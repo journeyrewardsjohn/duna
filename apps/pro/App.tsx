@@ -20,6 +20,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   type ViewStyle,
 } from "react-native";
@@ -176,11 +177,17 @@ function PageTitle({
   readonly action?: string;
   readonly onAction?: () => void;
 }) {
+  const { width } = useWindowDimensions();
+  const compact = width < 480;
   return (
-    <View style={styles.pageTitle}>
+    <View style={[styles.pageTitle, compact && styles.pageTitleCompact]}>
       <View>
         <Text style={styles.eyebrow}>{eyebrow}</Text>
-        <Text style={styles.displayTitle}>{title}</Text>
+        <Text
+          style={[styles.displayTitle, compact && styles.displayTitleCompact]}
+        >
+          {title}
+        </Text>
       </View>
       {action && (
         <Pressable
@@ -1624,6 +1631,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
+  pageTitleCompact: {
+    alignItems: "flex-start",
+    flexDirection: "column",
+    gap: 12,
+  },
   eyebrow: {
     color: colors.warning,
     fontSize: 7,
@@ -1637,6 +1649,11 @@ const styles = StyleSheet.create({
     letterSpacing: -2.1,
     lineHeight: 42,
     marginTop: 6,
+  },
+  displayTitleCompact: {
+    fontSize: 36,
+    letterSpacing: -1.8,
+    lineHeight: 38,
   },
   primaryAction: {
     backgroundColor: colors.warning,

@@ -19,6 +19,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   type ViewStyle,
 } from "react-native";
@@ -189,6 +190,8 @@ function HomeScreen({
 }: {
   readonly onBook: (eventIndex: number) => void;
 }) {
+  const { width } = useWindowDimensions();
+  const compact = width < 480;
   const { dashboard, people: livePeople } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
   const bookings = dashboard?.bookings ?? demoBookings;
@@ -216,8 +219,12 @@ function HomeScreen({
       showsVerticalScrollIndicator={false}
     >
       <AppHeader eyebrow={today.replace(", ", " · ")} />
-      <View style={styles.homeGreeting}>
-        <Text style={styles.displayTitle}>
+      <View
+        style={[styles.homeGreeting, compact && styles.homeGreetingCompact]}
+      >
+        <Text
+          style={[styles.displayTitle, compact && styles.displayTitleCompact]}
+        >
           Good morning,{`\n`}
           {player.displayName.split(" ")[0]}.
         </Text>
@@ -1801,12 +1808,22 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 20,
   },
+  homeGreetingCompact: {
+    alignItems: "flex-start",
+    flexDirection: "column",
+    gap: 14,
+  },
   displayTitle: {
     color: colors.bone,
     fontSize: 42,
     fontWeight: "900",
     letterSpacing: -2.2,
     lineHeight: 42,
+  },
+  displayTitleCompact: {
+    fontSize: 39,
+    letterSpacing: -2,
+    lineHeight: 40,
   },
   scoreAction: {
     backgroundColor: colors.aqua,
