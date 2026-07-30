@@ -2865,6 +2865,11 @@ button {
   grid-template-columns: minmax(0, 1.35fr) minmax(310px, 0.65fr);
 }
 
+.admin-overview-grid > *,
+.admin-lower-grid > * {
+  min-width: 0;
+}
+
 .admin-lower-grid {
   margin-top: 0.8rem;
 }
@@ -4062,6 +4067,39 @@ button {
   .money-balance > div:last-child,
   .admin-payment-hero > div:last-child {
     grid-template-columns: 1fr;
+  }
+
+  .service-health > div {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 0.35rem;
+  }
+
+  .service-health > div > span {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .service-health > div > span strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .service-health > div > .duna-numeric:nth-child(2) {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .service-health > div > .duna-numeric:nth-child(3) {
+    grid-column: 2;
+    grid-row: 2;
+    text-align: right;
+  }
+
+  .service-health > div > .duna-badge {
+    grid-column: 2;
+    grid-row: 1;
   }
 
   .report-main-chart > footer {
