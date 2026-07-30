@@ -59,6 +59,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify native React runtime
+        run: pnpm verify:mobile-runtime
+
       - name: Export Duna
         run: pnpm --filter @duna/player export
 
