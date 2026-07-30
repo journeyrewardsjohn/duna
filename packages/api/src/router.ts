@@ -40,6 +40,8 @@ import {
   eventSummarySchema,
   eventCheckoutResultSchema,
   eventCheckoutStatusSchema,
+  featureFlagCollectionSchema,
+  featureFlagSummarySchema,
   formSubmissionResultSchema,
   guardianReviewItemSchema,
   guardianReviewResultSchema,
@@ -85,6 +87,12 @@ import {
   recordConsent,
   submitFormResponse,
 } from "./forms-service";
+import {
+  createFeatureFlag,
+  FeatureFlagError,
+  loadFeatureFlags,
+  updateFeatureFlag,
+} from "./feature-flags";
 import {
   executeIdempotent,
   IdempotencyConflictError,
@@ -257,6 +265,17 @@ function throwDomainError(error: unknown): never {
           : error.code === "DATABASE_REQUIRED"
             ? "INTERNAL_SERVER_ERROR"
             : "BAD_REQUEST";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof FeatureFlagError) {
+    const code =
+      error.code === "FLAG_NOT_FOUND" || error.code === "ORGANIZATION_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "SUPER_ADMIN_REQUIRED"
+          ? "FORBIDDEN"
+          : error.code === "FLAG_ALREADY_EXISTS"
+            ? "CONFLICT"
+            : "INTERNAL_SERVER_ERROR";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
   if (error instanceof CheckoutError) {
@@ -2207,6 +2226,107 @@ const adminRouter = router({
   guardianships: adminProcedure
     .output(z.array(guardianReviewItemSchema).readonly())
     .query(() => loadGuardianReviewQueue()),
+  featureFlags: adminProcedure
+    .output(featureFlagCollectionSchema)
+    .query(({ ctx }) => loadFeatureFlags(ctx.actor!)),
+  createFeatureFlag: adminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-feature-flag-create",
+        capacity: 20,
+        refillPerMinute: 5,
+      }),
+    )
+    .input(
+      z.object({
+        key: z
+          .string()
+          .trim()
+          .min(2)
+          .max(96)
+          .regex(
+            /^[a-z0-9][a-z0-9._-]*$/,
+            "Use lowercase letters, numbers, dots, underscores, or hyphens.",
+          ),
+        organizationId: z.string().uuid().optional(),
+        market: z.string().trim().min(2).max(96).optional(),
+        enabled: z.boolean(),
+        configuration: z.record(z.string(), z.unknown()),
+        reason: z.string().trim().min(10).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(featureFlagSummarySchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.createFeatureFlag",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createFeatureFlag({
+              actor: ctx.actor!,
+              key: input.key,
+              organizationId: input.organizationId,
+              market: input.market,
+              enabled: input.enabled,
+              configuration: input.configuration,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  updateFeatureFlag: adminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-feature-flag-update",
+        capacity: 30,
+        refillPerMinute: 10,
+      }),
+    )
+    .input(
+      z.object({
+        flagId: z.string().uuid(),
+        enabled: z.boolean(),
+        configuration: z.record(z.string(), z.unknown()),
+        reason: z.string().trim().min(10).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(featureFlagSummarySchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.updateFeatureFlag",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateFeatureFlag({
+              actor: ctx.actor!,
+              flagId: input.flagId,
+              enabled: input.enabled,
+              configuration: input.configuration,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   reviewGuardianship: adminProcedure
     .use(
       rateLimitMiddleware({

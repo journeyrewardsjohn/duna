@@ -940,3 +940,23 @@ export const eventCheckoutStatusSchema = z.object({
     .optional(),
   complete: z.boolean(),
 });
+
+export const featureFlagSummarySchema = z.object({
+  id: z.string().uuid(),
+  key: z.string().min(2).max(96),
+  enabled: z.boolean(),
+  organizationId: z.string().uuid().optional(),
+  organizationName: z.string().optional(),
+  market: z.string().optional(),
+  configuration: z.record(z.string(), z.unknown()).readonly(),
+  updatedAt: z.iso.datetime(),
+  updatedByName: z.string().optional(),
+});
+
+export const featureFlagCollectionSchema = z.object({
+  flags: z.array(featureFlagSummarySchema).readonly(),
+  canManage: z.boolean(),
+});
+
+export type FeatureFlagSummary = z.infer<typeof featureFlagSummarySchema>;
+export type FeatureFlagCollection = z.infer<typeof featureFlagCollectionSchema>;

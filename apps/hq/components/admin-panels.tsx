@@ -1,5 +1,6 @@
 import type {
   AdminOverview as AdminOverviewData,
+  FeatureFlagCollection,
   GuardianReviewItem,
 } from "@duna/api";
 import type { OrganizationSummary } from "@duna/core";
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { AdminModule } from "./navigation";
+import { FeatureFlagControls } from "./feature-flag-controls";
 import { GuardianReviewCard } from "./guardian-review-card";
 
 const adminMetricIcons = [
@@ -71,7 +73,7 @@ const copy: Record<
     eyebrow: "Controlled delivery",
     title: "Feature flags",
     description:
-      "Flag administration stays unavailable until a connected flag read model is exposed.",
+      "Global, market, and organization rollout controls with immutable change history.",
   },
   health: {
     eyebrow: "Operational reliability",
@@ -355,11 +357,13 @@ export function AdminPanel({
   overview,
   organizations,
   guardianReviews,
+  featureFlags,
 }: {
   readonly module: AdminModule;
   readonly overview: AdminOverviewData;
   readonly organizations: readonly OrganizationSummary[];
   readonly guardianReviews: readonly GuardianReviewItem[];
+  readonly featureFlags: FeatureFlagCollection;
 }) {
   if (module === "overview") return null;
   const content = copy[module];
@@ -448,18 +452,13 @@ export function AdminPanel({
         <AuditList overview={overview} />
       ) : module === "health" ? (
         <SystemList overview={overview} />
+      ) : module === "flags" ? (
+        <FeatureFlagControls
+          collection={featureFlags}
+          organizations={organizations}
+        />
       ) : (
-        <section className="hq-card module-feature-card">
-          <Flag size={24} />
-          <span className="hq-eyebrow">Read model required</span>
-          <h2>No connected feature flags exposed.</h2>
-          <p>
-            The database capability exists, but this admin route will not invent
-            rollout state. Flag reads and mutations remain disabled until their
-            scoped API is connected.
-          </p>
-          <Badge tone="warning">Unavailable</Badge>
-        </section>
+        <SystemList overview={overview} />
       )}
     </main>
   );

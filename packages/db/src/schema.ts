@@ -2164,10 +2164,23 @@ export const featureFlags = pgTable(
     updatedAt,
   },
   (table) => [
-    uniqueIndex("feature_flag_scope_unique").on(
-      table.key,
-      table.organizationId,
-      table.market,
-    ),
+    uniqueIndex("feature_flag_global_unique")
+      .on(table.key)
+      .where(sql`${table.organizationId} IS NULL AND ${table.market} IS NULL`),
+    uniqueIndex("feature_flag_organization_unique")
+      .on(table.key, table.organizationId)
+      .where(
+        sql`${table.organizationId} IS NOT NULL AND ${table.market} IS NULL`,
+      ),
+    uniqueIndex("feature_flag_market_unique")
+      .on(table.key, table.market)
+      .where(
+        sql`${table.organizationId} IS NULL AND ${table.market} IS NOT NULL`,
+      ),
+    uniqueIndex("feature_flag_organization_market_unique")
+      .on(table.key, table.organizationId, table.market)
+      .where(
+        sql`${table.organizationId} IS NOT NULL AND ${table.market} IS NOT NULL`,
+      ),
   ],
 );

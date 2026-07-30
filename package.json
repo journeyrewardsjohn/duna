@@ -32,6 +32,7 @@
     "verify:match-lifecycle": "tsx scripts/verify-match-lifecycle.ts",
     "verify:operator-scoring": "tsx scripts/verify-operator-scoring.ts",
     "verify:operator-workflows": "tsx scripts/verify-operator-workflows.ts",
+    "verify:feature-flags": "tsx scripts/verify-feature-flags.ts",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e"
   },
   "devDependencies": {

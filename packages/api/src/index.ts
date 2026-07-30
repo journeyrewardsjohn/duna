@@ -4,6 +4,7 @@ export * from "./auth";
 export * from "./checkout";
 export * from "./court-checkout";
 export * from "./commerce";
+export * from "./feature-flags";
 export * from "./forms-service";
 export * from "./identity";
 export * from "./membership";

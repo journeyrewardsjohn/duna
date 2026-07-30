@@ -28,11 +28,15 @@ export default async function AdminModulePage({
     caller.admin.overview(),
     caller.admin.organizations(),
     module === "trust" ? caller.admin.guardianships() : Promise.resolve([]),
+    module === "flags"
+      ? caller.admin.featureFlags()
+      : Promise.resolve({ flags: [], canManage: false }),
   ])
-    .then(([overview, organizations, guardianReviews]) => ({
+    .then(([overview, organizations, guardianReviews, featureFlags]) => ({
       overview,
       organizations,
       guardianReviews,
+      featureFlags,
     }))
     .catch((error: unknown) => {
       if (
@@ -51,6 +55,7 @@ export default async function AdminModulePage({
         organizations={result.organizations}
         overview={result.overview}
         guardianReviews={result.guardianReviews}
+        featureFlags={result.featureFlags}
       />
     </AdminShell>
   );

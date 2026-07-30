@@ -5,25 +5,25 @@ verified” means executable implementation and acceptance coverage exist.
 “Partial” identifies the remaining connected workflow or external launch gate;
 it is not a production-complete claim.
 
-| Module                       | Primary surfaces              | Executable evidence                                                                         | Status                                                               |
-| ---------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| M1 Identity and guardianship | Player, Pro, HQ, Admin        | `identity.test.ts`; Clerk JWT/Organization adapter; adult-flow gate                         | Core verified; Clerk keys and onboarding UI pending                  |
-| M2 Sand Rating               | Player, HQ, Admin             | `rating/index.test.ts` determinism, symmetry, caps, explanations                            | Core verified                                                        |
-| M3 Import and resolution     | Admin                         | `import-resolution.test.ts` scoring, ambiguity, provenance, exact links                     | Core verified; licensed source access pending                        |
-| M4 Scoring                   | Player, Pro, public live view | `league-engine/engine.test.ts` rally, sideout, undo, offline replay                         | Core verified; device-authority sync UI pending                      |
-| M5 Leagues and tournaments   | Pro, HQ, Player               | Bracket, tiebreaker, and schedule suites; typed output contracts                            | Core verified; connected creation workflow partial                   |
-| M6 Inventory and booking     | HQ, Pro, Player               | Slot intersection and buffer tests; tenant-scoped venue repository                          | Partial; transactional booking race path pending                     |
-| M7 Payments and POS          | HQ, Pro, Player               | Pricing properties; Stripe Checkout, PaymentIntent, Terminal, refund, signed-webhook smokes | Sandbox verified; production approvals and physical Terminal pending |
-| M8 Eligibility               | HQ, Player                    | `eligibility.test.ts` versioned rule trees and overrides                                    | Core verified; registration persistence workflow partial             |
-| M9 Events and ticketing      | HQ, Pro, Player               | `ticketing.test.ts` exclusions, claims, scan dedupe, waitlists                              | Core verified; connected purchase UI partial                         |
-| M10 Forms and waivers        | HQ, Player                    | `forms.test.ts` conditional fields, exact-text hash, guardian binding, re-sign              | Core verified; connected form endpoints partial                      |
-| M11 Consumer network         | Player, web                   | Responsive browser journeys across desktop, tablet, and phone                               | Core verified                                                        |
-| M12 Coach marketplace        | Player, HQ, Admin             | `trust.test.ts` background gate and review integrity                                        | Partial; screening provider and marketplace settlement pending       |
-| M13 Messaging                | HQ, Pro, Player               | `messaging.test.ts` guardian-copy and quiet-hours enforcement                               | Partial; consent ledger endpoints and providers pending              |
-| M14 Reporting                | HQ                            | `reporting.test.ts` ledger-derived revenue and reconciliation; live DB admin metrics        | Core verified; accounting export/sync pending                        |
-| M15 Ask Duna and Operator    | All                           | Persistent agent drafts, canonical hashes, one-time confirmation, golden trace, audit       | Core risk gate verified; model/provider connection pending           |
-| M16 Wallet                   | Player, Pro, HQ, Admin        | `wallet.test.ts` ledger, custody, guardian spend, tax rails, drift incidents                | Core verified; counsel and production Stripe rails pending           |
-| M17 Trust and administration | Admin                         | `trust.test.ts`; live queues/audit; role and rate-limit contracts                           | Core verified; external monitoring and case providers pending        |
+| Module                       | Primary surfaces              | Executable evidence                                                                          | Status                                                                           |
+| ---------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| M1 Identity and guardianship | Player, Pro, HQ, Admin        | Connected profile, household, consent, guardian-review, export/deletion flows; Clerk adapter | Connected workflows verified; production Clerk activation pending                |
+| M2 Sand Rating               | Player, HQ, Admin             | `rating/index.test.ts` determinism, symmetry, caps, explanations                             | Core verified                                                                    |
+| M3 Import and resolution     | Admin                         | `import-resolution.test.ts` scoring, ambiguity, provenance, exact links                      | Core verified; licensed source access pending                                    |
+| M4 Scoring                   | Player, Pro, public live view | Connected event log, authoritative-device lock, offline replay, sync divergence, live view   | Connected workflows verified                                                     |
+| M5 Leagues and tournaments   | Pro, HQ, Player               | HQ draft/publish flow, connected scoring, bracket, tiebreaker, and schedule suites           | Core connected; advanced bracket persistence and purse activation remain gated   |
+| M6 Inventory and booking     | HQ, Pro, Player               | Connected venue/court/rate controls, atomic holds, race alternatives, Stripe checkout        | Connected workflows verified                                                     |
+| M7 Payments and POS          | HQ, Pro, Player               | Pricing properties; Stripe Checkout, PaymentIntent, Terminal, refund, signed-webhook smokes  | Sandbox verified; production approvals and physical Terminal pending             |
+| M8 Eligibility               | HQ, Player                    | Versioned rule trees, connected decisions, guardian authority, registration persistence      | Connected workflows verified                                                     |
+| M9 Events and ticketing      | HQ, Pro, Player               | Connected checkout/waitlist/registration lifecycle, offline-safe scan API, ticketing tests   | Connected core; advanced ticket catalog and affiliate UI remain partial          |
+| M10 Forms and waivers        | HQ, Player                    | Connected idempotent submission/consent endpoints, exact-text hash, guardian binding         | Server workflow verified; operator builder and checkout rendering remain partial |
+| M11 Consumer network         | Player, web                   | Responsive browser journeys across desktop, tablet, and phone                                | Core verified                                                                    |
+| M12 Coach marketplace        | Player, HQ, Admin             | `trust.test.ts` background gate and review integrity                                         | Partial; screening provider and marketplace settlement pending                   |
+| M13 Messaging                | HQ, Pro, Player               | Connected consent ledger, consent-safe draft composer, guardian-copy and quiet-hours rules   | Draft workflow verified; delivery providers and sender approvals pending         |
+| M14 Reporting                | HQ                            | `reporting.test.ts` ledger-derived revenue and reconciliation; live DB admin metrics         | Core verified; accounting export/sync pending                                    |
+| M15 Ask Duna and Operator    | All                           | Persistent agent drafts, canonical hashes, one-time confirmation, golden trace, audit        | Core risk gate verified; model/provider connection pending                       |
+| M16 Wallet                   | Player, Pro, HQ, Admin        | `wallet.test.ts` ledger, custody, guardian spend, tax rails, drift incidents                 | Core verified; counsel and production Stripe rails pending                       |
+| M17 Trust and administration | Admin                         | Live queues/audit/guardian review; scoped feature flags; role and rate-limit contracts       | Connected control plane verified; external monitoring and case providers pending |
 
 ## Cross-cutting release evidence
 
@@ -39,6 +39,12 @@ it is not a production-complete claim.
   one-minute recovery functions.
 - `pnpm verify:live-repository` exercises the production Neon branch and removes
   its own isolated smoke records.
+- Connected commerce, checkout completion, court booking, account lifecycle,
+  guardian review, match lifecycle, operator scoring, and operator workflow
+  verifiers exercise real Neon and Stripe sandbox state and clean up their
+  isolated records.
+- `pnpm verify:feature-flags` proves scoped uniqueness, super-admin-only writes,
+  configuration persistence, and immutable before/after audit hashes.
 
 ## External launch gates
 

@@ -127,6 +127,13 @@
       "when": 1785448001109,
       "tag": "0017_clever_karnak",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785450099771,
+      "tag": "0018_smiling_professor_monster",
+      "breakpoints": true
     }
   ]
 }

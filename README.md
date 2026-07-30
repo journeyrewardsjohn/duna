@@ -40,6 +40,16 @@ Copy `.env.example` to `.env.local` for connected services. Without connected
 credentials, the apps run in a seeded, clearly labeled demo environment so the
 entire product can still be explored and tested.
 
+## Connected previews
+
+- Player, parent, and public network: <https://duna-web.vercel.app>
+- Club, coach, facility, and platform operations: <https://duna-hq.vercel.app>
+
+The hosted previews use the connected Neon production branch and Stripe test
+mode. Real-money activation, identity onboarding, messaging delivery, and store
+distribution remain deliberately gated until the responsible account owner
+completes the required third-party attestations.
+
 ## Quality gate
 
 ```bash

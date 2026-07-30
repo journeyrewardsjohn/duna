@@ -1,0 +1,5 @@
+DROP INDEX "feature_flag_scope_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "feature_flag_global_unique" ON "feature_flags" USING btree ("key") WHERE "feature_flags"."organization_id" IS NULL AND "feature_flags"."market" IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "feature_flag_organization_unique" ON "feature_flags" USING btree ("key","organization_id") WHERE "feature_flags"."organization_id" IS NOT NULL AND "feature_flags"."market" IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "feature_flag_market_unique" ON "feature_flags" USING btree ("key","market") WHERE "feature_flags"."organization_id" IS NULL AND "feature_flags"."market" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "feature_flag_organization_market_unique" ON "feature_flags" USING btree ("key","organization_id","market") WHERE "feature_flags"."organization_id" IS NOT NULL AND "feature_flags"."market" IS NOT NULL;

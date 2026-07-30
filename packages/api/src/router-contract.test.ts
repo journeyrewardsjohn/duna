@@ -87,4 +87,22 @@ describe("tRPC contract surface", () => {
       code: "FORBIDDEN",
     });
   });
+
+  it("keeps rollout mutations behind the super-admin role", async () => {
+    const caller = createCaller(
+      createApiContext({ actor: createDemoActor(["admin"]) }),
+    );
+    await expect(
+      caller.admin.updateFeatureFlag({
+        flagId: crypto.randomUUID(),
+        enabled: true,
+        configuration: {},
+        reason: "Attempted rollout without super-admin authority.",
+        confirmed: true,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+  });
 });

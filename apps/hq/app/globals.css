@@ -4936,9 +4936,83 @@ button {
   padding: 0 1rem;
 }
 
+.feature-flag-controls {
+  display: grid;
+  gap: 1rem;
+}
+
+.feature-flag-readonly {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.8rem;
+  padding: 1rem 1.15rem;
+}
+
+.feature-flag-readonly svg {
+  color: var(--color-warning);
+  flex: 0 0 auto;
+}
+
+.feature-flag-readonly p {
+  color: var(--color-bone-muted);
+  margin: 0.25rem 0 0;
+}
+
+.feature-flag-list,
+.feature-flag-create {
+  padding: clamp(1rem, 2vw, 1.5rem);
+}
+
+.feature-flag-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.feature-flag-card {
+  background: rgb(255 255 255 / 2.5%);
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 16px;
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.feature-flag-card > header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.feature-flag-card > header > span {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.feature-flag-card > header strong {
+  overflow-wrap: anywhere;
+}
+
+.feature-flag-card > header small,
+.feature-flag-meta {
+  color: var(--color-bone-muted);
+}
+
+.feature-flag-card .operator-form {
+  gap: 0.8rem;
+}
+
+.feature-flag-meta {
+  display: block;
+  line-height: 1.45;
+}
+
 @media (max-width: 1040px) {
   .operator-controls-grid,
-  .operator-controls-grid--messages {
+  .operator-controls-grid--messages,
+  .feature-flag-grid {
     grid-template-columns: 1fr;
   }
 

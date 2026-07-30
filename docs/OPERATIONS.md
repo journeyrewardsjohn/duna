@@ -9,6 +9,9 @@
 - Expo projects:
   - `@journey-rewards-inc/duna-player`
   - `@journey-rewards-inc/duna-pro`
+- Vercel projects:
+  - `https://duna-web.vercel.app`
+  - `https://duna-hq.vercel.app`
 
 Secrets remain outside source control. Local values live in ignored
 `.env.local`; deployed values belong in the hosting provider’s encrypted
@@ -42,6 +45,10 @@ production channels. Physical-device iOS distribution and store submission
 remain gated on Apple organization credentials.
 
 GitHub Actions repeats both gates on pushes and pull requests.
+
+The production previews must use `DUNA_DATA_SOURCE=database`. If a hosted HQ
+ever displays seeded demonstration metrics, treat that as a release failure and
+verify the project-level environment before redeploying.
 
 ## Durable workflows
 
