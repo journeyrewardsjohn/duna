@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Duna Pro",
+    "slug": "duna-pro",
+    "scheme": "duna-pro",
+    "version": "1.0.0",
+    "platforms": ["ios", "android"],
+    "orientation": "default",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#070b0d"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.duna.pro",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Duna Pro uses the camera for QR check-in and profile verification."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#070b0d"
+      },
+      "package": "com.duna.pro",
+      "permissions": ["CAMERA"]
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [],
+    "extra": {
+      "eas": {
+        "projectId": "c3898acf-d6cd-4667-8dfc-570354c4d566"
+      }
+    },
+    "owner": "journey-rewards-inc"
+  }
+}

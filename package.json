@@ -1,0 +1,43 @@
+{
+  "name": "duna",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "turbo dev --parallel",
+    "dev:web": "pnpm --filter @duna/web dev",
+    "dev:hq": "pnpm --filter @duna/hq dev",
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "test:watch": "turbo test:watch",
+    "test:e2e": "playwright test",
+    "lint": "turbo lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @duna/db generate",
+    "db:migrate": "pnpm --filter @duna/db migrate",
+    "db:seed": "pnpm --filter @duna/db seed",
+    "stripe:bootstrap": "tsx scripts/stripe-bootstrap.ts",
+    "stripe:smoke": "tsx scripts/stripe-smoke.ts",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.1.2",
+    "eslint": "^10.8.0",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.1",
+    "turbo": "^2.10.7",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "stripe": "^22.4.0"
+  }
+}

@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds and caches
+.next/
+.expo/
+dist/
+build/
+coverage/
+.turbo/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# credentials and local state
+.env
+.env.local
+.env.*.local
+!.env.example
+.vercel/
+.neon/
+
+# mobile
+apps/*/android/
+apps/*/ios/
+apps/*/.expo/
+
+# system and editor
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# generated brand artifacts that have not been approved
+artifacts/

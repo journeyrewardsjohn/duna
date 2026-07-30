@@ -1,0 +1,23 @@
+{
+  "name": "@duna/league-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./scoring": "./src/scoring.ts",
+    "./brackets": "./src/brackets.ts",
+    "./standings": "./src/standings.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "fast-check": "^4.9.0",
+    "vitest": "^4.1.10"
+  }
+}

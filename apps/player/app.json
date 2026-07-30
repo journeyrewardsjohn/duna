@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Duna",
+    "slug": "duna-player",
+    "scheme": "duna",
+    "version": "1.0.0",
+    "platforms": ["ios", "android"],
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#070b0d"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.duna.player",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Duna uses your location to show nearby play and venues."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#070b0d"
+      },
+      "package": "com.duna.player",
+      "permissions": ["ACCESS_COARSE_LOCATION"]
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [],
+    "extra": {
+      "eas": {
+        "projectId": "87615942-8a2d-47e3-9dc4-334e427a5944"
+      }
+    },
+    "owner": "journey-rewards-inc"
+  }
+}

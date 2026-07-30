@@ -1,0 +1,192 @@
+:root {
+  --color-ink: #070b0d;
+  --color-depth: #0c1418;
+  --color-navy: #10242b;
+  --color-navy-lift: #17343d;
+  --color-bone: #f3efe5;
+  --color-bone-muted: #d8d2c4;
+  --color-sand: #c9a96c;
+  --color-sand-light: #ead9b5;
+  --color-aqua: #63e3db;
+  --color-aqua-deep: #1b9f9a;
+  --color-flare: #ff6a3d;
+  --color-positive: #85d49b;
+  --color-warning: #f7c86b;
+  --color-danger: #f27878;
+  --color-white: #fff;
+  --font-display: "Archivo", "Arial Black", sans-serif;
+  --font-body: "Instrument Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", monospace;
+  --shadow-small: 0 12px 28px rgb(0 0 0 / 16%);
+  --shadow-large: 0 28px 90px rgb(0 0 0 / 28%);
+  --radius-small: 10px;
+  --radius-medium: 16px;
+  --radius-large: 24px;
+  --focus: 0 0 0 3px rgb(99 227 219 / 38%);
+}
+
+.duna-mark {
+  align-items: center;
+  color: inherit;
+  display: inline-flex;
+  gap: 0.65rem;
+}
+
+.duna-mark__symbol {
+  height: 2rem;
+  width: 2rem;
+}
+
+.duna-mark__word {
+  font-family: var(--font-display);
+  font-size: 1.18rem;
+  font-stretch: expanded;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+
+.duna-button {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--font-body);
+  font-weight: 700;
+  gap: 0.55rem;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0.72rem 1.15rem;
+  text-decoration: none;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.duna-button:hover {
+  transform: translateY(-1px);
+}
+
+.duna-button:focus-visible {
+  box-shadow: var(--focus);
+  outline: none;
+}
+
+.duna-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+  transform: none;
+}
+
+.duna-button--primary {
+  background: var(--color-aqua);
+  color: var(--color-ink);
+}
+
+.duna-button--primary:hover {
+  background: #85ece5;
+}
+
+.duna-button--secondary {
+  background: transparent;
+  border-color: rgb(243 239 229 / 28%);
+  color: var(--color-bone);
+}
+
+.duna-button--secondary:hover {
+  border-color: rgb(243 239 229 / 55%);
+}
+
+.duna-button--ghost {
+  background: rgb(255 255 255 / 6%);
+  color: inherit;
+}
+
+.duna-button--danger {
+  background: var(--color-danger);
+  color: var(--color-ink);
+}
+
+.duna-button--small {
+  min-height: 38px;
+  padding: 0.55rem 0.9rem;
+}
+
+.duna-button--large {
+  min-height: 52px;
+  padding: 0.9rem 1.35rem;
+}
+
+.duna-badge {
+  align-items: center;
+  background: rgb(255 255 255 / 7%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  color: var(--color-bone-muted);
+  display: inline-flex;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  min-height: 25px;
+  padding: 0.42rem 0.65rem;
+  text-transform: uppercase;
+}
+
+.duna-badge--live {
+  background: rgb(255 106 61 / 14%);
+  border-color: rgb(255 106 61 / 45%);
+  color: #ff9a7a;
+}
+
+.duna-badge--positive {
+  background: rgb(133 212 155 / 13%);
+  border-color: rgb(133 212 155 / 35%);
+  color: var(--color-positive);
+}
+
+.duna-badge--warning {
+  background: rgb(247 200 107 / 12%);
+  border-color: rgb(247 200 107 / 35%);
+  color: var(--color-warning);
+}
+
+.duna-badge--danger {
+  background: rgb(242 120 120 / 12%);
+  border-color: rgb(242 120 120 / 35%);
+  color: var(--color-danger);
+}
+
+.duna-surface {
+  background: rgb(255 255 255 / 4%);
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: var(--radius-large);
+}
+
+.duna-surface--interactive {
+  transition:
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.duna-surface--interactive:hover {
+  border-color: rgb(99 227 219 / 28%);
+  transform: translateY(-2px);
+}
+
+.duna-numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

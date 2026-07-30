@@ -1,0 +1,35 @@
+{
+  "name": "@duna/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./context": "./src/context.ts",
+    "./payments": "./src/payments.ts",
+    "./webhooks": "./src/webhooks.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@duna/core": "workspace:*",
+    "@duna/db": "workspace:*",
+    "@duna/league-engine": "workspace:*",
+    "@duna/pricing": "workspace:*",
+    "@duna/rating": "workspace:*",
+    "@duna/scheduling": "workspace:*",
+    "@trpc/server": "^11.18.0",
+    "drizzle-orm": "^0.45.2",
+    "jose": "^6.2.5",
+    "stripe": "^22.4.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

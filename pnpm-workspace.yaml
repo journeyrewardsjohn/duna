@@ -1,0 +1,13 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+allowBuilds:
+  esbuild: true
+  sharp: true
+minimumReleaseAgeExclude:
+  - "@playwright/test@1.62.1"
+  - playwright-core@1.62.1
+  - playwright@1.62.1
+  - jose@6.2.5
+  - stripe@22.4.0
+  - lucide-react@1.28.0
