@@ -18,7 +18,9 @@ export function SiteFooter() {
           </div>
           <div>
             <strong>Run</strong>
-            <a href="http://localhost:3001">Duna HQ</a>
+            <a href={process.env.NEXT_PUBLIC_HQ_URL ?? "http://localhost:3001"}>
+              Duna HQ
+            </a>
             <Link href="/clubs/south-bay-volleyball">Clubs</Link>
             <Link href="/app/discover">Coaches</Link>
           </div>

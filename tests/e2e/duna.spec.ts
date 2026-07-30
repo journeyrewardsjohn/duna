@@ -19,6 +19,9 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await expect(
     page.getByRole("link", { name: "Find your game" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Duna HQ" }).first(),
+  ).toHaveAttribute("href", /.+/);
   await expectNoHorizontalOverflow(page);
 
   await page.goto("/app/discover");
