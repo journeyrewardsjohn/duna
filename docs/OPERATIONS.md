@@ -23,9 +23,18 @@ journeys across desktop, tablet, and phone.
 Native JS bundles are checked with:
 
 ```bash
+cd apps/player && pnpm dlx expo-doctor
+cd ../pro && pnpm dlx expo-doctor
+cd ../..
 pnpm --filter @duna/player export
 pnpm --filter @duna/pro export
 ```
+
+Installable internal builds use the `preview` profile for Android and the
+`preview-simulator` profile for iOS Simulator. Both apps are configured for EAS
+Update with app-version runtime matching and separate development, preview, and
+production channels. Physical-device iOS distribution and store submission
+remain gated on Apple organization credentials.
 
 GitHub Actions repeats both gates on pushes and pull requests.
 

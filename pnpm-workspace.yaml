@@ -11,3 +11,14 @@ minimumReleaseAgeExclude:
   - jose@6.2.5
   - stripe@22.4.0
   - lucide-react@1.28.0
+  - expo-updates@57.0.11
+  - "@expo/cli@57.0.11"
+  - "@expo/inline-modules@0.1.4"
+  - "@expo/local-build-cache-provider@57.0.5"
+  - "@expo/log-box@57.0.2"
+  - "@expo/prebuild-config@57.0.10"
+  - babel-preset-expo@57.0.5
+  - expo-asset@57.0.8
+  - expo-constants@57.0.8
+  - expo-modules-core@57.0.8
+  - expo@57.0.9

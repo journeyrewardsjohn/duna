@@ -8,11 +8,6 @@
     "orientation": "default",
     "userInterfaceStyle": "dark",
     "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#070b0d"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.duna.pro",
@@ -32,12 +27,28 @@
       "bundler": "metro",
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [],
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#070b0d"
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "c3898acf-d6cd-4667-8dfc-570354c4d566"
       }
     },
-    "owner": "journey-rewards-inc"
+    "owner": "journey-rewards-inc",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/c3898acf-d6cd-4667-8dfc-570354c4d566"
+    }
   }
 }
