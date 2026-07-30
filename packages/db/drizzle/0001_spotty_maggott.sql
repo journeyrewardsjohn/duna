@@ -1,0 +1,1 @@
+ALTER TABLE "pickup_sessions" ADD COLUMN "venue_label" text NOT NULL;

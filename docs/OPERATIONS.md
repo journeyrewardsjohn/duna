@@ -20,6 +20,11 @@ environment store.
 types, unit and property suites, production builds, and responsive browser
 journeys across desktop, tablet, and phone.
 
+`pnpm verify:live-repository` is the connected Neon smoke. It validates typed
+reads, tenant scope, atomic pickup/audit writes, idempotent replay, persistent AI
+confirmation, durable webhook processing, and database rate limiting. It removes
+the isolated records it creates.
+
 Native JS bundles are checked with:
 
 ```bash
@@ -37,6 +42,13 @@ production channels. Physical-device iOS distribution and store submission
 remain gated on Apple organization credentials.
 
 GitHub Actions repeats both gates on pushes and pull requests.
+
+## Durable workflows
+
+`/api/inngest` serves the event-driven workflow processor and one-minute recovery
+function. Stripe ingress remains safe if Inngest is unavailable because the
+signed payload and workflow job are committed to Neon first. Production dispatch
+requires both `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`.
 
 ## Database delivery
 

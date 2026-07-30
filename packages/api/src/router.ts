@@ -14,15 +14,42 @@ import {
 } from "@duna/league-engine";
 import { z } from "zod";
 import {
+  adultProcedure,
   adminProcedure,
   createCallerFactory,
   organizationProcedure,
   protectedProcedure,
   publicProcedure,
+  rateLimitMiddleware,
   router,
 } from "./auth";
+import type { ApiContext } from "./context";
+import {
+  adminOverviewSchema,
+  adminQueueSchema,
+  agentDraftSchema,
+  auditEventSchema,
+  availableSlotSchema,
+  bracketSchema,
+  eventSummarySchema,
+  matchSummarySchema,
+  operatorDashboardSchema,
+  organizationSummarySchema,
+  personSummarySchema,
+  playerDashboardSchema,
+  playerWalletSchema,
+  pricingSchema,
+  scoreStateSchema,
+  tournamentScheduleSchema,
+  venueSummarySchema,
+} from "./contracts";
+import {
+  executeIdempotent,
+  IdempotencyConflictError,
+  IdempotencyInProgressError,
+} from "./idempotency";
 import { createDunaPlusCheckout, isStripeConfigured } from "./payments";
-import { demoRepository } from "./repository";
+import { getRepository } from "./repository";
 import {
   confirmAgentAction,
   proposeAgentAction,
@@ -87,14 +114,57 @@ const courtWindowSchema = timeRangeSchema.extend({
   divisionIds: z.array(z.string().min(1)).min(1),
 });
 
+async function runIdempotentMutation<T extends object>(input: {
+  readonly key: string;
+  readonly procedure: string;
+  readonly request: Readonly<Record<string, unknown>>;
+  readonly ctx: ApiContext;
+  readonly execute: () => Promise<T>;
+}): Promise<T> {
+  try {
+    return (
+      await executeIdempotent({
+        key: input.key,
+        procedure: input.procedure,
+        personId: input.ctx.actor?.personId,
+        organizationId: input.ctx.actor?.organizationId,
+        request: input.request,
+        now: input.ctx.now,
+        execute: input.execute,
+      })
+    ).result;
+  } catch (error) {
+    if (error instanceof IdempotencyConflictError) {
+      throw new TRPCError({ code: "CONFLICT", message: error.message });
+    }
+    if (error instanceof IdempotencyInProgressError) {
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: error.message,
+      });
+    }
+    throw error;
+  }
+}
+
 const publicRouter = router({
-  health: publicProcedure.query(() => ({
-    status: "ok" as const,
-    service: "duna-api",
-    time: new Date().toISOString(),
-    databaseConfigured: Boolean(process.env.DATABASE_URL),
-    stripeConfigured: isStripeConfigured(),
-  })),
+  health: publicProcedure
+    .output(
+      z.object({
+        status: z.literal("ok"),
+        service: z.literal("duna-api"),
+        time: z.iso.datetime(),
+        databaseConfigured: z.boolean(),
+        stripeConfigured: z.boolean(),
+      }),
+    )
+    .query(() => ({
+      status: "ok" as const,
+      service: "duna-api" as const,
+      time: new Date().toISOString(),
+      databaseConfigured: Boolean(process.env.DATABASE_URL),
+      stripeConfigured: isStripeConfigured(),
+    })),
   events: publicProcedure
     .input(
       z
@@ -114,8 +184,9 @@ const publicRouter = router({
         })
         .optional(),
     )
-    .query(({ input }) =>
-      demoRepository.public.events().filter((event) => {
+    .output(z.array(eventSummarySchema).readonly())
+    .query(async ({ input }) =>
+      (await getRepository().public.events()).filter((event) => {
         if (input?.kind && event.kind !== input.kind) return false;
         if (
           input?.rating !== undefined &&
@@ -130,25 +201,37 @@ const publicRouter = router({
     ),
   eventBySlug: publicProcedure
     .input(z.object({ slug: z.string().min(1) }))
-    .query(({ input }) => {
-      const event = demoRepository.public.eventBySlug(input.slug);
+    .output(eventSummarySchema)
+    .query(async ({ input }) => {
+      const event = await getRepository().public.eventBySlug(input.slug);
       if (!event) throw new TRPCError({ code: "NOT_FOUND" });
       return event;
     }),
-  venues: publicProcedure.query(() => demoRepository.public.venues()),
+  venues: publicProcedure
+    .output(z.array(venueSummarySchema).readonly())
+    .query(() => getRepository().public.venues()),
   playerProfile: publicProcedure
     .input(z.object({ handle: z.string().min(1) }))
-    .query(({ input }) => {
-      const player = demoRepository.public.playerByHandle(input.handle);
+    .output(personSummarySchema)
+    .query(async ({ input }) => {
+      const player = await getRepository().public.playerByHandle(input.handle);
       if (!player) throw new TRPCError({ code: "NOT_FOUND" });
       return player;
     }),
 });
 
 const playerRouter = router({
-  dashboard: protectedProcedure.query(() => demoRepository.player.dashboard()),
-  matches: protectedProcedure.query(() => demoRepository.player.matchHistory()),
-  wallet: protectedProcedure.query(() => demoRepository.player.wallet()),
+  dashboard: protectedProcedure
+    .output(playerDashboardSchema)
+    .query(({ ctx }) => getRepository().player.dashboard(ctx.actor!.personId)),
+  matches: protectedProcedure
+    .output(z.array(matchSummarySchema).readonly())
+    .query(({ ctx }) =>
+      getRepository().player.matchHistory(ctx.actor!.personId),
+    ),
+  wallet: protectedProcedure
+    .output(playerWalletSchema)
+    .query(({ ctx }) => getRepository().player.wallet(ctx.actor!.personId)),
   quote: protectedProcedure
     .input(
       z.object({
@@ -156,6 +239,7 @@ const playerRouter = router({
         isDunaPlus: z.boolean(),
       }),
     )
+    .output(pricingSchema)
     .query(({ input }) =>
       priceConsumerOrder({
         items: input.items,
@@ -163,7 +247,14 @@ const playerRouter = router({
         isDunaPlus: input.isDunaPlus,
       }),
     ),
-  createPickup: protectedProcedure
+  createPickup: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "pickup-create",
+        capacity: 12,
+        refillPerMinute: 6,
+      }),
+    )
     .input(
       z
         .object({
@@ -181,7 +272,29 @@ const playerRouter = router({
           "Pickup must end after it begins",
         ),
     )
-    .mutation(({ input }) => demoRepository.player.createPickup(input)),
+    .output(eventSummarySchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.createPickup",
+        request: input,
+        ctx,
+        execute: async () =>
+          getRepository().player.createPickup({
+            title: input.title,
+            startsAt: input.startsAt,
+            endsAt: input.endsAt,
+            venueName: input.venueName,
+            capacity: input.capacity,
+            ratingMinimum: input.ratingMinimum,
+            ratingMaximum: input.ratingMaximum,
+            hostPersonId: ctx.actor!.personId,
+            organizationId: ctx.actor!.organizationId,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+          }),
+      }),
+    ),
   foldScore: protectedProcedure
     .input(
       z.object({
@@ -189,13 +302,21 @@ const playerRouter = router({
         scoringSystem: z.enum(["rally", "sideout"]).default("rally"),
       }),
     )
+    .output(scoreStateSchema)
     .query(({ input }) =>
       foldScore(input.events as unknown as ScoreEvent[], {
         ...standardBeachFormat,
         scoringSystem: input.scoringSystem,
       }),
     ),
-  startDunaPlusCheckout: protectedProcedure
+  startDunaPlusCheckout: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "checkout",
+        capacity: 10,
+        refillPerMinute: 5,
+      }),
+    )
     .input(
       z.object({
         interval: z.enum(["month", "year"]),
@@ -204,40 +325,63 @@ const playerRouter = router({
         idempotencyKey: z.string().uuid(),
       }),
     )
-    .mutation(async ({ input, ctx }) => {
-      if (!isStripeConfigured()) {
-        return {
-          id: "demo_checkout",
-          url: `${input.successUrl}?demoCheckout=complete`,
-          demo: true,
-        };
-      }
-      return {
-        ...(await createDunaPlusCheckout({
-          personId: ctx.actor!.personId,
-          interval: input.interval,
-          successUrl: input.successUrl,
-          cancelUrl: input.cancelUrl,
-          idempotencyKey: input.idempotencyKey,
-        })),
-        demo: false,
-      };
-    }),
+    .output(
+      z.object({
+        id: z.string(),
+        url: z.string().nullable(),
+        demo: z.boolean(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.startDunaPlusCheckout",
+        request: input,
+        ctx,
+        execute: async () => {
+          if (!isStripeConfigured()) {
+            return {
+              id: "demo_checkout",
+              url: `${input.successUrl}?demoCheckout=complete`,
+              demo: true,
+            };
+          }
+          return {
+            ...(await createDunaPlusCheckout({
+              personId: ctx.actor!.personId,
+              interval: input.interval,
+              successUrl: input.successUrl,
+              cancelUrl: input.cancelUrl,
+              idempotencyKey: input.idempotencyKey,
+            })),
+            demo: false,
+          };
+        },
+      }),
+    ),
 });
 
 const operatorRouter = router({
-  dashboard: organizationProcedure("reports:read").query(() =>
-    demoRepository.operator.dashboard(),
-  ),
-  organization: organizationProcedure("members:read").query(() =>
-    demoRepository.operator.organization(),
-  ),
-  members: organizationProcedure("members:read").query(() =>
-    demoRepository.operator.members(),
-  ),
-  events: organizationProcedure("sessions:read").query(() =>
-    demoRepository.operator.events(),
-  ),
+  dashboard: organizationProcedure("reports:read")
+    .output(operatorDashboardSchema)
+    .query(({ ctx }) =>
+      getRepository().operator.dashboard(ctx.actor!.organizationId!),
+    ),
+  organization: organizationProcedure("members:read")
+    .output(organizationSummarySchema)
+    .query(({ ctx }) =>
+      getRepository().operator.organization(ctx.actor!.organizationId!),
+    ),
+  members: organizationProcedure("members:read")
+    .output(z.array(personSummarySchema).readonly())
+    .query(({ ctx }) =>
+      getRepository().operator.members(ctx.actor!.organizationId!),
+    ),
+  events: organizationProcedure("sessions:read")
+    .output(z.array(eventSummarySchema).readonly())
+    .query(({ ctx }) =>
+      getRepository().operator.events(ctx.actor!.organizationId!),
+    ),
   availableSlots: organizationProcedure("sessions:read")
     .input(
       z.object({
@@ -254,6 +398,7 @@ const operatorRouter = router({
         busyRanges: z.array(busyRangeSchema),
       }),
     )
+    .output(z.array(availableSlotSchema).readonly())
     .query(({ input }) => solveAvailableSlots(input)),
   generateBracket: organizationProcedure("sessions:write")
     .input(
@@ -277,7 +422,8 @@ const operatorRouter = router({
         poolCount: z.number().int().positive().optional(),
       }),
     )
-    .mutation(({ input }) => {
+    .output(bracketSchema)
+    .query(({ input }) => {
       const teams = input.teams as readonly SeededTeam[];
       switch (input.format) {
         case "single-elimination":
@@ -318,8 +464,16 @@ const operatorRouter = router({
         minimumRestMinutes: z.number().int().nonnegative(),
       }),
     )
-    .mutation(({ input }) => scheduleTournament(input)),
+    .output(tournamentScheduleSchema)
+    .query(({ input }) => scheduleTournament(input)),
   proposeLeague: organizationProcedure("sessions:write")
+    .use(
+      rateLimitMiddleware({
+        id: "agent-league-proposal",
+        capacity: 20,
+        refillPerMinute: 10,
+      }),
+    )
     .input(
       z.object({
         title: z.string().min(3),
@@ -328,22 +482,49 @@ const operatorRouter = router({
         teamCapacity: z.number().int().min(2).max(256),
         priceMinor: z.number().int().nonnegative(),
         currency: z.string().length(3),
+        idempotencyKey: z.string().uuid(),
       }),
     )
+    .output(agentDraftSchema)
     .mutation(({ input, ctx }) =>
-      proposeAgentAction({
-        toolName: "leagues.create",
-        toolInput: input,
-        proposedDiff: {
-          entity: "league",
-          operation: "create",
-          values: input,
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.proposeLeague",
+        request: input,
+        ctx,
+        execute: async () => {
+          const league = {
+            title: input.title,
+            format: input.format,
+            weeks: input.weeks,
+            teamCapacity: input.teamCapacity,
+            priceMinor: input.priceMinor,
+            currency: input.currency,
+          };
+          return proposeAgentAction({
+            toolName: "leagues.create",
+            toolInput: league,
+            proposedDiff: {
+              entity: "league",
+              operation: "create",
+              values: league,
+            },
+            actorPersonId: ctx.actor!.personId,
+            organizationId: ctx.actor!.organizationId,
+            conversationId: ctx.requestId,
+            now: ctx.now,
+          });
         },
-        actorPersonId: ctx.actor!.personId,
-        now: ctx.now,
       }),
     ),
   proposeMessage: organizationProcedure("messages:propose")
+    .use(
+      rateLimitMiddleware({
+        id: "message-proposal",
+        capacity: 5,
+        refillPerMinute: 2,
+      }),
+    )
     .input(
       z.object({
         recipientCount: z.number().int().positive(),
@@ -351,52 +532,130 @@ const operatorRouter = router({
         channel: z.enum(["email", "sms", "push"]),
         subject: z.string().optional(),
         body: z.string().min(1),
+        idempotencyKey: z.string().uuid(),
       }),
     )
+    .output(agentDraftSchema)
     .mutation(({ input, ctx }) =>
-      proposeAgentAction({
-        toolName: "messages.send",
-        toolInput: input,
-        proposedDiff: {
-          operation: "send",
-          recipients: input.recipientCount,
-          channel: input.channel,
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.proposeMessage",
+        request: input,
+        ctx,
+        execute: async () => {
+          const message = {
+            recipientCount: input.recipientCount,
+            segment: input.segment,
+            channel: input.channel,
+            subject: input.subject,
+            body: input.body,
+          };
+          return proposeAgentAction({
+            toolName: "messages.send",
+            toolInput: message,
+            proposedDiff: {
+              operation: "send",
+              recipients: message.recipientCount,
+              channel: message.channel,
+            },
+            actorPersonId: ctx.actor!.personId,
+            organizationId: ctx.actor!.organizationId,
+            conversationId: ctx.requestId,
+            now: ctx.now,
+          });
         },
-        actorPersonId: ctx.actor!.personId,
-        now: ctx.now,
+      }),
+    ),
+});
+
+const agentConfirmationSchema = z.object({
+  draftId: z.string().uuid(),
+  confirmationNonce: z.string().uuid().optional(),
+  idempotencyKey: z.string().uuid(),
+});
+
+const agentRouter = router({
+  confirmAction: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "agent-confirmation",
+        capacity: 20,
+        refillPerMinute: 10,
+      }),
+    )
+    .input(agentConfirmationSchema)
+    .output(agentDraftSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "agent.confirmAction",
+        request: input,
+        ctx,
+        execute: async () =>
+          confirmAgentAction({
+            draftId: input.draftId,
+            actorPersonId: ctx.actor!.personId,
+            organizationId: ctx.actor!.organizationId,
+            confirmationNonce: input.confirmationNonce,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
       }),
     ),
 });
 
 const adminRouter = router({
-  overview: adminProcedure.query(() => demoRepository.admin.overview()),
-  organizations: adminProcedure.query(() =>
-    demoRepository.admin.organizations(),
-  ),
-  queues: adminProcedure.query(() => demoRepository.admin.queues()),
-  audit: adminProcedure.query(() => demoRepository.admin.audit()),
+  overview: adminProcedure
+    .output(adminOverviewSchema)
+    .query(() => getRepository().admin.overview()),
+  organizations: adminProcedure
+    .output(z.array(organizationSummarySchema).readonly())
+    .query(() => getRepository().admin.organizations()),
+  queues: adminProcedure
+    .output(z.array(adminQueueSchema).readonly())
+    .query(() => getRepository().admin.queues()),
+  audit: adminProcedure
+    .output(z.array(auditEventSchema).readonly())
+    .query(() => getRepository().admin.audit()),
   confirmAgentAction: adminProcedure
-    .input(
-      z.object({
-        draftId: z.string().uuid(),
-        confirmationNonce: z.string().uuid().optional(),
+    .use(
+      rateLimitMiddleware({
+        id: "admin-agent-confirmation",
+        capacity: 20,
+        refillPerMinute: 10,
       }),
     )
+    .input(agentConfirmationSchema)
+    .output(agentDraftSchema)
     .mutation(({ input, ctx }) =>
-      confirmAgentAction({
-        draftId: input.draftId,
-        actorPersonId: ctx.actor!.personId,
-        confirmationNonce: input.confirmationNonce,
-        now: ctx.now,
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.confirmAgentAction",
+        request: input,
+        ctx,
+        execute: async () =>
+          confirmAgentAction({
+            draftId: input.draftId,
+            actorPersonId: ctx.actor!.personId,
+            organizationId: ctx.actor!.organizationId,
+            confirmationNonce: input.confirmationNonce,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
       }),
     ),
-  toolRiskRegistry: adminProcedure.query(() => toolRiskRegistry),
+  toolRiskRegistry: adminProcedure
+    .output(z.record(z.string(), z.enum(["read", "propose", "confirm-always"])))
+    .query(() => toolRiskRegistry),
 });
 
 export const appRouter = router({
   public: publicRouter,
   player: playerRouter,
   operator: operatorRouter,
+  agent: agentRouter,
   admin: adminRouter,
 });
 

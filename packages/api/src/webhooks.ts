@@ -1,5 +1,10 @@
-import { getDatabase, isDatabaseConfigured, webhookEvents } from "@duna/db";
-import { eq, sql } from "drizzle-orm";
+import {
+  getDatabase,
+  isDatabaseConfigured,
+  webhookEvents,
+  workflowJobs,
+} from "@duna/db";
+import { and, eq } from "drizzle-orm";
 import type Stripe from "stripe";
 
 const processedDemoEvents = new Set<string>();
@@ -38,6 +43,7 @@ function actionForStripeEvent(type: string): StripeDomainAction {
 export async function processStripeWebhook(event: Stripe.Event): Promise<{
   readonly duplicate: boolean;
   readonly action: StripeDomainAction;
+  readonly workflowJobId?: string;
 }> {
   const action = actionForStripeEvent(event.type);
   if (!isDatabaseConfigured()) {
@@ -47,35 +53,52 @@ export async function processStripeWebhook(event: Stripe.Event): Promise<{
   }
 
   const db = getDatabase();
-  const payload = JSON.parse(JSON.stringify(event)) as Record<string, unknown>;
-  const inserted = await db
-    .insert(webhookEvents)
-    .values({
-      provider: "stripe",
-      providerEventId: event.id,
-      eventType: event.type,
-      payload,
-      signatureVerified: true,
-      status: "received",
-    })
-    .onConflictDoNothing()
-    .returning({ id: webhookEvents.id });
+  const existing = await db.query.webhookEvents.findFirst({
+    where: and(
+      eq(webhookEvents.provider, "stripe"),
+      eq(webhookEvents.providerEventId, event.id),
+    ),
+  });
+  if (existing) return { duplicate: true, action };
 
-  if (!inserted[0]) {
+  const payload = JSON.parse(JSON.stringify(event)) as Record<string, unknown>;
+  const webhookEventId = crypto.randomUUID();
+  const workflowJobId = crypto.randomUUID();
+  const [insertedEvents] = await db.batch([
+    db
+      .insert(webhookEvents)
+      .values({
+        id: webhookEventId,
+        provider: "stripe",
+        providerEventId: event.id,
+        eventType: event.type,
+        payload,
+        signatureVerified: true,
+        status: "queued",
+      })
+      .onConflictDoNothing()
+      .returning({ id: webhookEvents.id }),
+    db
+      .insert(workflowJobs)
+      .values({
+        id: workflowJobId,
+        kind: `stripe.${action}`,
+        idempotencyKey: `stripe:${event.id}`,
+        payload: {
+          webhookEventId,
+          providerEventId: event.id,
+          eventType: event.type,
+          action,
+        },
+        traceId: event.id,
+      })
+      .onConflictDoNothing()
+      .returning({ id: workflowJobs.id }),
+  ]);
+
+  if (!insertedEvents[0]) {
     return { duplicate: true, action };
   }
 
-  // The durable event is the integration boundary. Domain projections consume
-  // this record idempotently; no external webhook request executes business
-  // logic before the signed payload has been stored.
-  await db
-    .update(webhookEvents)
-    .set({
-      status: "processed",
-      attempts: sql`${webhookEvents.attempts} + 1`,
-      processedAt: new Date(),
-    })
-    .where(eq(webhookEvents.id, inserted[0].id));
-
-  return { duplicate: false, action };
+  return { duplicate: false, action, workflowJobId };
 }

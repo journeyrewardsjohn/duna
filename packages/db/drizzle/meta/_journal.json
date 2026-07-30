@@ -8,6 +8,41 @@
       "when": 1785433205212,
       "tag": "0000_outstanding_black_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785440021120,
+      "tag": "0001_spotty_maggott",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785440287575,
+      "tag": "0002_flat_invisible_woman",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785440531205,
+      "tag": "0003_awesome_blue_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785440930981,
+      "tag": "0004_curved_lord_tyger",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785441125917,
+      "tag": "0005_tranquil_hellfire_club",
+      "breakpoints": true
     }
   ]
 }

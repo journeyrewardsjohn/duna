@@ -1,5 +1,9 @@
 # Duna architecture
 
+These are required design invariants. Module-by-module implementation status is
+tracked separately in `BUILD_MATRIX.md`; this list is not a blanket launch
+readiness claim.
+
 ## Invariants
 
 1. Rally events are scoring truth. Rating events are rating truth. Ledger entries

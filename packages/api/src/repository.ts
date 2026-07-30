@@ -18,6 +18,9 @@ import {
   playerMetrics,
 } from "@duna/core/demo";
 import { priceConsumerOrder, type PricedOrderItem } from "@duna/pricing";
+import { isDatabaseConfigured } from "@duna/db";
+import { databaseRepository } from "./database-repository";
+import type { DunaRepository } from "./repository-contract";
 
 const mutableEvents: EventSummary[] = [...demoEvents];
 const mutableMatches: MatchSummary[] = [...demoMatches];
@@ -148,4 +151,14 @@ export const demoRepository = {
     queues: () => demoAdminQueues,
     audit: () => demoAuditEvents,
   },
-};
+} satisfies DunaRepository;
+
+export function getRepository(): DunaRepository {
+  if (
+    isDatabaseConfigured() &&
+    process.env.DUNA_DATA_SOURCE?.toLowerCase() !== "demo"
+  ) {
+    return databaseRepository;
+  }
+  return demoRepository;
+}

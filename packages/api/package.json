@@ -17,6 +17,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@clerk/backend": "3.14.0",
     "@duna/core": "workspace:*",
     "@duna/db": "workspace:*",
     "@duna/league-engine": "workspace:*",

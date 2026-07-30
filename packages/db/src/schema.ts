@@ -209,6 +209,11 @@ export const people = pgTable(
     handle: varchar("handle", { length: 48 }).notNull().unique(),
     birthDate: date("birth_date", { mode: "string" }),
     isMinor: boolean("is_minor").notNull().default(false),
+    ageBand: varchar("age_band", { length: 16 }).notNull().default("unknown"),
+    ageVerifiedAt: timestamp("age_verified_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     parentalConsentAt: timestamp("parental_consent_at", {
       withTimezone: true,
       mode: "date",
@@ -229,6 +234,14 @@ export const people = pgTable(
     check(
       "people_minor_private_check",
       sql`NOT ${table.isMinor} OR ${table.profileVisibility} <> 'public'`,
+    ),
+    check(
+      "people_age_band_check",
+      sql`${table.ageBand} IN ('unknown', 'under-13', 'teen', 'adult')`,
+    ),
+    check(
+      "people_minor_age_band_check",
+      sql`${table.ageBand} NOT IN ('under-13', 'teen') OR ${table.isMinor}`,
     ),
   ],
 );
@@ -1436,6 +1449,7 @@ export const pickupSessions = pgTable("pickup_sessions", {
     .notNull()
     .references(() => people.id),
   venueId: uuid("venue_id").references(() => venues.id),
+  venueLabel: text("venue_label").notNull(),
   title: text("title").notNull(),
   startsAt: timestamp("starts_at", {
     withTimezone: true,
@@ -1573,6 +1587,65 @@ export const idempotencyRecords = pgTable(
   ],
 );
 
+export const rateLimitBuckets = pgTable("rate_limit_buckets", {
+  key: varchar("key", { length: 256 }).primaryKey(),
+  tokens: doublePrecision("tokens").notNull(),
+  capacity: integer("capacity").notNull(),
+  refillPerSecond: doublePrecision("refill_per_second").notNull(),
+  expiresAt: timestamp("expires_at", {
+    withTimezone: true,
+    mode: "date",
+  }).notNull(),
+  createdAt,
+  updatedAt,
+});
+
+export const workflowJobs = pgTable(
+  "workflow_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: varchar("kind", { length: 128 }).notNull(),
+    idempotencyKey: varchar("idempotency_key", { length: 192 }).notNull(),
+    organizationId: uuid("organization_id").references(() => organizations.id),
+    personId: uuid("person_id").references(() => people.id),
+    payload: jsonb("payload").notNull().$type<Record<string, unknown>>(),
+    status: varchar("status", { length: 24 }).notNull().default("queued"),
+    attempts: integer("attempts").notNull().default(0),
+    maximumAttempts: integer("maximum_attempts").notNull().default(8),
+    availableAt: timestamp("available_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    lockedAt: timestamp("locked_at", { withTimezone: true, mode: "date" }),
+    lockToken: uuid("lock_token"),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    lastError: text("last_error"),
+    traceId: varchar("trace_id", { length: 128 }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("workflow_kind_idempotency_unique").on(
+      table.kind,
+      table.idempotencyKey,
+    ),
+    index("workflow_ready_idx").on(
+      table.status,
+      table.availableAt,
+      table.createdAt,
+    ),
+    check(
+      "workflow_attempt_bounds",
+      sql`${table.attempts} >= 0 AND ${table.maximumAttempts} > 0`,
+    ),
+  ],
+);
+
 export const webhookEvents = pgTable(
   "webhook_events",
   {
@@ -1608,10 +1681,12 @@ export const agentDrafts = pgTable("agent_drafts", {
   conversationId: varchar("conversation_id", { length: 128 }).notNull(),
   toolName: varchar("tool_name", { length: 128 }).notNull(),
   riskTier: riskTierEnum("risk_tier").notNull(),
+  inputHash: varchar("input_hash", { length: 128 }).notNull(),
   input: jsonb("input").notNull().$type<Record<string, unknown>>(),
   proposedDiff: jsonb("proposed_diff")
     .notNull()
     .$type<Record<string, unknown>>(),
+  confirmationNonceHash: varchar("confirmation_nonce_hash", { length: 128 }),
   status: varchar("status", { length: 24 }).notNull().default("proposed"),
   confirmedByPersonId: uuid("confirmed_by_person_id").references(
     () => people.id,

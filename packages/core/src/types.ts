@@ -141,7 +141,9 @@ export interface WalletEntry {
     | "prize"
     | "coach-earning"
     | "withdrawal"
-    | "affiliate";
+    | "affiliate"
+    | "adjustment"
+    | "chargeback";
   readonly description: string;
   readonly amount: Money;
   readonly occurredAt: string;

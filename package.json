@@ -23,6 +23,7 @@
     "db:seed": "pnpm --filter @duna/db seed",
     "stripe:bootstrap": "tsx scripts/stripe-bootstrap.ts",
     "stripe:smoke": "tsx scripts/stripe-smoke.ts",
+    "verify:live-repository": "tsx scripts/verify-live-repository.ts",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e"
   },
   "devDependencies": {

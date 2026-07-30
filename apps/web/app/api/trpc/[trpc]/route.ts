@@ -1,4 +1,4 @@
-import { appRouter, createApiContext } from "@duna/api";
+import { appRouter, createApiContextFromRequest } from "@duna/api";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 
 function handler(request: Request) {
@@ -8,7 +8,7 @@ function handler(request: Request) {
     req: request,
     router: appRouter,
     createContext: () =>
-      createApiContext({
+      createApiContextFromRequest(request, {
         requestId: request.headers.get("x-request-id") ?? crypto.randomUUID(),
         ipAddress: forwardedFor?.split(",")[0]?.trim(),
         userAgent: request.headers.get("user-agent") ?? undefined,
