@@ -1,19 +1,29 @@
-import { Badge, Numeric } from "@duna/ui";
-import {
-  Bell,
-  Check,
-  ChevronRight,
-  CreditCard,
-  Globe2,
-  Pause,
-  ShieldCheck,
-  UserRound,
-  Users,
-} from "lucide-react";
+import { GUARDIAN_CONSENT_DISCLOSURE } from "@duna/api";
+import { Bell, CreditCard, ShieldCheck, UserRound, Users } from "lucide-react";
+import { HouseholdSettings } from "@/components/household-settings";
+import { MembershipSettings } from "@/components/membership-settings";
+import { NotificationSettings } from "@/components/notification-settings";
+import { PrivacySettings } from "@/components/privacy-settings";
+import { ProfileSettings } from "@/components/profile-settings";
+import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Settings" };
 
-export default function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<{ membership?: string }>;
+}) {
+  const query = await searchParams;
+  const caller = await getServerCaller();
+  const settings = await caller.player.settings();
+  const membershipNotice =
+    query.membership === "success"
+      ? "Stripe accepted the checkout. Duna+ will appear here as soon as the signed webhook synchronizes it."
+      : query.membership === "cancelled"
+        ? "Duna+ checkout was cancelled. No membership change was made."
+        : undefined;
+
   return (
     <main className="standard-page settings-page">
       <section className="page-heading-row">
@@ -43,115 +53,22 @@ export default function SettingsPage() {
           <a href="#privacy">
             <ShieldCheck size={17} /> Privacy + safety
           </a>
-          <a href="#display">
-            <Globe2 size={17} /> Language + units
-          </a>
         </nav>
 
         <div className="settings-content">
-          <section id="membership">
-            <div className="settings-section__heading">
-              <div>
-                <span className="page-eyebrow">Membership</span>
-                <h2>Duna+</h2>
-              </div>
-              <Badge tone="positive">Active</Badge>
-            </div>
-            <article className="membership-card">
-              <div>
-                <span>DUNA+</span>
-                <Badge>Annual</Badge>
-              </div>
-              <Numeric>$59.00</Numeric>
-              <p>Renews July 12, 2027 · Visa •••• 4242</p>
-              <div className="membership-card__savings">
-                <span>
-                  <small>Fees saved</small>
-                  <Numeric>$18.72</Numeric>
-                </span>
-                <span>
-                  <small>Guest passes</small>
-                  <Numeric>2</Numeric>
-                </span>
-                <span>
-                  <small>Months paused</small>
-                  <Numeric>0 / 4</Numeric>
-                </span>
-              </div>
-              <ul>
-                <li>
-                  <Check size={15} /> No platform fees
-                </li>
-                <li>
-                  <Check size={15} /> All-time rating history
-                </li>
-                <li>
-                  <Check size={15} /> Deep partner chemistry
-                </li>
-                <li>
-                  <Check size={15} /> Personal analytics
-                </li>
-              </ul>
-            </article>
-            <div className="membership-actions">
-              <button>
-                <Pause aria-hidden size={17} /> Pause membership
-              </button>
-              <button className="danger-link">Cancel membership</button>
-              <p>
-                Cancellation takes one screen and keeps Duna+ active through
-                your paid period. Your profile, rating, matches, safety
-                features, and network access always remain free.
-              </p>
-            </div>
-          </section>
-
-          <section id="household">
-            <div className="settings-section__heading">
-              <div>
-                <span className="page-eyebrow">Family</span>
-                <h2>Household + guardians</h2>
-              </div>
-            </div>
-            <button className="settings-row">
-              <span className="avatar">PL</span>
-              <span>
-                <strong>Priya Lewis</strong>
-                <small>Verified guardian · emergency contact</small>
-              </span>
-              <Badge tone="positive">Verified</Badge>
-              <ChevronRight size={17} />
-            </button>
-          </section>
-
-          <section id="privacy">
-            <div className="settings-section__heading">
-              <div>
-                <span className="page-eyebrow">Your data</span>
-                <h2>Privacy + ownership</h2>
-              </div>
-            </div>
-            <button className="settings-row">
-              <span>
-                <strong>Export your Duna data</strong>
-                <small>
-                  Profile, rating events, matches, bookings, and wallet
-                  activity.
-                </small>
-              </span>
-              <ChevronRight size={17} />
-            </button>
-            <button className="settings-row">
-              <span>
-                <strong>Delete your account</strong>
-                <small>
-                  Review what Duna must retain for tax, safety, and audit
-                  duties.
-                </small>
-              </span>
-              <ChevronRight size={17} />
-            </button>
-          </section>
+          <MembershipSettings
+            initialNotice={membershipNotice}
+            membership={settings.membership}
+            plans={settings.dunaPlusPlans}
+          />
+          <ProfileSettings profile={settings.profile} />
+          <HouseholdSettings
+            ageBand={settings.profile.ageBand}
+            consentDisclosure={GUARDIAN_CONSENT_DISCLOSURE}
+            household={settings.household}
+          />
+          <NotificationSettings consents={settings.consents} />
+          <PrivacySettings requests={settings.privacyRequests} />
         </div>
       </section>
     </main>

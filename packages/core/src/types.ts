@@ -83,6 +83,16 @@ export type EventKind =
   | "court-rental"
   | "pickup";
 
+export interface EventDivisionSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly discipline: Discipline;
+  readonly ratingBasis: string;
+  readonly price: Money;
+  readonly spotsRemaining: number;
+  readonly capacity: number;
+}
+
 export interface EventSummary {
   readonly id: string;
   readonly slug: string;
@@ -90,6 +100,9 @@ export interface EventSummary {
   readonly kind: EventKind;
   readonly organizationName: string;
   readonly venueName: string;
+  readonly description?: string;
+  readonly format?: string;
+  readonly recordMatches?: boolean;
   readonly startsAt: string;
   readonly endsAt: string;
   readonly timezone: string;
@@ -97,6 +110,7 @@ export interface EventSummary {
   readonly spotsRemaining: number;
   readonly capacity: number;
   readonly ratingRange?: readonly [number, number];
+  readonly divisions?: readonly EventDivisionSummary[];
   readonly live?: boolean;
   readonly imageUrl?: string;
   readonly tags: readonly string[];
@@ -104,6 +118,9 @@ export interface EventSummary {
 
 export interface MatchSummary {
   readonly id: string;
+  readonly status?:
+    "pending-verification" | "verified" | "disputed" | "complete";
+  readonly confirmationRequired?: boolean;
   readonly playedAt: string;
   readonly venueName: string;
   readonly teamA: readonly PersonSummary[];

@@ -57,6 +57,160 @@ export async function createDunaPlusCheckout(input: {
   return { id: session.id, url: session.url };
 }
 
+export async function createEventCheckoutSession(input: {
+  readonly orderId: string;
+  readonly personId: string;
+  readonly customerEmail?: string;
+  readonly eventId: string;
+  readonly eventTitle: string;
+  readonly amountMinor: number;
+  readonly currency: string;
+  readonly applicationFeeMinor: number;
+  readonly connectedAccountId: string;
+  readonly successUrl: string;
+  readonly cancelUrl: string;
+  readonly expiresAt: Date;
+  readonly idempotencyKey: string;
+}): Promise<{
+  readonly id: string;
+  readonly url: string | null;
+  readonly expiresAt: string;
+}> {
+  if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
+    throw new Error("Checkout amount must be a positive minor-unit integer");
+  }
+  if (
+    !Number.isSafeInteger(input.applicationFeeMinor) ||
+    input.applicationFeeMinor < 0 ||
+    input.applicationFeeMinor > input.amountMinor
+  ) {
+    throw new Error("Connected checkout application fee is invalid");
+  }
+  const session = await getStripeClient().checkout.sessions.create(
+    {
+      mode: "payment",
+      client_reference_id: input.personId,
+      customer_email: input.customerEmail,
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: input.currency.toLowerCase(),
+            unit_amount: input.amountMinor,
+            product_data: {
+              name: input.eventTitle,
+              metadata: { dunaEventId: input.eventId },
+            },
+          },
+        },
+      ],
+      success_url: input.successUrl,
+      cancel_url: input.cancelUrl,
+      expires_at: Math.floor(input.expiresAt.getTime() / 1_000),
+      automatic_tax: {
+        enabled: process.env.STRIPE_AUTOMATIC_TAX_ENABLED === "true",
+      },
+      payment_intent_data: {
+        application_fee_amount: input.applicationFeeMinor,
+        transfer_data: { destination: input.connectedAccountId },
+        metadata: {
+          dunaOrderId: input.orderId,
+          dunaEventId: input.eventId,
+          dunaPersonId: input.personId,
+        },
+      },
+      metadata: {
+        dunaOrderId: input.orderId,
+        dunaEventId: input.eventId,
+        dunaPersonId: input.personId,
+      },
+    },
+    { idempotencyKey: input.idempotencyKey },
+  );
+  return {
+    id: session.id,
+    url: session.url,
+    expiresAt: new Date(session.expires_at * 1_000).toISOString(),
+  };
+}
+
+export async function createCourtCheckoutSession(input: {
+  readonly orderId: string;
+  readonly bookingId: string;
+  readonly personId: string;
+  readonly customerEmail?: string;
+  readonly description: string;
+  readonly amountMinor: number;
+  readonly currency: string;
+  readonly applicationFeeMinor: number;
+  readonly connectedAccountId: string;
+  readonly successUrl: string;
+  readonly cancelUrl: string;
+  readonly expiresAt: Date;
+  readonly idempotencyKey: string;
+}): Promise<{
+  readonly id: string;
+  readonly url: string | null;
+  readonly expiresAt: string;
+}> {
+  if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
+    throw new Error("Court checkout amount must be a positive integer");
+  }
+  if (
+    !Number.isSafeInteger(input.applicationFeeMinor) ||
+    input.applicationFeeMinor < 0 ||
+    input.applicationFeeMinor > input.amountMinor
+  ) {
+    throw new Error("Court checkout application fee is invalid");
+  }
+  const session = await getStripeClient().checkout.sessions.create(
+    {
+      mode: "payment",
+      client_reference_id: input.personId,
+      customer_email: input.customerEmail,
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: input.currency.toLowerCase(),
+            unit_amount: input.amountMinor,
+            product_data: {
+              name: input.description,
+              metadata: { dunaBookingId: input.bookingId },
+            },
+          },
+        },
+      ],
+      success_url: input.successUrl,
+      cancel_url: input.cancelUrl,
+      expires_at: Math.floor(input.expiresAt.getTime() / 1_000),
+      automatic_tax: {
+        enabled: process.env.STRIPE_AUTOMATIC_TAX_ENABLED === "true",
+      },
+      payment_intent_data: {
+        application_fee_amount: input.applicationFeeMinor,
+        transfer_data: { destination: input.connectedAccountId },
+        metadata: {
+          dunaOrderId: input.orderId,
+          dunaBookingId: input.bookingId,
+          dunaPersonId: input.personId,
+        },
+      },
+      metadata: {
+        dunaOrderId: input.orderId,
+        dunaBookingId: input.bookingId,
+        dunaPersonId: input.personId,
+      },
+    },
+    { idempotencyKey: input.idempotencyKey },
+  );
+  return {
+    id: session.id,
+    url: session.url,
+    expiresAt: new Date(session.expires_at * 1_000).toISOString(),
+  };
+}
+
 export async function createBillingPortalSession(input: {
   readonly customerId: string;
   readonly returnUrl: string;

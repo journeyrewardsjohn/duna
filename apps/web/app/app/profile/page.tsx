@@ -1,35 +1,33 @@
-import { demoMatches, demoPeople, demoPlayer } from "@duna/core/demo";
 import { Badge, Numeric } from "@duna/ui";
-import {
-  ArrowRight,
-  Check,
-  MapPin,
-  Share2,
-  Sparkles,
-  Trophy,
-  Users,
-} from "lucide-react";
+import { ArrowRight, Check, MapPin, Share2 } from "lucide-react";
 import Link from "next/link";
 import { MatchCard } from "@/components/match-card";
 import { RatingOrbit } from "@/components/rating-orbit";
+import { getServerCaller } from "@/lib/api";
 
-export const metadata = { title: "Mara Lewis" };
+export const metadata = { title: "Profile" };
 
-export default function ProfilePage() {
+export default async function ProfilePage() {
+  const caller = await getServerCaller();
+  const [dashboard, matches, people] = await Promise.all([
+    caller.player.dashboard(),
+    caller.player.matches(),
+    caller.public.players({ limit: 4 }),
+  ]);
+  const player = dashboard.player;
   return (
     <main className="standard-page profile-page">
       <section className="profile-hero">
         <div className="profile-hero__identity">
-          <span className="profile-avatar">ML</span>
+          <span className="profile-avatar">{player.initials}</span>
           <div>
             <div className="profile-hero__badges">
-              <Badge tone="positive">Duna+</Badge>
               <Badge>Claimed profile</Badge>
             </div>
-            <h1>{demoPlayer.displayName}</h1>
+            <h1>{player.displayName}</h1>
             <p>
-              @{demoPlayer.handle} · <MapPin aria-hidden size={14} />{" "}
-              {demoPlayer.homeMarket}
+              @{player.handle} · <MapPin aria-hidden size={14} />{" "}
+              {player.homeMarket}
             </p>
           </div>
         </div>
@@ -38,31 +36,31 @@ export default function ProfilePage() {
         </button>
         <div className="profile-hero__rating">
           <RatingOrbit
-            confidence={demoPlayer.rating.confidence}
-            delta={demoPlayer.rating.delta}
-            value={demoPlayer.rating.display}
+            confidence={player.rating.confidence}
+            delta={player.rating.delta}
+            value={player.rating.display}
           />
         </div>
         <div className="profile-hero__summary">
           <article>
-            <small>Current band</small>
-            <strong>A</strong>
-            <span>4.00–4.99</span>
+            <small>Sand Rating</small>
+            <Numeric>{player.rating.display.toFixed(2)}</Numeric>
+            <span>{player.rating.discipline.replace("-", " ")}</span>
           </article>
           <article>
-            <small>South Bay</small>
-            <Numeric>#42</Numeric>
-            <span>Top 9%</span>
+            <small>Confidence</small>
+            <strong>{player.rating.confidence}</strong>
+            <span>Verification-weighted</span>
           </article>
           <article>
-            <small>Career matches</small>
-            <Numeric>84</Numeric>
-            <span>68% verified live</span>
+            <small>Connected matches</small>
+            <Numeric>{matches.length}</Numeric>
+            <span>Available in this account</span>
           </article>
           <article>
-            <small>Win rate</small>
-            <Numeric>61%</Numeric>
-            <span>+7% last 90 days</span>
+            <small>Home market</small>
+            <strong>{player.homeMarket.split(",")[0]}</strong>
+            <span>Travel mode ready</span>
           </article>
         </div>
       </section>
@@ -71,7 +69,7 @@ export default function ProfilePage() {
         <article className="progression-card">
           <div className="panel-heading">
             <div>
-              <span className="page-eyebrow">Last 12 months</span>
+              <span className="page-eyebrow">Connected history</span>
               <h2>Rating progression</h2>
             </div>
             <div className="segmented-control">
@@ -79,35 +77,12 @@ export default function ProfilePage() {
               <button>All</button>
             </div>
           </div>
-          <div
-            className="rating-chart"
-            aria-label="Rating rose from 4.08 to 4.62"
-          >
-            <div className="rating-chart__grid">
-              {[5, 4.5, 4, 3.5].map((value) => (
-                <span key={value}>
-                  <Numeric>{value.toFixed(1)}</Numeric>
-                </span>
-              ))}
-            </div>
-            <svg aria-hidden viewBox="0 0 800 240" preserveAspectRatio="none">
-              <path
-                className="rating-chart__area"
-                d="M0 190 C70 175,100 184,150 160 S240 138,290 148 S380 100,430 115 S520 90,570 76 S660 55,720 64 S760 35,800 42 L800 240 L0 240 Z"
-              />
-              <path
-                className="rating-chart__line"
-                d="M0 190 C70 175,100 184,150 160 S240 138,290 148 S380 100,430 115 S520 90,570 76 S660 55,720 64 S760 35,800 42"
-              />
-              <circle cx="800" cy="42" r="7" />
-            </svg>
-            <div className="rating-chart__labels">
-              <span>Aug</span>
-              <span>Nov</span>
-              <span>Feb</span>
-              <span>May</span>
-              <span>Jul</span>
-            </div>
+          <div className="rating-chart empty-state">
+            <h3>Progression is waiting for rating events.</h3>
+            <p>
+              The chart will render from immutable rating movements once
+              connected match history is available.
+            </p>
           </div>
         </article>
 
@@ -115,25 +90,25 @@ export default function ProfilePage() {
           <span className="page-eyebrow">Partner chemistry</span>
           <h2>You make each other better.</h2>
           <div className="chemistry-card__partner">
-            <span className="avatar">TP</span>
+            <span className="avatar">—</span>
             <span>
-              <strong>Theo Park</strong>
-              <small>27 shared matches</small>
+              <strong>No computed partner yet</strong>
+              <small>Verified shared matches are required</small>
             </span>
-            <Numeric>+0.14</Numeric>
+            <Numeric>—</Numeric>
           </div>
           <div className="chemistry-card__stats">
             <div>
               <small>Win rate</small>
-              <Numeric>68%</Numeric>
+              <Numeric>—</Numeric>
             </div>
             <div>
               <small>Vs expected</small>
-              <Numeric>+7.2%</Numeric>
+              <Numeric>—</Numeric>
             </div>
           </div>
-          <Link href="/players/theopark">
-            Open partnership card <ArrowRight aria-hidden size={15} />
+          <Link href="/app/matches">
+            Open match history <ArrowRight aria-hidden size={15} />
           </Link>
         </article>
       </section>
@@ -141,31 +116,22 @@ export default function ProfilePage() {
       <section className="profile-achievements">
         <div className="dashboard-section__heading">
           <div>
-            <span className="page-eyebrow">Earned on sand</span>
-            <h2>Moments</h2>
+            <span className="page-eyebrow">Account state</span>
+            <h2>Portable identity</h2>
           </div>
         </div>
         <div>
           <article>
-            <span>
-              <Trophy aria-hidden />
-            </span>
-            <strong>Summer Open winner</strong>
-            <small>July 2026 · Hermosa Beach</small>
+            <strong>One player record</strong>
+            <small>Across every connected organization</small>
           </article>
           <article>
-            <span>
-              <Sparkles aria-hidden />
-            </span>
-            <strong>Reliable → Locked</strong>
-            <small>Rating confidence milestone</small>
+            <strong>{player.rating.confidence} confidence</strong>
+            <small>Derived from verified rating inputs</small>
           </article>
           <article>
-            <span>
-              <Users aria-hidden />
-            </span>
-            <strong>Pickup regular</strong>
-            <small>Hosted or joined 25 runs</small>
+            <strong>Privacy controlled</strong>
+            <small>Public fields stay separate from private history</small>
           </article>
         </div>
       </section>
@@ -179,36 +145,44 @@ export default function ProfilePage() {
             </div>
           </div>
           <div className="match-list">
-            {demoMatches.slice(0, 2).map((match) => (
+            {matches.slice(0, 2).map((match) => (
               <MatchCard key={match.id} match={match} />
             ))}
+            {matches.length === 0 && (
+              <article className="empty-state">
+                <p>No connected match history yet.</p>
+              </article>
+            )}
           </div>
         </div>
         <div className="dashboard-section">
           <div className="dashboard-section__heading">
             <div>
-              <span className="page-eyebrow">Frequent opponents</span>
-              <h2>Your circuit</h2>
+              <span className="page-eyebrow">Public community</span>
+              <h2>Players to explore</h2>
             </div>
           </div>
           <div className="opponent-list">
-            {demoPeople.slice(1, 4).map((person, index) => (
-              <Link href={`/players/${person.handle}`} key={person.id}>
-                <span className="avatar">{person.initials}</span>
-                <span>
-                  <strong>{person.displayName}</strong>
-                  <small>{12 - index * 2} matches</small>
-                </span>
-                <Numeric>{person.rating.display.toFixed(2)}</Numeric>
-              </Link>
-            ))}
+            {people
+              .filter((person) => person.id !== player.id)
+              .slice(0, 3)
+              .map((person) => (
+                <Link href={`/players/${person.handle}`} key={person.id}>
+                  <span className="avatar">{person.initials}</span>
+                  <span>
+                    <strong>{person.displayName}</strong>
+                    <small>{person.homeMarket}</small>
+                  </span>
+                  <Numeric>{person.rating.display.toFixed(2)}</Numeric>
+                </Link>
+              ))}
           </div>
         </div>
       </section>
 
       <section className="duna-plus-panel">
         <div>
-          <Badge tone="positive">Your Duna+</Badge>
+          <Badge>Duna+ preview</Badge>
           <h2>Depth without competitive advantage.</h2>
           <p>
             You get richer history, partner chemistry, insights, themes, and no
@@ -218,13 +192,13 @@ export default function ProfilePage() {
         </div>
         <ul>
           <li>
-            <Check aria-hidden size={16} /> $18.72 saved in fees
+            <Check aria-hidden size={16} /> Capped booking fees can be waived
           </li>
           <li>
-            <Check aria-hidden size={16} /> 2 guest passes available
+            <Check aria-hidden size={16} /> Deeper private history and insights
           </li>
           <li>
-            <Check aria-hidden size={16} /> All-time history unlocked
+            <Check aria-hidden size={16} /> No rating or eligibility advantage
           </li>
         </ul>
         <Link href="/app/settings">Manage Duna+</Link>

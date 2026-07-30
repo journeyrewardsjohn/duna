@@ -1,11 +1,10 @@
-import { demoMatches, demoPeople } from "@duna/core/demo";
 import { Badge, Numeric } from "@duna/ui";
 import { MapPin, Share2, UserPlus } from "lucide-react";
 import { notFound } from "next/navigation";
-import { MatchCard } from "@/components/match-card";
 import { RatingOrbit } from "@/components/rating-orbit";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { getServerCaller } from "@/lib/api";
 
 export default async function PublicPlayerPage({
   params,
@@ -13,7 +12,10 @@ export default async function PublicPlayerPage({
   readonly params: Promise<{ handle: string }>;
 }) {
   const { handle } = await params;
-  const player = demoPeople.find((person) => person.handle === handle);
+  const caller = await getServerCaller();
+  const player = await caller.public
+    .playerProfile({ handle })
+    .catch(() => undefined);
   if (!player) notFound();
   return (
     <main className="public-detail">
@@ -48,39 +50,35 @@ export default async function PublicPlayerPage({
       <section className="public-profile-body">
         <div className="profile-summary-grid">
           <article>
-            <small>Current band</small>
-            <strong>A</strong>
-            <span>Beach 2s</span>
+            <small>Sand Rating</small>
+            <Numeric>{player.rating.display.toFixed(2)}</Numeric>
+            <span>{player.rating.discipline.replace("-", " ")}</span>
           </article>
           <article>
-            <small>Percentile</small>
-            <Numeric>{player.rating.percentile ?? 86}%</Numeric>
-            <span>South Bay</span>
+            <small>Confidence</small>
+            <strong>{player.rating.confidence}</strong>
+            <span>Verification-weighted</span>
           </article>
           <article>
-            <small>Verified matches</small>
-            <Numeric>46</Numeric>
-            <span>All time</span>
+            <small>Market</small>
+            <strong>{player.homeMarket.split(",")[0]}</strong>
+            <span>Public profile</span>
           </article>
           <article>
-            <small>Win rate</small>
-            <Numeric>61%</Numeric>
-            <span>Last 12 months</span>
+            <small>Profile state</small>
+            <strong>Claimed</strong>
+            <span>One Duna identity</span>
           </article>
         </div>
         <div className="dashboard-two-column">
-          <section className="dashboard-section">
-            <div className="dashboard-section__heading">
-              <div>
-                <span className="page-eyebrow">Public history</span>
-                <h2>Recent matches</h2>
-              </div>
-            </div>
-            <div className="match-list">
-              {demoMatches.slice(0, 2).map((match) => (
-                <MatchCard key={match.id} match={match} />
-              ))}
-            </div>
+          <section className="public-method-note">
+            <span className="page-eyebrow">Privacy by design</span>
+            <h2>Match details stay with the player.</h2>
+            <p>
+              This public profile shows the portable rating and identity details
+              the player has chosen to share. Connected match history remains
+              private unless the player publishes it.
+            </p>
           </section>
           <section className="public-method-note">
             <span className="page-eyebrow">Trust the number</span>

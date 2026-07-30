@@ -31,8 +31,11 @@ export const demoRepository = {
     eventBySlug: (slug: string) =>
       mutableEvents.find((event) => event.slug === slug),
     venues: () => demoVenues,
+    players: (limit: number) => demoPeople.slice(0, limit),
     playerByHandle: (handle: string) =>
       demoPeople.find((person) => person.handle === handle),
+    organizationBySlug: (slug: string) =>
+      slug === demoOrganization.slug ? demoOrganization : undefined,
   },
   player: {
     dashboard: () => ({
@@ -54,6 +57,34 @@ export const demoRepository = {
       entries: demoWalletEntries,
       taxFormStatus: "not-required" as const,
     }),
+    settings: () => ({
+      profile: {
+        person: demoPlayer,
+        visibility: "public" as const,
+        locale: "en-US",
+        measurementSystem: "imperial" as const,
+        ageBand: "adult" as const,
+        ageVerified: false,
+        parentalConsentRecorded: false,
+      },
+      household: [],
+      dunaPlusPlans: [
+        {
+          interval: "month" as const,
+          priceMinor: 799,
+          currency: "USD" as const,
+          configured: Boolean(process.env.STRIPE_DUNA_PLUS_MONTHLY_PRICE_ID),
+        },
+        {
+          interval: "year" as const,
+          priceMinor: 5_900,
+          currency: "USD" as const,
+          configured: Boolean(process.env.STRIPE_DUNA_PLUS_ANNUAL_PRICE_ID),
+        },
+      ],
+      consents: [],
+      privacyRequests: [],
+    }),
     quote: (input: {
       items: readonly PricedOrderItem[];
       isDunaPlus: boolean;
@@ -69,6 +100,12 @@ export const demoRepository = {
       endsAt: string;
       venueName: string;
       capacity: number;
+      format: "2s" | "4s" | "6s" | "king-queen";
+      note?: string;
+      visibility: "public" | "unlisted";
+      costMinor: number;
+      currency: "USD";
+      recordMatches: boolean;
       ratingMinimum?: number;
       ratingMaximum?: number;
     }): EventSummary => {
@@ -82,17 +119,24 @@ export const demoRepository = {
         kind: "pickup",
         organizationName: `Hosted by ${demoPlayer.displayName}`,
         venueName: input.venueName,
+        description: input.note,
+        format: input.format,
+        recordMatches: input.recordMatches,
         startsAt: input.startsAt,
         endsAt: input.endsAt,
         timezone: "America/Los_Angeles",
-        price: { amountMinor: 0, currency: "USD" },
+        price: { amountMinor: input.costMinor, currency: input.currency },
         spotsRemaining: Math.max(0, input.capacity - 1),
         capacity: input.capacity,
         ratingRange:
           input.ratingMinimum !== undefined && input.ratingMaximum !== undefined
             ? [input.ratingMinimum, input.ratingMaximum]
             : undefined,
-        tags: ["Pickup", "Hosted"],
+        tags: [
+          "Pickup",
+          input.format === "king-queen" ? "King / Queen" : input.format,
+          input.costMinor === 0 ? "Free" : "Paid",
+        ],
       };
       mutableEvents.unshift(event);
       return event;

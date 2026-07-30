@@ -1,17 +1,37 @@
-import { demoMatches, demoPlayer } from "@duna/core/demo";
 import { Badge, Numeric } from "@duna/ui";
-import { ArrowRight, Plus, ScanLine, TrendingUp } from "lucide-react";
+import { Plus, ScanLine, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { MatchCard } from "@/components/match-card";
+import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Matches" };
 
-export default function MatchesPage() {
+export default async function MatchesPage() {
+  const caller = await getServerCaller();
+  const [dashboard, matches] = await Promise.all([
+    caller.player.dashboard(),
+    caller.player.matches(),
+  ]);
+  const form = matches.slice(0, 10).map((match) => {
+    const playerOnA = match.teamA.some(
+      (person) => person.id === dashboard.player.id,
+    );
+    return (playerOnA && match.winner === "A") ||
+      (!playerOnA && match.winner === "B")
+      ? "W"
+      : "L";
+  });
+  const ratingMovement = matches
+    .slice(0, 10)
+    .reduce((total, match) => total + match.ratingDelta, 0);
   return (
     <main className="standard-page">
       <section className="page-heading-row">
         <div>
-          <span className="page-eyebrow">84 verified results</span>
+          <span className="page-eyebrow">
+            {matches.length} connected{" "}
+            {matches.length === 1 ? "result" : "results"}
+          </span>
           <h1>Your matches.</h1>
           <p>
             Every result, rating explanation, partner record, and point that
@@ -19,7 +39,11 @@ export default function MatchesPage() {
           </p>
         </div>
         <div className="player-welcome__actions">
-          <button className="secondary-action">
+          <button
+            className="secondary-action"
+            disabled
+            title="Scoresheet OCR activates with the configured media and AI providers."
+          >
             <ScanLine aria-hidden size={17} /> Scan scoresheet
           </button>
           <Link className="primary-action" href="/app/score">
@@ -35,38 +59,38 @@ export default function MatchesPage() {
             <h2>Form line</h2>
           </div>
           <div className="form-line">
-            {["W", "W", "L", "W", "W", "W", "L", "W", "W", "W"].map(
-              (result, index) => (
-                <span className={result === "W" ? "win" : "loss"} key={index}>
-                  {result}
-                </span>
-              ),
-            )}
+            {form.map((result, index) => (
+              <span className={result === "W" ? "win" : "loss"} key={index}>
+                {result}
+              </span>
+            ))}
+            {form.length === 0 && <span>—</span>}
           </div>
           <p>
-            <TrendingUp aria-hidden size={17} /> <strong>+0.21</strong> across
-            your last ten verified matches.
+            <TrendingUp aria-hidden size={17} />{" "}
+            <strong>
+              {ratingMovement > 0 ? "+" : ""}
+              {ratingMovement.toFixed(2)}
+            </strong>{" "}
+            across your connected match history.
           </p>
         </article>
         <article className="partner-card">
-          <span className="page-eyebrow">Best chemistry · 27 matches</span>
+          <span className="page-eyebrow">Partner chemistry</span>
           <div>
-            <span className="avatar">TP</span>
+            <span className="avatar">—</span>
             <span>
-              <h2>Theo Park</h2>
-              <p>68% win rate · +0.14 partnership lift</p>
+              <h2>Awaiting connected matches</h2>
+              <p>Partnership insights appear after verified shared results.</p>
             </span>
-            <Numeric>4.44</Numeric>
+            <Numeric>—</Numeric>
           </div>
-          <Link href="/players/theopark">
-            View partnership <ArrowRight aria-hidden size={15} />
-          </Link>
         </article>
         <article className="match-rating-card">
-          <Badge tone="positive">{demoPlayer.rating.confidence}</Badge>
+          <Badge tone="positive">{dashboard.player.rating.confidence}</Badge>
           <span>Current Sand Rating</span>
-          <Numeric>{demoPlayer.rating.display.toFixed(2)}</Numeric>
-          <small>52-week peak 4.68</small>
+          <Numeric>{dashboard.player.rating.display.toFixed(2)}</Numeric>
+          <small>{dashboard.player.rating.discipline.replace("-", " ")}</small>
         </article>
       </section>
 
@@ -83,9 +107,18 @@ export default function MatchesPage() {
           </div>
         </div>
         <div className="match-list match-list--page">
-          {[...demoMatches, ...demoMatches].map((match, index) => (
-            <MatchCard key={`${match.id}-${index}`} match={match} />
+          {matches.map((match) => (
+            <MatchCard key={match.id} match={match} />
           ))}
+          {matches.length === 0 && (
+            <article className="empty-state">
+              <h3>No connected matches yet.</h3>
+              <p>
+                Record or confirm a result and its full rating explanation will
+                appear here.
+              </p>
+            </article>
+          )}
         </div>
       </section>
     </main>

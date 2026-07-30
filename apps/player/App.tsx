@@ -7,8 +7,10 @@ import {
   demoPlayer,
   demoWalletEntries,
 } from "@duna/core/demo";
+import * as Crypto from "expo-crypto";
 import { StatusBar } from "expo-status-bar";
-import { useMemo, useState } from "react";
+import * as WebBrowser from "expo-web-browser";
+import { useState } from "react";
 import {
   Modal,
   Platform,
@@ -21,6 +23,8 @@ import {
   type ViewStyle,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { dunaWebUrl } from "./mobile-api";
+import { PlayerRuntimeProvider, usePlayerRuntime } from "./runtime";
 
 const colors = {
   ink: "#070b0d",
@@ -51,6 +55,24 @@ const tabs: readonly {
   { key: "wallet", label: "Wallet", icon: "$" },
   { key: "you", label: "You", icon: "◎" },
 ];
+
+function displayError(reason: unknown): string {
+  return reason instanceof Error
+    ? reason.message
+    : "Duna could not complete that request.";
+}
+
+function PreviewBanner() {
+  const { mode } = usePlayerRuntime();
+  if (mode !== "preview") return null;
+  return (
+    <View style={styles.previewBanner}>
+      <Text style={styles.previewBannerText}>
+        PREVIEW DATA · SIGN-IN, BOOKINGS, AND PAYMENTS ARE DISABLED
+      </Text>
+    </View>
+  );
+}
 
 function DunaWordmark({ pro = false }: { readonly pro?: boolean }) {
   return (
@@ -109,6 +131,8 @@ function Pill({
 }
 
 function RatingOrbit({ compact = false }: { readonly compact?: boolean }) {
+  const { dashboard } = usePlayerRuntime();
+  const player = dashboard?.player ?? demoPlayer;
   return (
     <View style={[styles.ratingOrbit, compact && styles.ratingOrbitCompact]}>
       <View
@@ -121,10 +145,11 @@ function RatingOrbit({ compact = false }: { readonly compact?: boolean }) {
         <Text
           style={[styles.ratingValue, compact && styles.ratingValueCompact]}
         >
-          {demoPlayer.rating.display.toFixed(2)}
+          {player.rating.display.toFixed(2)}
         </Text>
         <Text style={styles.ratingDelta}>
-          ↗ +{(demoPlayer.rating.delta ?? 0).toFixed(2)}
+          {player.rating.delta && player.rating.delta > 0 ? "↗ +" : ""}
+          {(player.rating.delta ?? 0).toFixed(2)}
         </Text>
       </View>
       <View style={styles.lockedLabel}>
@@ -135,6 +160,8 @@ function RatingOrbit({ compact = false }: { readonly compact?: boolean }) {
 }
 
 function AppHeader({ eyebrow }: { readonly eyebrow?: string }) {
+  const { dashboard, mode } = usePlayerRuntime();
+  const initials = dashboard?.player.initials ?? demoPlayer.initials;
   return (
     <View style={styles.appHeader}>
       <View>
@@ -149,8 +176,8 @@ function AppHeader({ eyebrow }: { readonly eyebrow?: string }) {
           accessibilityLabel="Notifications"
           style={styles.avatarButton}
         >
-          <Text style={styles.avatarText}>ML</Text>
-          <View style={styles.notificationDot} />
+          <Text style={styles.avatarText}>{initials}</Text>
+          {mode === "live" && <View style={styles.notificationDot} />}
         </Pressable>
       </View>
     </View>
@@ -162,15 +189,44 @@ function HomeScreen({
 }: {
   readonly onBook: (eventIndex: number) => void;
 }) {
+  const { dashboard, people: livePeople } = usePlayerRuntime();
+  const player = dashboard?.player ?? demoPlayer;
+  const bookings = dashboard?.bookings ?? demoBookings;
+  const events = dashboard?.events ?? demoEvents;
+  const matches = dashboard?.recentMatches ?? demoMatches;
+  const people = livePeople ?? demoPeople;
+  const nextBooking = bookings[0];
+  const metrics = dashboard?.metrics.slice(0, 4) ?? [
+    { label: "Win rate", value: "61%" },
+    { label: "Last 10", value: "8–2" },
+    { label: "Rating change", value: "+0.14" },
+    { label: "This week", value: "3" },
+  ];
+  const insight = dashboard?.feed[0];
+  const today = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  })
+    .format(new Date())
+    .toUpperCase();
   return (
     <ScrollView
       contentContainerStyle={styles.screenContent}
       showsVerticalScrollIndicator={false}
     >
-      <AppHeader eyebrow="THURSDAY · JULY 30" />
+      <AppHeader eyebrow={today.replace(", ", " · ")} />
       <View style={styles.homeGreeting}>
-        <Text style={styles.displayTitle}>Good morning,{`\n`}Mara.</Text>
-        <Pressable style={styles.scoreAction}>
+        <Text style={styles.displayTitle}>
+          Good morning,{`\n`}
+          {player.displayName.split(" ")[0]}.
+        </Text>
+        <Pressable
+          onPress={() =>
+            void WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/score`)
+          }
+          style={styles.scoreAction}
+        >
           <Text style={styles.scoreActionText}>＋ Score match</Text>
         </Pressable>
       </View>
@@ -181,20 +237,24 @@ function HomeScreen({
               <Text style={styles.eyebrow}>YOUR LEVEL</Text>
               <Text style={styles.cardTitle}>Built by every rally.</Text>
             </View>
-            <Pill tone="positive">Reliable</Pill>
+            <Pill tone="positive">{player.rating.confidence}</Pill>
           </View>
           <RatingOrbit />
           <View style={styles.ratingStats}>
             <View>
-              <Text style={styles.statValue}>#42</Text>
-              <Text style={styles.statLabel}>South Bay</Text>
-            </View>
-            <View>
-              <Text style={styles.statValue}>91%</Text>
+              <Text style={styles.statValue}>
+                {player.rating.percentile
+                  ? `${player.rating.percentile}%`
+                  : "—"}
+              </Text>
               <Text style={styles.statLabel}>Percentile</Text>
             </View>
             <View>
-              <Text style={styles.statValue}>84</Text>
+              <Text style={styles.statValue}>{player.homeMarket || "—"}</Text>
+              <Text style={styles.statLabel}>Home market</Text>
+            </View>
+            <View>
+              <Text style={styles.statValue}>{matches.length}</Text>
               <Text style={styles.statLabel}>Matches</Text>
             </View>
           </View>
@@ -204,12 +264,29 @@ function HomeScreen({
             <Text style={styles.eyebrow}>NEXT UP</Text>
             <Pill>Confirmed</Pill>
           </View>
-          <Text style={styles.nextDate}>FRI</Text>
-          <Text style={styles.nextDay}>31</Text>
-          <Text style={styles.nextTitle}>Golden Hour 4s</Text>
-          <Text style={styles.nextMeta}>6:00 PM · Hermosa Pier</Text>
+          <Text style={styles.nextDate}>
+            {nextBooking
+              ? new Date(nextBooking.startsAt)
+                  .toLocaleDateString("en-US", { weekday: "short" })
+                  .toUpperCase()
+              : "OPEN"}
+          </Text>
+          <Text style={styles.nextDay}>
+            {nextBooking ? new Date(nextBooking.startsAt).getDate() : "—"}
+          </Text>
+          <Text style={styles.nextTitle}>
+            {nextBooking?.title ?? "Nothing booked yet"}
+          </Text>
+          <Text style={styles.nextMeta}>
+            {nextBooking
+              ? `${new Date(nextBooking.startsAt).toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })} · ${nextBooking.venueName}`
+              : "Discover a session built for your level"}
+          </Text>
           <View style={styles.avatarStack}>
-            {demoPeople.slice(0, 4).map((person) => (
+            {people.slice(0, 4).map((person) => (
               <View style={styles.miniAvatar} key={person.id}>
                 <Text style={styles.miniAvatarText}>{person.initials}</Text>
               </View>
@@ -221,22 +298,12 @@ function HomeScreen({
         </View>
       </View>
       <View style={styles.metricStrip}>
-        <View>
-          <Text style={styles.metricNumber}>61%</Text>
-          <Text style={styles.metricLabel}>Win rate</Text>
-        </View>
-        <View>
-          <Text style={styles.metricNumber}>8–2</Text>
-          <Text style={styles.metricLabel}>Last 10</Text>
-        </View>
-        <View>
-          <Text style={styles.metricNumber}>+0.14</Text>
-          <Text style={styles.metricLabel}>With Theo</Text>
-        </View>
-        <View>
-          <Text style={styles.metricNumber}>3</Text>
-          <Text style={styles.metricLabel}>This week</Text>
-        </View>
+        {metrics.map((metric) => (
+          <View key={metric.label}>
+            <Text style={styles.metricNumber}>{metric.value}</Text>
+            <Text style={styles.metricLabel}>{metric.label}</Text>
+          </View>
+        ))}
       </View>
       <SectionHeader
         eyebrow="MADE FOR YOUR LEVEL"
@@ -248,7 +315,7 @@ function HomeScreen({
         showsHorizontalScrollIndicator={false}
         style={styles.horizontalBleed}
       >
-        {demoEvents.slice(0, 4).map((event, index) => (
+        {events.slice(0, 4).map((event, index) => (
           <EventCard eventIndex={index} key={event.id} onPress={onBook} />
         ))}
       </ScrollView>
@@ -258,7 +325,7 @@ function HomeScreen({
         action="Matches"
       />
       <View style={styles.listCard}>
-        {demoMatches.slice(0, 2).map((match) => (
+        {matches.slice(0, 2).map((match) => (
           <View style={styles.matchRow} key={match.id}>
             <View
               style={[
@@ -294,21 +361,25 @@ function HomeScreen({
           </View>
         ))}
       </View>
-      <View style={styles.aiInsight}>
-        <View style={styles.aiIcon}>
-          <Text style={styles.aiIconText}>✦</Text>
+      {(insight || !dashboard) && (
+        <View style={styles.aiInsight}>
+          <View style={styles.aiIcon}>
+            <Text style={styles.aiIconText}>✦</Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.eyebrow}>
+              {insight?.eyebrow ?? "DUNA INSIGHT"}
+            </Text>
+            <Text style={styles.aiTitle}>
+              {insight?.title ?? "Your sideout game is becoming an edge."}
+            </Text>
+            <Text style={styles.aiBody}>
+              {insight?.body ??
+                "You are winning 8.4% more often than expected in sideout-scored matches. Preview insight only."}
+            </Text>
+          </View>
         </View>
-        <View style={styles.flex}>
-          <Text style={styles.eyebrow}>DUNA INSIGHT</Text>
-          <Text style={styles.aiTitle}>
-            Your sideout game is becoming an edge.
-          </Text>
-          <Text style={styles.aiBody}>
-            You are winning 8.4% more often than expected in sideout-scored
-            matches. That signal is based on 17 verified results.
-          </Text>
-        </View>
-      </View>
+      )}
     </ScrollView>
   );
 }
@@ -344,7 +415,8 @@ function EventCard({
   readonly eventIndex: number;
   readonly onPress: (eventIndex: number) => void;
 }) {
-  const event = demoEvents[eventIndex]!;
+  const { dashboard } = usePlayerRuntime();
+  const event = (dashboard?.events ?? demoEvents)[eventIndex]!;
   const accents = [colors.aquaDeep, "#745f3a", colors.navyLift, "#6b392f"];
   return (
     <Pressable onPress={() => onPress(eventIndex)} style={styles.eventCard}>
@@ -395,19 +467,63 @@ function DiscoverScreen({
   readonly onBook: (eventIndex: number) => void;
 }) {
   const [filter, setFilter] = useState("For you");
+  const [search, setSearch] = useState("");
+  const { dashboard, venues } = usePlayerRuntime();
+  const events = dashboard?.events ?? demoEvents;
+  const filteredEvents = events.filter((event) => {
+    const query = search.trim().toLowerCase();
+    if (
+      query &&
+      ![
+        event.title,
+        event.venueName,
+        event.organizationName,
+        event.kind,
+        ...event.tags,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    ) {
+      return false;
+    }
+    if (filter === "Today") {
+      return (
+        new Date(event.startsAt).toDateString() === new Date().toDateString()
+      );
+    }
+    if (filter === "Tournaments") return event.kind === "tournament";
+    if (filter === "Training") {
+      return ["clinic", "private-lesson"].includes(event.kind);
+    }
+    if (filter === "Open play") {
+      return ["open-play", "pickup"].includes(event.kind);
+    }
+    if (filter === "Free") return event.price.amountMinor === 0;
+    return true;
+  });
+  const resultCount = filteredEvents.length;
   return (
     <ScrollView
       contentContainerStyle={styles.screenContent}
       showsVerticalScrollIndicator={false}
     >
-      <AppHeader eyebrow="SOUTH BAY · LOS ANGELES" />
+      <AppHeader
+        eyebrow={
+          venues?.[0]
+            ? `${venues[0].city.toUpperCase()} · ${venues[0].region.toUpperCase()}`
+            : "SOUTH BAY · LOS ANGELES"
+        }
+      />
       <Text style={styles.displayTitle}>Find your game.</Text>
       <View style={styles.searchField}>
         <Text style={styles.searchIcon}>⌕</Text>
         <TextInput
+          onChangeText={setSearch}
           placeholder="Events, programs, clubs, coaches…"
           placeholderTextColor={colors.muted}
           style={styles.searchInput}
+          value={search}
         />
       </View>
       <ScrollView
@@ -464,174 +580,254 @@ function DiscoverScreen({
           </View>
         ))}
         <View style={styles.mapLabel}>
-          <Text style={styles.mapLabelTitle}>47 things to do</Text>
-          <Text style={styles.mapLabelText}>within 10 miles</Text>
+          <Text style={styles.mapLabelTitle}>
+            {resultCount} {resultCount === 1 ? "thing" : "things"} to do
+          </Text>
+          <Text style={styles.mapLabelText}>
+            across {venues?.length ?? 0} published venues
+          </Text>
         </View>
       </View>
       <SectionHeader
-        eyebrow={`${filter.toUpperCase()} · 47 RESULTS`}
+        eyebrow={`${filter.toUpperCase()} · ${resultCount} RESULTS`}
         title="Around you."
         action="Map"
       />
       <View style={styles.eventGrid}>
-        {demoEvents.map((event, index) => (
-          <EventCard eventIndex={index} key={event.id} onPress={onBook} />
-        ))}
+        {filteredEvents.map((event) => {
+          const eventIndex = events.findIndex(
+            (candidate) => candidate.id === event.id,
+          );
+          return (
+            <EventCard
+              eventIndex={eventIndex}
+              key={event.id}
+              onPress={onBook}
+            />
+          );
+        })}
       </View>
     </ScrollView>
   );
 }
 
 function PlayScreen() {
-  const [hosted, setHosted] = useState(false);
+  const { dashboard } = usePlayerRuntime();
+  const bookings = dashboard?.bookings ?? demoBookings;
+  const events = dashboard?.events ?? demoEvents;
+  const [showHost, setShowHost] = useState(false);
+  const [hostedTitle, setHostedTitle] = useState<string>();
+  const today = new Date();
+  const monday = new Date(today);
+  const mondayOffset = (today.getDay() + 6) % 7;
+  monday.setDate(today.getDate() - mondayOffset);
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + index);
+    return date;
+  });
+  const weekLabel = `${weekDays[0]!.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })} – ${weekDays[6]!.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })}`.toUpperCase();
   return (
-    <ScrollView
-      contentContainerStyle={styles.screenContent}
-      showsVerticalScrollIndicator={false}
-    >
-      <AppHeader eyebrow="YOUR CALENDAR + COMMUNITY" />
-      <View style={styles.homeGreeting}>
-        <Text style={styles.displayTitle}>Play.</Text>
-        <Pressable onPress={() => setHosted(true)} style={styles.scoreAction}>
-          <Text style={styles.scoreActionText}>＋ Host pickup</Text>
-        </Pressable>
-      </View>
-      {hosted && (
-        <View style={styles.successBanner}>
-          <Text style={styles.successIcon}>✓</Text>
-          <View style={styles.flex}>
-            <Text style={styles.rowTitle}>Golden Hour 4s is live.</Text>
-            <Text style={styles.rowMeta}>
-              312 matching nearby players can now find it.
-            </Text>
-          </View>
-          <Pressable onPress={() => setHosted(false)}>
-            <Text style={styles.closeText}>×</Text>
+    <>
+      <ScrollView
+        contentContainerStyle={styles.screenContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <AppHeader eyebrow="YOUR CALENDAR + COMMUNITY" />
+        <View style={styles.homeGreeting}>
+          <Text style={styles.displayTitle}>Play.</Text>
+          <Pressable
+            onPress={() => setShowHost(true)}
+            style={styles.scoreAction}
+          >
+            <Text style={styles.scoreActionText}>＋ Host pickup</Text>
           </Pressable>
         </View>
-      )}
-      <View style={styles.weekCard}>
-        <View style={styles.cardTitleRow}>
-          <View>
-            <Text style={styles.eyebrow}>JUL 27 – AUG 2</Text>
-            <Text style={styles.cardTitle}>Your week</Text>
-          </View>
-          <Text style={styles.sectionAction}>Calendar →</Text>
-        </View>
-        <View style={styles.weekDays}>
-          {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
-            <View
-              key={day + index}
-              style={[styles.weekDay, index === 3 && styles.weekDayActive]}
-            >
-              <Text
-                style={[
-                  styles.weekDayLabel,
-                  index === 3 && styles.weekDayTextActive,
-                ]}
-              >
-                {day}
-              </Text>
-              <Text
-                style={[
-                  styles.weekDayNumber,
-                  index === 3 && styles.weekDayTextActive,
-                ]}
-              >
-                {27 + index}
-              </Text>
-              {[1, 3, 4, 6].includes(index) && (
-                <View
-                  style={[
-                    styles.weekDot,
-                    index === 3 && { backgroundColor: colors.ink },
-                  ]}
-                />
-              )}
-            </View>
-          ))}
-        </View>
-        {demoBookings.map((booking, index) => (
-          <View style={styles.bookingRow} key={booking.id}>
-            <View style={styles.bookingTime}>
-              <Text style={styles.bookingTimeMain}>
-                {index === 0 ? "9:00" : index === 1 ? "6:00" : "6:00"}
-              </Text>
-              <Text style={styles.bookingTimeSuffix}>
-                {index === 0 ? "AM" : "PM"}
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.bookingAccent,
-                { backgroundColor: index === 1 ? colors.flare : colors.aqua },
-              ]}
-            />
+        {hostedTitle && (
+          <View style={styles.successBanner}>
+            <Text style={styles.successIcon}>✓</Text>
             <View style={styles.flex}>
-              <Text style={styles.rowTitle}>{booking.title}</Text>
-              <Text style={styles.rowMeta}>{booking.venueName}</Text>
+              <Text style={styles.rowTitle}>{hostedTitle} is live.</Text>
+              <Text style={styles.rowMeta}>
+                Eligible nearby players can now discover it.
+              </Text>
             </View>
-            <Pill tone="positive">Ready</Pill>
+            <Pressable onPress={() => setHostedTitle(undefined)}>
+              <Text style={styles.closeText}>×</Text>
+            </Pressable>
           </View>
-        ))}
-      </View>
-      <SectionHeader
-        eyebrow="PICKUP NEARBY"
-        title="Jump into something."
-        action="See all"
-      />
-      <View style={styles.listCard}>
-        {demoEvents
-          .filter(
-            (event) => event.kind === "pickup" || event.kind === "open-play",
-          )
-          .map((event) => (
-            <View key={event.id} style={styles.pickupRow}>
-              <View style={styles.pickupDate}>
-                <Text style={styles.pickupDay}>FRI</Text>
-                <Text style={styles.pickupNumber}>31</Text>
-              </View>
-              <View style={styles.flex}>
-                <Text style={styles.rowTitle}>{event.title}</Text>
-                <Text style={styles.rowMeta}>
-                  {event.venueName} · {(event.ratingRange?.[0] ?? 1).toFixed(1)}
-                  –{(event.ratingRange?.[1] ?? 7).toFixed(1)}
+        )}
+        <View style={styles.weekCard}>
+          <View style={styles.cardTitleRow}>
+            <View>
+              <Text style={styles.eyebrow}>{weekLabel}</Text>
+              <Text style={styles.cardTitle}>Your week</Text>
+            </View>
+            <Text style={styles.sectionAction}>Calendar →</Text>
+          </View>
+          <View style={styles.weekDays}>
+            {weekDays.map((date) => {
+              const isToday = date.toDateString() === today.toDateString();
+              const hasBooking = bookings.some(
+                (booking) =>
+                  new Date(booking.startsAt).toDateString() ===
+                  date.toDateString(),
+              );
+              return (
+                <View
+                  key={date.toISOString()}
+                  style={[styles.weekDay, isToday && styles.weekDayActive]}
+                >
+                  <Text
+                    style={[
+                      styles.weekDayLabel,
+                      isToday && styles.weekDayTextActive,
+                    ]}
+                  >
+                    {date
+                      .toLocaleDateString("en-US", { weekday: "narrow" })
+                      .toUpperCase()}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.weekDayNumber,
+                      isToday && styles.weekDayTextActive,
+                    ]}
+                  >
+                    {date.getDate()}
+                  </Text>
+                  {hasBooking && (
+                    <View
+                      style={[
+                        styles.weekDot,
+                        isToday && { backgroundColor: colors.ink },
+                      ]}
+                    />
+                  )}
+                </View>
+              );
+            })}
+          </View>
+          {bookings.map((booking, index) => (
+            <View style={styles.bookingRow} key={booking.id}>
+              <View style={styles.bookingTime}>
+                <Text style={styles.bookingTimeMain}>
+                  {new Date(booking.startsAt)
+                    .toLocaleTimeString("en-US", {
+                      hour: "numeric",
+                      minute: "2-digit",
+                      hour12: true,
+                    })
+                    .replace(/\s[AP]M$/, "")}
+                </Text>
+                <Text style={styles.bookingTimeSuffix}>
+                  {new Date(booking.startsAt)
+                    .toLocaleTimeString("en-US", { hour: "numeric" })
+                    .slice(-2)}
                 </Text>
               </View>
-              <View>
-                <Text style={styles.pickupSpots}>{event.spotsRemaining}</Text>
-                <Text style={styles.rowMeta}>spots</Text>
+              <View
+                style={[
+                  styles.bookingAccent,
+                  {
+                    backgroundColor:
+                      index % 2 === 1 ? colors.flare : colors.aqua,
+                  },
+                ]}
+              />
+              <View style={styles.flex}>
+                <Text style={styles.rowTitle}>{booking.title}</Text>
+                <Text style={styles.rowMeta}>{booking.venueName}</Text>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Pill
+                tone={
+                  booking.status === "needs-action" ? "warning" : "positive"
+                }
+              >
+                {booking.status}
+              </Pill>
             </View>
           ))}
-      </View>
-      <View style={styles.hostCard}>
-        <View style={styles.hostMark}>
-          <Text style={styles.hostMarkText}>＋</Text>
         </View>
-        <Text style={styles.sectionTitle}>Your court. Your people.</Text>
-        <Text style={styles.bodyText}>
-          Host a pickup in under 20 seconds. Duna finds nearby players in the
-          right rating band and opens a group thread.
-        </Text>
-        <Pressable onPress={() => setHosted(true)} style={styles.primaryButton}>
-          <Text style={styles.primaryButtonText}>Host pickup</Text>
-        </Pressable>
-      </View>
-    </ScrollView>
+        <SectionHeader
+          eyebrow="PICKUP NEARBY"
+          title="Jump into something."
+          action="See all"
+        />
+        <View style={styles.listCard}>
+          {events
+            .filter(
+              (event) => event.kind === "pickup" || event.kind === "open-play",
+            )
+            .map((event) => (
+              <View key={event.id} style={styles.pickupRow}>
+                <View style={styles.pickupDate}>
+                  <Text style={styles.pickupDay}>
+                    {new Date(event.startsAt)
+                      .toLocaleDateString("en-US", { weekday: "short" })
+                      .toUpperCase()}
+                  </Text>
+                  <Text style={styles.pickupNumber}>
+                    {new Date(event.startsAt).getDate()}
+                  </Text>
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.rowTitle}>{event.title}</Text>
+                  <Text style={styles.rowMeta}>
+                    {event.venueName} ·{" "}
+                    {(event.ratingRange?.[0] ?? 1).toFixed(1)}–
+                    {(event.ratingRange?.[1] ?? 7).toFixed(1)}
+                  </Text>
+                </View>
+                <View>
+                  <Text style={styles.pickupSpots}>{event.spotsRemaining}</Text>
+                  <Text style={styles.rowMeta}>spots</Text>
+                </View>
+                <Text style={styles.chevron}>›</Text>
+              </View>
+            ))}
+        </View>
+        <View style={styles.hostCard}>
+          <View style={styles.hostMark}>
+            <Text style={styles.hostMarkText}>＋</Text>
+          </View>
+          <Text style={styles.sectionTitle}>Your court. Your people.</Text>
+          <Text style={styles.bodyText}>
+            Publish a pickup with a clear time, format, level, and price.
+            Eligible nearby players can discover it immediately.
+          </Text>
+          <Pressable
+            onPress={() => setShowHost(true)}
+            style={styles.primaryButton}
+          >
+            <Text style={styles.primaryButtonText}>Host pickup</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+      <PickupModal
+        onClose={() => setShowHost(false)}
+        onCreated={(title) => {
+          setHostedTitle(title);
+          setShowHost(false);
+        }}
+        visible={showHost}
+      />
+    </>
   );
 }
 
 function WalletScreen() {
-  const balance = useMemo(
-    () =>
-      demoWalletEntries.reduce(
-        (sum, entry) => sum + entry.amount.amountMinor,
-        0,
-      ),
-    [],
-  );
+  const { mode, settings, wallet } = usePlayerRuntime();
+  const entries = wallet?.entries ?? demoWalletEntries;
+  const balance =
+    wallet?.availableMinor ??
+    entries.reduce((sum, entry) => sum + entry.amount.amountMinor, 0);
   return (
     <ScrollView
       contentContainerStyle={styles.screenContent}
@@ -642,20 +838,32 @@ function WalletScreen() {
       <View style={styles.walletCard}>
         <View style={styles.walletTop}>
           <DunaWordmark />
-          <Pill tone="positive">Ready</Pill>
+          <Pill tone={wallet?.pendingMinor ? "warning" : "positive"}>
+            {wallet?.pendingMinor ? "Pending" : "Ready"}
+          </Pill>
         </View>
         <Text style={styles.walletLabel}>AVAILABLE BALANCE</Text>
         <Text style={styles.walletBalance}>
-          {formatMoney(Math.max(balance, 18400), "USD")}
+          {formatMoney(balance, wallet?.currency ?? "USD")}
         </Text>
         <Text style={styles.walletMeta}>
           Held and moved by Stripe · Duna is not a bank
         </Text>
         <View style={styles.walletActions}>
-          <Pressable>
+          <Pressable
+            disabled={mode === "preview"}
+            onPress={() =>
+              void WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/wallet`)
+            }
+          >
             <Text style={styles.walletActionText}>Add money</Text>
           </Pressable>
-          <Pressable>
+          <Pressable
+            disabled={mode === "preview"}
+            onPress={() =>
+              void WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/wallet`)
+            }
+          >
             <Text style={styles.walletActionText}>Withdraw</Text>
           </Pressable>
         </View>
@@ -664,13 +872,21 @@ function WalletScreen() {
       <View style={styles.walletInfoGrid}>
         <View>
           <Text style={styles.eyebrow}>MEMBERSHIP</Text>
-          <Text style={styles.cardTitle}>Duna+</Text>
-          <Text style={styles.bodyText}>No platform fees · 2 guest passes</Text>
+          <Text style={styles.cardTitle}>
+            {settings?.membership?.tierName ?? "Duna+"}
+          </Text>
+          <Text style={styles.bodyText}>
+            {settings?.membership
+              ? `${settings.membership.status} · ${settings.membership.interval}`
+              : "No active membership"}
+          </Text>
         </View>
         <View>
-          <Text style={styles.eyebrow}>THIS MONTH</Text>
-          <Text style={styles.cardTitle}>$18.72</Text>
-          <Text style={styles.bodyText}>Saved with Duna+</Text>
+          <Text style={styles.eyebrow}>PENDING</Text>
+          <Text style={styles.cardTitle}>
+            {formatMoney(wallet?.pendingMinor ?? 0, wallet?.currency ?? "USD")}
+          </Text>
+          <Text style={styles.bodyText}>Still processing in Stripe</Text>
         </View>
       </View>
       <SectionHeader
@@ -679,7 +895,7 @@ function WalletScreen() {
         action="Statements"
       />
       <View style={styles.listCard}>
-        {demoWalletEntries.map((entry) => (
+        {entries.map((entry) => (
           <View style={styles.walletRow} key={entry.id}>
             <View
               style={[
@@ -720,7 +936,7 @@ function WalletScreen() {
               ]}
             >
               {entry.amount.amountMinor > 0 ? "+" : ""}
-              {formatMoney(entry.amount.amountMinor, "USD")}
+              {formatMoney(entry.amount.amountMinor, entry.amount.currency)}
             </Text>
           </View>
         ))}
@@ -738,6 +954,15 @@ function WalletScreen() {
 }
 
 function ProfileScreen() {
+  const { dashboard, mode, settings, signOut } = usePlayerRuntime();
+  const player = dashboard?.player ?? demoPlayer;
+  const matches = dashboard?.recentMatches ?? demoMatches;
+  const profileMetrics = dashboard?.metrics.slice(0, 4) ?? [
+    { label: "Current band", value: "A" },
+    { label: "Home market", value: player.homeMarket },
+    { label: "Matches", value: String(matches.length) },
+    { label: "Confidence", value: player.rating.confidence },
+  ];
   return (
     <ScrollView
       contentContainerStyle={styles.screenContent}
@@ -747,35 +972,27 @@ function ProfileScreen() {
       <View style={styles.profileHero}>
         <View style={styles.profileIdentity}>
           <View style={styles.profileAvatar}>
-            <Text style={styles.profileAvatarText}>ML</Text>
+            <Text style={styles.profileAvatarText}>{player.initials}</Text>
           </View>
           <View>
-            <Pill tone="positive">Duna+</Pill>
-            <Text style={styles.profileName}>{demoPlayer.displayName}</Text>
+            <Pill tone={settings?.membership ? "positive" : "neutral"}>
+              {settings?.membership?.tierName ?? "Player"}
+            </Pill>
+            <Text style={styles.profileName}>{player.displayName}</Text>
             <Text style={styles.profileHandle}>
-              @{demoPlayer.handle} · {demoPlayer.homeMarket}
+              @{player.handle} · {player.homeMarket}
             </Text>
           </View>
         </View>
         <RatingOrbit compact />
       </View>
       <View style={styles.metricStrip}>
-        <View>
-          <Text style={styles.metricNumber}>A</Text>
-          <Text style={styles.metricLabel}>Current band</Text>
-        </View>
-        <View>
-          <Text style={styles.metricNumber}>#42</Text>
-          <Text style={styles.metricLabel}>South Bay</Text>
-        </View>
-        <View>
-          <Text style={styles.metricNumber}>84</Text>
-          <Text style={styles.metricLabel}>Matches</Text>
-        </View>
-        <View>
-          <Text style={styles.metricNumber}>61%</Text>
-          <Text style={styles.metricLabel}>Win rate</Text>
-        </View>
+        {profileMetrics.map((metric) => (
+          <View key={metric.label}>
+            <Text style={styles.metricNumber}>{metric.value}</Text>
+            <Text style={styles.metricLabel}>{metric.label}</Text>
+          </View>
+        ))}
       </View>
       <View style={styles.progressCard}>
         <View style={styles.cardTitleRow}>
@@ -783,60 +1000,89 @@ function ProfileScreen() {
             <Text style={styles.eyebrow}>LAST 12 MONTHS</Text>
             <Text style={styles.cardTitle}>Rating progression</Text>
           </View>
-          <Pill tone="positive">+0.54</Pill>
+          <Pill tone="positive">
+            {player.rating.delta
+              ? `${player.rating.delta > 0 ? "+" : ""}${player.rating.delta.toFixed(2)}`
+              : player.rating.confidence}
+          </Pill>
         </View>
-        <View style={styles.mobileChart}>
-          <View style={[styles.chartPoint, { left: "3%", bottom: "18%" }]} />
-          <View style={[styles.chartPoint, { left: "26%", bottom: "31%" }]} />
-          <View style={[styles.chartPoint, { left: "49%", bottom: "45%" }]} />
-          <View style={[styles.chartPoint, { left: "72%", bottom: "61%" }]} />
-          <View style={[styles.chartPoint, { left: "94%", bottom: "79%" }]} />
-          <View style={styles.chartLine} />
-        </View>
-        <View style={styles.chartLabels}>
-          <Text>Aug</Text>
-          <Text>Nov</Text>
-          <Text>Feb</Text>
-          <Text>May</Text>
-          <Text>Jul</Text>
-        </View>
-      </View>
-      <View style={styles.chemistryCard}>
-        <Text style={styles.eyebrow}>PARTNER CHEMISTRY</Text>
-        <Text style={styles.sectionTitle}>You make each other better.</Text>
-        <View style={styles.chemistryPartner}>
-          <View style={styles.miniAvatar}>
-            <Text style={styles.miniAvatarText}>TP</Text>
-          </View>
-          <View style={styles.flex}>
-            <Text style={styles.rowTitle}>Theo Park</Text>
-            <Text style={styles.rowMeta}>27 shared matches · 68% win rate</Text>
-          </View>
-          <Text style={[styles.statValue, { color: colors.positive }]}>
-            +0.14
-          </Text>
-        </View>
-      </View>
-      <SectionHeader eyebrow="EARNED ON SAND" title="Moments." />
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.horizontalBleed}
-      >
-        <View style={styles.achievementRow}>
-          {[
-            ["◇", "Summer Open winner", "Jul 2026"],
-            ["✦", "Reliable → Locked", "Rating milestone"],
-            ["◎", "Pickup regular", "25 runs"],
-          ].map((item) => (
-            <View style={styles.achievementCard} key={item[1]}>
-              <Text style={styles.achievementIcon}>{item[0]}</Text>
-              <Text style={styles.rowTitle}>{item[1]}</Text>
-              <Text style={styles.rowMeta}>{item[2]}</Text>
+        {mode === "preview" ? (
+          <>
+            <View style={styles.mobileChart}>
+              <View
+                style={[styles.chartPoint, { left: "3%", bottom: "18%" }]}
+              />
+              <View
+                style={[styles.chartPoint, { left: "26%", bottom: "31%" }]}
+              />
+              <View
+                style={[styles.chartPoint, { left: "49%", bottom: "45%" }]}
+              />
+              <View
+                style={[styles.chartPoint, { left: "72%", bottom: "61%" }]}
+              />
+              <View
+                style={[styles.chartPoint, { left: "94%", bottom: "79%" }]}
+              />
+              <View style={styles.chartLine} />
             </View>
-          ))}
-        </View>
-      </ScrollView>
+            <View style={styles.chartLabels}>
+              <Text>Aug</Text>
+              <Text>Nov</Text>
+              <Text>Feb</Text>
+              <Text>May</Text>
+              <Text>Jul</Text>
+            </View>
+          </>
+        ) : (
+          <Text style={styles.bodyText}>
+            Duna will chart your verified rating history here as connected match
+            results accumulate.
+          </Text>
+        )}
+      </View>
+      {mode === "preview" && (
+        <>
+          <View style={styles.chemistryCard}>
+            <Text style={styles.eyebrow}>PARTNER CHEMISTRY</Text>
+            <Text style={styles.sectionTitle}>You make each other better.</Text>
+            <View style={styles.chemistryPartner}>
+              <View style={styles.miniAvatar}>
+                <Text style={styles.miniAvatarText}>TP</Text>
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.rowTitle}>Theo Park</Text>
+                <Text style={styles.rowMeta}>
+                  27 shared matches · 68% win rate
+                </Text>
+              </View>
+              <Text style={[styles.statValue, { color: colors.positive }]}>
+                +0.14
+              </Text>
+            </View>
+          </View>
+          <SectionHeader eyebrow="EARNED ON SAND" title="Moments." />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.horizontalBleed}
+          >
+            <View style={styles.achievementRow}>
+              {[
+                ["◇", "Summer Open winner", "Jul 2026"],
+                ["✦", "Reliable → Locked", "Rating milestone"],
+                ["◎", "Pickup regular", "25 runs"],
+              ].map((item) => (
+                <View style={styles.achievementCard} key={item[1]}>
+                  <Text style={styles.achievementIcon}>{item[0]}</Text>
+                  <Text style={styles.rowTitle}>{item[1]}</Text>
+                  <Text style={styles.rowMeta}>{item[2]}</Text>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        </>
+      )}
       <View style={styles.profileMenu}>
         {[
           "Edit profile",
@@ -846,11 +1092,28 @@ function ProfileScreen() {
           "Language + units",
           "Manage Duna+",
         ].map((item) => (
-          <Pressable style={styles.profileMenuRow} key={item}>
+          <Pressable
+            disabled={mode === "preview"}
+            key={item}
+            onPress={() =>
+              void WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/settings`)
+            }
+            style={styles.profileMenuRow}
+          >
             <Text style={styles.rowTitle}>{item}</Text>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
         ))}
+        {signOut && (
+          <Pressable
+            onPress={() => void signOut()}
+            style={styles.profileMenuRow}
+          >
+            <Text style={[styles.rowTitle, { color: colors.danger }]}>
+              Sign out
+            </Text>
+          </Pressable>
+        )}
       </View>
     </ScrollView>
   );
@@ -863,17 +1126,97 @@ function BookingModal({
   readonly eventIndex: number | null;
   readonly onClose: () => void;
 }) {
-  const [complete, setComplete] = useState(false);
-  const event = eventIndex === null ? null : demoEvents[eventIndex];
+  const { client, dashboard, mode, refresh, settings } = usePlayerRuntime();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const [complete, setComplete] = useState<{
+    readonly title: string;
+    readonly body: string;
+    readonly label: string;
+  }>();
+  const [divisionId, setDivisionId] = useState<string>();
+  const events = dashboard?.events ?? demoEvents;
+  const player = dashboard?.player ?? demoPlayer;
+  const event = eventIndex === null ? null : events[eventIndex];
   if (!event) return null;
-  const fee =
-    event.kind === "tournament"
-      ? 400
-      : Math.min(499, Math.max(49, Math.round(event.price.amountMinor * 0.03)));
+  const selectedEvent = event;
+  const division =
+    event.divisions?.find((candidate) => candidate.id === divisionId) ??
+    event.divisions?.[0];
+  const listedPrice = division?.price ?? event.price;
+
+  function close() {
+    setError(undefined);
+    setComplete(undefined);
+    setDivisionId(undefined);
+    setBusy(false);
+    onClose();
+  }
+
+  async function checkout() {
+    if (!client || mode === "preview") return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const result = await client.player.startEventCheckout.mutate({
+        sessionId: selectedEvent.id,
+        divisionId: division?.id,
+        isDunaPlus: Boolean(settings?.membership),
+        successUrl: `${dunaWebUrl}/app?checkout=success`,
+        cancelUrl: `${dunaWebUrl}/events/${selectedEvent.slug}?checkout=cancelled`,
+        idempotencyKey: Crypto.randomUUID(),
+      });
+      if (result.checkoutUrl) {
+        await WebBrowser.openBrowserAsync(result.checkoutUrl);
+        const status = result.checkoutSessionId
+          ? await client.player.checkoutStatus.query({
+              checkoutSessionId: result.checkoutSessionId,
+            })
+          : undefined;
+        setComplete(
+          status?.complete
+            ? {
+                label: "Confirmed",
+                title: "You’re in.",
+                body: `${selectedEvent.title} is confirmed and now appears with your bookings.`,
+              }
+            : {
+                label: "Pending",
+                title: "Checkout is still processing.",
+                body: "Duna will confirm the booking after Stripe reports a successful payment.",
+              },
+        );
+      } else {
+        const waitlisted = result.mode === "waitlist";
+        const alreadyRegistered = result.mode === "already-registered";
+        setComplete({
+          label: waitlisted
+            ? "Waitlisted"
+            : alreadyRegistered
+              ? "Already registered"
+              : "Confirmed",
+          title: waitlisted
+            ? "You’re on the list."
+            : alreadyRegistered
+              ? "You already have this booking."
+              : "You’re in.",
+          body: waitlisted
+            ? `${selectedEvent.title} will notify you if a place opens.`
+            : `${selectedEvent.title} now appears with your bookings.`,
+        });
+      }
+      await refresh();
+    } catch (reason) {
+      setError(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Modal
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={close}
       presentationStyle="pageSheet"
       visible={eventIndex !== null}
     >
@@ -883,19 +1226,19 @@ function BookingModal({
             <View style={styles.completeIcon}>
               <Text style={styles.completeIconText}>✓</Text>
             </View>
-            <Pill tone="positive">Confirmed</Pill>
-            <Text style={styles.completeTitle}>You’re in.</Text>
-            <Text style={styles.completeBody}>
-              {event.title} is on your calendar and the group thread is open.
-            </Text>
-            <Pressable onPress={onClose} style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>View your booking</Text>
+            <Pill tone={complete.label === "Pending" ? "warning" : "positive"}>
+              {complete.label}
+            </Pill>
+            <Text style={styles.completeTitle}>{complete.title}</Text>
+            <Text style={styles.completeBody}>{complete.body}</Text>
+            <Pressable onPress={close} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>Done</Text>
             </Pressable>
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Pressable onPress={onClose}>
+              <Pressable onPress={close}>
                 <Text style={styles.closeText}>×</Text>
               </Pressable>
               <Text style={styles.modalHeaderTitle}>Secure checkout</Text>
@@ -910,87 +1253,334 @@ function BookingModal({
               {event.venueName} ·{" "}
               {formatVenueTime(event.startsAt, event.timezone)}
             </Text>
+            {event.divisions && event.divisions.length > 0 && (
+              <View style={styles.checkoutSection}>
+                <Text style={styles.eyebrow}>DIVISION</Text>
+                <View style={styles.filterRow}>
+                  {event.divisions.map((option) => (
+                    <Pressable
+                      key={option.id}
+                      onPress={() => setDivisionId(option.id)}
+                      style={[
+                        styles.filterChip,
+                        division?.id === option.id && styles.filterChipActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterText,
+                          division?.id === option.id && styles.filterTextActive,
+                        ]}
+                      >
+                        {option.name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
             <View style={styles.checkoutSection}>
               <Text style={styles.eyebrow}>WHO’S PLAYING</Text>
               <View style={styles.checkoutPlayer}>
                 <View style={styles.miniAvatar}>
-                  <Text style={styles.miniAvatarText}>ML</Text>
+                  <Text style={styles.miniAvatarText}>{player.initials}</Text>
                 </View>
                 <View style={styles.flex}>
-                  <Text style={styles.rowTitle}>Mara Lewis</Text>
-                  <Text style={styles.rowMeta}>Rating requirement passed</Text>
+                  <Text style={styles.rowTitle}>{player.displayName}</Text>
+                  <Text style={styles.rowMeta}>
+                    {player.rating.display.toFixed(2)} sand rating ·{" "}
+                    {player.rating.confidence}
+                  </Text>
                 </View>
-                <Text style={styles.checkText}>✓</Text>
               </View>
             </View>
             <View style={styles.checkoutSection}>
-              <Text style={styles.eyebrow}>PAY YOUR WAY</Text>
+              <Text style={styles.eyebrow}>PAYMENT</Text>
               <View style={styles.paymentRow}>
-                <Text style={styles.paymentIcon}>▣</Text>
+                <Text style={styles.paymentIcon}>◇</Text>
                 <View style={styles.flex}>
-                  <Text style={styles.rowTitle}>Use Duna Wallet</Text>
-                  <Text style={styles.rowMeta}>$184.00 available</Text>
-                </View>
-                <Text style={styles.moneyAmount}>
-                  −
-                  {formatMoney(
-                    Math.min(18400, event.price.amountMinor + fee),
-                    "USD",
-                  )}
-                </Text>
-              </View>
-              <View style={styles.paymentRow}>
-                <Text style={styles.paymentIcon}>▤</Text>
-                <View style={styles.flex}>
-                  <Text style={styles.rowTitle}>Visa •••• 4242</Text>
+                  <Text style={styles.rowTitle}>
+                    {listedPrice.amountMinor
+                      ? "Stripe secure checkout"
+                      : "Free registration"}
+                  </Text>
                   <Text style={styles.rowMeta}>
-                    Securely stored with Stripe
+                    {listedPrice.amountMinor
+                      ? "Card details go directly to Stripe. Duna never stores them."
+                      : "No payment method is required."}
                   </Text>
                 </View>
-                <Text style={styles.moneyAmount}>$0.00</Text>
+                <Text style={styles.moneyAmount}>
+                  {listedPrice.amountMinor
+                    ? formatMoney(listedPrice.amountMinor, listedPrice.currency)
+                    : "FREE"}
+                </Text>
               </View>
             </View>
             <View style={styles.orderMath}>
               <View>
                 <Text style={styles.bodyText}>Entry</Text>
                 <Text style={styles.moneyAmount}>
-                  {formatMoney(event.price.amountMinor, "USD")}
+                  {formatMoney(listedPrice.amountMinor, listedPrice.currency)}
                 </Text>
               </View>
               <View>
-                <Text style={styles.bodyText}>
-                  {event.kind === "tournament"
-                    ? "Registration fee"
-                    : "Duna platform fee"}
-                </Text>
-                <Text style={styles.moneyAmount}>
-                  {formatMoney(fee, "USD")}
-                </Text>
+                <Text style={styles.bodyText}>Taxes and service fees</Text>
+                <Text style={styles.moneyAmount}>Calculated securely</Text>
               </View>
               <View style={styles.totalRow}>
-                <Text style={styles.rowTitle}>Total</Text>
+                <Text style={styles.rowTitle}>Listed price</Text>
                 <Text style={styles.totalAmount}>
-                  {formatMoney(event.price.amountMinor + fee, "USD")}
-                </Text>
-              </View>
-              <View>
-                <Text style={styles.bodyText}>From wallet</Text>
-                <Text style={[styles.moneyAmount, { color: colors.positive }]}>
-                  −{formatMoney(event.price.amountMinor + fee, "USD")}
+                  {formatMoney(listedPrice.amountMinor, listedPrice.currency)}
                 </Text>
               </View>
             </View>
+            {error && <Text style={styles.formError}>{error}</Text>}
             <Pressable
-              onPress={() => setComplete(true)}
-              style={styles.payButton}
+              disabled={mode === "preview" || busy}
+              onPress={() => void checkout()}
+              style={[
+                styles.payButton,
+                (mode === "preview" || busy) && styles.buttonDisabled,
+              ]}
             >
-              <Text style={styles.payButtonText}>◇ Confirm with Wallet</Text>
+              <Text style={styles.payButtonText}>
+                {mode === "preview"
+                  ? "Preview only · checkout disabled"
+                  : busy
+                    ? "Preparing secure checkout…"
+                    : listedPrice.amountMinor
+                      ? "Continue to Stripe"
+                      : "Confirm free registration"}
+              </Text>
             </Pressable>
             <Text style={styles.paymentTrust}>
-              Payments are processed by Stripe. Card details never touch Duna.
+              Eligibility, capacity, pricing, and guardian requirements are
+              rechecked by Duna before registration.
             </Text>
           </ScrollView>
         )}
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+function defaultPickupStart(): string {
+  const date = new Date(Date.now() + 2 * 60 * 60 * 1_000);
+  date.setMinutes(Math.ceil(date.getMinutes() / 15) * 15, 0, 0);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function PickupModal({
+  visible,
+  onClose,
+  onCreated,
+}: {
+  readonly visible: boolean;
+  readonly onClose: () => void;
+  readonly onCreated: (title: string) => void;
+}) {
+  const { client, mode, refresh } = usePlayerRuntime();
+  const [title, setTitle] = useState("");
+  const [venueName, setVenueName] = useState("");
+  const [startsAt, setStartsAt] = useState(defaultPickupStart);
+  const [durationMinutes, setDurationMinutes] = useState("120");
+  const [capacity, setCapacity] = useState("8");
+  const [format, setFormat] = useState<"2s" | "4s" | "6s" | "king-queen">("4s");
+  const [cost, setCost] = useState("0");
+  const [note, setNote] = useState("");
+  const [recordMatches, setRecordMatches] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function publish() {
+    if (!client || mode === "preview") return;
+    const start = new Date(startsAt);
+    const duration = Number(durationMinutes);
+    const playerCapacity = Number(capacity);
+    const dollars = Number(cost);
+    if (!Number.isFinite(start.getTime())) {
+      setError("Enter the start as YYYY-MM-DDTHH:MM.");
+      return;
+    }
+    if (!Number.isInteger(duration) || duration < 30 || duration > 480) {
+      setError("Duration must be between 30 and 480 minutes.");
+      return;
+    }
+    if (!Number.isInteger(playerCapacity) || playerCapacity < 4) {
+      setError("Capacity must be at least four players.");
+      return;
+    }
+    if (!Number.isFinite(dollars) || dollars < 0 || dollars > 1_000) {
+      setError("Enter a valid price from $0 to $1,000.");
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    try {
+      const event = await client.player.createPickup.mutate({
+        title: title.trim(),
+        startsAt: start.toISOString(),
+        endsAt: new Date(start.getTime() + duration * 60 * 1_000).toISOString(),
+        venueName: venueName.trim(),
+        capacity: playerCapacity,
+        format,
+        note: note.trim() || undefined,
+        visibility: "public",
+        costMinor: Math.round(dollars * 100),
+        currency: "USD",
+        recordMatches,
+        idempotencyKey: Crypto.randomUUID(),
+      });
+      await refresh();
+      onCreated(event.title);
+      setTitle("");
+      setVenueName("");
+      setNote("");
+    } catch (reason) {
+      setError(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="pageSheet"
+      visible={visible}
+    >
+      <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
+        <ScrollView contentContainerStyle={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Pressable onPress={onClose}>
+              <Text style={styles.closeText}>×</Text>
+            </Pressable>
+            <Text style={styles.modalHeaderTitle}>Host pickup</Text>
+            <Text style={styles.rowMeta}>Public</Text>
+          </View>
+          <Text style={styles.checkoutTitle}>Make the next game happen.</Text>
+          <Text style={styles.checkoutMeta}>
+            Duna publishes exactly what you enter and checks your adult identity
+            before the event goes live.
+          </Text>
+          <View style={styles.formStack}>
+            <TextInput
+              onChangeText={setTitle}
+              placeholder="Pickup title"
+              placeholderTextColor={colors.muted}
+              style={styles.formInput}
+              value={title}
+            />
+            <TextInput
+              onChangeText={setVenueName}
+              placeholder="Venue or court"
+              placeholderTextColor={colors.muted}
+              style={styles.formInput}
+              value={venueName}
+            />
+            <TextInput
+              autoCapitalize="none"
+              onChangeText={setStartsAt}
+              placeholder="YYYY-MM-DDTHH:MM"
+              placeholderTextColor={colors.muted}
+              style={styles.formInput}
+              value={startsAt}
+            />
+            <View style={styles.formRow}>
+              <TextInput
+                keyboardType="number-pad"
+                onChangeText={setDurationMinutes}
+                placeholder="Minutes"
+                placeholderTextColor={colors.muted}
+                style={[styles.formInput, styles.formRowInput]}
+                value={durationMinutes}
+              />
+              <TextInput
+                keyboardType="number-pad"
+                onChangeText={setCapacity}
+                placeholder="Players"
+                placeholderTextColor={colors.muted}
+                style={[styles.formInput, styles.formRowInput]}
+                value={capacity}
+              />
+              <TextInput
+                keyboardType="decimal-pad"
+                onChangeText={setCost}
+                placeholder="$"
+                placeholderTextColor={colors.muted}
+                style={[styles.formInput, styles.formRowInput]}
+                value={cost}
+              />
+            </View>
+            <View style={styles.filterRow}>
+              {(["2s", "4s", "6s", "king-queen"] as const).map((option) => (
+                <Pressable
+                  key={option}
+                  onPress={() => setFormat(option)}
+                  style={[
+                    styles.filterChip,
+                    format === option && styles.filterChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterText,
+                      format === option && styles.filterTextActive,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <TextInput
+              multiline
+              onChangeText={setNote}
+              placeholder="Optional note for players"
+              placeholderTextColor={colors.muted}
+              style={[styles.formInput, styles.formTextarea]}
+              value={note}
+            />
+            <Pressable
+              onPress={() => setRecordMatches((current) => !current)}
+              style={styles.toggleRow}
+            >
+              <Text style={styles.rowTitle}>Record match results</Text>
+              <Pill tone={recordMatches ? "positive" : "neutral"}>
+                {recordMatches ? "On" : "Off"}
+              </Pill>
+            </Pressable>
+          </View>
+          {error && <Text style={styles.formError}>{error}</Text>}
+          <Pressable
+            disabled={
+              mode === "preview" ||
+              busy ||
+              title.trim().length < 3 ||
+              venueName.trim().length < 2
+            }
+            onPress={() => void publish()}
+            style={[
+              styles.payButton,
+              (mode === "preview" ||
+                busy ||
+                title.trim().length < 3 ||
+                venueName.trim().length < 2) &&
+                styles.buttonDisabled,
+            ]}
+          >
+            <Text style={styles.payButtonText}>
+              {mode === "preview"
+                ? "Preview only · publishing disabled"
+                : busy
+                  ? "Publishing…"
+                  : "Publish pickup"}
+            </Text>
+          </Pressable>
+        </ScrollView>
       </SafeAreaView>
     </Modal>
   );
@@ -1037,6 +1627,7 @@ function DunaApp() {
     <SafeAreaView edges={["top"]} style={styles.safe}>
       <StatusBar style="light" />
       <View style={styles.app}>
+        <PreviewBanner />
         {tab === "home" && <HomeScreen onBook={setEventIndex} />}
         {tab === "discover" && <DiscoverScreen onBook={setEventIndex} />}
         {tab === "play" && <PlayScreen />}
@@ -1055,7 +1646,9 @@ function DunaApp() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <DunaApp />
+      <PlayerRuntimeProvider>
+        <DunaApp />
+      </PlayerRuntimeProvider>
     </SafeAreaProvider>
   );
 }
@@ -1063,8 +1656,53 @@ export default function App() {
 const styles = StyleSheet.create({
   safe: { backgroundColor: colors.ink, flex: 1 },
   app: { backgroundColor: colors.ink, flex: 1 },
+  buttonDisabled: { opacity: 0.45 },
   flex: { flex: 1, minWidth: 0 },
+  formError: {
+    color: colors.danger,
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 12,
+  },
+  formInput: {
+    backgroundColor: "rgba(255,255,255,.04)",
+    borderColor: "rgba(255,255,255,.1)",
+    borderRadius: 12,
+    borderWidth: 1,
+    color: colors.bone,
+    fontSize: 12,
+    minHeight: 46,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+  },
+  formRow: { flexDirection: "row", gap: 8 },
+  formRowInput: { flex: 1, minWidth: 0 },
+  formStack: { gap: 10, marginTop: 20 },
+  formTextarea: { minHeight: 88, textAlignVertical: "top" },
+  previewBanner: {
+    alignItems: "center",
+    backgroundColor: "rgba(247,200,107,.12)",
+    borderBottomColor: "rgba(247,200,107,.24)",
+    borderBottomWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  previewBannerText: {
+    color: colors.warning,
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textAlign: "center",
+  },
   screenContent: { paddingBottom: 118, paddingHorizontal: 18 },
+  toggleRow: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,.03)",
+    borderRadius: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: 12,
+  },
   appHeader: {
     alignItems: "center",
     flexDirection: "row",

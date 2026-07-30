@@ -1,6 +1,6 @@
 "use client";
 
-import { demoPlayer } from "@duna/core/demo";
+import type { PersonSummary } from "@duna/core";
 import { DunaMark, Numeric } from "@duna/ui";
 import {
   CalendarDays,
@@ -26,7 +26,13 @@ const navigation = [
   { label: "Wallet", href: "/app/wallet", icon: WalletCards },
 ] as const;
 
-export function PlayerShell({ children }: { readonly children: ReactNode }) {
+export function PlayerShell({
+  children,
+  player,
+}: {
+  readonly children: ReactNode;
+  readonly player: PersonSummary;
+}) {
   const pathname = usePathname();
   return (
     <div className="player-shell">
@@ -62,12 +68,12 @@ export function PlayerShell({ children }: { readonly children: ReactNode }) {
           <Link href="/app/settings">View plan</Link>
         </div>
         <Link className="player-sidebar__profile" href="/app/profile">
-          <span className="avatar">{demoPlayer.initials}</span>
+          <span className="avatar">{player.initials}</span>
           <span>
-            <strong>{demoPlayer.displayName}</strong>
-            <small>@{demoPlayer.handle}</small>
+            <strong>{player.displayName}</strong>
+            <small>@{player.handle}</small>
           </span>
-          <Numeric>{demoPlayer.rating.display.toFixed(2)}</Numeric>
+          <Numeric>{player.rating.display.toFixed(2)}</Numeric>
         </Link>
       </aside>
 
@@ -85,16 +91,15 @@ export function PlayerShell({ children }: { readonly children: ReactNode }) {
           </Link>
           <div className="player-topbar__market">
             <span>Playing in</span>
-            <strong>South Bay, LA</strong>
+            <strong>{player.homeMarket}</strong>
           </div>
           <div className="player-topbar__actions">
             <button aria-label="Messages">
               <MessageCircle aria-hidden size={19} />
-              <span className="notification-dot" />
             </button>
             <Link href="/app/profile">
-              <span className="avatar">{demoPlayer.initials}</span>
-              <Numeric>{demoPlayer.rating.display.toFixed(2)}</Numeric>
+              <span className="avatar">{player.initials}</span>
+              <Numeric>{player.rating.display.toFixed(2)}</Numeric>
             </Link>
           </div>
         </header>

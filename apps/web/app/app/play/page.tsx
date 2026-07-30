@@ -1,4 +1,3 @@
-import { demoBookings, demoEvents } from "@duna/core/demo";
 import { formatMoney, formatVenueTime } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
@@ -10,11 +9,27 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Play" };
 
-export default function PlayPage() {
-  const pickups = demoEvents.filter((event) => event.kind === "pickup");
+export default async function PlayPage() {
+  const caller = await getServerCaller();
+  const dashboard = await caller.player.dashboard();
+  const pickups = dashboard.events.filter((event) => event.kind === "pickup");
+  const featuredPickup = pickups[0];
+  const today = new Date();
+  const calendarDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() + index);
+    return {
+      day: new Intl.DateTimeFormat("en-US", { weekday: "short" })
+        .format(date)
+        .toUpperCase(),
+      date: String(date.getDate()).padStart(2, "0"),
+      active: index === 0,
+    };
+  });
   return (
     <main className="standard-page">
       <section className="page-heading-row">
@@ -36,31 +51,39 @@ export default function PlayPage() {
           <div className="panel-heading">
             <div>
               <span className="page-eyebrow">Your week</span>
-              <h2>Three reasons to get sandy.</h2>
+              <h2>
+                {dashboard.bookings.length} connected{" "}
+                {dashboard.bookings.length === 1 ? "booking" : "bookings"}.
+              </h2>
             </div>
             <button aria-label="Add to calendar">
               <CalendarPlus aria-hidden size={18} />
             </button>
           </div>
           <div className="play-calendar__days">
-            {[
-              ["MON", "27"],
-              ["TUE", "28"],
-              ["WED", "29"],
-              ["THU", "30"],
-              ["FRI", "31"],
-              ["SAT", "01"],
-              ["SUN", "02"],
-            ].map(([day, date], index) => (
-              <div className={index === 3 ? "active" : undefined} key={day}>
-                <small>{day}</small>
-                <Numeric>{date}</Numeric>
-                {index === 3 || index === 4 || index === 5 ? <span /> : null}
+            {calendarDays.map((item) => (
+              <div
+                className={item.active ? "active" : undefined}
+                key={item.day}
+              >
+                <small>{item.day}</small>
+                <Numeric>{item.date}</Numeric>
+                {dashboard.bookings.some(
+                  (booking) =>
+                    new Date(booking.startsAt).toDateString() ===
+                    new Date(
+                      today.getFullYear(),
+                      today.getMonth(),
+                      Number(item.date),
+                    ).toDateString(),
+                ) ? (
+                  <span />
+                ) : null}
               </div>
             ))}
           </div>
           <div className="booking-list booking-list--large">
-            {demoBookings.map((booking) => (
+            {dashboard.bookings.map((booking) => (
               <Link href="/app/play" key={booking.id}>
                 <span className="booking-list__time">
                   <Numeric>
@@ -81,6 +104,11 @@ export default function PlayPage() {
                 <Badge tone="positive">{booking.status}</Badge>
               </Link>
             ))}
+            {dashboard.bookings.length === 0 && (
+              <article className="empty-state">
+                <p>No confirmed bookings are connected yet.</p>
+              </article>
+            )}
           </div>
         </article>
 
@@ -88,20 +116,34 @@ export default function PlayPage() {
           <span className="pickup-prompt__icon">
             <Users aria-hidden size={24} />
           </span>
-          <Badge tone="live">Tonight · 6:00 PM</Badge>
-          <h2>Your regular crew is almost full.</h2>
+          <Badge tone={featuredPickup ? "live" : "neutral"}>
+            {featuredPickup
+              ? formatVenueTime(
+                  featuredPickup.startsAt,
+                  featuredPickup.timezone,
+                  "en-US",
+                  { weekday: "short", minute: "2-digit" },
+                )
+              : "Host the first run"}
+          </Badge>
+          <h2>{featuredPickup?.title ?? "Bring your people together."}</h2>
           <p>
-            Theo, Noa, and Elena are in. Two spots remain at Golden Hour 4s.
+            {featuredPickup
+              ? `${featuredPickup.spotsRemaining} spots remain at ${featuredPickup.venueName}.`
+              : "Create a connected pickup with a real time, location, level, and capacity."}
           </p>
           <div className="avatar-stack">
-            {["TP", "NW", "ET", "+2"].map((value) => (
-              <span className="avatar" key={value}>
-                {value}
-              </span>
-            ))}
+            <span className="avatar">{dashboard.player.initials}</span>
           </div>
-          <Link href="/events/golden-hour-fours">
-            Join the run <ArrowRight aria-hidden size={16} />
+          <Link
+            href={
+              featuredPickup
+                ? `/events/${featuredPickup.slug}`
+                : "/app/pickup/new"
+            }
+          >
+            {featuredPickup ? "Open the run" : "Host pickup"}{" "}
+            <ArrowRight aria-hidden size={16} />
           </Link>
         </aside>
       </section>
@@ -117,7 +159,7 @@ export default function PlayPage() {
           </Link>
         </div>
         <div className="pickup-list">
-          {[...pickups, demoEvents[3]!, demoEvents[2]!].map((event) => (
+          {pickups.map((event) => (
             <Link href={`/events/${event.slug}`} key={event.id}>
               <div className="pickup-list__date">
                 <small>
@@ -156,6 +198,12 @@ export default function PlayPage() {
               <CheckCircle2 aria-hidden size={20} />
             </Link>
           ))}
+          {pickups.length === 0 && (
+            <article className="empty-state">
+              <h3>No pickups nearby yet.</h3>
+              <p>Publish one in under a minute and share its connected page.</p>
+            </article>
+          )}
         </div>
       </section>
     </main>

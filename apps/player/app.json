@@ -12,6 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.duna.player",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "Duna uses your location to show nearby play and venues."
       }
     },
@@ -28,6 +29,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "@clerk/expo",
       [
         "expo-splash-screen",
         {

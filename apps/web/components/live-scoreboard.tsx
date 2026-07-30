@@ -1,5 +1,7 @@
 "use client";
 
+import type { MatchScoringState, ScoreEventEnvelope } from "@duna/api";
+import type { PersonSummary, VenueSummary } from "@duna/core";
 import {
   createUndoEvent,
   foldScore,
@@ -11,57 +13,419 @@ import { Badge, Numeric } from "@duna/ui";
 import {
   ChevronLeft,
   CloudOff,
+  Radio,
   RotateCcw,
-  Settings2,
   SwitchCamera,
   Wifi,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
+import {
+  appendMatchEventsAction,
+  startMatchAction,
+} from "@/app/app/score/actions";
 
 const now = () => new Date().toISOString();
 
-export function LiveScoreboard() {
-  const [scoringSystem, setScoringSystem] = useState<ScoringSystem>("rally");
-  const [offline, setOffline] = useState(false);
-  const [events, setEvents] = useState<readonly ScoreEvent[]>([
-    {
-      id: "start",
-      type: "match-started",
-      initialServer: "A",
-      occurredAt: now(),
-    },
-  ]);
-  const state = useMemo(
-    () =>
-      foldScore(events, {
-        ...standardBeachFormat,
-        scoringSystem,
-      }),
-    [events, scoringSystem],
+function deviceId(): string {
+  const key = "duna-scoring-device-id";
+  const existing = window.localStorage.getItem(key);
+  if (existing) return existing;
+  const created = `duna-web-${crypto.randomUUID()}`;
+  window.localStorage.setItem(key, created);
+  return created;
+}
+
+function initials(people: MatchScoringState["teamA"]["people"]): string[] {
+  return people.map((person) => person.initials);
+}
+
+export function LiveScoreboard({
+  currentPlayer,
+  initialMatch,
+  players,
+  venues,
+}: {
+  readonly currentPlayer: PersonSummary;
+  readonly initialMatch?: MatchScoringState;
+  readonly players: readonly PersonSummary[];
+  readonly venues: readonly VenueSummary[];
+}) {
+  const router = useRouter();
+  const candidates = players.filter((player) => player.id !== currentPlayer.id);
+  const [match, setMatch] = useState(initialMatch);
+  const [events, setEvents] = useState<readonly ScoreEvent[]>(
+    initialMatch?.events ?? [],
   );
-  const current = state.sets[state.setIndex] ?? { a: 0, b: 0 };
+  const [partnerId, setPartnerId] = useState(candidates[0]?.id ?? "");
+  const [opponentOneId, setOpponentOneId] = useState(candidates[1]?.id ?? "");
+  const [opponentTwoId, setOpponentTwoId] = useState(candidates[2]?.id ?? "");
+  const [venueId, setVenueId] = useState(venues[0]?.id ?? "");
+  const [scoringSystem, setScoringSystem] = useState<ScoringSystem>("rally");
+  const [initialServer, setInitialServer] = useState<"A" | "B">("A");
+  const [offline, setOffline] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [error, setError] = useState<string>();
+  const [isStarting, startTransition] = useTransition();
+  const pendingRef = useRef<ScoreEventEnvelope[]>([]);
+  const sequenceRef = useRef(initialMatch?.nextSequence ?? 2);
+  const counterRef = useRef(initialMatch?.nextMonotonicCounter ?? 2);
+  const syncingRef = useRef(false);
+  const flushRef = useRef<() => Promise<void>>(async () => undefined);
+  const score = useMemo(
+    () =>
+      foldScore(
+        events,
+        match?.format ?? {
+          ...standardBeachFormat,
+          scoringSystem,
+        },
+      ),
+    [events, match?.format, scoringSystem],
+  );
+  const current = score.sets[score.setIndex] ?? { a: 0, b: 0 };
+  const storageKey = match ? `duna-score-pending:${match.matchId}` : undefined;
 
-  function addRally(winner: "A" | "B") {
-    if (state.status === "complete") return;
-    setEvents((currentEvents) => [
-      ...currentEvents,
-      {
-        id: crypto.randomUUID(),
-        type: "rally-won",
-        winner,
-        occurredAt: now(),
-      },
-    ]);
-  }
+  const persistPending = () => {
+    if (!storageKey) return;
+    if (pendingRef.current.length === 0) {
+      window.localStorage.removeItem(storageKey);
+    } else {
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify(pendingRef.current),
+      );
+    }
+    setPendingCount(pendingRef.current.length);
+  };
 
-  function undo() {
-    const event = createUndoEvent(events, {
-      id: crypto.randomUUID(),
-      occurredAt: now(),
+  flushRef.current = async () => {
+    if (
+      syncingRef.current ||
+      !match ||
+      pendingRef.current.length === 0 ||
+      !navigator.onLine
+    ) {
+      if (!navigator.onLine) setOffline(true);
+      return;
+    }
+    syncingRef.current = true;
+    const batch = [...pendingRef.current];
+    const response = await appendMatchEventsAction({
+      matchId: match.matchId,
+      deviceId: match.deviceId,
+      events: batch,
     });
-    if (event) setEvents((currentEvents) => [...currentEvents, event]);
+    if (response.ok) {
+      const sentIds = new Set(batch.map((envelope) => envelope.event.id));
+      pendingRef.current = pendingRef.current.filter(
+        (envelope) => !sentIds.has(envelope.event.id),
+      );
+      const remainingEvents = pendingRef.current.map(
+        (envelope) => envelope.event,
+      );
+      setMatch(response.result.scoring);
+      setEvents([
+        ...response.result.scoring.events,
+        ...remainingEvents.filter(
+          (event) =>
+            !response.result.scoring.events.some(
+              (stored) => stored.id === event.id,
+            ),
+        ),
+      ]);
+      setError(undefined);
+      setOffline(false);
+      persistPending();
+    } else {
+      setError(response.error);
+      setOffline(true);
+    }
+    syncingRef.current = false;
+    if (pendingRef.current.length > 0 && navigator.onLine) {
+      window.setTimeout(() => void flushRef.current(), 0);
+    }
+  };
+
+  useEffect(() => {
+    if (!match || !storageKey) return;
+    sequenceRef.current = match.nextSequence;
+    counterRef.current = match.nextMonotonicCounter;
+    const stored = window.localStorage.getItem(storageKey);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as ScoreEventEnvelope[];
+        const pending = parsed
+          .filter(
+            (envelope) =>
+              envelope.sequence >= match.nextSequence &&
+              typeof envelope.event?.id === "string",
+          )
+          .sort((a, b) => a.sequence - b.sequence);
+        pendingRef.current = pending;
+        if (pending.length > 0) {
+          sequenceRef.current =
+            Math.max(...pending.map((envelope) => envelope.sequence)) + 1;
+          counterRef.current =
+            Math.max(...pending.map((envelope) => envelope.monotonicCounter)) +
+            1;
+          setEvents([
+            ...match.events,
+            ...pending
+              .map((envelope) => envelope.event)
+              .filter(
+                (event) =>
+                  !match.events.some(
+                    (storedEvent) => storedEvent.id === event.id,
+                  ),
+              ),
+          ]);
+          setPendingCount(pending.length);
+          void flushRef.current();
+        }
+      } catch {
+        window.localStorage.removeItem(storageKey);
+      }
+    }
+    const online = () => {
+      setOffline(false);
+      void flushRef.current();
+    };
+    const offlineHandler = () => setOffline(true);
+    window.addEventListener("online", online);
+    window.addEventListener("offline", offlineHandler);
+    setOffline(!navigator.onLine);
+    return () => {
+      window.removeEventListener("online", online);
+      window.removeEventListener("offline", offlineHandler);
+    };
+  }, [match?.matchId, storageKey]);
+
+  const queueEvent = (event: ScoreEvent) => {
+    if (!match || match.status !== "live") return;
+    const envelope: ScoreEventEnvelope = {
+      sequence: sequenceRef.current,
+      monotonicCounter: counterRef.current,
+      event,
+    };
+    sequenceRef.current += 1;
+    counterRef.current += 1;
+    pendingRef.current = [...pendingRef.current, envelope];
+    setEvents((currentEvents) => [...currentEvents, event]);
+    persistPending();
+    void flushRef.current();
+  };
+
+  const start = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(undefined);
+    const participantIds = [
+      currentPlayer.id,
+      partnerId,
+      opponentOneId,
+      opponentTwoId,
+    ];
+    if (
+      participantIds.some((id) => !id) ||
+      new Set(participantIds).size !== 4
+    ) {
+      setError("Choose four different players.");
+      return;
+    }
+    startTransition(async () => {
+      const response = await startMatchAction({
+        teamAIds: [currentPlayer.id, partnerId],
+        teamBIds: [opponentOneId, opponentTwoId],
+        venueId: venueId || undefined,
+        scoringSystem,
+        initialServer,
+        deviceId: deviceId(),
+      });
+      if (!response.ok) {
+        setError(response.error);
+        return;
+      }
+      setMatch(response.scoring);
+      setEvents(response.scoring.events);
+      sequenceRef.current = response.scoring.nextSequence;
+      counterRef.current = response.scoring.nextMonotonicCounter;
+      router.replace(`/app/score?match=${response.scoring.matchId}`);
+    });
+  };
+
+  if (!match) {
+    return (
+      <main className="score-setup">
+        <header>
+          <Link href="/app/matches">
+            <ChevronLeft aria-hidden size={20} /> Matches
+          </Link>
+          <Badge>Connected scoring</Badge>
+        </header>
+        <section>
+          <div>
+            <span className="page-eyebrow">Sand Rating match</span>
+            <h1>Set the court.</h1>
+            <p>
+              Four Duna profiles, event-sourced scoring, offline-safe replay,
+              and opponent confirmation before any rating moves.
+            </p>
+          </div>
+          {candidates.length >= 3 ? (
+            <form onSubmit={start}>
+              <div className="score-setup__team">
+                <span>Team A</span>
+                <label>
+                  You
+                  <input disabled value={currentPlayer.displayName} />
+                </label>
+                <label>
+                  Partner
+                  <select
+                    onChange={(eventValue) =>
+                      setPartnerId(eventValue.target.value)
+                    }
+                    value={partnerId}
+                  >
+                    {candidates.map((player) => (
+                      <option
+                        disabled={[opponentOneId, opponentTwoId].includes(
+                          player.id,
+                        )}
+                        key={player.id}
+                        value={player.id}
+                      >
+                        {player.displayName} ·{" "}
+                        {player.rating.display.toFixed(2)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="score-setup__team">
+                <span>Team B</span>
+                <label>
+                  Opponent
+                  <select
+                    onChange={(eventValue) =>
+                      setOpponentOneId(eventValue.target.value)
+                    }
+                    value={opponentOneId}
+                  >
+                    {candidates.map((player) => (
+                      <option
+                        disabled={[partnerId, opponentTwoId].includes(
+                          player.id,
+                        )}
+                        key={player.id}
+                        value={player.id}
+                      >
+                        {player.displayName} ·{" "}
+                        {player.rating.display.toFixed(2)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Opponent
+                  <select
+                    onChange={(eventValue) =>
+                      setOpponentTwoId(eventValue.target.value)
+                    }
+                    value={opponentTwoId}
+                  >
+                    {candidates.map((player) => (
+                      <option
+                        disabled={[partnerId, opponentOneId].includes(
+                          player.id,
+                        )}
+                        key={player.id}
+                        value={player.id}
+                      >
+                        {player.displayName} ·{" "}
+                        {player.rating.display.toFixed(2)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="form-grid form-grid--2">
+                <label>
+                  Venue
+                  <select
+                    onChange={(eventValue) =>
+                      setVenueId(eventValue.target.value)
+                    }
+                    value={venueId}
+                  >
+                    <option value="">Location not recorded</option>
+                    {venues.map((venue) => (
+                      <option key={venue.id} value={venue.id}>
+                        {venue.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Scoring
+                  <select
+                    onChange={(eventValue) =>
+                      setScoringSystem(eventValue.target.value as ScoringSystem)
+                    }
+                    value={scoringSystem}
+                  >
+                    <option value="rally">Rally scoring</option>
+                    <option value="sideout">Sideout scoring</option>
+                  </select>
+                </label>
+                <label>
+                  First serve
+                  <select
+                    onChange={(eventValue) =>
+                      setInitialServer(eventValue.target.value as "A" | "B")
+                    }
+                    value={initialServer}
+                  >
+                    <option value="A">Team A</option>
+                    <option value="B">Team B</option>
+                  </select>
+                </label>
+              </div>
+              {error && <p role="alert">{error}</p>}
+              <button
+                className="primary-action"
+                disabled={isStarting}
+                type="submit"
+              >
+                <Radio aria-hidden size={17} />
+                {isStarting ? "Opening court…" : "Start live scoring"}
+              </button>
+            </form>
+          ) : (
+            <article className="empty-state">
+              <h2>Three more public player profiles are needed.</h2>
+              <p>
+                Invite the other players to create or claim their Duna profile
+                before recording a rated doubles match.
+              </p>
+            </article>
+          )}
+        </section>
+      </main>
+    );
   }
+
+  const scoringOpen = match.status === "live" && score.status === "live";
+  const teamAInitials = initials(match.teamA.people);
+  const teamBInitials = initials(match.teamB.people);
 
   return (
     <div className="scoreboard">
@@ -70,119 +434,168 @@ export function LiveScoreboard() {
           <ChevronLeft aria-hidden size={22} /> Exit
         </Link>
         <div>
-          <Badge tone="live">
-            {state.status === "complete" ? "Complete" : "Live scoring"}
+          <Badge tone={scoringOpen ? "live" : "warning"}>
+            {match.status === "pending-verification"
+              ? "Awaiting confirmation"
+              : match.status === "verified"
+                ? "Verified"
+                : match.status === "disputed"
+                  ? "Disputed"
+                  : "Live scoring"}
           </Badge>
-          <span>Manhattan Beach · Court 4</span>
+          <span>{match.venueName}</span>
         </div>
-        <button aria-label="Scoring settings">
-          <Settings2 aria-hidden size={21} />
-        </button>
+        <Link
+          aria-label="Open public live view"
+          href={`/live/${match.matchId}`}
+        >
+          <Radio aria-hidden size={21} />
+        </Link>
       </header>
 
       <section className="scoreboard__format">
         <div className="segmented-control">
-          <button
-            className={scoringSystem === "rally" ? "active" : undefined}
-            onClick={() => setScoringSystem("rally")}
-          >
-            Rally
-          </button>
-          <button
-            className={scoringSystem === "sideout" ? "active" : undefined}
-            onClick={() => setScoringSystem("sideout")}
-          >
-            Sideout
+          <button className="active" disabled>
+            {match.format.scoringSystem === "rally" ? "Rally" : "Sideout"}
           </button>
         </div>
         <span>
-          Set <Numeric>{state.setIndex + 1}</Numeric> · best of 3 · to{" "}
-          <Numeric>
-            {standardBeachFormat.pointTargets[state.setIndex] ?? 21}
-          </Numeric>
+          Set <Numeric>{score.setIndex + 1}</Numeric> · best of 3 · to{" "}
+          <Numeric>{match.format.pointTargets[score.setIndex] ?? 21}</Numeric>
         </span>
       </section>
 
-      {(state.sideSwitchDue || state.technicalTimeoutDue) && (
-        <div className="scoreboard__notice">
+      {(score.sideSwitchDue || score.technicalTimeoutDue) && (
+        <button
+          className="scoreboard__notice"
+          disabled={!scoringOpen}
+          onClick={() => {
+            if (score.technicalTimeoutDue) {
+              queueEvent({
+                id: crypto.randomUUID(),
+                type: "technical-timeout-completed",
+                setIndex: score.setIndex,
+                occurredAt: now(),
+              });
+            }
+          }}
+          type="button"
+        >
           <SwitchCamera aria-hidden size={20} />
           <strong>
-            {state.technicalTimeoutDue ? "Technical timeout" : "Switch sides"}
+            {score.technicalTimeoutDue ? "Technical timeout" : "Switch sides"}
           </strong>
-          <span>Confirm when both teams are ready.</span>
-        </div>
+          <span>
+            {score.technicalTimeoutDue
+              ? "Tap when both teams are ready."
+              : "Side-switch checkpoint reached."}
+          </span>
+        </button>
       )}
 
       <section className="scoreboard__court">
         <button
-          aria-label="Point for Mara and Theo"
+          aria-label={`Point for ${match.teamA.name}`}
           className="score-team score-team--a"
-          disabled={state.status === "complete"}
-          onClick={() => addRally("A")}
+          disabled={!scoringOpen}
+          onClick={() =>
+            queueEvent({
+              id: crypto.randomUUID(),
+              type: "rally-won",
+              winner: "A",
+              occurredAt: now(),
+            })
+          }
+          type="button"
         >
           <div className="score-team__serve">
-            {state.serving === "A" && <span />}
-            <small>{state.serving === "A" ? "Serving" : "Receiving"}</small>
+            {score.serving === "A" && <span />}
+            <small>{score.serving === "A" ? "Serving" : "Receiving"}</small>
           </div>
           <div className="score-team__people">
-            <span className="avatar">ML</span>
-            <span className="avatar">TP</span>
-            <strong>Mara / Theo</strong>
+            {teamAInitials.map((value, index) => (
+              <span className="avatar" key={`${value}-${index}`}>
+                {value}
+              </span>
+            ))}
+            <strong>{match.teamA.name}</strong>
           </div>
           <Numeric>{current.a}</Numeric>
-          <span className="score-team__hint">Tap anywhere for point</span>
+          <span className="score-team__hint">
+            {scoringOpen ? "Tap anywhere for point" : "Scoring closed"}
+          </span>
         </button>
         <div className="scoreboard__divider">
           <span>VS</span>
         </div>
         <button
-          aria-label="Point for Noa and Elena"
+          aria-label={`Point for ${match.teamB.name}`}
           className="score-team score-team--b"
-          disabled={state.status === "complete"}
-          onClick={() => addRally("B")}
+          disabled={!scoringOpen}
+          onClick={() =>
+            queueEvent({
+              id: crypto.randomUUID(),
+              type: "rally-won",
+              winner: "B",
+              occurredAt: now(),
+            })
+          }
+          type="button"
         >
           <div className="score-team__serve">
-            {state.serving === "B" && <span />}
-            <small>{state.serving === "B" ? "Serving" : "Receiving"}</small>
+            {score.serving === "B" && <span />}
+            <small>{score.serving === "B" ? "Serving" : "Receiving"}</small>
           </div>
           <div className="score-team__people">
-            <span className="avatar">NW</span>
-            <span className="avatar">ET</span>
-            <strong>Noa / Elena</strong>
+            {teamBInitials.map((value, index) => (
+              <span className="avatar" key={`${value}-${index}`}>
+                {value}
+              </span>
+            ))}
+            <strong>{match.teamB.name}</strong>
           </div>
           <Numeric>{current.b}</Numeric>
-          <span className="score-team__hint">Tap anywhere for point</span>
+          <span className="score-team__hint">
+            {scoringOpen ? "Tap anywhere for point" : "Scoring closed"}
+          </span>
         </button>
       </section>
 
       <footer className="scoreboard__bottom">
-        <button disabled={events.length <= 1} onClick={undo}>
+        <button
+          disabled={!scoringOpen || events.length <= 1}
+          onClick={() => {
+            const event = createUndoEvent(events, {
+              id: crypto.randomUUID(),
+              occurredAt: now(),
+            });
+            if (event) queueEvent(event);
+          }}
+          type="button"
+        >
           <RotateCcw aria-hidden size={19} /> Undo
         </button>
         <div>
-          <button
-            aria-label={offline ? "Go online" : "Simulate offline"}
-            onClick={() => setOffline((value) => !value)}
-          >
+          <span aria-hidden>
             {offline ? (
               <CloudOff aria-hidden size={18} />
             ) : (
               <Wifi aria-hidden size={18} />
             )}
-          </button>
+          </span>
           <span>
             <strong>{offline ? "Saved on this device" : "Synced"}</strong>
             <small>
-              {offline
-                ? `${Math.max(0, events.length - 1)} events pending upload`
+              {pendingCount > 0
+                ? `${pendingCount} ${pendingCount === 1 ? "event" : "events"} pending upload`
                 : "Server and device agree"}
             </small>
           </span>
         </div>
         <div className="scoreboard__sets">
-          {state.sets.map((set, index) => (
+          {score.sets.map((set, index) => (
             <span
-              className={index === state.setIndex ? "active" : undefined}
+              className={index === score.setIndex ? "active" : undefined}
               key={index}
             >
               <small>S{index + 1}</small>
@@ -193,6 +606,11 @@ export function LiveScoreboard() {
           ))}
         </div>
       </footer>
+      {error && (
+        <div className="scoreboard__sync-error" role="alert">
+          {error}
+        </div>
+      )}
     </div>
   );
 }

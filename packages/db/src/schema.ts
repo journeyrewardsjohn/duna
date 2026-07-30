@@ -101,6 +101,13 @@ export const registrationStatusEnum = pgEnum("registration_status", [
   "refunded",
   "checked-in",
 ]);
+export const bookingStatusEnum = pgEnum("booking_status", [
+  "held",
+  "confirmed",
+  "cancelled",
+  "expired",
+  "refunded",
+]);
 export const matchStatusEnum = pgEnum("match_status", [
   "scheduled",
   "warmup",
@@ -259,6 +266,17 @@ export const guardianships = pgTable(
     verified: boolean("verified").notNull().default(false),
     emergencyContact: boolean("emergency_contact").notNull().default(true),
     canApproveSpending: boolean("can_approve_spending").notNull().default(true),
+    reviewStatus: varchar("review_status", { length: 16 })
+      .notNull()
+      .default("pending"),
+    reviewReason: text("review_reason"),
+    reviewedByPersonId: uuid("reviewed_by_person_id").references(
+      () => people.id,
+    ),
+    reviewedAt: timestamp("reviewed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     verifiedAt: timestamp("verified_at", {
       withTimezone: true,
       mode: "date",
@@ -270,6 +288,53 @@ export const guardianships = pgTable(
     check(
       "guardianship_distinct_people",
       sql`${table.guardianId} <> ${table.minorId}`,
+    ),
+    check(
+      "guardianship_review_status_valid",
+      sql`${table.reviewStatus} IN ('pending', 'verified', 'rejected')`,
+    ),
+  ],
+);
+
+export const guardianConsents = pgTable(
+  "guardian_consents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    guardianId: uuid("guardian_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    minorId: uuid("minor_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    disclosureVersion: varchar("disclosure_version", { length: 32 }).notNull(),
+    disclosureText: text("disclosure_text").notNull(),
+    disclosureTextHash: varchar("disclosure_text_hash", {
+      length: 128,
+    }).notNull(),
+    granted: boolean("granted").notNull(),
+    method: varchar("method", { length: 32 }).notNull(),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    userAgent: text("user_agent"),
+    occurredAt: timestamp("occurred_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("guardian_consent_minor_idx").on(table.minorId, table.occurredAt),
+    index("guardian_consent_guardian_idx").on(
+      table.guardianId,
+      table.occurredAt,
+    ),
+    check(
+      "guardian_consent_distinct_people",
+      sql`${table.guardianId} <> ${table.minorId}`,
+    ),
+    check(
+      "guardian_consent_method_valid",
+      sql`${table.method} IN ('signed-attestation', 'identity-provider', 'admin-review')`,
     ),
   ],
 );
@@ -340,6 +405,34 @@ export const organizationMemberships = pgTable(
   ],
 );
 
+export const ratePlans = pgTable(
+  "rate_plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    baseAmountMinor: integer("base_amount_minor").notNull(),
+    memberAmountMinor: integer("member_amount_minor"),
+    nonMemberAmountMinor: integer("non_member_amount_minor"),
+    rateUnitMinutes: integer("rate_unit_minutes").notNull().default(60),
+    dynamicFloorMinor: integer("dynamic_floor_minor"),
+    dynamicCeilingMinor: integer("dynamic_ceiling_minor"),
+    dailyChangeCapBps: integer("daily_change_cap_bps"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    check(
+      "rate_plan_amounts_nonnegative",
+      sql`${table.baseAmountMinor} >= 0 AND (${table.memberAmountMinor} IS NULL OR ${table.memberAmountMinor} >= 0) AND (${table.nonMemberAmountMinor} IS NULL OR ${table.nonMemberAmountMinor} >= 0)`,
+    ),
+    check("rate_plan_unit_positive", sql`${table.rateUnitMinutes} > 0`),
+  ],
+);
+
 // Inventory and booking
 export const venues = pgTable(
   "venues",
@@ -387,6 +480,7 @@ export const courts = pgTable(
     bookingPolicy: varchar("booking_policy", { length: 32 })
       .notNull()
       .default("public"),
+    ratePlanId: uuid("rate_plan_id").references(() => ratePlans.id),
     minimumDurationMinutes: integer("minimum_duration_minutes")
       .notNull()
       .default(30),
@@ -395,6 +489,14 @@ export const courts = pgTable(
       .default(120),
     bufferBeforeMinutes: integer("buffer_before_minutes").notNull().default(0),
     bufferAfterMinutes: integer("buffer_after_minutes").notNull().default(0),
+    minimumNoticeMinutes: integer("minimum_notice_minutes")
+      .notNull()
+      .default(60),
+    maximumAdvanceDays: integer("maximum_advance_days").notNull().default(90),
+    cancellationPolicy: jsonb("cancellation_policy")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
     qrToken: varchar("qr_token", { length: 96 }).notNull().unique(),
     ...{ createdAt, updatedAt },
   },
@@ -403,6 +505,10 @@ export const courts = pgTable(
     check(
       "court_duration_valid",
       sql`${table.minimumDurationMinutes} > 0 AND ${table.maximumDurationMinutes} >= ${table.minimumDurationMinutes}`,
+    ),
+    check(
+      "court_booking_window_valid",
+      sql`${table.minimumNoticeMinutes} >= 0 AND ${table.maximumAdvanceDays} > 0`,
     ),
   ],
 );
@@ -472,23 +578,6 @@ export const scheduleOverrides = pgTable(
     check("schedule_override_time", sql`${table.endsAt} > ${table.startsAt}`),
   ],
 );
-
-export const ratePlans = pgTable("rate_plans", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  organizationId: uuid("organization_id")
-    .notNull()
-    .references(() => organizations.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  currency: varchar("currency", { length: 3 }).notNull(),
-  baseAmountMinor: integer("base_amount_minor").notNull(),
-  memberAmountMinor: integer("member_amount_minor"),
-  nonMemberAmountMinor: integer("non_member_amount_minor"),
-  dynamicFloorMinor: integer("dynamic_floor_minor"),
-  dynamicCeilingMinor: integer("dynamic_ceiling_minor"),
-  dailyChangeCapBps: integer("daily_change_cap_bps"),
-  createdAt,
-  updatedAt,
-});
 
 // Programs, sessions, registrations, eligibility, and forms
 export const programs = pgTable("programs", {
@@ -563,6 +652,7 @@ export const sessions = pgTable(
     eventTypeId: uuid("event_type_id").references(() => eventTypes.id),
     venueId: uuid("venue_id").references(() => venues.id),
     courtId: uuid("court_id").references(() => courts.id),
+    createdByPersonId: uuid("created_by_person_id").references(() => people.id),
     coachPersonId: uuid("coach_person_id").references(() => people.id),
     title: text("title").notNull(),
     slug: varchar("slug", { length: 96 }).notNull().unique(),
@@ -631,6 +721,11 @@ export const registrations = pgTable(
       .notNull()
       .$type<Record<string, unknown>>(),
     eligibilityRuleVersion: integer("eligibility_rule_version"),
+    orderId: uuid("order_id"),
+    holdExpiresAt: timestamp("hold_expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     overriddenByPersonId: uuid("overridden_by_person_id").references(
       () => people.id,
     ),
@@ -646,6 +741,13 @@ export const registrations = pgTable(
     uniqueIndex("registration_session_person_unique").on(
       table.sessionId,
       table.personId,
+    ),
+    uniqueIndex("registration_order_unique")
+      .on(table.orderId)
+      .where(sql`${table.orderId} IS NOT NULL`),
+    check(
+      "registration_pending_hold_required",
+      sql`${table.status} <> 'pending' OR (${table.orderId} IS NOT NULL AND ${table.holdExpiresAt} IS NOT NULL)`,
     ),
   ],
 );
@@ -668,28 +770,43 @@ export const forms = pgTable(
     }),
     createdAt,
   },
-  (table) => [uniqueIndex("form_version_unique").on(table.id, table.version)],
+  (table) => [
+    uniqueIndex("form_version_unique").on(table.id, table.version),
+    check(
+      "form_document_hash_pair",
+      sql`(${table.documentText} IS NULL AND ${table.documentTextHash} IS NULL) OR (${table.documentText} IS NOT NULL AND ${table.documentTextHash} IS NOT NULL)`,
+    ),
+  ],
 );
 
-export const formResponses = pgTable("form_responses", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  formId: uuid("form_id")
-    .notNull()
-    .references(() => forms.id),
-  formVersion: integer("form_version").notNull(),
-  personId: uuid("person_id")
-    .notNull()
-    .references(() => people.id),
-  subjectPersonId: uuid("subject_person_id")
-    .notNull()
-    .references(() => people.id),
-  answers: jsonb("answers").notNull().$type<Record<string, unknown>>(),
-  signedByPersonId: uuid("signed_by_person_id").references(() => people.id),
-  signatureTextHash: varchar("signature_text_hash", { length: 128 }),
-  signedAt: timestamp("signed_at", { withTimezone: true, mode: "date" }),
-  ipAddress: varchar("ip_address", { length: 64 }),
-  createdAt,
-});
+export const formResponses = pgTable(
+  "form_responses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    formId: uuid("form_id")
+      .notNull()
+      .references(() => forms.id),
+    formVersion: integer("form_version").notNull(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id),
+    subjectPersonId: uuid("subject_person_id")
+      .notNull()
+      .references(() => people.id),
+    answers: jsonb("answers").notNull().$type<Record<string, unknown>>(),
+    signedByPersonId: uuid("signed_by_person_id").references(() => people.id),
+    signatureTextHash: varchar("signature_text_hash", { length: 128 }),
+    signedAt: timestamp("signed_at", { withTimezone: true, mode: "date" }),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    createdAt,
+  },
+  (table) => [
+    check(
+      "form_response_signature_complete",
+      sql`(${table.signedByPersonId} IS NULL AND ${table.signatureTextHash} IS NULL AND ${table.signedAt} IS NULL) OR (${table.signedByPersonId} IS NOT NULL AND ${table.signatureTextHash} IS NOT NULL AND ${table.signedAt} IS NOT NULL)`,
+    ),
+  ],
+);
 
 // Competition and event-sourced scoring
 export const teams = pgTable("teams", {
@@ -754,6 +871,7 @@ export const matches = pgTable(
     teamBId: uuid("team_b_id").references(() => teams.id),
     venueId: uuid("venue_id").references(() => venues.id),
     courtId: uuid("court_id").references(() => courts.id),
+    createdByPersonId: uuid("created_by_person_id").references(() => people.id),
     status: matchStatusEnum("status").notNull().default("scheduled"),
     scheduledAt: timestamp("scheduled_at", {
       withTimezone: true,
@@ -773,6 +891,10 @@ export const matches = pgTable(
     verificationWeightBps: integer("verification_weight_bps"),
     winnerTeamId: uuid("winner_team_id").references(() => teams.id),
     ratingEligible: boolean("rating_eligible").notNull().default(true),
+    ratingAppliedAt: timestamp("rating_applied_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     createdAt,
     updatedAt,
   },
@@ -813,12 +935,47 @@ export const rallyEvents = pgTable(
       .defaultNow(),
   },
   (table) => [
+    uniqueIndex("rally_event_match_sequence_unique").on(
+      table.matchId,
+      table.sequence,
+    ),
     uniqueIndex("rally_event_replay_unique").on(
       table.matchId,
       table.sequence,
       table.deviceId,
     ),
     index("rally_event_match_sequence_idx").on(table.matchId, table.sequence),
+  ],
+);
+
+export const matchConfirmations = pgTable(
+  "match_confirmations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    decision: varchar("decision", { length: 16 }).notNull(),
+    reason: text("reason"),
+    occurredAt: timestamp("occurred_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("match_confirmation_person_unique").on(
+      table.matchId,
+      table.personId,
+    ),
+    check(
+      "match_confirmation_decision_valid",
+      sql`${table.decision} IN ('confirmed', 'disputed')`,
+    ),
   ],
 );
 
@@ -870,6 +1027,15 @@ export const ratings = pgTable(
     confidence: confidenceEnum("confidence").notNull(),
     current52WeekPeak: doublePrecision("current_52_week_peak").notNull(),
     ratedMatches: integer("rated_matches").notNull().default(0),
+    weeklyPositiveDisplayGain: doublePrecision("weekly_positive_display_gain")
+      .notNull()
+      .default(0),
+    weeklyGainWindowStart: timestamp("weekly_gain_window_start", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
     updatedAt,
   },
   (table) => [
@@ -906,6 +1072,10 @@ export const ratingEvents = pgTable(
       table.sequence,
     ),
     index("rating_event_match_idx").on(table.matchId),
+    uniqueIndex("rating_event_match_person_unique").on(
+      table.matchId,
+      table.personId,
+    ),
   ],
 );
 
@@ -970,9 +1140,16 @@ export const orders = pgTable(
     stripePaymentIntentId: varchar("stripe_payment_intent_id", {
       length: 128,
     }).unique(),
+    stripeCheckoutSessionId: varchar("stripe_checkout_session_id", {
+      length: 128,
+    }).unique(),
     idempotencyKey: varchar("idempotency_key", { length: 128 })
       .notNull()
       .unique(),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     createdAt,
     updatedAt,
   },
@@ -980,6 +1157,64 @@ export const orders = pgTable(
     check(
       "order_amounts_nonnegative",
       sql`${table.subtotalMinor} >= 0 AND ${table.feeTotalMinor} >= 0 AND ${table.taxTotalMinor} >= 0 AND ${table.totalMinor} >= 0`,
+    ),
+  ],
+);
+
+export const courtBookings = pgTable(
+  "court_bookings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id),
+    courtId: uuid("court_id")
+      .notNull()
+      .references(() => courts.id),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id),
+    eventTypeId: uuid("event_type_id").references(() => eventTypes.id),
+    orderId: uuid("order_id").references(() => orders.id),
+    startsAt: timestamp("starts_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    endsAt: timestamp("ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    bufferBeforeMinutes: integer("buffer_before_minutes").notNull().default(0),
+    bufferAfterMinutes: integer("buffer_after_minutes").notNull().default(0),
+    status: bookingStatusEnum("status").notNull().default("held"),
+    holdExpiresAt: timestamp("hold_expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    idempotencyKey: varchar("idempotency_key", { length: 128 })
+      .notNull()
+      .unique(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("court_booking_court_time_idx").on(
+      table.courtId,
+      table.startsAt,
+      table.endsAt,
+    ),
+    index("court_booking_person_idx").on(table.personId, table.startsAt),
+    check("court_booking_time_valid", sql`${table.endsAt} > ${table.startsAt}`),
+    check(
+      "court_booking_buffers_valid",
+      sql`${table.bufferBeforeMinutes} >= 0 AND ${table.bufferAfterMinutes} >= 0`,
+    ),
+    check(
+      "court_booking_hold_expiry",
+      sql`${table.status} <> 'held' OR ${table.holdExpiresAt} IS NOT NULL`,
     ),
   ],
 );
@@ -1070,48 +1305,81 @@ export const creditLedger = pgTable(
   ],
 );
 
-export const membershipTiers = pgTable("membership_tiers", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  organizationId: uuid("organization_id").references(() => organizations.id, {
-    onDelete: "cascade",
-  }),
-  code: varchar("code", { length: 64 }).notNull(),
-  name: text("name").notNull(),
-  priceMinor: integer("price_minor").notNull(),
-  currency: varchar("currency", { length: 3 }).notNull(),
-  interval: varchar("interval", { length: 16 }).notNull(),
-  stripePriceId: varchar("stripe_price_id", { length: 128 }),
-  benefits: jsonb("benefits").notNull().$type<readonly string[]>().default([]),
-  active: boolean("active").notNull().default(true),
-  createdAt,
-  updatedAt,
-});
+export const membershipTiers = pgTable(
+  "membership_tiers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    code: varchar("code", { length: 64 }).notNull(),
+    name: text("name").notNull(),
+    priceMinor: integer("price_minor").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    interval: varchar("interval", { length: 16 }).notNull(),
+    stripePriceId: varchar("stripe_price_id", { length: 128 }).unique(),
+    benefits: jsonb("benefits")
+      .notNull()
+      .$type<readonly string[]>()
+      .default([]),
+    active: boolean("active").notNull().default(true),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("platform_membership_tier_code_unique")
+      .on(table.code)
+      .where(sql`${table.organizationId} IS NULL`),
+    uniqueIndex("organization_membership_tier_code_unique")
+      .on(table.organizationId, table.code)
+      .where(sql`${table.organizationId} IS NOT NULL`),
+    check("membership_tier_price_valid", sql`${table.priceMinor} >= 0`),
+    check(
+      "membership_tier_interval_valid",
+      sql`${table.interval} IN ('month', 'year')`,
+    ),
+  ],
+);
 
-export const memberships = pgTable("memberships", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  personId: uuid("person_id")
-    .notNull()
-    .references(() => people.id),
-  tierId: uuid("tier_id")
-    .notNull()
-    .references(() => membershipTiers.id),
-  status: varchar("status", { length: 24 }).notNull(),
-  stripeSubscriptionId: varchar("stripe_subscription_id", {
-    length: 128,
-  }).unique(),
-  currentPeriodStartsAt: timestamp("current_period_starts_at", {
-    withTimezone: true,
-    mode: "date",
-  }),
-  currentPeriodEndsAt: timestamp("current_period_ends_at", {
-    withTimezone: true,
-    mode: "date",
-  }),
-  pausedUntil: timestamp("paused_until", { withTimezone: true, mode: "date" }),
-  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
-  createdAt,
-  updatedAt,
-});
+export const memberships = pgTable(
+  "memberships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id),
+    tierId: uuid("tier_id")
+      .notNull()
+      .references(() => membershipTiers.id),
+    status: varchar("status", { length: 24 }).notNull(),
+    stripeSubscriptionId: varchar("stripe_subscription_id", {
+      length: 128,
+    }).unique(),
+    currentPeriodStartsAt: timestamp("current_period_starts_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    currentPeriodEndsAt: timestamp("current_period_ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    pausedUntil: timestamp("paused_until", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    pauseMonthsUsed: integer("pause_months_used").notNull().default(0),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("membership_person_status_idx").on(table.personId, table.status),
+    check(
+      "membership_pause_months_valid",
+      sql`${table.pauseMonthsUsed} >= 0 AND ${table.pauseMonthsUsed} <= 4`,
+    ),
+  ],
+);
 
 export const walletAccounts = pgTable("wallet_accounts", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -1264,6 +1532,18 @@ export const ticketTypes = pgTable(
       "ticket_order_limits",
       sql`${table.minimumPerOrder} > 0 AND ${table.maximumPerOrder} >= ${table.minimumPerOrder}`,
     ),
+    check(
+      "ticket_quantity_positive",
+      sql`${table.quantity} IS NULL OR ${table.quantity} > 0`,
+    ),
+    check(
+      "ticket_sales_window_valid",
+      sql`${table.salesStartsAt} IS NULL OR ${table.salesEndsAt} IS NULL OR ${table.salesEndsAt} > ${table.salesStartsAt}`,
+    ),
+    check(
+      "ticket_validity_window_valid",
+      sql`${table.validityStartsAt} IS NULL OR ${table.validityEndsAt} IS NULL OR ${table.validityEndsAt} > ${table.validityStartsAt}`,
+    ),
   ],
 );
 
@@ -1291,24 +1571,79 @@ export const tickets = pgTable(
   (table) => [index("ticket_token_status_idx").on(table.token, table.status)],
 );
 
-export const waitlistEntries = pgTable("waitlist_entries", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  sessionId: uuid("session_id")
-    .notNull()
-    .references(() => sessions.id, { onDelete: "cascade" }),
-  personId: uuid("person_id")
-    .notNull()
-    .references(() => people.id),
-  position: integer("position").notNull(),
-  status: varchar("status", { length: 24 }).notNull().default("waiting"),
-  promotedAt: timestamp("promoted_at", { withTimezone: true, mode: "date" }),
-  holdExpiresAt: timestamp("hold_expires_at", {
-    withTimezone: true,
-    mode: "date",
-  }),
-  createdAt,
-  updatedAt,
-});
+export const ticketScanEvents = pgTable(
+  "ticket_scan_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ticketId: uuid("ticket_id")
+      .notNull()
+      .references(() => tickets.id, { onDelete: "cascade" }),
+    scannedByPersonId: uuid("scanned_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    deviceId: varchar("device_id", { length: 128 }).notNull(),
+    scannedAt: timestamp("scanned_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    receivedAt: timestamp("received_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    offline: boolean("offline").notNull().default(false),
+    accepted: boolean("accepted").notNull(),
+    duplicate: boolean("duplicate").notNull().default(false),
+    reason: varchar("reason", { length: 48 }),
+    createdAt,
+  },
+  (table) => [
+    index("ticket_scan_event_ticket_idx").on(table.ticketId, table.scannedAt),
+    uniqueIndex("ticket_scan_event_device_dedupe").on(
+      table.ticketId,
+      table.deviceId,
+      table.scannedAt,
+    ),
+  ],
+);
+
+export const waitlistEntries = pgTable(
+  "waitlist_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id),
+    position: integer("position").notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("waiting"),
+    promotedAt: timestamp("promoted_at", { withTimezone: true, mode: "date" }),
+    holdExpiresAt: timestamp("hold_expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("waitlist_session_person_unique").on(
+      table.sessionId,
+      table.personId,
+    ),
+    uniqueIndex("waitlist_session_position_unique").on(
+      table.sessionId,
+      table.position,
+    ),
+    check("waitlist_position_positive", sql`${table.position} > 0`),
+    check(
+      "waitlist_status_valid",
+      sql`${table.status} IN ('waiting', 'offered', 'accepted', 'expired', 'cancelled')`,
+    ),
+  ],
+);
 
 export const teamEntries = pgTable("team_entries", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -1399,6 +1734,44 @@ export const consents = pgTable(
   ],
 );
 
+export const privacyRequests = pgTable(
+  "privacy_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    status: varchar("status", { length: 32 }).notNull().default("queued"),
+    reason: text("reason"),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("privacy_request_active_unique")
+      .on(table.personId, table.kind)
+      .where(
+        sql`${table.status} IN ('queued', 'identity-review', 'legal-hold')`,
+      ),
+    check(
+      "privacy_request_kind_valid",
+      sql`${table.kind} IN ('account-deletion')`,
+    ),
+    check(
+      "privacy_request_status_valid",
+      sql`${table.status} IN ('queued', 'identity-review', 'legal-hold', 'completed', 'cancelled')`,
+    ),
+    check(
+      "privacy_request_completion_valid",
+      sql`${table.status} <> 'completed' OR ${table.completedAt} IS NOT NULL`,
+    ),
+  ],
+);
+
 export const messages = pgTable("messages", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").references(() => organizations.id),
@@ -1443,30 +1816,101 @@ export const follows = pgTable(
   ],
 );
 
-export const pickupSessions = pgTable("pickup_sessions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  hostPersonId: uuid("host_person_id")
-    .notNull()
-    .references(() => people.id),
-  venueId: uuid("venue_id").references(() => venues.id),
-  venueLabel: text("venue_label").notNull(),
-  title: text("title").notNull(),
-  startsAt: timestamp("starts_at", {
-    withTimezone: true,
-    mode: "date",
-  }).notNull(),
-  endsAt: timestamp("ends_at", { withTimezone: true, mode: "date" }).notNull(),
-  latitude: doublePrecision("latitude"),
-  longitude: doublePrecision("longitude"),
-  capacity: integer("capacity").notNull(),
-  ratingMinimum: doublePrecision("rating_minimum"),
-  ratingMaximum: doublePrecision("rating_maximum"),
-  visibility: varchar("visibility", { length: 24 }).notNull().default("public"),
-  costMinor: integer("cost_minor").notNull().default(0),
-  currency: varchar("currency", { length: 3 }).notNull().default("USD"),
-  createdAt,
-  updatedAt,
-});
+export const pickupSessions = pgTable(
+  "pickup_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    hostPersonId: uuid("host_person_id")
+      .notNull()
+      .references(() => people.id),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "set null",
+    }),
+    venueId: uuid("venue_id").references(() => venues.id),
+    venueLabel: text("venue_label").notNull(),
+    title: text("title").notNull(),
+    format: varchar("format", { length: 24 }).notNull().default("4s"),
+    note: text("note"),
+    recordMatches: boolean("record_matches").notNull().default(true),
+    startsAt: timestamp("starts_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    endsAt: timestamp("ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    capacity: integer("capacity").notNull(),
+    ratingMinimum: doublePrecision("rating_minimum"),
+    ratingMaximum: doublePrecision("rating_maximum"),
+    visibility: varchar("visibility", { length: 24 })
+      .notNull()
+      .default("public"),
+    costMinor: integer("cost_minor").notNull().default(0),
+    currency: varchar("currency", { length: 3 }).notNull().default("USD"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("pickup_session_start_idx").on(table.startsAt),
+    index("pickup_session_organization_idx").on(table.organizationId),
+    check(
+      "pickup_session_time_valid",
+      sql`${table.endsAt} > ${table.startsAt}`,
+    ),
+    check("pickup_session_capacity_valid", sql`${table.capacity} > 1`),
+    check("pickup_session_cost_valid", sql`${table.costMinor} >= 0`),
+    check(
+      "pickup_session_rating_range_valid",
+      sql`(${table.ratingMinimum} IS NULL AND ${table.ratingMaximum} IS NULL) OR (${table.ratingMinimum} IS NOT NULL AND ${table.ratingMaximum} IS NOT NULL AND ${table.ratingMaximum} >= ${table.ratingMinimum})`,
+    ),
+    check(
+      "pickup_session_visibility_valid",
+      sql`${table.visibility} IN ('public', 'unlisted', 'private')`,
+    ),
+    check(
+      "pickup_session_format_valid",
+      sql`${table.format} IN ('2s', '4s', '6s', 'king-queen')`,
+    ),
+  ],
+);
+
+export const pickupParticipants = pgTable(
+  "pickup_participants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pickupSessionId: uuid("pickup_session_id")
+      .notNull()
+      .references(() => pickupSessions.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    status: registrationStatusEnum("status").notNull().default("confirmed"),
+    orderId: uuid("order_id").references(() => orders.id),
+    holdExpiresAt: timestamp("hold_expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("pickup_participant_session_person_unique").on(
+      table.pickupSessionId,
+      table.personId,
+    ),
+    uniqueIndex("pickup_participant_order_unique")
+      .on(table.orderId)
+      .where(sql`${table.orderId} IS NOT NULL`),
+    index("pickup_participant_person_idx").on(table.personId, table.createdAt),
+    check(
+      "pickup_participant_pending_hold_required",
+      sql`${table.status} <> 'pending' OR (${table.orderId} IS NOT NULL AND ${table.holdExpiresAt} IS NOT NULL)`,
+    ),
+  ],
+);
 
 export const threads = pgTable("threads", {
   id: uuid("id").primaryKey().defaultRandom(),

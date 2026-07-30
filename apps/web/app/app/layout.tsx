@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
 import { PlayerShell } from "@/components/player-shell";
+import { getServerCaller } from "@/lib/api";
 
-export default function PlayerLayout({
+export default async function PlayerLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
-  return <PlayerShell>{children}</PlayerShell>;
+  const caller = await getServerCaller();
+  const dashboard = await caller.player.dashboard();
+  return <PlayerShell player={dashboard.player}>{children}</PlayerShell>;
 }

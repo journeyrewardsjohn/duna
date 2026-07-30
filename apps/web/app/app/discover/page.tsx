@@ -1,4 +1,3 @@
-import { demoEvents, demoVenues } from "@duna/core/demo";
 import { Badge, Numeric } from "@duna/ui";
 import {
   CalendarDays,
@@ -8,16 +7,30 @@ import {
   Search,
   SlidersHorizontal,
 } from "lucide-react";
+import Link from "next/link";
 import { EventCard } from "@/components/event-card";
+import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Discover" };
 
-export default function DiscoverPage() {
+export default async function DiscoverPage() {
+  const caller = await getServerCaller();
+  const [events, venues] = await Promise.all([
+    caller.public.events(),
+    caller.public.venues(),
+  ]);
+  const courtCount = venues.reduce(
+    (total, venue) => total + venue.courtCount,
+    0,
+  );
+  const market = venues[0]
+    ? `${venues[0].city}, ${venues[0].region}`
+    : "Connected markets";
   return (
     <main className="discover-page">
       <section className="page-heading-row">
         <div>
-          <span className="page-eyebrow">South Bay, Los Angeles</span>
+          <span className="page-eyebrow">{market}</span>
           <h1>Find your next game.</h1>
           <p>
             Open play, pickup, coaching, events, and courts—matched to your
@@ -54,26 +67,57 @@ export default function DiscoverPage() {
         <div className="discover-results">
           <div className="discover-results__heading">
             <span>
-              <Numeric>{demoEvents.length}</Numeric> strong matches for you
+              <Numeric>{events.length}</Numeric>{" "}
+              {events.length === 1 ? "published option" : "published options"}
             </span>
             <button>
               Recommended <ChevronDown aria-hidden size={14} />
             </button>
           </div>
           <div className="discover-event-grid">
-            {demoEvents.map((event) => (
+            {events.map((event) => (
               <EventCard event={event} key={event.id} />
             ))}
+            {events.length === 0 && (
+              <article className="empty-state">
+                <h2>No published play yet.</h2>
+                <p>New sessions will appear here as operators publish them.</p>
+              </article>
+            )}
           </div>
+          <section className="venue-booking-grid">
+            <div className="discover-results__heading">
+              <span>
+                <Numeric>{venues.length}</Numeric>{" "}
+                {venues.length === 1 ? "connected venue" : "connected venues"}
+              </span>
+            </div>
+            {venues.map((venue) => (
+              <Link
+                className="venue-booking-card"
+                href={`/app/venues/${venue.id}`}
+                key={venue.id}
+              >
+                <span>
+                  <strong>{venue.name}</strong>
+                  <small>
+                    {venue.city}, {venue.region}
+                  </small>
+                </span>
+                <Badge>{venue.courtCount} courts</Badge>
+              </Link>
+            ))}
+          </section>
         </div>
         <aside className="discovery-map" aria-label="South Bay activity map">
           <div className="discovery-map__water" />
           <div className="discovery-map__shore" />
           <div className="discovery-map__grid" />
-          {demoVenues.map((venue, index) => (
-            <button
+          {venues.map((venue, index) => (
+            <Link
               aria-label={`${venue.name}, ${venue.courtCount} courts`}
               className="map-pin"
+              href={`/app/venues/${venue.id}`}
               key={venue.id}
               style={
                 {
@@ -83,7 +127,7 @@ export default function DiscoverPage() {
               }
             >
               <Numeric>{venue.courtCount}</Numeric>
-            </button>
+            </Link>
           ))}
           <button
             aria-label="Center map on me"
@@ -92,8 +136,10 @@ export default function DiscoverPage() {
             <LocateFixed aria-hidden size={18} />
           </button>
           <div className="discovery-map__legend">
-            <Badge tone="live">14 live courts</Badge>
-            <span>Your 4.0–5.0 filter is active</span>
+            <Badge tone={courtCount > 0 ? "live" : "neutral"}>
+              {courtCount} connected {courtCount === 1 ? "court" : "courts"}
+            </Badge>
+            <span>Live inventory from participating operators</span>
           </div>
         </aside>
       </section>

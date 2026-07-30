@@ -1,4 +1,3 @@
-import { demoEvents, demoPeople } from "@duna/core/demo";
 import { formatMoney, formatVenueTime } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
@@ -15,6 +14,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { getServerCaller } from "@/lib/api";
 
 export async function generateMetadata({
   params,
@@ -22,7 +22,10 @@ export async function generateMetadata({
   readonly params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const event = demoEvents.find((item) => item.slug === slug);
+  const caller = await getServerCaller();
+  const event = await caller.public
+    .eventBySlug({ slug })
+    .catch(() => undefined);
   return { title: event?.title ?? "Event" };
 }
 
@@ -32,7 +35,11 @@ export default async function EventPage({
   readonly params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const event = demoEvents.find((item) => item.slug === slug);
+  const caller = await getServerCaller();
+  const [event, people] = await Promise.all([
+    caller.public.eventBySlug({ slug }).catch(() => undefined),
+    caller.public.players({ limit: 4 }),
+  ]);
   if (!event) notFound();
   return (
     <main className="public-detail">
@@ -82,21 +89,56 @@ export default async function EventPage({
           <span className="section__eyebrow">The run</span>
           <h2>A proper South Bay night.</h2>
           <p>
-            Competitive games, simple check-in, live scoring, and a field tuned
-            to your Sand Rating. Arrive ready to warm up; Duna handles the rest.
+            {event.description ??
+              "Competitive games, simple check-in, live scoring, and a field tuned to your Sand Rating. Arrive ready to warm up; Duna handles the rest."}
           </p>
+          {event.divisions && event.divisions.length > 0 && (
+            <>
+              <h3>Choose your division</h3>
+              <div className="event-divisions">
+                {event.divisions.map((division) => (
+                  <Link
+                    href={`/app/checkout/${event.slug}?division=${division.id}`}
+                    key={division.id}
+                  >
+                    <span>
+                      <strong>{division.name}</strong>
+                      <small>
+                        {division.discipline.replace("-", " ")} ·{" "}
+                        {division.ratingBasis.replaceAll("-", " ")}
+                      </small>
+                    </span>
+                    <span>
+                      <Numeric>
+                        {division.price.amountMinor === 0
+                          ? "Free"
+                          : formatMoney(
+                              division.price.amountMinor,
+                              division.price.currency,
+                            )}
+                      </Numeric>
+                      <small>
+                        <Numeric>{division.spotsRemaining}</Numeric> spots
+                      </small>
+                    </span>
+                    <ArrowRight aria-hidden size={17} />
+                  </Link>
+                ))}
+              </div>
+            </>
+          )}
           <div className="event-detail-highlights">
             <article>
               <Trophy aria-hidden size={22} />
               <span>
                 <strong>
                   {event.kind === "tournament"
-                    ? "$1,500 purse"
+                    ? "Structured competition"
                     : "Verified play"}
                 </strong>
                 <small>
                   {event.kind === "tournament"
-                    ? "Paid to winners’ wallets at bracket close"
+                    ? "Bracket, scoring, and results stay in one place"
                     : "Results can feed your Sand Rating"}
                 </small>
               </span>
@@ -121,9 +163,9 @@ export default async function EventPage({
               </span>
             </article>
           </div>
-          <h3>Who’s in</h3>
+          <h3>Community profiles</h3>
           <div className="event-attendees">
-            {demoPeople.slice(0, 4).map((person) => (
+            {people.map((person) => (
               <Link href={`/players/${person.handle}`} key={person.id}>
                 <span className="avatar">{person.initials}</span>
                 <span>
@@ -137,15 +179,17 @@ export default async function EventPage({
         </article>
 
         <aside className="event-booking-card">
-          <span>Entry</span>
+          <span>
+            Entry{event.divisions && event.divisions.length > 0 ? " from" : ""}
+          </span>
           <Numeric>
             {event.price.amountMinor === 0
               ? "Free"
               : formatMoney(event.price.amountMinor, event.price.currency)}
           </Numeric>
-          {event.kind !== "tournament" && (
-            <small>+ capped Duna platform fee · waived with Duna+</small>
-          )}
+          <small>
+            Exact fees and tender are calculated before confirmation.
+          </small>
           <ul>
             <li>
               <Check aria-hidden size={15} /> Eligibility checked instantly

@@ -3,26 +3,57 @@
 import { Badge, Numeric } from "@duna/ui";
 import { Check, ChevronRight, Clock3, Eye, MapPin, Users } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { createPickupAction } from "@/app/app/pickup/new/actions";
 
 export function PickupForm() {
   const [step, setStep] = useState(1);
-  const [created, setCreated] = useState(false);
+  const [createdSlug, setCreatedSlug] = useState<string>();
+  const [title, setTitle] = useState("Golden Hour 4s");
+  const [format, setFormat] = useState<"2s" | "4s" | "6s" | "king-queen">("4s");
+  const [capacity, setCapacity] = useState(8);
+  const [ratingMinimum, setRatingMinimum] = useState(4);
+  const [ratingMaximum, setRatingMaximum] = useState(5);
+  const [venueName, setVenueName] = useState("Hermosa Beach — Pier Courts");
+  const [date, setDate] = useState(() =>
+    new Date(Date.now() + 24 * 60 * 60_000).toISOString().slice(0, 10),
+  );
+  const [time, setTime] = useState("18:00");
+  const [durationMinutes, setDurationMinutes] = useState(90);
+  const [costMode, setCostMode] = useState<"free" | "split" | "fixed">("free");
+  const [costDollars, setCostDollars] = useState("10.00");
+  const [visibility, setVisibility] = useState<"public" | "unlisted">("public");
+  const [note, setNote] = useState(
+    "Good energy, competitive games, easy rotation. Bring your own water.",
+  );
+  const [recordMatches, setRecordMatches] = useState(true);
+  const [error, setError] = useState<string>();
+  const [isPending, startTransition] = useTransition();
+  const startsAt = useMemo(() => {
+    const value = new Date(`${date}T${time}:00`);
+    return Number.isNaN(value.getTime()) ? undefined : value.toISOString();
+  }, [date, time]);
+  const endsAt = useMemo(() => {
+    if (!startsAt) return undefined;
+    return new Date(
+      new Date(startsAt).getTime() + durationMinutes * 60_000,
+    ).toISOString();
+  }, [durationMinutes, startsAt]);
 
-  if (created) {
+  if (createdSlug) {
     return (
       <section className="pickup-created">
         <span className="pickup-created__check">
           <Check aria-hidden size={28} />
         </span>
         <Badge tone="positive">Published</Badge>
-        <h1>Golden Hour 4s is live.</h1>
+        <h1>{title} is live.</h1>
         <p>
-          Matching 4.0–5.0 players within 10 miles are being invited now. Your
-          game thread is ready.
+          The connected listing is published and ready to share. Matching
+          notifications will begin when the messaging provider is activated.
         </p>
         <div>
-          <Link className="primary-action" href="/events/golden-hour-fours">
+          <Link className="primary-action" href={`/events/${createdSlug}`}>
             Open pickup <ChevronRight aria-hidden size={17} />
           </Link>
           <Link className="secondary-action" href="/app/play">
@@ -57,24 +88,39 @@ export function PickupForm() {
               <div className="field-group">
                 <label htmlFor="pickup-title">Name your run</label>
                 <input
-                  defaultValue="Golden Hour 4s"
                   id="pickup-title"
                   maxLength={80}
+                  onChange={(event) => setTitle(event.target.value)}
+                  value={title}
                 />
               </div>
               <div className="form-grid form-grid--2">
                 <div className="field-group">
                   <label htmlFor="pickup-format">Format</label>
-                  <select defaultValue="4s" id="pickup-format">
-                    <option>2s</option>
-                    <option>4s</option>
-                    <option>6s</option>
-                    <option>King / Queen</option>
+                  <select
+                    id="pickup-format"
+                    onChange={(event) =>
+                      setFormat(
+                        event.target.value as "2s" | "4s" | "6s" | "king-queen",
+                      )
+                    }
+                    value={format}
+                  >
+                    <option value="2s">2s</option>
+                    <option value="4s">4s</option>
+                    <option value="6s">6s</option>
+                    <option value="king-queen">King / Queen</option>
                   </select>
                 </div>
                 <div className="field-group">
                   <label htmlFor="pickup-spots">Total spots</label>
-                  <select defaultValue="8" id="pickup-spots">
+                  <select
+                    id="pickup-spots"
+                    onChange={(event) =>
+                      setCapacity(Number(event.target.value))
+                    }
+                    value={capacity}
+                  >
                     <option value="4">4</option>
                     <option value="8">8</option>
                     <option value="12">12</option>
@@ -85,17 +131,33 @@ export function PickupForm() {
               <div className="field-group">
                 <label>Level</label>
                 <div className="range-control">
-                  <span>
-                    <Numeric>4.0</Numeric>
-                  </span>
-                  <div>
-                    <i />
-                  </div>
-                  <span>
-                    <Numeric>5.0</Numeric>
-                  </span>
+                  <input
+                    aria-label="Minimum rating"
+                    max="8"
+                    min="1"
+                    onChange={(event) =>
+                      setRatingMinimum(Number(event.target.value))
+                    }
+                    step="0.1"
+                    type="number"
+                    value={ratingMinimum}
+                  />
+                  <span>to</span>
+                  <input
+                    aria-label="Maximum rating"
+                    max="8"
+                    min="1"
+                    onChange={(event) =>
+                      setRatingMaximum(Number(event.target.value))
+                    }
+                    step="0.1"
+                    type="number"
+                    value={ratingMaximum}
+                  />
                 </div>
-                <small>About 312 nearby players match this band.</small>
+                <small>
+                  Duna will match against connected, consented players.
+                </small>
               </div>
             </>
           )}
@@ -106,28 +168,41 @@ export function PickupForm() {
                 <label htmlFor="pickup-venue">Where</label>
                 <MapPin aria-hidden size={18} />
                 <input
-                  defaultValue="Hermosa Beach — Pier Courts"
                   id="pickup-venue"
+                  onChange={(event) => setVenueName(event.target.value)}
+                  value={venueName}
                 />
               </div>
               <div className="form-grid form-grid--2">
                 <div className="field-group">
                   <label htmlFor="pickup-date">Date</label>
                   <input
-                    defaultValue="2026-07-31"
                     id="pickup-date"
+                    onChange={(event) => setDate(event.target.value)}
                     type="date"
+                    value={date}
                   />
                 </div>
                 <div className="field-group">
                   <label htmlFor="pickup-time">Start time</label>
-                  <input defaultValue="18:00" id="pickup-time" type="time" />
+                  <input
+                    id="pickup-time"
+                    onChange={(event) => setTime(event.target.value)}
+                    type="time"
+                    value={time}
+                  />
                 </div>
               </div>
               <div className="form-grid form-grid--2">
                 <div className="field-group">
                   <label htmlFor="pickup-duration">Duration</label>
-                  <select defaultValue="90" id="pickup-duration">
+                  <select
+                    id="pickup-duration"
+                    onChange={(event) =>
+                      setDurationMinutes(Number(event.target.value))
+                    }
+                    value={durationMinutes}
+                  >
                     <option value="60">1 hour</option>
                     <option value="90">1.5 hours</option>
                     <option value="120">2 hours</option>
@@ -135,13 +210,41 @@ export function PickupForm() {
                 </div>
                 <div className="field-group">
                   <label htmlFor="pickup-cost">Cost per player</label>
-                  <select defaultValue="free" id="pickup-cost">
+                  <select
+                    id="pickup-cost"
+                    onChange={(event) =>
+                      setCostMode(
+                        event.target.value as "free" | "split" | "fixed",
+                      )
+                    }
+                    value={costMode}
+                  >
                     <option value="free">Free</option>
                     <option value="split">Split court cost</option>
                     <option value="fixed">Fixed amount</option>
                   </select>
                 </div>
               </div>
+              {costMode !== "free" && (
+                <div className="field-group">
+                  <label htmlFor="pickup-cost-amount">
+                    Amount per player (USD)
+                  </label>
+                  <input
+                    id="pickup-cost-amount"
+                    inputMode="decimal"
+                    min="0.50"
+                    onChange={(event) => setCostDollars(event.target.value)}
+                    step="0.01"
+                    type="number"
+                    value={costDollars}
+                  />
+                  <small>
+                    Paid pickup is available only through a connected club or
+                    facility Stripe account; Duna never holds host funds.
+                  </small>
+                </div>
+              )}
             </>
           )}
 
@@ -150,16 +253,32 @@ export function PickupForm() {
               <div className="field-group">
                 <label>Who can see it</label>
                 <div className="choice-list">
-                  <label className="selected">
-                    <input defaultChecked name="visibility" type="radio" />
+                  <label
+                    className={visibility === "public" ? "selected" : undefined}
+                  >
+                    <input
+                      checked={visibility === "public"}
+                      name="visibility"
+                      onChange={() => setVisibility("public")}
+                      type="radio"
+                    />
                     <Eye aria-hidden size={20} />
                     <span>
                       <strong>Nearby matches</strong>
                       <small>Public to players in your level and area.</small>
                     </span>
                   </label>
-                  <label>
-                    <input name="visibility" type="radio" />
+                  <label
+                    className={
+                      visibility === "unlisted" ? "selected" : undefined
+                    }
+                  >
+                    <input
+                      checked={visibility === "unlisted"}
+                      name="visibility"
+                      onChange={() => setVisibility("unlisted")}
+                      type="radio"
+                    />
                     <Users aria-hidden size={20} />
                     <span>
                       <strong>People I invite</strong>
@@ -171,9 +290,11 @@ export function PickupForm() {
               <div className="field-group">
                 <label htmlFor="pickup-note">A note for the group</label>
                 <textarea
-                  defaultValue="Good energy, competitive games, easy rotation. Bring your own water."
                   id="pickup-note"
+                  maxLength={1_000}
+                  onChange={(event) => setNote(event.target.value)}
                   rows={4}
+                  value={note}
                 />
               </div>
               <label className="toggle-row">
@@ -183,8 +304,13 @@ export function PickupForm() {
                     Group-confirmed results carry 0.60 rating weight.
                   </small>
                 </span>
-                <input defaultChecked type="checkbox" />
+                <input
+                  checked={recordMatches}
+                  onChange={(event) => setRecordMatches(event.target.checked)}
+                  type="checkbox"
+                />
               </label>
+              {error && <p role="alert">{error}</p>}
             </>
           )}
 
@@ -211,9 +337,59 @@ export function PickupForm() {
             ) : (
               <button
                 className="primary-action"
-                onClick={() => setCreated(true)}
+                disabled={isPending}
+                onClick={() => {
+                  setError(undefined);
+                  if (!startsAt || !endsAt) {
+                    setError("Choose a valid date and start time.");
+                    return;
+                  }
+                  if (ratingMinimum > ratingMaximum) {
+                    setError(
+                      "The minimum rating cannot exceed the maximum rating.",
+                    );
+                    return;
+                  }
+                  const costMinor =
+                    costMode === "free"
+                      ? 0
+                      : Math.round(Number(costDollars) * 100);
+                  if (
+                    !Number.isSafeInteger(costMinor) ||
+                    (costMode !== "free" && costMinor < 50)
+                  ) {
+                    setError(
+                      "Enter a valid per-player amount of at least $0.50.",
+                    );
+                    return;
+                  }
+                  startTransition(async () => {
+                    const result = await createPickupAction({
+                      title,
+                      startsAt,
+                      endsAt,
+                      venueName,
+                      capacity,
+                      format,
+                      note: note.trim() || undefined,
+                      visibility,
+                      costMinor,
+                      currency: "USD",
+                      recordMatches,
+                      ratingMinimum,
+                      ratingMaximum,
+                      idempotencyKey: crypto.randomUUID(),
+                    });
+                    if (result.ok) {
+                      setCreatedSlug(result.event.slug);
+                    } else {
+                      setError(result.error);
+                    }
+                  });
+                }}
               >
-                Publish pickup <Check aria-hidden size={17} />
+                {isPending ? "Publishing…" : "Publish pickup"}{" "}
+                <Check aria-hidden size={17} />
               </button>
             )}
           </footer>
@@ -225,19 +401,29 @@ export function PickupForm() {
             <div />
             <Badge>Pickup</Badge>
           </div>
-          <h2>Golden Hour 4s</h2>
+          <h2>{title || "Untitled pickup"}</h2>
           <p>
-            <MapPin aria-hidden size={14} /> Hermosa Beach — Pier Courts
+            <MapPin aria-hidden size={14} /> {venueName || "Choose a location"}
           </p>
           <div>
             <span>
-              <Clock3 aria-hidden size={15} /> Fri · 6:00 PM
+              <Clock3 aria-hidden size={15} /> {date} · {time}
             </span>
             <span>
-              <Users aria-hidden size={15} /> 8 spots
+              <Users aria-hidden size={15} /> {capacity} spots
             </span>
           </div>
-          <Badge tone="positive">4.0–5.0</Badge>
+          <Badge tone="positive">
+            {ratingMinimum.toFixed(1)}–{ratingMaximum.toFixed(1)}
+          </Badge>
+          <div className="pickup-preview__meta">
+            <Badge>{format === "king-queen" ? "King / Queen" : format}</Badge>
+            <Numeric>
+              {costMode === "free"
+                ? "Free"
+                : `$${Number(costDollars || 0).toFixed(2)}`}
+            </Numeric>
+          </div>
         </aside>
       </section>
     </div>

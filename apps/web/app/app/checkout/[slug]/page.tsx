@@ -1,20 +1,65 @@
-import { demoEvents } from "@duna/core/demo";
 import { notFound } from "next/navigation";
 import { CheckoutPanel } from "@/components/checkout-panel";
+import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Checkout" };
 
 export default async function CheckoutPage({
   params,
+  searchParams,
 }: {
   readonly params: Promise<{ slug: string }>;
+  readonly searchParams: Promise<{
+    checkout?: string;
+    division?: string;
+    session_id?: string;
+  }>;
 }) {
   const { slug } = await params;
-  const event = demoEvents.find((item) => item.slug === slug);
+  const query = await searchParams;
+  const caller = await getServerCaller();
+  const [event, dashboard, wallet, settings] = await Promise.all([
+    caller.public.eventBySlug({ slug }).catch(() => undefined),
+    caller.player.dashboard(),
+    caller.player.wallet(),
+    caller.player.settings(),
+  ]);
   if (!event) notFound();
   return (
     <main className="standard-page">
-      <CheckoutPanel event={event} />
+      <CheckoutPanel
+        event={event}
+        initialDivisionId={query.division}
+        isDunaPlus={Boolean(
+          settings.membership &&
+          ["active", "trialing"].includes(settings.membership.status) &&
+          !settings.membership.pausedUntil,
+        )}
+        initialCheckoutSessionId={
+          query.checkout === "success" ? query.session_id : undefined
+        }
+        initialNotice={
+          query.checkout === "cancelled"
+            ? "Stripe Checkout was cancelled. Your temporary spot will be released automatically."
+            : undefined
+        }
+        player={dashboard.player}
+        participants={[
+          {
+            person: settings.profile.person,
+            label: "You",
+            available: settings.profile.ageBand === "adult",
+          },
+          ...settings.household
+            .filter((member) => member.role === "dependent")
+            .map((member) => ({
+              person: member.person,
+              label: member.relationship,
+              available: member.verified,
+            })),
+        ]}
+        walletAvailableMinor={wallet.availableMinor}
+      />
     </main>
   );
 }

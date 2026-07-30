@@ -1,5 +1,6 @@
 import { constructStripeEvent } from "@duna/api/payments";
 import { processStripeWebhook } from "@duna/api/webhooks";
+import { processWorkflowJobById } from "@duna/api";
 import { NextResponse } from "next/server";
 import { inngest } from "../../inngest/client";
 
@@ -17,6 +18,7 @@ export async function POST(request: Request) {
     const event = constructStripeEvent(await request.text(), signature);
     const result = await processStripeWebhook(event);
     let dispatched = false;
+    let processedFallback = false;
     if (result.workflowJobId) {
       try {
         await inngest.send({
@@ -26,12 +28,12 @@ export async function POST(request: Request) {
         });
         dispatched = true;
       } catch (error) {
-        // Neon is the durable source. The recovery schedule will claim this
-        // job even if the workflow event service is temporarily unavailable.
         console.error(
-          "Stripe workflow dispatch failed; durable recovery remains queued.",
+          "Stripe workflow dispatch failed; processing the durable job inline.",
           error,
         );
+        await processWorkflowJobById(result.workflowJobId);
+        processedFallback = true;
       }
     }
     return NextResponse.json({
@@ -41,6 +43,7 @@ export async function POST(request: Request) {
       action: result.action,
       queued: Boolean(result.workflowJobId),
       dispatched,
+      processedFallback,
     });
   } catch (error) {
     return NextResponse.json(

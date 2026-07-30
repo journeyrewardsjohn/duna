@@ -1,41 +1,66 @@
-import { demoEvents, demoOrganization, demoVenues } from "@duna/core/demo";
 import { Badge, Numeric } from "@duna/ui";
 import { ArrowRight, Check, MapPin, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { EventCard } from "@/components/event-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { getServerCaller } from "@/lib/api";
 
-export default function ClubPage() {
+export default async function ClubPage({
+  params,
+}: {
+  readonly params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const caller = await getServerCaller();
+  const [organization, allEvents, allVenues] = await Promise.all([
+    caller.public.organizationBySlug({ slug }).catch(() => undefined),
+    caller.public.events(),
+    caller.public.venues(),
+  ]);
+  if (!organization) notFound();
+  const events = allEvents.filter(
+    (event) => event.organizationName === organization.name,
+  );
+  const venues = allVenues.filter(
+    (venue) => venue.organizationId === organization.id,
+  );
+  const mark = organization.name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
   return (
     <main className="public-detail">
       <SiteHeader />
       <section className="club-hero">
         <div className="club-hero__art">
           <div />
-          <span>SB</span>
+          <span>{mark}</span>
         </div>
         <div className="club-hero__copy">
           <div>
             <Badge tone="positive">Verified club</Badge>
-            <Badge>South Bay</Badge>
+            <Badge>{organization.plan.replace("-", " ")}</Badge>
           </div>
-          <h1>{demoOrganization.name}</h1>
+          <h1>{organization.name}</h1>
           <p>
             Structured training, serious competition, and easy ways into the
             South Bay beach community.
           </p>
           <div className="club-hero__stats">
             <span>
-              <Numeric>{demoOrganization.memberCount}</Numeric>
+              <Numeric>{organization.memberCount}</Numeric>
               <small>members</small>
             </span>
             <span>
-              <Numeric>{demoOrganization.staffCount}</Numeric>
+              <Numeric>{organization.staffCount}</Numeric>
               <small>coaches + staff</small>
             </span>
             <span>
-              <Numeric>{demoOrganization.venueCount}</Numeric>
+              <Numeric>{organization.venueCount}</Numeric>
               <small>venues</small>
             </span>
           </div>
@@ -52,9 +77,15 @@ export default function ClubPage() {
           </div>
         </div>
         <div className="event-grid">
-          {demoEvents.slice(0, 4).map((event) => (
+          {events.slice(0, 4).map((event) => (
             <EventCard event={event} key={event.id} />
           ))}
+          {events.length === 0 && (
+            <article className="empty-state">
+              <h3>No published sessions yet.</h3>
+              <p>This club’s next public offering will appear here.</p>
+            </article>
+          )}
         </div>
         <div className="club-values">
           <article>
@@ -76,10 +107,13 @@ export default function ClubPage() {
         <div className="club-locations">
           <div>
             <span className="section__eyebrow">Where we play</span>
-            <h2>Three venues. One club.</h2>
+            <h2>
+              {venues.length} {venues.length === 1 ? "venue" : "venues"}. One
+              club.
+            </h2>
           </div>
           <div>
-            {demoVenues.map((venue) => (
+            {venues.map((venue) => (
               <article key={venue.id}>
                 <MapPin size={18} />
                 <span>

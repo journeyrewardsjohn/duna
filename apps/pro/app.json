@@ -12,6 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.duna.pro",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Duna Pro uses the camera for QR check-in and profile verification."
       }
     },
@@ -28,6 +29,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "@clerk/expo",
       [
         "expo-splash-screen",
         {

@@ -42,10 +42,16 @@ export function MatchCard({ match }: { readonly match: MatchSummary }) {
         </div>
       </div>
       <div className="match-card__delta">
-        <Badge tone={match.ratingDelta > 0 ? "positive" : "neutral"}>
-          {match.ratingDelta > 0 ? "+" : ""}
-          {match.ratingDelta.toFixed(2)}
-        </Badge>
+        {match.status === "pending-verification" ? (
+          <Badge tone="warning">Confirm</Badge>
+        ) : match.status === "disputed" ? (
+          <Badge tone="warning">Held</Badge>
+        ) : (
+          <Badge tone={match.ratingDelta > 0 ? "positive" : "neutral"}>
+            {match.ratingDelta > 0 ? "+" : ""}
+            {match.ratingDelta.toFixed(2)}
+          </Badge>
+        )}
         <ChevronRight aria-hidden size={17} />
       </div>
     </Link>

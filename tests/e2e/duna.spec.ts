@@ -32,41 +32,40 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 });
 
-test("Duna+ fee waiver and wallet checkout complete cleanly", async ({
+test("paid checkout exposes a real Stripe handoff and honest wallet state", async ({
   page,
 }) => {
   await page.goto("/app/checkout/serve-receive-lab");
   await expect(
     page.getByRole("heading", { name: "Finish your spot." }),
   ).toBeVisible();
-
-  await page.getByRole("button", { name: "Add Duna+" }).click();
-  await expect(page.getByText("Duna+ platform-fee waiver")).toBeVisible();
-  await page.getByRole("button", { name: "Confirm with Wallet" }).click();
-
-  await expect(page.getByRole("heading", { name: "You’re in." })).toBeVisible();
+  await expect(
+    page.getByRole("checkbox", { name: /Use Duna Wallet/ }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: /Continue to Stripe/ }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "View Duna+" })).toBeVisible();
+  await expect(page.getByText("Card details never touch Duna.")).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
 
-test("event-sourced scorer handles points, undo, and offline state", async ({
+test("connected scorer requires an explicit four-player court setup", async ({
   page,
 }) => {
   await page.goto("/app/score");
-  const teamA = page.getByRole("button", { name: "Point for Mara and Theo" });
-  const teamB = page.getByRole("button", { name: "Point for Noa and Elena" });
-
-  await teamA.click();
-  await teamA.click();
-  await teamA.click();
-  await teamB.click();
-  await expect(page.getByText("3–1")).toBeVisible();
-
-  await page.getByRole("button", { name: "Undo" }).click();
-  await expect(page.getByText("3–0")).toBeVisible();
-
-  await page.getByRole("button", { name: "Simulate offline" }).click();
-  await expect(page.getByRole("button", { name: "Go online" })).toBeVisible();
-  await expect(page.getByText("5 events pending upload")).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { name: "Set the court." }),
+  ).toBeVisible();
+  await expect(page.getByLabel("You")).toHaveValue("Mara Lewis");
+  await expect(page.getByLabel("Partner")).toHaveValue(
+    "10000000-0000-4000-8000-000000000011",
+  );
+  await expect(
+    page.getByRole("button", { name: "Start live scoring" }),
+  ).toBeVisible();
+  await page.getByLabel("Scoring").selectOption("sideout");
+  await expect(page.getByLabel("Scoring")).toHaveValue("sideout");
   await expectNoHorizontalOverflow(page);
 });
 
@@ -93,26 +92,35 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
 }) => {
   await page.goto("http://127.0.0.1:3001/");
   await expect(
-    page.getByRole("heading", { name: "Good morning, Sam." }),
+    page.getByRole("heading", { name: "South Bay Volleyball Club." }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   await page.goto("http://127.0.0.1:3001/admin");
   await expect(
-    page.getByRole("heading", { name: "Everything healthy." }),
+    page.getByRole("heading", {
+      name: "Platform administration access required.",
+    }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   await page.goto("http://127.0.0.1:3001/leagues");
-  await page.getByRole("button", { name: "Generate proposal" }).click();
-  await expect(page.getByText("Proposal ready")).toBeVisible();
-  await expect(page.getByText("No changes have been made.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Leagues" })).toBeVisible();
+  await expect(
+    page.getByRole("checkbox", { name: /I reviewed the player price/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Save session draft" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText("Publishing is a separate explicit action."),
+  ).toBeVisible();
 
   await page.goto("http://127.0.0.1:3001/ai");
-  await expect(page.getByText("Confirmation required")).toBeVisible();
-  await page.getByRole("button", { name: "Confirm draft" }).click();
+  await expect(page.getByText("Grounded read-only analysis")).toBeVisible();
+  await expect(page.getByText("Read-only", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("Draft roster saved. Nothing was published or messaged."),
+    page.getByText(/Model-generated recommendations remain off/),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });

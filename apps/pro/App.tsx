@@ -8,7 +8,10 @@ import {
   type ScoringSystem,
 } from "@duna/league-engine";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Crypto from "expo-crypto";
+import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
+import * as WebBrowser from "expo-web-browser";
 import { useEffect, useMemo, useState } from "react";
 import {
   Platform,
@@ -21,6 +24,13 @@ import {
   type ViewStyle,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { dunaHqUrl } from "./mobile-api";
+import {
+  ProRuntimeProvider,
+  useProRuntime,
+  type OperatorMatchScoringState,
+  type OperatorMatches,
+} from "./runtime";
 
 const colors = {
   ink: "#070b0d",
@@ -47,6 +57,33 @@ const tabs: readonly { key: Tab; label: string; icon: string }[] = [
   { key: "money", label: "Money", icon: "$" },
   { key: "more", label: "More", icon: "•••" },
 ];
+
+function displayError(reason: unknown): string {
+  return reason instanceof Error
+    ? reason.message
+    : "Duna Pro could not complete that request.";
+}
+
+async function loadDeviceId(): Promise<string> {
+  const key = "duna-pro-authoritative-device-id";
+  const existing = await SecureStore.getItemAsync(key);
+  if (existing) return existing;
+  const value = `duna-pro-${Crypto.randomUUID()}`;
+  await SecureStore.setItemAsync(key, value);
+  return value;
+}
+
+function PreviewBanner() {
+  const { mode } = useProRuntime();
+  if (mode !== "preview") return null;
+  return (
+    <View style={styles.previewBanner}>
+      <Text style={styles.previewBannerText}>
+        PREVIEW DATA · LIVE OPERATIONS AND MONEY ACTIONS ARE DISABLED
+      </Text>
+    </View>
+  );
+}
 
 function Mark() {
   return (
@@ -103,6 +140,12 @@ function Pill({
 }
 
 function Header({ context }: { readonly context: string }) {
+  const { dashboard, mode } = useProRuntime();
+  const initials = (dashboard?.organization.name ?? demoOrganization.name)
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
   return (
     <View style={styles.header}>
       <View>
@@ -114,8 +157,8 @@ function Header({ context }: { readonly context: string }) {
           <Text style={styles.aiButtonText}>✦</Text>
         </Pressable>
         <Pressable style={styles.profileButton}>
-          <Text style={styles.profileText}>SR</Text>
-          <View style={styles.dot} />
+          <Text style={styles.profileText}>{initials}</Text>
+          {mode === "live" && <View style={styles.dot} />}
         </Pressable>
       </View>
     </View>
@@ -126,10 +169,12 @@ function PageTitle({
   eyebrow,
   title,
   action,
+  onAction,
 }: {
   readonly eyebrow: string;
   readonly title: string;
   readonly action?: string;
+  readonly onAction?: () => void;
 }) {
   return (
     <View style={styles.pageTitle}>
@@ -138,7 +183,11 @@ function PageTitle({
         <Text style={styles.displayTitle}>{title}</Text>
       </View>
       {action && (
-        <Pressable style={styles.primaryAction}>
+        <Pressable
+          disabled={!onAction}
+          onPress={onAction}
+          style={[styles.primaryAction, !onAction && styles.buttonDisabled]}
+        >
           <Text style={styles.primaryActionText}>＋ {action}</Text>
         </Pressable>
       )}
@@ -182,44 +231,93 @@ const schedule = [
 ] as const;
 
 function TodayScreen({ onScore }: { readonly onScore: () => void }) {
+  const { dashboard, mode } = useProRuntime();
+  const organization = dashboard?.organization ?? demoOrganization;
+  const metrics = dashboard?.metrics.slice(0, 4) ?? [
+    { label: "Today’s sales", value: "$8,420", change: "↗ 18.4%" },
+    { label: "Check-ins", value: "146 / 168", change: "87% arrived" },
+    { label: "Court use", value: "82%" },
+    { label: "Next payout", value: "$61,884", change: "Friday" },
+  ];
+  const scheduleItems =
+    dashboard?.schedule ??
+    schedule.map((item) => ({
+      time: `${item[0]} ${item[1]}`,
+      title: item[2],
+      court: item[3],
+      detail: `${item[4]} roster`,
+      state: item[5],
+    }));
+  const alerts = dashboard?.alerts ?? [
+    {
+      id: "preview-waivers",
+      title: "2 waivers expire before Saturday",
+      detail: "U14 roster · guardians can renew in one tap",
+      action: "Review",
+      tone: "warning",
+    },
+    {
+      id: "preview-renewals",
+      title: "3 failed membership renewals",
+      detail: "$474.00 at risk · recovery is running",
+      action: "Open",
+      tone: "danger",
+    },
+    {
+      id: "preview-replies",
+      title: "4 conversations need a reply",
+      detail: "Oldest waiting 2h 18m",
+      action: "Reply",
+      tone: "default",
+    },
+  ];
+  const today = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  })
+    .format(new Date())
+    .replace(", ", " · ")
+    .toUpperCase();
   return (
     <ScrollView
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <Header context="SOUTH BAY VOLLEYBALL" />
+      <Header context={organization.name.toUpperCase()} />
       <PageTitle
-        eyebrow="THURSDAY · JULY 30"
-        title="Good morning, Sam."
         action="Create"
+        eyebrow={today}
+        onAction={() =>
+          void WebBrowser.openBrowserAsync(`${dunaHqUrl}/calendar`)
+        }
+        title={mode === "preview" ? "Good morning, Sam." : "Good morning."}
       />
       <Text style={styles.subhead}>
-        {demoOrganization.name} has{" "}
-        <Text style={styles.subheadStrong}>61 players</Text> on sand today.
+        {organization.name} has{" "}
+        <Text style={styles.subheadStrong}>
+          {organization.memberCount} active people
+        </Text>{" "}
+        and {scheduleItems.length} scheduled items in this workspace.
       </Text>
       <View style={styles.metricGrid}>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricLabel}>TODAY’S SALES</Text>
-          <Text style={styles.metricValue}>$8,420</Text>
-          <Text style={styles.positiveText}>↗ 18.4%</Text>
-        </View>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricLabel}>CHECK-INS</Text>
-          <Text style={styles.metricValue}>146 / 168</Text>
-          <Text style={styles.metaText}>87% arrived</Text>
-        </View>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricLabel}>COURT USE</Text>
-          <Text style={styles.metricValue}>82%</Text>
-          <View style={styles.meter}>
-            <View style={[styles.meterFill, { width: "82%" }]} />
+        {metrics.map((metric) => (
+          <View key={metric.label} style={styles.metricCard}>
+            <Text style={styles.metricLabel}>{metric.label.toUpperCase()}</Text>
+            <Text style={styles.metricValue}>{metric.value}</Text>
+            {metric.change && (
+              <Text
+                style={
+                  metric.trend === "down"
+                    ? styles.metaText
+                    : styles.positiveText
+                }
+              >
+                {metric.change}
+              </Text>
+            )}
           </View>
-        </View>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricLabel}>NEXT PAYOUT</Text>
-          <Text style={styles.metricValue}>$61,884</Text>
-          <Pill tone="positive">Friday</Pill>
-        </View>
+        ))}
       </View>
       <SectionTitle
         eyebrow="LIVE OPERATIONS"
@@ -227,15 +325,14 @@ function TodayScreen({ onScore }: { readonly onScore: () => void }) {
         action="Calendar"
       />
       <View style={styles.scheduleCard}>
-        {schedule.map((item, index) => (
+        {scheduleItems.map((item, index) => (
           <Pressable
-            key={item[2]}
-            onPress={index === 3 ? onScore : undefined}
+            key={`${item.time}-${item.title}`}
+            onPress={onScore}
             style={styles.scheduleRow}
           >
             <View style={styles.timeBlock}>
-              <Text style={styles.timeMain}>{item[0]}</Text>
-              <Text style={styles.timeSuffix}>{item[1]}</Text>
+              <Text style={styles.timeMain}>{item.time}</Text>
             </View>
             <View
               style={[
@@ -244,14 +341,17 @@ function TodayScreen({ onScore }: { readonly onScore: () => void }) {
               ]}
             />
             <View style={styles.flex}>
-              <Text style={styles.rowTitle}>{item[2]}</Text>
-              <Text style={styles.metaText}>{item[3]}</Text>
+              <Text style={styles.rowTitle}>{item.title}</Text>
+              <Text style={styles.metaText}>{item.court}</Text>
             </View>
             <View style={styles.rosterCount}>
-              <Text style={styles.rowTitle}>{item[4]}</Text>
-              <Text style={styles.metaText}>roster</Text>
+              <Text style={styles.rowTitle}>{item.detail}</Text>
             </View>
-            <Pill tone={index === 0 ? "live" : "neutral"}>{item[5]}</Pill>
+            <Pill
+              tone={item.state.toLowerCase() === "live" ? "live" : "neutral"}
+            >
+              {item.state}
+            </Pill>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
         ))}
@@ -262,27 +362,8 @@ function TodayScreen({ onScore }: { readonly onScore: () => void }) {
         action="View all"
       />
       <View style={styles.attentionCard}>
-        {[
-          [
-            "!",
-            "2 waivers expire before Saturday",
-            "U14 roster · guardians can renew in one tap",
-            "Review",
-          ],
-          [
-            "$",
-            "3 failed membership renewals",
-            "$474.00 at risk · recovery is running",
-            "Open",
-          ],
-          [
-            "✉",
-            "4 conversations need a reply",
-            "Oldest waiting 2h 18m",
-            "Reply",
-          ],
-        ].map((item, index) => (
-          <View key={item[1]} style={styles.attentionRow}>
+        {alerts.map((item, index) => (
+          <View key={item.id} style={styles.attentionRow}>
             <View
               style={[
                 styles.attentionIcon,
@@ -295,37 +376,44 @@ function TodayScreen({ onScore }: { readonly onScore: () => void }) {
                   index === 1 && { color: colors.danger },
                 ]}
               >
-                {item[0]}
+                {item.tone === "danger"
+                  ? "$"
+                  : item.tone === "warning"
+                    ? "!"
+                    : "•"}
               </Text>
             </View>
             <View style={styles.flex}>
-              <Text style={styles.rowTitle}>{item[1]}</Text>
-              <Text style={styles.metaText}>{item[2]}</Text>
+              <Text style={styles.rowTitle}>{item.title}</Text>
+              <Text style={styles.metaText}>{item.detail}</Text>
             </View>
-            <Pressable>
-              <Text style={styles.linkText}>{item[3]}</Text>
+            <Pressable
+              onPress={() =>
+                void WebBrowser.openBrowserAsync(`${dunaHqUrl}/dashboard`)
+              }
+            >
+              <Text style={styles.linkText}>{item.action}</Text>
             </Pressable>
           </View>
         ))}
       </View>
-      <View style={styles.aiBrief}>
-        <View style={styles.aiMark}>
-          <Text style={styles.aiMarkText}>✦</Text>
+      {mode === "preview" && (
+        <View style={styles.aiBrief}>
+          <View style={styles.aiMark}>
+            <Text style={styles.aiMarkText}>✦</Text>
+          </View>
+          <View style={styles.flex}>
+            <Pill>Duna AI · read only</Pill>
+            <Text style={styles.aiTitle}>
+              Friday Lights will likely sell out by 2 PM tomorrow.
+            </Text>
+            <Text style={styles.aiBody}>
+              Preview insight only. Connected recommendations remain read-only
+              until an operator asks Duna to prepare a draft.
+            </Text>
+          </View>
         </View>
-        <View style={styles.flex}>
-          <Pill>Duna AI · read only</Pill>
-          <Text style={styles.aiTitle}>
-            Friday Lights will likely sell out by 2 PM tomorrow.
-          </Text>
-          <Text style={styles.aiBody}>
-            Four waitlisted 4.0+ players fit the remaining spots. Want a draft
-            invitation?
-          </Text>
-          <Pressable>
-            <Text style={styles.linkText}>Explore insight →</Text>
-          </Pressable>
-        </View>
-      </View>
+      )}
     </ScrollView>
   );
 }
@@ -356,23 +444,54 @@ function SectionTitle({
 
 function PeopleScreen() {
   const [filter, setFilter] = useState("All");
+  const [search, setSearch] = useState("");
+  const { dashboard, members } = useProRuntime();
+  const people = members ?? demoPeople;
+  const filteredPeople = people.filter((person) => {
+    const query = search.trim().toLowerCase();
+    if (
+      query &&
+      ![person.displayName, person.handle, ...person.roles]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    ) {
+      return false;
+    }
+    if (filter === "Players") return person.roles.includes("player");
+    if (filter === "Coaches") return person.roles.includes("coach");
+    if (filter === "Guardians") return person.roles.includes("guardian");
+    if (filter === "Minors") return Boolean(person.isMinor);
+    return true;
+  });
+  const guardianCount = people.filter((person) =>
+    person.roles.includes("guardian"),
+  ).length;
+  const minorCount = people.filter((person) => person.isMinor).length;
   return (
     <ScrollView
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <Header context="PEOPLE + HOUSEHOLDS" />
+      <Header
+        context={`${dashboard?.organization.name ?? "PEOPLE"} · PEOPLE + HOUSEHOLDS`}
+      />
       <PageTitle
-        eyebrow="CRM + ELIGIBILITY"
-        title="People."
         action="Add person"
+        eyebrow="CRM + ELIGIBILITY"
+        onAction={() =>
+          void WebBrowser.openBrowserAsync(`${dunaHqUrl}/members`)
+        }
+        title="People."
       />
       <View style={styles.searchField}>
         <Text style={styles.searchIcon}>⌕</Text>
         <TextInput
-          placeholder="Search 918 people…"
+          onChangeText={setSearch}
+          placeholder={`Search ${people.length} people…`}
           placeholderTextColor={colors.muted}
           style={styles.searchInput}
+          value={search}
         />
       </View>
       <ScrollView
@@ -381,84 +500,69 @@ function PeopleScreen() {
         style={styles.filterBleed}
       >
         <View style={styles.filterRow}>
-          {["All", "Members", "Coaches", "Minors", "Needs action"].map(
-            (item) => (
-              <Pressable
-                key={item}
-                onPress={() => setFilter(item)}
+          {["All", "Players", "Coaches", "Guardians", "Minors"].map((item) => (
+            <Pressable
+              key={item}
+              onPress={() => setFilter(item)}
+              style={[
+                styles.filterChip,
+                filter === item && styles.filterActive,
+              ]}
+            >
+              <Text
                 style={[
-                  styles.filterChip,
-                  filter === item && styles.filterActive,
+                  styles.filterText,
+                  filter === item && styles.filterTextActive,
                 ]}
               >
-                <Text
-                  style={[
-                    styles.filterText,
-                    filter === item && styles.filterTextActive,
-                  ]}
-                >
-                  {item}
-                </Text>
-              </Pressable>
-            ),
-          )}
+                {item}
+              </Text>
+            </Pressable>
+          ))}
         </View>
       </ScrollView>
       <View style={styles.peopleSummary}>
         <View>
-          <Text style={styles.metricValue}>918</Text>
+          <Text style={styles.metricValue}>{people.length}</Text>
           <Text style={styles.metaText}>active people</Text>
         </View>
         <View>
-          <Text style={styles.metricValue}>97.8%</Text>
-          <Text style={styles.metaText}>eligibility ready</Text>
+          <Text style={styles.metricValue}>{guardianCount}</Text>
+          <Text style={styles.metaText}>guardians</Text>
         </View>
         <View>
-          <Text style={styles.metricValue}>184</Text>
-          <Text style={styles.metaText}>households</Text>
+          <Text style={styles.metricValue}>{minorCount}</Text>
+          <Text style={styles.metaText}>minor profiles</Text>
         </View>
       </View>
       <View style={styles.peopleList}>
-        {demoPeople
-          .concat([
-            {
-              ...demoPeople[0]!,
-              id: "guardian-priya",
-              displayName: "Priya Lewis",
-              initials: "PL",
-              handle: "priyal",
-              roles: ["guardian"],
-            },
-          ])
-          .map((person, index) => (
-            <Pressable key={person.id} style={styles.personRow}>
-              <View style={styles.personAvatar}>
-                <Text style={styles.personAvatarText}>{person.initials}</Text>
-              </View>
-              <View style={styles.flex}>
-                <Text style={styles.rowTitle}>{person.displayName}</Text>
-                <Text style={styles.metaText}>
-                  {person.roles.join(" + ")} · {person.handle}@example.com
-                </Text>
-              </View>
-              {index === 2 ? (
-                <Pill tone="warning">Waiver</Pill>
-              ) : (
-                <Pill tone="positive">
-                  {index === 5 ? "Guardian" : "Active"}
-                </Pill>
-              )}
-              <View style={styles.personRating}>
-                <Text style={styles.ratingNumber}>
-                  {index === 5 ? "—" : person.rating.display.toFixed(2)}
-                </Text>
-                <Text style={styles.metaText}>
-                  {index === 5 ? "" : person.rating.confidence}
-                </Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-          ))}
+        {filteredPeople.map((person) => (
+          <Pressable key={person.id} style={styles.personRow}>
+            <View style={styles.personAvatar}>
+              <Text style={styles.personAvatarText}>{person.initials}</Text>
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.rowTitle}>{person.displayName}</Text>
+              <Text style={styles.metaText}>
+                @{person.handle} · {person.roles.join(" + ")}
+              </Text>
+            </View>
+            <Pill tone={person.isMinor ? "warning" : "positive"}>
+              {person.isMinor
+                ? "Minor"
+                : person.roles.includes("guardian")
+                  ? "Guardian"
+                  : "Active"}
+            </Pill>
+            <View style={styles.personRating}>
+              <Text style={styles.ratingNumber}>
+                {person.rating.display.toFixed(2)}
+              </Text>
+              <Text style={styles.metaText}>{person.rating.confidence}</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+        ))}
       </View>
     </ScrollView>
   );
@@ -473,91 +577,391 @@ const initialEvents: readonly ScoreEvent[] = [
   },
 ];
 
+interface PendingScoreEvent {
+  readonly sequence: number;
+  readonly monotonicCounter: number;
+  readonly event: ScoreEvent;
+}
+
+type OperatorMatch = OperatorMatches[number];
+
+function MatchPicker({
+  matches,
+  deviceId,
+  busy,
+  error,
+  onOpen,
+}: {
+  readonly matches: OperatorMatches;
+  readonly deviceId?: string;
+  readonly busy: boolean;
+  readonly error?: string;
+  readonly onOpen: (match: OperatorMatch) => void;
+}) {
+  return (
+    <ScrollView
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      <Header context="AUTHORIZED MATCH SCORING" />
+      <PageTitle eyebrow="SELECT A MATCH" title="Score." />
+      <Text style={styles.subhead}>
+        Scheduled matches can be claimed by one device. Live matches remain
+        locked to the device that started them.
+      </Text>
+      {error && <Text style={styles.formError}>{error}</Text>}
+      <View style={styles.matchPickerList}>
+        {matches.length === 0 && (
+          <View style={styles.emptyState}>
+            <Text style={styles.sectionHeading}>No scorable matches.</Text>
+            <Text style={styles.metaText}>
+              Schedule teams into a match in Duna HQ, then return here to begin
+              live scoring.
+            </Text>
+            <Pressable
+              onPress={() =>
+                void WebBrowser.openBrowserAsync(`${dunaHqUrl}/leagues`)
+              }
+            >
+              <Text style={styles.linkText}>Open matches in HQ →</Text>
+            </Pressable>
+          </View>
+        )}
+        {matches.map((match) => {
+          const controlledElsewhere =
+            match.status === "live" &&
+            Boolean(match.authoritativeDeviceId) &&
+            match.authoritativeDeviceId !== deviceId;
+          return (
+            <View key={match.id} style={styles.matchPickerCard}>
+              <View style={styles.cardTop}>
+                <Pill tone={match.status === "live" ? "live" : "neutral"}>
+                  {match.status}
+                </Pill>
+                <Text style={styles.metaText}>
+                  {match.scheduledAt
+                    ? new Date(match.scheduledAt).toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })
+                    : "Time not assigned"}
+                </Text>
+              </View>
+              <Text style={styles.matchPickerTeams}>
+                {match.teamA.name} vs {match.teamB.name}
+              </Text>
+              <Text style={styles.metaText}>
+                {match.venueName}
+                {match.courtName ? ` · ${match.courtName}` : ""}
+              </Text>
+              <Pressable
+                disabled={busy || controlledElsewhere || !deviceId}
+                onPress={() => onOpen(match)}
+                style={[
+                  styles.primaryAction,
+                  (busy || controlledElsewhere || !deviceId) &&
+                    styles.buttonDisabled,
+                ]}
+              >
+                <Text style={styles.primaryActionText}>
+                  {controlledElsewhere
+                    ? "Controlled on another device"
+                    : match.status === "live"
+                      ? "Resume scoring"
+                      : "Begin scoring"}
+                </Text>
+              </Pressable>
+            </View>
+          );
+        })}
+      </View>
+    </ScrollView>
+  );
+}
+
 function ScorerScreen() {
-  const [system, setSystem] = useState<ScoringSystem>("rally");
+  const { client, matches = [], mode } = useProRuntime();
+  const [previewSystem, setPreviewSystem] = useState<ScoringSystem>("rally");
   const [events, setEvents] = useState<readonly ScoreEvent[]>(initialEvents);
+  const [pending, setPending] = useState<readonly PendingScoreEvent[]>([]);
   const [offline, setOffline] = useState(false);
-  const [ready, setReady] = useState(false);
+  const [deviceId, setDeviceId] = useState<string>();
+  const [selectedMatchId, setSelectedMatchId] = useState<string>();
+  const [serverState, setServerState] = useState<OperatorMatchScoringState>();
+  const [nextSequence, setNextSequence] = useState(2);
+  const [nextCounter, setNextCounter] = useState(2);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const system = serverState?.format.scoringSystem ?? previewSystem;
   const state = useMemo(
-    () => foldScore(events, { ...standardBeachFormat, scoringSystem: system }),
-    [events, system],
+    () =>
+      foldScore(
+        events,
+        serverState?.format ?? {
+          ...standardBeachFormat,
+          scoringSystem: system,
+        },
+      ),
+    [events, serverState?.format, system],
   );
   const current = state.sets[state.setIndex] ?? { a: 0, b: 0 };
+  const scoreComplete =
+    state.status === "complete" || state.status === "forfeit";
+  const selectedMatch = matches.find((match) => match.id === selectedMatchId);
+  const teamA = serverState?.teamA;
+  const teamB = serverState?.teamB;
 
   useEffect(() => {
-    AsyncStorage.getItem("duna-pro-score-events")
-      .then((saved) => {
-        if (saved) {
-          try {
-            setEvents(JSON.parse(saved) as readonly ScoreEvent[]);
-          } catch {
-            setEvents(initialEvents);
-          }
-        }
-        setReady(true);
-      })
-      .catch(() => setReady(true));
+    loadDeviceId()
+      .then(setDeviceId)
+      .catch((reason) => {
+        setError(displayError(reason));
+      });
   }, []);
 
   useEffect(() => {
-    if (ready)
-      void AsyncStorage.setItem(
-        "duna-pro-score-events",
-        JSON.stringify(events),
+    const key =
+      mode === "preview"
+        ? "duna-pro-score-preview"
+        : selectedMatchId
+          ? `duna-pro-score-${selectedMatchId}`
+          : undefined;
+    if (!key) return;
+    void AsyncStorage.setItem(
+      key,
+      JSON.stringify({ events, pending, nextSequence, nextCounter }),
+    );
+  }, [events, mode, nextCounter, nextSequence, pending, selectedMatchId]);
+
+  function applyServerState(next: OperatorMatchScoringState) {
+    setServerState(next);
+    setEvents(next.events);
+    setPending([]);
+    setNextSequence(next.nextSequence);
+    setNextCounter(next.nextMonotonicCounter);
+  }
+
+  async function hydrateOfflineQueue(next: OperatorMatchScoringState) {
+    const saved = await AsyncStorage.getItem(`duna-pro-score-${next.matchId}`);
+    if (!saved) {
+      applyServerState(next);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(saved) as {
+        readonly pending?: readonly PendingScoreEvent[];
+      };
+      const savedPending = parsed.pending ?? [];
+      if (
+        savedPending.length > 0 &&
+        savedPending[0]?.sequence === next.nextSequence
+      ) {
+        setServerState(next);
+        setPending(savedPending);
+        setEvents([
+          ...next.events,
+          ...savedPending.map((envelope) => envelope.event),
+        ]);
+        setNextSequence(
+          (savedPending.at(-1)?.sequence ?? next.nextSequence - 1) + 1,
+        );
+        setNextCounter(
+          (savedPending.at(-1)?.monotonicCounter ??
+            next.nextMonotonicCounter - 1) + 1,
+        );
+        setOffline(true);
+        return;
+      }
+      if (savedPending.length > 0) {
+        setError(
+          "Saved offline score events no longer match the server sequence. They were preserved on this device for review.",
+        );
+      }
+    } catch {
+      setError("A saved offline score queue could not be read.");
+    }
+    applyServerState(next);
+  }
+
+  async function openMatch(match: OperatorMatch) {
+    if (!client || !deviceId) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const next =
+        match.status === "scheduled"
+          ? await client.operator.startMatchScoring.mutate({
+              matchId: match.id,
+              deviceId,
+              initialServer: "A",
+              confirmed: true,
+              idempotencyKey: Crypto.randomUUID(),
+            })
+          : await client.operator.matchScoringState.query({
+              matchId: match.id,
+            });
+      if (next.deviceId !== deviceId) {
+        throw new Error(
+          "This live match is controlled by another scoring device.",
+        );
+      }
+      await hydrateOfflineQueue(next);
+      setSelectedMatchId(match.id);
+    } catch (reason) {
+      setError(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitEvent(event: ScoreEvent) {
+    if (scoreComplete || busy) return;
+    const envelope: PendingScoreEvent = {
+      sequence: nextSequence,
+      monotonicCounter: nextCounter,
+      event,
+    };
+    setEvents((currentEvents) => [...currentEvents, event]);
+    setNextSequence((value) => value + 1);
+    setNextCounter((value) => value + 1);
+    if (mode === "preview" || offline || !client || !serverState || !deviceId) {
+      setPending((currentPending) => [...currentPending, envelope]);
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    try {
+      const result = await client.operator.appendMatchEvents.mutate({
+        matchId: serverState.matchId,
+        deviceId,
+        events: [envelope],
+        idempotencyKey: Crypto.randomUUID(),
+      });
+      applyServerState(result.scoring);
+    } catch (reason) {
+      setPending((currentPending) => [...currentPending, envelope]);
+      setOffline(true);
+      setError(
+        `${displayError(reason)} The point remains encrypted on this device.`,
       );
-  }, [events, ready]);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function point(winner: "A" | "B") {
-    if (state.status === "complete") return;
-    setEvents((currentEvents) => [
-      ...currentEvents,
-      {
-        id: `rally-${Date.now()}-${currentEvents.length}`,
-        type: "rally-won",
-        winner,
-        occurredAt: new Date().toISOString(),
-      },
-    ]);
+    void submitEvent({
+      id: Crypto.randomUUID(),
+      type: "rally-won",
+      winner,
+      occurredAt: new Date().toISOString(),
+    });
   }
 
   function undo() {
     const event = createUndoEvent(events, {
-      id: `undo-${Date.now()}`,
+      id: Crypto.randomUUID(),
       occurredAt: new Date().toISOString(),
     });
-    if (event) setEvents((currentEvents) => [...currentEvents, event]);
+    if (event) void submitEvent(event);
   }
 
   function reset() {
+    if (mode !== "preview") return;
     setEvents([{ ...initialEvents[0]!, occurredAt: new Date().toISOString() }]);
+    setPending([]);
+    setNextSequence(2);
+    setNextCounter(2);
+  }
+
+  async function synchronize() {
+    if (
+      mode === "preview" ||
+      !client ||
+      !serverState ||
+      !deviceId ||
+      pending.length === 0
+    ) {
+      setOffline((value) => !value);
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    try {
+      const result = await client.operator.appendMatchEvents.mutate({
+        matchId: serverState.matchId,
+        deviceId,
+        events: [...pending],
+        idempotencyKey: Crypto.randomUUID(),
+      });
+      applyServerState(result.scoring);
+      setOffline(false);
+    } catch (reason) {
+      setOffline(true);
+      setError(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (mode === "live" && !serverState) {
+    return (
+      <MatchPicker
+        busy={busy}
+        deviceId={deviceId}
+        error={error}
+        matches={matches}
+        onOpen={(match) => void openMatch(match)}
+      />
+    );
   }
 
   return (
     <View style={styles.scorer}>
       <View style={styles.scorerTop}>
         <View>
-          <Text style={styles.eyebrow}>SUNSET OPEN · QUARTERFINAL</Text>
-          <Text style={styles.scorerVenue}>Manhattan Beach · Court 4</Text>
+          <Text style={styles.eyebrow}>
+            {selectedMatch
+              ? `${selectedMatch.teamA.name} · ${selectedMatch.teamB.name}`
+              : "PREVIEW MATCH · EXHIBITION"}
+          </Text>
+          <Text style={styles.scorerVenue}>
+            {serverState?.venueName ?? "Manhattan Beach · Court 4"}
+          </Text>
         </View>
-        <Pill tone={state.status === "complete" ? "positive" : "live"}>
-          {state.status === "complete" ? "Complete" : "Live scoring"}
+        <Pill tone={scoreComplete ? "positive" : "live"}>
+          {scoreComplete
+            ? "Complete"
+            : mode === "preview"
+              ? "Preview"
+              : "Live scoring"}
         </Pill>
         <Pressable
-          onPress={() => setOffline((value) => !value)}
+          disabled={busy}
+          onPress={() => void synchronize()}
           style={styles.syncButton}
         >
           <Text style={[styles.syncIcon, offline && { color: colors.warning }]}>
             {offline ? "◌" : "●"}
           </Text>
           <Text style={styles.syncText}>
-            {offline ? "On device" : "Synced"}
+            {mode === "preview"
+              ? "Preview"
+              : offline
+                ? "On device"
+                : busy
+                  ? "Syncing"
+                  : "Synced"}
           </Text>
         </Pressable>
       </View>
       <View style={styles.scorerFormat}>
         <View style={styles.segmented}>
           <Pressable
-            onPress={() => setSystem("rally")}
+            disabled={mode === "live"}
+            onPress={() => setPreviewSystem("rally")}
             style={[
               styles.segmentButton,
               system === "rally" && styles.segmentActive,
@@ -573,7 +977,8 @@ function ScorerScreen() {
             </Text>
           </Pressable>
           <Pressable
-            onPress={() => setSystem("sideout")}
+            disabled={mode === "live"}
+            onPress={() => setPreviewSystem("sideout")}
             style={[
               styles.segmentButton,
               system === "sideout" && styles.segmentActive,
@@ -607,7 +1012,7 @@ function ScorerScreen() {
       )}
       <View style={styles.court}>
         <Pressable
-          disabled={state.status === "complete"}
+          disabled={scoreComplete || busy}
           onPress={() => point("A")}
           style={[styles.teamButton, styles.teamA]}
         >
@@ -621,12 +1026,16 @@ function ScorerScreen() {
           </View>
           <View style={styles.teamPeople}>
             <View style={styles.scoreAvatar}>
-              <Text style={styles.scoreAvatarText}>ML</Text>
+              <Text style={styles.scoreAvatarText}>
+                {teamA?.people[0]?.initials ?? "ML"}
+              </Text>
             </View>
             <View style={styles.scoreAvatar}>
-              <Text style={styles.scoreAvatarText}>TP</Text>
+              <Text style={styles.scoreAvatarText}>
+                {teamA?.people[1]?.initials ?? "TP"}
+              </Text>
             </View>
-            <Text style={styles.teamName}>Mara / Theo</Text>
+            <Text style={styles.teamName}>{teamA?.name ?? "Mara / Theo"}</Text>
           </View>
           <Text style={styles.bigScore}>{current.a}</Text>
           <Text style={styles.tapHint}>TAP ANYWHERE FOR POINT</Text>
@@ -635,7 +1044,7 @@ function ScorerScreen() {
           <Text style={styles.versusText}>VS</Text>
         </View>
         <Pressable
-          disabled={state.status === "complete"}
+          disabled={scoreComplete || busy}
           onPress={() => point("B")}
           style={[styles.teamButton, styles.teamB]}
         >
@@ -649,12 +1058,16 @@ function ScorerScreen() {
           </View>
           <View style={styles.teamPeople}>
             <View style={styles.scoreAvatar}>
-              <Text style={styles.scoreAvatarText}>NW</Text>
+              <Text style={styles.scoreAvatarText}>
+                {teamB?.people[0]?.initials ?? "NW"}
+              </Text>
             </View>
             <View style={styles.scoreAvatar}>
-              <Text style={styles.scoreAvatarText}>ET</Text>
+              <Text style={styles.scoreAvatarText}>
+                {teamB?.people[1]?.initials ?? "ET"}
+              </Text>
             </View>
-            <Text style={styles.teamName}>Noa / Elena</Text>
+            <Text style={styles.teamName}>{teamB?.name ?? "Noa / Elena"}</Text>
           </View>
           <Text style={styles.bigScore}>{current.b}</Text>
           <Text style={styles.tapHint}>TAP ANYWHERE FOR POINT</Text>
@@ -662,7 +1075,7 @@ function ScorerScreen() {
       </View>
       <View style={styles.scorerBottom}>
         <Pressable
-          disabled={events.length <= 1}
+          disabled={events.length <= 1 || busy}
           onPress={undo}
           style={styles.secondaryAction}
         >
@@ -679,12 +1092,20 @@ function ScorerScreen() {
           </Text>
           <View>
             <Text style={styles.rowTitle}>
-              {offline ? "Saved on this device" : "Server and device agree"}
+              {mode === "preview"
+                ? "Preview score only"
+                : offline
+                  ? "Saved on this device"
+                  : busy
+                    ? "Sending score event"
+                    : "Server and device agree"}
             </Text>
             <Text style={styles.metaText}>
-              {offline
-                ? `${Math.max(0, events.length - 1)} events pending upload`
-                : `${Math.max(0, events.length - 1)} score events synced`}
+              {mode === "preview"
+                ? "No live match or server record is changed"
+                : offline
+                  ? `${pending.length} events pending upload`
+                  : `${Math.max(0, events.length - 1)} score events synced`}
             </Text>
           </View>
         </View>
@@ -708,11 +1129,19 @@ function ScorerScreen() {
           <Text style={styles.moreScoreText}>•••</Text>
         </Pressable>
       </View>
+      {error && <Text style={styles.scorerError}>{error}</Text>}
     </View>
   );
 }
 
 function MoneyScreen() {
+  const { dashboard, mode, workspace } = useProRuntime();
+  const stripeReady = Boolean(workspace?.organization.stripeChargesEnabled);
+  const metrics = dashboard?.metrics.slice(0, 3) ?? [
+    { label: "Gross · July", value: "$84,260", change: "+18.4%" },
+    { label: "Refunds", value: "$2,184", change: "2.59% gross" },
+    { label: "Net sales", value: "$78,132", change: "92.7% retained" },
+  ];
   return (
     <ScrollView
       contentContainerStyle={styles.content}
@@ -720,109 +1149,134 @@ function MoneyScreen() {
     >
       <Header context="STRIPE-CONNECTED MONEY" />
       <PageTitle
+        action="Open HQ"
         eyebrow="SALES + PAYOUTS"
+        onAction={() => void WebBrowser.openBrowserAsync(`${dunaHqUrl}/money`)}
         title="Money."
-        action="Take payment"
       />
       <View style={styles.balanceCard}>
         <View style={styles.cardTop}>
-          <Pill tone="positive">Stripe connected</Pill>
+          <Pill tone={stripeReady ? "positive" : "warning"}>
+            {stripeReady ? "Charges enabled" : "Stripe restricted"}
+          </Pill>
           <Text style={styles.brandSmall}>DUNA PRO</Text>
         </View>
-        <Text style={styles.balanceLabel}>AVAILABLE TO PAY OUT</Text>
-        <Text style={styles.balanceValue}>$61,884.22</Text>
+        <Text style={styles.balanceLabel}>PAYMENTS STATUS</Text>
+        <Text style={styles.balanceValue}>
+          {stripeReady ? "Ready" : "Action needed"}
+        </Text>
         <Text style={styles.metaText}>
-          Estimated arrival Friday · •••• 8842
+          {stripeReady
+            ? "Connected charges are routed directly through the club’s Stripe account."
+            : "Finish Stripe onboarding in HQ before publishing paid products."}
         </Text>
         <View style={styles.balanceActions}>
-          <Pressable>
-            <Text style={styles.balanceAction}>View in Stripe ↗</Text>
-          </Pressable>
-          <Pressable>
-            <Text style={styles.balanceAction}>Reconcile July</Text>
+          <Pressable
+            onPress={() =>
+              void WebBrowser.openBrowserAsync(`${dunaHqUrl}/money`)
+            }
+          >
+            <Text style={styles.balanceAction}>Open money workspace ↗</Text>
           </Pressable>
         </View>
       </View>
       <View style={styles.moneyMetrics}>
-        <View>
-          <Text style={styles.metricLabel}>GROSS · JULY</Text>
-          <Text style={styles.metricValue}>$84,260</Text>
-          <Text style={styles.positiveText}>+18.4%</Text>
-        </View>
-        <View>
-          <Text style={styles.metricLabel}>REFUNDS</Text>
-          <Text style={styles.metricValue}>$2,184</Text>
-          <Text style={styles.metaText}>2.59% gross</Text>
-        </View>
-        <View>
-          <Text style={styles.metricLabel}>NET SALES</Text>
-          <Text style={styles.metricValue}>$78,132</Text>
-          <Text style={styles.positiveText}>92.7% retained</Text>
-        </View>
+        {metrics.map((metric) => (
+          <View key={metric.label}>
+            <Text style={styles.metricLabel}>{metric.label.toUpperCase()}</Text>
+            <Text style={styles.metricValue}>{metric.value}</Text>
+            {metric.change && (
+              <Text style={styles.metaText}>{metric.change}</Text>
+            )}
+          </View>
+        ))}
       </View>
       <SectionTitle
         eyebrow="TODAY"
         title="Transactions"
         action="All activity"
       />
-      <View style={styles.transactions}>
-        {[
-          ["↓", "Mara Lewis", "Tournament registration", 9600, "Succeeded"],
-          ["↓", "Theo Park", "Private coaching", 12000, "Succeeded"],
-          ["↑", "Priya Lewis", "Weather refund", -4800, "Wallet credit"],
-          ["↓", "Elena Torres", "Membership renewal", 15900, "Recovered"],
-        ].map((item) => (
-          <View
-            style={styles.transactionRow}
-            key={String(item[1]) + String(item[2])}
-          >
+      {mode === "preview" ? (
+        <View style={styles.transactions}>
+          {[
+            ["↓", "Mara Lewis", "Tournament registration", 9600, "Succeeded"],
+            ["↓", "Theo Park", "Private coaching", 12000, "Succeeded"],
+            ["↑", "Priya Lewis", "Weather refund", -4800, "Wallet credit"],
+            ["↓", "Elena Torres", "Membership renewal", 15900, "Recovered"],
+          ].map((item) => (
             <View
-              style={[
-                styles.transactionIcon,
-                (item[3] as number) < 0 && {
-                  backgroundColor: "rgba(247,200,107,.08)",
-                },
-              ]}
+              style={styles.transactionRow}
+              key={String(item[1]) + String(item[2])}
             >
-              <Text
-                style={{
-                  color:
-                    (item[3] as number) < 0 ? colors.warning : colors.positive,
-                }}
+              <View
+                style={[
+                  styles.transactionIcon,
+                  (item[3] as number) < 0 && {
+                    backgroundColor: "rgba(247,200,107,.08)",
+                  },
+                ]}
               >
-                {item[0]}
+                <Text
+                  style={{
+                    color:
+                      (item[3] as number) < 0
+                        ? colors.warning
+                        : colors.positive,
+                  }}
+                >
+                  {item[0]}
+                </Text>
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.rowTitle}>{item[2]}</Text>
+                <Text style={styles.metaText}>
+                  {item[1]} · {item[4]}
+                </Text>
+              </View>
+              <Text style={styles.transactionAmount}>
+                {formatMoney(item[3] as number, "USD")}
               </Text>
             </View>
-            <View style={styles.flex}>
-              <Text style={styles.rowTitle}>{item[2]}</Text>
-              <Text style={styles.metaText}>
-                {item[1]} · {item[4]}
-              </Text>
-            </View>
-            <Text style={styles.transactionAmount}>
-              {formatMoney(item[3] as number, "USD")}
-            </Text>
-          </View>
-        ))}
-      </View>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.emptyState}>
+          <Text style={styles.rowTitle}>Open the verified ledger in HQ.</Text>
+          <Text style={styles.metaText}>
+            Duna Pro does not infer balances or recent transactions when the
+            connected ledger projection is unavailable on mobile.
+          </Text>
+        </View>
+      )}
       <View style={styles.boundaryNote}>
         <Text style={styles.boundaryIcon}>◇</Text>
         <View style={styles.flex}>
           <Text style={styles.rowTitle}>
-            Ledger and Stripe agree through 10:42 AM.
+            {mode === "preview"
+              ? "Preview reconciliation only."
+              : "Stripe status is connected; balances remain source-owned."}
           </Text>
           <Text style={styles.metaText}>
             Funds remain in Stripe-managed accounts. Duna never custodies
             operator or player money.
           </Text>
         </View>
-        <Pill tone="positive">Reconciled</Pill>
+        <Pill tone={stripeReady ? "positive" : "warning"}>
+          {stripeReady ? "Connected" : "Action needed"}
+        </Pill>
       </View>
     </ScrollView>
   );
 }
 
 function MoreScreen() {
+  const { dashboard, mode, signOut, workspace } = useProRuntime();
+  const organization = dashboard?.organization ?? demoOrganization;
+  const organizationInitials = organization.name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
   const sections = [
     [
       "OPERATIONS",
@@ -848,22 +1302,38 @@ function MoreScreen() {
       ],
     ],
   ] as const;
+  const routes: Readonly<Record<string, string>> = {
+    Calendar: "calendar",
+    Programs: "programs",
+    "Events + leagues": "leagues",
+    Messages: "messages",
+    Reports: "reports",
+    "Products + pricing": "money",
+    "Memberships + packages": "memberships",
+    "Retail + inventory": "inventory",
+    "Coach payroll support": "money",
+    "Venues + courts": "facilities",
+    "Team + roles": "members",
+    "Policies + waivers": "members",
+    Integrations: "settings",
+    "Billing + plan": "settings",
+  };
   return (
     <ScrollView
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <Header context="SOUTH BAY VOLLEYBALL" />
+      <Header context={organization.name.toUpperCase()} />
       <PageTitle eyebrow="EVERYTHING ELSE" title="More." />
       <View style={styles.organizationCard}>
         <View style={styles.orgAvatar}>
-          <Text style={styles.orgAvatarText}>SB</Text>
+          <Text style={styles.orgAvatarText}>{organizationInitials}</Text>
         </View>
         <View style={styles.flex}>
-          <Text style={styles.orgName}>{demoOrganization.name}</Text>
+          <Text style={styles.orgName}>{organization.name}</Text>
           <Text style={styles.metaText}>
-            {demoOrganization.plan} plan · {demoOrganization.memberCount} people
-            · {demoOrganization.venueCount} venues
+            {organization.plan} plan · {organization.memberCount} people ·{" "}
+            {workspace?.venues.length ?? organization.venueCount} venues
           </Text>
         </View>
         <Text style={styles.chevron}>›</Text>
@@ -873,7 +1343,16 @@ function MoreScreen() {
           <Text style={styles.menuEyebrow}>{section[0]}</Text>
           <View style={styles.menuCard}>
             {section[1].map((item) => (
-              <Pressable style={styles.menuRow} key={item}>
+              <Pressable
+                disabled={mode === "preview"}
+                key={item}
+                onPress={() =>
+                  void WebBrowser.openBrowserAsync(
+                    `${dunaHqUrl}/${routes[item] ?? "dashboard"}`,
+                  )
+                }
+                style={styles.menuRow}
+              >
                 <Text style={styles.menuIcon}>{item.charAt(0)}</Text>
                 <Text style={styles.rowTitle}>{item}</Text>
                 <Text style={styles.chevron}>›</Text>
@@ -890,6 +1369,11 @@ function MoreScreen() {
         </Text>
         <Pill tone="positive">Offline ready</Pill>
       </View>
+      {signOut && (
+        <Pressable onPress={() => void signOut()} style={styles.signOutButton}>
+          <Text style={styles.signOutText}>Sign out of Duna Pro</Text>
+        </Pressable>
+      )}
     </ScrollView>
   );
 }
@@ -947,6 +1431,7 @@ function ProApp() {
     >
       <StatusBar style="light" />
       <View style={styles.app}>
+        {tab !== "score" && <PreviewBanner />}
         {tab === "today" && <TodayScreen onScore={() => setTab("score")} />}
         {tab === "people" && <PeopleScreen />}
         {tab === "score" && <ScorerScreen />}
@@ -966,7 +1451,9 @@ function ProApp() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <ProApp />
+      <ProRuntimeProvider>
+        <ProApp />
+      </ProRuntimeProvider>
     </SafeAreaProvider>
   );
 }
@@ -974,7 +1461,71 @@ export default function App() {
 const styles = StyleSheet.create({
   safe: { backgroundColor: colors.ink, flex: 1 },
   app: { backgroundColor: colors.ink, flex: 1 },
+  buttonDisabled: { opacity: 0.45 },
+  emptyState: {
+    backgroundColor: colors.depth,
+    borderColor: "rgba(255,255,255,.07)",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 10,
+    marginTop: 12,
+    padding: 16,
+  },
   flex: { flex: 1, minWidth: 0 },
+  formError: {
+    color: colors.danger,
+    fontSize: 9,
+    lineHeight: 14,
+    marginTop: 12,
+  },
+  matchPickerCard: {
+    backgroundColor: colors.depth,
+    borderColor: "rgba(255,255,255,.07)",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 9,
+    padding: 14,
+  },
+  matchPickerList: { gap: 10, marginTop: 20 },
+  matchPickerTeams: {
+    color: colors.bone,
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+  },
+  previewBanner: {
+    alignItems: "center",
+    backgroundColor: "rgba(247,200,107,.12)",
+    borderBottomColor: "rgba(247,200,107,.24)",
+    borderBottomWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  previewBannerText: {
+    color: colors.warning,
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textAlign: "center",
+  },
+  scorerError: {
+    backgroundColor: "rgba(242,120,120,.12)",
+    color: colors.danger,
+    fontSize: 7,
+    lineHeight: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    textAlign: "center",
+  },
+  signOutButton: {
+    alignItems: "center",
+    borderColor: "rgba(242,120,120,.2)",
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 18,
+    padding: 13,
+  },
+  signOutText: { color: colors.danger, fontSize: 9, fontWeight: "800" },
   content: { paddingBottom: 116, paddingHorizontal: 18 },
   wordmark: { alignItems: "center", flexDirection: "row", gap: 7 },
   mark: {

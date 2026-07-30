@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "rally_event_match_sequence_unique" ON "rally_events" USING btree ("match_id","sequence");

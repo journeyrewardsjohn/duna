@@ -1,6 +1,14 @@
 import {
+  auditLog,
+  courtBookings,
   getDatabase,
   isDatabaseConfigured,
+  memberships,
+  membershipTiers,
+  orders,
+  organizations,
+  pickupParticipants,
+  registrations,
   webhookEvents,
   workflowJobs,
 } from "@duna/db";
@@ -48,6 +56,215 @@ function stringField(
   return field;
 }
 
+function optionalString(
+  value: Readonly<Record<string, unknown>>,
+  key: string,
+): string | undefined {
+  const field = value[key];
+  return typeof field === "string" && field.length > 0 ? field : undefined;
+}
+
+function unixDate(value: unknown): Date | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? new Date(value * 1_000)
+    : undefined;
+}
+
+async function synchronizeMembership(input: {
+  readonly object: Readonly<Record<string, unknown>>;
+  readonly occurredAt: Date;
+  readonly traceId: string;
+}): Promise<void> {
+  const database = getDatabase();
+  const metadata = input.object.metadata as
+    Readonly<Record<string, unknown>> | undefined;
+  const personId =
+    typeof metadata?.dunaPersonId === "string"
+      ? metadata.dunaPersonId
+      : undefined;
+  const subscriptionId = optionalString(input.object, "id");
+  if (!personId || !subscriptionId) {
+    throw new Error("Stripe subscription is missing Duna membership metadata");
+  }
+  const items = input.object.items as
+    | {
+        readonly data?: readonly Readonly<Record<string, unknown>>[];
+      }
+    | undefined;
+  const firstItem = items?.data?.[0];
+  const price = firstItem?.price as
+    Readonly<Record<string, unknown>> | undefined;
+  const priceId =
+    typeof price?.id === "string"
+      ? price.id
+      : typeof firstItem?.price === "string"
+        ? firstItem.price
+        : undefined;
+  if (!priceId) throw new Error("Stripe subscription price is missing");
+  const tier = await database.query.membershipTiers.findFirst({
+    where: eq(membershipTiers.stripePriceId, priceId),
+  });
+  if (!tier) {
+    throw new Error("Stripe subscription price is not mapped to a Duna tier");
+  }
+  const pauseCollection = input.object.pause_collection as
+    Readonly<Record<string, unknown>> | null | undefined;
+  const currentPeriodStartsAt =
+    unixDate(input.object.current_period_start) ??
+    unixDate(firstItem?.current_period_start);
+  const currentPeriodEndsAt =
+    unixDate(input.object.current_period_end) ??
+    unixDate(firstItem?.current_period_end);
+  const pausedUntil = unixDate(pauseCollection?.resumes_at);
+  const status = optionalString(input.object, "status") ?? "unknown";
+  const cancelAtPeriodEnd = input.object.cancel_at_period_end === true;
+  const existing = await database.query.memberships.findFirst({
+    where: eq(memberships.stripeSubscriptionId, subscriptionId),
+  });
+  if (existing && existing.personId !== personId) {
+    throw new Error("Stripe subscription is bound to a different Duna person");
+  }
+  if (existing) {
+    await database
+      .update(memberships)
+      .set({
+        tierId: tier.id,
+        status,
+        currentPeriodStartsAt,
+        currentPeriodEndsAt,
+        pausedUntil,
+        cancelAtPeriodEnd,
+        updatedAt: input.occurredAt,
+      })
+      .where(eq(memberships.id, existing.id));
+  } else {
+    await database.insert(memberships).values({
+      personId,
+      tierId: tier.id,
+      status,
+      stripeSubscriptionId: subscriptionId,
+      currentPeriodStartsAt,
+      currentPeriodEndsAt,
+      pausedUntil,
+      cancelAtPeriodEnd,
+      createdAt: input.occurredAt,
+      updatedAt: input.occurredAt,
+    });
+  }
+  await database.insert(auditLog).values({
+    actorType: "system",
+    action: "membership.synchronized",
+    entityType: "membership",
+    entityId: existing?.id ?? subscriptionId,
+    reason: `Stripe subscription state synchronized as ${status}.`,
+    traceId: input.traceId,
+    createdAt: input.occurredAt,
+  });
+}
+
+async function markMembershipPaymentFailed(input: {
+  readonly object: Readonly<Record<string, unknown>>;
+  readonly occurredAt: Date;
+  readonly traceId: string;
+}): Promise<void> {
+  const subscriptionField = input.object.subscription;
+  const parent = input.object.parent as
+    | {
+        readonly subscription_details?: Readonly<Record<string, unknown>>;
+      }
+    | undefined;
+  const subscriptionId =
+    typeof subscriptionField === "string"
+      ? subscriptionField
+      : typeof parent?.subscription_details?.subscription === "string"
+        ? parent.subscription_details.subscription
+        : undefined;
+  if (!subscriptionId) {
+    throw new Error("Failed Stripe invoice is missing its subscription");
+  }
+  const database = getDatabase();
+  const membership = await database.query.memberships.findFirst({
+    where: eq(memberships.stripeSubscriptionId, subscriptionId),
+  });
+  if (!membership) {
+    throw new Error("Failed Stripe invoice membership was not found");
+  }
+  await database.batch([
+    database
+      .update(memberships)
+      .set({ status: "past_due", updatedAt: input.occurredAt })
+      .where(eq(memberships.id, membership.id)),
+    database.insert(auditLog).values({
+      actorType: "system",
+      action: "membership.payment_failed",
+      entityType: "membership",
+      entityId: membership.id,
+      reason: "Stripe reported a failed membership invoice.",
+      traceId: input.traceId,
+      createdAt: input.occurredAt,
+    }),
+  ]);
+}
+
+async function synchronizeConnectAccount(input: {
+  readonly object: Readonly<Record<string, unknown>>;
+  readonly occurredAt: Date;
+  readonly traceId: string;
+}): Promise<void> {
+  const accountId = optionalString(input.object, "id");
+  if (!accountId) throw new Error("Stripe account update is missing its id");
+  const metadata = input.object.metadata as
+    Readonly<Record<string, unknown>> | undefined;
+  const metadataOrganizationId =
+    typeof metadata?.dunaEntityId === "string"
+      ? metadata.dunaEntityId
+      : undefined;
+  const database = getDatabase();
+  const organization =
+    (await database.query.organizations.findFirst({
+      where: eq(organizations.stripeAccountId, accountId),
+    })) ??
+    (metadataOrganizationId
+      ? await database.query.organizations.findFirst({
+          where: eq(organizations.id, metadataOrganizationId),
+        })
+      : undefined);
+  if (!organization) {
+    throw new Error("Stripe account is not mapped to a Duna organization");
+  }
+  if (
+    organization.stripeAccountId &&
+    organization.stripeAccountId !== accountId
+  ) {
+    throw new Error("Stripe account metadata conflicts with the Duna mapping");
+  }
+  const chargesEnabled = input.object.charges_enabled === true;
+  const accountType = optionalString(input.object, "type") ?? "express";
+  await database.batch([
+    database
+      .update(organizations)
+      .set({
+        stripeAccountId: accountId,
+        stripeAccountType: accountType,
+        stripeChargesEnabled: chargesEnabled,
+        updatedAt: input.occurredAt,
+      })
+      .where(eq(organizations.id, organization.id)),
+    database.insert(auditLog).values({
+      organizationId: organization.id,
+      actorType: "system",
+      action: "stripe.account_synchronized",
+      entityType: "organization",
+      entityId: organization.id,
+      reason: chargesEnabled
+        ? "Stripe confirmed that connected charges are enabled."
+        : "Stripe connected-account requirements remain incomplete or restricted.",
+      traceId: input.traceId,
+      createdAt: input.occurredAt,
+    }),
+  ]);
+}
+
 async function processStripeWorkflow(
   payload: Readonly<Record<string, unknown>>,
 ): Promise<void> {
@@ -58,9 +275,147 @@ async function processStripeWorkflow(
   });
   if (!webhook) throw new Error("Persisted Stripe webhook was not found");
 
-  // Domain projection handlers are intentionally isolated from webhook ingress.
-  // Each event is retained in full so projection logic can be replayed after
-  // adding or correcting a handler without asking Stripe to resend the event.
+  const action = stringField(payload, "action");
+  const eventPayload = webhook.payload as {
+    readonly id?: string;
+    readonly created?: number;
+    readonly data?: { readonly object?: Readonly<Record<string, unknown>> };
+  };
+  const object = eventPayload.data?.object;
+  if (!object) throw new Error("Stripe event object is missing");
+  const occurredAt =
+    typeof eventPayload.created === "number"
+      ? new Date(eventPayload.created * 1_000)
+      : new Date();
+
+  if (action === "membership.synchronized") {
+    await synchronizeMembership({
+      object,
+      occurredAt,
+      traceId: eventPayload.id ?? webhook.providerEventId,
+    });
+  } else if (action === "membership.payment_failed") {
+    await markMembershipPaymentFailed({
+      object,
+      occurredAt,
+      traceId: eventPayload.id ?? webhook.providerEventId,
+    });
+  } else if (action === "connect.synchronized") {
+    await synchronizeConnectAccount({
+      object,
+      occurredAt,
+      traceId: eventPayload.id ?? webhook.providerEventId,
+    });
+  } else if (action === "order.payment_succeeded") {
+    const metadata = object.metadata as
+      Readonly<Record<string, unknown>> | undefined;
+    const orderId =
+      typeof metadata?.dunaOrderId === "string"
+        ? metadata.dunaOrderId
+        : undefined;
+    if (!orderId) throw new Error("Stripe payment is missing dunaOrderId");
+    const order = await database.query.orders.findFirst({
+      where: eq(orders.id, orderId),
+    });
+    if (!order) throw new Error("Stripe payment order was not found");
+    const amountReceived =
+      typeof object.amount_received === "number"
+        ? object.amount_received
+        : undefined;
+    const paymentCurrency =
+      typeof object.currency === "string"
+        ? object.currency.toUpperCase()
+        : undefined;
+    if (
+      amountReceived !== order.totalMinor ||
+      paymentCurrency !== order.currency
+    ) {
+      throw new Error("Stripe payment amount does not match the Duna order");
+    }
+    const paymentIntentId =
+      typeof object.id === "string" ? object.id : undefined;
+    if (!paymentIntentId)
+      throw new Error("Stripe payment intent id is missing");
+    const latestCharge =
+      typeof object.latest_charge === "string"
+        ? object.latest_charge
+        : typeof object.latest_charge === "object" &&
+            object.latest_charge !== null &&
+            "id" in object.latest_charge &&
+            typeof object.latest_charge.id === "string"
+          ? object.latest_charge.id
+          : null;
+    await database.execute(sql`
+      SELECT duna_project_order_payment(
+        ${order.id}::uuid,
+        ${paymentIntentId}::text,
+        ${latestCharge}::text,
+        ${occurredAt}::timestamptz,
+        ${eventPayload.id ?? webhook.providerEventId}::text
+      )
+    `);
+  } else if (
+    action === "order.payment_failed" ||
+    action === "order.checkout_expired"
+  ) {
+    const metadata = object.metadata as
+      Readonly<Record<string, unknown>> | undefined;
+    const orderId =
+      typeof metadata?.dunaOrderId === "string"
+        ? metadata.dunaOrderId
+        : undefined;
+    if (orderId) {
+      const failedAt = occurredAt;
+      await database.batch([
+        database
+          .update(orders)
+          .set({
+            status:
+              action === "order.checkout_expired" ? "cancelled" : "failed",
+            updatedAt: failedAt,
+          })
+          .where(eq(orders.id, orderId)),
+        database
+          .update(registrations)
+          .set({
+            status: "cancelled",
+            updatedAt: failedAt,
+          })
+          .where(eq(registrations.orderId, orderId)),
+        database
+          .update(pickupParticipants)
+          .set({
+            status: "cancelled",
+            updatedAt: failedAt,
+          })
+          .where(eq(pickupParticipants.orderId, orderId)),
+        database
+          .update(courtBookings)
+          .set({
+            status:
+              action === "order.checkout_expired" ? "expired" : "cancelled",
+            holdExpiresAt: null,
+            updatedAt: failedAt,
+          })
+          .where(eq(courtBookings.orderId, orderId)),
+        database.insert(auditLog).values({
+          actorType: "system",
+          action,
+          entityType: "order",
+          entityId: orderId,
+          reason:
+            action === "order.checkout_expired"
+              ? "Stripe checkout expired and its capacity hold was released."
+              : "Stripe payment failed and its capacity hold was released.",
+          traceId: eventPayload.id ?? webhook.providerEventId,
+          createdAt: failedAt,
+        }),
+      ]);
+    }
+  }
+
+  // Each raw event remains replayable after projection so corrected handlers
+  // can be rerun without asking Stripe to resend it.
   await database
     .update(webhookEvents)
     .set({

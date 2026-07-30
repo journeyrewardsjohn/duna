@@ -44,6 +44,11 @@ describe("tRPC contract surface", () => {
       endsAt: "2030-08-02T00:00:00.000Z",
       venueName: "Contract beach",
       capacity: 8,
+      format: "4s" as const,
+      visibility: "public" as const,
+      costMinor: 0,
+      currency: "USD" as const,
+      recordMatches: true,
       idempotencyKey: key,
     };
     const first = await caller.player.createPickup(input);
@@ -64,6 +69,11 @@ describe("tRPC contract surface", () => {
         endsAt: "2030-08-02T00:00:00.000Z",
         venueName: "Unknown beach",
         capacity: 8,
+        format: "4s",
+        visibility: "public",
+        costMinor: 0,
+        currency: "USD",
+        recordMatches: true,
         idempotencyKey: crypto.randomUUID(),
       }),
     ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });

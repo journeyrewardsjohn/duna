@@ -21,6 +21,7 @@ import {
   protectedProcedure,
   publicProcedure,
   rateLimitMiddleware,
+  requireScope,
   router,
 } from "./auth";
 import type { ApiContext } from "./context";
@@ -31,23 +32,109 @@ import {
   auditEventSchema,
   availableSlotSchema,
   bracketSchema,
+  consentRecordResultSchema,
+  courtBookingInventorySchema,
+  courtCheckoutResultSchema,
+  courtCheckoutStatusSchema,
+  courtHoldResultSchema,
   eventSummarySchema,
+  eventCheckoutResultSchema,
+  eventCheckoutStatusSchema,
+  formSubmissionResultSchema,
+  guardianReviewItemSchema,
+  guardianReviewResultSchema,
   matchSummarySchema,
+  matchScoringStateSchema,
   operatorDashboardSchema,
+  operatorMutationResultSchema,
+  operatorScorableMatchSchema,
+  operatorWorkspaceSchema,
   organizationSummarySchema,
   personSummarySchema,
   playerDashboardSchema,
+  playerSettingsSchema,
   playerWalletSchema,
   pricingSchema,
+  registrationResultSchema,
   scoreStateSchema,
+  stripeOnboardingResultSchema,
+  scoreEventSchema,
+  ticketScanResultSchema,
   tournamentScheduleSchema,
   venueSummarySchema,
 } from "./contracts";
+import {
+  CheckoutError,
+  getEventCheckoutStatus,
+  startEventCheckout,
+} from "./checkout";
+import {
+  CourtCheckoutError,
+  getCourtCheckoutStatus,
+  loadCourtBookingInventory,
+  startCourtCheckout,
+} from "./court-checkout";
+import {
+  CommerceError,
+  createCourtHold,
+  registerForSession,
+  scanTicketConnected,
+} from "./commerce";
+import {
+  FormSubmissionError,
+  recordConsent,
+  submitFormResponse,
+} from "./forms-service";
 import {
   executeIdempotent,
   IdempotencyConflictError,
   IdempotencyInProgressError,
 } from "./idempotency";
+import {
+  addDependent,
+  IdentityError,
+  loadGuardianReviewQueue,
+  recordOwnBirthDate,
+  reviewGuardianship,
+  updateOwnProfile,
+} from "./identity";
+import {
+  changeDunaPlusMembership,
+  MembershipError,
+  openDunaPlusPortal,
+} from "./membership";
+import {
+  activateCourt,
+  createCourt,
+  createProgramSession,
+  createRatePlan,
+  createVenue,
+  loadDemoOperatorWorkspace,
+  loadOperatorWorkspace,
+  OperatorServiceError,
+  publishSession,
+  publishVenue,
+  saveMessageDraft,
+  startStripeOnboarding,
+} from "./operator-service";
+import {
+  appendMatchEvents,
+  appendOperatorMatchEvents,
+  confirmMatchResult,
+  loadOperatorMatchScoringState,
+  loadOperatorScorableMatches,
+  loadMatchScoringState,
+  loadPublicMatchScoringState,
+  MatchServiceError,
+  startOperatorMatchScoring,
+  startSelfReportedMatch,
+} from "./match-service";
+import {
+  buildPersonDataExport,
+  cancelAccountDeletion,
+  PrivacyError,
+  requestAccountDeletion,
+} from "./privacy";
 import { createDunaPlusCheckout, isStripeConfigured } from "./payments";
 import { getRepository } from "./repository";
 import {
@@ -147,6 +234,128 @@ async function runIdempotentMutation<T extends object>(input: {
   }
 }
 
+function throwDomainError(error: unknown): never {
+  if (error instanceof CommerceError) {
+    const code =
+      error.code.endsWith("_NOT_FOUND") || error.code === "TICKET_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "TICKET_WRONG_ORGANIZATION"
+          ? "FORBIDDEN"
+          : error.code === "DATABASE_REQUIRED"
+            ? "INTERNAL_SERVER_ERROR"
+            : error.code === "INVALID_BOOKING_TIME"
+              ? "BAD_REQUEST"
+              : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof FormSubmissionError) {
+    const code =
+      error.code === "FORM_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "FORM_VERSION_MISMATCH"
+          ? "CONFLICT"
+          : error.code === "DATABASE_REQUIRED"
+            ? "INTERNAL_SERVER_ERROR"
+            : "BAD_REQUEST";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof CheckoutError) {
+    const code =
+      error.code === "EVENT_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "CHECKOUT_UNAVAILABLE"
+          ? "CONFLICT"
+          : error.code === "DATABASE_REQUIRED" ||
+              error.code === "STRIPE_REQUIRED"
+            ? "INTERNAL_SERVER_ERROR"
+            : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof CourtCheckoutError) {
+    const code =
+      error.code === "COURT_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "DATABASE_REQUIRED"
+          ? "INTERNAL_SERVER_ERROR"
+          : error.code === "INVALID_LOCAL_TIME"
+            ? "BAD_REQUEST"
+            : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof MembershipError) {
+    const code =
+      error.code === "MEMBERSHIP_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "MEMBERSHIP_NOT_MANAGEABLE" ||
+            error.code === "PAUSE_LIMIT_REACHED"
+          ? "PRECONDITION_FAILED"
+          : "INTERNAL_SERVER_ERROR";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof PrivacyError) {
+    const code =
+      error.code === "REQUEST_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "REQUEST_NOT_CANCELLABLE"
+          ? "PRECONDITION_FAILED"
+          : "INTERNAL_SERVER_ERROR";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof IdentityError) {
+    const code =
+      error.code === "PERSON_NOT_FOUND" ||
+      error.code === "GUARDIANSHIP_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "HANDLE_UNAVAILABLE" ||
+            error.code === "PHONE_UNAVAILABLE" ||
+            error.code === "GUARDIANSHIP_ALREADY_REVIEWED"
+          ? "CONFLICT"
+          : error.code === "DATABASE_REQUIRED"
+            ? "INTERNAL_SERVER_ERROR"
+            : error.code === "ADULT_REQUIRED" ||
+                error.code === "PUBLIC_MINOR_PROFILE_BLOCKED" ||
+                error.code === "GUARDIAN_CONSENT_REQUIRED" ||
+                error.code === "INVALID_GUARDIANSHIP"
+              ? "PRECONDITION_FAILED"
+              : "BAD_REQUEST";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof OperatorServiceError) {
+    const code =
+      error.code === "RESOURCE_NOT_FOUND" ||
+      error.code === "ORGANIZATION_NOT_FOUND" ||
+      error.code === "RECIPIENT_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "RESOURCE_WRONG_ORGANIZATION" ||
+            error.code === "RECIPIENT_NOT_ELIGIBLE"
+          ? "FORBIDDEN"
+          : error.code === "DATABASE_REQUIRED"
+            ? "INTERNAL_SERVER_ERROR"
+            : error.code === "INVALID_TIMEZONE" ||
+                error.code === "INVALID_SCHEDULE" ||
+                error.code === "INVALID_CONFIGURATION" ||
+                error.code === "DELIVERY_DESTINATION_MISSING"
+              ? "BAD_REQUEST"
+              : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof MatchServiceError) {
+    const code =
+      error.code === "MATCH_NOT_FOUND" || error.code === "PARTICIPANT_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "PARTICIPANT_REQUIRED" ||
+            error.code === "DEVICE_MISMATCH"
+          ? "FORBIDDEN"
+          : error.code === "DATABASE_REQUIRED"
+            ? "INTERNAL_SERVER_ERROR"
+            : error.code === "EVENT_SEQUENCE_CONFLICT"
+              ? "CONFLICT"
+              : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  throw error;
+}
+
 const publicRouter = router({
   health: publicProcedure
     .output(
@@ -165,6 +374,16 @@ const publicRouter = router({
       databaseConfigured: Boolean(process.env.DATABASE_URL),
       stripeConfigured: isStripeConfigured(),
     })),
+  liveMatch: publicProcedure
+    .input(z.object({ matchId: z.string().uuid() }))
+    .output(matchScoringStateSchema)
+    .query(async ({ input }) => {
+      try {
+        return await loadPublicMatchScoringState(input.matchId);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   events: publicProcedure
     .input(
       z
@@ -210,6 +429,24 @@ const publicRouter = router({
   venues: publicProcedure
     .output(z.array(venueSummarySchema).readonly())
     .query(() => getRepository().public.venues()),
+  courtBookingInventory: publicProcedure
+    .input(z.object({ venueId: z.string().uuid() }))
+    .output(courtBookingInventorySchema)
+    .query(async ({ input }) => {
+      try {
+        return await loadCourtBookingInventory(input.venueId);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  players: publicProcedure
+    .input(
+      z
+        .object({ limit: z.number().int().min(1).max(50).default(12) })
+        .optional(),
+    )
+    .output(z.array(personSummarySchema).readonly())
+    .query(({ input }) => getRepository().public.players(input?.limit ?? 12)),
   playerProfile: publicProcedure
     .input(z.object({ handle: z.string().min(1) }))
     .output(personSummarySchema)
@@ -217,6 +454,16 @@ const publicRouter = router({
       const player = await getRepository().public.playerByHandle(input.handle);
       if (!player) throw new TRPCError({ code: "NOT_FOUND" });
       return player;
+    }),
+  organizationBySlug: publicProcedure
+    .input(z.object({ slug: z.string().min(1) }))
+    .output(organizationSummarySchema)
+    .query(async ({ input }) => {
+      const organization = await getRepository().public.organizationBySlug(
+        input.slug,
+      );
+      if (!organization) throw new TRPCError({ code: "NOT_FOUND" });
+      return organization;
     }),
 });
 
@@ -229,9 +476,454 @@ const playerRouter = router({
     .query(({ ctx }) =>
       getRepository().player.matchHistory(ctx.actor!.personId),
     ),
+  matchById: protectedProcedure
+    .input(z.object({ matchId: z.string().uuid() }))
+    .output(matchSummarySchema)
+    .query(async ({ input, ctx }) => {
+      const match = (
+        await getRepository().player.matchHistory(ctx.actor!.personId)
+      ).find((candidate) => candidate.id === input.matchId);
+      if (!match) throw new TRPCError({ code: "NOT_FOUND" });
+      return match;
+    }),
+  matchScoringState: protectedProcedure
+    .input(z.object({ matchId: z.string().uuid() }))
+    .output(matchScoringStateSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadMatchScoringState({
+          actor: ctx.actor!,
+          matchId: input.matchId,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  startMatch: protectedProcedure
+    .use(requireScope("matches:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "match-start",
+        capacity: 10,
+        refillPerMinute: 5,
+      }),
+    )
+    .input(
+      z.object({
+        teamAIds: z.tuple([z.string().uuid(), z.string().uuid()]),
+        teamBIds: z.tuple([z.string().uuid(), z.string().uuid()]),
+        venueId: z.string().uuid().optional(),
+        scoringSystem: z.enum(["rally", "sideout"]),
+        initialServer: z.enum(["A", "B"]),
+        deviceId: z.string().trim().min(8).max(128),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(matchScoringStateSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.startMatch",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await startSelfReportedMatch({
+              actor: ctx.actor!,
+              teamAIds: input.teamAIds,
+              teamBIds: input.teamBIds,
+              venueId: input.venueId,
+              scoringSystem: input.scoringSystem,
+              initialServer: input.initialServer,
+              deviceId: input.deviceId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  appendMatchEvents: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "match-score",
+        capacity: 240,
+        refillPerMinute: 240,
+      }),
+    )
+    .input(
+      z.object({
+        matchId: z.string().uuid(),
+        deviceId: z.string().trim().min(8).max(128),
+        events: z
+          .array(
+            z.object({
+              sequence: z.number().int().positive(),
+              monotonicCounter: z.number().int().positive(),
+              event: scoreEventSchema,
+            }),
+          )
+          .min(1)
+          .max(100),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        accepted: z.number().int().nonnegative(),
+        scoring: matchScoringStateSchema,
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.appendMatchEvents",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await appendMatchEvents({
+              actor: ctx.actor!,
+              matchId: input.matchId,
+              deviceId: input.deviceId,
+              events: input.events,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  confirmMatch: protectedProcedure
+    .use(requireScope("matches:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "match-confirm",
+        capacity: 20,
+        refillPerMinute: 10,
+      }),
+    )
+    .input(
+      z
+        .object({
+          matchId: z.string().uuid(),
+          decision: z.enum(["confirmed", "disputed"]),
+          reason: z.string().trim().max(1_000).optional(),
+          idempotencyKey: z.string().uuid(),
+        })
+        .refine(
+          (value) =>
+            value.decision !== "disputed" ||
+            Boolean(value.reason && value.reason.length >= 5),
+          {
+            message: "Explain what is wrong with the submitted result.",
+            path: ["reason"],
+          },
+        ),
+    )
+    .output(
+      z.object({
+        status: z.enum(["pending-verification", "verified", "disputed"]),
+        ratingApplied: z.boolean(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.confirmMatch",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await confirmMatchResult({
+              actor: ctx.actor!,
+              matchId: input.matchId,
+              decision: input.decision,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   wallet: protectedProcedure
     .output(playerWalletSchema)
     .query(({ ctx }) => getRepository().player.wallet(ctx.actor!.personId)),
+  settings: protectedProcedure
+    .output(playerSettingsSchema)
+    .query(({ ctx }) => getRepository().player.settings(ctx.actor!.personId)),
+  updateProfile: protectedProcedure
+    .use(requireScope("profile:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "profile-update",
+        capacity: 12,
+        refillPerMinute: 6,
+      }),
+    )
+    .input(
+      z.object({
+        displayName: z.string().trim().min(2).max(80),
+        handle: z
+          .string()
+          .trim()
+          .toLowerCase()
+          .min(3)
+          .max(48)
+          .regex(
+            /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+            "Handle can use lowercase letters, numbers, and single hyphens.",
+          ),
+        email: z.email().nullable().optional(),
+        phoneE164: z
+          .string()
+          .regex(/^\+[1-9]\d{7,14}$/, "Phone must use international format.")
+          .nullable()
+          .optional(),
+        homeMarket: z.string().trim().max(120).nullable().optional(),
+        visibility: z.enum(["public", "members", "private"]),
+        locale: z
+          .string()
+          .trim()
+          .min(2)
+          .max(16)
+          .regex(/^[a-z]{2,3}(?:-[A-Z]{2})?$/),
+        measurementSystem: z.enum(["imperial", "metric"]),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        personId: z.string().uuid(),
+        displayName: z.string(),
+        handle: z.string(),
+        visibility: z.enum(["public", "members", "private"]),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.updateProfile",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateOwnProfile({
+              actor: ctx.actor!,
+              displayName: input.displayName,
+              handle: input.handle,
+              email: input.email,
+              phoneE164: input.phoneE164,
+              homeMarket: input.homeMarket,
+              visibility: input.visibility,
+              locale: input.locale,
+              measurementSystem: input.measurementSystem,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  recordBirthDate: protectedProcedure
+    .use(requireScope("profile:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "birth-date",
+        capacity: 4,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(
+      z.object({
+        birthDate: z.iso.date(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        personId: z.string().uuid(),
+        ageBand: z.enum(["unknown", "under-13", "teen", "adult"]),
+        isMinor: z.boolean(),
+        requiresGuardian: z.boolean(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.recordBirthDate",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await recordOwnBirthDate({
+              actor: ctx.actor!,
+              birthDate: input.birthDate,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  addDependent: adultProcedure
+    .use(requireScope("profile:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "dependent-create",
+        capacity: 6,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(
+      z.object({
+        displayName: z.string().trim().min(2).max(80),
+        birthDate: z.iso.date(),
+        relationship: z.string().trim().min(2).max(48),
+        emergencyContact: z.boolean(),
+        canApproveSpending: z.boolean(),
+        consentConfirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        personId: z.string().uuid(),
+        handle: z.string(),
+        ageBand: z.enum(["under-13", "teen"]),
+        relationshipVerified: z.literal(false),
+        parentalConsentRecorded: z.literal(true),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.addDependent",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await addDependent({
+              actor: ctx.actor!,
+              displayName: input.displayName,
+              birthDate: input.birthDate,
+              relationship: input.relationship,
+              emergencyContact: input.emergencyContact,
+              canApproveSpending: input.canApproveSpending,
+              consentConfirmed: input.consentConfirmed,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              userAgent: ctx.userAgent,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  dataExport: protectedProcedure.output(z.unknown()).query(async ({ ctx }) => {
+    try {
+      return await buildPersonDataExport({
+        actor: ctx.actor!,
+        now: ctx.now,
+      });
+    } catch (error) {
+      return throwDomainError(error);
+    }
+  }),
+  requestAccountDeletion: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "privacy-request",
+        capacity: 4,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(
+      z.object({
+        reason: z.string().trim().max(1_000).optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        status: z.enum(["queued", "identity-review", "legal-hold"]),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.requestAccountDeletion",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await requestAccountDeletion({
+              actor: ctx.actor!,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  cancelAccountDeletion: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "privacy-request",
+        capacity: 4,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(z.object({ idempotencyKey: z.string().uuid() }))
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        status: z.literal("cancelled"),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.cancelAccountDeletion",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await cancelAccountDeletion({
+              actor: ctx.actor!,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   quote: protectedProcedure
     .input(
       z.object({
@@ -263,6 +955,12 @@ const playerRouter = router({
           endsAt: z.iso.datetime(),
           venueName: z.string().min(2),
           capacity: z.number().int().min(4).max(48),
+          format: z.enum(["2s", "4s", "6s", "king-queen"]),
+          note: z.string().trim().max(1_000).optional(),
+          visibility: z.enum(["public", "unlisted"]),
+          costMinor: z.number().int().min(0).max(100_000),
+          currency: z.literal("USD"),
+          recordMatches: z.boolean(),
           ratingMinimum: z.number().min(1).max(8).optional(),
           ratingMaximum: z.number().min(1).max(8).optional(),
           idempotencyKey: z.string().uuid(),
@@ -286,6 +984,12 @@ const playerRouter = router({
             endsAt: input.endsAt,
             venueName: input.venueName,
             capacity: input.capacity,
+            format: input.format,
+            note: input.note,
+            visibility: input.visibility,
+            costMinor: input.costMinor,
+            currency: input.currency,
+            recordMatches: input.recordMatches,
             ratingMinimum: input.ratingMinimum,
             ratingMaximum: input.ratingMaximum,
             hostPersonId: ctx.actor!.personId,
@@ -293,6 +997,302 @@ const playerRouter = router({
             requestId: ctx.requestId,
             ipAddress: ctx.ipAddress,
           }),
+      }),
+    ),
+  registerForSession: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "session-registration",
+        capacity: 12,
+        refillPerMinute: 6,
+      }),
+    )
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        divisionId: z.string().uuid().optional(),
+        subjectPersonId: z.string().uuid().optional(),
+        inviteCodes: z.array(z.string().min(2).max(64)).max(5).optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(registrationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.registerForSession",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await registerForSession({
+              actor: ctx.actor!,
+              sessionId: input.sessionId,
+              divisionId: input.divisionId,
+              subjectPersonId: input.subjectPersonId,
+              inviteCodes: input.inviteCodes,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createCourtHold: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "court-hold",
+        capacity: 12,
+        refillPerMinute: 6,
+      }),
+    )
+    .input(
+      z
+        .object({
+          courtId: z.string().uuid(),
+          startsAt: z.iso.datetime(),
+          endsAt: z.iso.datetime(),
+          idempotencyKey: z.string().uuid(),
+        })
+        .refine(
+          (value) => Date.parse(value.endsAt) > Date.parse(value.startsAt),
+          "Court hold must end after it begins",
+        ),
+    )
+    .output(courtHoldResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.createCourtHold",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createCourtHold({
+              actor: ctx.actor!,
+              courtId: input.courtId,
+              startsAt: input.startsAt,
+              endsAt: input.endsAt,
+              idempotencyKey: input.idempotencyKey,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  startCourtCheckout: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "court-checkout",
+        capacity: 8,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        courtId: z.string().uuid(),
+        localStartsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
+        durationMinutes: z.number().int().min(15).max(480),
+        successUrl: z.url(),
+        cancelUrl: z.url(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(courtCheckoutResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.startCourtCheckout",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await startCourtCheckout({
+              actor: ctx.actor!,
+              courtId: input.courtId,
+              localStartsAt: input.localStartsAt,
+              durationMinutes: input.durationMinutes,
+              successUrl: input.successUrl,
+              cancelUrl: input.cancelUrl,
+              idempotencyKey: input.idempotencyKey,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  courtCheckoutStatus: protectedProcedure
+    .input(z.object({ checkoutSessionId: z.string().min(1).max(192) }))
+    .output(courtCheckoutStatusSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await getCourtCheckoutStatus({
+          actor: ctx.actor!,
+          checkoutSessionId: input.checkoutSessionId,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  startEventCheckout: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "event-checkout",
+        capacity: 10,
+        refillPerMinute: 5,
+      }),
+    )
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        divisionId: z.string().uuid().optional(),
+        subjectPersonId: z.string().uuid().optional(),
+        isDunaPlus: z.boolean(),
+        successUrl: z.url(),
+        cancelUrl: z.url(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(eventCheckoutResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.startEventCheckout",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await startEventCheckout({
+              actor: ctx.actor!,
+              sessionId: input.sessionId,
+              divisionId: input.divisionId,
+              subjectPersonId: input.subjectPersonId,
+              isDunaPlus: input.isDunaPlus,
+              successUrl: input.successUrl,
+              cancelUrl: input.cancelUrl,
+              idempotencyKey: input.idempotencyKey,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  checkoutStatus: protectedProcedure
+    .input(z.object({ checkoutSessionId: z.string().min(1).max(255) }))
+    .output(eventCheckoutStatusSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await getEventCheckoutStatus({
+          actor: ctx.actor!,
+          checkoutSessionId: input.checkoutSessionId,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  submitForm: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "form-submission",
+        capacity: 20,
+        refillPerMinute: 10,
+      }),
+    )
+    .input(
+      z.object({
+        formId: z.string().uuid(),
+        formVersion: z.number().int().positive(),
+        subjectPersonId: z.string().uuid().optional(),
+        answers: z.record(z.string().min(1), z.unknown()),
+        signatureValue: z.string().trim().min(2).max(160).optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(formSubmissionResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.submitForm",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await submitFormResponse({
+              actor: ctx.actor!,
+              formId: input.formId,
+              formVersion: input.formVersion,
+              subjectPersonId: input.subjectPersonId,
+              answers: input.answers,
+              signatureValue: input.signatureValue,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  recordConsent: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "consent-write",
+        capacity: 20,
+        refillPerMinute: 10,
+      }),
+    )
+    .input(
+      z.object({
+        scope: z.enum([
+          "transactional",
+          "marketing-email",
+          "marketing-sms",
+          "marketing-push",
+        ]),
+        granted: z.boolean(),
+        disclosureText: z.string().trim().min(10).max(4_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(consentRecordResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.recordConsent",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await recordConsent({
+              actor: ctx.actor!,
+              scope: input.scope,
+              granted: input.granted,
+              disclosureText: input.disclosureText,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              userAgent: ctx.userAgent,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
       }),
     ),
   foldScore: protectedProcedure
@@ -340,15 +1340,29 @@ const playerRouter = router({
         ctx,
         execute: async () => {
           if (!isStripeConfigured()) {
-            return {
-              id: "demo_checkout",
-              url: `${input.successUrl}?demoCheckout=complete`,
-              demo: true,
-            };
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Duna+ checkout is not configured.",
+            });
+          }
+          const settings = await getRepository().player.settings(
+            ctx.actor!.personId,
+          );
+          if (
+            settings.membership &&
+            !["cancelled", "canceled", "incomplete_expired"].includes(
+              settings.membership.status,
+            )
+          ) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "A Duna+ membership already exists for this account.",
+            });
           }
           return {
             ...(await createDunaPlusCheckout({
               personId: ctx.actor!.personId,
+              email: settings.profile.email,
               interval: input.interval,
               successUrl: input.successUrl,
               cancelUrl: input.cancelUrl,
@@ -359,6 +1373,70 @@ const playerRouter = router({
         },
       }),
     ),
+  openDunaPlusPortal: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "billing-portal",
+        capacity: 10,
+        refillPerMinute: 5,
+      }),
+    )
+    .input(z.object({ returnUrl: z.url() }))
+    .output(z.object({ url: z.url() }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await openDunaPlusPortal({
+          actor: ctx.actor!,
+          returnUrl: input.returnUrl,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  changeDunaPlusMembership: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "membership-change",
+        capacity: 8,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        action: z.enum(["cancel", "pause", "resume"]),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        action: z.enum(["cancel", "pause", "resume"]),
+        effectiveAt: z.iso.datetime().optional(),
+        pauseMonthsUsed: z.number().int().min(0).max(4),
+        cancelAtPeriodEnd: z.boolean(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.changeDunaPlusMembership",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await changeDunaPlusMembership({
+              actor: ctx.actor!,
+              action: input.action,
+              idempotencyKey: input.idempotencyKey,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
 });
 
 const operatorRouter = router({
@@ -366,6 +1444,13 @@ const operatorRouter = router({
     .output(operatorDashboardSchema)
     .query(({ ctx }) =>
       getRepository().operator.dashboard(ctx.actor!.organizationId!),
+    ),
+  workspace: organizationProcedure("sessions:read")
+    .output(operatorWorkspaceSchema)
+    .query(({ ctx }) =>
+      ctx.actor!.isDemo && !process.env.DATABASE_URL
+        ? loadDemoOperatorWorkspace(ctx.actor!.organizationId!)
+        : loadOperatorWorkspace(ctx.actor!.organizationId!),
     ),
   organization: organizationProcedure("members:read")
     .output(organizationSummarySchema)
@@ -381,6 +1466,507 @@ const operatorRouter = router({
     .output(z.array(eventSummarySchema).readonly())
     .query(({ ctx }) =>
       getRepository().operator.events(ctx.actor!.organizationId!),
+    ),
+  scorableMatches: organizationProcedure("matches:read")
+    .output(z.array(operatorScorableMatchSchema).readonly())
+    .query(async ({ ctx }) => {
+      try {
+        return await loadOperatorScorableMatches(ctx.actor!);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  matchScoringState: organizationProcedure("matches:score")
+    .input(z.object({ matchId: z.string().uuid() }))
+    .output(matchScoringStateSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadOperatorMatchScoringState({
+          actor: ctx.actor!,
+          matchId: input.matchId,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  startMatchScoring: organizationProcedure("matches:score")
+    .use(
+      rateLimitMiddleware({
+        id: "operator-match-start",
+        capacity: 20,
+        refillPerMinute: 10,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z.object({
+        matchId: z.string().uuid(),
+        deviceId: z.string().trim().min(8).max(128),
+        initialServer: z.enum(["A", "B"]),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(matchScoringStateSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.startMatchScoring",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await startOperatorMatchScoring({
+              actor: ctx.actor!,
+              matchId: input.matchId,
+              deviceId: input.deviceId,
+              initialServer: input.initialServer,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  appendMatchEvents: organizationProcedure("matches:score")
+    .use(
+      rateLimitMiddleware({
+        id: "operator-match-score",
+        capacity: 240,
+        refillPerMinute: 240,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z.object({
+        matchId: z.string().uuid(),
+        deviceId: z.string().trim().min(8).max(128),
+        events: z
+          .array(
+            z.object({
+              sequence: z.number().int().positive(),
+              monotonicCounter: z.number().int().positive(),
+              event: scoreEventSchema,
+            }),
+          )
+          .min(1)
+          .max(100),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        accepted: z.number().int().nonnegative(),
+        scoring: matchScoringStateSchema,
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.appendMatchEvents",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await appendOperatorMatchEvents({
+              actor: ctx.actor!,
+              matchId: input.matchId,
+              deviceId: input.deviceId,
+              events: input.events,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createRatePlan: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        name: z.string().trim().min(2).max(80),
+        baseAmountMinor: z.number().int().min(0).max(10_000_000),
+        memberAmountMinor: z.number().int().min(0).max(10_000_000).optional(),
+        nonMemberAmountMinor: z
+          .number()
+          .int()
+          .min(0)
+          .max(10_000_000)
+          .optional(),
+        rateUnitMinutes: z.number().int().min(15).max(1_440),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createRatePlan",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createRatePlan({
+              actor: ctx.actor!,
+              name: input.name,
+              baseAmountMinor: input.baseAmountMinor,
+              memberAmountMinor: input.memberAmountMinor,
+              nonMemberAmountMinor: input.nonMemberAmountMinor,
+              rateUnitMinutes: input.rateUnitMinutes,
+              confirmed: input.confirmed,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createVenue: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        name: z.string().trim().min(2).max(120),
+        addressLine1: z.string().trim().max(160).optional(),
+        locality: z.string().trim().max(100).optional(),
+        administrativeArea: z.string().trim().max(100).optional(),
+        postalCode: z.string().trim().max(24).optional(),
+        countryCode: z.string().trim().length(2),
+        timezone: z.string().trim().min(3).max(64),
+        temporary: z.boolean(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createVenue",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createVenue({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createCourt: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        venueId: z.string().uuid(),
+        name: z.string().trim().min(1).max(100),
+        surface: z.string().trim().min(2).max(32),
+        lit: z.boolean(),
+        bookingPolicy: z.enum(["public", "members", "tiers", "staff", "none"]),
+        ratePlanId: z.string().uuid().optional(),
+        minimumDurationMinutes: z.number().int().min(15).max(1_440),
+        maximumDurationMinutes: z.number().int().min(15).max(1_440),
+        bufferBeforeMinutes: z.number().int().min(0).max(240),
+        bufferAfterMinutes: z.number().int().min(0).max(240),
+        minimumNoticeMinutes: z.number().int().min(0).max(43_200),
+        maximumAdvanceDays: z.number().int().min(1).max(730),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createCourt",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createCourt({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  activateCourt: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        courtId: z.string().uuid(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.activateCourt",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await activateCourt({
+              actor: ctx.actor!,
+              courtId: input.courtId,
+              confirmed: input.confirmed,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  publishVenue: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        venueId: z.string().uuid(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.publishVenue",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await publishVenue({
+              actor: ctx.actor!,
+              venueId: input.venueId,
+              confirmed: input.confirmed,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createProgramSession: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        title: z.string().trim().min(3).max(140),
+        description: z.string().trim().max(2_000).optional(),
+        kind: z.enum([
+          "tournament",
+          "league",
+          "clinic",
+          "open-play",
+          "private-lesson",
+          "court-rental",
+          "pickup",
+        ]),
+        venueId: z.string().uuid(),
+        courtId: z.string().uuid().optional(),
+        localStartsAt: z.string().min(16).max(16),
+        localEndsAt: z.string().min(16).max(16),
+        capacity: z.number().int().min(1).max(10_000),
+        minimumCapacity: z.number().int().min(1).max(10_000),
+        priceMinor: z.number().int().min(0).max(100_000_000),
+        confirmedPrice: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createProgramSession",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createProgramSession({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  publishSession: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.publishSession",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await publishSession({
+              actor: ctx.actor!,
+              sessionId: input.sessionId,
+              confirmed: input.confirmed,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  saveMessageDraft: organizationProcedure("messages:propose")
+    .use(
+      rateLimitMiddleware({
+        id: "message-draft",
+        capacity: 30,
+        refillPerMinute: 15,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z.object({
+        recipientPersonId: z.string().uuid(),
+        channel: z.enum(["email", "sms", "push"]),
+        classification: z.enum(["transactional", "marketing"]),
+        subject: z.string().trim().max(180).optional(),
+        body: z.string().trim().min(1).max(8_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.saveMessageDraft",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await saveMessageDraft({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  startStripeOnboarding: organizationProcedure("payments:write")
+    .use(
+      rateLimitMiddleware({
+        id: "stripe-onboarding",
+        capacity: 10,
+        refillPerMinute: 2,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z.object({
+        refreshUrl: z.url(),
+        returnUrl: z.url(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(stripeOnboardingResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.startStripeOnboarding",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await startStripeOnboarding({
+              actor: ctx.actor!,
+              refreshUrl: input.refreshUrl,
+              returnUrl: input.returnUrl,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  scanTicket: organizationProcedure("tickets:scan")
+    .use(
+      rateLimitMiddleware({
+        id: "ticket-scan",
+        capacity: 600,
+        refillPerMinute: 600,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z.object({
+        ticketToken: z.string().min(16).max(128),
+        deviceId: z.string().min(3).max(128),
+        scannedAt: z.iso.datetime(),
+        offline: z.boolean(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(ticketScanResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.scanTicket",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await scanTicketConnected({
+              actor: ctx.actor!,
+              ticketToken: input.ticketToken,
+              deviceId: input.deviceId,
+              scannedAt: new Date(input.scannedAt),
+              offline: input.offline,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
     ),
   availableSlots: organizationProcedure("sessions:read")
     .input(
@@ -618,6 +2204,51 @@ const adminRouter = router({
   audit: adminProcedure
     .output(z.array(auditEventSchema).readonly())
     .query(() => getRepository().admin.audit()),
+  guardianships: adminProcedure
+    .output(z.array(guardianReviewItemSchema).readonly())
+    .query(() => loadGuardianReviewQueue()),
+  reviewGuardianship: adminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-guardianship-review",
+        capacity: 30,
+        refillPerMinute: 15,
+      }),
+    )
+    .input(
+      z.object({
+        guardianId: z.string().uuid(),
+        minorId: z.string().uuid(),
+        decision: z.enum(["verified", "rejected"]),
+        reason: z.string().trim().min(10).max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(guardianReviewResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.reviewGuardianship",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await reviewGuardianship({
+              actor: ctx.actor!,
+              guardianId: input.guardianId,
+              minorId: input.minorId,
+              decision: input.decision,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   confirmAgentAction: adminProcedure
     .use(
       rateLimitMiddleware({

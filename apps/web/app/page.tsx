@@ -1,4 +1,3 @@
-import { demoEvents, demoPeople } from "@duna/core/demo";
 import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowRight,
@@ -15,8 +14,25 @@ import { EventCard } from "@/components/event-card";
 import { RatingOrbit } from "@/components/rating-orbit";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { getServerCaller } from "@/lib/api";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const caller = await getServerCaller();
+  const [events, people, venues] = await Promise.all([
+    caller.public.events(),
+    caller.public.players({ limit: 50 }),
+    caller.public.venues(),
+  ]);
+  const courtCount = venues.reduce(
+    (total, venue) => total + venue.courtCount,
+    0,
+  );
+  const featuredEvent = events[0];
+  const featuredPlayer = people[0];
+  const marketLabel = venues[0]
+    ? `${venues[0].city}, ${venues[0].region}`
+    : "New markets opening";
+  const markets = [...new Set(venues.map((venue) => venue.city))].join(" · ");
   return (
     <main className="marketing">
       <SiteHeader />
@@ -26,7 +42,8 @@ export default function HomePage() {
         <div className="hero__glow" />
         <div className="hero__content">
           <Badge tone="live">
-            <Radio aria-hidden size={12} /> 14 courts live near you
+            <Radio aria-hidden size={12} /> {courtCount} connected{" "}
+            {courtCount === 1 ? "court" : "courts"}
           </Badge>
           <h1>
             Your game.
@@ -47,16 +64,16 @@ export default function HomePage() {
           </div>
           <div className="hero__proof">
             <div>
-              <Numeric>24,892</Numeric>
-              <span>rated players</span>
+              <Numeric>{people.length}</Numeric>
+              <span>public player profiles</span>
             </div>
             <div>
-              <Numeric>1.2M</Numeric>
-              <span>rallies recorded</span>
+              <Numeric>{events.length}</Numeric>
+              <span>published play options</span>
             </div>
             <div>
-              <Numeric>92 sec</Numeric>
-              <span>fastest purse payout</span>
+              <Numeric>{courtCount}</Numeric>
+              <span>bookable court resources</span>
             </div>
           </div>
         </div>
@@ -78,28 +95,42 @@ export default function HomePage() {
           </div>
           <div className="hero-live-card">
             <div>
-              <Badge tone="live">Live</Badge>
-              <span>Court 4 · Set 3</span>
+              <Badge tone={featuredEvent?.live ? "live" : "neutral"}>
+                {featuredEvent?.live ? "Live" : "Connected"}
+              </Badge>
+              <span>{featuredEvent?.venueName ?? "Duna scoring"}</span>
             </div>
             <div className="hero-live-card__score">
-              <span>Mara / Theo</span>
-              <Numeric>13</Numeric>
-              <span>Noa / Elena</span>
-              <Numeric>11</Numeric>
+              <span>{featuredEvent?.title ?? "No event published yet"}</span>
+              <Numeric>
+                {featuredEvent
+                  ? `${featuredEvent.spotsRemaining}/${featuredEvent.capacity}`
+                  : "—"}
+              </Numeric>
             </div>
-            <small>Next side switch at 15</small>
+            <small>
+              {featuredEvent
+                ? "Connected capacity, schedule, and venue"
+                : "Operators publish inventory into this surface"}
+            </small>
           </div>
           <div className="hero-rating-card">
             <RatingOrbit
               compact
-              confidence="Locked"
-              delta={0.08}
-              value={4.62}
+              confidence={featuredPlayer?.rating.confidence ?? "Provisional"}
+              delta={featuredPlayer?.rating.delta}
+              value={featuredPlayer?.rating.display ?? 1}
             />
             <div>
-              <span>Moved after the win</span>
-              <strong className="duna-numeric">+0.08</strong>
-              <small>Expected 44% · verified live</small>
+              <span>{featuredPlayer?.displayName ?? "Your Sand Rating"}</span>
+              <strong className="duna-numeric">
+                {featuredPlayer?.rating.display.toFixed(2) ?? "—"}
+              </strong>
+              <small>
+                {featuredPlayer
+                  ? `${featuredPlayer.rating.confidence} confidence`
+                  : "Built from verified results"}
+              </small>
             </div>
           </div>
         </div>
@@ -108,13 +139,14 @@ export default function HomePage() {
       <section className="market-ribbon">
         <div>
           <MapPin aria-hidden size={16} />
-          <span>South Bay is live</span>
+          <span>{marketLabel} is connected</span>
         </div>
         <p>
-          <Numeric>526</Numeric> players · <Numeric>7</Numeric> recurring runs ·
-          consumer network unlocked
+          <Numeric>{people.length}</Numeric> public profiles ·{" "}
+          <Numeric>{events.length}</Numeric> published options ·{" "}
+          <Numeric>{courtCount}</Numeric> courts
         </p>
-        <Link href="/app/discover">Explore South Bay</Link>
+        <Link href="/app/discover">Explore the market</Link>
       </section>
 
       <section className="section section--events">
@@ -128,9 +160,15 @@ export default function HomePage() {
           </Link>
         </div>
         <div className="event-grid">
-          {demoEvents.slice(0, 4).map((event, index) => (
+          {events.slice(0, 4).map((event, index) => (
             <EventCard event={event} featured={index === 0} key={event.id} />
           ))}
+          {events.length === 0 && (
+            <article className="empty-state">
+              <h3>No public sessions yet.</h3>
+              <p>Connected operator inventory will appear here.</p>
+            </article>
+          )}
         </div>
       </section>
 
@@ -167,10 +205,14 @@ export default function HomePage() {
         </div>
         <div className="rating-story__visual">
           <div className="rating-story__orbit">
-            <RatingOrbit confidence="Locked" delta={0.08} value={4.62} />
+            <RatingOrbit
+              confidence={featuredPlayer?.rating.confidence ?? "Provisional"}
+              delta={featuredPlayer?.rating.delta}
+              value={featuredPlayer?.rating.display ?? 1}
+            />
           </div>
           <div className="rating-story__ladder">
-            {demoPeople.slice(0, 4).map((person, index) => (
+            {people.slice(0, 4).map((person, index) => (
               <div key={person.id}>
                 <Numeric>{String(index + 1).padStart(2, "0")}</Numeric>
                 <span className="avatar">{person.initials}</span>
@@ -244,30 +286,36 @@ export default function HomePage() {
         <div className="operator-callout__visual">
           <div className="operator-callout__topbar">
             <span>DUNA HQ</span>
-            <Badge tone="positive">All systems synced</Badge>
+            <Badge tone="positive">Connected snapshot</Badge>
           </div>
           <div className="operator-callout__metrics">
             <div>
-              <small>Today’s revenue</small>
-              <Numeric>$8,420</Numeric>
-              <span>+18%</span>
+              <small>Published sessions</small>
+              <Numeric>{events.length}</Numeric>
+              <span>Live repository</span>
             </div>
             <div>
-              <small>Court utilization</small>
-              <Numeric>82%</Numeric>
-              <span>+6%</span>
+              <small>Connected courts</small>
+              <Numeric>{courtCount}</Numeric>
+              <span>{venues.length} venues</span>
             </div>
             <div>
-              <small>Check-ins</small>
-              <Numeric>146/168</Numeric>
-              <span>87%</span>
+              <small>Public profiles</small>
+              <Numeric>{people.length}</Numeric>
+              <span>Privacy-filtered</span>
             </div>
           </div>
           <div className="operator-callout__schedule">
-            <span>1:00</span>
-            <strong>Sunset Open — Qualifier</strong>
-            <small>Courts 1–6 · 32 teams · $1,500 purse</small>
-            <Badge tone="live">Live soon</Badge>
+            <span>{featuredEvent ? "Next" : "Ready"}</span>
+            <strong>{featuredEvent?.title ?? "Publish from Duna HQ"}</strong>
+            <small>
+              {featuredEvent
+                ? `${featuredEvent.venueName} · ${featuredEvent.spotsRemaining} spots remaining`
+                : "Inventory, schedules, registration, and reporting"}
+            </small>
+            <Badge tone={featuredEvent?.live ? "live" : "neutral"}>
+              {featuredEvent?.live ? "Live" : "Connected"}
+            </Badge>
           </div>
         </div>
         <div className="operator-callout__copy">
@@ -290,7 +338,9 @@ export default function HomePage() {
 
       <section className="final-cta">
         <div className="final-cta__sun" />
-        <Badge tone="live">South Bay · Chicago · New York</Badge>
+        <Badge tone={markets ? "live" : "neutral"}>
+          {markets || "New markets opening"}
+        </Badge>
         <h2>There’s always another game.</h2>
         <p>Find yours. Bring the whole history with you.</p>
         <Link href="/app">

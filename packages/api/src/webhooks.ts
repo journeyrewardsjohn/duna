@@ -19,6 +19,7 @@ export type StripeDomainAction =
   | "dispute.synchronized"
   | "refund.synchronized"
   | "checkout.completed"
+  | "order.checkout_expired"
   | "ignored";
 
 function actionForStripeEvent(type: string): StripeDomainAction {
@@ -37,6 +38,7 @@ function actionForStripeEvent(type: string): StripeDomainAction {
   if (type.startsWith("charge.dispute.")) return "dispute.synchronized";
   if (type.startsWith("refund.")) return "refund.synchronized";
   if (type === "checkout.session.completed") return "checkout.completed";
+  if (type === "checkout.session.expired") return "order.checkout_expired";
   return "ignored";
 }
 

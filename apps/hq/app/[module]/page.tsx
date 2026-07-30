@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { ModulePanel } from "@/components/module-panels";
 import { operatorModules, type OperatorModule } from "@/components/navigation";
 import { OperatorShell } from "@/components/operator-shell";
+import { getServerCaller } from "@/lib/api";
 
 export async function generateMetadata({
   params,
@@ -21,9 +22,24 @@ export default async function OperatorModulePage({
   const { module } = await params;
   const item = operatorModules.find((entry) => entry.slug === module);
   if (!item || module === "overview") notFound();
+  const caller = await getServerCaller();
+  const [dashboard, members, workspace] = await Promise.all([
+    caller.operator.dashboard(),
+    caller.operator.members(),
+    caller.operator.workspace(),
+  ]);
   return (
-    <OperatorShell active={module as OperatorModule}>
-      <ModulePanel module={module as OperatorModule} />
+    <OperatorShell
+      active={module as OperatorModule}
+      messageDraftCount={workspace.messageDrafts.length}
+      organization={dashboard.organization}
+    >
+      <ModulePanel
+        dashboard={dashboard}
+        members={members}
+        module={module as OperatorModule}
+        workspace={workspace}
+      />
     </OperatorShell>
   );
 }

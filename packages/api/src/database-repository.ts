@@ -1,19 +1,32 @@
 import {
   auditLog,
+  consents,
+  courtBookings,
   courts,
+  divisions,
   eventTypes,
   getDatabase,
   guardianships,
+  matchConfirmations,
+  matches,
+  memberships,
+  membershipTiers,
   organizationMemberships,
   organizations,
   orders,
   people,
+  pickupParticipants,
   pickupSessions,
   programs,
+  privacyRequests,
+  rallyEvents,
+  ratingEvents,
   ratings,
   registrations,
   reports,
   sessions,
+  teamMembers,
+  teams,
   venues,
   walletAccounts,
   walletLedger,
@@ -22,9 +35,11 @@ import {
   evaluateTaxRails,
   foldWalletLedger,
   type AuditEvent,
+  type BookingSummary,
   type Currency,
   type EventKind,
   type EventSummary,
+  type MatchSummary,
   type Metric,
   type OrganizationSummary,
   type PersonRole,
@@ -33,18 +48,26 @@ import {
   type WalletEntry,
 } from "@duna/core";
 import {
+  foldScore,
+  standardBeachFormat,
+  type MatchFormat,
+  type ScoreEvent,
+} from "@duna/league-engine";
+import {
   priceConsumerOrder,
   type CurrencyCode,
   type PricedOrderItem,
 } from "@duna/pricing";
-import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, ne, or } from "drizzle-orm";
 import type {
   AdminQueue,
   DunaRepository,
   OperatorScheduleItem,
   PickupMutationInput,
+  PlayerSettings,
   PlayerWallet,
 } from "./repository-contract";
+import { loadGuardianReviewQueue } from "./identity";
 
 const publicSessionStatuses = [
   "published",
@@ -183,7 +206,7 @@ async function loadPeople(
               discipline: rating.discipline,
             }
           : {
-              display: 1,
+              display: 3,
               mu: 1_500,
               phi: 350,
               sigma: 0.06,
@@ -199,14 +222,227 @@ async function loadPeople(
     );
 }
 
+function storedMatchFormat(value: unknown): MatchFormat {
+  const stored =
+    typeof value === "object" && value !== null
+      ? (value as Partial<MatchFormat>)
+      : {};
+  return {
+    ...standardBeachFormat,
+    ...stored,
+    scoringSystem: stored.scoringSystem === "sideout" ? "sideout" : "rally",
+  };
+}
+
+function summaryVerification(
+  value: string | null,
+): MatchSummary["verification"] {
+  if (
+    value === "live-scored" ||
+    value === "desk" ||
+    value === "both-confirmed" ||
+    value === "auto-accepted" ||
+    value === "self-reported" ||
+    value === "group-confirmed"
+  ) {
+    return value;
+  }
+  return "auto-accepted";
+}
+
+async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
+  const database = getDatabase();
+  const ownMembershipRows = await database
+    .select({ teamId: teamMembers.teamId })
+    .from(teamMembers)
+    .where(eq(teamMembers.personId, personId));
+  const ownTeamIds = [...new Set(ownMembershipRows.map((row) => row.teamId))];
+  if (ownTeamIds.length === 0) return [];
+  const matchRows = await database
+    .select()
+    .from(matches)
+    .where(
+      and(
+        or(
+          inArray(matches.teamAId, ownTeamIds),
+          inArray(matches.teamBId, ownTeamIds),
+        ),
+        inArray(matches.status, [
+          "pending-verification",
+          "verified",
+          "disputed",
+          "complete",
+          "forfeit",
+        ]),
+      ),
+    )
+    .orderBy(desc(matches.completedAt), desc(matches.createdAt));
+  if (matchRows.length === 0) return [];
+  const matchIds = matchRows.map((match) => match.id);
+  const allTeamIds = [
+    ...new Set(
+      matchRows.flatMap((match) =>
+        [match.teamAId, match.teamBId].filter(
+          (id): id is string => id !== null,
+        ),
+      ),
+    ),
+  ];
+  const [
+    allMembershipRows,
+    teamRows,
+    rallyRows,
+    deltaRows,
+    venueRows,
+    confirmationRows,
+  ] = await Promise.all([
+    database
+      .select()
+      .from(teamMembers)
+      .where(inArray(teamMembers.teamId, allTeamIds)),
+    database.select().from(teams).where(inArray(teams.id, allTeamIds)),
+    database
+      .select()
+      .from(rallyEvents)
+      .where(inArray(rallyEvents.matchId, matchIds))
+      .orderBy(asc(rallyEvents.sequence)),
+    database
+      .select()
+      .from(ratingEvents)
+      .where(
+        and(
+          eq(ratingEvents.personId, personId),
+          inArray(ratingEvents.matchId, matchIds),
+        ),
+      ),
+    database
+      .select({ id: venues.id, name: venues.name })
+      .from(venues)
+      .where(
+        inArray(
+          venues.id,
+          matchRows.flatMap((match) => (match.venueId ? [match.venueId] : [])),
+        ),
+      ),
+    database
+      .select()
+      .from(matchConfirmations)
+      .where(
+        and(
+          eq(matchConfirmations.personId, personId),
+          inArray(matchConfirmations.matchId, matchIds),
+        ),
+      ),
+  ]);
+  const allPersonIds = [
+    ...new Set(allMembershipRows.map((member) => member.personId)),
+  ];
+  const peopleRows = await loadPeople(allPersonIds);
+  const personById = new Map(
+    peopleRows.map((person) => [person.id, person] as const),
+  );
+  const teamById = new Map(teamRows.map((team) => [team.id, team] as const));
+  const venueById = new Map(
+    venueRows.map((venue) => [venue.id, venue.name] as const),
+  );
+  const confirmationByMatch = new Map(
+    confirmationRows.map((row) => [row.matchId, row] as const),
+  );
+  const deltaByMatch = new Map(
+    deltaRows.map((event) => {
+      const before =
+        typeof event.before.display === "number" ? event.before.display : 0;
+      const after =
+        typeof event.after.display === "number" ? event.after.display : before;
+      return [event.matchId, after - before] as const;
+    }),
+  );
+  return matchRows.flatMap((match): MatchSummary[] => {
+    if (!match.teamAId || !match.teamBId) return [];
+    const teamA = teamById.get(match.teamAId);
+    const teamB = teamById.get(match.teamBId);
+    if (!teamA || !teamB) return [];
+    const teamAPlayers = allMembershipRows
+      .filter((member) => member.teamId === teamA.id)
+      .flatMap((member) => {
+        const person = personById.get(member.personId);
+        return person ? [person] : [];
+      });
+    const teamBPlayers = allMembershipRows
+      .filter((member) => member.teamId === teamB.id)
+      .flatMap((member) => {
+        const person = personById.get(member.personId);
+        return person ? [person] : [];
+      });
+    if (teamAPlayers.length === 0 || teamBPlayers.length === 0) return [];
+    const events = rallyRows
+      .filter((event) => event.matchId === match.id)
+      .map((event) => event.payload as unknown as ScoreEvent);
+    let score;
+    try {
+      score = foldScore(events, storedMatchFormat(match.format));
+    } catch {
+      return [];
+    }
+    const winner =
+      match.winnerTeamId === match.teamAId
+        ? "A"
+        : match.winnerTeamId === match.teamBId
+          ? "B"
+          : score.winner;
+    if (!winner) return [];
+    const confirmation = confirmationByMatch.get(match.id);
+    const status =
+      match.status === "pending-verification" ||
+      match.status === "verified" ||
+      match.status === "disputed"
+        ? match.status
+        : "complete";
+    return [
+      {
+        id: match.id,
+        status,
+        confirmationRequired:
+          status === "pending-verification" &&
+          confirmation?.decision !== "confirmed",
+        playedAt: (
+          match.completedAt ??
+          match.startedAt ??
+          match.scheduledAt ??
+          match.createdAt
+        ).toISOString(),
+        venueName:
+          (match.venueId && venueById.get(match.venueId)) ??
+          "Location not recorded",
+        teamA: teamAPlayers,
+        teamB: teamBPlayers,
+        score: score.sets
+          .filter((set) => set.winner)
+          .map((set) => [set.a, set.b] as const),
+        winner,
+        ratingDelta: deltaByMatch.get(match.id) ?? 0,
+        verification: summaryVerification(match.verification),
+      },
+    ];
+  });
+}
+
 interface ScopedEvent {
   readonly event: EventSummary;
   readonly organizationId?: string;
 }
 
-async function loadEvents(): Promise<ScopedEvent[]> {
+async function loadEvents(input?: {
+  readonly includeUnlistedPickups?: boolean;
+}): Promise<ScopedEvent[]> {
   const database = getDatabase();
-  const [sessionRows, pickupRows, registrationRows] = await Promise.all([
+  const [
+    sessionRows,
+    pickupRows,
+    divisionRows,
+    registrationRows,
+    pickupParticipantRows,
+  ] = await Promise.all([
     database
       .select({
         id: sessions.id,
@@ -240,7 +476,12 @@ async function loadEvents(): Promise<ScopedEvent[]> {
         startsAt: pickupSessions.startsAt,
         endsAt: pickupSessions.endsAt,
         venueLabel: pickupSessions.venueLabel,
+        note: pickupSessions.note,
+        format: pickupSessions.format,
+        recordMatches: pickupSessions.recordMatches,
+        visibility: pickupSessions.visibility,
         venueTimezone: venues.timezone,
+        directOrganizationId: pickupSessions.organizationId,
         venueOrganizationId: venues.organizationId,
         capacity: pickupSessions.capacity,
         ratingMinimum: pickupSessions.ratingMinimum,
@@ -251,16 +492,48 @@ async function loadEvents(): Promise<ScopedEvent[]> {
       .from(pickupSessions)
       .innerJoin(people, eq(pickupSessions.hostPersonId, people.id))
       .leftJoin(venues, eq(pickupSessions.venueId, venues.id))
-      .where(eq(pickupSessions.visibility, "public"))
+      .where(
+        input?.includeUnlistedPickups
+          ? inArray(pickupSessions.visibility, ["public", "unlisted"])
+          : eq(pickupSessions.visibility, "public"),
+      )
       .orderBy(asc(pickupSessions.startsAt)),
     database
       .select({
+        id: divisions.id,
+        sessionId: divisions.sessionId,
+        name: divisions.name,
+        discipline: divisions.discipline,
+        ratingBasis: divisions.ratingBasis,
+        capacity: divisions.capacity,
+        entryFeeMinor: divisions.entryFeeMinor,
+        currency: divisions.currency,
+      })
+      .from(divisions),
+    database
+      .select({
         sessionId: registrations.sessionId,
+        divisionId: registrations.divisionId,
         status: registrations.status,
+        holdExpiresAt: registrations.holdExpiresAt,
       })
       .from(registrations)
       .where(
         inArray(registrations.status, ["pending", "confirmed", "checked-in"]),
+      ),
+    database
+      .select({
+        pickupSessionId: pickupParticipants.pickupSessionId,
+        status: pickupParticipants.status,
+        holdExpiresAt: pickupParticipants.holdExpiresAt,
+      })
+      .from(pickupParticipants)
+      .where(
+        inArray(pickupParticipants.status, [
+          "pending",
+          "confirmed",
+          "checked-in",
+        ]),
       ),
   ]);
   const organizationIds = new Set<string>();
@@ -269,6 +542,10 @@ async function loadEvents(): Promise<ScopedEvent[]> {
       row.programOrganizationId ??
       row.eventTypeOrganizationId ??
       row.venueOrganizationId;
+    if (id) organizationIds.add(id);
+  }
+  for (const row of pickupRows) {
+    const id = row.directOrganizationId ?? row.venueOrganizationId;
     if (id) organizationIds.add(id);
   }
   const organizationRows =
@@ -282,11 +559,37 @@ async function loadEvents(): Promise<ScopedEvent[]> {
     organizationRows.map((row) => [row.id, row.name] as const),
   );
   const registrationCount = new Map<string, number>();
+  const divisionRegistrationCount = new Map<string, number>();
+  const now = new Date();
   for (const row of registrationRows) {
+    if (
+      row.status === "pending" &&
+      (!row.holdExpiresAt || row.holdExpiresAt <= now)
+    ) {
+      continue;
+    }
     registrationCount.set(
       row.sessionId,
       (registrationCount.get(row.sessionId) ?? 0) + 1,
     );
+    if (row.divisionId) {
+      divisionRegistrationCount.set(
+        row.divisionId,
+        (divisionRegistrationCount.get(row.divisionId) ?? 0) + 1,
+      );
+    }
+  }
+  const pickupParticipantCount = new Map<string, number>();
+  for (const row of pickupParticipantRows) {
+    if (
+      row.status !== "pending" ||
+      (row.holdExpiresAt !== null && row.holdExpiresAt > now)
+    ) {
+      pickupParticipantCount.set(
+        row.pickupSessionId,
+        (pickupParticipantCount.get(row.pickupSessionId) ?? 0) + 1,
+      );
+    }
   }
   const sessionEvents: ScopedEvent[] = sessionRows.map((row) => {
     const kind = (row.programKind ??
@@ -298,6 +601,31 @@ async function loadEvents(): Promise<ScopedEvent[]> {
       row.venueOrganizationId ??
       undefined;
     const occupied = registrationCount.get(row.id) ?? 0;
+    const eventDivisions = divisionRows
+      .filter((division) => division.sessionId === row.id)
+      .map((division) => ({
+        id: division.id,
+        name: division.name,
+        discipline: division.discipline,
+        ratingBasis: division.ratingBasis,
+        price: {
+          amountMinor: division.entryFeeMinor,
+          currency: currency(division.currency),
+        },
+        spotsRemaining: Math.max(
+          0,
+          division.capacity - (divisionRegistrationCount.get(division.id) ?? 0),
+        ),
+        capacity: division.capacity,
+      }));
+    const startingPrice =
+      eventDivisions.length > 0
+        ? Math.min(
+            ...eventDivisions.map((division) => division.price.amountMinor),
+          )
+        : (row.priceMinor ?? 0);
+    const startingCurrency =
+      eventDivisions[0]?.price.currency ?? currency(row.priceCurrency ?? "USD");
     return {
       organizationId,
       event: {
@@ -313,41 +641,56 @@ async function loadEvents(): Promise<ScopedEvent[]> {
         endsAt: row.endsAt.toISOString(),
         timezone: row.timezone,
         price: {
-          amountMinor: row.priceMinor ?? 0,
-          currency: currency(row.priceCurrency ?? "USD"),
+          amountMinor: startingPrice,
+          currency: startingCurrency,
         },
         spotsRemaining: Math.max(0, row.capacity - occupied),
         capacity: row.capacity,
+        divisions: eventDivisions.length > 0 ? eventDivisions : undefined,
         live: row.status === "live",
         tags: [titleCase(kind), titleCase(row.status)],
       },
     };
   });
-  const pickupEvents: ScopedEvent[] = pickupRows.map((row) => ({
-    organizationId: row.venueOrganizationId ?? undefined,
-    event: {
-      id: row.id,
-      slug: `pickup-${row.id}`,
-      title: row.title,
-      kind: "pickup",
-      organizationName: `Hosted by ${row.hostName}`,
-      venueName: row.venueLabel,
-      startsAt: row.startsAt.toISOString(),
-      endsAt: row.endsAt.toISOString(),
-      timezone: row.venueTimezone ?? "America/New_York",
-      price: {
-        amountMinor: row.costMinor,
-        currency: currency(row.currency),
+  const pickupEvents: ScopedEvent[] = pickupRows.map((row) => {
+    const organizationId =
+      row.directOrganizationId ?? row.venueOrganizationId ?? undefined;
+    const occupied = pickupParticipantCount.get(row.id) ?? 0;
+    return {
+      organizationId,
+      event: {
+        id: row.id,
+        slug: `pickup-${row.id}`,
+        title: row.title,
+        kind: "pickup",
+        organizationName:
+          (organizationId && organizationNames.get(organizationId)) ??
+          `Hosted by ${row.hostName}`,
+        venueName: row.venueLabel,
+        description: row.note ?? undefined,
+        format: row.format,
+        recordMatches: row.recordMatches,
+        startsAt: row.startsAt.toISOString(),
+        endsAt: row.endsAt.toISOString(),
+        timezone: row.venueTimezone ?? "America/New_York",
+        price: {
+          amountMinor: row.costMinor,
+          currency: currency(row.currency),
+        },
+        spotsRemaining: Math.max(0, row.capacity - occupied),
+        capacity: row.capacity,
+        ratingRange:
+          row.ratingMinimum !== null && row.ratingMaximum !== null
+            ? [row.ratingMinimum, row.ratingMaximum]
+            : undefined,
+        tags: [
+          "Pickup",
+          row.format === "king-queen" ? "King / Queen" : row.format,
+          row.costMinor === 0 ? "Free" : "Paid",
+        ],
       },
-      spotsRemaining: Math.max(0, row.capacity - 1),
-      capacity: row.capacity,
-      ratingRange:
-        row.ratingMinimum !== null && row.ratingMaximum !== null
-          ? [row.ratingMinimum, row.ratingMaximum]
-          : undefined,
-      tags: ["Pickup", row.costMinor === 0 ? "Free" : "Paid"],
-    },
-  }));
+    };
+  });
   return [...sessionEvents, ...pickupEvents].sort((a, b) =>
     a.event.startsAt.localeCompare(b.event.startsAt),
   );
@@ -531,27 +874,259 @@ async function loadWallet(personId: string): Promise<PlayerWallet> {
   };
 }
 
+function settingsCurrency(value: string): CurrencyCode {
+  const supported: readonly CurrencyCode[] = [
+    "USD",
+    "CAD",
+    "AUD",
+    "BRL",
+    "EUR",
+  ];
+  return supported.includes(value as CurrencyCode)
+    ? (value as CurrencyCode)
+    : "USD";
+}
+
+async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
+  const database = getDatabase();
+  const [
+    person,
+    summary,
+    guardianRows,
+    dependentRows,
+    membershipRows,
+    consentRows,
+    privacyRequestRows,
+  ] = await Promise.all([
+    database.query.people.findFirst({ where: eq(people.id, personId) }),
+    loadPeople([personId]).then((rows) => rows[0]),
+    database
+      .select()
+      .from(guardianships)
+      .where(eq(guardianships.minorId, personId)),
+    database
+      .select()
+      .from(guardianships)
+      .where(eq(guardianships.guardianId, personId)),
+    database
+      .select({
+        id: memberships.id,
+        status: memberships.status,
+        currentPeriodEndsAt: memberships.currentPeriodEndsAt,
+        pausedUntil: memberships.pausedUntil,
+        pauseMonthsUsed: memberships.pauseMonthsUsed,
+        cancelAtPeriodEnd: memberships.cancelAtPeriodEnd,
+        tierName: membershipTiers.name,
+        interval: membershipTiers.interval,
+        priceMinor: membershipTiers.priceMinor,
+        currency: membershipTiers.currency,
+        benefits: membershipTiers.benefits,
+      })
+      .from(memberships)
+      .innerJoin(membershipTiers, eq(memberships.tierId, membershipTiers.id))
+      .where(eq(memberships.personId, personId))
+      .orderBy(desc(memberships.updatedAt))
+      .limit(1),
+    database
+      .select({
+        scope: consents.scope,
+        granted: consents.granted,
+        recordedAt: consents.occurredAt,
+      })
+      .from(consents)
+      .where(eq(consents.personId, personId))
+      .orderBy(desc(consents.occurredAt)),
+    database
+      .select({
+        id: privacyRequests.id,
+        kind: privacyRequests.kind,
+        status: privacyRequests.status,
+        requestedAt: privacyRequests.createdAt,
+      })
+      .from(privacyRequests)
+      .where(eq(privacyRequests.personId, personId))
+      .orderBy(desc(privacyRequests.createdAt)),
+  ]);
+  if (!person || !summary) throw new Error("Player profile was not found");
+
+  const householdIds = [
+    ...guardianRows.map((row) => row.guardianId),
+    ...dependentRows.map((row) => row.minorId),
+  ];
+  const householdPeople = new Map(
+    (await loadPeople([...new Set(householdIds)])).map((entry) => [
+      entry.id,
+      entry,
+    ]),
+  );
+  const household: PlayerSettings["household"] = [
+    ...guardianRows.flatMap((row) => {
+      const householdPerson = householdPeople.get(row.guardianId);
+      return householdPerson
+        ? [
+            {
+              person: householdPerson,
+              relationship: row.relationship,
+              role: "guardian" as const,
+              verified: row.verified,
+              emergencyContact: row.emergencyContact,
+              canApproveSpending: row.canApproveSpending,
+            },
+          ]
+        : [];
+    }),
+    ...dependentRows.flatMap((row) => {
+      const householdPerson = householdPeople.get(row.minorId);
+      return householdPerson
+        ? [
+            {
+              person: householdPerson,
+              relationship: row.relationship,
+              role: "dependent" as const,
+              verified: row.verified,
+              emergencyContact: row.emergencyContact,
+              canApproveSpending: row.canApproveSpending,
+            },
+          ]
+        : [];
+    }),
+  ];
+  const latestConsentByScope = new Map<
+    PlayerSettings["consents"][number]["scope"],
+    PlayerSettings["consents"][number]
+  >();
+  for (const row of consentRows) {
+    if (!latestConsentByScope.has(row.scope)) {
+      latestConsentByScope.set(row.scope, {
+        scope: row.scope,
+        granted: row.granted,
+        recordedAt: row.recordedAt.toISOString(),
+      });
+    }
+  }
+  const membership = membershipRows[0];
+  const interval =
+    membership?.interval === "month" || membership?.interval === "year"
+      ? membership.interval
+      : undefined;
+  const visibility =
+    person.profileVisibility === "public" ||
+    person.profileVisibility === "members"
+      ? person.profileVisibility
+      : "private";
+  const measurementSystem =
+    person.measurementSystem === "metric" ? "metric" : "imperial";
+  const ageBand =
+    person.ageBand === "under-13" ||
+    person.ageBand === "teen" ||
+    person.ageBand === "adult"
+      ? person.ageBand
+      : "unknown";
+  return {
+    profile: {
+      person: summary,
+      email: person.email ?? undefined,
+      phoneE164: person.phoneE164 ?? undefined,
+      visibility,
+      locale: person.locale,
+      measurementSystem,
+      ageBand,
+      ageVerified: person.ageVerifiedAt !== null,
+      birthDate: person.birthDate ?? undefined,
+      parentalConsentRecorded: person.parentalConsentAt !== null,
+    },
+    household,
+    membership:
+      membership && interval
+        ? {
+            id: membership.id,
+            status: membership.status,
+            tierName: membership.tierName,
+            interval,
+            priceMinor: membership.priceMinor,
+            currency: settingsCurrency(membership.currency),
+            benefits: membership.benefits,
+            currentPeriodEndsAt: membership.currentPeriodEndsAt?.toISOString(),
+            pausedUntil: membership.pausedUntil?.toISOString(),
+            pauseMonthsUsed: membership.pauseMonthsUsed,
+            cancelAtPeriodEnd: membership.cancelAtPeriodEnd,
+          }
+        : undefined,
+    dunaPlusPlans: [
+      {
+        interval: "month",
+        priceMinor: 799,
+        currency: "USD",
+        configured: Boolean(process.env.STRIPE_DUNA_PLUS_MONTHLY_PRICE_ID),
+      },
+      {
+        interval: "year",
+        priceMinor: 5_900,
+        currency: "USD",
+        configured: Boolean(process.env.STRIPE_DUNA_PLUS_ANNUAL_PRICE_ID),
+      },
+    ],
+    consents: [...latestConsentByScope.values()],
+    privacyRequests: privacyRequestRows.flatMap((request) => {
+      if (
+        request.kind !== "account-deletion" ||
+        ![
+          "queued",
+          "identity-review",
+          "legal-hold",
+          "completed",
+          "cancelled",
+        ].includes(request.status)
+      ) {
+        return [];
+      }
+      return [
+        {
+          id: request.id,
+          kind: request.kind,
+          status:
+            request.status as PlayerSettings["privacyRequests"][number]["status"],
+          requestedAt: request.requestedAt.toISOString(),
+        },
+      ];
+    }),
+  };
+}
+
 async function loadAdminQueues(): Promise<AdminQueue[]> {
   const database = getDatabase();
-  const rows = await database
-    .select()
-    .from(reports)
-    .where(
-      inArray(reports.status, ["open", "triaged", "investigating", "held"]),
-    )
-    .orderBy(asc(reports.slaDueAt));
-  return rows.map((row) => ({
-    id: row.id,
-    title: titleCase(row.category),
-    detail: `${titleCase(row.entityType)} report`,
-    age: relativeAge(row.createdAt),
-    sla: slaLabel(row.slaDueAt),
-    priority: row.involvesMinor
-      ? "urgent"
-      : row.category.includes("wallet")
-        ? "high"
-        : "normal",
-  }));
+  const [rows, guardianReviews] = await Promise.all([
+    database
+      .select()
+      .from(reports)
+      .where(
+        inArray(reports.status, ["open", "triaged", "investigating", "held"]),
+      )
+      .orderBy(asc(reports.slaDueAt)),
+    loadGuardianReviewQueue(),
+  ]);
+  return [
+    ...rows.map((row) => ({
+      id: row.id,
+      title: titleCase(row.category),
+      detail: `${titleCase(row.entityType)} report`,
+      age: relativeAge(row.createdAt),
+      sla: slaLabel(row.slaDueAt),
+      priority: row.involvesMinor
+        ? "urgent"
+        : row.category.includes("wallet")
+          ? "high"
+          : "normal",
+    })),
+    ...guardianReviews.map((review) => ({
+      id: `guardianship:${review.guardianId}:${review.minorId}`,
+      title: "Guardian relationship",
+      detail: `${review.guardianName} · ${review.minorName} · ${review.relationship}`,
+      age: relativeAge(new Date(review.createdAt)),
+      sla: "Review within 1 business day",
+      priority: review.minorAgeBand === "under-13" ? "urgent" : "high",
+    })),
+  ];
 }
 
 async function loadAudit(): Promise<AuditEvent[]> {
@@ -605,6 +1180,175 @@ function scheduleFromEvents(
   }));
 }
 
+function connectedBookingStatus(
+  status: string,
+): BookingSummary["status"] | undefined {
+  if (status === "waitlisted") return "waitlisted";
+  if (status === "pending" || status === "held") return "needs-action";
+  if (status === "confirmed" || status === "checked-in") return "confirmed";
+  return undefined;
+}
+
+async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
+  const database = getDatabase();
+  const person = await database.query.people.findFirst({
+    where: eq(people.id, personId),
+  });
+  if (!person) return [];
+  const now = new Date();
+  const [registrationRows, pickupRows, courtRows] = await Promise.all([
+    database
+      .select({
+        id: registrations.id,
+        title: sessions.title,
+        startsAt: sessions.startsAt,
+        endsAt: sessions.endsAt,
+        status: registrations.status,
+        programKind: programs.kind,
+        eventTypeKind: eventTypes.kind,
+        venueName: venues.name,
+        orderTotalMinor: orders.totalMinor,
+        orderCurrency: orders.currency,
+      })
+      .from(registrations)
+      .innerJoin(sessions, eq(registrations.sessionId, sessions.id))
+      .leftJoin(programs, eq(sessions.programId, programs.id))
+      .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
+      .leftJoin(venues, eq(sessions.venueId, venues.id))
+      .leftJoin(orders, eq(registrations.orderId, orders.id))
+      .where(
+        and(
+          eq(registrations.personId, personId),
+          inArray(registrations.status, [
+            "pending",
+            "confirmed",
+            "waitlisted",
+            "checked-in",
+          ]),
+          gte(sessions.endsAt, now),
+        ),
+      ),
+    database
+      .select({
+        id: pickupParticipants.id,
+        title: pickupSessions.title,
+        startsAt: pickupSessions.startsAt,
+        endsAt: pickupSessions.endsAt,
+        status: pickupParticipants.status,
+        venueName: pickupSessions.venueLabel,
+        connectedVenueName: venues.name,
+        orderTotalMinor: orders.totalMinor,
+        orderCurrency: orders.currency,
+      })
+      .from(pickupParticipants)
+      .innerJoin(
+        pickupSessions,
+        eq(pickupParticipants.pickupSessionId, pickupSessions.id),
+      )
+      .leftJoin(venues, eq(pickupSessions.venueId, venues.id))
+      .leftJoin(orders, eq(pickupParticipants.orderId, orders.id))
+      .where(
+        and(
+          eq(pickupParticipants.personId, personId),
+          inArray(pickupParticipants.status, [
+            "pending",
+            "confirmed",
+            "waitlisted",
+          ]),
+          gte(pickupSessions.endsAt, now),
+        ),
+      ),
+    database
+      .select({
+        id: courtBookings.id,
+        courtName: courts.name,
+        startsAt: courtBookings.startsAt,
+        endsAt: courtBookings.endsAt,
+        status: courtBookings.status,
+        venueName: venues.name,
+        orderTotalMinor: orders.totalMinor,
+        orderCurrency: orders.currency,
+      })
+      .from(courtBookings)
+      .innerJoin(courts, eq(courtBookings.courtId, courts.id))
+      .innerJoin(venues, eq(courtBookings.venueId, venues.id))
+      .leftJoin(orders, eq(courtBookings.orderId, orders.id))
+      .where(
+        and(
+          eq(courtBookings.personId, personId),
+          inArray(courtBookings.status, ["held", "confirmed"]),
+          gte(courtBookings.endsAt, now),
+        ),
+      ),
+  ]);
+  const bookings: BookingSummary[] = [
+    ...registrationRows.flatMap((row): BookingSummary[] => {
+      const status = connectedBookingStatus(row.status);
+      if (!status) return [];
+      return [
+        {
+          id: row.id,
+          title: row.title,
+          kind: row.programKind ?? row.eventTypeKind ?? "open-play",
+          startsAt: row.startsAt.toISOString(),
+          endsAt: row.endsAt.toISOString(),
+          venueName: row.venueName ?? "Venue not assigned",
+          status,
+          amount: {
+            amountMinor: row.orderTotalMinor ?? 0,
+            currency: currency(row.orderCurrency ?? "USD"),
+          },
+          participantNames: [person.displayName],
+        },
+      ];
+    }),
+    ...pickupRows.flatMap((row): BookingSummary[] => {
+      const status = connectedBookingStatus(row.status);
+      if (!status) return [];
+      return [
+        {
+          id: row.id,
+          title: row.title,
+          kind: "pickup",
+          startsAt: row.startsAt.toISOString(),
+          endsAt: row.endsAt.toISOString(),
+          venueName:
+            row.connectedVenueName ?? row.venueName ?? "Community location",
+          status,
+          amount: {
+            amountMinor: row.orderTotalMinor ?? 0,
+            currency: currency(row.orderCurrency ?? "USD"),
+          },
+          participantNames: [person.displayName],
+        },
+      ];
+    }),
+    ...courtRows.flatMap((row): BookingSummary[] => {
+      const status = connectedBookingStatus(row.status);
+      if (!status) return [];
+      return [
+        {
+          id: row.id,
+          title: `Court rental · ${row.courtName}`,
+          kind: "court-rental",
+          startsAt: row.startsAt.toISOString(),
+          endsAt: row.endsAt.toISOString(),
+          venueName: row.venueName,
+          status,
+          amount: {
+            amountMinor: row.orderTotalMinor ?? 0,
+            currency: currency(row.orderCurrency ?? "USD"),
+          },
+          participantNames: [person.displayName],
+        },
+      ];
+    }),
+  ];
+  return bookings.sort(
+    (left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt),
+  );
+}
+
 async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
   const database = getDatabase();
   const matchingVenue = await database.query.venues.findFirst({
@@ -618,21 +1362,48 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
   const pickupId = crypto.randomUUID();
   const startsAt = new Date(input.startsAt);
   const endsAt = new Date(input.endsAt);
+  const organizationId =
+    input.organizationId ?? matchingVenue?.organizationId ?? undefined;
+  const organization = organizationId
+    ? await database.query.organizations.findFirst({
+        where: eq(organizations.id, organizationId),
+      })
+    : undefined;
+  if (
+    input.costMinor > 0 &&
+    (!organization?.stripeAccountId || !organization.stripeChargesEnabled)
+  ) {
+    throw new Error(
+      "Paid pickup requires an organization with Stripe charges enabled so Duna never holds host funds.",
+    );
+  }
   await database.batch([
     database.insert(pickupSessions).values({
       id: pickupId,
       hostPersonId: input.hostPersonId,
+      organizationId,
       venueId: matchingVenue?.id,
       venueLabel: input.venueName,
       title: input.title,
+      format: input.format,
+      note: input.note,
+      recordMatches: input.recordMatches,
       startsAt,
       endsAt,
       capacity: input.capacity,
       ratingMinimum: input.ratingMinimum,
       ratingMaximum: input.ratingMaximum,
+      visibility: input.visibility,
+      costMinor: input.costMinor,
+      currency: input.currency,
+    }),
+    database.insert(pickupParticipants).values({
+      pickupSessionId: pickupId,
+      personId: input.hostPersonId,
+      status: "confirmed",
     }),
     database.insert(auditLog).values({
-      organizationId: input.organizationId,
+      organizationId,
       actorPersonId: input.hostPersonId,
       actorType: "person",
       action: "pickup.created",
@@ -648,19 +1419,26 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
     slug: `pickup-${pickupId}`,
     title: input.title,
     kind: "pickup",
-    organizationName: "Player-hosted pickup",
+    organizationName: organization?.name ?? "Player-hosted pickup",
     venueName: input.venueName,
+    description: input.note,
+    format: input.format,
+    recordMatches: input.recordMatches,
     startsAt: startsAt.toISOString(),
     endsAt: endsAt.toISOString(),
     timezone: matchingVenue?.timezone ?? "America/New_York",
-    price: { amountMinor: 0, currency: "USD" },
+    price: { amountMinor: input.costMinor, currency: input.currency },
     spotsRemaining: Math.max(0, input.capacity - 1),
     capacity: input.capacity,
     ratingRange:
       input.ratingMinimum !== undefined && input.ratingMaximum !== undefined
         ? [input.ratingMinimum, input.ratingMaximum]
         : undefined,
-    tags: ["Pickup", "Player hosted"],
+    tags: [
+      "Pickup",
+      input.format === "king-queen" ? "King / Queen" : input.format,
+      input.costMinor === 0 ? "Free" : "Paid",
+    ],
   };
 }
 
@@ -668,8 +1446,28 @@ export const databaseRepository = {
   public: {
     events: async () => (await loadEvents()).map(({ event }) => event),
     eventBySlug: async (slug: string) =>
-      (await loadEvents()).find(({ event }) => event.slug === slug)?.event,
+      (
+        await loadEvents({
+          includeUnlistedPickups: true,
+        })
+      ).find(({ event }) => event.slug === slug)?.event,
     venues: () => loadVenues(),
+    players: async (limit: number) => {
+      const database = getDatabase();
+      const rows = await database
+        .select({ id: people.id })
+        .from(people)
+        .where(
+          and(
+            eq(people.status, "active"),
+            eq(people.profileVisibility, "public"),
+            eq(people.isMinor, false),
+          ),
+        )
+        .orderBy(asc(people.displayName))
+        .limit(limit);
+      return loadPeople(rows.map((row) => row.id));
+    },
     playerByHandle: async (handle: string) => {
       const database = getDatabase();
       const person = await database.query.people.findFirst({
@@ -682,14 +1480,21 @@ export const databaseRepository = {
       if (!person || person.isMinor) return undefined;
       return (await loadPeople([person.id]))[0];
     },
+    organizationBySlug: async (slug: string) =>
+      (await loadOrganizations()).find(
+        (organization) => organization.slug === slug,
+      ),
   },
   player: {
     dashboard: async (personId: string) => {
-      const [player, events, wallet] = await Promise.all([
-        loadPeople([personId]).then((rows) => rows[0]),
-        loadEvents().then((rows) => rows.map(({ event }) => event)),
-        loadWallet(personId),
-      ]);
+      const [player, events, wallet, matchHistory, bookings] =
+        await Promise.all([
+          loadPeople([personId]).then((rows) => rows[0]),
+          loadEvents().then((rows) => rows.map(({ event }) => event)),
+          loadWallet(personId),
+          loadMatchHistory(personId),
+          loadPlayerBookings(personId),
+        ]);
       if (!player) throw new Error("Player profile was not found");
       const metrics: Metric[] = [
         {
@@ -699,14 +1504,28 @@ export const databaseRepository = {
         },
         {
           label: "Rated matches",
-          value: "—",
-          change: "No connected match history",
-          trend: "flat",
+          value: String(
+            matchHistory.filter((match) => match.status === "verified").length,
+          ),
+          change:
+            matchHistory.length === 0
+              ? "No connected match history"
+              : `${matchHistory.length} submitted`,
+          trend:
+            matchHistory.reduce(
+              (total, match) => total + match.ratingDelta,
+              0,
+            ) > 0
+              ? "up"
+              : "flat",
         },
         {
           label: "Upcoming",
-          value: String(events.length),
-          change: "Published events",
+          value: String(bookings.length),
+          change:
+            bookings.length === 0
+              ? "No connected bookings"
+              : `${events.length} published options`,
         },
         {
           label: "Wallet",
@@ -717,16 +1536,17 @@ export const databaseRepository = {
       return {
         player,
         metrics,
-        bookings: [],
+        bookings,
         events,
         feed: [],
-        recentMatches: [],
+        recentMatches: matchHistory.slice(0, 3),
         walletBalanceMinor: wallet.balanceMinor,
         currency: "USD" as const,
       };
     },
-    matchHistory: async () => [],
+    matchHistory: loadMatchHistory,
     wallet: loadWallet,
+    settings: loadPlayerSettings,
     quote: (input: {
       items: readonly PricedOrderItem[];
       isDunaPlus: boolean;
@@ -740,7 +1560,8 @@ export const databaseRepository = {
   },
   operator: {
     dashboard: async (organizationId: string) => {
-      const [organization, scopedEvents, organizationVenues] =
+      const database = getDatabase();
+      const [organization, scopedEvents, organizationVenues, orderRows] =
         await Promise.all([
           loadOrganizations(organizationId).then((rows) => rows[0]),
           loadEvents().then((rows) =>
@@ -749,20 +1570,59 @@ export const databaseRepository = {
               .map(({ event }) => event),
           ),
           loadVenues(organizationId),
+          database
+            .select({
+              totalMinor: orders.totalMinor,
+              status: orders.status,
+            })
+            .from(orders)
+            .where(
+              and(
+                eq(orders.organizationId, organizationId),
+                inArray(orders.status, ["paid", "partially-refunded"]),
+              ),
+            ),
         ]);
       if (!organization) throw new Error("Organization was not found");
       const courtCount = organizationVenues.reduce(
         (total, venue) => total + venue.courtCount,
         0,
       );
+      const grossSalesMinor = orderRows.reduce(
+        (total, order) => total + order.totalMinor,
+        0,
+      );
+      const totalCapacity = scopedEvents.reduce(
+        (total, event) => total + event.capacity,
+        0,
+      );
+      const occupied = scopedEvents.reduce(
+        (total, event) =>
+          total + Math.max(0, event.capacity - event.spotsRemaining),
+        0,
+      );
+      const fillRate =
+        totalCapacity === 0 ? undefined : (occupied / totalCapacity) * 100;
       return {
         organization,
         metrics: [
           {
-            label: "Published sessions",
-            value: String(scopedEvents.length),
+            label: "Gross sales",
+            value: formatUsd(grossSalesMinor),
+            change: "Paid connected orders",
           },
           { label: "Members", value: String(organization.memberCount) },
+          {
+            label: "Fill rate",
+            value:
+              fillRate === undefined
+                ? "Unavailable"
+                : `${fillRate.toFixed(1)}%`,
+            change:
+              fillRate === undefined
+                ? "No published capacity"
+                : `${occupied} of ${totalCapacity} spots`,
+          },
           { label: "Active courts", value: String(courtCount) },
           {
             label: "Stripe",

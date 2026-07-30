@@ -1,5 +1,7 @@
 import { loadEnvFile } from "node:process";
+import { eq } from "drizzle-orm";
 import Stripe from "stripe";
+import { getDatabase, membershipTiers } from "../packages/db/src/index.ts";
 
 try {
   loadEnvFile(".env.local");
@@ -168,6 +170,47 @@ async function main() {
     const product = await findOrCreateProduct(definition);
     const price = await findOrCreatePrice(definition, product.id);
     resources[definition.key] = price.id;
+  }
+
+  if (process.env.DATABASE_URL) {
+    const database = getDatabase();
+    const membershipDefinitions = definitions.filter(
+      (definition) =>
+        definition.key === "duna_plus_monthly" ||
+        definition.key === "duna_plus_annual",
+    );
+    for (const definition of membershipDefinitions) {
+      const interval = definition.recurring;
+      if (interval !== "month" && interval !== "year") continue;
+      const code = `duna-plus-${interval === "month" ? "monthly" : "annual"}`;
+      const existing = await database.query.membershipTiers.findFirst({
+        where: eq(membershipTiers.code, code),
+      });
+      const values = {
+        code,
+        name: `Duna+ ${interval === "month" ? "Monthly" : "Annual"}`,
+        priceMinor: definition.amountMinor,
+        currency: "USD",
+        interval,
+        stripePriceId: resources[definition.key],
+        benefits: [
+          "No platform fees",
+          "Full rating history",
+          "Partner chemistry",
+          "Two monthly guest passes",
+        ],
+        active: true,
+        updatedAt: new Date(),
+      };
+      if (existing) {
+        await database
+          .update(membershipTiers)
+          .set(values)
+          .where(eq(membershipTiers.id, existing.id));
+      } else {
+        await database.insert(membershipTiers).values(values);
+      }
+    }
   }
 
   const existingClocks = await stripe.testHelpers.testClocks.list({

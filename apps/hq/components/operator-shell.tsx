@@ -1,3 +1,4 @@
+import type { OrganizationSummary } from "@duna/core";
 import { Badge, DunaMark } from "@duna/ui";
 import { Bell, ChevronDown, Search, Sparkles } from "lucide-react";
 import Link from "next/link";
@@ -7,10 +8,20 @@ import { operatorModules, type OperatorModule } from "./navigation";
 export function OperatorShell({
   active,
   children,
+  organization,
+  messageDraftCount = 0,
 }: {
   readonly active: OperatorModule;
   readonly children: ReactNode;
+  readonly organization: OrganizationSummary;
+  readonly messageDraftCount?: number;
 }) {
+  const initials = organization.name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
   return (
     <div className="hq-shell">
       <aside className="hq-sidebar">
@@ -18,14 +29,14 @@ export function OperatorShell({
           <DunaMark />
           <Badge>HQ</Badge>
         </Link>
-        <button className="organization-switcher">
-          <span>SB</span>
+        <div className="organization-switcher">
+          <span>{initials}</span>
           <span>
-            <strong>South Bay Volleyball</strong>
-            <small>Club plan</small>
+            <strong>{organization.name}</strong>
+            <small>{organization.plan.replaceAll("-", " ")} plan</small>
           </span>
-          <ChevronDown aria-hidden size={15} />
-        </button>
+          <Badge>{organization.stripeStatus}</Badge>
+        </div>
         <nav aria-label="Operator modules">
           {operatorModules.map((item) => {
             const Icon = item.icon;
@@ -37,15 +48,17 @@ export function OperatorShell({
               >
                 <Icon aria-hidden size={18} />
                 <span>{item.label}</span>
-                {item.slug === "messages" && <i>4</i>}
+                {item.slug === "messages" && messageDraftCount > 0 && (
+                  <i>{messageDraftCount}</i>
+                )}
               </Link>
             );
           })}
         </nav>
         <div className="hq-sidebar__meta">
           <Link href="/admin">Open Duna Admin</Link>
-          <span>Beach Elite LLC</span>
-          <small>Duna HQ · Preview environment</small>
+          <span>{organization.legalName}</span>
+          <small>Duna HQ · Connected workspace</small>
         </div>
       </aside>
       <div className="hq-workspace">

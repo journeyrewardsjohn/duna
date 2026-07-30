@@ -7,22 +7,34 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "channel": "development"
+      "channel": "development",
+      "env": {
+        "EXPO_PUBLIC_DUNA_PREVIEW": "true"
+      }
     },
     "preview": {
       "distribution": "internal",
-      "channel": "preview"
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_DUNA_PREVIEW": "true"
+      }
     },
     "preview-simulator": {
       "distribution": "internal",
       "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_DUNA_PREVIEW": "true"
+      },
       "ios": {
         "simulator": true
       }
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_DUNA_PREVIEW": "false"
+      }
     }
   },
   "submit": {

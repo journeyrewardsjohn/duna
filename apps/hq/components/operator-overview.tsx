@@ -1,4 +1,5 @@
-import { demoOrganization, demoPeople } from "@duna/core/demo";
+import type { OperatorDashboard } from "@duna/api";
+import { formatMoney, formatVenueTime, type PersonSummary } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowRight,
@@ -7,7 +8,6 @@ import {
   ChevronRight,
   CircleAlert,
   CreditCard,
-  MessageSquareText,
   MoreHorizontal,
   Sparkles,
   TrendingUp,
@@ -16,85 +16,40 @@ import {
 import Link from "next/link";
 import { quickActions } from "./navigation";
 
-const schedule = [
-  {
-    time: "8:00",
-    suffix: "AM",
-    title: "U14 Summer Training",
-    place: "Manhattan Beach · Courts 1–3",
-    coach: "Sam Rivera",
-    count: "18 / 20",
-    status: "Checked in",
-  },
-  {
-    time: "10:00",
-    suffix: "AM",
-    title: "Serve + Receive Lab",
-    place: "Manhattan Beach · Court 4",
-    coach: "Theo Park",
-    count: "8 / 8",
-    status: "Full",
-  },
-  {
-    time: "4:30",
-    suffix: "PM",
-    title: "High Performance 2s",
-    place: "Hermosa Beach · Courts 5–6",
-    coach: "Sam Rivera",
-    count: "11 / 12",
-    status: "Ready",
-  },
-  {
-    time: "6:00",
-    suffix: "PM",
-    title: "South Bay Summer Series",
-    place: "Hermosa Beach · Courts 1–8",
-    coach: "League operations",
-    count: "24 / 24",
-    status: "Week 5",
-  },
-] as const;
+const metricIcons = [TrendingUp, UsersRound, Check, CreditCard] as const;
 
-const attention = [
-  {
-    icon: CircleAlert,
-    tone: "warning" as const,
-    title: "2 waivers expire before Saturday",
-    detail: "U14 roster · guardians can renew in one tap",
-    action: "Review",
-  },
-  {
-    icon: CreditCard,
-    tone: "danger" as const,
-    title: "3 failed membership renewals",
-    detail: "$474.00 at risk · automatic recovery is running",
-    action: "Open",
-  },
-  {
-    icon: MessageSquareText,
-    tone: "neutral" as const,
-    title: "4 conversations need a reply",
-    detail: "Oldest waiting 2h 18m",
-    action: "Reply",
-  },
-] as const;
+export function OperatorOverview({
+  dashboard,
+  members,
+}: {
+  readonly dashboard: OperatorDashboard;
+  readonly members: readonly PersonSummary[];
+}) {
+  const today = new Intl.DateTimeFormat("en-US", {
+    dateStyle: "full",
+    timeZone: dashboard.organization.timezone,
+  }).format(new Date());
+  const nearlyFull = dashboard.events
+    .filter(
+      (event) => event.spotsRemaining <= Math.max(2, event.capacity * 0.1),
+    )
+    .slice(0, 3);
 
-export function OperatorOverview() {
   return (
     <main className="hq-page">
       <header className="hq-page-heading">
         <div>
-          <span className="hq-eyebrow">Thursday · July 30</span>
-          <h1>Good morning, Sam.</h1>
+          <span className="hq-eyebrow">{today}</span>
+          <h1>{dashboard.organization.name}.</h1>
           <p>
-            {demoOrganization.name} has <strong>61 players</strong> on sand
-            today.
+            A connected operating view across people, sessions, courts, and
+            payments.
           </p>
         </div>
         <div>
-          <button className="hq-button hq-button--secondary">
-            <CalendarPlus aria-hidden size={17} /> Add to calendar
-          </button>
+          <Link className="hq-button hq-button--secondary" href="/calendar">
+            <CalendarPlus aria-hidden size={17} /> Open calendar
+          </Link>
           <Link className="hq-button hq-button--primary" href="/programs">
             Create <ChevronRight aria-hidden size={17} />
           </Link>
@@ -102,61 +57,39 @@ export function OperatorOverview() {
       </header>
 
       <section className="metric-grid">
-        <article>
-          <span>
-            <small>Gross sales · July</small>
-            <TrendingUp aria-hidden size={17} />
-          </span>
-          <Numeric>$84,260</Numeric>
-          <p>
-            <strong>+18.4%</strong> from June
-          </p>
-          <div className="spark-bars" aria-hidden>
-            {[31, 42, 37, 50, 44, 58, 62, 54, 69, 78, 73, 86].map((value) => (
-              <i key={value} style={{ height: `${value}%` }} />
-            ))}
-          </div>
-        </article>
-        <article>
-          <span>
-            <small>Active people</small>
-            <UsersRound aria-hidden size={17} />
-          </span>
-          <Numeric>{demoOrganization.memberCount}</Numeric>
-          <p>
-            <strong>+46</strong> this month
-          </p>
-          <div className="metric-avatars">
-            {demoPeople.slice(0, 4).map((person) => (
-              <span key={person.id}>{person.initials}</span>
-            ))}
-            <small>+914</small>
-          </div>
-        </article>
-        <article>
-          <span>
-            <small>Fill rate</small>
-            <Check aria-hidden size={17} />
-          </span>
-          <Numeric>87.4%</Numeric>
-          <p>
-            <strong>+5.2 pts</strong> vs. target
-          </p>
-          <div className="meter">
-            <i style={{ width: "87.4%" }} />
-          </div>
-        </article>
-        <article>
-          <span>
-            <small>Projected payout</small>
-            <CreditCard aria-hidden size={17} />
-          </span>
-          <Numeric>$61,884</Numeric>
-          <p>
-            Arrives <strong>Friday</strong>
-          </p>
-          <Badge tone="positive">Stripe connected</Badge>
-        </article>
+        {dashboard.metrics.map((metric, index) => {
+          const Icon = metricIcons[index % metricIcons.length]!;
+          return (
+            <article key={metric.label}>
+              <span>
+                <small>{metric.label}</small>
+                <Icon aria-hidden size={17} />
+              </span>
+              <Numeric>{metric.value}</Numeric>
+              <p>
+                <strong>{metric.change ?? "Connected now"}</strong>
+              </p>
+              {metric.label === "Members" && members.length > 0 ? (
+                <div className="metric-avatars">
+                  {members.slice(0, 4).map((person) => (
+                    <span key={person.id}>{person.initials}</span>
+                  ))}
+                  {members.length > 4 && <small>+{members.length - 4}</small>}
+                </div>
+              ) : metric.label === "Stripe" ? (
+                <Badge
+                  tone={
+                    dashboard.organization.stripeStatus === "connected"
+                      ? "positive"
+                      : "warning"
+                  }
+                >
+                  {dashboard.organization.stripeStatus}
+                </Badge>
+              ) : null}
+            </article>
+          );
+        })}
       </section>
 
       <section className="overview-grid">
@@ -164,40 +97,41 @@ export function OperatorOverview() {
           <header className="hq-card-heading">
             <div>
               <span className="hq-eyebrow">Live operations</span>
-              <h2>Today on sand</h2>
+              <h2>Published schedule</h2>
             </div>
             <Link href="/calendar">
               Full calendar <ArrowRight size={15} />
             </Link>
           </header>
           <div className="today-list">
-            {schedule.map((item, index) => (
-              <article key={item.title}>
+            {dashboard.schedule.map((item) => (
+              <article key={`${item.time}-${item.title}`}>
                 <time>
                   <Numeric>{item.time}</Numeric>
-                  <small>{item.suffix}</small>
                 </time>
-                <i className={index === 0 ? "live" : undefined} />
+                <i className={item.state === "live" ? "live" : undefined} />
                 <div>
                   <strong>{item.title}</strong>
-                  <span>{item.place}</span>
+                  <span>{item.court}</span>
                 </div>
                 <div>
-                  <small>Lead</small>
-                  <span>{item.coach}</span>
+                  <small>Capacity</small>
+                  <span>{item.detail}</span>
                 </div>
-                <div>
-                  <small>Roster</small>
-                  <Numeric>{item.count}</Numeric>
-                </div>
-                <Badge tone={index === 0 ? "live" : "neutral"}>
-                  {item.status}
+                <Badge tone={item.state === "live" ? "live" : "neutral"}>
+                  {item.state}
                 </Badge>
                 <button aria-label={`More options for ${item.title}`}>
                   <MoreHorizontal size={18} />
                 </button>
               </article>
             ))}
+            {dashboard.schedule.length === 0 && (
+              <article className="hq-empty">
+                <strong>No published sessions.</strong>
+                <span>Create a program or event to populate operations.</span>
+              </article>
+            )}
           </div>
         </article>
 
@@ -207,27 +141,37 @@ export function OperatorOverview() {
               <span className="hq-eyebrow">Action queue</span>
               <h2>Needs attention</h2>
             </div>
-            <Badge tone="warning">9</Badge>
+            <Badge tone={dashboard.alerts.length > 0 ? "warning" : "positive"}>
+              {dashboard.alerts.length}
+            </Badge>
           </header>
           <div>
-            {attention.map((item) => {
-              const Icon = item.icon;
-              return (
-                <article key={item.title}>
-                  <span>
-                    <Icon aria-hidden size={18} />
-                  </span>
-                  <div>
-                    <strong>{item.title}</strong>
-                    <small>{item.detail}</small>
-                  </div>
-                  <button>{item.action}</button>
-                </article>
-              );
-            })}
+            {dashboard.alerts.map((item) => (
+              <article key={item.id}>
+                <span>
+                  <CircleAlert aria-hidden size={18} />
+                </span>
+                <div>
+                  <strong>{item.title}</strong>
+                  <small>{item.detail}</small>
+                </div>
+                <Link href="/payments">{item.action}</Link>
+              </article>
+            ))}
+            {dashboard.alerts.length === 0 && (
+              <article>
+                <span>
+                  <Check aria-hidden size={18} />
+                </span>
+                <div>
+                  <strong>No connected alerts.</strong>
+                  <small>Current operational checks are clear.</small>
+                </div>
+              </article>
+            )}
           </div>
-          <Link href="/messages">
-            Open full queue <ArrowRight size={15} />
+          <Link href="/reports">
+            Open reporting <ArrowRight size={15} />
           </Link>
         </aside>
       </section>
@@ -236,60 +180,43 @@ export function OperatorOverview() {
         <article className="hq-card revenue-card">
           <header className="hq-card-heading">
             <div>
-              <span className="hq-eyebrow">Net operating view</span>
-              <h2>Revenue pulse</h2>
+              <span className="hq-eyebrow">Published inventory</span>
+              <h2>Next events</h2>
             </div>
-            <div className="segmented">
-              <button className="active">30 days</button>
-              <button>Quarter</button>
-            </div>
+            <Link href="/events">
+              All events <ArrowRight size={15} />
+            </Link>
           </header>
-          <div className="revenue-chart">
-            <div className="revenue-chart__labels">
-              <span>$100k</span>
-              <span>$75k</span>
-              <span>$50k</span>
-              <span>$25k</span>
-              <span>$0</span>
-            </div>
-            <svg
-              aria-label="Revenue increased steadily through July"
-              preserveAspectRatio="none"
-              viewBox="0 0 760 240"
-            >
-              <defs>
-                <linearGradient id="revenue-fill" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0" stopColor="#63e3db" stopOpacity=".22" />
-                  <stop offset="1" stopColor="#63e3db" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <path
-                d="M0 210 C70 195 90 188 145 192 S220 140 280 151 S365 128 420 122 S510 84 570 102 S660 65 760 45 L760 240 L0 240Z"
-                fill="url(#revenue-fill)"
-              />
-              <path
-                d="M0 210 C70 195 90 188 145 192 S220 140 280 151 S365 128 420 122 S510 84 570 102 S660 65 760 45"
-                fill="none"
-                stroke="#63e3db"
-                strokeLinecap="round"
-                strokeWidth="3"
-              />
-            </svg>
-            <div className="revenue-chart__months">
-              <span>Jul 1</span>
-              <span>Jul 8</span>
-              <span>Jul 15</span>
-              <span>Jul 22</span>
-              <span>Jul 30</span>
-            </div>
-          </div>
-          <div className="revenue-legend">
-            <span>
-              <i /> Program + event revenue <Numeric>$72.8k</Numeric>
-            </span>
-            <span>
-              <i /> Facility + retail <Numeric>$11.5k</Numeric>
-            </span>
+          <div className="hq-connected-list">
+            {dashboard.events.slice(0, 5).map((event) => (
+              <Link href="/events" key={event.id}>
+                <span>
+                  <strong>{event.title}</strong>
+                  <small>
+                    {formatVenueTime(event.startsAt, event.timezone, "en-US", {
+                      weekday: "short",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}{" "}
+                    · {event.venueName}
+                  </small>
+                </span>
+                <span>
+                  <Numeric>{event.spotsRemaining}</Numeric>
+                  <small>
+                    {event.price.amountMinor
+                      ? formatMoney(
+                          event.price.amountMinor,
+                          event.price.currency,
+                        )
+                      : "Free"}
+                  </small>
+                </span>
+              </Link>
+            ))}
+            {dashboard.events.length === 0 && (
+              <p>No connected event inventory is published.</p>
+            )}
           </div>
         </article>
 
@@ -298,34 +225,36 @@ export function OperatorOverview() {
             <span>
               <Sparkles aria-hidden size={17} />
             </span>
-            <Badge>Duna AI · read only</Badge>
+            <Badge>Grounded signals</Badge>
           </header>
-          <h2>Three useful things to know.</h2>
+          <h2>What the connected data says.</h2>
           <ol>
             <li>
               <Numeric>01</Numeric>
               <p>
-                Friday Lights will likely sell out by 2 PM tomorrow. Four
-                waitlisted 4.0+ players fit the open spots.
+                {dashboard.events.length} published{" "}
+                {dashboard.events.length === 1 ? "event is" : "events are"} in
+                the current operating view.
               </p>
             </li>
             <li>
               <Numeric>02</Numeric>
               <p>
-                The U14 program’s Tuesday session is under capacity while
-                Thursday has a waitlist of six.
+                {nearlyFull.length > 0
+                  ? `${nearlyFull.map((event) => event.title).join(", ")} ${nearlyFull.length === 1 ? "is" : "are"} near capacity.`
+                  : "No published event is currently within the near-capacity threshold."}
               </p>
             </li>
             <li>
               <Numeric>03</Numeric>
               <p>
-                Membership recovery recovered $1,104 this week. Three renewals
-                still need a personal note.
+                Stripe status is {dashboard.organization.stripeStatus}. No
+                processor economics are inferred when the feed is unavailable.
               </p>
             </li>
           </ol>
           <Link href="/ai">
-            Explore with Duna AI <ArrowRight size={15} />
+            Explore Duna AI controls <ArrowRight size={15} />
           </Link>
         </article>
       </section>
@@ -338,11 +267,23 @@ export function OperatorOverview() {
         <div>
           {quickActions.map((action) => {
             const Icon = action.icon;
+            const destination =
+              action.label === "Add person"
+                ? "/members"
+                : action.label === "Send update"
+                  ? "/messages"
+                  : action.label === "Reconcile"
+                    ? "/payments"
+                    : action.label === "Run check-in"
+                      ? "/events"
+                      : action.label === "Create event"
+                        ? "/events"
+                        : "/calendar";
             return (
-              <button key={action.label}>
+              <Link href={destination} key={action.label}>
                 <Icon aria-hidden size={18} />
                 <span>{action.label}</span>
-              </button>
+              </Link>
             );
           })}
         </div>

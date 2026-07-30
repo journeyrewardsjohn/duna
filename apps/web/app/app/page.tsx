@@ -1,11 +1,3 @@
-import {
-  demoBookings,
-  demoEvents,
-  demoFeed,
-  demoMatches,
-  demoPlayer,
-  playerMetrics,
-} from "@duna/core/demo";
 import { formatVenueTime } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
@@ -22,17 +14,28 @@ import Link from "next/link";
 import { EventCard } from "@/components/event-card";
 import { MatchCard } from "@/components/match-card";
 import { RatingOrbit } from "@/components/rating-orbit";
+import { getServerCaller } from "@/lib/api";
 
-export default function PlayerDashboard() {
+export default async function PlayerDashboard() {
+  const caller = await getServerCaller();
+  const dashboard = await caller.player.dashboard();
+  const { player } = dashboard;
+  const nextEvent = dashboard.events[0];
+  const latestMatch = dashboard.recentMatches[0];
+  const dateLabel = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  }).format(new Date());
   return (
     <main className="player-dashboard">
       <section className="player-welcome">
         <div>
-          <span className="page-eyebrow">Thursday, July 30</span>
-          <h1>Good afternoon, Mara.</h1>
+          <span className="page-eyebrow">{dateLabel}</span>
+          <h1>Welcome back, {player.displayName.split(" ")[0]}.</h1>
           <p>
-            The beach is moving. You have a game tonight and two new rating
-            moments.
+            Your rating, connected bookings, wallet, and available play are
+            current below.
           </p>
         </div>
         <div className="player-welcome__actions">
@@ -49,8 +52,10 @@ export default function PlayerDashboard() {
         <article className="rating-panel">
           <div className="rating-panel__header">
             <div>
-              <Badge tone="positive">Locked confidence</Badge>
-              <h2>Your best form is becoming your baseline.</h2>
+              <Badge tone="positive">
+                {player.rating.confidence} confidence
+              </Badge>
+              <h2>Your portable Sand Rating.</h2>
             </div>
             <button aria-label="Share rating card">
               <Share2 aria-hidden size={18} />
@@ -58,38 +63,45 @@ export default function PlayerDashboard() {
           </div>
           <div className="rating-panel__body">
             <RatingOrbit
-              confidence={demoPlayer.rating.confidence}
-              delta={demoPlayer.rating.delta}
-              value={demoPlayer.rating.display}
+              confidence={player.rating.confidence}
+              delta={player.rating.delta}
+              value={player.rating.display}
             />
             <div className="rating-panel__insight">
-              <span>Last movement</span>
-              <strong>Closed against a stronger pair in three.</strong>
+              <span>{latestMatch ? "Last movement" : "Rating state"}</span>
+              <strong>
+                {latestMatch
+                  ? `${latestMatch.ratingDelta > 0 ? "+" : ""}${latestMatch.ratingDelta.toFixed(2)} after a ${latestMatch.verification.replace("-", " ")} result.`
+                  : "No connected rating movement is available yet."}
+              </strong>
               <p>
-                Expected win <Numeric>44%</Numeric> · verification{" "}
-                <Numeric>1.00</Numeric> · point share <Numeric>53%</Numeric>
+                Current rating{" "}
+                <Numeric>{player.rating.display.toFixed(2)}</Numeric> ·
+                discipline {player.rating.discipline.replace("-", " ")}
               </p>
-              <Link href="/app/matches/match-1">
-                See why it moved <ArrowRight aria-hidden size={15} />
+              <Link href="/app/matches">
+                Open match history <ArrowRight aria-hidden size={15} />
               </Link>
             </div>
           </div>
           <div className="rating-panel__stats">
             <div>
-              <small>52-week peak</small>
-              <Numeric>4.68</Numeric>
+              <small>Confidence</small>
+              <strong>{player.rating.confidence}</strong>
             </div>
             <div>
-              <small>South Bay rank</small>
-              <Numeric>#42</Numeric>
+              <small>Home market</small>
+              <strong>{player.homeMarket.split(",")[0]}</strong>
             </div>
             <div>
-              <small>Matches</small>
-              <Numeric>84</Numeric>
+              <small>Connected matches</small>
+              <Numeric>{dashboard.recentMatches.length}</Numeric>
             </div>
             <div>
-              <small>Next band</small>
-              <Numeric>5.00</Numeric>
+              <small>Wallet</small>
+              <Numeric>
+                ${(dashboard.walletBalanceMinor / 100).toFixed(2)}
+              </Numeric>
             </div>
           </div>
         </article>
@@ -98,45 +110,63 @@ export default function PlayerDashboard() {
           <div className="panel-heading">
             <div>
               <span className="page-eyebrow">Next up</span>
-              <h2>Golden Hour 4s</h2>
+              <h2>{nextEvent?.title ?? "Nothing booked yet"}</h2>
             </div>
-            <Badge tone="live">Tonight</Badge>
+            <Badge tone={nextEvent?.live ? "live" : "neutral"}>
+              {nextEvent?.live ? "Live" : nextEvent ? "Published" : "Open"}
+            </Badge>
           </div>
           <div className="next-up-panel__time">
-            <Numeric>6:00</Numeric>
-            <span>PM</span>
-            <small>in 4h 12m</small>
+            <Numeric>
+              {nextEvent
+                ? formatVenueTime(
+                    nextEvent.startsAt,
+                    nextEvent.timezone,
+                    "en-US",
+                    { minute: "2-digit" },
+                  )
+                : "—"}
+            </Numeric>
+            <small>
+              {nextEvent ? nextEvent.tags[0] : "Explore available play"}
+            </small>
           </div>
           <div className="next-up-panel__place">
             <MapPin aria-hidden size={17} />
             <span>
-              <strong>Hermosa Beach — Pier Courts</strong>
-              <small>Court 7 · 1.8 miles away</small>
+              <strong>{nextEvent?.venueName ?? "No venue selected"}</strong>
+              <small>
+                {nextEvent
+                  ? `${nextEvent.spotsRemaining} spots remaining`
+                  : "Published venues appear in Discover"}
+              </small>
             </span>
           </div>
           <div className="next-up-panel__players">
             <div className="avatar-stack">
-              {["TP", "NW", "ET", "+2"].map((value) => (
-                <span className="avatar" key={value}>
-                  {value}
-                </span>
-              ))}
+              <span className="avatar">{player.initials}</span>
             </div>
             <span>
-              <Numeric>6/8</Numeric> confirmed
+              <Numeric>
+                {nextEvent
+                  ? `${nextEvent.capacity - nextEvent.spotsRemaining}/${nextEvent.capacity}`
+                  : "0"}
+              </Numeric>{" "}
+              registered
             </span>
           </div>
           <Link
             className="next-up-panel__action"
-            href="/events/golden-hour-fours"
+            href={nextEvent ? `/events/${nextEvent.slug}` : "/app/discover"}
           >
-            Open game thread <ChevronRight aria-hidden size={17} />
+            {nextEvent ? "Open event" : "Explore play"}{" "}
+            <ChevronRight aria-hidden size={17} />
           </Link>
         </article>
       </section>
 
       <section className="metric-strip" aria-label="Player overview">
-        {playerMetrics.map((metric) => (
+        {dashboard.metrics.map((metric) => (
           <article key={metric.label}>
             <small>{metric.label}</small>
             <Numeric>{metric.value}</Numeric>
@@ -160,9 +190,14 @@ export default function PlayerDashboard() {
           </Link>
         </div>
         <div className="player-event-row">
-          {demoEvents.slice(1, 4).map((event) => (
+          {dashboard.events.slice(0, 3).map((event) => (
             <EventCard event={event} key={event.id} />
           ))}
+          {dashboard.events.length === 0 && (
+            <article className="empty-state">
+              <p>No published events are available yet.</p>
+            </article>
+          )}
         </div>
       </section>
 
@@ -178,9 +213,14 @@ export default function PlayerDashboard() {
             </Link>
           </div>
           <div className="match-list">
-            {demoMatches.map((match) => (
+            {dashboard.recentMatches.map((match) => (
               <MatchCard key={match.id} match={match} />
             ))}
+            {dashboard.recentMatches.length === 0 && (
+              <article className="empty-state">
+                <p>No connected matches yet.</p>
+              </article>
+            )}
           </div>
         </div>
 
@@ -192,7 +232,7 @@ export default function PlayerDashboard() {
             </div>
           </div>
           <div className="booking-list">
-            {demoBookings.map((booking) => (
+            {dashboard.bookings.map((booking) => (
               <Link href="/app/play" key={booking.id}>
                 <span className="booking-list__date">
                   <Numeric>
@@ -215,6 +255,11 @@ export default function PlayerDashboard() {
                 </Badge>
               </Link>
             ))}
+            {dashboard.bookings.length === 0 && (
+              <article className="empty-state">
+                <p>No confirmed bookings yet.</p>
+              </article>
+            )}
           </div>
         </div>
       </section>
@@ -227,7 +272,7 @@ export default function PlayerDashboard() {
           </div>
         </div>
         <div className="feed-grid">
-          {demoFeed.map((item) => (
+          {dashboard.feed.map((item) => (
             <article data-accent={item.accent} key={item.id}>
               <div className="feed-grid__icon">
                 {item.accent === "flare" ? (
@@ -242,6 +287,17 @@ export default function PlayerDashboard() {
               <small>{item.meta}</small>
             </article>
           ))}
+          {dashboard.feed.length === 0 && (
+            <article data-accent="aqua">
+              <span>Connected feed</span>
+              <h3>No new activity</h3>
+              <p>
+                Confirmed matches, registrations, and community updates will
+                appear here.
+              </p>
+              <small>Up to date</small>
+            </article>
+          )}
         </div>
       </section>
     </main>
