@@ -25,6 +25,8 @@ test-results/
 apps/*/android/
 apps/*/ios/
 apps/*/.expo/
+apps/*/credentials.json
+apps/*/credentials/
 
 # system and editor
 .DS_Store
