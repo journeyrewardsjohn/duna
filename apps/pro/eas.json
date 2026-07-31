@@ -29,6 +29,14 @@
         "simulator": true
       }
     },
+    "testflight": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "channel": "testflight",
+      "env": {
+        "EXPO_PUBLIC_DUNA_PREVIEW": "true"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "channel": "production",
@@ -38,6 +46,7 @@
     }
   },
   "submit": {
+    "testflight": {},
     "production": {}
   }
 }
