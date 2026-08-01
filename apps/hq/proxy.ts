@@ -19,8 +19,13 @@ const authenticatedProxy = clerkCredentials
   ? clerkMiddleware(
       async (auth, request) => {
         const pathname = request.nextUrl.pathname;
-        if (!isPublicRoute(pathname)) await auth.protect();
         const session = await auth();
+        if (!isPublicRoute(pathname) && !session.userId) {
+          if (routeMatches(pathname, "/api")) {
+            return new NextResponse(null, { status: 401 });
+          }
+          return session.redirectToSignIn({ returnBackUrl: request.url });
+        }
         if (
           session.userId &&
           !session.orgId &&
@@ -33,6 +38,8 @@ const authenticatedProxy = clerkCredentials
       {
         publishableKey: clerkCredentials.publishableKey,
         secretKey: clerkCredentials.secretKey,
+        signInUrl: "/sign-in",
+        signUpUrl: "/sign-up",
       },
     )
   : undefined;
