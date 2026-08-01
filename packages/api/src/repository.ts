@@ -20,7 +20,10 @@ import {
 import { priceConsumerOrder, type PricedOrderItem } from "@duna/pricing";
 import { isDatabaseConfigured } from "@duna/db";
 import { databaseRepository } from "./database-repository";
-import type { DunaRepository } from "./repository-contract";
+import type {
+  DunaRepository,
+  PickupMutationInput,
+} from "./repository-contract";
 
 const mutableEvents: EventSummary[] = [...demoEvents];
 const mutableMatches: MatchSummary[] = [...demoMatches];
@@ -94,21 +97,7 @@ export const demoRepository = {
         currency: "USD",
         isDunaPlus: input.isDunaPlus,
       }),
-    createPickup: (input: {
-      title: string;
-      startsAt: string;
-      endsAt: string;
-      venueName: string;
-      capacity: number;
-      format: "2s" | "4s" | "6s" | "king-queen";
-      note?: string;
-      visibility: "public" | "unlisted";
-      costMinor: number;
-      currency: "USD";
-      recordMatches: boolean;
-      ratingMinimum?: number;
-      ratingMaximum?: number;
-    }): EventSummary => {
+    createPickup: (input: PickupMutationInput): EventSummary => {
       const event: EventSummary = {
         id: crypto.randomUUID(),
         slug: input.title
@@ -134,6 +123,10 @@ export const demoRepository = {
             : undefined,
         tags: [
           "Pickup",
+          input.matchType === "competitive" ? "Competitive" : "Casual",
+          input.genderPreference === "open"
+            ? "All players"
+            : input.genderPreference,
           input.format === "king-queen" ? "King / Queen" : input.format,
           input.costMinor === 0 ? "Free" : "Paid",
         ],

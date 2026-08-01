@@ -12,11 +12,13 @@ import {
   CalendarDays,
   CircleAlert,
   CreditCard,
+  MapPinned,
   MessageSquareText,
   Plus,
   ShieldCheck,
   Trophy,
   UsersRound,
+  Waves,
 } from "lucide-react";
 import Link from "next/link";
 import type { OperatorModule } from "./navigation";
@@ -36,6 +38,12 @@ const moduleCopy: Record<
     title: "Calendar",
     description:
       "Published sessions, venue time, capacity, and live operating state.",
+  },
+  locations: {
+    eyebrow: "Facility operations",
+    title: "Venues",
+    description:
+      "Capacity, court utilization, bookable time, cancellation rules, and player-facing venue stories.",
   },
   members: {
     eyebrow: "People + permissions",
@@ -196,46 +204,214 @@ function CalendarPanel({
   );
 }
 
-function MembersPanel({
-  members,
+function VenuePortfolioPanel({
+  workspace,
 }: {
-  readonly members: readonly PersonSummary[];
+  readonly workspace: OperatorWorkspace;
 }) {
+  if (workspace.venues.length === 0) {
+    return (
+      <section className="hq-card module-feature-card">
+        <MapPinned size={25} />
+        <span className="hq-eyebrow">Facility portfolio</span>
+        <h2>Add the first venue.</h2>
+        <p>
+          Venue identity, courts, pricing, availability, and player booking all
+          begin in one guided setup below.
+        </p>
+      </section>
+    );
+  }
   return (
-    <section className="hq-card connected-table">
-      <header className="hq-card-heading">
-        <div>
-          <span className="hq-eyebrow">Organization scope</span>
-          <h2>{members.length} connected people</h2>
-        </div>
-        <Badge>Permission-aware</Badge>
-      </header>
-      <div className="hq-people-grid">
-        {members.map((person) => (
-          <article key={person.id}>
-            <span className="avatar">{person.initials}</span>
+    <div className="venue-portfolio-grid">
+      {workspace.venues.map((venue) => (
+        <article
+          className="hq-card venue-portfolio-card"
+          key={venue.id}
+          style={
+            venue.heroImageTreatmentUrl || venue.heroImageUrl
+              ? {
+                  backgroundImage: `linear-gradient(110deg, rgba(7, 24, 37, .92), rgba(7, 24, 37, .35)), url(${venue.heroImageTreatmentUrl ?? venue.heroImageUrl})`,
+                }
+              : undefined
+          }
+        >
+          <header>
             <span>
-              <strong>{person.displayName}</strong>
+              <Badge tone={venue.status === "active" ? "live" : "warning"}>
+                {venue.status}
+              </Badge>
               <small>
-                @{person.handle} · {person.homeMarket}
+                {venue.locality ?? "City missing"} · {venue.timezone}
               </small>
             </span>
-            <Numeric>{person.rating.display.toFixed(2)}</Numeric>
-            <div>
-              {person.roles.slice(0, 3).map((role) => (
-                <Badge key={role}>{role}</Badge>
-              ))}
-            </div>
-          </article>
-        ))}
-        {members.length === 0 && (
-          <div className="hq-empty">
-            <strong>No connected people.</strong>
-            <span>Invitations and roster imports will appear here.</span>
+            <MapPinned aria-hidden size={22} />
+          </header>
+          <div>
+            <span className="hq-eyebrow">Venue operating view</span>
+            <h2>{venue.name}</h2>
+            <p>
+              {venue.description ??
+                "Add a short player-facing venue story from the controls below."}
+            </p>
           </div>
-        )}
-      </div>
-    </section>
+          <dl>
+            <div>
+              <dt>Utilization</dt>
+              <dd>
+                <Numeric>{venue.utilization.percent.toFixed(1)}%</Numeric>
+              </dd>
+            </div>
+            <div>
+              <dt>Courts</dt>
+              <dd>
+                <Numeric>{venue.courts.length}</Numeric>
+              </dd>
+            </div>
+            <div>
+              <dt>Capacity</dt>
+              <dd>
+                <Numeric>
+                  {venue.capacity ||
+                    venue.courts.reduce(
+                      (total, court) => total + court.capacity,
+                      0,
+                    )}
+                </Numeric>
+              </dd>
+            </div>
+            <div>
+              <dt>Bookings · 30d</dt>
+              <dd>
+                <Numeric>{venue.utilization.bookingCount30d}</Numeric>
+              </dd>
+            </div>
+          </dl>
+          <div className="venue-court-utilization">
+            {venue.courts.map((court) => (
+              <article key={court.id}>
+                <span>
+                  <Waves aria-hidden size={15} />
+                  <strong>{court.name}</strong>
+                  <small>
+                    {court.durationOptionsMinutes.join(" / ")} min ·{" "}
+                    {court.bookingPolicy}
+                  </small>
+                </span>
+                <span>
+                  <strong>{court.utilization.percent.toFixed(1)}%</strong>
+                  <i>
+                    <b
+                      style={{
+                        width: `${Math.max(2, court.utilization.percent)}%`,
+                      }}
+                    />
+                  </i>
+                </span>
+              </article>
+            ))}
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function MembersPanel({
+  members,
+  workspace,
+}: {
+  readonly members: readonly PersonSummary[];
+  readonly workspace: OperatorWorkspace;
+}) {
+  return (
+    <div className="module-grid module-grid--two people-operating-grid">
+      <section className="hq-card connected-table">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">Player roster</span>
+            <h2>{workspace.participants.length} connected players</h2>
+          </div>
+          <Badge>
+            {workspace.participants.filter((person) => person.isMinor).length}{" "}
+            minors
+          </Badge>
+        </header>
+        <div className="hq-people-grid">
+          {workspace.participants.map((person) => (
+            <article key={person.id}>
+              <span className="avatar">
+                {person.displayName
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((part) => part[0])
+                  .join("")
+                  .toUpperCase()}
+              </span>
+              <span>
+                <strong>{person.displayName}</strong>
+                <small>
+                  {person.relationship} · {person.status}
+                </small>
+              </span>
+              <Badge
+                tone={
+                  person.guardianStatus === "verified"
+                    ? "live"
+                    : person.guardianStatus === "pending"
+                      ? "warning"
+                      : "neutral"
+                }
+              >
+                {person.guardianStatus === "not-required"
+                  ? "adult"
+                  : `guardian ${person.guardianStatus}`}
+              </Badge>
+            </article>
+          ))}
+          {workspace.participants.length === 0 && (
+            <div className="hq-empty">
+              <strong>No players connected.</strong>
+              <span>Invite an adult or route a minor through a guardian.</span>
+            </div>
+          )}
+        </div>
+      </section>
+      <section className="hq-card connected-table">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">Staff + permissions</span>
+            <h2>{members.length} operating team members</h2>
+          </div>
+          <Badge>Permission-aware</Badge>
+        </header>
+        <div className="hq-people-grid">
+          {members.map((person) => (
+            <article key={person.id}>
+              <span className="avatar">{person.initials}</span>
+              <span>
+                <strong>{person.displayName}</strong>
+                <small>
+                  @{person.handle} · {person.homeMarket}
+                </small>
+              </span>
+              <Numeric>{person.rating.display.toFixed(2)}</Numeric>
+              <div>
+                {person.roles.slice(0, 3).map((role) => (
+                  <Badge key={role}>{role}</Badge>
+                ))}
+              </div>
+            </article>
+          ))}
+          {members.length === 0 && (
+            <div className="hq-empty">
+              <strong>No operating staff.</strong>
+              <span>Clerk organization roles will appear here.</span>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -403,15 +579,17 @@ export function ModulePanel({
   const icon =
     module === "calendar"
       ? CalendarDays
-      : module === "members"
-        ? UsersRound
-        : module === "payments"
-          ? CreditCard
-          : module === "messages"
-            ? MessageSquareText
-            : module === "ai"
-              ? Bot
-              : Trophy;
+      : module === "locations"
+        ? MapPinned
+        : module === "members"
+          ? UsersRound
+          : module === "payments"
+            ? CreditCard
+            : module === "messages"
+              ? MessageSquareText
+              : module === "ai"
+                ? Bot
+                : Trophy;
   const Icon = icon;
   const createHref =
     module === "events"
@@ -454,8 +632,10 @@ export function ModulePanel({
 
       {module === "calendar" ? (
         <CalendarPanel dashboard={dashboard} />
+      ) : module === "locations" ? (
+        <VenuePortfolioPanel workspace={workspace} />
       ) : module === "members" ? (
-        <MembersPanel members={members} />
+        <MembersPanel members={members} workspace={workspace} />
       ) : module === "programs" ? (
         <EventInventory
           dashboard={dashboard}

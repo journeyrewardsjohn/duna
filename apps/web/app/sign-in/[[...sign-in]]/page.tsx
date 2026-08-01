@@ -2,7 +2,16 @@ import { SignIn } from "@clerk/nextjs";
 import { DunaMark } from "@duna/ui";
 import Link from "next/link";
 
-export default function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<{ redirect_url?: string }>;
+}) {
+  const query = await searchParams;
+  const redirectUrl =
+    query.redirect_url?.startsWith("/") && !query.redirect_url.startsWith("//")
+      ? query.redirect_url
+      : undefined;
   if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
     return (
       <main className="auth-page">
@@ -17,7 +26,16 @@ export default function SignInPage() {
   }
   return (
     <main className="auth-page">
-      <SignIn path="/sign-in" routing="path" signUpUrl="/sign-up" />
+      <SignIn
+        forceRedirectUrl={redirectUrl}
+        path="/sign-in"
+        routing="path"
+        signUpUrl={
+          redirectUrl
+            ? `/sign-up?redirect_url=${encodeURIComponent(redirectUrl)}`
+            : "/sign-up"
+        }
+      />
     </main>
   );
 }

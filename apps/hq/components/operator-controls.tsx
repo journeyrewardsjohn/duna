@@ -3,36 +3,49 @@
 import type { OperatorWorkspace } from "@duna/api";
 import { formatMoney } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
+import { upload } from "@vercel/blob/client";
 import {
   ArrowRight,
   ArrowUpRight,
   Building2,
+  CalendarOff,
   CalendarPlus,
   Check,
   CircleAlert,
   CreditCard,
+  Gauge,
+  ImageIcon,
   Landmark,
   MapPinned,
   MessageSquareText,
   Plus,
   ShieldCheck,
   Sparkles,
+  UserPlus,
+  UploadCloud,
   Waves,
 } from "lucide-react";
 import Link from "next/link";
-import { useActionState, type ReactNode } from "react";
+import { useActionState, useState, type ReactNode } from "react";
 import {
   activateCourtAction,
+  blockCourtTimeAction,
   createCourtAction,
+  createPlayerInvitationAction,
   createProgramSessionAction,
   createRatePlanAction,
   createVenueAction,
+  draftCourtScheduleAction,
   publishSessionAction,
   publishVenueAction,
+  replaceCourtScheduleAction,
   saveMessageDraftAction,
   startStripeOnboardingAction,
+  updateCourtBookingConfigurationAction,
+  updateVenueProfileAction,
   type OperatorActionState,
 } from "@/app/actions";
+import { createVenueMediaPath, optimizeImageUpload } from "@/lib/media-storage";
 import type { OperatorModule } from "./navigation";
 
 const initialOperatorActionState: OperatorActionState = {
@@ -108,6 +121,160 @@ function MoneyInput({
         />
       </span>
     </label>
+  );
+}
+
+function PlayerInvitationComposer({
+  workspace,
+}: {
+  readonly workspace: OperatorWorkspace;
+}) {
+  const [isMinor, setIsMinor] = useState(false);
+  const [state, action, pending] = useActionState(
+    createPlayerInvitationAction,
+    initialOperatorActionState,
+  );
+  return (
+    <div className="operator-controls-grid operator-people-controls">
+      <section className="hq-card operator-control-card">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">People · invite</span>
+            <h2>Add a player without creating an identity for them.</h2>
+            <p>
+              Adults claim their own profile. Minors are routed to a parent or
+              guardian and remain private while the relationship is reviewed.
+            </p>
+          </div>
+          <UserPlus aria-hidden size={24} />
+        </header>
+        <form action={action} className="operator-form">
+          <div className="operator-form-grid operator-form-grid--two">
+            <label>
+              <span>Player name</span>
+              <input name="invitedName" required />
+            </label>
+            <label>
+              <span>Relationship</span>
+              <select name="relationship" defaultValue="player">
+                <option value="player">Player</option>
+                <option value="member">Member</option>
+              </select>
+            </label>
+            {!isMinor && (
+              <>
+                <label>
+                  <span>Player email</span>
+                  <input name="invitedEmail" type="email" />
+                </label>
+                <label>
+                  <span>Player mobile · E.164</span>
+                  <input
+                    name="invitedPhoneE164"
+                    inputMode="tel"
+                    placeholder="+17045550123"
+                  />
+                </label>
+              </>
+            )}
+          </div>
+          <label className="operator-switch">
+            <input
+              type="checkbox"
+              name="isMinor"
+              value="true"
+              checked={isMinor}
+              onChange={(event) => setIsMinor(event.target.checked)}
+            />
+            <span>
+              <strong>This player is a minor</strong>
+              Send the invitation to a parent or guardian and create the child
+              profile only after acceptance.
+            </span>
+          </label>
+          {isMinor && (
+            <fieldset className="operator-guardian-fields">
+              <legend>Parent or guardian</legend>
+              <div className="operator-form-grid operator-form-grid--two">
+                <label>
+                  <span>Name</span>
+                  <input name="guardianName" required />
+                </label>
+                <label>
+                  <span>Email</span>
+                  <input name="guardianEmail" type="email" />
+                </label>
+                <label className="operator-field--wide">
+                  <span>Mobile · E.164</span>
+                  <input
+                    name="guardianPhoneE164"
+                    inputMode="tel"
+                    placeholder="+17045550123"
+                  />
+                </label>
+              </div>
+            </fieldset>
+          )}
+          <label className="operator-confirmation">
+            <input type="checkbox" name="confirmed" value="true" required />
+            <span>
+              <strong>I checked this recipient.</strong>
+              SMS is transactional. A minor’s guardian must accept before the
+              player joins the roster.
+            </span>
+          </label>
+          <div className="operator-form-footer">
+            <ActionNotice state={state} />
+            <SubmitButton pending={pending}>Create invitation</SubmitButton>
+          </div>
+        </form>
+      </section>
+      <section className="hq-card operator-control-card operator-invite-status">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">Invitation rail</span>
+            <h2>{workspace.invitations.length} recent invitations</h2>
+            <p>
+              SMS uses Sent.dm. Email delivery remains a configuration gate.
+            </p>
+          </div>
+          <Badge tone={workspace.deliveryProviders.sms ? "live" : "warning"}>
+            SMS {workspace.deliveryProviders.sms ? "ready" : "needs key"}
+          </Badge>
+        </header>
+        <div className="operator-compact-list">
+          {workspace.invitations.map((invitation) => (
+            <article key={invitation.id}>
+              <span>
+                <strong>{invitation.invitedName}</strong>
+                <small>
+                  {invitation.isMinor ? "Minor · guardian routed" : "Adult"} ·{" "}
+                  {invitation.deliveryChannel ?? "link"} ·{" "}
+                  {invitation.deliveryStatus}
+                </small>
+              </span>
+              <Badge
+                tone={
+                  invitation.status === "claimed"
+                    ? "live"
+                    : invitation.status === "pending"
+                      ? "warning"
+                      : "neutral"
+                }
+              >
+                {invitation.status}
+              </Badge>
+            </article>
+          ))}
+          {workspace.invitations.length === 0 && (
+            <div className="hq-empty">
+              <strong>No invitations yet.</strong>
+              <span>The first player invitation will appear here.</span>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -223,6 +390,35 @@ function VenueComposer({
             <span>Venue name</span>
             <input name="name" placeholder="Manhattan Beach Pier" required />
           </label>
+          <label>
+            <span>Venue capacity</span>
+            <input
+              type="number"
+              name="capacity"
+              min="0"
+              defaultValue="0"
+              required
+            />
+          </label>
+          <label className="operator-field--wide">
+            <span>Player-facing description</span>
+            <textarea
+              name="description"
+              rows={3}
+              placeholder="A bright, welcoming home for training and play."
+            />
+          </label>
+          <label className="operator-field--wide">
+            <span>Venue hero image URL</span>
+            <input type="url" name="heroImageUrl" placeholder="https://…" />
+          </label>
+          <label className="operator-field--wide">
+            <span>Amenities</span>
+            <input
+              name="amenities"
+              placeholder="Showers, parking, pro shop, covered courts"
+            />
+          </label>
           <label className="operator-field--wide">
             <span>Street or beach access</span>
             <input name="addressLine1" placeholder="1200 Ocean Drive" />
@@ -310,6 +506,16 @@ function CourtComposer({
             <input name="name" placeholder="Court 3" required />
           </label>
           <label>
+            <span>Comfortable capacity</span>
+            <input
+              type="number"
+              name="capacity"
+              min="1"
+              defaultValue="12"
+              required
+            />
+          </label>
+          <label>
             <span>Surface</span>
             <select name="surface" defaultValue="sand">
               <option value="sand">Sand</option>
@@ -355,6 +561,23 @@ function CourtComposer({
               <option value="90">90 min</option>
               <option value="120">2 hours</option>
               <option value="180">3 hours</option>
+            </select>
+          </label>
+          <label>
+            <span>Bookable lengths</span>
+            <input
+              name="durationOptionsMinutes"
+              defaultValue="60,90,120"
+              placeholder="60,90,120"
+              required
+            />
+          </label>
+          <label>
+            <span>Start-time increment</span>
+            <select name="bookingIncrementMinutes" defaultValue="30">
+              <option value="15">Every 15 min</option>
+              <option value="30">Every 30 min</option>
+              <option value="60">Every hour</option>
             </select>
           </label>
           <label>
@@ -461,6 +684,471 @@ function ConfirmVenue({
   );
 }
 
+function VenueProfileEditor({
+  venue,
+  organizationId,
+}: {
+  readonly venue: OperatorWorkspace["venues"][number];
+  readonly organizationId: string;
+}) {
+  const [state, action, pending] = useActionState(
+    updateVenueProfileAction,
+    initialOperatorActionState,
+  );
+  const [heroImageUrl, setHeroImageUrl] = useState(venue.heroImageUrl ?? "");
+  const [uploadState, setUploadState] = useState<
+    "idle" | "uploading" | "ready" | "error"
+  >("idle");
+  const [uploadMessage, setUploadMessage] = useState("");
+  const uploadVenueImage = async (file?: File) => {
+    if (!file) return;
+    setUploadState("uploading");
+    setUploadMessage("Optimizing your venue image…");
+    try {
+      const prepared = await optimizeImageUpload(file);
+      const stored = await upload(
+        createVenueMediaPath(organizationId, prepared.type),
+        prepared,
+        {
+          access: "public",
+          clientPayload: JSON.stringify({
+            organizationId,
+            fileName: prepared.name,
+            contentType: prepared.type,
+            size: prepared.size,
+            purpose: "venue",
+          }),
+          contentType: prepared.type,
+          handleUploadUrl: "/api/media/upload",
+          onUploadProgress: ({ percentage }) => {
+            setUploadMessage(`Uploading… ${Math.round(percentage)}%`);
+          },
+        },
+      );
+      if (!stored.url) {
+        throw new Error("Duna storage did not return a venue image URL.");
+      }
+      setHeroImageUrl(stored.url);
+      setUploadState("ready");
+      setUploadMessage("Image optimized and ready to save.");
+    } catch (error) {
+      setUploadState("error");
+      setUploadMessage(
+        error instanceof Error ? error.message : "Venue image upload failed.",
+      );
+    }
+  };
+  return (
+    <details className="operator-inline-editor">
+      <summary>
+        <ImageIcon aria-hidden size={16} /> Venue story & image
+      </summary>
+      <form action={action} className="operator-form">
+        <input type="hidden" name="venueId" value={venue.id} />
+        <div className="operator-form-grid operator-form-grid--two">
+          <label>
+            <span>Venue capacity</span>
+            <input
+              type="number"
+              name="capacity"
+              min="0"
+              defaultValue={venue.capacity}
+              required
+            />
+          </label>
+          <label className="operator-field--wide">
+            <span>Player-facing description</span>
+            <textarea
+              name="description"
+              rows={3}
+              defaultValue={venue.description}
+              placeholder="What should players know and feel about this venue?"
+            />
+          </label>
+          <div className="operator-field--wide operator-venue-image">
+            <span>Venue image</span>
+            {heroImageUrl && (
+              <div
+                aria-label="Current venue image"
+                className="operator-venue-image__preview"
+                style={{ backgroundImage: `url("${heroImageUrl}")` }}
+              />
+            )}
+            <label className="operator-venue-image__upload">
+              <UploadCloud aria-hidden size={18} />
+              <span>
+                <strong>
+                  {heroImageUrl ? "Replace image" : "Upload venue image"}
+                </strong>
+                <small>JPEG, PNG, WebP, or AVIF · up to 15 MB</small>
+              </span>
+              <input
+                accept="image/avif,image/jpeg,image/png,image/webp"
+                disabled={uploadState === "uploading"}
+                onChange={(event) => {
+                  void uploadVenueImage(event.target.files?.[0]);
+                }}
+                type="file"
+              />
+            </label>
+            {uploadMessage && (
+              <p
+                className={`operator-upload-status operator-upload-status--${uploadState}`}
+                role={uploadState === "error" ? "alert" : "status"}
+              >
+                {uploadMessage}
+              </p>
+            )}
+            <details className="operator-image-url">
+              <summary>Or paste an image URL</summary>
+              <input
+                onChange={(event) => setHeroImageUrl(event.target.value)}
+                placeholder="https://…"
+                type="url"
+                value={heroImageUrl}
+              />
+            </details>
+            <input name="heroImageUrl" type="hidden" value={heroImageUrl} />
+          </div>
+          <label className="operator-field--wide">
+            <span>Amenities</span>
+            <input
+              name="amenities"
+              defaultValue={venue.amenities.join(", ")}
+              placeholder="Parking, showers, pro shop"
+            />
+          </label>
+        </div>
+        <div className="operator-form-footer">
+          <ActionNotice state={state} />
+          <SubmitButton
+            disabled={uploadState === "uploading"}
+            pending={pending}
+          >
+            Save venue profile
+          </SubmitButton>
+        </div>
+      </form>
+    </details>
+  );
+}
+
+function CourtConfigurationEditor({
+  court,
+  ratePlans = [],
+}: {
+  readonly court: OperatorWorkspace["venues"][number]["courts"][number];
+  readonly ratePlans?: OperatorWorkspace["ratePlans"];
+}) {
+  const [state, action, pending] = useActionState(
+    updateCourtBookingConfigurationAction,
+    initialOperatorActionState,
+  );
+  return (
+    <details className="operator-inline-editor">
+      <summary>
+        <Gauge aria-hidden size={16} /> Booking rules
+      </summary>
+      <form action={action} className="operator-form">
+        <input type="hidden" name="courtId" value={court.id} />
+        <div className="operator-form-grid operator-form-grid--two">
+          <label>
+            <span>Capacity</span>
+            <input
+              type="number"
+              name="capacity"
+              min="1"
+              defaultValue={court.capacity}
+              required
+            />
+          </label>
+          <label>
+            <span>Rate plan</span>
+            <select name="ratePlanId" defaultValue={court.ratePlanId ?? ""}>
+              <option value="">Not available for paid checkout</option>
+              {ratePlans.map((rate) => (
+                <option key={rate.id} value={rate.id}>
+                  {rate.name} ·{" "}
+                  {formatMoney(
+                    rate.nonMemberAmountMinor ?? rate.baseAmountMinor,
+                    rate.currency,
+                  )}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Bookable lengths</span>
+            <input
+              name="durationOptionsMinutes"
+              defaultValue={court.durationOptionsMinutes.join(",")}
+              required
+            />
+          </label>
+          <label>
+            <span>Start-time increment</span>
+            <select
+              name="bookingIncrementMinutes"
+              defaultValue={court.bookingIncrementMinutes}
+            >
+              <option value="15">15 minutes</option>
+              <option value="30">30 minutes</option>
+              <option value="60">60 minutes</option>
+            </select>
+          </label>
+          <label>
+            <span>Minimum notice · minutes</span>
+            <input
+              type="number"
+              name="minimumNoticeMinutes"
+              min="0"
+              defaultValue={court.minimumNoticeMinutes}
+              required
+            />
+          </label>
+          <label>
+            <span>Booking horizon · days</span>
+            <input
+              type="number"
+              name="maximumAdvanceDays"
+              min="1"
+              defaultValue={court.maximumAdvanceDays}
+              required
+            />
+          </label>
+          <label className="operator-field--wide">
+            <span>Cancellation policy title</span>
+            <input
+              name="policyTitle"
+              defaultValue={court.cancellationPolicy.title}
+              required
+            />
+          </label>
+          <label className="operator-field--wide">
+            <span>Cancellation policy</span>
+            <textarea
+              name="policyMarkdown"
+              rows={5}
+              defaultValue={court.cancellationPolicy.markdown}
+              required
+            />
+          </label>
+          <label>
+            <span>Refund until · hours before</span>
+            <input
+              type="number"
+              name="refundBeforeHours"
+              min="0"
+              defaultValue={court.cancellationPolicy.refundBeforeHours ?? 24}
+              required
+            />
+          </label>
+          <label>
+            <span>Credit until · hours before</span>
+            <input
+              type="number"
+              name="creditBeforeHours"
+              min="0"
+              defaultValue={court.cancellationPolicy.creditBeforeHours ?? 2}
+              required
+            />
+          </label>
+          <label className="operator-field--wide">
+            <span>Late cancellation result</span>
+            <input
+              name="lateCancellation"
+              defaultValue={court.cancellationPolicy.lateCancellation}
+              placeholder="Non-refundable inside the cancellation window."
+            />
+          </label>
+        </div>
+        <label className="operator-switch">
+          <input
+            type="checkbox"
+            name="requireFullScroll"
+            value="true"
+            defaultChecked={court.cancellationPolicy.requireFullScroll}
+          />
+          <span>
+            <strong>Require players to read the full policy</strong>
+            Checkout stays locked until they reach the end.
+          </span>
+        </label>
+        <label className="operator-confirmation">
+          <input type="checkbox" name="confirmed" value="true" required />
+          <span>
+            <strong>I reviewed these booking rules.</strong>
+            The change is audit-logged and affects new reservations.
+          </span>
+        </label>
+        <div className="operator-form-footer">
+          <ActionNotice state={state} />
+          <SubmitButton pending={pending}>Apply booking rules</SubmitButton>
+        </div>
+      </form>
+    </details>
+  );
+}
+
+const scheduleDayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function scheduleTime(minute: number) {
+  const hour = Math.floor(minute / 60);
+  const minutes = minute % 60;
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(2020, 0, 1, hour, minutes)));
+}
+
+function ScheduleCopilot({
+  workspace,
+}: {
+  readonly workspace: OperatorWorkspace;
+}) {
+  const courts = workspace.venues.flatMap((venue) =>
+    venue.courts.map((court) => ({ ...court, venueName: venue.name })),
+  );
+  const [courtId, setCourtId] = useState(courts[0]?.id ?? "");
+  const [draftState, draftAction, draftPending] = useActionState(
+    draftCourtScheduleAction,
+    initialOperatorActionState,
+  );
+  const [applyState, applyAction, applyPending] = useActionState(
+    replaceCourtScheduleAction,
+    initialOperatorActionState,
+  );
+  const [blockState, blockAction, blockPending] = useActionState(
+    blockCourtTimeAction,
+    initialOperatorActionState,
+  );
+  return (
+    <section className="hq-card operator-control-card operator-control-card--wide">
+      <header className="hq-card-heading">
+        <div>
+          <span className="hq-eyebrow">Duna AI · schedule copilot</span>
+          <h2>Describe when a court should be open.</h2>
+          <p>
+            Duna turns plain language into a weekly draft. Nothing changes until
+            you review and confirm.
+          </p>
+        </div>
+        <Sparkles aria-hidden size={24} />
+      </header>
+      {courts.length > 0 ? (
+        <>
+          <label className="operator-copilot-court">
+            <span>Court</span>
+            <select
+              value={courtId}
+              onChange={(event) => setCourtId(event.target.value)}
+            >
+              {courts.map((court) => (
+                <option key={court.id} value={court.id}>
+                  {court.venueName} · {court.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <form action={draftAction} className="operator-copilot-form">
+            <textarea
+              name="prompt"
+              rows={3}
+              defaultValue="Open weekdays from 8am to 10pm and weekends from 7am to 8pm for court rentals."
+              required
+            />
+            <SubmitButton pending={draftPending}>
+              <Sparkles aria-hidden size={16} /> Draft schedule
+            </SubmitButton>
+          </form>
+          <ActionNotice state={draftState} />
+          {draftState.scheduleProposal && (
+            <div className="operator-schedule-proposal">
+              <header>
+                <strong>{draftState.scheduleProposal.summary}</strong>
+                <Badge>Proposed</Badge>
+              </header>
+              <div>
+                {draftState.scheduleProposal.blocks.map((block) => (
+                  <span key={`${block.weekday}-${block.startsAtMinute}`}>
+                    <strong>{scheduleDayNames[block.weekday]}</strong>
+                    <small>
+                      {scheduleTime(block.startsAtMinute)}–
+                      {scheduleTime(block.endsAtMinute)}
+                    </small>
+                  </span>
+                ))}
+              </div>
+              <ul>
+                {draftState.scheduleProposal.assumptions.map((assumption) => (
+                  <li key={assumption}>{assumption}</li>
+                ))}
+              </ul>
+              <form action={applyAction}>
+                <input type="hidden" name="courtId" value={courtId} />
+                <input
+                  type="hidden"
+                  name="blocks"
+                  value={JSON.stringify(draftState.scheduleProposal.blocks)}
+                />
+                <input type="hidden" name="confirmed" value="true" />
+                <div className="operator-form-footer">
+                  <ActionNotice state={applyState} />
+                  <SubmitButton pending={applyPending}>
+                    Confirm & publish schedule
+                  </SubmitButton>
+                </div>
+              </form>
+            </div>
+          )}
+          <details className="operator-blackout">
+            <summary>
+              <CalendarOff aria-hidden size={16} /> Block a date or maintenance
+              window
+            </summary>
+            <form action={blockAction} className="operator-form">
+              <input type="hidden" name="courtId" value={courtId} />
+              <div className="operator-form-grid operator-form-grid--two">
+                <label>
+                  <span>Starts</span>
+                  <input type="datetime-local" name="localStartsAt" required />
+                </label>
+                <label>
+                  <span>Ends</span>
+                  <input type="datetime-local" name="localEndsAt" required />
+                </label>
+                <label className="operator-field--wide">
+                  <span>Reason</span>
+                  <input name="reason" placeholder="Net maintenance" required />
+                </label>
+              </div>
+              <label className="operator-confirmation">
+                <input type="checkbox" name="confirmed" value="true" required />
+                <span>
+                  <strong>Block this time from new reservations.</strong>
+                  Existing bookings remain visible for staff review.
+                </span>
+              </label>
+              <div className="operator-form-footer">
+                <ActionNotice state={blockState} />
+                <SubmitButton pending={blockPending} secondary>
+                  Block court time
+                </SubmitButton>
+              </div>
+            </form>
+          </details>
+        </>
+      ) : (
+        <div className="hq-empty">
+          <strong>Add a court before drafting availability.</strong>
+          <span>The schedule copilot will appear here automatically.</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function FacilityInventory({
   workspace,
 }: {
@@ -486,7 +1174,17 @@ function FacilityInventory({
       </header>
       <div className="operator-facility-list">
         {workspace.venues.map((venue) => (
-          <article key={venue.id}>
+          <article
+            className="operator-facility"
+            key={venue.id}
+            style={
+              venue.heroImageTreatmentUrl || venue.heroImageUrl
+                ? {
+                    backgroundImage: `linear-gradient(110deg, rgba(7, 24, 37, .96), rgba(7, 24, 37, .66)), url(${venue.heroImageTreatmentUrl ?? venue.heroImageUrl})`,
+                  }
+                : undefined
+            }
+          >
             <header>
               <span>
                 <strong>{venue.name}</strong>
@@ -498,6 +1196,26 @@ function FacilityInventory({
                 {venue.status}
               </Badge>
             </header>
+            <section className="operator-venue-metrics">
+              <span>
+                <small>Utilization · 30d</small>
+                <Numeric>{venue.utilization.percent.toFixed(1)}%</Numeric>
+              </span>
+              <span>
+                <small>Bookings</small>
+                <Numeric>{venue.utilization.bookingCount30d}</Numeric>
+              </span>
+              <span>
+                <small>Capacity</small>
+                <Numeric>
+                  {venue.capacity ||
+                    venue.courts.reduce(
+                      (total, court) => total + court.capacity,
+                      0,
+                    )}
+                </Numeric>
+              </span>
+            </section>
             <div>
               {venue.courts.map((court) => {
                 const rate = workspace.ratePlans.find(
@@ -527,8 +1245,19 @@ function FacilityInventory({
                       >
                         {court.status}
                       </Badge>
+                      <i className="operator-utilization-bar">
+                        <b
+                          style={{
+                            width: `${Math.max(2, court.utilization.percent)}%`,
+                          }}
+                        />
+                      </i>
                     </span>
                     <ConfirmCourt court={court} />
+                    <CourtConfigurationEditor
+                      court={court}
+                      ratePlans={workspace.ratePlans}
+                    />
                   </section>
                 );
               })}
@@ -538,6 +1267,10 @@ function FacilityInventory({
                 </p>
               )}
             </div>
+            <VenueProfileEditor
+              organizationId={workspace.organization.id}
+              venue={venue}
+            />
             <ConfirmVenue venue={venue} />
           </article>
         ))}
@@ -989,6 +1722,7 @@ function FacilitiesControls({
   return (
     <>
       <FacilityInventory workspace={workspace} />
+      <ScheduleCopilot workspace={workspace} />
       <div className="operator-controls-grid">
         <VenueComposer workspace={workspace} />
         <CourtComposer workspace={workspace} />
@@ -1006,6 +1740,9 @@ export function OperatorControls({
 }) {
   if (module === "messages") {
     return <MessageComposer workspace={workspace} />;
+  }
+  if (module === "members") {
+    return <PlayerInvitationComposer workspace={workspace} />;
   }
   if (module === "payments") {
     return (
@@ -1025,6 +1762,9 @@ export function OperatorControls({
         <FacilitiesControls workspace={workspace} />
       </>
     );
+  }
+  if (module === "locations") {
+    return <FacilitiesControls workspace={workspace} />;
   }
   if (module === "events" || module === "leagues") {
     const kind = module === "leagues" ? "league" : "tournament";

@@ -33,6 +33,10 @@ import {
   availableSlotSchema,
   bracketSchema,
   consentRecordResultSchema,
+  courtScheduleProposalSchema,
+  availabilityAlertResultSchema,
+  courtAvailabilitySchema,
+  courtBookingInviteSummarySchema,
   courtBookingInventorySchema,
   courtCheckoutResultSchema,
   courtCheckoutStatusSchema,
@@ -53,6 +57,8 @@ import {
   operatorWorkspaceSchema,
   organizationSummarySchema,
   personSummarySchema,
+  playerInvitationClaimResultSchema,
+  playerInvitationSchema,
   playerDashboardSchema,
   playerSettingsSchema,
   playerWalletSchema,
@@ -79,9 +85,13 @@ import {
 } from "./checkout";
 import {
   CourtCheckoutError,
+  createAvailabilityAlert,
   getCourtCheckoutStatus,
+  loadCourtAvailability,
+  loadCourtBookingInvite,
   loadCourtBookingInventory,
   startCourtCheckout,
+  startParticipantShareCheckout,
 } from "./court-checkout";
 import {
   CommerceError,
@@ -120,18 +130,26 @@ import {
 } from "./membership";
 import {
   activateCourt,
+  blockCourtTime,
+  claimPlayerInvitation,
   createCourt,
   createEventDraft,
+  createPlayerInvitation,
   createProgramSession,
   createRatePlan,
   createVenue,
+  draftCourtScheduleFromPrompt,
   loadDemoOperatorWorkspace,
   loadOperatorWorkspace,
+  loadPlayerInvitation,
   OperatorServiceError,
   publishSession,
   publishVenue,
   saveMessageDraft,
   startStripeOnboarding,
+  replaceCourtSchedule,
+  updateCourtBookingConfiguration,
+  updateVenueProfile,
 } from "./operator-service";
 import {
   appendMatchEvents,
@@ -152,6 +170,8 @@ import {
   importSandSource,
   linkExternalPlayer,
   loadPublicPlayerPerformanceByHandle,
+  loadPublicProEvent,
+  loadPublicProMatch,
   loadPublicProCoverage,
   loadSandDataOverview,
   mergeUnclaimedProfile,
@@ -712,6 +732,45 @@ const publicRouter = router({
         return throwDomainError(error);
       }
     }),
+  courtAvailability: publicProcedure
+    .input(
+      z.object({
+        venueId: z.string().uuid(),
+        date: z.iso.date(),
+        durationMinutes: z.number().int().min(15).max(480),
+      }),
+    )
+    .output(courtAvailabilitySchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadCourtAvailability({
+          ...input,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  courtBookingInvite: publicProcedure
+    .input(z.object({ inviteToken: z.string().uuid() }))
+    .output(courtBookingInviteSummarySchema)
+    .query(async ({ input }) => {
+      try {
+        return await loadCourtBookingInvite(input.inviteToken);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  playerInvitation: publicProcedure
+    .input(z.object({ inviteToken: z.string().min(32).max(96) }))
+    .output(playerInvitationSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadPlayerInvitation(input.inviteToken, ctx.now);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   players: publicProcedure
     .input(
       z
@@ -738,6 +797,25 @@ const publicRouter = router({
       return performance;
     }),
   proCoverage: publicProcedure.query(() => loadPublicProCoverage()),
+  proEvent: publicProcedure
+    .input(z.object({ slug: z.string().trim().min(1).max(180) }))
+    .query(async ({ input }) => {
+      const event = await loadPublicProEvent(input.slug);
+      if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+      return event;
+    }),
+  proMatch: publicProcedure
+    .input(
+      z.object({
+        eventSlug: z.string().trim().min(1).max(180),
+        matchId: z.string().uuid(),
+      }),
+    )
+    .query(async ({ input }) => {
+      const match = await loadPublicProMatch(input.eventSlug, input.matchId);
+      if (!match) throw new TRPCError({ code: "NOT_FOUND" });
+      return match;
+    }),
   organizationBySlug: publicProcedure
     .input(z.object({ slug: z.string().min(1) }))
     .output(organizationSummarySchema)
@@ -754,6 +832,42 @@ const playerRouter = router({
   dashboard: protectedProcedure
     .output(playerDashboardSchema)
     .query(({ ctx }) => getRepository().player.dashboard(ctx.actor!.personId)),
+  claimOrganizationInvitation: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "organization-invitation-claim",
+        capacity: 8,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        inviteToken: z.string().min(32).max(96),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(playerInvitationClaimResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.claimOrganizationInvitation",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await claimPlayerInvitation({
+              actor: ctx.actor!,
+              inviteToken: input.inviteToken,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   matches: protectedProcedure
     .output(z.array(matchSummarySchema).readonly())
     .query(({ ctx }) =>
@@ -1237,8 +1351,14 @@ const playerRouter = router({
           startsAt: z.iso.datetime(),
           endsAt: z.iso.datetime(),
           venueName: z.string().min(2),
-          capacity: z.number().int().min(4).max(48),
-          format: z.enum(["2s", "4s", "6s", "king-queen"]),
+          venueId: z.string().uuid().optional(),
+          courtBookingId: z.string().uuid().optional(),
+          capacity: z.number().int().min(2).max(48),
+          format: z.enum(["2s", "3s", "4s", "6s", "king-queen"]),
+          matchType: z.enum(["competitive", "casual"]).default("competitive"),
+          genderPreference: z
+            .enum(["open", "mens", "womens", "mixed"])
+            .default("open"),
           note: z.string().trim().max(1_000).optional(),
           visibility: z.enum(["public", "unlisted"]),
           costMinor: z.number().int().min(0).max(100_000),
@@ -1266,8 +1386,12 @@ const playerRouter = router({
             startsAt: input.startsAt,
             endsAt: input.endsAt,
             venueName: input.venueName,
+            venueId: input.venueId,
+            courtBookingId: input.courtBookingId,
             capacity: input.capacity,
             format: input.format,
+            matchType: input.matchType,
+            genderPreference: input.genderPreference,
             note: input.note,
             visibility: input.visibility,
             costMinor: input.costMinor,
@@ -1383,6 +1507,28 @@ const playerRouter = router({
         courtId: z.string().uuid(),
         localStartsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
         durationMinutes: z.number().int().min(15).max(480),
+        paymentMode: z.enum(["full", "split"]).default("full"),
+        participants: z
+          .array(
+            z
+              .object({
+                personId: z.string().uuid().optional(),
+                name: z.string().trim().min(1).max(120).optional(),
+                email: z.email().optional(),
+                phoneE164: z
+                  .string()
+                  .regex(/^\+[1-9]\d{7,14}$/)
+                  .optional(),
+              })
+              .refine(
+                (value) =>
+                  Boolean(value.personId || value.email || value.phoneE164),
+                "Choose a Duna player or provide an email or phone number.",
+              ),
+          )
+          .default([]),
+        policyAccepted: z.boolean(),
+        policyFullScrollConfirmed: z.boolean(),
         successUrl: z.url(),
         cancelUrl: z.url(),
         idempotencyKey: z.string().uuid(),
@@ -1402,6 +1548,10 @@ const playerRouter = router({
               courtId: input.courtId,
               localStartsAt: input.localStartsAt,
               durationMinutes: input.durationMinutes,
+              paymentMode: input.paymentMode,
+              participants: input.participants,
+              policyAccepted: input.policyAccepted,
+              policyFullScrollConfirmed: input.policyFullScrollConfirmed,
               successUrl: input.successUrl,
               cancelUrl: input.cancelUrl,
               idempotencyKey: input.idempotencyKey,
@@ -1428,6 +1578,93 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
+  createAvailabilityAlert: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "availability-alert-create",
+        capacity: 8,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z
+        .object({
+          venueId: z.string().uuid(),
+          courtId: z.string().uuid().optional(),
+          targetDate: z.iso.date(),
+          earliestMinute: z.number().int().min(0).max(1_439).default(0),
+          latestMinute: z.number().int().min(1).max(1_440).default(1_440),
+          durationMinutes: z.number().int().min(15).max(480),
+          channel: z.enum(["sms", "push", "in-app"]).default("push"),
+        })
+        .refine(
+          (value) => value.latestMinute > value.earliestMinute,
+          "Alert end time must be later than its start time.",
+        ),
+    )
+    .output(availabilityAlertResultSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await createAvailabilityAlert({
+          actor: ctx.actor!,
+          venueId: input.venueId,
+          courtId: input.courtId,
+          targetDate: input.targetDate,
+          earliestMinute: input.earliestMinute,
+          latestMinute: input.latestMinute,
+          durationMinutes: input.durationMinutes,
+          channel: input.channel,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  startParticipantShareCheckout: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "court-share-checkout",
+        capacity: 8,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        inviteToken: z.string().uuid(),
+        policyAccepted: z.boolean(),
+        policyFullScrollConfirmed: z.boolean(),
+        successUrl: z.url(),
+        cancelUrl: z.url(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(courtCheckoutResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.startParticipantShareCheckout",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await startParticipantShareCheckout({
+              actor: ctx.actor!,
+              inviteToken: input.inviteToken,
+              policyAccepted: input.policyAccepted,
+              policyFullScrollConfirmed: input.policyFullScrollConfirmed,
+              successUrl: input.successUrl,
+              cancelUrl: input.cancelUrl,
+              idempotencyKey: input.idempotencyKey,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   startEventCheckout: protectedProcedure
     .use(
       rateLimitMiddleware({
@@ -1833,6 +2070,73 @@ const operatorRouter = router({
     .query(({ ctx }) =>
       getRepository().operator.members(ctx.actor!.organizationId!),
     ),
+  createPlayerInvitation: organizationProcedure("members:write")
+    .use(
+      rateLimitMiddleware({
+        id: "operator-player-invitation",
+        capacity: 20,
+        refillPerMinute: 10,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z
+        .object({
+          invitedName: z.string().trim().min(2).max(120),
+          invitedEmail: z.email().optional(),
+          invitedPhoneE164: z
+            .string()
+            .regex(/^\+[1-9]\d{7,14}$/)
+            .optional(),
+          relationship: z.enum(["player", "member"]).default("player"),
+          isMinor: z.boolean().default(false),
+          guardianName: z.string().trim().min(2).max(120).optional(),
+          guardianEmail: z.email().optional(),
+          guardianPhoneE164: z
+            .string()
+            .regex(/^\+[1-9]\d{7,14}$/)
+            .optional(),
+          confirmed: z.literal(true),
+          idempotencyKey: z.string().uuid(),
+        })
+        .refine(
+          (value) =>
+            value.isMinor
+              ? Boolean(value.guardianEmail || value.guardianPhoneE164)
+              : Boolean(value.invitedEmail || value.invitedPhoneE164),
+          "Provide a delivery destination for the player or their guardian.",
+        ),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createPlayerInvitation",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createPlayerInvitation({
+              actor: ctx.actor!,
+              invitedName: input.invitedName,
+              invitedEmail: input.invitedEmail,
+              invitedPhoneE164: input.invitedPhoneE164,
+              relationship: input.relationship,
+              isMinor: input.isMinor,
+              guardianName: input.guardianName,
+              guardianEmail: input.guardianEmail,
+              guardianPhoneE164: input.guardianPhoneE164,
+              confirmed: input.confirmed,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   events: organizationProcedure("sessions:read")
     .output(z.array(eventSummarySchema).readonly())
     .query(({ ctx }) =>
@@ -2005,6 +2309,10 @@ const operatorRouter = router({
     .input(
       z.object({
         name: z.string().trim().min(2).max(120),
+        description: z.string().trim().max(2_000).optional(),
+        capacity: z.number().int().min(0).max(100_000).optional(),
+        heroImageUrl: z.url().optional(),
+        amenities: z.array(z.string().trim().min(1).max(80)).max(40).optional(),
         addressLine1: z.string().trim().max(160).optional(),
         locality: z.string().trim().max(100).optional(),
         administrativeArea: z.string().trim().max(100).optional(),
@@ -2044,14 +2352,31 @@ const operatorRouter = router({
         name: z.string().trim().min(1).max(100),
         surface: z.string().trim().min(2).max(32),
         lit: z.boolean(),
+        capacity: z.number().int().min(1).max(1_000).optional(),
         bookingPolicy: z.enum(["public", "members", "tiers", "staff", "none"]),
         ratePlanId: z.string().uuid().optional(),
         minimumDurationMinutes: z.number().int().min(15).max(1_440),
         maximumDurationMinutes: z.number().int().min(15).max(1_440),
+        durationOptionsMinutes: z
+          .array(z.number().int().min(15).max(1_440))
+          .min(1)
+          .max(16)
+          .optional(),
+        bookingIncrementMinutes: z.number().int().min(5).max(240).optional(),
         bufferBeforeMinutes: z.number().int().min(0).max(240),
         bufferAfterMinutes: z.number().int().min(0).max(240),
         minimumNoticeMinutes: z.number().int().min(0).max(43_200),
         maximumAdvanceDays: z.number().int().min(1).max(730),
+        cancellationPolicy: z
+          .object({
+            title: z.string().trim().min(2).max(120),
+            markdown: z.string().trim().min(10).max(20_000),
+            refundBeforeHours: z.number().int().min(0).max(8_760).optional(),
+            creditBeforeHours: z.number().int().min(0).max(8_760).optional(),
+            lateCancellation: z.string().trim().max(1_000).optional(),
+            requireFullScroll: z.boolean(),
+          })
+          .optional(),
         idempotencyKey: z.string().uuid(),
       }),
     )
@@ -2067,6 +2392,191 @@ const operatorRouter = router({
             return await createCourt({
               actor: ctx.actor!,
               ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  updateVenueProfile: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        venueId: z.string().uuid(),
+        description: z.string().trim().max(2_000).optional(),
+        capacity: z.number().int().min(0).max(100_000),
+        heroImageUrl: z.url().optional(),
+        amenities: z.array(z.string().trim().min(1).max(80)).max(40),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.updateVenueProfile",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateVenueProfile({
+              actor: ctx.actor!,
+              venueId: input.venueId,
+              description: input.description,
+              capacity: input.capacity,
+              heroImageUrl: input.heroImageUrl,
+              amenities: input.amenities,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  updateCourtBookingConfiguration: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        courtId: z.string().uuid(),
+        ratePlanId: z.string().uuid().nullable(),
+        capacity: z.number().int().min(1).max(1_000),
+        durationOptionsMinutes: z
+          .array(z.number().int().min(15).max(1_440))
+          .min(1)
+          .max(16),
+        bookingIncrementMinutes: z.number().int().min(5).max(240),
+        minimumNoticeMinutes: z.number().int().min(0).max(43_200),
+        maximumAdvanceDays: z.number().int().min(1).max(730),
+        cancellationPolicy: z.object({
+          title: z.string().trim().min(2).max(120),
+          markdown: z.string().trim().min(10).max(20_000),
+          refundBeforeHours: z.number().int().min(0).max(8_760).optional(),
+          creditBeforeHours: z.number().int().min(0).max(8_760).optional(),
+          lateCancellation: z.string().trim().max(1_000).optional(),
+          requireFullScroll: z.boolean(),
+        }),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.updateCourtBookingConfiguration",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateCourtBookingConfiguration({
+              actor: ctx.actor!,
+              courtId: input.courtId,
+              ratePlanId: input.ratePlanId,
+              capacity: input.capacity,
+              durationOptionsMinutes: input.durationOptionsMinutes,
+              bookingIncrementMinutes: input.bookingIncrementMinutes,
+              minimumNoticeMinutes: input.minimumNoticeMinutes,
+              maximumAdvanceDays: input.maximumAdvanceDays,
+              cancellationPolicy: input.cancellationPolicy,
+              confirmed: input.confirmed,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  draftCourtSchedule: organizationProcedure("sessions:write")
+    .input(z.object({ prompt: z.string().trim().min(8).max(2_000) }))
+    .output(courtScheduleProposalSchema)
+    .query(({ input }) => draftCourtScheduleFromPrompt(input.prompt)),
+  replaceCourtSchedule: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        courtId: z.string().uuid(),
+        blocks: z
+          .array(
+            z.object({
+              weekday: z.number().int().min(0).max(6),
+              startsAtMinute: z.number().int().min(0).max(1_439),
+              endsAtMinute: z.number().int().min(1).max(1_440),
+              mode: z.enum([
+                "open",
+                "rentals-only",
+                "members-only",
+                "private-lessons-only",
+                "group-only",
+                "league-reserved",
+                "maintenance",
+                "blocked",
+              ]),
+            }),
+          )
+          .min(1)
+          .max(64),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.replaceCourtSchedule",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await replaceCourtSchedule({
+              actor: ctx.actor!,
+              courtId: input.courtId,
+              blocks: input.blocks,
+              confirmed: input.confirmed,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  blockCourtTime: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        courtId: z.string().uuid(),
+        localStartsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
+        localEndsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.blockCourtTime",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await blockCourtTime({
+              actor: ctx.actor!,
+              courtId: input.courtId,
+              localStartsAt: input.localStartsAt,
+              localEndsAt: input.localEndsAt,
+              reason: input.reason,
+              confirmed: input.confirmed,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,

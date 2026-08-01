@@ -8,6 +8,7 @@ import {
   demoWalletEntries,
 } from "@duna/core/demo";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Contacts from "expo-contacts";
 import * as Crypto from "expo-crypto";
 import { StatusBar } from "expo-status-bar";
 import * as WebBrowser from "expo-web-browser";
@@ -25,7 +26,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { dunaWebUrl } from "./mobile-api";
+import { dunaWebUrl, type DunaApiClient } from "./mobile-api";
 import { PlayerRuntimeProvider, usePlayerRuntime } from "./runtime";
 
 const lightColors = {
@@ -118,6 +119,19 @@ function ThemeButton() {
 }
 
 type Tab = "home" | "discover" | "play" | "wallet" | "you";
+
+type CourtInventory = Awaited<
+  ReturnType<DunaApiClient["public"]["courtBookingInventory"]["query"]>
+>;
+type CourtAvailability = Awaited<
+  ReturnType<DunaApiClient["public"]["courtAvailability"]["query"]>
+>;
+type BookingParticipant = {
+  readonly personId?: string;
+  readonly name?: string;
+  readonly email?: string;
+  readonly phoneE164?: string;
+};
 
 const tabs: readonly {
   key: Tab;
@@ -543,6 +557,661 @@ function EventCard({
   );
 }
 
+function localDateValue(date: Date): string {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+function localSlotTime(value: string): string {
+  const [hourValue = "0", minuteValue = "00"] = value.slice(11, 16).split(":");
+  const hour = Number(hourValue);
+  return `${hour % 12 || 12}:${minuteValue} ${hour >= 12 ? "pm" : "am"}`;
+}
+
+function contactPhoneE164(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const digits = value.replace(/\D/g, "");
+  if (value.trim().startsWith("+") && digits.length >= 8) return `+${digits}`;
+  if (digits.length === 10) return `+1${digits}`;
+  return undefined;
+}
+
+function VenueBookingModal({
+  venueId,
+  visible,
+  onClose,
+}: {
+  readonly venueId?: string;
+  readonly visible: boolean;
+  readonly onClose: () => void;
+}) {
+  const { client, mode, people, refresh } = usePlayerRuntime();
+  const [inventory, setInventory] = useState<CourtInventory>();
+  const [availability, setAvailability] = useState<CourtAvailability>();
+  const [selectedDate, setSelectedDate] = useState(() =>
+    localDateValue(new Date()),
+  );
+  const [durationMinutes, setDurationMinutes] = useState(90);
+  const [selectedSlot, setSelectedSlot] =
+    useState<CourtAvailability["slots"][number]>();
+  const [paymentMode, setPaymentMode] = useState<"full" | "split">("full");
+  const [participants, setParticipants] = useState<BookingParticipant[]>([]);
+  const [contactOptions, setContactOptions] = useState<BookingParticipant[]>(
+    [],
+  );
+  const [manualName, setManualName] = useState("");
+  const [manualTarget, setManualTarget] = useState("");
+  const [policyAccepted, setPolicyAccepted] = useState(false);
+  const [policyRead, setPolicyRead] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
+
+  const dates = Array.from({ length: 8 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() + index);
+    return date;
+  });
+  const durations = [
+    ...new Set(
+      inventory?.courts.flatMap((court) => court.durationOptionsMinutes) ?? [
+        60, 90, 120,
+      ],
+    ),
+  ].sort((left, right) => left - right);
+  const selectedCourt = inventory?.courts.find(
+    (court) => court.id === selectedSlot?.courtId,
+  );
+  const policy = selectedCourt?.cancellationPolicy;
+  const policyReady =
+    policyAccepted && (!policy?.requireFullScroll || policyRead);
+  const totalMinor = selectedSlot?.price?.amountMinor ?? 0;
+  const shareMinor =
+    paymentMode === "split"
+      ? Math.ceil(totalMinor / Math.max(1, participants.length + 1))
+      : totalMinor;
+
+  useEffect(() => {
+    if (!visible || !venueId || !client) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(undefined);
+    void client.public.courtBookingInventory
+      .query({ venueId })
+      .then((nextInventory) => {
+        if (cancelled) return;
+        setInventory(nextInventory);
+        const options = [
+          ...new Set(
+            nextInventory.courts.flatMap(
+              (court) => court.durationOptionsMinutes,
+            ),
+          ),
+        ];
+        setDurationMinutes(options.includes(90) ? 90 : (options[0] ?? 60));
+      })
+      .catch((reason) => {
+        if (!cancelled) setError(displayError(reason));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, venueId, visible]);
+
+  useEffect(() => {
+    if (!visible || !venueId || !client || !inventory) return;
+    let cancelled = false;
+    setLoading(true);
+    setSelectedSlot(undefined);
+    setPolicyAccepted(false);
+    setPolicyRead(false);
+    void client.public.courtAvailability
+      .query({
+        venueId,
+        date: selectedDate,
+        durationMinutes,
+      })
+      .then((nextAvailability) => {
+        if (!cancelled) setAvailability(nextAvailability);
+      })
+      .catch((reason) => {
+        if (!cancelled) setError(displayError(reason));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, durationMinutes, inventory, selectedDate, venueId, visible]);
+
+  function addParticipant(participant: BookingParticipant) {
+    const key =
+      participant.personId ?? participant.email ?? participant.phoneE164;
+    if (
+      !key ||
+      participants.some(
+        (item) =>
+          (item.personId ?? item.email ?? item.phoneE164)?.toLowerCase() ===
+          key.toLowerCase(),
+      )
+    ) {
+      return;
+    }
+    setParticipants((current) => [...current, participant]);
+  }
+
+  function addManualParticipant() {
+    const value = manualTarget.trim();
+    const email = value.includes("@") ? value.toLowerCase() : undefined;
+    const phoneE164 = email ? undefined : contactPhoneE164(value);
+    if (!email && !phoneE164) {
+      setError("Enter an email address or a mobile number with country code.");
+      return;
+    }
+    addParticipant({
+      name: manualName.trim() || undefined,
+      email,
+      phoneE164,
+    });
+    setManualName("");
+    setManualTarget("");
+    setError(undefined);
+  }
+
+  async function importContacts() {
+    try {
+      const permission = await Contacts.requestPermissionsAsync();
+      if (permission.status !== "granted") {
+        setError("Contacts permission was not granted.");
+        return;
+      }
+      const result = await Contacts.getContactsAsync({
+        fields: [Contacts.Fields.Emails, Contacts.Fields.PhoneNumbers],
+        pageSize: 40,
+        sort: Contacts.SortTypes.UserDefault,
+      });
+      const options = result.data
+        .map((contact) => {
+          const email = contact.emails?.[0]?.email?.trim().toLowerCase();
+          const phoneE164 = contactPhoneE164(contact.phoneNumbers?.[0]?.number);
+          return {
+            name: contact.name || undefined,
+            email: email || undefined,
+            phoneE164,
+          } satisfies BookingParticipant;
+        })
+        .filter((contact) => contact.email || contact.phoneE164)
+        .slice(0, 20);
+      setContactOptions(options);
+      setNotice(
+        "Contacts stay on this device. Duna receives only people you add.",
+      );
+    } catch (reason) {
+      setError(displayError(reason));
+    }
+  }
+
+  async function createAlert() {
+    if (!client || !venueId || mode === "preview") return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const result = await client.player.createAvailabilityAlert.mutate({
+        venueId,
+        targetDate: selectedDate,
+        durationMinutes,
+        earliestMinute: 0,
+        latestMinute: 1_440,
+        channel: "push",
+      });
+      setNotice(
+        result.premiumRequired
+          ? "Your free priority alert is active. Duna+ unlocks additional simultaneous alerts."
+          : "Priority alert created. We’ll notify you when a matching court opens.",
+      );
+    } catch (reason) {
+      setError(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function checkout() {
+    if (!client || !selectedSlot || !policyReady || mode === "preview") {
+      return;
+    }
+    if (paymentMode === "split" && participants.length === 0) {
+      setError("Add at least one player before splitting the payment.");
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    try {
+      const result = await client.player.startCourtCheckout.mutate({
+        courtId: selectedSlot.courtId,
+        localStartsAt: selectedSlot.localStartsAt.slice(0, 16),
+        durationMinutes,
+        paymentMode,
+        participants,
+        policyAccepted,
+        policyFullScrollConfirmed: policyRead || !policy?.requireFullScroll,
+        successUrl: `${dunaWebUrl}/app?court_checkout=success`,
+        cancelUrl: `${dunaWebUrl}/app?court_checkout=cancelled`,
+        idempotencyKey: Crypto.randomUUID(),
+      });
+      if (result.checkoutUrl) {
+        await WebBrowser.openBrowserAsync(result.checkoutUrl);
+      }
+      if (result.mode === "free" || result.checkoutUrl) {
+        await refresh();
+        setNotice(
+          paymentMode === "split"
+            ? "Your share is ready. Duna sent each invited player their secure link."
+            : "The court is reserved.",
+        );
+      } else {
+        setError("That court is no longer available. Pick another time.");
+      }
+    } catch (reason) {
+      setError(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!visible) return null;
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="pageSheet"
+      visible={visible}
+    >
+      <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
+        <ScrollView
+          contentContainerStyle={styles.modalContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.modalHeader}>
+            <Pressable
+              onPress={
+                selectedSlot ? () => setSelectedSlot(undefined) : onClose
+              }
+            >
+              <Text style={styles.closeText}>{selectedSlot ? "‹" : "×"}</Text>
+            </Pressable>
+            <Text style={styles.modalHeaderTitle}>
+              {selectedSlot ? "Review" : "Book a court"}
+            </Text>
+            <ThemeButton />
+          </View>
+          {inventory && (
+            <>
+              <Text style={styles.bookingVenueName}>
+                {inventory.venue.name}
+              </Text>
+              <Text style={styles.checkoutMeta}>
+                {inventory.venue.city} · {inventory.venue.organizationName}
+              </Text>
+            </>
+          )}
+          {!selectedSlot ? (
+            <>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.horizontalBleed}
+              >
+                <View style={styles.bookingDateRow}>
+                  {dates.map((date) => {
+                    const value = localDateValue(date);
+                    const active = value === selectedDate;
+                    return (
+                      <Pressable
+                        key={value}
+                        onPress={() => setSelectedDate(value)}
+                        style={[
+                          styles.bookingDate,
+                          active && styles.bookingDateActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.bookingDateDay,
+                            active && styles.bookingDateTextActive,
+                          ]}
+                        >
+                          {date
+                            .toLocaleDateString("en-US", { weekday: "short" })
+                            .toUpperCase()}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.bookingDateNumber,
+                            active && styles.bookingDateTextActive,
+                          ]}
+                        >
+                          {date.getDate()}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+              <View style={styles.bookingDurationRow}>
+                {durations.map((duration) => (
+                  <Pressable
+                    key={duration}
+                    onPress={() => setDurationMinutes(duration)}
+                    style={[
+                      styles.bookingDuration,
+                      duration === durationMinutes &&
+                        styles.bookingDurationActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.bookingDurationText,
+                        duration === durationMinutes &&
+                          styles.bookingDurationTextActive,
+                      ]}
+                    >
+                      {duration} min
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              {loading ? (
+                <Text style={styles.bookingEmpty}>Finding open courts…</Text>
+              ) : availability?.slots.length ? (
+                <View style={styles.bookingSlotGrid}>
+                  {availability.slots.map((slot) => (
+                    <Pressable
+                      key={`${slot.courtId}-${slot.startsAt}`}
+                      onPress={() => setSelectedSlot(slot)}
+                      style={styles.bookingSlot}
+                    >
+                      <Text style={styles.bookingSlotTime}>
+                        {localSlotTime(slot.localStartsAt)}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.bookingSlotCourt}>
+                        {slot.courtName}
+                      </Text>
+                      <Text style={styles.bookingSlotPrice}>
+                        {slot.price
+                          ? formatMoney(
+                              slot.price.amountMinor,
+                              slot.price.currency,
+                            )
+                          : "Free"}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.bookingEmptyCard}>
+                  <Text style={styles.rowTitle}>
+                    No matching court is open.
+                  </Text>
+                  <Text style={styles.bodyText}>
+                    Create a priority alert and Duna will watch cancellations
+                    and newly released inventory.
+                  </Text>
+                </View>
+              )}
+              <Pressable
+                disabled={busy || mode === "preview"}
+                onPress={() => void createAlert()}
+                style={styles.bookingAlertButton}
+              >
+                <Text style={styles.bookingAlertIcon}>♢</Text>
+                <View style={styles.flex}>
+                  <Text style={styles.rowTitle}>Priority alert</Text>
+                  <Text style={styles.rowMeta}>
+                    One active alert is included. Duna+ unlocks more.
+                  </Text>
+                </View>
+                <Text style={styles.chevron}>›</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <View style={styles.bookingReviewCard}>
+                <Text style={styles.bookingReviewDate}>
+                  {new Date(selectedSlot.startsAt).toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </Text>
+                <Text style={styles.bookingReviewTime}>
+                  {localSlotTime(selectedSlot.localStartsAt)} –{" "}
+                  {localSlotTime(selectedSlot.localEndsAt)}
+                </Text>
+                <Text style={styles.checkoutMeta}>
+                  {selectedSlot.courtName} · {durationMinutes} minutes
+                </Text>
+              </View>
+              <View style={styles.purchaseKindRow}>
+                {(["full", "split"] as const).map((modeOption) => (
+                  <Pressable
+                    key={modeOption}
+                    onPress={() => setPaymentMode(modeOption)}
+                    style={[
+                      styles.purchaseKindButton,
+                      paymentMode === modeOption &&
+                        styles.purchaseKindButtonActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.purchaseKindText,
+                        paymentMode === modeOption &&
+                          styles.purchaseKindTextActive,
+                      ]}
+                    >
+                      {modeOption === "full"
+                        ? `Pay everything · ${formatMoney(totalMinor, "USD")}`
+                        : `Pay your part · ${formatMoney(shareMinor, "USD")}`}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={styles.checkoutSection}>
+                <View style={styles.rowBetween}>
+                  <View>
+                    <Text style={styles.rowTitle}>Add players</Text>
+                    <Text style={styles.rowMeta}>
+                      Frequent partners first. Invite any group size.
+                    </Text>
+                  </View>
+                  <Pressable onPress={() => void importContacts()}>
+                    <Text style={styles.linkText}>Contacts</Text>
+                  </Pressable>
+                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.bookingPartnerScroll}
+                >
+                  <View style={styles.bookingPartnerRow}>
+                    {people?.slice(0, 6).map((person) => (
+                      <Pressable
+                        key={person.id}
+                        onPress={() =>
+                          addParticipant({
+                            personId: person.id,
+                            name: person.displayName,
+                          })
+                        }
+                        style={styles.bookingPartner}
+                      >
+                        <Text style={styles.bookingPartnerAvatar}>
+                          {person.initials}
+                        </Text>
+                        <Text
+                          numberOfLines={1}
+                          style={styles.bookingPartnerName}
+                        >
+                          {person.displayName.split(" ")[0]}
+                        </Text>
+                      </Pressable>
+                    ))}
+                    {contactOptions.map((contact) => (
+                      <Pressable
+                        key={contact.email ?? contact.phoneE164}
+                        onPress={() => addParticipant(contact)}
+                        style={styles.bookingPartner}
+                      >
+                        <Text style={styles.bookingPartnerAvatar}>
+                          {(contact.name ?? "C").slice(0, 1).toUpperCase()}
+                        </Text>
+                        <Text
+                          numberOfLines={1}
+                          style={styles.bookingPartnerName}
+                        >
+                          {contact.name ?? "Contact"}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
+                <View style={styles.bookingManualInvite}>
+                  <TextInput
+                    onChangeText={setManualName}
+                    placeholder="Name"
+                    placeholderTextColor={colors.muted}
+                    style={[styles.formInput, styles.formRowInput]}
+                    value={manualName}
+                  />
+                  <TextInput
+                    autoCapitalize="none"
+                    onChangeText={setManualTarget}
+                    placeholder="Email or mobile"
+                    placeholderTextColor={colors.muted}
+                    style={[styles.formInput, styles.formRowInput]}
+                    value={manualTarget}
+                  />
+                  <Pressable
+                    onPress={addManualParticipant}
+                    style={styles.bookingAddButton}
+                  >
+                    <Text style={styles.payButtonText}>Add</Text>
+                  </Pressable>
+                </View>
+                {participants.map((participant, index) => (
+                  <View
+                    key={
+                      participant.personId ??
+                      participant.email ??
+                      participant.phoneE164
+                    }
+                    style={styles.bookingParticipant}
+                  >
+                    <Text style={styles.checkText}>✓</Text>
+                    <View style={styles.flex}>
+                      <Text style={styles.rowTitle}>
+                        {participant.name ??
+                          participant.email ??
+                          participant.phoneE164}
+                      </Text>
+                      <Text style={styles.rowMeta}>
+                        {paymentMode === "split"
+                          ? `Pays ${formatMoney(shareMinor, "USD")}`
+                          : "Included in your reservation"}
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() =>
+                        setParticipants((current) =>
+                          current.filter((_, itemIndex) => itemIndex !== index),
+                        )
+                      }
+                    >
+                      <Text style={styles.closeText}>×</Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+              {policy && (
+                <View style={styles.checkoutSection}>
+                  <Text style={styles.rowTitle}>{policy.title}</Text>
+                  <Text style={styles.rowMeta}>
+                    Refund until {policy.refundBeforeHours ?? 0} hours before ·{" "}
+                    {policy.lateCancellation}
+                  </Text>
+                  <ScrollView
+                    nestedScrollEnabled
+                    onScroll={({ nativeEvent }) => {
+                      const atEnd =
+                        nativeEvent.layoutMeasurement.height +
+                          nativeEvent.contentOffset.y >=
+                        nativeEvent.contentSize.height - 12;
+                      if (atEnd) setPolicyRead(true);
+                    }}
+                    scrollEventThrottle={16}
+                    style={styles.bookingPolicyScroll}
+                  >
+                    <Text style={styles.bodyText}>{policy.markdown}</Text>
+                  </ScrollView>
+                  <Pressable
+                    onPress={() => setPolicyAccepted((current) => !current)}
+                    style={styles.toggleRow}
+                  >
+                    <Text style={styles.rowTitle}>
+                      I read and accept this policy
+                    </Text>
+                    <Pill tone={policyAccepted ? "positive" : "neutral"}>
+                      {policyAccepted ? "Accepted" : "Required"}
+                    </Pill>
+                  </Pressable>
+                  {policy.requireFullScroll && !policyRead && (
+                    <Text style={styles.formError}>
+                      Scroll to the end of the policy to continue.
+                    </Text>
+                  )}
+                </View>
+              )}
+              <Pressable
+                disabled={
+                  busy ||
+                  mode === "preview" ||
+                  !policyReady ||
+                  (paymentMode === "split" && participants.length === 0) ||
+                  !inventory?.venue.paymentsReady
+                }
+                onPress={() => void checkout()}
+                style={[
+                  styles.payButton,
+                  (busy ||
+                    mode === "preview" ||
+                    !policyReady ||
+                    (paymentMode === "split" && participants.length === 0) ||
+                    !inventory?.venue.paymentsReady) &&
+                    styles.buttonDisabled,
+                ]}
+              >
+                <Text style={styles.payButtonText}>
+                  {busy
+                    ? "Opening secure checkout…"
+                    : `Continue · ${formatMoney(shareMinor, "USD")}`}
+                </Text>
+              </Pressable>
+            </>
+          )}
+          {notice && <Text style={styles.bookingNotice}>{notice}</Text>}
+          {error && <Text style={styles.formError}>{error}</Text>}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 function DiscoverScreen({
   onBook,
 }: {
@@ -550,6 +1219,7 @@ function DiscoverScreen({
 }) {
   const [filter, setFilter] = useState("For you");
   const [search, setSearch] = useState("");
+  const [bookingVenueId, setBookingVenueId] = useState<string>();
   const { dashboard, venues } = usePlayerRuntime();
   const events = dashboard?.events ?? demoEvents;
   const filteredEvents = events.filter((event) => {
@@ -586,110 +1256,154 @@ function DiscoverScreen({
   });
   const resultCount = filteredEvents.length;
   return (
-    <ScrollView
-      contentContainerStyle={styles.screenContent}
-      showsVerticalScrollIndicator={false}
-    >
-      <AppHeader
-        eyebrow={
-          venues?.[0]
-            ? `${venues[0].city.toUpperCase()} · ${venues[0].region.toUpperCase()}`
-            : "SOUTH BAY · LOS ANGELES"
-        }
-      />
-      <Text style={styles.displayTitle}>Find your game.</Text>
-      <View style={styles.searchField}>
-        <Text style={styles.searchIcon}>⌕</Text>
-        <TextInput
-          onChangeText={setSearch}
-          placeholder="Events, programs, clubs, coaches…"
-          placeholderTextColor={colors.muted}
-          style={styles.searchInput}
-          value={search}
-        />
-      </View>
+    <>
       <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.horizontalBleed}
+        contentContainerStyle={styles.screenContent}
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.filterRow}>
-          {[
-            "For you",
-            "Today",
-            "Tournaments",
-            "Training",
-            "Open play",
-            "Free",
-          ].map((item) => (
-            <Pressable
-              key={item}
-              onPress={() => setFilter(item)}
-              style={[
-                styles.filterChip,
-                filter === item && styles.filterChipActive,
-              ]}
-            >
-              <Text
+        <AppHeader
+          eyebrow={
+            venues?.[0]
+              ? `${venues[0].city.toUpperCase()} · ${venues[0].region.toUpperCase()}`
+              : "SOUTH BAY · LOS ANGELES"
+          }
+        />
+        <Text style={styles.displayTitle}>Find your game.</Text>
+        <View style={styles.searchField}>
+          <Text style={styles.searchIcon}>⌕</Text>
+          <TextInput
+            onChangeText={setSearch}
+            placeholder="Events, programs, clubs, coaches…"
+            placeholderTextColor={colors.muted}
+            style={styles.searchInput}
+            value={search}
+          />
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.horizontalBleed}
+        >
+          <View style={styles.filterRow}>
+            {[
+              "For you",
+              "Today",
+              "Tournaments",
+              "Training",
+              "Open play",
+              "Free",
+            ].map((item) => (
+              <Pressable
+                key={item}
+                onPress={() => setFilter(item)}
                 style={[
-                  styles.filterText,
-                  filter === item && styles.filterTextActive,
+                  styles.filterChip,
+                  filter === item && styles.filterChipActive,
                 ]}
               >
-                {item}
-              </Text>
-            </Pressable>
+                <Text
+                  style={[
+                    styles.filterText,
+                    filter === item && styles.filterTextActive,
+                  ]}
+                >
+                  {item}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
+        {venues && venues.length > 0 && (
+          <>
+            <SectionHeader
+              eyebrow="LIVE COURT INVENTORY"
+              title="Book a court."
+              action={`${venues.length} venues`}
+            />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.horizontalBleed}
+            >
+              <View style={styles.bookingVenueRow}>
+                {venues.map((venue) => (
+                  <Pressable
+                    key={venue.id}
+                    onPress={() => setBookingVenueId(venue.id)}
+                    style={styles.bookingVenueCard}
+                  >
+                    <Text style={styles.bookingVenueEyebrow}>
+                      {venue.city.toUpperCase()} · {venue.region.toUpperCase()}
+                    </Text>
+                    <Text
+                      numberOfLines={2}
+                      style={styles.bookingVenueCardTitle}
+                    >
+                      {venue.name}
+                    </Text>
+                    <Text style={styles.bookingVenueAction}>
+                      See times <Text>→</Text>
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </ScrollView>
+          </>
+        )}
+        <View style={styles.mapCard}>
+          <View style={styles.mapWater} />
+          <View style={styles.mapShore} />
+          {[
+            ["14%", "28%", "5"],
+            ["52%", "46%", "3"],
+            ["72%", "64%", "14"],
+            ["40%", "73%", "8"],
+          ].map((pin) => (
+            <View
+              key={pin[0]}
+              style={[
+                styles.mapPin,
+                { left: pin[0] as `${number}%`, top: pin[1] as `${number}%` },
+              ]}
+            >
+              <Text style={styles.mapPinText}>{pin[2]}</Text>
+            </View>
           ))}
+          <View style={styles.mapLabel}>
+            <Text style={styles.mapLabelTitle}>
+              {resultCount} {resultCount === 1 ? "thing" : "things"} to do
+            </Text>
+            <Text style={styles.mapLabelText}>
+              across {venues?.length ?? 0} published venues
+            </Text>
+          </View>
+        </View>
+        <SectionHeader
+          eyebrow={`${filter.toUpperCase()} · ${resultCount} RESULTS`}
+          title="Around you."
+          action="Map"
+        />
+        <View style={styles.eventGrid}>
+          {filteredEvents.map((event) => {
+            const eventIndex = events.findIndex(
+              (candidate) => candidate.id === event.id,
+            );
+            return (
+              <EventCard
+                eventIndex={eventIndex}
+                key={event.id}
+                onPress={onBook}
+              />
+            );
+          })}
         </View>
       </ScrollView>
-      <View style={styles.mapCard}>
-        <View style={styles.mapWater} />
-        <View style={styles.mapShore} />
-        {[
-          ["14%", "28%", "5"],
-          ["52%", "46%", "3"],
-          ["72%", "64%", "14"],
-          ["40%", "73%", "8"],
-        ].map((pin) => (
-          <View
-            key={pin[0]}
-            style={[
-              styles.mapPin,
-              { left: pin[0] as `${number}%`, top: pin[1] as `${number}%` },
-            ]}
-          >
-            <Text style={styles.mapPinText}>{pin[2]}</Text>
-          </View>
-        ))}
-        <View style={styles.mapLabel}>
-          <Text style={styles.mapLabelTitle}>
-            {resultCount} {resultCount === 1 ? "thing" : "things"} to do
-          </Text>
-          <Text style={styles.mapLabelText}>
-            across {venues?.length ?? 0} published venues
-          </Text>
-        </View>
-      </View>
-      <SectionHeader
-        eyebrow={`${filter.toUpperCase()} · ${resultCount} RESULTS`}
-        title="Around you."
-        action="Map"
+      <VenueBookingModal
+        onClose={() => setBookingVenueId(undefined)}
+        venueId={bookingVenueId}
+        visible={Boolean(bookingVenueId)}
       />
-      <View style={styles.eventGrid}>
-        {filteredEvents.map((event) => {
-          const eventIndex = events.findIndex(
-            (candidate) => candidate.id === event.id,
-          );
-          return (
-            <EventCard
-              eventIndex={eventIndex}
-              key={event.id}
-              onPress={onBook}
-            />
-          );
-        })}
-      </View>
-    </ScrollView>
+    </>
   );
 }
 
@@ -1663,18 +2377,35 @@ function PickupModal({
   readonly onClose: () => void;
   readonly onCreated: (title: string) => void;
 }) {
-  const { client, mode, refresh } = usePlayerRuntime();
+  const { client, dashboard, mode, refresh, venues } = usePlayerRuntime();
   const [title, setTitle] = useState("");
   const [venueName, setVenueName] = useState("");
+  const [venueId, setVenueId] = useState<string>();
+  const [courtBookingId, setCourtBookingId] = useState<string>();
   const [startsAt, setStartsAt] = useState(defaultPickupStart);
   const [durationMinutes, setDurationMinutes] = useState("120");
   const [capacity, setCapacity] = useState("8");
-  const [format, setFormat] = useState<"2s" | "4s" | "6s" | "king-queen">("4s");
+  const [format, setFormat] = useState<
+    "2s" | "3s" | "4s" | "6s" | "king-queen"
+  >("4s");
+  const [matchType, setMatchType] = useState<"competitive" | "casual">(
+    "competitive",
+  );
+  const [genderPreference, setGenderPreference] = useState<
+    "open" | "mens" | "womens" | "mixed"
+  >("open");
+  const [ratingEnabled, setRatingEnabled] = useState(true);
+  const [ratingMinimum, setRatingMinimum] = useState("1.00");
+  const [ratingMaximum, setRatingMaximum] = useState("8.00");
   const [cost, setCost] = useState("0");
   const [note, setNote] = useState("");
   const [recordMatches, setRecordMatches] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const courtReservations = (dashboard?.bookings ?? []).filter(
+    (booking) =>
+      booking.kind === "court-rental" && new Date(booking.endsAt) > new Date(),
+  );
 
   async function publish() {
     if (!client || mode === "preview") return;
@@ -1682,6 +2413,8 @@ function PickupModal({
     const duration = Number(durationMinutes);
     const playerCapacity = Number(capacity);
     const dollars = Number(cost);
+    const ratingMin = Number(ratingMinimum);
+    const ratingMax = Number(ratingMaximum);
     if (!Number.isFinite(start.getTime())) {
       setError("Enter the start as YYYY-MM-DDTHH:MM.");
       return;
@@ -1690,12 +2423,24 @@ function PickupModal({
       setError("Duration must be between 30 and 480 minutes.");
       return;
     }
-    if (!Number.isInteger(playerCapacity) || playerCapacity < 4) {
-      setError("Capacity must be at least four players.");
+    if (!Number.isInteger(playerCapacity) || playerCapacity < 2) {
+      setError("Capacity must be at least two players.");
       return;
     }
     if (!Number.isFinite(dollars) || dollars < 0 || dollars > 1_000) {
       setError("Enter a valid price from $0 to $1,000.");
+      return;
+    }
+    if (
+      ratingEnabled &&
+      matchType === "competitive" &&
+      (!Number.isFinite(ratingMin) ||
+        !Number.isFinite(ratingMax) ||
+        ratingMin < 1 ||
+        ratingMax > 8 ||
+        ratingMax < ratingMin)
+    ) {
+      setError("Choose a Sand Rating range from 1.00 to 8.00.");
       return;
     }
     setBusy(true);
@@ -1706,13 +2451,21 @@ function PickupModal({
         startsAt: start.toISOString(),
         endsAt: new Date(start.getTime() + duration * 60 * 1_000).toISOString(),
         venueName: venueName.trim(),
+        venueId,
+        courtBookingId,
         capacity: playerCapacity,
         format,
+        matchType,
+        genderPreference,
         note: note.trim() || undefined,
         visibility: "public",
         costMinor: Math.round(dollars * 100),
         currency: "USD",
         recordMatches,
+        ratingMinimum:
+          ratingEnabled && matchType === "competitive" ? ratingMin : undefined,
+        ratingMaximum:
+          ratingEnabled && matchType === "competitive" ? ratingMax : undefined,
         idempotencyKey: Crypto.randomUUID(),
       });
       await refresh();
@@ -1745,8 +2498,8 @@ function PickupModal({
           </View>
           <Text style={styles.checkoutTitle}>Make the next game happen.</Text>
           <Text style={styles.checkoutMeta}>
-            Duna publishes exactly what you enter and checks your adult identity
-            before the event goes live.
+            Choose the game, who it is for, and optionally attach a confirmed
+            court reservation. It appears in Discover immediately.
           </Text>
           <View style={styles.formStack}>
             <TextInput
@@ -1756,13 +2509,133 @@ function PickupModal({
               style={styles.formInput}
               value={title}
             />
+            <Text style={styles.formSectionLabel}>MATCH TYPE</Text>
+            <View style={styles.pickupChoiceGrid}>
+              {(["competitive", "casual"] as const).map((option) => (
+                <Pressable
+                  key={option}
+                  onPress={() => {
+                    setMatchType(option);
+                    if (option === "casual") setRatingEnabled(false);
+                  }}
+                  style={[
+                    styles.pickupChoiceCard,
+                    matchType === option && styles.pickupChoiceCardActive,
+                  ]}
+                >
+                  <Text style={styles.rowTitle}>
+                    {option === "competitive" ? "Competitive" : "Casual"}
+                  </Text>
+                  <Text style={styles.rowMeta}>
+                    {option === "competitive"
+                      ? "Rated play with a clear range"
+                      : "Social play without rating impact"}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {courtReservations.length > 0 && (
+              <>
+                <Text style={styles.formSectionLabel}>
+                  USE A COURT YOU BOOKED
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.horizontalBleed}
+                >
+                  <View style={styles.pickupReservationRow}>
+                    <Pressable
+                      onPress={() => setCourtBookingId(undefined)}
+                      style={[
+                        styles.pickupReservation,
+                        !courtBookingId && styles.pickupReservationActive,
+                      ]}
+                    >
+                      <Text style={styles.rowTitle}>No linked court</Text>
+                      <Text style={styles.rowMeta}>Use a custom location</Text>
+                    </Pressable>
+                    {courtReservations.map((booking) => (
+                      <Pressable
+                        key={booking.id}
+                        onPress={() => {
+                          const start = new Date(booking.startsAt);
+                          const end = new Date(booking.endsAt);
+                          const local = new Date(
+                            start.getTime() -
+                              start.getTimezoneOffset() * 60_000,
+                          );
+                          setCourtBookingId(booking.id);
+                          setVenueName(booking.venueName);
+                          setStartsAt(local.toISOString().slice(0, 16));
+                          setDurationMinutes(
+                            String(
+                              Math.round(
+                                (end.getTime() - start.getTime()) / 60_000,
+                              ),
+                            ),
+                          );
+                        }}
+                        style={[
+                          styles.pickupReservation,
+                          courtBookingId === booking.id &&
+                            styles.pickupReservationActive,
+                        ]}
+                      >
+                        <Text style={styles.rowTitle}>{booking.venueName}</Text>
+                        <Text style={styles.rowMeta}>
+                          {new Date(booking.startsAt).toLocaleString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
+              </>
+            )}
             <TextInput
-              onChangeText={setVenueName}
+              editable={!courtBookingId}
+              onChangeText={(value) => {
+                setVenueName(value);
+                setVenueId(undefined);
+              }}
               placeholder="Venue or court"
               placeholderTextColor={colors.muted}
               style={styles.formInput}
               value={venueName}
             />
+            {!courtBookingId && venues && venues.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.filterRow}>
+                  {venues.map((venue) => (
+                    <Pressable
+                      key={venue.id}
+                      onPress={() => {
+                        setVenueId(venue.id);
+                        setVenueName(venue.name);
+                      }}
+                      style={[
+                        styles.filterChip,
+                        venueId === venue.id && styles.filterChipActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterText,
+                          venueId === venue.id && styles.filterTextActive,
+                        ]}
+                      >
+                        {venue.name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </ScrollView>
+            )}
             <TextInput
               autoCapitalize="none"
               onChangeText={setStartsAt}
@@ -1798,26 +2671,94 @@ function PickupModal({
               />
             </View>
             <View style={styles.filterRow}>
-              {(["2s", "4s", "6s", "king-queen"] as const).map((option) => (
+              {(["2s", "3s", "4s", "6s", "king-queen"] as const).map(
+                (option) => (
+                  <Pressable
+                    key={option}
+                    onPress={() => setFormat(option)}
+                    style={[
+                      styles.filterChip,
+                      format === option && styles.filterChipActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterText,
+                        format === option && styles.filterTextActive,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </Pressable>
+                ),
+              )}
+            </View>
+            <Text style={styles.formSectionLabel}>WHO CAN JOIN</Text>
+            <View style={styles.filterRow}>
+              {(["open", "mixed", "womens", "mens"] as const).map((option) => (
                 <Pressable
                   key={option}
-                  onPress={() => setFormat(option)}
+                  onPress={() => setGenderPreference(option)}
                   style={[
                     styles.filterChip,
-                    format === option && styles.filterChipActive,
+                    genderPreference === option && styles.filterChipActive,
                   ]}
                 >
                   <Text
                     style={[
                       styles.filterText,
-                      format === option && styles.filterTextActive,
+                      genderPreference === option && styles.filterTextActive,
                     ]}
                   >
-                    {option}
+                    {option === "open"
+                      ? "All"
+                      : option === "mixed"
+                        ? "Mixed"
+                        : option === "womens"
+                          ? "Women"
+                          : "Men"}
                   </Text>
                 </Pressable>
               ))}
             </View>
+            {matchType === "competitive" && (
+              <>
+                <Pressable
+                  onPress={() => setRatingEnabled((current) => !current)}
+                  style={styles.toggleRow}
+                >
+                  <View>
+                    <Text style={styles.rowTitle}>Sand Rating range</Text>
+                    <Text style={styles.rowMeta}>
+                      Out-of-range players can request access.
+                    </Text>
+                  </View>
+                  <Pill tone={ratingEnabled ? "positive" : "neutral"}>
+                    {ratingEnabled ? "On" : "Open"}
+                  </Pill>
+                </Pressable>
+                {ratingEnabled && (
+                  <View style={styles.formRow}>
+                    <TextInput
+                      keyboardType="decimal-pad"
+                      onChangeText={setRatingMinimum}
+                      placeholder="Min rating"
+                      placeholderTextColor={colors.muted}
+                      style={[styles.formInput, styles.formRowInput]}
+                      value={ratingMinimum}
+                    />
+                    <TextInput
+                      keyboardType="decimal-pad"
+                      onChangeText={setRatingMaximum}
+                      placeholder="Max rating"
+                      placeholderTextColor={colors.muted}
+                      style={[styles.formInput, styles.formRowInput]}
+                      value={ratingMaximum}
+                    />
+                  </View>
+                )}
+              </>
+            )}
             <TextInput
               multiline
               onChangeText={setNote}
@@ -1985,6 +2926,297 @@ function createStyles(palette: Palette) {
     formRowInput: { flex: 1, minWidth: 0 },
     formStack: { gap: 10, marginTop: 20 },
     formTextarea: { minHeight: 88, textAlignVertical: "top" },
+    rowBetween: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    linkText: { color: colors.aqua, fontSize: 10, fontWeight: "800" },
+    bookingVenueRow: {
+      flexDirection: "row",
+      gap: 10,
+      paddingHorizontal: 18,
+      paddingRight: 36,
+    },
+    bookingVenueCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      justifyContent: "space-between",
+      minHeight: 155,
+      padding: 15,
+      width: 230,
+    },
+    bookingVenueEyebrow: {
+      color: colors.aqua,
+      fontSize: 7,
+      fontWeight: "800",
+      letterSpacing: 0.7,
+    },
+    bookingVenueCardTitle: {
+      color: colors.bone,
+      fontSize: 22,
+      fontWeight: "900",
+      letterSpacing: -1,
+      lineHeight: 24,
+      marginVertical: 15,
+    },
+    bookingVenueAction: {
+      color: colors.bone,
+      fontSize: 9,
+      fontWeight: "800",
+    },
+    bookingVenueName: {
+      color: colors.bone,
+      fontSize: 32,
+      fontWeight: "900",
+      letterSpacing: -1.6,
+      lineHeight: 35,
+    },
+    bookingDateRow: {
+      flexDirection: "row",
+      gap: 8,
+      paddingHorizontal: 18,
+      paddingRight: 36,
+      paddingVertical: 18,
+    },
+    bookingDate: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 25,
+      borderWidth: 1,
+      height: 64,
+      justifyContent: "center",
+      width: 52,
+    },
+    bookingDateActive: {
+      backgroundColor: colors.aquaDeep,
+      borderColor: colors.aquaDeep,
+    },
+    bookingDateDay: {
+      color: colors.muted,
+      fontSize: 6,
+      fontWeight: "800",
+    },
+    bookingDateNumber: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+    bookingDateTextActive: { color: "#ffffff" },
+    bookingDurationRow: {
+      flexDirection: "row",
+      gap: 8,
+      marginBottom: 14,
+    },
+    bookingDuration: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 12,
+      borderWidth: 1,
+      flex: 1,
+      minHeight: 45,
+      justifyContent: "center",
+    },
+    bookingDurationActive: {
+      backgroundColor: colors.aquaDeep,
+      borderColor: colors.aquaDeep,
+    },
+    bookingDurationText: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    bookingDurationTextActive: { color: "#ffffff" },
+    bookingSlotGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    bookingSlot: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 13,
+      borderWidth: 1,
+      minHeight: 86,
+      padding: 11,
+      width: "31.5%",
+    },
+    bookingSlotTime: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    bookingSlotCourt: {
+      color: colors.muted,
+      fontSize: 7,
+      marginTop: 5,
+    },
+    bookingSlotPrice: {
+      color: colors.aqua,
+      fontSize: 8,
+      fontWeight: "800",
+      marginTop: 5,
+    },
+    bookingEmpty: {
+      color: colors.muted,
+      fontSize: 10,
+      paddingVertical: 28,
+      textAlign: "center",
+    },
+    bookingEmptyCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 16,
+      borderWidth: 1,
+      padding: 16,
+    },
+    bookingAlertButton: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 15,
+      padding: 14,
+    },
+    bookingAlertIcon: {
+      color: colors.aqua,
+      fontSize: 22,
+    },
+    bookingReviewCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      marginTop: 18,
+      padding: 16,
+    },
+    bookingReviewDate: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    bookingReviewTime: {
+      color: colors.aqua,
+      fontSize: 28,
+      fontWeight: "900",
+      letterSpacing: -1.2,
+      marginTop: 5,
+    },
+    bookingPartnerScroll: { marginHorizontal: -13, marginTop: 12 },
+    bookingPartnerRow: {
+      flexDirection: "row",
+      gap: 9,
+      paddingHorizontal: 13,
+      paddingRight: 26,
+    },
+    bookingPartner: { alignItems: "center", gap: 5, width: 60 },
+    bookingPartnerAvatar: {
+      backgroundColor: colors.navyLift,
+      borderRadius: 22,
+      color: colors.aquaDeep,
+      fontSize: 11,
+      fontWeight: "900",
+      height: 44,
+      lineHeight: 44,
+      overflow: "hidden",
+      textAlign: "center",
+      width: 44,
+    },
+    bookingPartnerName: {
+      color: colors.bone,
+      fontSize: 7,
+      textAlign: "center",
+      width: 58,
+    },
+    bookingManualInvite: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 6,
+      marginTop: 13,
+    },
+    bookingAddButton: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 12,
+      justifyContent: "center",
+      minHeight: 46,
+      paddingHorizontal: 13,
+    },
+    bookingParticipant: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.07),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      marginTop: 10,
+      paddingTop: 10,
+    },
+    bookingPolicyScroll: {
+      backgroundColor: rgba(colors.overlayRgb, 0.025),
+      borderRadius: 10,
+      marginVertical: 10,
+      maxHeight: 150,
+      paddingHorizontal: 10,
+    },
+    bookingNotice: {
+      backgroundColor: rgba(colors.positiveRgb, 0.09),
+      borderColor: rgba(colors.positiveRgb, 0.2),
+      borderRadius: 12,
+      borderWidth: 1,
+      color: colors.positive,
+      fontSize: 9,
+      lineHeight: 14,
+      marginTop: 12,
+      padding: 11,
+    },
+    formSectionLabel: {
+      color: colors.muted,
+      fontSize: 7,
+      fontWeight: "800",
+      letterSpacing: 1,
+      marginTop: 8,
+    },
+    pickupChoiceGrid: { flexDirection: "row", gap: 8 },
+    pickupChoiceCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 14,
+      borderWidth: 1,
+      flex: 1,
+      minHeight: 90,
+      padding: 13,
+    },
+    pickupChoiceCardActive: {
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderColor: rgba(colors.accentRgb, 0.4),
+    },
+    pickupReservationRow: {
+      flexDirection: "row",
+      gap: 8,
+      paddingHorizontal: 18,
+      paddingRight: 36,
+    },
+    pickupReservation: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 13,
+      borderWidth: 1,
+      minHeight: 74,
+      padding: 12,
+      width: 185,
+    },
+    pickupReservationActive: {
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderColor: rgba(colors.accentRgb, 0.4),
+    },
     previewBanner: {
       alignItems: "center",
       backgroundColor: rgba(colors.warningRgb, 0.12),

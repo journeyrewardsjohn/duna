@@ -15,6 +15,29 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { DunaClerkProvider } from "@/components/clerk-provider";
 
+function resolveMetadataBase() {
+  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  const vercelUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  const candidates = [
+    configuredUrl,
+    vercelUrl ? `https://${vercelUrl}` : undefined,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    try {
+      return new URL(candidate);
+    } catch {
+      // Ignore malformed deployment configuration and use the local fallback.
+    }
+  }
+
+  return new URL("http://localhost:3000");
+}
+
 export const metadata: Metadata = {
   title: {
     default: "Duna — The operating system for sand",
@@ -23,9 +46,7 @@ export const metadata: Metadata = {
   description:
     "Find your game, know your level, and run everything that happens on sand.",
   applicationName: "Duna",
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
-  ),
+  metadataBase: resolveMetadataBase(),
   openGraph: {
     title: "Duna — The operating system for sand",
     description:

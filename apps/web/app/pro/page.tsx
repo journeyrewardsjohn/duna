@@ -1,5 +1,6 @@
 import { Badge, Numeric } from "@duna/ui";
 import { Activity, CalendarDays, Globe2, Radio, Trophy } from "lucide-react";
+import Link from "next/link";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
@@ -49,7 +50,11 @@ export default async function ProTourPage() {
           </header>
           <div className="pro-event-grid">
             {(coverage?.events ?? []).map((event) => (
-              <article key={event.id}>
+              <Link
+                className="pro-event-card"
+                href={`/events/${event.slug}`}
+                key={event.id}
+              >
                 <div>
                   <Badge tone={event.live ? "danger" : "neutral"}>
                     {event.live ? "Live" : event.status}
@@ -66,7 +71,7 @@ export default async function ProTourPage() {
                   </span>
                   <span>{event.location ?? "Location pending"}</span>
                 </footer>
-              </article>
+              </Link>
             ))}
           </div>
           {!coverage?.events.length && (
@@ -93,26 +98,28 @@ export default async function ProTourPage() {
                   .join(" / ");
               return (
                 <article key={match.id}>
-                  <div>
-                    <small>{match.roundLabel ?? match.title}</small>
-                    <strong>{team("A")}</strong>
-                    <span>{team("B")}</span>
-                  </div>
-                  <div>
-                    <strong>
-                      {match.sets
-                        .map((set) => `${set.a}–${set.b}`)
-                        .join(" · ") || "Scheduled"}
-                    </strong>
-                    <small>
-                      {match.playedAt
-                        ? new Intl.DateTimeFormat("en-US", {
-                            month: "short",
-                            day: "numeric",
-                          }).format(new Date(match.playedAt))
-                        : "Time pending"}
-                    </small>
-                  </div>
+                  <Link href={match.canonicalPath ?? "/pro"}>
+                    <div>
+                      <small>{match.roundLabel ?? match.title}</small>
+                      <strong>{team("A")}</strong>
+                      <span>{team("B")}</span>
+                    </div>
+                    <div>
+                      <strong>
+                        {match.sets
+                          .map((set) => `${set.a}–${set.b}`)
+                          .join(" · ") || "Scheduled"}
+                      </strong>
+                      <small>
+                        {match.playedAt
+                          ? new Intl.DateTimeFormat("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            }).format(new Date(match.playedAt))
+                          : "Time pending"}
+                      </small>
+                    </div>
+                  </Link>
                 </article>
               );
             })}

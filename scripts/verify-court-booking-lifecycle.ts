@@ -5,6 +5,7 @@ import {
   appliedFees,
   auditLog,
   courtBookings,
+  courtBookingParticipants,
   courts,
   getDatabase,
   orderItems,
@@ -59,13 +60,23 @@ async function main() {
   const expiredOrderId = crypto.randomUUID();
   const directBookingId = crypto.randomUUID();
   const expiredBookingId = crypto.randomUUID();
+  const splitBookingId = crypto.randomUUID();
+  const splitOrganizerOrderId = crypto.randomUUID();
+  const splitGuestOrderId = crypto.randomUUID();
   const directCheckoutSessionId = `cs_court_verify_${suffix}`;
   const webhookIds = [
     `evt_court_paid_${suffix}`,
     `evt_court_expired_${suffix}`,
+    `evt_court_split_organizer_${suffix}`,
+    `evt_court_split_guest_${suffix}`,
   ];
-  const orderIds = [directOrderId, expiredOrderId];
-  const bookingIds = [directBookingId, expiredBookingId];
+  const orderIds = [
+    directOrderId,
+    expiredOrderId,
+    splitOrganizerOrderId,
+    splitGuestOrderId,
+  ];
+  const bookingIds = [directBookingId, expiredBookingId, splitBookingId];
   let freeBookingId: string | undefined;
 
   try {
@@ -151,11 +162,44 @@ async function main() {
       "Invalid daylight-saving wall time was accepted",
     );
 
+    let policyGateBlocked = false;
+    try {
+      await startCourtCheckout({
+        actor,
+        courtId: freeCourtId,
+        localStartsAt: "2030-09-01T09:00",
+        durationMinutes: 60,
+        paymentMode: "full",
+        participants: [],
+        policyAccepted: false,
+        policyFullScrollConfirmed: false,
+        successUrl:
+          "https://duna-web.vercel.app/app/venues/verification?checkout=success",
+        cancelUrl:
+          "https://duna-web.vercel.app/app/venues/verification?checkout=cancelled",
+        idempotencyKey: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+        now,
+      });
+    } catch (error) {
+      policyGateBlocked =
+        error instanceof CourtCheckoutError &&
+        error.code === "POLICY_ACCEPTANCE_REQUIRED";
+    }
+    assert(
+      policyGateBlocked,
+      "Court checkout bypassed the cancellation policy gate",
+    );
+
     const free = await startCourtCheckout({
       actor,
       courtId: freeCourtId,
       localStartsAt: "2030-09-01T10:00",
       durationMinutes: 60,
+      paymentMode: "full",
+      participants: [],
+      policyAccepted: true,
+      policyFullScrollConfirmed: true,
       successUrl:
         "https://duna-web.vercel.app/app/venues/verification?checkout=success",
       cancelUrl:
@@ -178,6 +222,10 @@ async function main() {
       courtId: freeCourtId,
       localStartsAt: "2030-09-01T11:00",
       durationMinutes: 60,
+      paymentMode: "full",
+      participants: [],
+      policyAccepted: true,
+      policyFullScrollConfirmed: true,
       successUrl:
         "https://duna-web.vercel.app/app/venues/verification?checkout=success",
       cancelUrl:
@@ -199,6 +247,10 @@ async function main() {
         courtId: paidCourtId,
         localStartsAt: "2030-09-01T13:00",
         durationMinutes: 60,
+        paymentMode: "full",
+        participants: [],
+        policyAccepted: true,
+        policyFullScrollConfirmed: true,
         successUrl:
           "https://duna-web.vercel.app/app/venues/verification?checkout=success",
         cancelUrl:
@@ -223,6 +275,10 @@ async function main() {
     );
     const expiredStartsAt = venueWallTimeToUtc(
       "2030-09-01T16:00",
+      "America/Los_Angeles",
+    );
+    const splitStartsAt = venueWallTimeToUtc(
+      "2030-09-01T18:00",
       "America/Los_Angeles",
     );
     await database.batch([
@@ -297,6 +353,89 @@ async function main() {
         holdExpiresAt: new Date(now.getTime() + 35 * 60_000),
         idempotencyKey: crypto.randomUUID(),
       }),
+      database.insert(orders).values({
+        id: splitOrganizerOrderId,
+        organizationId: actor.organizationId,
+        buyerPersonId: actor.personId,
+        status: "pending",
+        currency: "USD",
+        subtotalMinor: 1_940,
+        feeTotalMinor: 60,
+        taxTotalMinor: 0,
+        totalMinor: 2_000,
+        idempotencyKey: crypto.randomUUID(),
+        expiresAt: new Date(now.getTime() + 120 * 60_000),
+      }),
+      database.insert(orders).values({
+        id: splitGuestOrderId,
+        organizationId: actor.organizationId,
+        buyerPersonId: actor.personId,
+        status: "pending",
+        currency: "USD",
+        subtotalMinor: 1_940,
+        feeTotalMinor: 60,
+        taxTotalMinor: 0,
+        totalMinor: 2_000,
+        idempotencyKey: crypto.randomUUID(),
+        expiresAt: new Date(now.getTime() + 120 * 60_000),
+      }),
+      database.insert(orderItems).values({
+        orderId: splitOrganizerOrderId,
+        kind: "booking",
+        referenceId: splitBookingId,
+        description: "Split court organizer share verification",
+        quantity: 1,
+        unitAmountMinor: 1_940,
+        totalAmountMinor: 1_940,
+      }),
+      database.insert(orderItems).values({
+        orderId: splitGuestOrderId,
+        kind: "booking",
+        referenceId: splitBookingId,
+        description: "Split court guest share verification",
+        quantity: 1,
+        unitAmountMinor: 1_940,
+        totalAmountMinor: 1_940,
+      }),
+      database.insert(courtBookings).values({
+        id: splitBookingId,
+        organizationId: actor.organizationId,
+        venueId,
+        courtId: paidCourtId,
+        personId: actor.personId,
+        startsAt: splitStartsAt,
+        endsAt: new Date(splitStartsAt.getTime() + 60 * 60_000),
+        status: "held",
+        holdExpiresAt: new Date(now.getTime() + 120 * 60_000),
+        paymentMode: "split",
+        totalAmountMinor: 4_000,
+        fundedAmountMinor: 0,
+        currency: "USD",
+        participantTarget: 2,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+      database.insert(courtBookingParticipants).values({
+        bookingId: splitBookingId,
+        personId: actor.personId,
+        invitedName: actor.displayName,
+        inviteToken: crypto.randomUUID(),
+        role: "organizer",
+        status: "payment-pending",
+        shareAmountMinor: 2_000,
+        orderId: splitOrganizerOrderId,
+        acceptedAt: now,
+      }),
+      database.insert(courtBookingParticipants).values({
+        bookingId: splitBookingId,
+        invitedName: "Split Payment Guest",
+        invitedEmail: `split-${suffix}@example.test`,
+        inviteToken: crypto.randomUUID(),
+        role: "player",
+        status: "payment-pending",
+        shareAmountMinor: 2_000,
+        orderId: splitGuestOrderId,
+        acceptedAt: now,
+      }),
     ]);
 
     await project({
@@ -336,6 +475,54 @@ async function main() {
       request: null,
       type: "checkout.session.expired",
     } as unknown as Stripe.Event);
+    await project({
+      id: webhookIds[2],
+      object: "event",
+      api_version: "2026-06-30.basil",
+      created: Math.floor((now.getTime() + 3_000) / 1_000),
+      data: {
+        object: {
+          id: `pi_court_split_organizer_${suffix}`,
+          object: "payment_intent",
+          amount_received: 2_000,
+          currency: "usd",
+          latest_charge: `ch_court_split_organizer_${suffix}`,
+          metadata: { dunaOrderId: splitOrganizerOrderId },
+        },
+      },
+      livemode: false,
+      pending_webhooks: 0,
+      request: null,
+      type: "payment_intent.succeeded",
+    } as unknown as Stripe.Event);
+    const partiallyFundedSplit = await database.query.courtBookings.findFirst({
+      where: eq(courtBookings.id, splitBookingId),
+    });
+    assert(
+      partiallyFundedSplit?.status === "held" &&
+        partiallyFundedSplit.fundedAmountMinor === 2_000,
+      "The first split payment confirmed the court before every share was paid",
+    );
+    await project({
+      id: webhookIds[3],
+      object: "event",
+      api_version: "2026-06-30.basil",
+      created: Math.floor((now.getTime() + 4_000) / 1_000),
+      data: {
+        object: {
+          id: `pi_court_split_guest_${suffix}`,
+          object: "payment_intent",
+          amount_received: 2_000,
+          currency: "usd",
+          latest_charge: `ch_court_split_guest_${suffix}`,
+          metadata: { dunaOrderId: splitGuestOrderId },
+        },
+      },
+      livemode: false,
+      pending_webhooks: 0,
+      request: null,
+      type: "payment_intent.succeeded",
+    } as unknown as Stripe.Event);
 
     const [
       paidBooking,
@@ -345,6 +532,7 @@ async function main() {
       expiredOrder,
       status,
       dashboard,
+      fundedSplit,
     ] = await Promise.all([
       database.query.courtBookings.findFirst({
         where: eq(courtBookings.id, directBookingId),
@@ -367,6 +555,9 @@ async function main() {
         checkoutSessionId: directCheckoutSessionId,
       }),
       databaseRepository.player.dashboard(actor.personId),
+      database.query.courtBookings.findFirst({
+        where: eq(courtBookings.id, splitBookingId),
+      }),
     ]);
     assert(
       paidBooking?.status === "confirmed" &&
@@ -380,6 +571,12 @@ async function main() {
       expiredBooking?.status === "expired" &&
         expiredOrder?.status === "cancelled",
       "Expired checkout did not release its court hold",
+    );
+    assert(
+      fundedSplit?.status === "confirmed" &&
+        fundedSplit.fundedAmountMinor === 4_000 &&
+        fundedSplit.holdExpiresAt === null,
+      "All split shares did not fund and confirm the court booking",
     );
     assert(
       dashboard.bookings.some(
@@ -400,6 +597,7 @@ async function main() {
           inventoryProjected: true,
           venueTimezoneValidated: true,
           daylightGapBlocked,
+          policyGateBlocked,
           freeBookingConfirmed: true,
           bufferedCollisionBlocked: true,
           alternativesReturned: bufferedConflict.alternatives.length,
@@ -407,6 +605,7 @@ async function main() {
           paidBookingProjected: paidBooking.status,
           checkoutStatusComplete: status.complete,
           expiredHoldReleased: expiredBooking.status,
+          splitPaymentsConfirmed: fundedSplit.status,
           playerCalendarProjected: true,
         },
         null,

@@ -13,6 +13,7 @@
       "bundleIdentifier": "com.duna.player",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
+        "NSContactsUsageDescription": "Duna uses contacts you select to find frequent partners or send a one-time game invitation.",
         "NSLocationWhenInUseUsageDescription": "Duna uses your location to show nearby play and venues."
       }
     },
@@ -22,7 +23,7 @@
         "backgroundColor": "#F7F3EA"
       },
       "package": "com.duna.player",
-      "permissions": ["ACCESS_COARSE_LOCATION"]
+      "permissions": ["ACCESS_COARSE_LOCATION", "READ_CONTACTS"]
     },
     "web": {
       "bundler": "metro",
@@ -30,6 +31,7 @@
     },
     "plugins": [
       "@clerk/expo",
+      "expo-contacts",
       [
         "expo-splash-screen",
         {

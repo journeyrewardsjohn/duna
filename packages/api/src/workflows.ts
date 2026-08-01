@@ -1,5 +1,6 @@
 import {
   auditLog,
+  courtBookingParticipants,
   courtBookings,
   getDatabase,
   isDatabaseConfigured,
@@ -427,6 +428,13 @@ async function processStripeWorkflow(
             updatedAt: failedAt,
           })
           .where(eq(courtBookings.orderId, orderId)),
+        database
+          .update(courtBookingParticipants)
+          .set({
+            status: "cancelled",
+            updatedAt: failedAt,
+          })
+          .where(eq(courtBookingParticipants.orderId, orderId)),
         database.insert(auditLog).values({
           actorType: "system",
           action,

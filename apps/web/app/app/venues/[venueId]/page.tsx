@@ -30,9 +30,10 @@ export default async function VenueBookingPage({
   const { venueId } = await params;
   const query = await searchParams;
   const caller = await getServerCaller();
-  const [inventory, settings] = await Promise.all([
+  const [inventory, settings, suggestedPlayers] = await Promise.all([
     caller.public.courtBookingInventory({ venueId }).catch(() => undefined),
     caller.player.settings(),
+    caller.public.players({ limit: 12 }),
   ]);
   if (!inventory) notFound();
   return (
@@ -48,6 +49,7 @@ export default async function VenueBookingPage({
             : undefined
         }
         inventory={inventory}
+        suggestedPlayers={suggestedPlayers}
         isDunaPlus={Boolean(
           settings.membership &&
           ["active", "trialing"].includes(settings.membership.status) &&

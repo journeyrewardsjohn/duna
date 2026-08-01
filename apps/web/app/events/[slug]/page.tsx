@@ -22,6 +22,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { ProEventDetail } from "@/components/pro-event-detail";
 import { getServerCaller } from "@/lib/api";
 
 function words(value: string | undefined, fallback = "Configured") {
@@ -48,12 +49,21 @@ export async function generateMetadata({
 }) {
   const { slug } = await params;
   const caller = await getServerCaller();
-  const event = await caller.public
-    .eventBySlug({ slug })
-    .catch(() => undefined);
+  const [event, proEvent] = await Promise.all([
+    caller.public.eventBySlug({ slug }).catch(() => undefined),
+    caller.public.proEvent({ slug }).catch(() => undefined),
+  ]);
   return {
-    title: event?.title ?? "Event",
-    description: event?.shortSummary ?? event?.description,
+    title: event?.title ?? proEvent?.name ?? "Event",
+    description:
+      event?.shortSummary ??
+      event?.description ??
+      (proEvent
+        ? `Live standings, pools, bracket, results, and predictions for ${proEvent.name}.`
+        : undefined),
+    alternates: {
+      canonical: `/events/${slug}`,
+    },
   };
 }
 
@@ -64,10 +74,12 @@ export default async function EventPage({
 }) {
   const { slug } = await params;
   const caller = await getServerCaller();
-  const [event, people] = await Promise.all([
+  const [event, proEvent, people] = await Promise.all([
     caller.public.eventBySlug({ slug }).catch(() => undefined),
+    caller.public.proEvent({ slug }).catch(() => undefined),
     caller.public.players({ limit: 8 }),
   ]);
+  if (!event && proEvent) return <ProEventDetail event={proEvent} />;
   if (!event) notFound();
 
   const cover = event.media?.[0];

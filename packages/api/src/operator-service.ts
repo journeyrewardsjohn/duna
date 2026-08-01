@@ -1,6 +1,7 @@
 import {
   auditLog,
   consents,
+  courtBookings,
   courts,
   divisions,
   eventBlueprints,
@@ -8,28 +9,39 @@ import {
   getDatabase,
   guardianships,
   messages,
+  organizationInvitations,
   organizationMemberships,
+  organizationParticipants,
   organizations,
   people,
   programs,
   ratePlans,
   registrations,
+  scheduleBlocks,
+  scheduleOverrides,
+  schedules,
   sessions,
   ticketTypes,
   venues,
 } from "@duna/db";
 import { demoOrganization } from "@duna/core/demo";
-import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import type {
   OperatorMutationResult,
   OperatorWorkspace,
+  PlayerInvitation,
+  PlayerInvitationClaimResult,
   StripeOnboardingResult,
 } from "./contracts";
 import type { ApiActor } from "./context";
-import { venueWallTimeToUtc } from "./court-checkout";
+import {
+  normalizeCourtCancellationPolicy,
+  venueWallTimeToUtc,
+} from "./court-checkout";
 import { enforceGuardianCopies } from "./messaging";
 import { createConnectOnboarding } from "./payments";
+import { isSentConfigured, sendTemplateSms } from "./sent";
 
 type CurrencyCode = OperatorWorkspace["organization"]["currency"];
 type EventKind = OperatorWorkspace["sessions"][number]["kind"];
@@ -166,7 +178,10 @@ export class OperatorServiceError extends Error {
       | "RECIPIENT_NOT_FOUND"
       | "RECIPIENT_NOT_ELIGIBLE"
       | "CONSENT_REQUIRED"
-      | "DELIVERY_DESTINATION_MISSING",
+      | "DELIVERY_DESTINATION_MISSING"
+      | "INVITATION_NOT_FOUND"
+      | "INVITATION_EXPIRED"
+      | "INVITATION_ALREADY_CLAIMED",
     message: string,
   ) {
     super(message);
@@ -295,6 +310,23 @@ async function uniqueSessionSlug(value: string): Promise<string> {
   return existing ? `${base}-${crypto.randomUUID().slice(0, 8)}` : base;
 }
 
+async function uniquePersonHandle(value: string): Promise<string> {
+  const database = getDatabase();
+  const base = (slugBase(value) || "player").slice(0, 38);
+  const existing = await database.query.people.findFirst({
+    where: eq(people.handle, base),
+  });
+  return existing ? `${base}-${crypto.randomUUID().slice(0, 7)}` : base;
+}
+
+function playerInvitationUrl(inviteToken: string): string {
+  const origin =
+    process.env.NEXT_PUBLIC_WEB_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    "https://duna.com";
+  return `${origin.replace(/\/$/, "")}/join/organization/${encodeURIComponent(inviteToken)}`;
+}
+
 async function organizationRow(organizationId: string) {
   const organization = await getDatabase().query.organizations.findFirst({
     where: eq(organizations.id, organizationId),
@@ -311,11 +343,13 @@ async function organizationRow(organizationId: string) {
 function providerReadiness() {
   return {
     email: Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL),
-    sms: Boolean(
-      process.env.TWILIO_ACCOUNT_SID &&
-      process.env.TWILIO_AUTH_TOKEN &&
-      process.env.TWILIO_FROM_NUMBER,
-    ),
+    sms:
+      isSentConfigured() ||
+      Boolean(
+        process.env.TWILIO_ACCOUNT_SID &&
+        process.env.TWILIO_AUTH_TOKEN &&
+        process.env.TWILIO_FROM_NUMBER,
+      ),
     push: Boolean(process.env.EXPO_ACCESS_TOKEN),
   };
 }
@@ -341,6 +375,8 @@ export function loadDemoOperatorWorkspace(
     ratePlans: [],
     venues: [],
     sessions: [],
+    participants: [],
+    invitations: [],
     messageRecipients: [],
     messageDrafts: [],
     deliveryProviders: {
@@ -357,13 +393,21 @@ export async function loadOperatorWorkspace(
   requireDatabase();
   const database = getDatabase();
   const organization = await organizationRow(organizationId);
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60_000);
+  const thirtyDaysAhead = new Date(now.getTime() + 30 * 24 * 60 * 60_000);
   const [
     ratePlanRows,
     venueRows,
     courtRows,
+    scheduleRows,
+    scheduleBlockRows,
+    bookingRows,
     sessionRows,
     memberRows,
     registrationRows,
+    participantRows,
+    invitationRows,
     draftRows,
   ] = await Promise.all([
     database
@@ -385,6 +429,51 @@ export async function loadOperatorWorkspace(
       .innerJoin(venues, eq(courts.venueId, venues.id))
       .where(eq(venues.organizationId, organizationId))
       .orderBy(asc(courts.name)),
+    database
+      .select()
+      .from(schedules)
+      .where(
+        and(
+          eq(schedules.organizationId, organizationId),
+          eq(schedules.resourceType, "court"),
+        ),
+      ),
+    database
+      .select({
+        block: scheduleBlocks,
+        resourceId: schedules.resourceId,
+      })
+      .from(scheduleBlocks)
+      .innerJoin(schedules, eq(scheduleBlocks.scheduleId, schedules.id))
+      .where(
+        and(
+          eq(schedules.organizationId, organizationId),
+          eq(schedules.resourceType, "court"),
+        ),
+      )
+      .orderBy(
+        asc(schedules.resourceId),
+        asc(scheduleBlocks.weekday),
+        asc(scheduleBlocks.startsAtMinute),
+      ),
+    database
+      .select({
+        id: courtBookings.id,
+        venueId: courtBookings.venueId,
+        courtId: courtBookings.courtId,
+        startsAt: courtBookings.startsAt,
+        endsAt: courtBookings.endsAt,
+      })
+      .from(courtBookings)
+      .innerJoin(venues, eq(courtBookings.venueId, venues.id))
+      .where(
+        and(
+          eq(venues.organizationId, organizationId),
+          eq(courtBookings.status, "confirmed"),
+          gt(courtBookings.endsAt, thirtyDaysAgo),
+          lt(courtBookings.startsAt, thirtyDaysAhead),
+        ),
+      ),
     database
       .select({
         id: sessions.id,
@@ -454,6 +543,29 @@ export async function loadOperatorWorkspace(
       ),
     database
       .select({
+        id: organizationParticipants.id,
+        personId: people.id,
+        displayName: people.displayName,
+        email: people.email,
+        phoneE164: people.phoneE164,
+        avatarUrl: people.avatarUrl,
+        isMinor: people.isMinor,
+        relationship: organizationParticipants.relationship,
+        status: organizationParticipants.status,
+        joinedAt: organizationParticipants.joinedAt,
+      })
+      .from(organizationParticipants)
+      .innerJoin(people, eq(organizationParticipants.personId, people.id))
+      .where(eq(organizationParticipants.organizationId, organizationId))
+      .orderBy(asc(people.displayName)),
+    database
+      .select()
+      .from(organizationInvitations)
+      .where(eq(organizationInvitations.organizationId, organizationId))
+      .orderBy(desc(organizationInvitations.createdAt))
+      .limit(50),
+    database
+      .select({
         id: messages.id,
         recipientPersonId: messages.recipientPersonId,
         recipientName: people.displayName,
@@ -479,9 +591,24 @@ export async function loadOperatorWorkspace(
   ]);
 
   const recipientMap = new Map(
-    [...memberRows, ...registrationRows].map((row) => [row.id, row]),
+    [
+      ...memberRows,
+      ...registrationRows,
+      ...participantRows.map((row) => ({
+        id: row.personId,
+        displayName: row.displayName,
+        email: row.email,
+        phoneE164: row.phoneE164,
+        isMinor: row.isMinor,
+      })),
+    ].map((row) => [row.id, row]),
   );
-  const recipientIds = [...recipientMap.keys()];
+  const recipientIds = [
+    ...new Set([
+      ...recipientMap.keys(),
+      ...participantRows.map((row) => row.personId),
+    ]),
+  ];
   const guardianRows =
     recipientIds.length > 0
       ? await database
@@ -499,9 +626,126 @@ export async function loadOperatorWorkspace(
           )
       : [];
   const guardianCounts = new Map<string, number>();
+  const guardianPendingCounts = new Map<string, number>();
   for (const row of guardianRows) {
     guardianCounts.set(row.minorId, (guardianCounts.get(row.minorId) ?? 0) + 1);
   }
+  if (participantRows.some((row) => row.isMinor)) {
+    const pendingGuardianRows = await database
+      .select({ minorId: guardianships.minorId })
+      .from(guardianships)
+      .where(
+        and(
+          inArray(
+            guardianships.minorId,
+            participantRows
+              .filter((row) => row.isMinor)
+              .map((row) => row.personId),
+          ),
+          eq(guardianships.reviewStatus, "pending"),
+        ),
+      );
+    for (const row of pendingGuardianRows) {
+      guardianPendingCounts.set(
+        row.minorId,
+        (guardianPendingCounts.get(row.minorId) ?? 0) + 1,
+      );
+    }
+  }
+  const availabilityModes = new Set([
+    "open",
+    "rentals-only",
+    "members-only",
+    "private-lessons-only",
+    "group-only",
+    "league-reserved",
+  ]);
+  const scheduleBlocksForCourt = (courtId: string) =>
+    scheduleBlockRows
+      .filter((row) => row.resourceId === courtId)
+      .map((row) => row.block);
+  const utilizationForCourt = (courtId: string) => {
+    const configured = scheduleRows.some(
+      (schedule) => schedule.resourceId === courtId,
+    );
+    const weeklyMinutes = scheduleBlocksForCourt(courtId)
+      .filter((block) => availabilityModes.has(block.mode))
+      .reduce(
+        (total, block) =>
+          total + Math.max(0, block.endsAtMinute - block.startsAtMinute),
+        0,
+      );
+    const availableMinutes30d = Math.max(
+      1,
+      Math.round((configured ? weeklyMinutes : 14 * 60 * 7) * (30 / 7)),
+    );
+    const historical = bookingRows.filter(
+      (booking) =>
+        booking.courtId === courtId &&
+        booking.startsAt < now &&
+        booking.endsAt > thirtyDaysAgo,
+    );
+    const bookedMinutes30d = Math.round(
+      historical.reduce((total, booking) => {
+        const startsAt = Math.max(
+          booking.startsAt.getTime(),
+          thirtyDaysAgo.getTime(),
+        );
+        const endsAt = Math.min(booking.endsAt.getTime(), now.getTime());
+        return total + Math.max(0, endsAt - startsAt) / 60_000;
+      }, 0),
+    );
+    const nextBookingAt = bookingRows
+      .filter(
+        (booking) => booking.courtId === courtId && booking.startsAt >= now,
+      )
+      .sort(
+        (left, right) => left.startsAt.getTime() - right.startsAt.getTime(),
+      )[0]?.startsAt;
+    return {
+      percent: Math.min(
+        100,
+        Math.round((bookedMinutes30d / availableMinutes30d) * 1_000) / 10,
+      ),
+      bookedMinutes30d,
+      availableMinutes30d,
+      bookingCount30d: historical.length,
+      nextBookingAt: nextBookingAt?.toISOString(),
+    };
+  };
+  const utilizationForVenue = (venueId: string) => {
+    const venueCourtIds = courtRows
+      .filter((row) => row.court.venueId === venueId)
+      .map((row) => row.court.id);
+    const metrics = venueCourtIds.map(utilizationForCourt);
+    const bookedMinutes30d = metrics.reduce(
+      (total, item) => total + item.bookedMinutes30d,
+      0,
+    );
+    const availableMinutes30d = metrics.reduce(
+      (total, item) => total + item.availableMinutes30d,
+      0,
+    );
+    const nextBookingAt = metrics
+      .flatMap((item) => (item.nextBookingAt ? [item.nextBookingAt] : []))
+      .sort()[0];
+    return {
+      percent:
+        availableMinutes30d > 0
+          ? Math.min(
+              100,
+              Math.round((bookedMinutes30d / availableMinutes30d) * 1_000) / 10,
+            )
+          : 0,
+      bookedMinutes30d,
+      availableMinutes30d,
+      bookingCount30d: metrics.reduce(
+        (total, item) => total + item.bookingCount30d,
+        0,
+      ),
+      nextBookingAt,
+    };
+  };
 
   return {
     organization: {
@@ -525,15 +769,21 @@ export async function loadOperatorWorkspace(
     venues: venueRows.map((venue) => ({
       id: venue.id,
       name: venue.name,
+      description: venue.description ?? undefined,
       slug: venue.slug,
       status: venue.status,
       temporary: venue.temporary,
+      capacity: venue.capacity,
+      heroImageUrl: venue.heroImageUrl ?? undefined,
+      heroImageTreatmentUrl: venue.heroImageTreatmentUrl ?? undefined,
+      amenities: venue.amenities,
       addressLine1: venue.addressLine1 ?? undefined,
       locality: venue.locality ?? undefined,
       administrativeArea: venue.administrativeArea ?? undefined,
       postalCode: venue.postalCode ?? undefined,
       countryCode: venue.countryCode,
       timezone: venue.timezone,
+      utilization: utilizationForVenue(venue.id),
       courts: courtRows
         .filter((row) => row.court.venueId === venue.id)
         .map(({ court }) => ({
@@ -542,6 +792,7 @@ export async function loadOperatorWorkspace(
           name: court.name,
           surface: court.surface,
           lit: court.lit,
+          capacity: court.capacity,
           status: court.status,
           bookingPolicy:
             court.bookingPolicy === "members" ||
@@ -553,10 +804,25 @@ export async function loadOperatorWorkspace(
           ratePlanId: court.ratePlanId ?? undefined,
           minimumDurationMinutes: court.minimumDurationMinutes,
           maximumDurationMinutes: court.maximumDurationMinutes,
+          durationOptionsMinutes: court.durationOptionsMinutes,
+          bookingIncrementMinutes: court.bookingIncrementMinutes,
           bufferBeforeMinutes: court.bufferBeforeMinutes,
           bufferAfterMinutes: court.bufferAfterMinutes,
           minimumNoticeMinutes: court.minimumNoticeMinutes,
           maximumAdvanceDays: court.maximumAdvanceDays,
+          cancellationPolicy: normalizeCourtCancellationPolicy(
+            court.cancellationPolicy,
+          ),
+          schedule: scheduleBlocksForCourt(court.id).map((block) => ({
+            id: block.id,
+            weekday: block.weekday,
+            startsAtMinute: block.startsAtMinute,
+            endsAtMinute: block.endsAtMinute,
+            mode: block.mode,
+            effectiveFrom: block.effectiveFrom ?? undefined,
+            effectiveTo: block.effectiveTo ?? undefined,
+          })),
+          utilization: utilizationForCourt(court.id),
         })),
     })),
     sessions: sessionRows.map((row) => ({
@@ -576,6 +842,60 @@ export async function loadOperatorWorkspace(
       courtId: row.courtId ?? undefined,
       priceMinor: row.priceMinor ?? 0,
       currency: currency(row.currency ?? organization.currency),
+    })),
+    participants: participantRows.map((row) => ({
+      id: row.id,
+      personId: row.personId,
+      displayName: row.displayName,
+      email: row.email ?? undefined,
+      phoneE164: row.phoneE164 ?? undefined,
+      avatarUrl: row.avatarUrl ?? undefined,
+      isMinor: row.isMinor,
+      relationship:
+        row.relationship === "member" || row.relationship === "guardian"
+          ? row.relationship
+          : "player",
+      status:
+        row.status === "inactive" || row.status === "pending"
+          ? row.status
+          : "active",
+      guardianStatus: !row.isMinor
+        ? "not-required"
+        : (guardianCounts.get(row.personId) ?? 0) > 0
+          ? "verified"
+          : (guardianPendingCounts.get(row.personId) ?? 0) > 0
+            ? "pending"
+            : "pending",
+      joinedAt: row.joinedAt.toISOString(),
+    })),
+    invitations: invitationRows.map((row) => ({
+      id: row.id,
+      invitedName: row.invitedName,
+      invitedEmail: row.invitedEmail ?? undefined,
+      invitedPhoneE164: row.invitedPhoneE164 ?? undefined,
+      isMinor: row.isMinor,
+      guardianName: row.guardianName ?? undefined,
+      relationship: row.relationship === "member" ? "member" : "player",
+      status:
+        row.status === "claimed" ||
+        row.status === "expired" ||
+        row.status === "cancelled"
+          ? row.status
+          : row.expiresAt <= now
+            ? "expired"
+            : "pending",
+      deliveryChannel:
+        row.deliveryChannel === "sms" || row.deliveryChannel === "email"
+          ? row.deliveryChannel
+          : undefined,
+      deliveryStatus:
+        row.deliveryStatus === "queued" ||
+        row.deliveryStatus === "sent" ||
+        row.deliveryStatus === "failed"
+          ? row.deliveryStatus
+          : "not-configured",
+      expiresAt: row.expiresAt.toISOString(),
+      createdAt: row.createdAt.toISOString(),
     })),
     messageRecipients: [...recipientMap.values()]
       .sort((left, right) => left.displayName.localeCompare(right.displayName))
@@ -601,6 +921,466 @@ export async function loadOperatorWorkspace(
       createdAt: row.createdAt.toISOString(),
     })),
     deliveryProviders: providerReadiness(),
+  };
+}
+
+export async function createPlayerInvitation(input: {
+  readonly actor: ApiActor;
+  readonly invitedName: string;
+  readonly invitedEmail?: string;
+  readonly invitedPhoneE164?: string;
+  readonly relationship: "player" | "member";
+  readonly isMinor: boolean;
+  readonly guardianName?: string;
+  readonly guardianEmail?: string;
+  readonly guardianPhoneE164?: string;
+  readonly confirmed: boolean;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  if (!input.confirmed) {
+    throw new OperatorServiceError(
+      "PUBLISH_CONFIRMATION_REQUIRED",
+      "Confirm the invitation recipient before sending.",
+    );
+  }
+  const organizationId = requireOrganization(input.actor);
+  const organization = await organizationRow(organizationId);
+  const invitedName = input.invitedName.trim();
+  const invitedEmail = input.invitedEmail?.trim().toLowerCase() || undefined;
+  const invitedPhoneE164 = input.invitedPhoneE164?.trim() || undefined;
+  const guardianName = input.guardianName?.trim() || undefined;
+  const guardianEmail = input.guardianEmail?.trim().toLowerCase() || undefined;
+  const guardianPhoneE164 = input.guardianPhoneE164?.trim() || undefined;
+  if (!invitedName) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Enter the player's name.",
+    );
+  }
+  if (input.isMinor && !guardianEmail && !guardianPhoneE164) {
+    throw new OperatorServiceError(
+      "DELIVERY_DESTINATION_MISSING",
+      "A parent or guardian email or phone number is required for a minor.",
+    );
+  }
+  if (!input.isMinor && !invitedEmail && !invitedPhoneE164) {
+    throw new OperatorServiceError(
+      "DELIVERY_DESTINATION_MISSING",
+      "Enter an email address or mobile number for the player.",
+    );
+  }
+  const id = crypto.randomUUID();
+  const inviteToken = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll(
+    "-",
+    "",
+  );
+  const expiresAt = new Date(input.now.getTime() + 14 * 24 * 60 * 60_000);
+  const targetPhone = input.isMinor ? guardianPhoneE164 : invitedPhoneE164;
+  const targetEmail = input.isMinor ? guardianEmail : invitedEmail;
+  const deliveryChannel = targetPhone
+    ? "sms"
+    : targetEmail
+      ? "email"
+      : undefined;
+  const values = {
+    invitedName,
+    invitedEmail,
+    invitedPhoneE164,
+    isMinor: input.isMinor,
+    guardianName,
+    guardianEmail,
+    guardianPhoneE164,
+    relationship: input.relationship,
+    deliveryChannel,
+    expiresAt,
+  };
+  const database = getDatabase();
+  await database.batch([
+    database.insert(organizationInvitations).values({
+      id,
+      organizationId,
+      invitedByPersonId: input.actor.personId,
+      inviteToken,
+      ...values,
+    }),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "player-invitation.created",
+      entityType: "player-invitation",
+      entityId: id,
+      afterHash: stableHash({
+        ...values,
+        expiresAt: expiresAt.toISOString(),
+      }),
+      reason: input.isMinor
+        ? "Operator invited a minor through a parent or guardian."
+        : "Operator invited a player to the organization.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+
+  if (targetPhone) {
+    const delivery = await sendTemplateSms({
+      to: targetPhone,
+      templateName:
+        process.env.SENT_DM_PLAYER_INVITE_TEMPLATE_NAME ??
+        "duna_player_invitation",
+      parameters: {
+        organization_name: organization.name,
+        player_name: invitedName,
+        inviter_name: input.actor.displayName,
+        invite_url: playerInvitationUrl(inviteToken),
+      },
+      idempotencyKey: `player-invite:${id}`,
+    }).catch((error: unknown) => ({
+      configured: true,
+      sent: false,
+      messageId: undefined,
+      reason:
+        error instanceof Error
+          ? error.message
+          : "SMS delivery did not complete.",
+    }));
+    await database
+      .update(organizationInvitations)
+      .set({
+        deliveryStatus: delivery.configured
+          ? delivery.sent
+            ? "sent"
+            : "failed"
+          : "not-configured",
+        deliveryMessageId: delivery.messageId,
+        updatedAt: input.now,
+      })
+      .where(eq(organizationInvitations.id, id));
+  }
+
+  return {
+    id,
+    entity: "player-invitation",
+    status:
+      deliveryChannel === "sms" && isSentConfigured()
+        ? "sent"
+        : "invite-created",
+  };
+}
+
+export async function loadPlayerInvitation(
+  inviteToken: string,
+  now = new Date(),
+): Promise<PlayerInvitation> {
+  requireDatabase();
+  const row = await getDatabase()
+    .select({
+      id: organizationInvitations.id,
+      invitedName: organizationInvitations.invitedName,
+      isMinor: organizationInvitations.isMinor,
+      guardianName: organizationInvitations.guardianName,
+      relationship: organizationInvitations.relationship,
+      status: organizationInvitations.status,
+      expiresAt: organizationInvitations.expiresAt,
+      organizationName: organizations.name,
+    })
+    .from(organizationInvitations)
+    .innerJoin(
+      organizations,
+      eq(organizationInvitations.organizationId, organizations.id),
+    )
+    .where(eq(organizationInvitations.inviteToken, inviteToken))
+    .limit(1)
+    .then((rows) => rows[0]);
+  if (!row) {
+    throw new OperatorServiceError(
+      "INVITATION_NOT_FOUND",
+      "This invitation could not be found.",
+    );
+  }
+  const status =
+    row.status === "claimed" ||
+    row.status === "cancelled" ||
+    row.status === "expired"
+      ? row.status
+      : row.expiresAt <= now
+        ? "expired"
+        : "pending";
+  return {
+    id: row.id,
+    organizationName: row.organizationName,
+    invitedName: row.invitedName,
+    isMinor: row.isMinor,
+    guardianName: row.guardianName ?? undefined,
+    relationship: row.relationship === "member" ? "member" : "player",
+    status,
+    expiresAt: row.expiresAt.toISOString(),
+  };
+}
+
+export async function claimPlayerInvitation(input: {
+  readonly actor: ApiActor;
+  readonly inviteToken: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<PlayerInvitationClaimResult> {
+  requireDatabase();
+  const database = getDatabase();
+  const invitation = await database.query.organizationInvitations.findFirst({
+    where: eq(organizationInvitations.inviteToken, input.inviteToken),
+  });
+  if (!invitation) {
+    throw new OperatorServiceError(
+      "INVITATION_NOT_FOUND",
+      "This invitation could not be found.",
+    );
+  }
+  if (invitation.status === "claimed") {
+    throw new OperatorServiceError(
+      "INVITATION_ALREADY_CLAIMED",
+      "This invitation has already been claimed.",
+    );
+  }
+  if (invitation.status !== "pending" || invitation.expiresAt <= input.now) {
+    throw new OperatorServiceError(
+      "INVITATION_EXPIRED",
+      "This invitation is no longer active.",
+    );
+  }
+  if (invitation.isMinor && input.actor.ageBand !== "adult") {
+    throw new OperatorServiceError(
+      "RECIPIENT_NOT_ELIGIBLE",
+      "A parent or guardian who is 18 or older must accept this invitation.",
+    );
+  }
+
+  const childId = invitation.isMinor ? crypto.randomUUID() : undefined;
+  const participantPersonId = childId ?? input.actor.personId;
+  const relationship =
+    invitation.relationship === "member" ? "member" : "player";
+  const childHandle = childId
+    ? await uniquePersonHandle(invitation.invitedName)
+    : undefined;
+
+  const afterHash = stableHash({
+    participantPersonId,
+    guardianReviewRequired: Boolean(childId),
+  });
+  const claimReason = childId
+    ? "Guardian accepted an invitation and created a protected minor profile."
+    : "Player accepted an organization invitation.";
+  const claimResult =
+    childId && childHandle
+      ? await database.execute(sql`
+          WITH claimed AS (
+            UPDATE ${organizationInvitations}
+               SET "status" = 'claimed',
+                   "claimed_by_person_id" = ${input.actor.personId}::uuid,
+                   "claimed_person_id" = ${participantPersonId}::uuid,
+                   "claimed_at" = ${input.now}::timestamptz,
+                   "updated_at" = ${input.now}::timestamptz
+             WHERE "id" = ${invitation.id}::uuid
+               AND "status" = 'pending'
+               AND "expires_at" > ${input.now}::timestamptz
+            RETURNING "organization_id", "invited_by_person_id"
+          ),
+          child_profile AS (
+            INSERT INTO ${people} (
+              "id",
+              "display_name",
+              "handle",
+              "profile_claim_status",
+              "is_minor",
+              "age_band",
+              "profile_visibility"
+            )
+            SELECT
+              ${childId}::uuid,
+              ${invitation.invitedName},
+              ${childHandle},
+              'claim-pending',
+              true,
+              'unknown',
+              'private'
+            FROM claimed
+            RETURNING "id"
+          ),
+          player_participant AS (
+            INSERT INTO ${organizationParticipants} (
+              "organization_id",
+              "person_id",
+              "relationship",
+              "status",
+              "added_by_person_id",
+              "joined_at"
+            )
+            SELECT
+              "organization_id",
+              ${participantPersonId}::uuid,
+              ${relationship},
+              'active',
+              "invited_by_person_id",
+              ${input.now}::timestamptz
+            FROM claimed
+            ON CONFLICT ("organization_id", "person_id", "relationship")
+            DO NOTHING
+            RETURNING "id"
+          ),
+          guardian_participant AS (
+            INSERT INTO ${organizationParticipants} (
+              "organization_id",
+              "person_id",
+              "relationship",
+              "status",
+              "added_by_person_id",
+              "joined_at"
+            )
+            SELECT
+              "organization_id",
+              ${input.actor.personId}::uuid,
+              'guardian',
+              'active',
+              "invited_by_person_id",
+              ${input.now}::timestamptz
+            FROM claimed
+            ON CONFLICT ("organization_id", "person_id", "relationship")
+            DO NOTHING
+            RETURNING "id"
+          ),
+          guardian_link AS (
+            INSERT INTO ${guardianships} (
+              "guardian_id",
+              "minor_id",
+              "relationship",
+              "verified",
+              "review_status",
+              "created_at"
+            )
+            SELECT
+              ${input.actor.personId}::uuid,
+              ${childId}::uuid,
+              'parent-or-guardian',
+              false,
+              'pending',
+              ${input.now}::timestamptz
+            FROM claimed
+            ON CONFLICT ("guardian_id", "minor_id") DO NOTHING
+            RETURNING "minor_id"
+          ),
+          audited AS (
+            INSERT INTO ${auditLog} (
+              "organization_id",
+              "actor_person_id",
+              "actor_type",
+              "action",
+              "entity_type",
+              "entity_id",
+              "after_hash",
+              "reason",
+              "trace_id",
+              "ip_address",
+              "created_at"
+            )
+            SELECT
+              "organization_id",
+              ${input.actor.personId}::uuid,
+              'person',
+              'player-invitation.claimed',
+              'player-invitation',
+              ${invitation.id},
+              ${afterHash},
+              ${claimReason},
+              ${input.requestId},
+              ${input.ipAddress ?? null},
+              ${input.now}::timestamptz
+            FROM claimed
+            RETURNING "id"
+          )
+          SELECT "organization_id" FROM claimed
+        `)
+      : await database.execute(sql`
+          WITH claimed AS (
+            UPDATE ${organizationInvitations}
+               SET "status" = 'claimed',
+                   "claimed_by_person_id" = ${input.actor.personId}::uuid,
+                   "claimed_person_id" = ${participantPersonId}::uuid,
+                   "claimed_at" = ${input.now}::timestamptz,
+                   "updated_at" = ${input.now}::timestamptz
+             WHERE "id" = ${invitation.id}::uuid
+               AND "status" = 'pending'
+               AND "expires_at" > ${input.now}::timestamptz
+            RETURNING "organization_id", "invited_by_person_id"
+          ),
+          player_participant AS (
+            INSERT INTO ${organizationParticipants} (
+              "organization_id",
+              "person_id",
+              "relationship",
+              "status",
+              "added_by_person_id",
+              "joined_at"
+            )
+            SELECT
+              "organization_id",
+              ${participantPersonId}::uuid,
+              ${relationship},
+              'active',
+              "invited_by_person_id",
+              ${input.now}::timestamptz
+            FROM claimed
+            ON CONFLICT ("organization_id", "person_id", "relationship")
+            DO NOTHING
+            RETURNING "id"
+          ),
+          audited AS (
+            INSERT INTO ${auditLog} (
+              "organization_id",
+              "actor_person_id",
+              "actor_type",
+              "action",
+              "entity_type",
+              "entity_id",
+              "after_hash",
+              "reason",
+              "trace_id",
+              "ip_address",
+              "created_at"
+            )
+            SELECT
+              "organization_id",
+              ${input.actor.personId}::uuid,
+              'person',
+              'player-invitation.claimed',
+              'player-invitation',
+              ${invitation.id},
+              ${afterHash},
+              ${claimReason},
+              ${input.requestId},
+              ${input.ipAddress ?? null},
+              ${input.now}::timestamptz
+            FROM claimed
+            RETURNING "id"
+          )
+          SELECT "organization_id" FROM claimed
+        `);
+  if (claimResult.rows.length === 0) {
+    throw new OperatorServiceError(
+      "INVITATION_ALREADY_CLAIMED",
+      "This invitation was claimed in another session.",
+    );
+  }
+
+  return {
+    invitationId: invitation.id,
+    organizationId: invitation.organizationId,
+    participantPersonId,
+    guardianReviewRequired: Boolean(childId),
+    status: "claimed",
   };
 }
 
@@ -661,6 +1441,10 @@ export async function createRatePlan(input: {
 export async function createVenue(input: {
   readonly actor: ApiActor;
   readonly name: string;
+  readonly description?: string;
+  readonly capacity?: number;
+  readonly heroImageUrl?: string;
+  readonly amenities?: readonly string[];
   readonly addressLine1?: string;
   readonly locality?: string;
   readonly administrativeArea?: string;
@@ -678,9 +1462,15 @@ export async function createVenue(input: {
   const id = crypto.randomUUID();
   const values = {
     name: input.name.trim(),
+    description: input.description?.trim() || undefined,
     slug: await uniqueVenueSlug(organizationId, input.name),
     status: "draft" as const,
     temporary: input.temporary,
+    capacity: input.capacity ?? 0,
+    heroImageUrl: input.heroImageUrl?.trim() || undefined,
+    amenities: (input.amenities ?? [])
+      .map((amenity) => amenity.trim())
+      .filter(Boolean),
     addressLine1: input.addressLine1?.trim() || undefined,
     locality: input.locality?.trim() || undefined,
     administrativeArea: input.administrativeArea?.trim() || undefined,
@@ -718,14 +1508,39 @@ export async function createCourt(input: {
   readonly name: string;
   readonly surface: string;
   readonly lit: boolean;
+  readonly capacity?: number;
   readonly bookingPolicy: "public" | "members" | "tiers" | "staff" | "none";
   readonly ratePlanId?: string;
   readonly minimumDurationMinutes: number;
   readonly maximumDurationMinutes: number;
+  readonly durationOptionsMinutes?: readonly number[];
+  readonly bookingIncrementMinutes?: number;
   readonly bufferBeforeMinutes: number;
   readonly bufferAfterMinutes: number;
   readonly minimumNoticeMinutes: number;
   readonly maximumAdvanceDays: number;
+  readonly cancellationPolicy?: {
+    readonly title: string;
+    readonly markdown: string;
+    readonly refundBeforeHours?: number;
+    readonly creditBeforeHours?: number;
+    readonly lateCancellation?: string;
+    readonly requireFullScroll: boolean;
+  };
+  readonly weeklySchedule?: readonly {
+    readonly weekday: number;
+    readonly startsAtMinute: number;
+    readonly endsAtMinute: number;
+    readonly mode:
+      | "open"
+      | "rentals-only"
+      | "members-only"
+      | "private-lessons-only"
+      | "group-only"
+      | "league-reserved"
+      | "maintenance"
+      | "blocked";
+  }[];
   readonly requestId: string;
   readonly ipAddress?: string;
   readonly now: Date;
@@ -754,6 +1569,29 @@ export async function createCourt(input: {
       "Maximum duration must be at least the minimum duration.",
     );
   }
+  const durationOptionsMinutes = [
+    ...new Set(
+      input.durationOptionsMinutes?.length
+        ? input.durationOptionsMinutes
+        : [
+            input.minimumDurationMinutes,
+            Math.min(90, input.maximumDurationMinutes),
+            input.maximumDurationMinutes,
+          ],
+    ),
+  ]
+    .filter(
+      (minutes) =>
+        minutes >= input.minimumDurationMinutes &&
+        minutes <= input.maximumDurationMinutes,
+    )
+    .sort((left, right) => left - right);
+  if (durationOptionsMinutes.length === 0) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Configure at least one booking length inside the court duration range.",
+    );
+  }
   if (input.ratePlanId) {
     const ratePlan = await database.query.ratePlans.findFirst({
       where: eq(ratePlans.id, input.ratePlanId),
@@ -772,25 +1610,43 @@ export async function createCourt(input: {
     }
   }
   const id = crypto.randomUUID();
+  const scheduleId = crypto.randomUUID();
+  const weeklySchedule = input.weeklySchedule?.length
+    ? input.weeklySchedule
+    : Array.from({ length: 7 }, (_, weekday) => ({
+        weekday,
+        startsAtMinute: 8 * 60,
+        endsAtMinute: 22 * 60,
+        mode: "rentals-only" as const,
+      }));
   const values = {
     venueId: input.venueId,
     name: input.name.trim(),
     surface: input.surface.trim().toLowerCase(),
     lit: input.lit,
+    capacity: input.capacity ?? 12,
     status: "draft" as const,
     bookingPolicy: input.bookingPolicy,
     ratePlanId: input.ratePlanId,
     minimumDurationMinutes: input.minimumDurationMinutes,
     maximumDurationMinutes: input.maximumDurationMinutes,
+    durationOptionsMinutes,
+    bookingIncrementMinutes: input.bookingIncrementMinutes ?? 30,
     bufferBeforeMinutes: input.bufferBeforeMinutes,
     bufferAfterMinutes: input.bufferAfterMinutes,
     minimumNoticeMinutes: input.minimumNoticeMinutes,
     maximumAdvanceDays: input.maximumAdvanceDays,
-    cancellationPolicy: {
-      refundBeforeHours: 24,
-      creditBeforeHours: 2,
-      lateCancellation: "non-refundable",
-    },
+    cancellationPolicy:
+      input.cancellationPolicy ??
+      ({
+        title: "Reservation cancellation policy",
+        markdown:
+          "Cancel at least 24 hours before your reservation for a refund to the original payment method. Later cancellations are non-refundable.",
+        refundBeforeHours: 24,
+        creditBeforeHours: 2,
+        lateCancellation: "Non-refundable inside 24 hours.",
+        requireFullScroll: true,
+      } as const),
   };
   await database.batch([
     database.insert(courts).values({
@@ -798,6 +1654,23 @@ export async function createCourt(input: {
       ...values,
       qrToken: crypto.randomUUID().replaceAll("-", ""),
     }),
+    database.insert(schedules).values({
+      id: scheduleId,
+      organizationId,
+      name: `${input.name.trim()} availability`,
+      timezone: venue.timezone,
+      resourceType: "court",
+      resourceId: id,
+    }),
+    database.insert(scheduleBlocks).values(
+      weeklySchedule.map((block) => ({
+        scheduleId,
+        weekday: block.weekday,
+        startsAtMinute: block.startsAtMinute,
+        endsAtMinute: block.endsAtMinute,
+        mode: block.mode,
+      })),
+    ),
     database.insert(auditLog).values({
       organizationId,
       actorPersonId: input.actor.personId,
@@ -813,6 +1686,458 @@ export async function createCourt(input: {
     }),
   ]);
   return { id, entity: "court", status: "draft" };
+}
+
+async function ownedCourt(actor: ApiActor, courtId: string) {
+  const organizationId = requireOrganization(actor);
+  const row = (
+    await getDatabase()
+      .select({ court: courts, venue: venues })
+      .from(courts)
+      .innerJoin(venues, eq(courts.venueId, venues.id))
+      .where(eq(courts.id, courtId))
+      .limit(1)
+  )[0];
+  if (!row) {
+    throw new OperatorServiceError(
+      "RESOURCE_NOT_FOUND",
+      "Court was not found.",
+    );
+  }
+  if (row.venue.organizationId !== organizationId) {
+    throw new OperatorServiceError(
+      "RESOURCE_WRONG_ORGANIZATION",
+      "Court belongs to another organization.",
+    );
+  }
+  return { ...row, organizationId };
+}
+
+export async function updateVenueProfile(input: {
+  readonly actor: ApiActor;
+  readonly venueId: string;
+  readonly description?: string;
+  readonly capacity: number;
+  readonly heroImageUrl?: string;
+  readonly amenities: readonly string[];
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const venue = await database.query.venues.findFirst({
+    where: eq(venues.id, input.venueId),
+  });
+  if (!venue) {
+    throw new OperatorServiceError(
+      "RESOURCE_NOT_FOUND",
+      "Venue was not found.",
+    );
+  }
+  if (venue.organizationId !== organizationId) {
+    throw new OperatorServiceError(
+      "RESOURCE_WRONG_ORGANIZATION",
+      "Venue belongs to another organization.",
+    );
+  }
+  const values = {
+    description: input.description?.trim() || null,
+    capacity: input.capacity,
+    heroImageUrl: input.heroImageUrl?.trim() || null,
+    amenities: input.amenities.map((amenity) => amenity.trim()).filter(Boolean),
+    updatedAt: input.now,
+  };
+  await database.batch([
+    database.update(venues).set(values).where(eq(venues.id, input.venueId)),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "venue.profile_updated",
+      entityType: "venue",
+      entityId: input.venueId,
+      beforeHash: stableHash({
+        description: venue.description,
+        capacity: venue.capacity,
+        heroImageUrl: venue.heroImageUrl,
+        amenities: venue.amenities,
+      }),
+      afterHash: stableHash(values),
+      reason: "Operator updated the player-facing venue profile.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return { id: input.venueId, entity: "venue", status: venue.status };
+}
+
+export async function updateCourtBookingConfiguration(input: {
+  readonly actor: ApiActor;
+  readonly courtId: string;
+  readonly ratePlanId: string | null;
+  readonly capacity: number;
+  readonly durationOptionsMinutes: readonly number[];
+  readonly bookingIncrementMinutes: number;
+  readonly minimumNoticeMinutes: number;
+  readonly maximumAdvanceDays: number;
+  readonly cancellationPolicy: {
+    readonly title: string;
+    readonly markdown: string;
+    readonly refundBeforeHours?: number;
+    readonly creditBeforeHours?: number;
+    readonly lateCancellation?: string;
+    readonly requireFullScroll: boolean;
+  };
+  readonly confirmed: boolean;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  if (!input.confirmed) {
+    throw new OperatorServiceError(
+      "PUBLISH_CONFIRMATION_REQUIRED",
+      "Review and confirm the booking rules before applying them.",
+    );
+  }
+  const { court, organizationId } = await ownedCourt(
+    input.actor,
+    input.courtId,
+  );
+  if (input.ratePlanId) {
+    const ratePlan = await getDatabase().query.ratePlans.findFirst({
+      where: eq(ratePlans.id, input.ratePlanId),
+    });
+    if (!ratePlan || ratePlan.organizationId !== organizationId) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        "Choose a rate plan owned by this organization.",
+      );
+    }
+  }
+  const durationOptionsMinutes = [
+    ...new Set(input.durationOptionsMinutes),
+  ].sort((left, right) => left - right);
+  if (
+    durationOptionsMinutes.length === 0 ||
+    durationOptionsMinutes.some(
+      (minutes) =>
+        minutes < court.minimumDurationMinutes ||
+        minutes > court.maximumDurationMinutes,
+    )
+  ) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Every booking length must be inside the court duration range.",
+    );
+  }
+  const values = {
+    ratePlanId: input.ratePlanId,
+    capacity: input.capacity,
+    durationOptionsMinutes,
+    bookingIncrementMinutes: input.bookingIncrementMinutes,
+    minimumNoticeMinutes: input.minimumNoticeMinutes,
+    maximumAdvanceDays: input.maximumAdvanceDays,
+    cancellationPolicy: input.cancellationPolicy,
+    updatedAt: input.now,
+  };
+  const database = getDatabase();
+  await database.batch([
+    database.update(courts).set(values).where(eq(courts.id, input.courtId)),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "court.booking_configuration_updated",
+      entityType: "court",
+      entityId: input.courtId,
+      beforeHash: stableHash({
+        ratePlanId: court.ratePlanId,
+        capacity: court.capacity,
+        durationOptionsMinutes: court.durationOptionsMinutes,
+        bookingIncrementMinutes: court.bookingIncrementMinutes,
+        minimumNoticeMinutes: court.minimumNoticeMinutes,
+        maximumAdvanceDays: court.maximumAdvanceDays,
+        cancellationPolicy: court.cancellationPolicy,
+      }),
+      afterHash: stableHash(values),
+      reason: "Operator confirmed court booking and cancellation rules.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return { id: input.courtId, entity: "court", status: court.status };
+}
+
+type ScheduleMode =
+  | "open"
+  | "rentals-only"
+  | "members-only"
+  | "private-lessons-only"
+  | "group-only"
+  | "league-reserved"
+  | "maintenance"
+  | "blocked";
+
+function timeMatches(prompt: string): number[] {
+  return [...prompt.matchAll(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/gi)].map(
+    (match) => {
+      let hour = Number(match[1] ?? 0) % 12;
+      const minute = Number(match[2] ?? 0);
+      if (match[3]?.toLowerCase() === "pm") hour += 12;
+      return hour * 60 + minute;
+    },
+  );
+}
+
+export function draftCourtScheduleFromPrompt(prompt: string) {
+  const normalized = prompt.trim().toLowerCase();
+  const times = timeMatches(normalized);
+  const mode: ScheduleMode = normalized.includes("member")
+    ? "members-only"
+    : normalized.includes("lesson")
+      ? "private-lessons-only"
+      : "rentals-only";
+  const weekdayTimes: readonly [number, number] =
+    times.length >= 2 ? [times[0]!, times[1]!] : [8 * 60, 22 * 60];
+  const weekendTimes: readonly [number, number] =
+    times.length >= 4 ? [times[2]!, times[3]!] : weekdayTimes;
+  const closedDays = new Set<number>();
+  const dayNames = [
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+  ];
+  dayNames.forEach((day, index) => {
+    if (
+      normalized.includes(`closed ${day}`) ||
+      normalized.includes(`${day} closed`)
+    ) {
+      closedDays.add(index);
+    }
+  });
+  const blocks = Array.from({ length: 7 }, (_, weekday) => {
+    if (closedDays.has(weekday)) return undefined;
+    const [startsAtMinute, endsAtMinute] =
+      weekday === 0 || weekday === 6 ? weekendTimes : weekdayTimes;
+    return {
+      weekday,
+      startsAtMinute,
+      endsAtMinute,
+      mode,
+    };
+  }).filter((block): block is NonNullable<typeof block> => Boolean(block));
+  return {
+    summary: `Open ${blocks.length} days each week for ${mode.replaceAll("-", " ")}.`,
+    blocks,
+    assumptions: [
+      times.length >= 2
+        ? "Times were read from your instruction."
+        : "No complete time range was found, so 8:00 AM–10:00 PM was proposed.",
+      "This is a draft. Nothing changes until an operator confirms it.",
+      "Existing bookings remain protected when the schedule changes.",
+    ],
+  };
+}
+
+export async function replaceCourtSchedule(input: {
+  readonly actor: ApiActor;
+  readonly courtId: string;
+  readonly blocks: readonly {
+    readonly weekday: number;
+    readonly startsAtMinute: number;
+    readonly endsAtMinute: number;
+    readonly mode: ScheduleMode;
+  }[];
+  readonly confirmed: boolean;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  if (!input.confirmed) {
+    throw new OperatorServiceError(
+      "PUBLISH_CONFIRMATION_REQUIRED",
+      "Confirm the proposed weekly schedule before applying it.",
+    );
+  }
+  if (
+    input.blocks.length === 0 ||
+    input.blocks.some(
+      (block) =>
+        block.weekday < 0 ||
+        block.weekday > 6 ||
+        block.startsAtMinute < 0 ||
+        block.endsAtMinute > 1_440 ||
+        block.endsAtMinute <= block.startsAtMinute,
+    )
+  ) {
+    throw new OperatorServiceError(
+      "INVALID_SCHEDULE",
+      "Every schedule block needs a valid day and start/end time.",
+    );
+  }
+  const { court, venue, organizationId } = await ownedCourt(
+    input.actor,
+    input.courtId,
+  );
+  const database = getDatabase();
+  let schedule = await database.query.schedules.findFirst({
+    where: and(
+      eq(schedules.resourceType, "court"),
+      eq(schedules.resourceId, court.id),
+    ),
+  });
+  if (!schedule) {
+    const id = crypto.randomUUID();
+    await database.insert(schedules).values({
+      id,
+      organizationId,
+      name: `${court.name} availability`,
+      timezone: venue.timezone,
+      resourceType: "court",
+      resourceId: court.id,
+    });
+    schedule = await database.query.schedules.findFirst({
+      where: eq(schedules.id, id),
+    });
+  }
+  if (!schedule) {
+    throw new OperatorServiceError(
+      "INVALID_SCHEDULE",
+      "The court schedule could not be initialized.",
+    );
+  }
+  const previous = await database
+    .select()
+    .from(scheduleBlocks)
+    .where(eq(scheduleBlocks.scheduleId, schedule.id));
+  await database.batch([
+    database
+      .delete(scheduleBlocks)
+      .where(eq(scheduleBlocks.scheduleId, schedule.id)),
+    database.insert(scheduleBlocks).values(
+      input.blocks.map((block) => ({
+        scheduleId: schedule.id,
+        weekday: block.weekday,
+        startsAtMinute: block.startsAtMinute,
+        endsAtMinute: block.endsAtMinute,
+        mode: block.mode,
+      })),
+    ),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "court.schedule_replaced",
+      entityType: "schedule",
+      entityId: schedule.id,
+      beforeHash: stableHash(previous),
+      afterHash: stableHash(input.blocks),
+      reason: "Operator confirmed and replaced the court weekly schedule.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return { id: schedule.id, entity: "schedule", status: "active" };
+}
+
+export async function blockCourtTime(input: {
+  readonly actor: ApiActor;
+  readonly courtId: string;
+  readonly localStartsAt: string;
+  readonly localEndsAt: string;
+  readonly reason: string;
+  readonly confirmed: boolean;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  if (!input.confirmed) {
+    throw new OperatorServiceError(
+      "PUBLISH_CONFIRMATION_REQUIRED",
+      "Confirm the blackout before blocking player bookings.",
+    );
+  }
+  const { court, venue, organizationId } = await ownedCourt(
+    input.actor,
+    input.courtId,
+  );
+  const startsAt = venueWallTimeToUtc(input.localStartsAt, venue.timezone);
+  const endsAt = venueWallTimeToUtc(input.localEndsAt, venue.timezone);
+  if (endsAt <= startsAt) {
+    throw new OperatorServiceError(
+      "INVALID_SCHEDULE",
+      "The blackout must end after it begins.",
+    );
+  }
+  const database = getDatabase();
+  let schedule = await database.query.schedules.findFirst({
+    where: and(
+      eq(schedules.resourceType, "court"),
+      eq(schedules.resourceId, court.id),
+    ),
+  });
+  if (!schedule) {
+    const id = crypto.randomUUID();
+    await database.insert(schedules).values({
+      id,
+      organizationId,
+      name: `${court.name} availability`,
+      timezone: venue.timezone,
+      resourceType: "court",
+      resourceId: court.id,
+    });
+    schedule = await database.query.schedules.findFirst({
+      where: eq(schedules.id, id),
+    });
+  }
+  if (!schedule) {
+    throw new OperatorServiceError(
+      "INVALID_SCHEDULE",
+      "The court schedule could not be initialized.",
+    );
+  }
+  const id = crypto.randomUUID();
+  await database.batch([
+    database.insert(scheduleOverrides).values({
+      id,
+      scheduleId: schedule.id,
+      startsAt,
+      endsAt,
+      mode: "blocked",
+      reason: input.reason.trim(),
+      createdAt: input.now,
+    }),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "court.blackout_created",
+      entityType: "schedule-override",
+      entityId: id,
+      afterHash: stableHash({ courtId: court.id, startsAt, endsAt }),
+      reason: input.reason.trim(),
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return {
+    id,
+    entity: "schedule-override",
+    status: "blocked",
+  };
 }
 
 export async function activateCourt(input: {

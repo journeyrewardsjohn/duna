@@ -417,6 +417,114 @@ export const organizationMemberships = pgTable(
   ],
 );
 
+export const organizationParticipants = pgTable(
+  "organization_participants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    relationship: varchar("relationship", { length: 24 })
+      .notNull()
+      .default("player"),
+    status: varchar("status", { length: 24 }).notNull().default("active"),
+    addedByPersonId: uuid("added_by_person_id").references(() => people.id),
+    joinedAt: timestamp("joined_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("organization_participant_unique").on(
+      table.organizationId,
+      table.personId,
+      table.relationship,
+    ),
+    index("organization_participant_person_idx").on(table.personId),
+    check(
+      "organization_participant_relationship_valid",
+      sql`${table.relationship} IN ('player', 'member', 'guardian')`,
+    ),
+    check(
+      "organization_participant_status_valid",
+      sql`${table.status} IN ('active', 'inactive', 'pending')`,
+    ),
+  ],
+);
+
+export const organizationInvitations = pgTable(
+  "organization_invitations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    invitedByPersonId: uuid("invited_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    inviteToken: varchar("invite_token", { length: 96 }).notNull().unique(),
+    relationship: varchar("relationship", { length: 24 })
+      .notNull()
+      .default("player"),
+    invitedName: text("invited_name").notNull(),
+    invitedEmail: text("invited_email"),
+    invitedPhoneE164: varchar("invited_phone_e164", { length: 24 }),
+    isMinor: boolean("is_minor").notNull().default(false),
+    guardianName: text("guardian_name"),
+    guardianEmail: text("guardian_email"),
+    guardianPhoneE164: varchar("guardian_phone_e164", { length: 24 }),
+    status: varchar("status", { length: 24 }).notNull().default("pending"),
+    deliveryChannel: varchar("delivery_channel", { length: 16 }),
+    deliveryStatus: varchar("delivery_status", { length: 24 })
+      .notNull()
+      .default("not-configured"),
+    deliveryMessageId: varchar("delivery_message_id", { length: 160 }),
+    claimedByPersonId: uuid("claimed_by_person_id").references(() => people.id),
+    claimedPersonId: uuid("claimed_person_id").references(() => people.id),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    claimedAt: timestamp("claimed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("organization_invitation_org_status_idx").on(
+      table.organizationId,
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "organization_invitation_relationship_valid",
+      sql`${table.relationship} IN ('player', 'member')`,
+    ),
+    check(
+      "organization_invitation_status_valid",
+      sql`${table.status} IN ('pending', 'claimed', 'expired', 'cancelled')`,
+    ),
+    check(
+      "organization_invitation_delivery_status_valid",
+      sql`${table.deliveryStatus} IN ('not-configured', 'queued', 'sent', 'failed')`,
+    ),
+    check(
+      "organization_invitation_destination_present",
+      sql`${table.invitedEmail} IS NOT NULL OR ${table.invitedPhoneE164} IS NOT NULL OR ${table.guardianEmail} IS NOT NULL OR ${table.guardianPhoneE164} IS NOT NULL`,
+    ),
+    check(
+      "organization_invitation_minor_guardian_present",
+      sql`NOT ${table.isMinor} OR ${table.guardianEmail} IS NOT NULL OR ${table.guardianPhoneE164} IS NOT NULL`,
+    ),
+  ],
+);
+
 export const ratePlans = pgTable(
   "rate_plans",
   {
@@ -455,8 +563,16 @@ export const venues = pgTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     slug: varchar("slug", { length: 64 }).notNull(),
     name: text("name").notNull(),
+    description: text("description"),
     status: venueStatusEnum("status").notNull().default("draft"),
     temporary: boolean("temporary").notNull().default(false),
+    capacity: integer("capacity").notNull().default(0),
+    heroImageUrl: text("hero_image_url"),
+    heroImageTreatmentUrl: text("hero_image_treatment_url"),
+    amenities: text("amenities")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     addressLine1: text("address_line_1"),
     addressLine2: text("address_line_2"),
     locality: text("locality"),
@@ -475,6 +591,7 @@ export const venues = pgTable(
   (table) => [
     uniqueIndex("venue_org_slug_unique").on(table.organizationId, table.slug),
     index("venue_geo_idx").on(table.latitude, table.longitude),
+    check("venue_capacity_nonnegative", sql`${table.capacity} >= 0`),
   ],
 );
 
@@ -488,6 +605,7 @@ export const courts = pgTable(
     name: text("name").notNull(),
     surface: varchar("surface", { length: 32 }).notNull().default("sand"),
     lit: boolean("lit").notNull().default(false),
+    capacity: integer("capacity").notNull().default(12),
     status: venueStatusEnum("status").notNull().default("active"),
     bookingPolicy: varchar("booking_policy", { length: 32 })
       .notNull()
@@ -499,6 +617,13 @@ export const courts = pgTable(
     maximumDurationMinutes: integer("maximum_duration_minutes")
       .notNull()
       .default(120),
+    durationOptionsMinutes: integer("duration_options_minutes")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[60, 90, 120]::integer[]`),
+    bookingIncrementMinutes: integer("booking_increment_minutes")
+      .notNull()
+      .default(30),
     bufferBeforeMinutes: integer("buffer_before_minutes").notNull().default(0),
     bufferAfterMinutes: integer("buffer_after_minutes").notNull().default(0),
     minimumNoticeMinutes: integer("minimum_notice_minutes")
@@ -521,6 +646,15 @@ export const courts = pgTable(
     check(
       "court_booking_window_valid",
       sql`${table.minimumNoticeMinutes} >= 0 AND ${table.maximumAdvanceDays} > 0`,
+    ),
+    check("court_capacity_positive", sql`${table.capacity} > 0`),
+    check(
+      "court_booking_increment_valid",
+      sql`${table.bookingIncrementMinutes} BETWEEN 5 AND 240`,
+    ),
+    check(
+      "court_duration_options_valid",
+      sql`cardinality(${table.durationOptionsMinutes}) > 0 AND 0 < ALL(${table.durationOptionsMinutes})`,
     ),
   ],
 );
@@ -1604,6 +1738,28 @@ export const courtBookings = pgTable(
     bufferBeforeMinutes: integer("buffer_before_minutes").notNull().default(0),
     bufferAfterMinutes: integer("buffer_after_minutes").notNull().default(0),
     status: bookingStatusEnum("status").notNull().default("held"),
+    paymentMode: varchar("payment_mode", { length: 16 })
+      .notNull()
+      .default("full"),
+    totalAmountMinor: integer("total_amount_minor").notNull().default(0),
+    fundedAmountMinor: integer("funded_amount_minor").notNull().default(0),
+    currency: varchar("currency", { length: 3 }).notNull().default("USD"),
+    participantTarget: integer("participant_target").notNull().default(1),
+    policySnapshot: jsonb("policy_snapshot")
+      .notNull()
+      .$type<{
+        readonly title: string;
+        readonly markdown: string;
+        readonly refundBeforeHours?: number;
+        readonly creditBeforeHours?: number;
+        readonly lateCancellation?: string;
+        readonly requireFullScroll: boolean;
+      }>()
+      .default({
+        title: "Reservation cancellation policy",
+        markdown: "",
+        requireFullScroll: false,
+      }),
     holdExpiresAt: timestamp("hold_expires_at", {
       withTimezone: true,
       mode: "date",
@@ -1629,6 +1785,158 @@ export const courtBookings = pgTable(
     check(
       "court_booking_hold_expiry",
       sql`${table.status} <> 'held' OR ${table.holdExpiresAt} IS NOT NULL`,
+    ),
+    check(
+      "court_booking_payment_mode",
+      sql`${table.paymentMode} IN ('full', 'split')`,
+    ),
+    check(
+      "court_booking_funding_valid",
+      sql`${table.totalAmountMinor} >= 0 AND ${table.fundedAmountMinor} >= 0 AND ${table.fundedAmountMinor} <= ${table.totalAmountMinor}`,
+    ),
+    check(
+      "court_booking_participant_target",
+      sql`${table.participantTarget} > 0`,
+    ),
+  ],
+);
+
+export const courtBookingParticipants = pgTable(
+  "court_booking_participants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => courtBookings.id, { onDelete: "cascade" }),
+    personId: uuid("person_id").references(() => people.id, {
+      onDelete: "set null",
+    }),
+    invitedName: text("invited_name"),
+    invitedEmail: text("invited_email"),
+    invitedPhoneE164: varchar("invited_phone_e164", { length: 24 }),
+    inviteToken: varchar("invite_token", { length: 96 }).notNull().unique(),
+    role: varchar("role", { length: 24 }).notNull().default("player"),
+    status: varchar("status", { length: 24 }).notNull().default("invited"),
+    shareAmountMinor: integer("share_amount_minor").notNull().default(0),
+    orderId: uuid("order_id").references(() => orders.id),
+    paidAt: timestamp("paid_at", { withTimezone: true, mode: "date" }),
+    acceptedAt: timestamp("accepted_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("court_booking_participant_person_unique")
+      .on(table.bookingId, table.personId)
+      .where(sql`${table.personId} IS NOT NULL`),
+    uniqueIndex("court_booking_participant_order_unique")
+      .on(table.orderId)
+      .where(sql`${table.orderId} IS NOT NULL`),
+    index("court_booking_participant_booking_idx").on(
+      table.bookingId,
+      table.status,
+    ),
+    check(
+      "court_booking_participant_identity",
+      sql`${table.personId} IS NOT NULL OR ${table.invitedEmail} IS NOT NULL OR ${table.invitedPhoneE164} IS NOT NULL`,
+    ),
+    check(
+      "court_booking_participant_status",
+      sql`${table.status} IN ('organizer', 'invited', 'accepted', 'payment-pending', 'paid', 'declined', 'cancelled')`,
+    ),
+    check(
+      "court_booking_participant_share",
+      sql`${table.shareAmountMinor} >= 0`,
+    ),
+  ],
+);
+
+export const bookingPolicyAcceptances = pgTable(
+  "booking_policy_acceptances",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    acceptanceKey: varchar("acceptance_key", { length: 128 })
+      .notNull()
+      .unique(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => courtBookings.id, { onDelete: "cascade" }),
+    subjectPersonId: uuid("subject_person_id")
+      .notNull()
+      .references(() => people.id),
+    acceptedByPersonId: uuid("accepted_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    policyTitle: text("policy_title").notNull(),
+    documentText: text("document_text").notNull(),
+    documentTextHash: varchar("document_text_hash", { length: 128 }).notNull(),
+    fullScrollConfirmed: boolean("full_scroll_confirmed")
+      .notNull()
+      .default(false),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    acceptedAt: timestamp("accepted_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    createdAt,
+  },
+  (table) => [
+    index("booking_policy_acceptance_booking_idx").on(
+      table.bookingId,
+      table.subjectPersonId,
+    ),
+  ],
+);
+
+export const availabilityAlerts = pgTable(
+  "availability_alerts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    courtId: uuid("court_id").references(() => courts.id, {
+      onDelete: "cascade",
+    }),
+    targetDate: date("target_date", { mode: "string" }).notNull(),
+    earliestMinute: integer("earliest_minute").notNull().default(0),
+    latestMinute: integer("latest_minute").notNull().default(1440),
+    durationMinutes: integer("duration_minutes").notNull(),
+    channel: messageChannelEnum("channel").notNull().default("push"),
+    status: varchar("status", { length: 24 }).notNull().default("active"),
+    lastMatchedAt: timestamp("last_matched_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    lastNotifiedAt: timestamp("last_notified_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("availability_alert_active_idx").on(
+      table.venueId,
+      table.targetDate,
+      table.status,
+    ),
+    check(
+      "availability_alert_minutes_valid",
+      sql`${table.earliestMinute} >= 0 AND ${table.latestMinute} <= 1440 AND ${table.latestMinute} > ${table.earliestMinute}`,
+    ),
+    check(
+      "availability_alert_duration_valid",
+      sql`${table.durationMinutes} > 0`,
+    ),
+    check(
+      "availability_alert_status_valid",
+      sql`${table.status} IN ('active', 'matched', 'paused', 'expired', 'cancelled')`,
     ),
   ],
 );
@@ -2327,8 +2635,17 @@ export const pickupSessions = pgTable(
       onDelete: "set null",
     }),
     venueId: uuid("venue_id").references(() => venues.id),
+    courtBookingId: uuid("court_booking_id")
+      .unique()
+      .references(() => courtBookings.id, { onDelete: "set null" }),
     venueLabel: text("venue_label").notNull(),
     title: text("title").notNull(),
+    matchType: varchar("match_type", { length: 24 })
+      .notNull()
+      .default("competitive"),
+    genderPreference: varchar("gender_preference", { length: 24 })
+      .notNull()
+      .default("open"),
     format: varchar("format", { length: 24 }).notNull().default("4s"),
     note: text("note"),
     recordMatches: boolean("record_matches").notNull().default(true),
@@ -2372,7 +2689,15 @@ export const pickupSessions = pgTable(
     ),
     check(
       "pickup_session_format_valid",
-      sql`${table.format} IN ('2s', '4s', '6s', 'king-queen')`,
+      sql`${table.format} IN ('2s', '3s', '4s', '6s', 'king-queen')`,
+    ),
+    check(
+      "pickup_session_match_type_valid",
+      sql`${table.matchType} IN ('competitive', 'casual')`,
+    ),
+    check(
+      "pickup_session_gender_valid",
+      sql`${table.genderPreference} IN ('open', 'mens', 'womens', 'mixed')`,
     ),
   ],
 );

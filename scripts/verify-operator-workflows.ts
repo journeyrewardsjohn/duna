@@ -10,7 +10,9 @@ import {
   guardianships,
   idempotencyRecords,
   messages,
+  organizationInvitations,
   organizationMemberships,
+  organizationParticipants,
   organizations,
   people,
   programs,
@@ -71,6 +73,7 @@ async function main() {
   let sessionIds: string[] = [];
   let programIds: string[] = [];
   let eventTypeIds: string[] = [];
+  let invitedMinorPersonId: string | undefined;
 
   try {
     await database.batch([
@@ -190,6 +193,31 @@ async function main() {
       venueId: venue.id,
       confirmed: true,
       idempotencyKey: idempotencyKeys[4],
+    });
+    await caller.operator.replaceCourtSchedule({
+      courtId: court.id,
+      blocks: [
+        {
+          weekday: 1,
+          startsAtMinute: 8 * 60,
+          endsAtMinute: 20 * 60,
+          mode: "rentals-only",
+        },
+        {
+          weekday: 3,
+          startsAtMinute: 8 * 60,
+          endsAtMinute: 20 * 60,
+          mode: "open",
+        },
+        {
+          weekday: 6,
+          startsAtMinute: 9 * 60,
+          endsAtMinute: 18 * 60,
+          mode: "members-only",
+        },
+      ],
+      confirmed: true,
+      idempotencyKey: idempotencyKeys[10],
     });
 
     const otherVenueId = crypto.randomUUID();
@@ -424,11 +452,78 @@ async function main() {
       "Verified guardian was not copied at the message storage boundary",
     );
 
+    const playerInvitation = await caller.operator.createPlayerInvitation({
+      invitedName: "Invited Verification Junior",
+      relationship: "player",
+      isMinor: true,
+      guardianName: "Operator Verification Guardian",
+      guardianEmail: `guardian-${suffix}@example.test`,
+      confirmed: true,
+      idempotencyKey: idempotencyKeys[8],
+    });
+    const invitationRow =
+      await database.query.organizationInvitations.findFirst({
+        where: eq(organizationInvitations.id, playerInvitation.id),
+      });
+    assert(invitationRow, "Player invitation was not persisted");
+    const publicInvitation = await caller.public.playerInvitation({
+      inviteToken: invitationRow.inviteToken,
+    });
+    assert(
+      publicInvitation.isMinor &&
+        publicInvitation.organizationName === "Operator Verification Club",
+      "Public invitation did not preserve the protected minor context",
+    );
+    const guardianActor: ApiActor = {
+      personId: guardianPersonId,
+      displayName: "Operator Verification Guardian",
+      roles: ["player"],
+      scopes: scopesForRoles(["player"]),
+      ageBand: "adult",
+      isDemo: false,
+    };
+    const guardianCaller = createCaller(
+      createApiContext({
+        actor: guardianActor,
+        requestId: requestIds[8],
+        now,
+      }),
+    );
+    const claimedInvitation =
+      await guardianCaller.player.claimOrganizationInvitation({
+        inviteToken: invitationRow.inviteToken,
+        idempotencyKey: idempotencyKeys[9],
+      });
+    invitedMinorPersonId = claimedInvitation.participantPersonId;
+    const [invitedParticipant, invitedGuardianship] = await Promise.all([
+      database.query.organizationParticipants.findFirst({
+        where: and(
+          eq(organizationParticipants.organizationId, organizationId),
+          eq(organizationParticipants.personId, invitedMinorPersonId),
+          eq(organizationParticipants.relationship, "player"),
+        ),
+      }),
+      database.query.guardianships.findFirst({
+        where: and(
+          eq(guardianships.guardianId, guardianPersonId),
+          eq(guardianships.minorId, invitedMinorPersonId),
+        ),
+      }),
+    ]);
+    assert(
+      claimedInvitation.guardianReviewRequired &&
+        invitedParticipant?.status === "active" &&
+        invitedGuardianship?.reviewStatus === "pending" &&
+        !invitedGuardianship.verified,
+      "Minor invitation did not create a protected profile and pending guardian review",
+    );
+
     const workspace = await loadOperatorWorkspace(organizationId);
     assert(
       workspace.venues.length === 1 &&
         workspace.venues[0]?.courts.length === 1 &&
-        workspace.ratePlans.length === 1,
+        workspace.ratePlans.length === 1 &&
+        workspace.venues[0].courts[0]?.schedule.length === 3,
       "Operator workspace did not project facility configuration",
     );
     assert(
@@ -452,6 +547,19 @@ async function main() {
         ),
       "Operator workspace did not project protected message drafts",
     );
+    assert(
+      workspace.participants.some(
+        (participant) =>
+          participant.personId === invitedMinorPersonId &&
+          participant.guardianStatus === "pending",
+      ) &&
+        workspace.invitations.some(
+          (invitation) =>
+            invitation.id === playerInvitation.id &&
+            invitation.status === "claimed",
+        ),
+      "Operator workspace did not project invited players and guardian review",
+    );
 
     const auditRows = await database
       .select({ action: auditLog.action })
@@ -463,10 +571,13 @@ async function main() {
       "venue.created",
       "court.created",
       "court.activated",
+      "court.schedule_replaced",
       "venue.published",
       "session.draft_created",
       "session.published",
       "message.draft_saved",
+      "player-invitation.created",
+      "player-invitation.claimed",
     ]) {
       assert(auditedActions.has(action), `Missing audit action: ${action}`);
     }
@@ -478,6 +589,8 @@ async function main() {
           crossTenantBlocked,
           facilityPublished: workspace.venues[0]?.status === "active",
           courtActivated: workspace.venues[0]?.courts[0]?.status === "active",
+          courtScheduleApplied:
+            workspace.venues[0]?.courts[0]?.schedule.length === 3,
           freeSessionPublished: true,
           paidPublishBlocked,
           connectSynchronized: connectedOrganization.stripeChargesEnabled,
@@ -485,6 +598,8 @@ async function main() {
           consentChecked: true,
           minorGuardianGateBlocked,
           guardianCopies: minorMessage.guardianCopyPersonIds.length,
+          minorInvitationProtected: true,
+          guardianReviewPending: true,
           protectedDrafts: workspace.messageDrafts.length,
           auditedActions: auditedActions.size,
         },
@@ -568,7 +683,12 @@ async function main() {
       .where(
         and(
           eq(guardianships.guardianId, guardianPersonId),
-          eq(guardianships.minorId, minorPersonId),
+          inArray(
+            guardianships.minorId,
+            invitedMinorPersonId
+              ? [minorPersonId, invitedMinorPersonId]
+              : [minorPersonId],
+          ),
         ),
       );
     await database
@@ -594,6 +714,7 @@ async function main() {
           adultPersonId,
           minorPersonId,
           guardianPersonId,
+          ...(invitedMinorPersonId ? [invitedMinorPersonId] : []),
         ]),
       );
   }

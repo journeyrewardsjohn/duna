@@ -457,6 +457,15 @@ export const operatorDashboardSchema = z.object({
     .readonly(),
 });
 
+export const courtCancellationPolicySchema = z.object({
+  title: z.string(),
+  markdown: z.string(),
+  refundBeforeHours: z.number().int().nonnegative().optional(),
+  creditBeforeHours: z.number().int().nonnegative().optional(),
+  lateCancellation: z.string().optional(),
+  requireFullScroll: z.boolean(),
+});
+
 export const operatorRatePlanSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
@@ -467,35 +476,74 @@ export const operatorRatePlanSchema = z.object({
   rateUnitMinutes: z.number().int().positive(),
 });
 
+export const operatorAvailabilityBlockSchema = z.object({
+  id: z.string().uuid(),
+  weekday: z.number().int().min(0).max(6),
+  startsAtMinute: z.number().int().min(0).max(1_439),
+  endsAtMinute: z.number().int().min(1).max(1_440),
+  mode: z.enum([
+    "open",
+    "private-lessons-only",
+    "group-only",
+    "league-reserved",
+    "rentals-only",
+    "members-only",
+    "maintenance",
+    "blocked",
+  ]),
+  effectiveFrom: z.iso.date().optional(),
+  effectiveTo: z.iso.date().optional(),
+});
+
+export const operatorUtilizationSchema = z.object({
+  percent: z.number().min(0).max(100),
+  bookedMinutes30d: z.number().int().nonnegative(),
+  availableMinutes30d: z.number().int().nonnegative(),
+  bookingCount30d: z.number().int().nonnegative(),
+  nextBookingAt: z.iso.datetime().optional(),
+});
+
 export const operatorCourtSchema = z.object({
   id: z.string().uuid(),
   venueId: z.string().uuid(),
   name: z.string(),
   surface: z.string(),
   lit: z.boolean(),
+  capacity: z.number().int().positive(),
   status: z.enum(["draft", "active", "maintenance", "seasonal", "closed"]),
   bookingPolicy: z.enum(["public", "members", "tiers", "staff", "none"]),
   ratePlanId: z.string().uuid().optional(),
   minimumDurationMinutes: z.number().int().positive(),
   maximumDurationMinutes: z.number().int().positive(),
+  durationOptionsMinutes: z.array(z.number().int().positive()).readonly(),
+  bookingIncrementMinutes: z.number().int().positive(),
   bufferBeforeMinutes: z.number().int().nonnegative(),
   bufferAfterMinutes: z.number().int().nonnegative(),
   minimumNoticeMinutes: z.number().int().nonnegative(),
   maximumAdvanceDays: z.number().int().positive(),
+  cancellationPolicy: courtCancellationPolicySchema,
+  schedule: z.array(operatorAvailabilityBlockSchema).readonly(),
+  utilization: operatorUtilizationSchema,
 });
 
 export const operatorVenueSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
+  description: z.string().optional(),
   slug: z.string(),
   status: z.enum(["draft", "active", "maintenance", "seasonal", "closed"]),
   temporary: z.boolean(),
+  capacity: z.number().int().nonnegative(),
+  heroImageUrl: z.string().optional(),
+  heroImageTreatmentUrl: z.string().optional(),
+  amenities: z.array(z.string()).readonly(),
   addressLine1: z.string().optional(),
   locality: z.string().optional(),
   administrativeArea: z.string().optional(),
   postalCode: z.string().optional(),
   countryCode: z.string(),
   timezone: z.string(),
+  utilization: operatorUtilizationSchema,
   courts: z.array(operatorCourtSchema).readonly(),
 });
 
@@ -547,6 +595,35 @@ export const operatorMessageDraftSchema = z.object({
   createdAt: z.iso.datetime(),
 });
 
+export const operatorParticipantSchema = z.object({
+  id: z.string().uuid(),
+  personId: z.string().uuid(),
+  displayName: z.string(),
+  email: z.string().email().optional(),
+  phoneE164: z.string().optional(),
+  avatarUrl: z.string().optional(),
+  isMinor: z.boolean(),
+  relationship: z.enum(["player", "member", "guardian"]),
+  status: z.enum(["active", "inactive", "pending"]),
+  guardianStatus: z.enum(["not-required", "pending", "verified"]),
+  joinedAt: z.iso.datetime(),
+});
+
+export const operatorInvitationSchema = z.object({
+  id: z.string().uuid(),
+  invitedName: z.string(),
+  invitedEmail: z.string().email().optional(),
+  invitedPhoneE164: z.string().optional(),
+  isMinor: z.boolean(),
+  guardianName: z.string().optional(),
+  relationship: z.enum(["player", "member"]),
+  status: z.enum(["pending", "claimed", "expired", "cancelled"]),
+  deliveryChannel: z.enum(["email", "sms"]).optional(),
+  deliveryStatus: z.enum(["not-configured", "queued", "sent", "failed"]),
+  expiresAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+});
+
 export const operatorWorkspaceSchema = z.object({
   organization: z.object({
     id: z.string().uuid(),
@@ -560,6 +637,8 @@ export const operatorWorkspaceSchema = z.object({
   ratePlans: z.array(operatorRatePlanSchema).readonly(),
   venues: z.array(operatorVenueSchema).readonly(),
   sessions: z.array(operatorSessionSchema).readonly(),
+  participants: z.array(operatorParticipantSchema).readonly(),
+  invitations: z.array(operatorInvitationSchema).readonly(),
   messageRecipients: z.array(operatorMessageRecipientSchema).readonly(),
   messageDrafts: z.array(operatorMessageDraftSchema).readonly(),
   deliveryProviders: z.object({
@@ -604,8 +683,38 @@ export const operatorMutationResultSchema = z.object({
     "session",
     "event",
     "message-draft",
+    "schedule",
+    "schedule-override",
+    "player-invitation",
   ]),
   status: z.string(),
+});
+
+export const playerInvitationSchema = z.object({
+  id: z.string().uuid(),
+  organizationName: z.string(),
+  invitedName: z.string(),
+  isMinor: z.boolean(),
+  guardianName: z.string().optional(),
+  relationship: z.enum(["player", "member"]),
+  status: z.enum(["pending", "claimed", "expired", "cancelled"]),
+  expiresAt: z.iso.datetime(),
+});
+
+export const playerInvitationClaimResultSchema = z.object({
+  invitationId: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  participantPersonId: z.string().uuid(),
+  guardianReviewRequired: z.boolean(),
+  status: z.literal("claimed"),
+});
+
+export const courtScheduleProposalSchema = z.object({
+  summary: z.string(),
+  blocks: z
+    .array(operatorAvailabilityBlockSchema.omit({ id: true }))
+    .readonly(),
+  assumptions: z.array(z.string()).readonly(),
 });
 
 export const stripeOnboardingResultSchema = z.object({
@@ -637,6 +746,10 @@ export const ticketApprovalResultSchema = z.object({
 export type OperatorWorkspace = z.infer<typeof operatorWorkspaceSchema>;
 export type OperatorMutationResult = z.infer<
   typeof operatorMutationResultSchema
+>;
+export type PlayerInvitation = z.infer<typeof playerInvitationSchema>;
+export type PlayerInvitationClaimResult = z.infer<
+  typeof playerInvitationClaimResultSchema
 >;
 export type TicketApprovalSummary = z.infer<typeof ticketApprovalSummarySchema>;
 export type TicketApprovalResult = z.infer<typeof ticketApprovalResultSchema>;
@@ -922,11 +1035,16 @@ export const courtBookingInventorySchema = z.object({
   venue: z.object({
     id: z.string().uuid(),
     name: z.string(),
+    description: z.string().optional(),
     city: z.string(),
     region: z.string(),
     timezone: z.string(),
     organizationName: z.string(),
     paymentsReady: z.boolean(),
+    capacity: z.number().int().nonnegative(),
+    heroImageUrl: z.string().optional(),
+    heroImageTreatmentUrl: z.string().optional(),
+    amenities: z.array(z.string()).readonly(),
   }),
   courts: z
     .array(
@@ -935,11 +1053,18 @@ export const courtBookingInventorySchema = z.object({
         name: z.string(),
         surface: z.string(),
         lit: z.boolean(),
+        capacity: z.number().int().positive(),
         bookingPolicy: z.string(),
         minimumDurationMinutes: z.number().int().positive(),
         maximumDurationMinutes: z.number().int().positive(),
+        durationOptionsMinutes: z
+          .array(z.number().int().positive())
+          .min(1)
+          .readonly(),
+        bookingIncrementMinutes: z.number().int().positive(),
         minimumNoticeMinutes: z.number().int().nonnegative(),
         maximumAdvanceDays: z.number().int().positive(),
+        cancellationPolicy: courtCancellationPolicySchema,
         pricing: z
           .object({
             name: z.string(),
@@ -955,10 +1080,49 @@ export const courtBookingInventorySchema = z.object({
     .readonly(),
 });
 
+export const courtAvailabilitySlotSchema = z.object({
+  courtId: z.string().uuid(),
+  courtName: z.string(),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
+  localStartsAt: z.string(),
+  localEndsAt: z.string(),
+  durationMinutes: z.number().int().positive(),
+  price: moneySchema.optional(),
+});
+
+export const courtAvailabilitySchema = z.object({
+  venueId: z.string().uuid(),
+  date: z.iso.date(),
+  durationMinutes: z.number().int().positive(),
+  timezone: z.string(),
+  generatedAt: z.iso.datetime(),
+  slots: z.array(courtAvailabilitySlotSchema).readonly(),
+});
+
+export const courtBookingParticipantSchema = z.object({
+  id: z.string().uuid(),
+  personId: z.string().uuid().optional(),
+  displayName: z.string(),
+  role: z.string(),
+  status: z.enum([
+    "organizer",
+    "invited",
+    "accepted",
+    "payment-pending",
+    "paid",
+    "declined",
+    "cancelled",
+  ]),
+  shareAmountMinor: z.number().int().nonnegative(),
+  inviteToken: z.string().optional(),
+});
+
 export const courtCheckoutResultSchema = z.object({
   mode: z.enum(["free", "stripe", "unavailable"]),
   bookingId: z.string().uuid().optional(),
   bookingStatus: z.enum(["held", "confirmed", "unavailable"]),
+  paymentMode: z.enum(["full", "split"]).optional(),
   checkoutSessionId: z.string().optional(),
   checkoutUrl: z.url().optional(),
   expiresAt: z.iso.datetime().optional(),
@@ -970,10 +1134,13 @@ export const courtCheckoutResultSchema = z.object({
       subtotalMinor: z.number().int().nonnegative(),
       feeTotalMinor: z.number().int().nonnegative(),
       totalMinor: z.number().int().nonnegative(),
+      payNowMinor: z.number().int().nonnegative(),
       currency: currencySchema,
       rateUnitMinutes: z.number().int().positive(),
     })
     .optional(),
+  policy: courtCancellationPolicySchema.optional(),
+  participants: z.array(courtBookingParticipantSchema).readonly().optional(),
 });
 
 export const courtCheckoutStatusSchema = z.object({
@@ -999,11 +1166,51 @@ export const courtCheckoutStatusSchema = z.object({
     ])
     .optional(),
   complete: z.boolean(),
+  sharePaid: z.boolean(),
+  awaitingParticipants: z.boolean(),
+  fundedAmountMinor: z.number().int().nonnegative().optional(),
+  totalAmountMinor: z.number().int().nonnegative().optional(),
+  paymentMode: z.enum(["full", "split"]).optional(),
+  participants: z.array(courtBookingParticipantSchema).readonly().optional(),
+});
+
+export const availabilityAlertResultSchema = z.object({
+  alertId: z.string().uuid().optional(),
+  created: z.boolean(),
+  status: z.enum(["active", "matched", "paused", "expired", "cancelled"]),
+  freeAlertsRemaining: z.number().int().nonnegative(),
+  premiumRequired: z.boolean(),
+});
+
+export const courtBookingInviteSummarySchema = z.object({
+  bookingId: z.string().uuid(),
+  inviteToken: z.string(),
+  venueName: z.string(),
+  courtName: z.string(),
+  organizerName: z.string(),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
+  timezone: z.string(),
+  bookingStatus: z.enum([
+    "held",
+    "confirmed",
+    "cancelled",
+    "expired",
+    "refunded",
+  ]),
+  participant: courtBookingParticipantSchema,
+  policy: courtCancellationPolicySchema,
+  currency: currencySchema,
+  available: z.boolean(),
 });
 
 export type CourtBookingInventory = z.infer<typeof courtBookingInventorySchema>;
+export type CourtAvailability = z.infer<typeof courtAvailabilitySchema>;
 export type CourtCheckoutResult = z.infer<typeof courtCheckoutResultSchema>;
 export type CourtCheckoutStatus = z.infer<typeof courtCheckoutStatusSchema>;
+export type CourtCancellationPolicy = z.infer<
+  typeof courtCancellationPolicySchema
+>;
 
 export const ticketScanResultSchema = z.object({
   scanEventId: z.string().uuid(),

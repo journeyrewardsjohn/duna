@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   assertEventMediaPath,
+  assertVenueMediaPath,
   createEventMediaPath,
+  createVenueMediaPath,
   validateEventMediaInput,
 } from "./media-storage";
 
@@ -68,5 +70,18 @@ describe("event media storage", () => {
         "jpg",
       ),
     ).toThrow("destination is invalid");
+
+    const venuePath = createVenueMediaPath(
+      organizationId,
+      "image/webp",
+      identifier,
+    );
+    expect(venuePath).toBe(`venues/${organizationId}/${identifier}.webp`);
+    expect(() =>
+      assertVenueMediaPath(venuePath, organizationId, "webp"),
+    ).not.toThrow();
+    expect(() =>
+      createVenueMediaPath(organizationId, "video/mp4", identifier),
+    ).toThrow("safe venue image path");
   });
 });

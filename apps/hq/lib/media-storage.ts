@@ -86,6 +86,23 @@ export function createEventMediaPath(
   return `events/${organizationId}/${identifier}.${configuration.extension}`;
 }
 
+export function createVenueMediaPath(
+  organizationId: string,
+  contentType: string,
+  identifier = crypto.randomUUID(),
+): string {
+  const configuration = mediaType(contentType);
+  if (
+    !configuration ||
+    configuration.kind !== "image" ||
+    !uuidPattern.test(organizationId) ||
+    !uuidPattern.test(identifier)
+  ) {
+    throw new Error("Duna could not create a safe venue image path.");
+  }
+  return `venues/${organizationId}/${identifier}.${configuration.extension}`;
+}
+
 export function assertEventMediaPath(
   pathname: string,
   organizationId: string,
@@ -102,4 +119,61 @@ export function assertEventMediaPath(
   ) {
     throw new Error("The event media destination is invalid.");
   }
+}
+
+export function assertVenueMediaPath(
+  pathname: string,
+  organizationId: string,
+  extension: string,
+): void {
+  const prefix = `venues/${organizationId}/`;
+  const identifier = pathname.slice(prefix.length, -(extension.length + 1));
+  if (
+    !uuidPattern.test(organizationId) ||
+    !pathname.startsWith(prefix) ||
+    !pathname.endsWith(`.${extension}`) ||
+    !uuidPattern.test(identifier) ||
+    pathname !== `${prefix}${identifier}.${extension}`
+  ) {
+    throw new Error("The venue image destination is invalid.");
+  }
+}
+
+export async function optimizeImageUpload(file: File): Promise<File> {
+  if (
+    !file.type.startsWith("image/") ||
+    file.type === "image/avif" ||
+    typeof createImageBitmap !== "function" ||
+    typeof document === "undefined"
+  ) {
+    return file;
+  }
+  const bitmap = await createImageBitmap(file);
+  const maximumEdge = 2_400;
+  const scale = Math.min(
+    1,
+    maximumEdge / Math.max(bitmap.width, bitmap.height),
+  );
+  if (scale === 1 && file.type === "image/webp" && file.size < 2_000_000) {
+    bitmap.close();
+    return file;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) {
+    bitmap.close();
+    return file;
+  }
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/webp", 0.86),
+  );
+  if (!blob || blob.size >= file.size) return file;
+  return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".webp", {
+    type: "image/webp",
+    lastModified: file.lastModified,
+  });
 }

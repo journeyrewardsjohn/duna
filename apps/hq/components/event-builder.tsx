@@ -30,7 +30,7 @@ import {
   createEventDraftAction,
   type OperatorActionState,
 } from "@/app/actions";
-import { createEventMediaPath } from "@/lib/media-storage";
+import { createEventMediaPath, optimizeImageUpload } from "@/lib/media-storage";
 import { PlaceSearch } from "./place-search";
 
 type EventKind = "tournament" | "league";
@@ -143,44 +143,6 @@ function localDateTime(daysAhead: number, hour: number) {
   value.setHours(hour, 0, 0, 0);
   const offset = value.getTimezoneOffset();
   return new Date(value.getTime() - offset * 60_000).toISOString().slice(0, 16);
-}
-
-async function optimizeEventImage(file: File): Promise<File> {
-  if (
-    !file.type.startsWith("image/") ||
-    file.type === "image/avif" ||
-    typeof createImageBitmap !== "function"
-  ) {
-    return file;
-  }
-  const bitmap = await createImageBitmap(file);
-  const maximumEdge = 2_400;
-  const scale = Math.min(
-    1,
-    maximumEdge / Math.max(bitmap.width, bitmap.height),
-  );
-  if (scale === 1 && file.type === "image/webp" && file.size < 2_000_000) {
-    bitmap.close();
-    return file;
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-  const context = canvas.getContext("2d");
-  if (!context) {
-    bitmap.close();
-    return file;
-  }
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/webp", 0.86),
-  );
-  if (!blob || blob.size >= file.size) return file;
-  return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".webp", {
-    type: "image/webp",
-    lastModified: file.lastModified,
-  });
 }
 
 function initialDivision(id = uid("division")): DivisionDraft {
@@ -663,7 +625,7 @@ export function EventBuilder({
     setMediaUploadMessage("Preparing the original…");
     try {
       const prepared = file.type.startsWith("image/")
-        ? await optimizeEventImage(file)
+        ? await optimizeImageUpload(file)
         : file;
       setMediaUploadMessage(
         prepared !== file

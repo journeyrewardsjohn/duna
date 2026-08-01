@@ -1597,9 +1597,11 @@ export async function loadPublicProCoverage() {
     database
       .select()
       .from(professionalEvents)
-      .where(inArray(professionalEvents.status, ["live", "upcoming"]))
-      .orderBy(desc(professionalEvents.live), asc(professionalEvents.startsOn))
-      .limit(24),
+      .where(
+        inArray(professionalEvents.status, ["live", "upcoming", "completed"]),
+      )
+      .orderBy(desc(professionalEvents.live), desc(professionalEvents.startsOn))
+      .limit(36),
     database
       .select({
         id: importedMatches.id,
@@ -1646,6 +1648,7 @@ export async function loadPublicProCoverage() {
     events: eventRows.map((event) => ({
       id: event.id,
       externalEventId: event.externalEventId,
+      slug: professionalEventSlug(event),
       name: event.name,
       location: event.location ?? undefined,
       category: event.category ?? undefined,
@@ -1658,10 +1661,26 @@ export async function loadPublicProCoverage() {
       matchCount: event.matchCount,
       lastSyncedAt: event.lastSyncedAt.toISOString(),
     })),
-    matches: matchRows.map((match) => ({
-      ...match,
-      playedAt: match.playedAt?.toISOString(),
-    })),
+    matches: matchRows.map((match) => {
+      const event = eventRows.find(
+        (candidate) => candidate.externalEventId === match.externalEventId,
+      );
+      const team = (side: "A" | "B") =>
+        match.participants
+          .filter((participant) => participant.side === side)
+          .map((participant) => participant.name)
+          .join(" / ");
+      const matchSlug = slugSegment(`${team("A")}-vs-${team("B")}`) || "match";
+      return {
+        ...match,
+        playedAt: match.playedAt?.toISOString(),
+        ...(event
+          ? {
+              canonicalPath: `/events/${professionalEventSlug(event)}/match/${matchSlug}/${match.id}`,
+            }
+          : {}),
+      };
+    }),
     rankingDate,
     rankings: rankingRows.map((ranking) => ({
       id: ranking.id,
@@ -1675,6 +1694,483 @@ export async function loadPublicProCoverage() {
       signal: worldRankingSignal(ranking.rank),
     })),
   };
+}
+
+function slugSegment(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96);
+}
+
+function normalizedProGender(value: string): "mens" | "womens" | string {
+  const normalized = value.toLowerCase();
+  if (normalized.includes("women") || normalized === "female") return "womens";
+  if (normalized.includes("men") || normalized === "male") return "mens";
+  return slugSegment(value) || "open";
+}
+
+function proEventBaseName(value: string): string {
+  return value
+    .replace(
+      /\s*(?:[-–—|]\s*)?(?:men(?:'s)?|women(?:'s)?|male|female)\s*$/i,
+      "",
+    )
+    .trim();
+}
+
+export function professionalEventSlug(event: {
+  readonly name: string;
+  readonly genderCategory: string;
+  readonly startsOn?: string | null;
+}): string {
+  return [
+    slugSegment(proEventBaseName(event.name)),
+    normalizedProGender(event.genderCategory),
+    event.startsOn,
+  ]
+    .filter(Boolean)
+    .join("-");
+}
+
+type ProParticipant = {
+  readonly name: string;
+  readonly personId?: string;
+  readonly handle?: string;
+  readonly avatarUrl?: string;
+  readonly rating?: number;
+};
+
+type ProTeam = {
+  readonly key: string;
+  readonly label: string;
+  readonly players: readonly ProParticipant[];
+  readonly averageRating?: number;
+};
+
+type PublicProMatch = {
+  readonly id: string;
+  readonly externalMatchId: string;
+  readonly roundLabel: string;
+  readonly playedAt?: string;
+  readonly sourceUrl?: string;
+  readonly time?: string;
+  readonly court?: string;
+  readonly teamA: ProTeam;
+  readonly teamB: ProTeam;
+  readonly sets: readonly { readonly a: number; readonly b: number }[];
+  readonly winnerSide?: "A" | "B";
+  readonly status: "scheduled" | "live" | "completed";
+  readonly slug: string;
+  readonly canonicalPath: string;
+  readonly prediction: {
+    readonly teamA: number;
+    readonly teamB: number;
+    readonly favorite: "A" | "B" | "even";
+    readonly basis: "SandRating" | "Even prior";
+  };
+};
+
+type TeamStanding = {
+  readonly team: ProTeam;
+  readonly played: number;
+  readonly wins: number;
+  readonly losses: number;
+  readonly setsFor: number;
+  readonly setsAgainst: number;
+  readonly pointsFor: number;
+  readonly pointsAgainst: number;
+};
+
+function objectString(
+  value: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const candidate = value[key];
+  return typeof candidate === "string" && candidate.trim()
+    ? candidate.trim()
+    : typeof candidate === "number"
+      ? String(candidate)
+      : undefined;
+}
+
+function poolName(roundLabel: string): string | undefined {
+  const match = roundLabel.match(/\b(?:pool|group)\s*([a-z0-9]+)\b/i);
+  return match?.[1] ? `Pool ${match[1].toUpperCase()}` : undefined;
+}
+
+function bracketRound(roundLabel: string):
+  | {
+      readonly key: string;
+      readonly label: string;
+      readonly order: number;
+    }
+  | undefined {
+  const normalized = roundLabel.toLowerCase();
+  if (poolName(roundLabel)) return undefined;
+  if (/(?:final\s*(?:3rd|third)|bronze|third[\s-]*place)/i.test(normalized)) {
+    return { key: "bronze", label: "Third place", order: 7 };
+  }
+  if (/(?:final\s*(?:1st|first)|gold|championship|^final$)/i.test(normalized)) {
+    return { key: "final", label: "Final", order: 6 };
+  }
+  if (/(?:semi|1\/2)/i.test(normalized)) {
+    return { key: "semifinals", label: "Semifinals", order: 5 };
+  }
+  if (/(?:quarter|1\/4)/i.test(normalized)) {
+    return { key: "quarterfinals", label: "Quarterfinals", order: 4 };
+  }
+  if (/(?:round\s*of\s*16|\br16\b|1\/8)/i.test(normalized)) {
+    return { key: "round-of-16", label: "Round of 16", order: 3 };
+  }
+  if (/(?:round\s*of\s*32|\br32\b|1\/16)/i.test(normalized)) {
+    return { key: "round-of-32", label: "Round of 32", order: 2 };
+  }
+  if (/(?:qualification|qualifier|lucky loser)/i.test(normalized)) {
+    return { key: slugSegment(roundLabel), label: roundLabel, order: 1 };
+  }
+  return undefined;
+}
+
+function standingRows(
+  matches: readonly PublicProMatch[],
+): readonly TeamStanding[] {
+  const standings = new Map<
+    string,
+    {
+      team: ProTeam;
+      played: number;
+      wins: number;
+      losses: number;
+      setsFor: number;
+      setsAgainst: number;
+      pointsFor: number;
+      pointsAgainst: number;
+    }
+  >();
+  const ensure = (team: ProTeam) => {
+    const existing = standings.get(team.key);
+    if (existing) return existing;
+    const next = {
+      team,
+      played: 0,
+      wins: 0,
+      losses: 0,
+      setsFor: 0,
+      setsAgainst: 0,
+      pointsFor: 0,
+      pointsAgainst: 0,
+    };
+    standings.set(team.key, next);
+    return next;
+  };
+  for (const match of matches) {
+    const a = ensure(match.teamA);
+    const b = ensure(match.teamB);
+    if (match.sets.length === 0) continue;
+    a.played += 1;
+    b.played += 1;
+    for (const set of match.sets) {
+      a.pointsFor += set.a;
+      a.pointsAgainst += set.b;
+      b.pointsFor += set.b;
+      b.pointsAgainst += set.a;
+      if (set.a > set.b) {
+        a.setsFor += 1;
+        b.setsAgainst += 1;
+      } else if (set.b > set.a) {
+        b.setsFor += 1;
+        a.setsAgainst += 1;
+      }
+    }
+    if (match.winnerSide === "A") {
+      a.wins += 1;
+      b.losses += 1;
+    } else if (match.winnerSide === "B") {
+      b.wins += 1;
+      a.losses += 1;
+    }
+  }
+  return [...standings.values()].sort(
+    (a, b) =>
+      b.wins - a.wins ||
+      a.losses - b.losses ||
+      b.setsFor - b.setsAgainst - (a.setsFor - a.setsAgainst) ||
+      b.pointsFor - b.pointsAgainst - (a.pointsFor - a.pointsAgainst) ||
+      a.team.label.localeCompare(b.team.label),
+  );
+}
+
+function podiumFromMatches(matches: readonly PublicProMatch[]) {
+  const final = matches.find(
+    (match) => bracketRound(match.roundLabel)?.key === "final",
+  );
+  const bronze = matches.find(
+    (match) => bracketRound(match.roundLabel)?.key === "bronze",
+  );
+  const winner = (match: PublicProMatch | undefined) =>
+    match?.winnerSide === "A"
+      ? match.teamA
+      : match?.winnerSide === "B"
+        ? match.teamB
+        : undefined;
+  const loser = (match: PublicProMatch | undefined) =>
+    match?.winnerSide === "A"
+      ? match.teamB
+      : match?.winnerSide === "B"
+        ? match.teamA
+        : undefined;
+  return {
+    champion: winner(final),
+    runnerUp: loser(final),
+    thirdPlace: winner(bronze),
+  };
+}
+
+export async function loadPublicProEvent(slug: string) {
+  requireDatabase();
+  const database = getDatabase();
+  const eventRows = await database
+    .select()
+    .from(professionalEvents)
+    .orderBy(desc(professionalEvents.startsOn))
+    .limit(500);
+  const event = eventRows.find(
+    (candidate) => professionalEventSlug(candidate) === slug,
+  );
+  if (!event) return undefined;
+
+  const matchRows = await database
+    .select()
+    .from(importedMatches)
+    .where(
+      and(
+        eq(importedMatches.sourceId, event.sourceId),
+        eq(importedMatches.externalEventId, event.externalEventId),
+      ),
+    )
+    .orderBy(asc(importedMatches.playedAt), asc(importedMatches.createdAt));
+  const personIds = [
+    ...new Set(
+      matchRows.flatMap((match) =>
+        match.participants.flatMap((participant) =>
+          participant.personId ? [participant.personId] : [],
+        ),
+      ),
+    ),
+  ];
+  const [personRows, ratingRows] =
+    personIds.length > 0
+      ? await Promise.all([
+          database
+            .select({
+              id: people.id,
+              handle: people.handle,
+              avatarUrl: people.avatarUrl,
+            })
+            .from(people)
+            .where(inArray(people.id, personIds)),
+          database
+            .select({
+              personId: ratings.personId,
+              display: ratings.display,
+            })
+            .from(ratings)
+            .where(
+              and(
+                inArray(ratings.personId, personIds),
+                eq(ratings.discipline, "beach-2s"),
+              ),
+            ),
+        ])
+      : [[], []];
+  const personById = new Map(personRows.map((person) => [person.id, person]));
+  const ratingByPersonId = new Map(
+    ratingRows.map((rating) => [rating.personId, rating.display]),
+  );
+  const eventSlug = professionalEventSlug(event);
+  const toTeam = (
+    participants: (typeof matchRows)[number]["participants"],
+    side: "A" | "B",
+  ): ProTeam => {
+    const players = participants
+      .filter((participant) => participant.side === side)
+      .map((participant) => {
+        const person = participant.personId
+          ? personById.get(participant.personId)
+          : undefined;
+        const rating = participant.personId
+          ? ratingByPersonId.get(participant.personId)
+          : undefined;
+        return {
+          name: participant.name,
+          ...(participant.personId ? { personId: participant.personId } : {}),
+          ...(person?.handle ? { handle: person.handle } : {}),
+          ...(person?.avatarUrl ? { avatarUrl: person.avatarUrl } : {}),
+          ...(rating !== undefined ? { rating } : {}),
+        };
+      });
+    const rated = players.flatMap((player) =>
+      player.rating !== undefined ? [player.rating] : [],
+    );
+    return {
+      key:
+        players
+          .map((player) => player.personId ?? normalizePersonName(player.name))
+          .sort()
+          .join(":") || `${side}-unknown`,
+      label: players.map((player) => player.name).join(" / ") || "TBD",
+      players,
+      ...(rated.length
+        ? {
+            averageRating:
+              rated.reduce((sum, rating) => sum + rating, 0) / rated.length,
+          }
+        : {}),
+    };
+  };
+  const publicMatches: readonly PublicProMatch[] = matchRows.map((match) => {
+    const teamA = toTeam(match.participants, "A");
+    const teamB = toTeam(match.participants, "B");
+    const hasRatings =
+      teamA.averageRating !== undefined && teamB.averageRating !== undefined;
+    const teamAChance = hasRatings
+      ? Math.round(
+          (100 /
+            (1 +
+              10 **
+                (((teamB.averageRating ?? 0) - (teamA.averageRating ?? 0)) /
+                  1.5))) *
+            10,
+        ) / 10
+      : 50;
+    const matchSlug =
+      slugSegment(`${teamA.label}-vs-${teamB.label}`) || "match";
+    const winnerSide =
+      match.winnerSide === "A" || match.winnerSide === "B"
+        ? match.winnerSide
+        : undefined;
+    return {
+      id: match.id,
+      externalMatchId: match.externalMatchId,
+      roundLabel: match.roundLabel ?? "Match",
+      ...(match.playedAt ? { playedAt: match.playedAt.toISOString() } : {}),
+      ...(match.sourceUrl ? { sourceUrl: match.sourceUrl } : {}),
+      ...(objectString(match.rawPayload, "time")
+        ? { time: objectString(match.rawPayload, "time") }
+        : {}),
+      ...(objectString(match.rawPayload, "court")
+        ? { court: objectString(match.rawPayload, "court") }
+        : {}),
+      teamA,
+      teamB,
+      sets: match.sets,
+      ...(winnerSide ? { winnerSide } : {}),
+      status: winnerSide ? "completed" : event.live ? "live" : "scheduled",
+      slug: matchSlug,
+      canonicalPath: `/events/${eventSlug}/match/${matchSlug}/${match.id}`,
+      prediction: {
+        teamA: teamAChance,
+        teamB: Math.round((100 - teamAChance) * 10) / 10,
+        favorite: teamAChance > 50 ? "A" : teamAChance < 50 ? "B" : "even",
+        basis: hasRatings ? "SandRating" : "Even prior",
+      },
+    };
+  });
+  const poolMap = new Map<string, PublicProMatch[]>();
+  const bracketMap = new Map<
+    string,
+    {
+      label: string;
+      order: number;
+      matches: PublicProMatch[];
+    }
+  >();
+  for (const match of publicMatches) {
+    const pool = poolName(match.roundLabel);
+    if (pool) {
+      poolMap.set(pool, [...(poolMap.get(pool) ?? []), match]);
+      continue;
+    }
+    const round = bracketRound(match.roundLabel);
+    if (!round) continue;
+    const existing = bracketMap.get(round.key);
+    if (existing) existing.matches.push(match);
+    else {
+      bracketMap.set(round.key, {
+        label: round.label,
+        order: round.order,
+        matches: [match],
+      });
+    }
+  }
+  const sibling = eventRows.find(
+    (candidate) =>
+      candidate.id !== event.id &&
+      candidate.startsOn === event.startsOn &&
+      slugSegment(proEventBaseName(candidate.name)) ===
+        slugSegment(proEventBaseName(event.name)) &&
+      normalizedProGender(candidate.genderCategory) !==
+        normalizedProGender(event.genderCategory),
+  );
+  return {
+    id: event.id,
+    slug: eventSlug,
+    externalEventId: event.externalEventId,
+    name: event.name,
+    location: event.location ?? undefined,
+    countryCode: event.countryCode ?? undefined,
+    category: event.category ?? undefined,
+    genderCategory: event.genderCategory,
+    startsOn: event.startsOn ?? undefined,
+    endsOn: event.endsOn ?? undefined,
+    status: event.status,
+    live: event.live,
+    teamCount: event.teamCount,
+    matchCount: Math.max(event.matchCount, publicMatches.length),
+    sourceUrl: event.sourceUrl,
+    lastSyncedAt: event.lastSyncedAt.toISOString(),
+    sibling: sibling
+      ? {
+          name: sibling.name,
+          genderCategory: sibling.genderCategory,
+          slug: professionalEventSlug(sibling),
+          status: sibling.status,
+        }
+      : undefined,
+    podium: podiumFromMatches(publicMatches),
+    pools: [...poolMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, poolMatches]) => ({
+        name,
+        completedMatches: poolMatches.filter(
+          (match) => match.status === "completed",
+        ).length,
+        matchCount: poolMatches.length,
+        standings: standingRows(poolMatches),
+        matches: poolMatches,
+      })),
+    liveStandings: standingRows(publicMatches),
+    bracket: [...bracketMap.entries()]
+      .sort(([, a], [, b]) => a.order - b.order)
+      .map(([key, round]) => ({
+        key,
+        label: round.label,
+        matches: round.matches,
+      })),
+    matches: publicMatches,
+  };
+}
+
+export async function loadPublicProMatch(eventSlug: string, matchId: string) {
+  const event = await loadPublicProEvent(eventSlug);
+  if (!event) return undefined;
+  const match = event.matches.find((candidate) => candidate.id === matchId);
+  return match ? { event, match } : undefined;
 }
 
 export async function loadPublicPlayerPerformance(personId: string) {
@@ -1841,6 +2337,12 @@ export async function grantPlatformRoleFromBootstrap(input: {
 export type SandDataOverview = Awaited<ReturnType<typeof loadSandDataOverview>>;
 export type PublicProCoverage = Awaited<
   ReturnType<typeof loadPublicProCoverage>
+>;
+export type PublicProEvent = NonNullable<
+  Awaited<ReturnType<typeof loadPublicProEvent>>
+>;
+export type PublicProMatchDetail = NonNullable<
+  Awaited<ReturnType<typeof loadPublicProMatch>>
 >;
 export type PublicPlayerPerformance = Awaited<
   ReturnType<typeof loadPublicPlayerPerformance>

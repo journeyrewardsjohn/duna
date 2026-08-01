@@ -17,6 +17,15 @@ export async function startCourtCheckoutAction(input: {
   readonly courtId: string;
   readonly localStartsAt: string;
   readonly durationMinutes: number;
+  readonly paymentMode: "full" | "split";
+  readonly participants: readonly {
+    readonly personId?: string;
+    readonly name?: string;
+    readonly email?: string;
+    readonly phoneE164?: string;
+  }[];
+  readonly policyAccepted: boolean;
+  readonly policyFullScrollConfirmed: boolean;
   readonly idempotencyKey: string;
 }) {
   try {
@@ -29,6 +38,10 @@ export async function startCourtCheckoutAction(input: {
       courtId: input.courtId,
       localStartsAt: input.localStartsAt,
       durationMinutes: input.durationMinutes,
+      paymentMode: input.paymentMode,
+      participants: [...input.participants],
+      policyAccepted: input.policyAccepted,
+      policyFullScrollConfirmed: input.policyFullScrollConfirmed,
       successUrl: `${origin}/app/venues/${input.venueId}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${origin}/app/venues/${input.venueId}?checkout=cancelled`,
       idempotencyKey: input.idempotencyKey,
@@ -41,6 +54,55 @@ export async function startCourtCheckoutAction(input: {
         error instanceof Error
           ? error.message
           : "Court checkout could not start.",
+    };
+  }
+}
+
+export async function loadCourtAvailabilityAction(input: {
+  readonly venueId: string;
+  readonly date: string;
+  readonly durationMinutes: number;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const availability = await caller.public.courtAvailability(input);
+    return { ok: true as const, availability };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Court availability is unavailable.",
+    };
+  }
+}
+
+export async function createAvailabilityAlertAction(input: {
+  readonly venueId: string;
+  readonly courtId?: string;
+  readonly targetDate: string;
+  readonly durationMinutes: number;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.createAvailabilityAlert({
+      venueId: input.venueId,
+      courtId: input.courtId,
+      targetDate: input.targetDate,
+      durationMinutes: input.durationMinutes,
+      earliestMinute: 0,
+      latestMinute: 1_440,
+      channel: "push",
+    });
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The priority alert could not be created.",
     };
   }
 }

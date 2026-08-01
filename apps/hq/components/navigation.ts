@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Mail,
+  MapPinned,
   MessageSquareText,
   Network,
   PackageOpen,
@@ -31,6 +32,7 @@ import type { LucideIcon } from "lucide-react";
 export const operatorModules = [
   { slug: "overview", label: "Overview", icon: LayoutDashboard },
   { slug: "calendar", label: "Calendar", icon: CalendarDays },
+  { slug: "locations", label: "Venues", icon: MapPinned },
   { slug: "members", label: "People", icon: UsersRound },
   { slug: "programs", label: "Programs", icon: PackageOpen },
   { slug: "events", label: "Events", icon: Trophy },

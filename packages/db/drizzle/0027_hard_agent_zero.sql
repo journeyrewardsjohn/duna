@@ -1,0 +1,2 @@
+ALTER TABLE "pickup_sessions" DROP CONSTRAINT "pickup_session_format_valid";--> statement-breakpoint
+ALTER TABLE "pickup_sessions" ADD CONSTRAINT "pickup_session_format_valid" CHECK ("pickup_sessions"."format" IN ('2s', '3s', '4s', '6s', 'king-queen'));

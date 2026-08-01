@@ -1511,17 +1511,35 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
 
 async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
   const database = getDatabase();
+  const linkedCourtBooking = input.courtBookingId
+    ? await database.query.courtBookings.findFirst({
+        where: and(
+          eq(courtBookings.id, input.courtBookingId),
+          eq(courtBookings.personId, input.hostPersonId),
+          eq(courtBookings.status, "confirmed"),
+        ),
+      })
+    : undefined;
+  if (input.courtBookingId && !linkedCourtBooking) {
+    throw new Error(
+      "Choose a confirmed court reservation that belongs to your Duna account.",
+    );
+  }
   const matchingVenue = await database.query.venues.findFirst({
-    where: input.organizationId
-      ? and(
-          eq(venues.organizationId, input.organizationId),
-          eq(venues.name, input.venueName),
-        )
-      : eq(venues.name, input.venueName),
+    where: linkedCourtBooking
+      ? eq(venues.id, linkedCourtBooking.venueId)
+      : input.venueId
+        ? eq(venues.id, input.venueId)
+        : input.organizationId
+          ? and(
+              eq(venues.organizationId, input.organizationId),
+              eq(venues.name, input.venueName),
+            )
+          : eq(venues.name, input.venueName),
   });
   const pickupId = crypto.randomUUID();
-  const startsAt = new Date(input.startsAt);
-  const endsAt = new Date(input.endsAt);
+  const startsAt = linkedCourtBooking?.startsAt ?? new Date(input.startsAt);
+  const endsAt = linkedCourtBooking?.endsAt ?? new Date(input.endsAt);
   const organizationId =
     input.organizationId ?? matchingVenue?.organizationId ?? undefined;
   const organization = organizationId
@@ -1543,8 +1561,11 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
       hostPersonId: input.hostPersonId,
       organizationId,
       venueId: matchingVenue?.id,
-      venueLabel: input.venueName,
+      courtBookingId: linkedCourtBooking?.id,
+      venueLabel: matchingVenue?.name ?? input.venueName,
       title: input.title,
+      matchType: input.matchType,
+      genderPreference: input.genderPreference,
       format: input.format,
       note: input.note,
       recordMatches: input.recordMatches,
@@ -1580,7 +1601,7 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
     title: input.title,
     kind: "pickup",
     organizationName: organization?.name ?? "Player-hosted pickup",
-    venueName: input.venueName,
+    venueName: matchingVenue?.name ?? input.venueName,
     description: input.note,
     format: input.format,
     recordMatches: input.recordMatches,
@@ -1596,6 +1617,10 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
         : undefined,
     tags: [
       "Pickup",
+      input.matchType === "competitive" ? "Competitive" : "Casual",
+      input.genderPreference === "open"
+        ? "All players"
+        : input.genderPreference,
       input.format === "king-queen" ? "King / Queen" : input.format,
       input.costMinor === 0 ? "Free" : "Paid",
     ],

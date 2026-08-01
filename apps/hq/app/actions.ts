@@ -9,6 +9,24 @@ export interface OperatorActionState {
   readonly message: string;
   readonly onboardingUrl?: string;
   readonly entityId?: string;
+  readonly scheduleProposal?: {
+    readonly summary: string;
+    readonly blocks: readonly {
+      readonly weekday: number;
+      readonly startsAtMinute: number;
+      readonly endsAtMinute: number;
+      readonly mode:
+        | "open"
+        | "rentals-only"
+        | "members-only"
+        | "private-lessons-only"
+        | "group-only"
+        | "league-reserved"
+        | "maintenance"
+        | "blocked";
+    }[];
+    readonly assumptions: readonly string[];
+  };
 }
 
 function field(formData: FormData, name: string): string {
@@ -75,13 +93,48 @@ function revalidateOperator() {
   revalidatePath("/leagues");
   revalidatePath("/payments");
   revalidatePath("/messages");
+  revalidatePath("/members");
   revalidatePath("/settings");
+  revalidatePath("/locations");
 }
 
 type ServerCaller = Awaited<ReturnType<typeof getServerCaller>>;
 type CreateEventDraftPayload = Parameters<
   ServerCaller["operator"]["createEventDraft"]
 >[0];
+
+export async function createPlayerInvitationAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    const created = await caller.operator.createPlayerInvitation({
+      invitedName: field(formData, "invitedName"),
+      invitedEmail: optionalField(formData, "invitedEmail"),
+      invitedPhoneE164: optionalField(formData, "invitedPhoneE164"),
+      relationship:
+        field(formData, "relationship") === "member" ? "member" : "player",
+      isMinor: field(formData, "isMinor") === "true",
+      guardianName: optionalField(formData, "guardianName"),
+      guardianEmail: optionalField(formData, "guardianEmail"),
+      guardianPhoneE164: optionalField(formData, "guardianPhoneE164"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      created.status === "sent"
+        ? "Invitation sent by SMS."
+        : "Invitation created. SMS will send after Sent.dm has a non-empty API key and approved template.",
+      undefined,
+      created.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
 
 export async function createEventDraftAction(
   _previous: OperatorActionState,
@@ -167,6 +220,13 @@ export async function createVenueAction(
     const caller = await getServerCaller();
     await caller.operator.createVenue({
       name: field(formData, "name"),
+      description: optionalField(formData, "description"),
+      capacity: numberField(formData, "capacity"),
+      heroImageUrl: optionalField(formData, "heroImageUrl"),
+      amenities: field(formData, "amenities")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
       addressLine1: optionalField(formData, "addressLine1"),
       locality: optionalField(formData, "locality"),
       administrativeArea: optionalField(formData, "administrativeArea"),
@@ -207,10 +267,16 @@ export async function createCourtAction(
       name: field(formData, "name"),
       surface: field(formData, "surface"),
       lit: field(formData, "lit") === "true",
+      capacity: numberField(formData, "capacity"),
       bookingPolicy,
       ratePlanId: optionalField(formData, "ratePlanId"),
       minimumDurationMinutes: numberField(formData, "minimumDurationMinutes"),
       maximumDurationMinutes: numberField(formData, "maximumDurationMinutes"),
+      durationOptionsMinutes: field(formData, "durationOptionsMinutes")
+        .split(",")
+        .map(Number)
+        .filter((value) => Number.isFinite(value)),
+      bookingIncrementMinutes: numberField(formData, "bookingIncrementMinutes"),
       bufferBeforeMinutes: numberField(formData, "bufferBeforeMinutes"),
       bufferAfterMinutes: numberField(formData, "bufferAfterMinutes"),
       minimumNoticeMinutes: numberField(formData, "minimumNoticeMinutes"),
@@ -222,6 +288,138 @@ export async function createCourtAction(
       "success",
       "Court draft created. Review its policy before activation.",
     );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function updateVenueProfileAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.updateVenueProfile({
+      venueId: field(formData, "venueId"),
+      description: optionalField(formData, "description"),
+      capacity: numberField(formData, "capacity"),
+      heroImageUrl: optionalField(formData, "heroImageUrl"),
+      amenities: field(formData, "amenities")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result("success", "Venue story and capacity updated.");
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function updateCourtBookingConfigurationAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.updateCourtBookingConfiguration({
+      courtId: field(formData, "courtId"),
+      ratePlanId: optionalField(formData, "ratePlanId") ?? null,
+      capacity: numberField(formData, "capacity"),
+      durationOptionsMinutes: field(formData, "durationOptionsMinutes")
+        .split(",")
+        .map(Number)
+        .filter((value) => Number.isFinite(value)),
+      bookingIncrementMinutes: numberField(formData, "bookingIncrementMinutes"),
+      minimumNoticeMinutes: numberField(formData, "minimumNoticeMinutes"),
+      maximumAdvanceDays: numberField(formData, "maximumAdvanceDays"),
+      cancellationPolicy: {
+        title: field(formData, "policyTitle"),
+        markdown: field(formData, "policyMarkdown"),
+        refundBeforeHours: numberField(formData, "refundBeforeHours"),
+        creditBeforeHours: numberField(formData, "creditBeforeHours"),
+        lateCancellation: optionalField(formData, "lateCancellation"),
+        requireFullScroll: field(formData, "requireFullScroll") === "true",
+      },
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result("success", "Court booking and cancellation rules updated.");
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function draftCourtScheduleAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    const scheduleProposal = await caller.operator.draftCourtSchedule({
+      prompt: field(formData, "prompt"),
+    });
+    return {
+      status: "success",
+      message: "Duna drafted a weekly schedule. Review it before applying.",
+      scheduleProposal,
+    };
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function replaceCourtScheduleAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    const blocks = JSON.parse(field(formData, "blocks")) as {
+      weekday: number;
+      startsAtMinute: number;
+      endsAtMinute: number;
+      mode:
+        | "open"
+        | "rentals-only"
+        | "members-only"
+        | "private-lessons-only"
+        | "group-only"
+        | "league-reserved"
+        | "maintenance"
+        | "blocked";
+    }[];
+    await caller.operator.replaceCourtSchedule({
+      courtId: field(formData, "courtId"),
+      blocks,
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result("success", "Weekly availability replaced and published.");
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function blockCourtTimeAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.blockCourtTime({
+      courtId: field(formData, "courtId"),
+      localStartsAt: field(formData, "localStartsAt"),
+      localEndsAt: field(formData, "localEndsAt"),
+      reason: field(formData, "reason"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result("success", "Court time blocked from new bookings.");
   } catch (error) {
     return errorState(error);
   }
