@@ -1,4 +1,5 @@
-import { auth } from "@clerk/nextjs/server";
+import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
+import { withAuth } from "@workos-inc/authkit-nextjs";
 import { notFound } from "next/navigation";
 import { OrganizationInvitationPanel } from "@/components/organization-invitation-panel";
 import { getServerCaller } from "@/lib/api";
@@ -16,13 +17,15 @@ export default async function OrganizationInvitationPage({
     .playerInvitation({ inviteToken })
     .catch(() => undefined);
   if (!invitation) notFound();
-  const { userId } = await auth();
+  const signedIn = isWorkOSAuthKitConfigured()
+    ? Boolean((await withAuth()).user)
+    : true;
   return (
     <main className="organization-invite-page">
       <OrganizationInvitationPanel
         invitation={invitation}
         inviteToken={inviteToken}
-        signedIn={Boolean(userId)}
+        signedIn={signedIn}
       />
     </main>
   );

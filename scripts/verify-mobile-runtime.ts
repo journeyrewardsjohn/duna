@@ -12,10 +12,8 @@ interface RuntimeResolution {
   readonly app: string;
   readonly reactVersion: string;
   readonly reactDomVersion: string;
-  readonly clerkExpoUsesAppReact: boolean;
-  readonly clerkExpoUsesAppReactDom: boolean;
-  readonly clerkReactUsesAppReact: boolean;
-  readonly clerkReactUsesAppReactDom: boolean;
+  readonly mobileAuthUsesAppReact: boolean;
+  readonly authSessionUsesAppReact: boolean;
   readonly reactNativeUsesAppReact: boolean;
 }
 
@@ -68,12 +66,11 @@ function verifyApp(
   );
 
   const appReact = resolvedEntry(requireFromApp, "react");
-  const appReactDom = resolvedEntry(requireFromApp, "react-dom");
-  const clerkExpoRequire = createRequire(
-    resolvedEntry(requireFromApp, "@clerk/expo"),
+  const mobileAuthRequire = createRequire(
+    resolvedEntry(requireFromApp, "@duna/mobile-auth"),
   );
-  const clerkReactRequire = createRequire(
-    resolvedEntry(clerkExpoRequire, "@clerk/react"),
+  const authSessionRequire = createRequire(
+    resolvedEntry(mobileAuthRequire, "expo-auth-session"),
   );
   const reactNativeRequire = createRequire(
     resolvedEntry(requireFromApp, "react-native"),
@@ -82,14 +79,10 @@ function verifyApp(
     app: appDirectory,
     reactVersion,
     reactDomVersion,
-    clerkExpoUsesAppReact:
-      resolvedEntry(clerkExpoRequire, "react") === appReact,
-    clerkExpoUsesAppReactDom:
-      resolvedEntry(clerkExpoRequire, "react-dom") === appReactDom,
-    clerkReactUsesAppReact:
-      resolvedEntry(clerkReactRequire, "react") === appReact,
-    clerkReactUsesAppReactDom:
-      resolvedEntry(clerkReactRequire, "react-dom") === appReactDom,
+    mobileAuthUsesAppReact:
+      resolvedEntry(mobileAuthRequire, "react") === appReact,
+    authSessionUsesAppReact:
+      resolvedEntry(authSessionRequire, "react") === appReact,
     reactNativeUsesAppReact:
       resolvedEntry(reactNativeRequire, "react") === appReact,
   };

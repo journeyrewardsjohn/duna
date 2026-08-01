@@ -1,10 +1,10 @@
-import { auth } from "@clerk/nextjs/server";
 import {
-  createApiContextFromClerkSession,
   createApiContextFromRequest,
+  createApiContextFromWorkOSSession,
   createCaller,
-  resolveClerkCredentials,
+  isWorkOSAuthKitConfigured,
 } from "@duna/api";
+import { withAuth } from "@workos-inc/authkit-nextjs";
 import { headers } from "next/headers";
 import { cache } from "react";
 
@@ -30,14 +30,15 @@ export const getServerCaller = cache(async () => {
     ipAddress: forwardedFor?.split(",")[0]?.trim(),
     userAgent: requestHeaders.get("user-agent") ?? undefined,
   };
-  const credentials = resolveClerkCredentials();
-  const clerkSession = credentials ? await auth() : undefined;
-  const context = credentials
-    ? await createApiContextFromClerkSession(
+  const configured = isWorkOSAuthKitConfigured();
+  const workosSession = configured ? await withAuth() : undefined;
+  const context = configured
+    ? await createApiContextFromWorkOSSession(
         {
-          userId: clerkSession?.userId,
-          organizationId: clerkSession?.orgId,
-          organizationRole: clerkSession?.orgRole,
+          user: workosSession?.user,
+          organizationId: workosSession?.organizationId,
+          role: workosSession?.role,
+          roles: workosSession?.roles,
         },
         contextInput,
       )

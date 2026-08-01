@@ -46,21 +46,24 @@ export default async function HomePage() {
             {courtCount === 1 ? "court" : "courts"}
           </Badge>
           <h1>
-            Your game.
+            Where your game
             <br />
-            <span>All of it.</span>
+            <span>comes together.</span>
           </h1>
           <p>
-            Know your level. Find your people. Book the court, enter the draw,
-            keep score, and carry every match with you.
+            Find people to play, book a court, enter an event, know your
+            rating—and give clubs one simple place to run it all.
           </p>
           <div className="hero__actions">
             <Link className="hero__primary" href="/app">
-              Find your game <ArrowRight aria-hidden size={18} />
+              Find a game <ArrowRight aria-hidden size={18} />
             </Link>
-            <Link className="hero__secondary" href="/app/profile">
-              See your Sand Rating
-            </Link>
+            <a
+              className="hero__secondary"
+              href={process.env.NEXT_PUBLIC_HQ_URL ?? "http://localhost:3001"}
+            >
+              Run your club
+            </a>
           </div>
           <div className="hero__proof">
             <div>
@@ -78,7 +81,17 @@ export default async function HomePage() {
           </div>
         </div>
 
-        <div className="hero__visual" aria-label="Live beach volleyball court">
+        <div
+          className="hero__visual"
+          aria-label="Duna connected volleyball experience"
+        >
+          <div className="hero-product-bar">
+            <span>
+              <span className="hero-product-bar__mark" />
+              DUNA
+            </span>
+            <Badge tone="positive">{marketLabel}</Badge>
+          </div>
           <div className="hero-court">
             <div className="hero-court__horizon" />
             <div className="hero-court__sun" />

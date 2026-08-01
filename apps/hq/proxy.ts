@@ -1,5 +1,10 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
-import { resolveClerkCredentials } from "@duna/api/clerk-environment";
+import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
+import {
+  applyResponseHeaders,
+  authkit,
+  handleAuthkitProxy,
+  partitionAuthkitHeaders,
+} from "@workos-inc/authkit-nextjs";
 import { type NextRequest, NextResponse } from "next/server";
 
 function routeMatches(pathname: string, root: string): boolean {
@@ -10,50 +15,56 @@ function isPublicRoute(pathname: string): boolean {
   return (
     routeMatches(pathname, "/sign-in") ||
     routeMatches(pathname, "/sign-up") ||
+    routeMatches(pathname, "/auth/callback") ||
     routeMatches(pathname, "/api/health")
   );
 }
 
-const clerkCredentials = resolveClerkCredentials();
-const authenticatedProxy = clerkCredentials
-  ? clerkMiddleware(
-      async (auth, request) => {
-        const pathname = request.nextUrl.pathname;
-        const session = await auth();
-        if (!isPublicRoute(pathname) && !session.userId) {
-          if (routeMatches(pathname, "/api")) {
-            return new NextResponse(null, { status: 401 });
-          }
-          return session.redirectToSignIn({ returnBackUrl: request.url });
-        }
-        if (
-          session.userId &&
-          !session.orgId &&
-          !routeMatches(pathname, "/onboarding") &&
-          !isPublicRoute(pathname)
-        ) {
-          return NextResponse.redirect(new URL("/onboarding", request.url));
-        }
-      },
-      {
-        publishableKey: clerkCredentials.publishableKey,
-        secretKey: clerkCredentials.secretKey,
-        signInUrl: "/sign-in",
-        signUpUrl: "/sign-up",
-      },
-    )
-  : undefined;
+export default async function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  if (!isWorkOSAuthKitConfigured()) {
+    if (
+      isPublicRoute(pathname) ||
+      process.env.NEXT_PUBLIC_DEMO_MODE !== "false"
+    ) {
+      return NextResponse.next();
+    }
+    return NextResponse.redirect(new URL("/sign-in", request.url));
+  }
 
-function authenticationSetupProxy(request: NextRequest) {
-  if (isPublicRoute(request.nextUrl.pathname)) return NextResponse.next();
-  return NextResponse.redirect(new URL("/sign-in", request.url));
+  const result = await authkit(request, {
+    redirectUri: new URL("/auth/callback", request.url).toString(),
+  });
+  if (!isPublicRoute(pathname) && !result.session.user) {
+    if (routeMatches(pathname, "/api")) {
+      const { responseHeaders } = partitionAuthkitHeaders(
+        request,
+        result.headers,
+      );
+      return applyResponseHeaders(
+        new NextResponse(null, { status: 401 }),
+        responseHeaders,
+      );
+    }
+    const signIn = new URL("/sign-in", request.url);
+    signIn.searchParams.set(
+      "returnTo",
+      `${request.nextUrl.pathname}${request.nextUrl.search}`,
+    );
+    return handleAuthkitProxy(request, result.headers, { redirect: signIn });
+  }
+  if (
+    result.session.user &&
+    !result.session.organizationId &&
+    !routeMatches(pathname, "/onboarding") &&
+    !isPublicRoute(pathname)
+  ) {
+    return handleAuthkitProxy(request, result.headers, {
+      redirect: new URL("/onboarding", request.url),
+    });
+  }
+  return handleAuthkitProxy(request, result.headers);
 }
-
-export default authenticatedProxy
-  ? authenticatedProxy
-  : process.env.NEXT_PUBLIC_DEMO_MODE === "false"
-    ? authenticationSetupProxy
-    : () => NextResponse.next();
 
 export const config = {
   matcher: [

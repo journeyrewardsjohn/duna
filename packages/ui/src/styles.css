@@ -15,6 +15,7 @@
   --color-warning: #a86f18;
   --color-danger: #b84444;
   --color-white: #fff;
+  --color-on-primary: #fff;
   --color-canvas: #f8f7f3;
   --color-canvas-soft: #f1f3f6;
   --color-surface: #fff;
@@ -56,6 +57,7 @@
   --color-positive: #85d49b;
   --color-warning: #f7c86b;
   --color-danger: #f27878;
+  --color-on-primary: #071119;
   --color-canvas: #070b0d;
   --color-canvas-soft: #0c1418;
   --color-surface: #0c1418;
@@ -132,7 +134,7 @@
 
 .duna-button--primary {
   background: var(--color-aqua);
-  color: var(--color-white);
+  color: var(--color-on-primary);
 }
 
 .duna-button--primary:hover {

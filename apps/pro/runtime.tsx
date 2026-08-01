@@ -1,6 +1,7 @@
-import { ClerkProvider, useAuth, useOrganizationList } from "@clerk/expo";
-import { AuthView } from "@clerk/expo/native";
-import { tokenCache } from "@clerk/expo/token-cache";
+import {
+  WorkOSMobileAuthProvider,
+  useWorkOSMobileAuth,
+} from "@duna/mobile-auth";
 import {
   createContext,
   useCallback,
@@ -51,7 +52,10 @@ export interface ProRuntime {
 }
 
 const RuntimeContext = createContext<ProRuntime | undefined>(undefined);
-const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+const workosClientId = process.env.EXPO_PUBLIC_WORKOS_CLIENT_ID?.trim();
+const authBaseUrl = (
+  process.env.EXPO_PUBLIC_DUNA_AUTH_URL?.trim() || "https://duna-web.vercel.app"
+).replace(/\/+$/, "");
 const previewEnabled = process.env.EXPO_PUBLIC_DUNA_PREVIEW === "true";
 
 function CenteredState({
@@ -90,14 +94,15 @@ function CenteredState({
 }
 
 function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
-  const { getToken, isLoaded, isSignedIn, orgId, signOut } = useAuth();
   const {
-    isLoaded: organizationsLoaded,
-    setActive,
-    userMemberships,
-  } = useOrganizationList({
-    userMemberships: { infinite: true },
-  });
+    error: authError,
+    getToken,
+    isLoaded,
+    isSignedIn,
+    organizationId,
+    signIn,
+    signOut,
+  } = useWorkOSMobileAuth();
   const client = useMemo(() => createDunaApiClient(getToken), [getToken]);
   const [dashboard, setDashboard] = useState<OperatorDashboard>();
   const [workspace, setWorkspace] = useState<OperatorWorkspace>();
@@ -106,29 +111,8 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   const [matches, setMatches] = useState<OperatorMatches>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
-  const memberships = userMemberships.data ?? [];
-
-  useEffect(() => {
-    if (
-      isLoaded &&
-      isSignedIn &&
-      organizationsLoaded &&
-      !orgId &&
-      memberships[0]
-    ) {
-      void setActive({ organization: memberships[0].organization.id });
-    }
-  }, [
-    isLoaded,
-    isSignedIn,
-    memberships,
-    orgId,
-    organizationsLoaded,
-    setActive,
-  ]);
-
   const refresh = useCallback(async () => {
-    if (!orgId) return;
+    if (!organizationId) return;
     setLoading(true);
     setError(undefined);
     try {
@@ -159,13 +143,13 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [client, orgId]);
+  }, [client, organizationId]);
 
   useEffect(() => {
-    if (isLoaded && isSignedIn && orgId) void refresh();
-  }, [isLoaded, isSignedIn, orgId, refresh]);
+    if (isLoaded && isSignedIn && organizationId) void refresh();
+  }, [isLoaded, isSignedIn, organizationId, refresh]);
 
-  if (!isLoaded || !organizationsLoaded) {
+  if (!isLoaded) {
     return (
       <CenteredState
         body="Restoring your encrypted operator session."
@@ -176,12 +160,18 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   }
   if (!isSignedIn) {
     return (
-      <View style={runtimeStyles.auth}>
-        <AuthView isDismissible={false} mode="signIn" />
-      </View>
+      <CenteredState
+        action="Sign in"
+        body={
+          authError ??
+          "Use your secure Duna identity to open the organization workspace."
+        }
+        onAction={() => void signIn()}
+        title="Run your day from anywhere"
+      />
     );
   }
-  if (!orgId && memberships.length === 0) {
+  if (!organizationId) {
     return (
       <CenteredState
         action="Sign out"
@@ -191,7 +181,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       />
     );
   }
-  if (!orgId || (loading && !dashboard)) {
+  if (loading && !dashboard) {
     return (
       <CenteredState
         body="Selecting your club and syncing today’s operation."
@@ -248,19 +238,24 @@ export function ProRuntimeProvider({
 }: {
   readonly children: ReactNode;
 }) {
-  if (!publishableKey) {
+  if (!workosClientId) {
     if (previewEnabled) return <PreviewRuntime>{children}</PreviewRuntime>;
     return (
       <CenteredState
-        body="This production build is intentionally locked until a Clerk publishable key is added to the Duna Pro environment."
+        body="This build needs the WorkOS client identifier before secure sign-in can begin."
         title="Identity setup required"
       />
     );
   }
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+    <WorkOSMobileAuthProvider
+      authBaseUrl={authBaseUrl}
+      clientId={workosClientId}
+      requireOrganization
+      scheme="duna-pro"
+    >
       <ConnectedRuntime>{children}</ConnectedRuntime>
-    </ClerkProvider>
+    </WorkOSMobileAuthProvider>
   );
 }
 
@@ -273,25 +268,25 @@ export function useProRuntime(): ProRuntime {
 }
 
 const runtimeStyles = StyleSheet.create({
-  auth: { backgroundColor: "#070b0d", flex: 1 },
+  auth: { backgroundColor: "#f8f7f3", flex: 1 },
   body: {
-    color: "#aaa79e",
+    color: "#657083",
     fontSize: 15,
     lineHeight: 23,
     maxWidth: 340,
     textAlign: "center",
   },
   button: {
-    backgroundColor: "#f7c86b",
+    backgroundColor: "#2367a8",
     borderRadius: 14,
     marginTop: 12,
     paddingHorizontal: 22,
     paddingVertical: 14,
   },
-  buttonText: { color: "#070b0d", fontSize: 14, fontWeight: "800" },
+  buttonText: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
   mark: {
     alignItems: "center",
-    borderColor: "#f7c86b",
+    borderColor: "#2367a8",
     borderRadius: 22,
     borderWidth: 3,
     height: 44,
@@ -300,7 +295,7 @@ const runtimeStyles = StyleSheet.create({
     width: 44,
   },
   markArc: {
-    borderColor: "#f3efe5",
+    borderColor: "#0b1930",
     borderRadius: 16,
     borderTopWidth: 3,
     height: 18,
@@ -310,7 +305,7 @@ const runtimeStyles = StyleSheet.create({
     width: 27,
   },
   markDot: {
-    backgroundColor: "#63e3db",
+    backgroundColor: "#2367a8",
     borderRadius: 3,
     bottom: 7,
     height: 5,
@@ -320,7 +315,7 @@ const runtimeStyles = StyleSheet.create({
   pro: {
     backgroundColor: "rgba(247,200,107,.12)",
     borderRadius: 6,
-    color: "#f7c86b",
+    color: "#2367a8",
     fontSize: 8,
     fontWeight: "900",
     letterSpacing: 1,
@@ -330,14 +325,14 @@ const runtimeStyles = StyleSheet.create({
   },
   state: {
     alignItems: "center",
-    backgroundColor: "#070b0d",
+    backgroundColor: "#f8f7f3",
     flex: 1,
     gap: 14,
     justifyContent: "center",
     padding: 28,
   },
   title: {
-    color: "#f3efe5",
+    color: "#0b1930",
     fontSize: 26,
     fontWeight: "800",
     letterSpacing: -0.7,
@@ -345,7 +340,7 @@ const runtimeStyles = StyleSheet.create({
     textAlign: "center",
   },
   wordmark: {
-    color: "#f3efe5",
+    color: "#0b1930",
     fontSize: 19,
     fontWeight: "900",
     letterSpacing: 4,

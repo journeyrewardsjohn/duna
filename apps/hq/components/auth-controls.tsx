@@ -1,12 +1,8 @@
 "use client";
 
-import {
-  OrganizationSwitcher,
-  SignInButton,
-  UserButton,
-  useAuth,
-} from "@clerk/nextjs";
-import { LogIn } from "lucide-react";
+import { useAuth } from "@workos-inc/authkit-nextjs/components";
+import { LogIn, LogOut, UsersRound } from "lucide-react";
+import Link from "next/link";
 
 export function AuthControls({
   configured,
@@ -17,8 +13,8 @@ export function AuthControls({
 }) {
   if (!configured) {
     return (
-      <span className="auth-setup-badge" title="Add Clerk keys to activate">
-        Auth setup
+      <span className="auth-setup-badge" title="WorkOS is not configured">
+        Preview
       </span>
     );
   }
@@ -30,27 +26,46 @@ function ConfiguredAuthControls({
 }: {
   readonly showOrganization: boolean;
 }) {
-  const { isLoaded, userId } = useAuth();
-  if (!isLoaded) return null;
+  const { loading, organizationId, signOut, user } = useAuth();
+  if (loading) return null;
+  const initials = user
+    ? `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}` ||
+      user.email[0]?.toUpperCase()
+    : "";
   return (
     <>
-      {userId ? (
+      {user ? (
         <>
           {showOrganization && (
-            <OrganizationSwitcher
-              afterCreateOrganizationUrl="/"
-              afterSelectOrganizationUrl="/"
-              hidePersonal
-            />
+            <Link className="hq-auth-workspace" href="/onboarding">
+              <UsersRound aria-hidden size={15} />
+              {organizationId ? "Workspace" : "Choose workspace"}
+            </Link>
           )}
-          <UserButton />
+          <span className="hq-auth-avatar" title={user.email}>
+            {initials}
+          </span>
+          <button
+            aria-label="Sign out"
+            className="hq-auth-signout"
+            onClick={() =>
+              void signOut({
+                returnTo: new URL(
+                  "/sign-in",
+                  window.location.origin,
+                ).toString(),
+              })
+            }
+            title="Sign out"
+            type="button"
+          >
+            <LogOut aria-hidden size={16} />
+          </button>
         </>
       ) : (
-        <SignInButton mode="modal">
-          <button className="hq-button hq-button--secondary" type="button">
-            <LogIn aria-hidden size={16} /> Sign in
-          </button>
-        </SignInButton>
+        <Link className="hq-button hq-button--secondary" href="/sign-in">
+          <LogIn aria-hidden size={16} /> Sign in
+        </Link>
       )}
     </>
   );

@@ -1,29 +1,40 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
-import { resolveClerkCredentials } from "@duna/api/clerk-environment";
-import { NextResponse } from "next/server";
+import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
+import { authkit, handleAuthkitProxy } from "@workos-inc/authkit-nextjs";
+import { type NextRequest, NextResponse } from "next/server";
 
-const clerkCredentials = resolveClerkCredentials();
-const authenticatedProxy = clerkCredentials
-  ? clerkMiddleware(
-      async (auth, request) => {
-        const pathname = request.nextUrl.pathname;
-        if (pathname === "/app" || pathname.startsWith("/app/")) {
-          const session = await auth();
-          if (!session.userId) {
-            return session.redirectToSignIn({ returnBackUrl: request.url });
-          }
-        }
-      },
-      {
-        publishableKey: clerkCredentials.publishableKey,
-        secretKey: clerkCredentials.secretKey,
-        signInUrl: "/sign-in",
-        signUpUrl: "/sign-up",
-      },
-    )
-  : undefined;
+function isProtectedRoute(pathname: string): boolean {
+  return pathname === "/app" || pathname.startsWith("/app/");
+}
 
-export default authenticatedProxy ?? (() => NextResponse.next());
+export default async function proxy(request: NextRequest) {
+  if (!isWorkOSAuthKitConfigured()) {
+    if (
+      isProtectedRoute(request.nextUrl.pathname) &&
+      process.env.NEXT_PUBLIC_DEMO_MODE === "false"
+    ) {
+      const signIn = new URL("/sign-in", request.url);
+      signIn.searchParams.set(
+        "returnTo",
+        `${request.nextUrl.pathname}${request.nextUrl.search}`,
+      );
+      return NextResponse.redirect(signIn);
+    }
+    return NextResponse.next();
+  }
+
+  const result = await authkit(request, {
+    redirectUri: new URL("/auth/callback", request.url).toString(),
+  });
+  if (isProtectedRoute(request.nextUrl.pathname) && !result.session.user) {
+    const signIn = new URL("/sign-in", request.url);
+    signIn.searchParams.set(
+      "returnTo",
+      `${request.nextUrl.pathname}${request.nextUrl.search}`,
+    );
+    return handleAuthkitProxy(request, result.headers, { redirect: signIn });
+  }
+  return handleAuthkitProxy(request, result.headers);
+}
 
 export const config = {
   matcher: [

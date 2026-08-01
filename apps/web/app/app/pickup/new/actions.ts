@@ -8,7 +8,9 @@ export interface CreatePickupActionInput {
   readonly endsAt: string;
   readonly venueName: string;
   readonly capacity: number;
-  readonly format: "2s" | "4s" | "6s" | "king-queen";
+  readonly format: "2s" | "3s" | "4s" | "6s" | "king-queen";
+  readonly matchType: "competitive" | "casual";
+  readonly genderPreference: "open" | "mens" | "womens" | "mixed";
   readonly note?: string;
   readonly visibility: "public" | "unlisted";
   readonly costMinor: number;

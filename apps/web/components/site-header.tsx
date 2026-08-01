@@ -1,5 +1,5 @@
 import { DunaMark } from "@duna/ui";
-import { isClerkConfigured } from "@duna/api/clerk-environment";
+import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { ArrowUpRight, Menu } from "lucide-react";
 import Link from "next/link";
@@ -28,7 +28,7 @@ export function SiteHeader() {
           >
             Duna HQ <ArrowUpRight aria-hidden size={15} />
           </a>
-          <WebAuthButton configured={isClerkConfigured()} />
+          <WebAuthButton configured={isWorkOSAuthKitConfigured()} />
           <button aria-label="Open menu" className="site-header__menu">
             <Menu aria-hidden size={21} />
           </button>

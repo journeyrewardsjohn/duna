@@ -1,5 +1,5 @@
 import { Badge, DunaMark } from "@duna/ui";
-import { isClerkConfigured } from "@duna/api/clerk-environment";
+import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { Bell, Search, ShieldCheck } from "lucide-react";
 import Link from "next/link";
@@ -68,7 +68,7 @@ export function AdminShell({
             <button aria-label="Notifications" className="icon-button">
               <Bell aria-hidden size={18} />
             </button>
-            <AuthControls configured={isClerkConfigured()} />
+            <AuthControls configured={isWorkOSAuthKitConfigured()} />
           </div>
         </header>
         <div className="hq-content">{children}</div>

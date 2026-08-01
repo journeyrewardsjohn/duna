@@ -11,7 +11,6 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@clerk/nextjs": "7.6.3",
     "@duna/api": "workspace:*",
     "@duna/core": "workspace:*",
     "@duna/ui": "workspace:*",
@@ -19,6 +18,8 @@
     "@fontsource/instrument-sans": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@vercel/blob": "^2.6.1",
+    "@workos-inc/authkit-nextjs": "4.3.1",
+    "@workos-inc/node": "10.9.0",
     "lucide-react": "^1.28.0",
     "next": "^16.2.12",
     "react": "^19.2.8",

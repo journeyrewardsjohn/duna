@@ -5,7 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./clerk-environment": "./src/clerk-environment.ts",
+    "./workos-environment": "./src/workos-environment.ts",
     "./context": "./src/context.ts",
     "./payments": "./src/payments.ts",
     "./webhooks": "./src/webhooks.ts"
@@ -18,7 +18,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@clerk/backend": "3.14.0",
     "@duna/core": "workspace:*",
     "@duna/db": "workspace:*",
     "@duna/league-engine": "workspace:*",
@@ -27,6 +26,7 @@
     "@duna/scheduling": "workspace:*",
     "@mendable/firecrawl-js": "4.32.0",
     "@trpc/server": "^11.18.0",
+    "@workos-inc/node": "10.9.0",
     "drizzle-orm": "^0.45.2",
     "jose": "^6.2.5",
     "stripe": "^22.4.0",

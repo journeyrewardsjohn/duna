@@ -1,6 +1,6 @@
 "use client";
 
-import { UserButton, useAuth } from "@clerk/nextjs";
+import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import Link from "next/link";
 
 export function WebAuthButton({
@@ -19,16 +19,28 @@ export function WebAuthButton({
 }
 
 function ConfiguredWebAuthButton() {
-  const { isLoaded, userId } = useAuth();
-  if (!isLoaded) return null;
+  const { loading, signOut, user } = useAuth();
+  if (loading) return null;
+  const initials = user
+    ? `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}` ||
+      user.email[0]?.toUpperCase()
+    : "";
   return (
     <>
-      {userId ? (
+      {user ? (
         <>
           <Link className="site-header__enter" href="/app">
             Open Duna
           </Link>
-          <UserButton />
+          <button
+            aria-label={`Sign out ${user.email}`}
+            className="site-header__avatar"
+            onClick={() => void signOut({ returnTo: window.location.origin })}
+            title="Sign out"
+            type="button"
+          >
+            {initials}
+          </button>
         </>
       ) : (
         <Link className="site-header__enter" href="/sign-in">

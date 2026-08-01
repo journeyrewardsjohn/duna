@@ -1,6 +1,7 @@
-import { ClerkProvider, useAuth } from "@clerk/expo";
-import { AuthView } from "@clerk/expo/native";
-import { tokenCache } from "@clerk/expo/token-cache";
+import {
+  WorkOSMobileAuthProvider,
+  useWorkOSMobileAuth,
+} from "@duna/mobile-auth";
 import {
   createContext,
   useCallback,
@@ -48,7 +49,10 @@ export interface PlayerRuntime {
 }
 
 const RuntimeContext = createContext<PlayerRuntime | undefined>(undefined);
-const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+const workosClientId = process.env.EXPO_PUBLIC_WORKOS_CLIENT_ID?.trim();
+const authBaseUrl = (
+  process.env.EXPO_PUBLIC_DUNA_WEB_URL?.trim() || "https://duna-web.vercel.app"
+).replace(/\/+$/, "");
 const previewEnabled = process.env.EXPO_PUBLIC_DUNA_PREVIEW === "true";
 
 function CenteredState({
@@ -84,7 +88,14 @@ function CenteredState({
 }
 
 function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
-  const { getToken, isLoaded, isSignedIn, signOut } = useAuth();
+  const {
+    error: authError,
+    getToken,
+    isLoaded,
+    isSignedIn,
+    signIn,
+    signOut,
+  } = useWorkOSMobileAuth();
   const client = useMemo(() => createDunaApiClient(getToken), [getToken]);
   const [dashboard, setDashboard] = useState<PlayerDashboard>();
   const [wallet, setWallet] = useState<PlayerWallet>();
@@ -137,9 +148,15 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   }
   if (!isSignedIn) {
     return (
-      <View style={runtimeStyles.auth}>
-        <AuthView isDismissible={false} mode="signInOrUp" />
-      </View>
+      <CenteredState
+        action="Sign in or create account"
+        body={
+          authError ??
+          "Use one secure Duna identity for play, ratings, bookings, and events."
+        }
+        onAction={() => void signIn()}
+        title="Your game, connected"
+      />
     );
   }
   if (loading && !dashboard) {
@@ -199,19 +216,23 @@ export function PlayerRuntimeProvider({
 }: {
   readonly children: ReactNode;
 }) {
-  if (!publishableKey) {
+  if (!workosClientId) {
     if (previewEnabled) return <PreviewRuntime>{children}</PreviewRuntime>;
     return (
       <CenteredState
-        body="This production build is intentionally locked until a Clerk publishable key is added to the Duna mobile environment."
+        body="This build needs the WorkOS client identifier before secure sign-in can begin."
         title="Identity setup required"
       />
     );
   }
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+    <WorkOSMobileAuthProvider
+      authBaseUrl={authBaseUrl}
+      clientId={workosClientId}
+      scheme="duna"
+    >
       <ConnectedRuntime>{children}</ConnectedRuntime>
-    </ClerkProvider>
+    </WorkOSMobileAuthProvider>
   );
 }
 
@@ -226,25 +247,25 @@ export function usePlayerRuntime(): PlayerRuntime {
 }
 
 const runtimeStyles = StyleSheet.create({
-  auth: { backgroundColor: "#070b0d", flex: 1 },
+  auth: { backgroundColor: "#f8f7f3", flex: 1 },
   body: {
-    color: "#aaa79e",
+    color: "#657083",
     fontSize: 15,
     lineHeight: 23,
     maxWidth: 340,
     textAlign: "center",
   },
   button: {
-    backgroundColor: "#63e3db",
+    backgroundColor: "#2367a8",
     borderRadius: 14,
     marginTop: 12,
     paddingHorizontal: 22,
     paddingVertical: 14,
   },
-  buttonText: { color: "#070b0d", fontSize: 14, fontWeight: "800" },
+  buttonText: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
   mark: {
     alignItems: "center",
-    borderColor: "#63e3db",
+    borderColor: "#2367a8",
     borderRadius: 28,
     borderWidth: 3,
     height: 56,
@@ -253,7 +274,7 @@ const runtimeStyles = StyleSheet.create({
     width: 56,
   },
   markArc: {
-    borderColor: "#f3efe5",
+    borderColor: "#0b1930",
     borderRadius: 20,
     borderTopWidth: 3,
     height: 23,
@@ -263,7 +284,7 @@ const runtimeStyles = StyleSheet.create({
     width: 34,
   },
   markDot: {
-    backgroundColor: "#63e3db",
+    backgroundColor: "#2367a8",
     borderRadius: 3,
     bottom: 9,
     height: 6,
@@ -272,14 +293,14 @@ const runtimeStyles = StyleSheet.create({
   },
   state: {
     alignItems: "center",
-    backgroundColor: "#070b0d",
+    backgroundColor: "#f8f7f3",
     flex: 1,
     gap: 14,
     justifyContent: "center",
     padding: 28,
   },
   title: {
-    color: "#f3efe5",
+    color: "#0b1930",
     fontSize: 26,
     fontWeight: "800",
     letterSpacing: -0.7,
@@ -287,7 +308,7 @@ const runtimeStyles = StyleSheet.create({
     textAlign: "center",
   },
   wordmark: {
-    color: "#f3efe5",
+    color: "#0b1930",
     fontSize: 19,
     fontWeight: "900",
     letterSpacing: 4,

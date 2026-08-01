@@ -1,16 +1,69 @@
 "use client";
 
 import { Badge, Numeric } from "@duna/ui";
-import { Check, ChevronRight, Clock3, Eye, MapPin, Users } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Eye,
+  Gauge,
+  MapPin,
+  Minus,
+  Plus,
+  Sparkles,
+  Trophy,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { createPickupAction } from "@/app/app/pickup/new/actions";
+
+type PickupFormat = "2s" | "3s" | "4s" | "6s" | "king-queen";
+type MatchType = "competitive" | "casual";
+type GenderPreference = "open" | "mens" | "womens" | "mixed";
+
+const FORMAT_OPTIONS: ReadonlyArray<{
+  value: PickupFormat;
+  label: string;
+  detail: string;
+  spots: number;
+}> = [
+  { value: "2s", label: "2v2", detail: "Beach doubles", spots: 4 },
+  { value: "3s", label: "3v3", detail: "Fast triples", spots: 6 },
+  { value: "4s", label: "4v4", detail: "Social fours", spots: 8 },
+  { value: "6s", label: "6v6", detail: "Full court", spots: 12 },
+  {
+    value: "king-queen",
+    label: "KOB / QOB",
+    detail: "Rotating partners",
+    spots: 8,
+  },
+];
+
+const GENDER_OPTIONS: ReadonlyArray<{
+  value: GenderPreference;
+  label: string;
+  detail: string;
+}> = [
+  {
+    value: "open",
+    label: "All players",
+    detail: "Everyone can request a spot",
+  },
+  { value: "mixed", label: "CoEd", detail: "Mixed-gender teams" },
+  { value: "womens", label: "Women", detail: "Women’s run" },
+  { value: "mens", label: "Men", detail: "Men’s run" },
+];
 
 export function PickupForm() {
   const [step, setStep] = useState(1);
   const [createdSlug, setCreatedSlug] = useState<string>();
   const [title, setTitle] = useState("Golden Hour 4s");
-  const [format, setFormat] = useState<"2s" | "4s" | "6s" | "king-queen">("4s");
+  const [format, setFormat] = useState<PickupFormat>("4s");
+  const [matchType, setMatchType] = useState<MatchType>("competitive");
+  const [genderPreference, setGenderPreference] =
+    useState<GenderPreference>("open");
   const [capacity, setCapacity] = useState(8);
   const [ratingMinimum, setRatingMinimum] = useState(4);
   const [ratingMaximum, setRatingMaximum] = useState(5);
@@ -69,7 +122,7 @@ export function PickupForm() {
       <header>
         <div>
           <span className="page-eyebrow">Create in under 20 seconds</span>
-          <h1>Host pickup.</h1>
+          <h1>Host a match.</h1>
           <p>Set the shape. Duna finds the right nearby players.</p>
         </div>
         <div className="pickup-builder__progress">
@@ -85,79 +138,184 @@ export function PickupForm() {
         <div className="pickup-builder__main">
           {step === 1 && (
             <>
-              <div className="field-group">
-                <label htmlFor="pickup-title">Name your run</label>
-                <input
-                  id="pickup-title"
-                  maxLength={80}
-                  onChange={(event) => setTitle(event.target.value)}
-                  value={title}
-                />
-              </div>
-              <div className="form-grid form-grid--2">
-                <div className="field-group">
-                  <label htmlFor="pickup-format">Format</label>
-                  <select
-                    id="pickup-format"
-                    onChange={(event) =>
-                      setFormat(
-                        event.target.value as "2s" | "4s" | "6s" | "king-queen",
-                      )
+              <fieldset className="pickup-choice-section">
+                <legend>What kind of match?</legend>
+                <div className="match-style-grid">
+                  <button
+                    aria-pressed={matchType === "competitive"}
+                    className={
+                      matchType === "competitive" ? "selected" : undefined
                     }
-                    value={format}
+                    onClick={() => {
+                      setMatchType("competitive");
+                      setRecordMatches(true);
+                    }}
+                    type="button"
                   >
-                    <option value="2s">2s</option>
-                    <option value="4s">4s</option>
-                    <option value="6s">6s</option>
-                    <option value="king-queen">King / Queen</option>
-                  </select>
+                    <span className="choice-radio" />
+                    <span className="match-style-grid__icon">
+                      <Trophy aria-hidden size={22} />
+                    </span>
+                    <strong>Competitive</strong>
+                    <small>
+                      Challenge your level. Confirmed results can move your
+                      SandRating.
+                    </small>
+                    <span className="match-style-grid__art match-style-grid__art--competitive">
+                      <Gauge aria-hidden size={32} />
+                    </span>
+                  </button>
+                  <button
+                    aria-pressed={matchType === "casual"}
+                    className={matchType === "casual" ? "selected" : undefined}
+                    onClick={() => {
+                      setMatchType("casual");
+                      setRecordMatches(false);
+                    }}
+                    type="button"
+                  >
+                    <span className="choice-radio" />
+                    <span className="match-style-grid__icon">
+                      <Sparkles aria-hidden size={22} />
+                    </span>
+                    <strong>Casual</strong>
+                    <small>
+                      Play for fun, meet people, and leave ratings unchanged.
+                    </small>
+                    <span className="match-style-grid__art match-style-grid__art--casual">
+                      <Users aria-hidden size={32} />
+                    </span>
+                  </button>
+                </div>
+              </fieldset>
+
+              {matchType === "competitive" && (
+                <fieldset className="pickup-choice-section pickup-level-card">
+                  <legend>Who is this run for?</legend>
+                  <div className="pickup-level-card__heading">
+                    <span>
+                      <Gauge aria-hidden size={19} />
+                      SandRating range
+                    </span>
+                    <strong>
+                      {ratingMinimum.toFixed(1)}–{ratingMaximum.toFixed(1)}
+                    </strong>
+                  </div>
+                  <div className="pickup-level-card__sliders">
+                    <label>
+                      <span>Minimum {ratingMinimum.toFixed(1)}</span>
+                      <input
+                        aria-label="Minimum SandRating"
+                        max={ratingMaximum}
+                        min="1"
+                        onChange={(event) =>
+                          setRatingMinimum(Number(event.target.value))
+                        }
+                        step="0.1"
+                        type="range"
+                        value={ratingMinimum}
+                      />
+                    </label>
+                    <label>
+                      <span>Maximum {ratingMaximum.toFixed(1)}</span>
+                      <input
+                        aria-label="Maximum SandRating"
+                        max="8"
+                        min={ratingMinimum}
+                        onChange={(event) =>
+                          setRatingMaximum(Number(event.target.value))
+                        }
+                        step="0.1"
+                        type="range"
+                        value={ratingMaximum}
+                      />
+                    </label>
+                  </div>
+                  <small>
+                    Players outside the range can still request access.
+                  </small>
+                </fieldset>
+              )}
+
+              <fieldset className="pickup-choice-section">
+                <legend>Choose a format</legend>
+                <div className="pickup-option-grid pickup-option-grid--formats">
+                  {FORMAT_OPTIONS.map((option) => (
+                    <button
+                      aria-pressed={format === option.value}
+                      className={
+                        format === option.value ? "selected" : undefined
+                      }
+                      key={option.value}
+                      onClick={() => {
+                        setFormat(option.value);
+                        setCapacity(option.spots);
+                      }}
+                      type="button"
+                    >
+                      <span className="choice-radio" />
+                      <strong>{option.label}</strong>
+                      <small>{option.detail}</small>
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              <fieldset className="pickup-choice-section">
+                <legend>Who do you want to play with?</legend>
+                <div className="pickup-option-grid pickup-option-grid--gender">
+                  {GENDER_OPTIONS.map((option) => (
+                    <button
+                      aria-pressed={genderPreference === option.value}
+                      className={
+                        genderPreference === option.value
+                          ? "selected"
+                          : undefined
+                      }
+                      key={option.value}
+                      onClick={() => setGenderPreference(option.value)}
+                      type="button"
+                    >
+                      <span className="choice-radio" />
+                      <strong>{option.label}</strong>
+                      <small>{option.detail}</small>
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              <div className="pickup-basics-row">
+                <div className="field-group">
+                  <label htmlFor="pickup-title">Name your run</label>
+                  <input
+                    id="pickup-title"
+                    maxLength={80}
+                    onChange={(event) => setTitle(event.target.value)}
+                    value={title}
+                  />
                 </div>
                 <div className="field-group">
-                  <label htmlFor="pickup-spots">Total spots</label>
-                  <select
-                    id="pickup-spots"
-                    onChange={(event) =>
-                      setCapacity(Number(event.target.value))
-                    }
-                    value={capacity}
-                  >
-                    <option value="4">4</option>
-                    <option value="8">8</option>
-                    <option value="12">12</option>
-                    <option value="16">16</option>
-                  </select>
+                  <label>Total players</label>
+                  <div className="pickup-stepper">
+                    <button
+                      aria-label="Remove a player"
+                      disabled={capacity <= 2}
+                      onClick={() => setCapacity(Math.max(2, capacity - 1))}
+                      type="button"
+                    >
+                      <Minus aria-hidden size={16} />
+                    </button>
+                    <Numeric>{capacity}</Numeric>
+                    <button
+                      aria-label="Add a player"
+                      disabled={capacity >= 40}
+                      onClick={() => setCapacity(Math.min(40, capacity + 1))}
+                      type="button"
+                    >
+                      <Plus aria-hidden size={16} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <div className="field-group">
-                <label>Level</label>
-                <div className="range-control">
-                  <input
-                    aria-label="Minimum rating"
-                    max="8"
-                    min="1"
-                    onChange={(event) =>
-                      setRatingMinimum(Number(event.target.value))
-                    }
-                    step="0.1"
-                    type="number"
-                    value={ratingMinimum}
-                  />
-                  <span>to</span>
-                  <input
-                    aria-label="Maximum rating"
-                    max="8"
-                    min="1"
-                    onChange={(event) =>
-                      setRatingMaximum(Number(event.target.value))
-                    }
-                    step="0.1"
-                    type="number"
-                    value={ratingMaximum}
-                  />
-                </div>
-                <small>
-                  Duna will match against connected, consented players.
-                </small>
               </div>
             </>
           )}
@@ -193,52 +351,66 @@ export function PickupForm() {
                   />
                 </div>
               </div>
-              <div className="form-grid form-grid--2">
-                <div className="field-group">
-                  <label htmlFor="pickup-duration">Duration</label>
-                  <select
-                    id="pickup-duration"
-                    onChange={(event) =>
-                      setDurationMinutes(Number(event.target.value))
-                    }
-                    value={durationMinutes}
-                  >
-                    <option value="60">1 hour</option>
-                    <option value="90">1.5 hours</option>
-                    <option value="120">2 hours</option>
-                  </select>
+              <fieldset className="pickup-choice-section">
+                <legend>How long?</legend>
+                <div className="pickup-duration-options">
+                  {[60, 90, 120].map((value) => (
+                    <button
+                      aria-pressed={durationMinutes === value}
+                      className={
+                        durationMinutes === value ? "selected" : undefined
+                      }
+                      key={value}
+                      onClick={() => setDurationMinutes(value)}
+                      type="button"
+                    >
+                      <Clock3 aria-hidden size={17} />
+                      <strong>{value} min</strong>
+                    </button>
+                  ))}
                 </div>
-                <div className="field-group">
-                  <label htmlFor="pickup-cost">Cost per player</label>
-                  <select
-                    id="pickup-cost"
-                    onChange={(event) =>
-                      setCostMode(
-                        event.target.value as "free" | "split" | "fixed",
-                      )
-                    }
-                    value={costMode}
-                  >
-                    <option value="free">Free</option>
-                    <option value="split">Split court cost</option>
-                    <option value="fixed">Fixed amount</option>
-                  </select>
+              </fieldset>
+              <fieldset className="pickup-choice-section">
+                <legend>Amount per player</legend>
+                <div className="pickup-cost-options">
+                  {(
+                    [
+                      ["free", "Free", "No payment needed"],
+                      ["split", "Split the court", "Each player pays a share"],
+                      ["fixed", "Fixed price", "One price per player"],
+                    ] as const
+                  ).map(([value, label, detail]) => (
+                    <button
+                      aria-pressed={costMode === value}
+                      className={costMode === value ? "selected" : undefined}
+                      key={value}
+                      onClick={() => setCostMode(value)}
+                      type="button"
+                    >
+                      <span className="choice-radio" />
+                      <strong>{label}</strong>
+                      <small>{detail}</small>
+                    </button>
+                  ))}
                 </div>
-              </div>
+              </fieldset>
               {costMode !== "free" && (
-                <div className="field-group">
+                <div className="field-group pickup-amount-field">
                   <label htmlFor="pickup-cost-amount">
                     Amount per player (USD)
                   </label>
-                  <input
-                    id="pickup-cost-amount"
-                    inputMode="decimal"
-                    min="0.50"
-                    onChange={(event) => setCostDollars(event.target.value)}
-                    step="0.01"
-                    type="number"
-                    value={costDollars}
-                  />
+                  <div>
+                    <span>$</span>
+                    <input
+                      id="pickup-cost-amount"
+                      inputMode="decimal"
+                      min="0.50"
+                      onChange={(event) => setCostDollars(event.target.value)}
+                      step="0.01"
+                      type="number"
+                      value={costDollars}
+                    />
+                  </div>
                   <small>
                     Paid pickup is available only through a connected club or
                     facility Stripe account; Duna never holds host funds.
@@ -319,8 +491,9 @@ export function PickupForm() {
               <button
                 className="secondary-action"
                 onClick={() => setStep(step - 1)}
+                type="button"
               >
-                Back
+                <ChevronLeft aria-hidden size={17} /> Back
               </button>
             ) : (
               <Link className="secondary-action" href="/app/play">
@@ -331,6 +504,7 @@ export function PickupForm() {
               <button
                 className="primary-action"
                 onClick={() => setStep(step + 1)}
+                type="button"
               >
                 Continue <ChevronRight aria-hidden size={17} />
               </button>
@@ -371,13 +545,17 @@ export function PickupForm() {
                       venueName,
                       capacity,
                       format,
+                      matchType,
+                      genderPreference,
                       note: note.trim() || undefined,
                       visibility,
                       costMinor,
                       currency: "USD",
                       recordMatches,
-                      ratingMinimum,
-                      ratingMaximum,
+                      ratingMinimum:
+                        matchType === "competitive" ? ratingMinimum : undefined,
+                      ratingMaximum:
+                        matchType === "competitive" ? ratingMaximum : undefined,
                       idempotencyKey: crypto.randomUUID(),
                     });
                     if (result.ok) {
@@ -387,6 +565,7 @@ export function PickupForm() {
                     }
                   });
                 }}
+                type="button"
               >
                 {isPending ? "Publishing…" : "Publish pickup"}{" "}
                 <Check aria-hidden size={17} />
@@ -413,15 +592,27 @@ export function PickupForm() {
               <Users aria-hidden size={15} /> {capacity} spots
             </span>
           </div>
-          <Badge tone="positive">
-            {ratingMinimum.toFixed(1)}–{ratingMaximum.toFixed(1)}
-          </Badge>
+          <div className="pickup-preview__badges">
+            <Badge tone={matchType === "competitive" ? "positive" : "neutral"}>
+              {matchType === "competitive"
+                ? `${ratingMinimum.toFixed(1)}–${ratingMaximum.toFixed(1)}`
+                : "Casual"}
+            </Badge>
+            <Badge>
+              {GENDER_OPTIONS.find(
+                (option) => option.value === genderPreference,
+              )?.label ?? "All players"}
+            </Badge>
+          </div>
           <div className="pickup-preview__meta">
-            <Badge>{format === "king-queen" ? "King / Queen" : format}</Badge>
+            <Badge>
+              {FORMAT_OPTIONS.find((option) => option.value === format)
+                ?.label ?? format}
+            </Badge>
             <Numeric>
               {costMode === "free"
                 ? "Free"
-                : `$${Number(costDollars || 0).toFixed(2)}`}
+                : `$${Number(costDollars || 0).toFixed(2)} / player`}
             </Numeric>
           </div>
         </aside>

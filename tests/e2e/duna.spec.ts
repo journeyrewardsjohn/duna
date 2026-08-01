@@ -15,11 +15,9 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(
-    page.getByRole("heading", { name: "Your game. All of it." }),
+    page.getByRole("heading", { name: "Where your game comes together." }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "Find your game" }),
-  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Find a game" })).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Duna HQ" }).first(),
   ).toHaveAttribute("href", /.+/);
@@ -180,7 +178,7 @@ test("connected scorer requires an explicit four-player court setup", async ({
 test("pickup host flow publishes a complete listing", async ({ page }) => {
   await page.goto("/app/pickup/new");
   await expect(
-    page.getByRole("heading", { name: "Host pickup." }),
+    page.getByRole("heading", { name: "Host a match." }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Continue" }).click();
@@ -200,7 +198,12 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
 }) => {
   await page.goto("http://127.0.0.1:3001/");
   await expect(
-    page.getByRole("heading", { name: "South Bay Volleyball Club." }),
+    page.getByRole("heading", { name: "Good morning." }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Here’s what is happening across South Bay Volleyball Club.",
+    ),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 

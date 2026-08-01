@@ -406,7 +406,7 @@ function MembersPanel({
           {members.length === 0 && (
             <div className="hq-empty">
               <strong>No operating staff.</strong>
-              <span>Clerk organization roles will appear here.</span>
+              <span>WorkOS organization roles will appear here.</span>
             </div>
           )}
         </div>

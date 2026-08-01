@@ -1,5 +1,5 @@
 export * from "./context";
-export * from "./clerk-environment";
+export * from "./workos-environment";
 export * from "./contracts";
 export * from "./auth";
 export * from "./checkout";

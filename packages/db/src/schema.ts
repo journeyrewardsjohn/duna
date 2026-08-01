@@ -207,6 +207,7 @@ export const people = pgTable(
   "people",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    workosUserId: varchar("workos_user_id", { length: 128 }).unique(),
     clerkUserId: varchar("clerk_user_id", { length: 128 }).unique(),
     phoneE164: varchar("phone_e164", { length: 24 }).unique(),
     email: text("email"),
@@ -355,6 +356,9 @@ export const organizations = pgTable(
   "organizations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    workosOrganizationId: varchar("workos_organization_id", {
+      length: 128,
+    }).unique(),
     clerkOrganizationId: varchar("clerk_organization_id", {
       length: 128,
     }).unique(),

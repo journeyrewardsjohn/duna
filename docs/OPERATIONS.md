@@ -91,7 +91,8 @@ address is entered in Stripe. Do not invent that legal address.
 The repository is technically ready for previews, but public production launch
 still requires external approvals or account data:
 
-- Clerk production application and keys
+- WorkOS production environment and verified-domain promotion; staging AuthKit
+  redirects and sign-out URLs are connected to the live Duna surfaces
 - Stripe Connect production review, Tax address, Terminal/Tap to Pay
   entitlements, Treasury/1099 approvals
 - Apple Developer and Google Play organization credentials and store review

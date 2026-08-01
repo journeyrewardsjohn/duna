@@ -1,8 +1,8 @@
 import type { OrganizationSummary } from "@duna/core";
-import { isClerkConfigured } from "@duna/api/clerk-environment";
-import { Badge, DunaMark } from "@duna/ui";
+import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
+import { DunaMark } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
-import { Bell, Search, Sparkles } from "lucide-react";
+import { Bell, ChevronDown, Search, ShieldCheck, Sparkles } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { operatorModules, type OperatorModule } from "./navigation";
@@ -28,18 +28,10 @@ export function OperatorShell({
   return (
     <div className="hq-shell">
       <aside className="hq-sidebar">
-        <Link className="hq-sidebar__brand" href="/">
+        <Link aria-label="Duna HQ home" className="hq-sidebar__brand" href="/">
           <DunaMark />
-          <Badge>HQ</Badge>
+          <small>HQ</small>
         </Link>
-        <div className="organization-switcher">
-          <span>{initials}</span>
-          <span>
-            <strong>{organization.name}</strong>
-            <small>{organization.plan.replaceAll("-", " ")} plan</small>
-          </span>
-          <Badge>{organization.stripeStatus}</Badge>
-        </div>
         <nav aria-label="Operator modules">
           {operatorModules.map((item) => {
             const Icon = item.icon;
@@ -48,6 +40,7 @@ export function OperatorShell({
                 className={active === item.slug ? "active" : undefined}
                 href={item.slug === "overview" ? "/" : `/${item.slug}`}
                 key={item.slug}
+                title={item.label}
               >
                 <Icon aria-hidden size={18} />
                 <span>{item.label}</span>
@@ -59,13 +52,22 @@ export function OperatorShell({
           })}
         </nav>
         <div className="hq-sidebar__meta">
-          <Link href="/admin">Open Duna Admin</Link>
-          <span>{organization.legalName}</span>
-          <small>Duna HQ · Connected workspace</small>
+          <Link aria-label="Open Duna Admin" href="/admin" title="Duna Admin">
+            <ShieldCheck aria-hidden size={18} />
+            <span>Admin</span>
+          </Link>
         </div>
       </aside>
       <div className="hq-workspace">
         <header className="hq-topbar">
+          <Link className="organization-switcher" href="/settings">
+            <span>{initials}</span>
+            <span>
+              <strong>{organization.name}</strong>
+              <small>{organization.plan.replaceAll("-", " ")} plan</small>
+            </span>
+            <ChevronDown aria-hidden size={15} />
+          </Link>
           <label className="hq-search">
             <Search aria-hidden size={17} />
             <input
@@ -77,13 +79,13 @@ export function OperatorShell({
           <div>
             <ThemeToggle />
             <Link className="hq-ai-button" href="/ai">
-              <Sparkles aria-hidden size={16} /> Ask Duna
+              <Sparkles aria-hidden size={16} /> Duna AI
             </Link>
             <button aria-label="Notifications" className="icon-button">
               <Bell aria-hidden size={18} />
               <i />
             </button>
-            <AuthControls configured={isClerkConfigured()} />
+            <AuthControls configured={isWorkOSAuthKitConfigured()} />
           </div>
         </header>
         <div className="hq-content">{children}</div>
