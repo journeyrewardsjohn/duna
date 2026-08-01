@@ -16,7 +16,17 @@ export async function startEventCheckoutAction(input: {
   readonly sessionId: string;
   readonly slug: string;
   readonly divisionId?: string;
+  readonly ticketTypeId?: string;
+  readonly ticketQuantity?: number;
+  readonly teamPaymentMode?: "self" | "team";
+  readonly teamRoster?: readonly {
+    readonly personId?: string;
+    readonly inviteTarget?: string;
+    readonly displayName?: string;
+  }[];
   readonly subjectPersonId?: string;
+  readonly acceptedPolicyIds: readonly string[];
+  readonly readPolicyIds: readonly string[];
   readonly isDunaPlus: boolean;
   readonly idempotencyKey: string;
 }) {
@@ -25,14 +35,25 @@ export async function startEventCheckoutAction(input: {
     const requestHeaders = new Headers();
     incoming.forEach((value, key) => requestHeaders.set(key, value));
     const origin = applicationOrigin(requestHeaders);
+    const selectionQuery = input.ticketTypeId
+      ? `&ticket=${encodeURIComponent(input.ticketTypeId)}`
+      : input.divisionId
+        ? `&division=${encodeURIComponent(input.divisionId)}`
+        : "";
     const caller = await getServerCaller();
     const result = await caller.player.startEventCheckout({
       sessionId: input.sessionId,
       divisionId: input.divisionId,
+      ticketTypeId: input.ticketTypeId,
+      ticketQuantity: input.ticketQuantity,
+      teamPaymentMode: input.teamPaymentMode,
+      teamRoster: input.teamRoster ? [...input.teamRoster] : undefined,
       subjectPersonId: input.subjectPersonId,
+      acceptedPolicyIds: [...input.acceptedPolicyIds],
+      readPolicyIds: [...input.readPolicyIds],
       isDunaPlus: input.isDunaPlus,
-      successUrl: `${origin}/app/checkout/${input.slug}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${origin}/app/checkout/${input.slug}?checkout=cancelled`,
+      successUrl: `${origin}/app/checkout/${input.slug}?checkout=success&session_id={CHECKOUT_SESSION_ID}${selectionQuery}`,
+      cancelUrl: `${origin}/app/checkout/${input.slug}?checkout=cancelled${selectionQuery}`,
       idempotencyKey: input.idempotencyKey,
     });
     return { ok: true as const, result };

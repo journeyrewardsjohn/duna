@@ -12,7 +12,7 @@ import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
 import * as WebBrowser from "expo-web-browser";
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
   Platform,
   Pressable,
@@ -33,7 +33,38 @@ import {
   type OperatorMatches,
 } from "./runtime";
 
-const colors = {
+const lightColors = {
+  canvas: "#f8f7f3",
+  ink: "#101828",
+  depth: "#ffffff",
+  navy: "#f1ece2",
+  navyLift: "#e8eef7",
+  bone: "#101828",
+  muted: "#667085",
+  aqua: "#235a96",
+  aquaDeep: "#173a67",
+  sand: "#d7bd91",
+  flare: "#de6842",
+  positive: "#2f7d57",
+  warning: "#a86f18",
+  danger: "#b84444",
+  onAccent: "#ffffff",
+  overlayRgb: "23,58,103",
+  accentRgb: "35,90,150",
+  warningRgb: "168,111,24",
+  positiveRgb: "47,125,87",
+  dangerRgb: "184,68,68",
+  flareRgb: "222,104,66",
+  inkRgb: "16,24,40",
+  depthRgb: "255,255,255",
+} as const;
+
+type Palette = {
+  readonly [Key in keyof typeof lightColors]: string;
+};
+
+const darkColors: Palette = {
+  canvas: "#070b0d",
   ink: "#070b0d",
   depth: "#0c1418",
   navy: "#10242b",
@@ -47,7 +78,49 @@ const colors = {
   positive: "#85d49b",
   warning: "#f7c86b",
   danger: "#f27878",
-} as const;
+  onAccent: "#070b0d",
+  overlayRgb: "255,255,255",
+  accentRgb: "99,227,219",
+  warningRgb: "247,200,107",
+  positiveRgb: "133,212,155",
+  dangerRgb: "242,120,120",
+  flareRgb: "255,106,61",
+  inkRgb: "7,11,13",
+  depthRgb: "12,20,24",
+};
+
+type ThemeName = "light" | "dark";
+
+let activePalette: Palette = lightColors;
+const colors = new Proxy(lightColors, {
+  get(_target, property: keyof Palette) {
+    return activePalette[property];
+  },
+}) as Palette;
+
+function rgba(rgb: string, alpha: number) {
+  return `rgba(${rgb},${alpha})`;
+}
+
+const ThemeContext = createContext<{
+  readonly theme: ThemeName;
+  readonly toggle: () => void;
+}>({ theme: "light", toggle: () => undefined });
+
+function ThemeButton() {
+  const { theme, toggle } = useContext(ThemeContext);
+  return (
+    <Pressable
+      accessibilityLabel={`Use ${theme === "light" ? "dark" : "light"} mode`}
+      onPress={toggle}
+      style={styles.themeButton}
+    >
+      <Text style={styles.themeButtonText}>
+        {theme === "light" ? "☾" : "☀"}
+      </Text>
+    </Pressable>
+  );
+}
 
 type Tab = "today" | "people" | "score" | "money" | "more";
 
@@ -108,20 +181,20 @@ function Pill({
 }) {
   const style: Record<typeof tone, ViewStyle> = {
     neutral: {
-      backgroundColor: "rgba(255,255,255,.05)",
-      borderColor: "rgba(255,255,255,.09)",
+      backgroundColor: rgba(colors.overlayRgb, 0.05),
+      borderColor: rgba(colors.overlayRgb, 0.09),
     },
     positive: {
-      backgroundColor: "rgba(133,212,155,.08)",
-      borderColor: "rgba(133,212,155,.22)",
+      backgroundColor: rgba(colors.positiveRgb, 0.08),
+      borderColor: rgba(colors.positiveRgb, 0.22),
     },
     warning: {
-      backgroundColor: "rgba(247,200,107,.08)",
-      borderColor: "rgba(247,200,107,.22)",
+      backgroundColor: rgba(colors.warningRgb, 0.08),
+      borderColor: rgba(colors.warningRgb, 0.22),
     },
     live: {
-      backgroundColor: "rgba(255,106,61,.08)",
-      borderColor: "rgba(255,106,61,.25)",
+      backgroundColor: rgba(colors.flareRgb, 0.08),
+      borderColor: rgba(colors.flareRgb, 0.25),
     },
   };
   return (
@@ -154,6 +227,7 @@ function Header({ context }: { readonly context: string }) {
         <Text style={styles.headerContext}>{context}</Text>
       </View>
       <View style={styles.headerButtons}>
+        <ThemeButton />
         <Pressable style={styles.aiButton}>
           <Text style={styles.aiButtonText}>✦</Text>
         </Pressable>
@@ -296,7 +370,7 @@ function TodayScreen({ onScore }: { readonly onScore: () => void }) {
         action="Create"
         eyebrow={today}
         onAction={() =>
-          void WebBrowser.openBrowserAsync(`${dunaHqUrl}/calendar`)
+          void WebBrowser.openBrowserAsync(`${dunaHqUrl}/events/create`)
         }
         title={mode === "preview" ? "Good morning, Sam." : "Good morning."}
       />
@@ -307,6 +381,42 @@ function TodayScreen({ onScore }: { readonly onScore: () => void }) {
         </Text>{" "}
         and {scheduleItems.length} scheduled items in this workspace.
       </Text>
+      <View style={styles.createEventCard}>
+        <View style={styles.createEventHeader}>
+          <View style={styles.createEventMark}>
+            <Text style={styles.createEventMarkText}>＋</Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.rowTitle}>Create from the field</Text>
+            <Text style={styles.metaText}>
+              Start a private draft now. Publishing stays locked until Money is
+              connected in HQ.
+            </Text>
+          </View>
+        </View>
+        <View style={styles.createEventActions}>
+          <Pressable
+            onPress={() =>
+              void WebBrowser.openBrowserAsync(
+                `${dunaHqUrl}/events/create?type=tournament`,
+              )
+            }
+            style={styles.createEventPrimary}
+          >
+            <Text style={styles.createEventPrimaryText}>Tournament</Text>
+          </Pressable>
+          <Pressable
+            onPress={() =>
+              void WebBrowser.openBrowserAsync(
+                `${dunaHqUrl}/events/create?type=league`,
+              )
+            }
+            style={styles.createEventSecondary}
+          >
+            <Text style={styles.createEventSecondaryText}>League</Text>
+          </Pressable>
+        </View>
+      </View>
       <View style={styles.metricGrid}>
         {metrics.map((metric) => (
           <View key={metric.label} style={styles.metricCard}>
@@ -374,7 +484,7 @@ function TodayScreen({ onScore }: { readonly onScore: () => void }) {
             <View
               style={[
                 styles.attentionIcon,
-                index === 1 && { backgroundColor: "rgba(242,120,120,.1)" },
+                index === 1 && { backgroundColor: rgba(colors.dangerRgb, 0.1) },
               ]}
             >
               <Text
@@ -1219,7 +1329,7 @@ function MoneyScreen() {
                 style={[
                   styles.transactionIcon,
                   (item[3] as number) < 0 && {
-                    backgroundColor: "rgba(247,200,107,.08)",
+                    backgroundColor: rgba(colors.warningRgb, 0.08),
                   },
                 ]}
               >
@@ -1431,27 +1541,46 @@ function TabBar({
 
 function ProApp() {
   const [tab, setTab] = useState<Tab>("today");
+  const [theme, setTheme] = useState<ThemeName>("light");
+
+  useEffect(() => {
+    void AsyncStorage.getItem("duna-theme").then((stored) => {
+      if (stored === "dark") setTheme("dark");
+    });
+  }, []);
+
+  activePalette = theme === "dark" ? darkColors : lightColors;
+  activeStyles = theme === "dark" ? darkStyles : lightStyles;
+
   return (
-    <SafeAreaView
-      edges={tab === "score" ? ["top"] : ["top"]}
-      style={styles.safe}
+    <ThemeContext.Provider
+      value={{
+        theme,
+        toggle: () => {
+          const next = theme === "light" ? "dark" : "light";
+          setTheme(next);
+          void AsyncStorage.setItem("duna-theme", next);
+        },
+      }}
     >
-      <StatusBar style="light" />
-      <View style={styles.app}>
-        {tab !== "score" && <PreviewBanner />}
-        {tab === "today" && <TodayScreen onScore={() => setTab("score")} />}
-        {tab === "people" && <PeopleScreen />}
-        {tab === "score" && <ScorerScreen />}
-        {tab === "money" && <MoneyScreen />}
-        {tab === "more" && <MoreScreen />}
-        {tab !== "score" && <TabBar active={tab} onChange={setTab} />}
-        {tab === "score" && (
-          <Pressable onPress={() => setTab("today")} style={styles.exitScore}>
-            <Text style={styles.exitScoreText}>‹ Exit</Text>
-          </Pressable>
-        )}
-      </View>
-    </SafeAreaView>
+      <SafeAreaView edges={["top"]} style={styles.safe}>
+        <StatusBar style={theme === "dark" ? "light" : "dark"} />
+        <View style={styles.app}>
+          {tab !== "score" && <PreviewBanner />}
+          {tab === "today" && <TodayScreen onScore={() => setTab("score")} />}
+          {tab === "people" && <PeopleScreen />}
+          {tab === "score" && <ScorerScreen />}
+          {tab === "money" && <MoneyScreen />}
+          {tab === "more" && <MoreScreen />}
+          {tab !== "score" && <TabBar active={tab} onChange={setTab} />}
+          {tab === "score" && (
+            <Pressable onPress={() => setTab("today")} style={styles.exitScore}>
+              <Text style={styles.exitScoreText}>‹ Exit</Text>
+            </Pressable>
+          )}
+        </View>
+      </SafeAreaView>
+    </ThemeContext.Provider>
   );
 }
 
@@ -1465,770 +1594,875 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { backgroundColor: colors.ink, flex: 1 },
-  app: { backgroundColor: colors.ink, flex: 1 },
-  buttonDisabled: { opacity: 0.45 },
-  emptyState: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 10,
-    marginTop: 12,
-    padding: 16,
-  },
-  flex: { flex: 1, minWidth: 0 },
-  formError: {
-    color: colors.danger,
-    fontSize: 9,
-    lineHeight: 14,
-    marginTop: 12,
-  },
-  matchPickerCard: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 9,
-    padding: 14,
-  },
-  matchPickerList: { gap: 10, marginTop: 20 },
-  matchPickerTeams: {
-    color: colors.bone,
-    fontSize: 18,
-    fontWeight: "900",
-    letterSpacing: -0.5,
-  },
-  previewBanner: {
-    alignItems: "center",
-    backgroundColor: "rgba(247,200,107,.12)",
-    borderBottomColor: "rgba(247,200,107,.24)",
-    borderBottomWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  previewBannerText: {
-    color: colors.warning,
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textAlign: "center",
-  },
-  scorerError: {
-    backgroundColor: "rgba(242,120,120,.12)",
-    color: colors.danger,
-    fontSize: 7,
-    lineHeight: 11,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    textAlign: "center",
-  },
-  signOutButton: {
-    alignItems: "center",
-    borderColor: "rgba(242,120,120,.2)",
-    borderRadius: 14,
-    borderWidth: 1,
-    marginTop: 18,
-    padding: 13,
-  },
-  signOutText: { color: colors.danger, fontSize: 9, fontWeight: "800" },
-  content: { paddingBottom: 116, paddingHorizontal: 18 },
-  wordmark: { alignItems: "center", flexDirection: "row", gap: 7 },
-  mark: {
-    alignItems: "center",
-    borderColor: colors.warning,
-    borderRadius: 15,
-    borderWidth: 2,
-    height: 30,
-    justifyContent: "center",
-    position: "relative",
-    width: 30,
-  },
-  markArc: {
-    borderColor: colors.bone,
-    borderRadius: 15,
-    borderTopWidth: 2,
-    height: 13,
-    position: "absolute",
-    top: 8,
-    transform: [{ rotate: "180deg" }],
-    width: 18,
-  },
-  markDot: {
-    backgroundColor: colors.aqua,
-    borderRadius: 2,
-    bottom: 5,
-    height: 4,
-    position: "absolute",
-    width: 4,
-  },
-  wordmarkText: {
-    color: colors.bone,
-    fontSize: 17,
-    fontWeight: "900",
-    letterSpacing: 3,
-  },
-  proPill: {
-    backgroundColor: "rgba(247,200,107,.12)",
-    borderRadius: 6,
-    color: colors.warning,
-    fontSize: 7,
-    fontWeight: "900",
-    letterSpacing: 1,
-    overflow: "hidden",
-    paddingHorizontal: 5,
-    paddingVertical: 3,
-  },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingBottom: 22,
-    paddingTop: 10,
-  },
-  headerContext: {
-    color: colors.muted,
-    fontSize: 7,
-    letterSpacing: 1,
-    marginTop: 5,
-  },
-  headerButtons: { flexDirection: "row", gap: 8 },
-  aiButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(247,200,107,.08)",
-    borderColor: "rgba(247,200,107,.18)",
-    borderRadius: 19,
-    borderWidth: 1,
-    height: 38,
-    justifyContent: "center",
-    width: 38,
-  },
-  aiButtonText: { color: colors.warning, fontSize: 16 },
-  profileButton: {
-    alignItems: "center",
-    backgroundColor: colors.navyLift,
-    borderRadius: 19,
-    height: 38,
-    justifyContent: "center",
-    position: "relative",
-    width: 38,
-  },
-  profileText: { color: colors.bone, fontSize: 9, fontWeight: "900" },
-  dot: {
-    backgroundColor: colors.flare,
-    borderColor: colors.ink,
-    borderRadius: 5,
-    borderWidth: 2,
-    height: 9,
-    position: "absolute",
-    right: 0,
-    top: 0,
-    width: 9,
-  },
-  pageTitle: {
-    alignItems: "flex-end",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  pageTitleCompact: {
-    alignItems: "flex-start",
-    flexDirection: "column",
-    gap: 12,
-  },
-  eyebrow: {
-    color: colors.warning,
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 1.1,
-  },
-  displayTitle: {
-    color: colors.bone,
-    fontSize: 40,
-    fontWeight: "900",
-    letterSpacing: -2.1,
-    lineHeight: 42,
-    marginTop: 6,
-  },
-  displayTitleCompact: {
-    fontSize: 36,
-    letterSpacing: -1.8,
-    lineHeight: 38,
-  },
-  primaryAction: {
-    backgroundColor: colors.warning,
-    borderRadius: 21,
-    paddingHorizontal: 13,
-    paddingVertical: 10,
-  },
-  primaryActionText: { color: colors.ink, fontSize: 9, fontWeight: "900" },
-  subhead: { color: colors.muted, fontSize: 10, marginTop: 8 },
-  subheadStrong: { color: colors.bone, fontWeight: "700" },
-  metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 18 },
-  metricCard: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 15,
-    borderWidth: 1,
-    minHeight: 112,
-    padding: 12,
-    width: "48.7%",
-  },
-  metricLabel: { color: colors.muted, fontSize: 7, letterSpacing: 0.8 },
-  metricValue: {
-    color: colors.bone,
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: -1,
-    marginTop: 12,
-  },
-  positiveText: {
-    color: colors.positive,
-    fontSize: 8,
-    fontWeight: "700",
-    marginTop: 5,
-  },
-  metaText: { color: colors.muted, fontSize: 7.5, marginTop: 3 },
-  meter: {
-    backgroundColor: "rgba(255,255,255,.08)",
-    borderRadius: 3,
-    height: 4,
-    marginTop: 12,
-    overflow: "hidden",
-  },
-  meterFill: { backgroundColor: colors.aqua, height: "100%" },
-  pill: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    borderRadius: 18,
-    borderWidth: 1,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-  },
-  pillText: {
-    color: colors.muted,
-    fontSize: 6,
-    fontWeight: "900",
-    letterSpacing: 0.7,
-  },
-  sectionTitle: {
-    alignItems: "flex-end",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 10,
-    marginTop: 28,
-  },
-  sectionHeading: {
-    color: colors.bone,
-    fontSize: 23,
-    fontWeight: "900",
-    letterSpacing: -1,
-    marginTop: 4,
-  },
-  linkText: { color: colors.warning, fontSize: 8, fontWeight: "700" },
-  scheduleCard: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  scheduleRow: {
-    alignItems: "center",
-    borderBottomColor: "rgba(255,255,255,.06)",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    minHeight: 68,
-    padding: 9,
-  },
-  timeBlock: { width: 32 },
-  timeMain: { color: colors.bone, fontSize: 9, fontWeight: "700" },
-  timeSuffix: { color: colors.muted, fontSize: 6 },
-  statusLine: { borderRadius: 2, height: 35, width: 3 },
-  rowTitle: { color: colors.bone, fontSize: 9.5, fontWeight: "700" },
-  rosterCount: { alignItems: "flex-end" },
-  chevron: { color: colors.muted, fontSize: 19 },
-  attentionCard: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  attentionRow: {
-    alignItems: "center",
-    borderBottomColor: "rgba(255,255,255,.06)",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 9,
-    minHeight: 65,
-    padding: 9,
-  },
-  attentionIcon: {
-    alignItems: "center",
-    backgroundColor: "rgba(247,200,107,.08)",
-    borderRadius: 9,
-    height: 34,
-    justifyContent: "center",
-    width: 34,
-  },
-  attentionIconText: { color: colors.warning, fontSize: 12, fontWeight: "900" },
-  aiBrief: {
-    backgroundColor: colors.navy,
-    borderColor: "rgba(247,200,107,.13)",
-    borderRadius: 17,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 24,
-    padding: 13,
-  },
-  aiMark: {
-    alignItems: "center",
-    backgroundColor: colors.warning,
-    borderRadius: 9,
-    height: 34,
-    justifyContent: "center",
-    width: 34,
-  },
-  aiMarkText: { color: colors.ink, fontSize: 15 },
-  aiTitle: {
-    color: colors.bone,
-    fontSize: 13,
-    fontWeight: "800",
-    letterSpacing: -0.4,
-    lineHeight: 16,
-    marginTop: 9,
-  },
-  aiBody: {
-    color: colors.muted,
-    fontSize: 8,
-    lineHeight: 12,
-    marginBottom: 9,
-    marginTop: 4,
-  },
-  searchField: {
-    alignItems: "center",
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.08)",
-    borderRadius: 22,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 7,
-    marginTop: 18,
-    paddingHorizontal: 12,
-  },
-  searchIcon: { color: colors.muted, fontSize: 18 },
-  searchInput: { color: colors.bone, flex: 1, fontSize: 10, height: 44 },
-  filterBleed: { marginHorizontal: -18, paddingHorizontal: 18 },
-  filterRow: { flexDirection: "row", gap: 6, marginTop: 12, paddingRight: 36 },
-  filterChip: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.08)",
-    borderRadius: 17,
-    borderWidth: 1,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-  },
-  filterActive: {
-    backgroundColor: colors.warning,
-    borderColor: colors.warning,
-  },
-  filterText: { color: colors.muted, fontSize: 8 },
-  filterTextActive: { color: colors.ink, fontWeight: "800" },
-  peopleSummary: {
-    backgroundColor: colors.navy,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 15,
-    borderWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 14,
-    padding: 12,
-  },
-  peopleList: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 16,
-    borderWidth: 1,
-    marginTop: 12,
-    overflow: "hidden",
-  },
-  personRow: {
-    alignItems: "center",
-    borderBottomColor: "rgba(255,255,255,.06)",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    minHeight: 66,
-    padding: 9,
-  },
-  personAvatar: {
-    alignItems: "center",
-    backgroundColor: colors.navyLift,
-    borderRadius: 9,
-    height: 34,
-    justifyContent: "center",
-    width: 34,
-  },
-  personAvatarText: { color: colors.bone, fontSize: 8, fontWeight: "900" },
-  personRating: { alignItems: "flex-end", minWidth: 30 },
-  ratingNumber: { color: colors.bone, fontSize: 9, fontWeight: "800" },
-  scorer: { backgroundColor: colors.ink, flex: 1 },
-  scorerTop: {
-    alignItems: "center",
-    borderBottomColor: "rgba(255,255,255,.07)",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "space-between",
-    padding: 10,
-  },
-  scorerVenue: {
-    color: colors.bone,
-    fontSize: 9,
-    fontWeight: "700",
-    marginTop: 3,
-  },
-  syncButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,.04)",
-    borderRadius: 16,
-    flexDirection: "row",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  syncIcon: { color: colors.positive, fontSize: 8 },
-  syncText: { color: colors.muted, fontSize: 6 },
-  scorerFormat: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 8,
-  },
-  segmented: {
-    backgroundColor: "rgba(255,255,255,.05)",
-    borderRadius: 18,
-    flexDirection: "row",
-    padding: 2,
-  },
-  segmentButton: {
-    borderRadius: 16,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-  },
-  segmentActive: { backgroundColor: colors.bone },
-  segmentText: { color: colors.muted, fontSize: 7, fontWeight: "700" },
-  segmentTextActive: { color: colors.ink },
-  scoreNotice: {
-    alignItems: "center",
-    backgroundColor: colors.warning,
-    flexDirection: "row",
-    gap: 8,
-    padding: 7,
-  },
-  scoreNoticeIcon: { color: colors.ink, fontSize: 14 },
-  scoreNoticeTitle: { color: colors.ink, fontSize: 8, fontWeight: "900" },
-  court: { flex: 1, flexDirection: "row", minHeight: 0 },
-  teamButton: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-    padding: 8,
-    position: "relative",
-  },
-  teamA: {
-    backgroundColor: colors.depth,
-    borderRightColor: "rgba(255,255,255,.06)",
-    borderRightWidth: 1,
-  },
-  teamB: { backgroundColor: colors.navy },
-  serveRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 4,
-    position: "absolute",
-    top: 12,
-  },
-  serveDot: {
-    backgroundColor: colors.aqua,
-    borderRadius: 3,
-    height: 6,
-    width: 6,
-  },
-  serveText: { color: colors.muted, fontSize: 6, letterSpacing: 0.7 },
-  teamPeople: { alignItems: "center", flexDirection: "row" },
-  scoreAvatar: {
-    alignItems: "center",
-    backgroundColor: colors.navyLift,
-    borderColor: colors.depth,
-    borderRadius: 13,
-    borderWidth: 2,
-    height: 26,
-    justifyContent: "center",
-    marginLeft: -4,
-    width: 26,
-  },
-  scoreAvatarText: { color: colors.bone, fontSize: 6, fontWeight: "900" },
-  teamName: {
-    color: colors.bone,
-    fontSize: 10,
-    fontWeight: "800",
-    marginLeft: 6,
-  },
-  bigScore: {
-    color: colors.bone,
-    fontSize: 124,
-    fontWeight: "900",
-    letterSpacing: -10,
-    lineHeight: 130,
-    marginVertical: 4,
-  },
-  tapHint: { color: colors.muted, fontSize: 5.5, letterSpacing: 0.6 },
-  versus: {
-    alignItems: "center",
-    backgroundColor: colors.ink,
-    borderColor: "rgba(255,255,255,.08)",
-    borderRadius: 18,
-    borderWidth: 1,
-    height: 34,
-    justifyContent: "center",
-    left: "50%",
-    marginLeft: -17,
-    marginTop: -17,
-    position: "absolute",
-    top: "50%",
-    width: 34,
-    zIndex: 3,
-  },
-  versusText: { color: colors.muted, fontSize: 6, fontWeight: "800" },
-  scorerBottom: {
-    alignItems: "center",
-    borderTopColor: "rgba(255,255,255,.07)",
-    borderTopWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "space-between",
-    padding: 8,
-  },
-  secondaryAction: {
-    backgroundColor: "rgba(255,255,255,.05)",
-    borderColor: "rgba(255,255,255,.08)",
-    borderRadius: 17,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  secondaryActionText: { color: colors.bone, fontSize: 7, fontWeight: "700" },
-  syncSummary: { alignItems: "center", flexDirection: "row", gap: 6 },
-  sets: { flexDirection: "row", gap: 4 },
-  setBox: {
-    backgroundColor: "rgba(255,255,255,.04)",
-    borderRadius: 7,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-  },
-  setBoxActive: { backgroundColor: "rgba(99,227,219,.09)" },
-  setLabel: { color: colors.muted, fontSize: 5 },
-  setScore: {
-    color: colors.bone,
-    fontSize: 8,
-    fontWeight: "800",
-    marginTop: 2,
-  },
-  moreScore: { padding: 6 },
-  moreScoreText: { color: colors.muted },
-  exitScore: { left: 9, position: "absolute", top: 12, zIndex: 8 },
-  exitScoreText: { color: colors.aqua, fontSize: 8, fontWeight: "700" },
-  balanceCard: {
-    backgroundColor: colors.navy,
-    borderColor: "rgba(247,200,107,.16)",
-    borderRadius: 19,
-    borderWidth: 1,
-    marginTop: 18,
-    padding: 16,
-  },
-  cardTop: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  brandSmall: {
-    color: colors.warning,
-    fontSize: 7,
-    fontWeight: "900",
-    letterSpacing: 1.3,
-  },
-  balanceLabel: {
-    color: colors.muted,
-    fontSize: 7,
-    letterSpacing: 1,
-    marginTop: 34,
-  },
-  balanceValue: {
-    color: colors.bone,
-    fontSize: 39,
-    fontWeight: "900",
-    letterSpacing: -2.4,
-    marginTop: 4,
-  },
-  balanceActions: { flexDirection: "row", gap: 7, marginTop: 19 },
-  balanceAction: {
-    backgroundColor: "rgba(255,255,255,.06)",
-    borderRadius: 16,
-    color: colors.bone,
-    fontSize: 7.5,
-    fontWeight: "700",
-    overflow: "hidden",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  moneyMetrics: { flexDirection: "row", gap: 7, marginTop: 9 },
-  transactions: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  transactionRow: {
-    alignItems: "center",
-    borderBottomColor: "rgba(255,255,255,.06)",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 9,
-    minHeight: 64,
-    padding: 9,
-  },
-  transactionIcon: {
-    alignItems: "center",
-    backgroundColor: "rgba(133,212,155,.08)",
-    borderRadius: 9,
-    height: 34,
-    justifyContent: "center",
-    width: 34,
-  },
-  transactionAmount: { color: colors.bone, fontSize: 9, fontWeight: "800" },
-  boundaryNote: {
-    alignItems: "center",
-    backgroundColor: "rgba(99,227,219,.05)",
-    borderColor: "rgba(99,227,219,.13)",
-    borderRadius: 13,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 13,
-    padding: 10,
-  },
-  boundaryIcon: { color: colors.aqua, fontSize: 16 },
-  organizationCard: {
-    alignItems: "center",
-    backgroundColor: colors.navy,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 9,
-    marginTop: 17,
-    padding: 12,
-  },
-  orgAvatar: {
-    alignItems: "center",
-    backgroundColor: colors.aquaDeep,
-    borderRadius: 11,
-    height: 42,
-    justifyContent: "center",
-    width: 42,
-  },
-  orgAvatarText: { color: colors.bone, fontSize: 11, fontWeight: "900" },
-  orgName: { color: colors.bone, fontSize: 12, fontWeight: "800" },
-  menuEyebrow: {
-    color: colors.warning,
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 1,
-    marginBottom: 7,
-    marginTop: 22,
-  },
-  menuCard: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 15,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  menuRow: {
-    alignItems: "center",
-    borderBottomColor: "rgba(255,255,255,.06)",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 9,
-    minHeight: 55,
-    padding: 10,
-  },
-  menuIcon: {
-    alignItems: "center",
-    backgroundColor: "rgba(247,200,107,.08)",
-    borderRadius: 8,
-    color: colors.warning,
-    fontSize: 8,
-    fontWeight: "900",
-    height: 30,
-    lineHeight: 30,
-    textAlign: "center",
-    width: 30,
-  },
-  proNote: {
-    alignItems: "center",
-    backgroundColor: colors.navy,
-    borderColor: "rgba(247,200,107,.12)",
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 11,
-    marginTop: 22,
-    padding: 15,
-  },
-  tabBar: {
-    backgroundColor: "rgba(12,20,24,.98)",
-    borderTopColor: "rgba(255,255,255,.08)",
-    borderTopWidth: 1,
-    bottom: 0,
-    flexDirection: "row",
-    left: 0,
-    paddingBottom: Platform.OS === "ios" ? 22 : 9,
-    paddingHorizontal: 8,
-    paddingTop: 8,
-    position: "absolute",
-    right: 0,
-  },
-  tabItem: {
-    alignItems: "center",
-    flex: 1,
-    gap: 3,
-    paddingVertical: 4,
-    position: "relative",
-  },
-  tabIcon: { color: colors.muted, fontSize: 17 },
-  tabLabel: { color: colors.muted, fontSize: 7, fontWeight: "600" },
-  tabActive: { color: colors.warning },
-  tabIndicator: {
-    backgroundColor: colors.warning,
-    borderRadius: 2,
-    height: 2,
-    position: "absolute",
-    top: -9,
-    width: 20,
-  },
-  scoreTab: {
-    backgroundColor: colors.warning,
-    borderRadius: 25,
-    height: 50,
-    marginTop: -18,
-    maxWidth: 50,
-    paddingTop: 5,
-  },
-  scoreTabIcon: { color: colors.ink, fontSize: 22, lineHeight: 23 },
-  scoreTabLabel: { color: colors.ink, fontWeight: "800" },
-});
+function createStyles(palette: Palette) {
+  activePalette = palette;
+  return StyleSheet.create({
+    safe: { backgroundColor: colors.canvas, flex: 1 },
+    app: { backgroundColor: colors.canvas, flex: 1 },
+    buttonDisabled: { opacity: 0.45 },
+    emptyState: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 10,
+      marginTop: 12,
+      padding: 16,
+    },
+    flex: { flex: 1, minWidth: 0 },
+    formError: {
+      color: colors.danger,
+      fontSize: 9,
+      lineHeight: 14,
+      marginTop: 12,
+    },
+    matchPickerCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 9,
+      padding: 14,
+    },
+    matchPickerList: { gap: 10, marginTop: 20 },
+    matchPickerTeams: {
+      color: colors.bone,
+      fontSize: 18,
+      fontWeight: "900",
+      letterSpacing: -0.5,
+    },
+    previewBanner: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.warningRgb, 0.12),
+      borderBottomColor: rgba(colors.warningRgb, 0.24),
+      borderBottomWidth: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+    },
+    previewBannerText: {
+      color: colors.warning,
+      fontSize: 7,
+      fontWeight: "800",
+      letterSpacing: 0.8,
+      textAlign: "center",
+    },
+    scorerError: {
+      backgroundColor: rgba(colors.dangerRgb, 0.12),
+      color: colors.danger,
+      fontSize: 7,
+      lineHeight: 11,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      textAlign: "center",
+    },
+    signOutButton: {
+      alignItems: "center",
+      borderColor: rgba(colors.dangerRgb, 0.2),
+      borderRadius: 14,
+      borderWidth: 1,
+      marginTop: 18,
+      padding: 13,
+    },
+    signOutText: { color: colors.danger, fontSize: 9, fontWeight: "800" },
+    content: { paddingBottom: 116, paddingHorizontal: 18 },
+    wordmark: { alignItems: "center", flexDirection: "row", gap: 7 },
+    mark: {
+      alignItems: "center",
+      borderColor: colors.warning,
+      borderRadius: 15,
+      borderWidth: 2,
+      height: 30,
+      justifyContent: "center",
+      position: "relative",
+      width: 30,
+    },
+    markArc: {
+      borderColor: colors.bone,
+      borderRadius: 15,
+      borderTopWidth: 2,
+      height: 13,
+      position: "absolute",
+      top: 8,
+      transform: [{ rotate: "180deg" }],
+      width: 18,
+    },
+    markDot: {
+      backgroundColor: colors.aqua,
+      borderRadius: 2,
+      bottom: 5,
+      height: 4,
+      position: "absolute",
+      width: 4,
+    },
+    wordmarkText: {
+      color: colors.bone,
+      fontSize: 17,
+      fontWeight: "900",
+      letterSpacing: 3,
+    },
+    proPill: {
+      backgroundColor: rgba(colors.warningRgb, 0.12),
+      borderRadius: 6,
+      color: colors.warning,
+      fontSize: 7,
+      fontWeight: "900",
+      letterSpacing: 1,
+      overflow: "hidden",
+      paddingHorizontal: 5,
+      paddingVertical: 3,
+    },
+    header: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingBottom: 22,
+      paddingTop: 10,
+    },
+    headerContext: {
+      color: colors.muted,
+      fontSize: 7,
+      letterSpacing: 1,
+      marginTop: 5,
+    },
+    headerButtons: { flexDirection: "row", gap: 8 },
+    themeButton: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 19,
+      borderWidth: 1,
+      height: 38,
+      justifyContent: "center",
+      width: 38,
+    },
+    themeButtonText: {
+      color: colors.bone,
+      fontSize: 17,
+      lineHeight: 20,
+    },
+    aiButton: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.warningRgb, 0.08),
+      borderColor: rgba(colors.warningRgb, 0.18),
+      borderRadius: 19,
+      borderWidth: 1,
+      height: 38,
+      justifyContent: "center",
+      width: 38,
+    },
+    aiButtonText: { color: colors.warning, fontSize: 16 },
+    profileButton: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 19,
+      height: 38,
+      justifyContent: "center",
+      position: "relative",
+      width: 38,
+    },
+    profileText: { color: colors.bone, fontSize: 9, fontWeight: "900" },
+    dot: {
+      backgroundColor: colors.flare,
+      borderColor: colors.ink,
+      borderRadius: 5,
+      borderWidth: 2,
+      height: 9,
+      position: "absolute",
+      right: 0,
+      top: 0,
+      width: 9,
+    },
+    pageTitle: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    pageTitleCompact: {
+      alignItems: "flex-start",
+      flexDirection: "column",
+      gap: 12,
+    },
+    eyebrow: {
+      color: colors.warning,
+      fontSize: 7,
+      fontWeight: "800",
+      letterSpacing: 1.1,
+    },
+    displayTitle: {
+      color: colors.bone,
+      fontSize: 40,
+      fontWeight: "900",
+      letterSpacing: -2.1,
+      lineHeight: 42,
+      marginTop: 6,
+    },
+    displayTitleCompact: {
+      fontSize: 36,
+      letterSpacing: -1.8,
+      lineHeight: 38,
+    },
+    primaryAction: {
+      backgroundColor: colors.warning,
+      borderRadius: 21,
+      paddingHorizontal: 13,
+      paddingVertical: 10,
+    },
+    primaryActionText: {
+      color: colors.onAccent,
+      fontSize: 9,
+      fontWeight: "900",
+    },
+    subhead: { color: colors.muted, fontSize: 10, marginTop: 8 },
+    subheadStrong: { color: colors.bone, fontWeight: "700" },
+    createEventCard: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.accentRgb, 0.16),
+      borderRadius: 17,
+      borderWidth: 1,
+      gap: 13,
+      marginTop: 18,
+      padding: 13,
+    },
+    createEventHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+    },
+    createEventMark: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 12,
+      height: 42,
+      justifyContent: "center",
+      width: 42,
+    },
+    createEventMarkText: {
+      color: colors.onAccent,
+      fontSize: 22,
+      fontWeight: "700",
+      lineHeight: 24,
+    },
+    createEventActions: { flexDirection: "row", gap: 8 },
+    createEventPrimary: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 12,
+      flex: 1,
+      paddingVertical: 11,
+    },
+    createEventPrimaryText: {
+      color: colors.onAccent,
+      fontSize: 9,
+      fontWeight: "900",
+    },
+    createEventSecondary: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 12,
+      borderWidth: 1,
+      flex: 1,
+      paddingVertical: 11,
+    },
+    createEventSecondaryText: {
+      color: colors.bone,
+      fontSize: 9,
+      fontWeight: "900",
+    },
+    metricGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 18,
+    },
+    metricCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 15,
+      borderWidth: 1,
+      minHeight: 112,
+      padding: 12,
+      width: "48.7%",
+    },
+    metricLabel: { color: colors.muted, fontSize: 7, letterSpacing: 0.8 },
+    metricValue: {
+      color: colors.bone,
+      fontSize: 20,
+      fontWeight: "900",
+      letterSpacing: -1,
+      marginTop: 12,
+    },
+    positiveText: {
+      color: colors.positive,
+      fontSize: 8,
+      fontWeight: "700",
+      marginTop: 5,
+    },
+    metaText: { color: colors.muted, fontSize: 7.5, marginTop: 3 },
+    meter: {
+      backgroundColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 3,
+      height: 4,
+      marginTop: 12,
+      overflow: "hidden",
+    },
+    meterFill: { backgroundColor: colors.aqua, height: "100%" },
+    pill: {
+      alignItems: "center",
+      alignSelf: "flex-start",
+      borderRadius: 18,
+      borderWidth: 1,
+      paddingHorizontal: 7,
+      paddingVertical: 4,
+    },
+    pillText: {
+      color: colors.muted,
+      fontSize: 6,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+    sectionTitle: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 10,
+      marginTop: 28,
+    },
+    sectionHeading: {
+      color: colors.bone,
+      fontSize: 23,
+      fontWeight: "900",
+      letterSpacing: -1,
+      marginTop: 4,
+    },
+    linkText: { color: colors.warning, fontSize: 8, fontWeight: "700" },
+    scheduleCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 16,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    scheduleRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.06),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 68,
+      padding: 9,
+    },
+    timeBlock: { width: 32 },
+    timeMain: { color: colors.bone, fontSize: 9, fontWeight: "700" },
+    timeSuffix: { color: colors.muted, fontSize: 6 },
+    statusLine: { borderRadius: 2, height: 35, width: 3 },
+    rowTitle: { color: colors.bone, fontSize: 9.5, fontWeight: "700" },
+    rosterCount: { alignItems: "flex-end" },
+    chevron: { color: colors.muted, fontSize: 19 },
+    attentionCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 16,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    attentionRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.06),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      minHeight: 65,
+      padding: 9,
+    },
+    attentionIcon: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.warningRgb, 0.08),
+      borderRadius: 9,
+      height: 34,
+      justifyContent: "center",
+      width: 34,
+    },
+    attentionIconText: {
+      color: colors.warning,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    aiBrief: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.warningRgb, 0.13),
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 24,
+      padding: 13,
+    },
+    aiMark: {
+      alignItems: "center",
+      backgroundColor: colors.warning,
+      borderRadius: 9,
+      height: 34,
+      justifyContent: "center",
+      width: 34,
+    },
+    aiMarkText: { color: colors.onAccent, fontSize: 15 },
+    aiTitle: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "800",
+      letterSpacing: -0.4,
+      lineHeight: 16,
+      marginTop: 9,
+    },
+    aiBody: {
+      color: colors.muted,
+      fontSize: 8,
+      lineHeight: 12,
+      marginBottom: 9,
+      marginTop: 4,
+    },
+    searchField: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 22,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 7,
+      marginTop: 18,
+      paddingHorizontal: 12,
+    },
+    searchIcon: { color: colors.muted, fontSize: 18 },
+    searchInput: { color: colors.bone, flex: 1, fontSize: 10, height: 44 },
+    filterBleed: { marginHorizontal: -18, paddingHorizontal: 18 },
+    filterRow: {
+      flexDirection: "row",
+      gap: 6,
+      marginTop: 12,
+      paddingRight: 36,
+    },
+    filterChip: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      paddingHorizontal: 11,
+      paddingVertical: 7,
+    },
+    filterActive: {
+      backgroundColor: colors.warning,
+      borderColor: colors.warning,
+    },
+    filterText: { color: colors.muted, fontSize: 8 },
+    filterTextActive: { color: colors.onAccent, fontWeight: "800" },
+    peopleSummary: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 15,
+      borderWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-around",
+      marginTop: 14,
+      padding: 12,
+    },
+    peopleList: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 16,
+      borderWidth: 1,
+      marginTop: 12,
+      overflow: "hidden",
+    },
+    personRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.06),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 66,
+      padding: 9,
+    },
+    personAvatar: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 9,
+      height: 34,
+      justifyContent: "center",
+      width: 34,
+    },
+    personAvatarText: { color: colors.bone, fontSize: 8, fontWeight: "900" },
+    personRating: { alignItems: "flex-end", minWidth: 30 },
+    ratingNumber: { color: colors.bone, fontSize: 9, fontWeight: "800" },
+    scorer: { backgroundColor: colors.canvas, flex: 1 },
+    scorerTop: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      justifyContent: "space-between",
+      padding: 10,
+    },
+    scorerVenue: {
+      color: colors.bone,
+      fontSize: 9,
+      fontWeight: "700",
+      marginTop: 3,
+    },
+    syncButton: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.04),
+      borderRadius: 16,
+      flexDirection: "row",
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    syncIcon: { color: colors.positive, fontSize: 8 },
+    syncText: { color: colors.muted, fontSize: 6 },
+    scorerFormat: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      padding: 8,
+    },
+    segmented: {
+      backgroundColor: rgba(colors.overlayRgb, 0.05),
+      borderRadius: 18,
+      flexDirection: "row",
+      padding: 2,
+    },
+    segmentButton: {
+      borderRadius: 16,
+      paddingHorizontal: 11,
+      paddingVertical: 6,
+    },
+    segmentActive: { backgroundColor: colors.aqua },
+    segmentText: { color: colors.muted, fontSize: 7, fontWeight: "700" },
+    segmentTextActive: { color: colors.onAccent },
+    scoreNotice: {
+      alignItems: "center",
+      backgroundColor: colors.warning,
+      flexDirection: "row",
+      gap: 8,
+      padding: 7,
+    },
+    scoreNoticeIcon: { color: colors.onAccent, fontSize: 14 },
+    scoreNoticeTitle: {
+      color: colors.onAccent,
+      fontSize: 8,
+      fontWeight: "900",
+    },
+    court: { flex: 1, flexDirection: "row", minHeight: 0 },
+    teamButton: {
+      alignItems: "center",
+      flex: 1,
+      justifyContent: "center",
+      padding: 8,
+      position: "relative",
+    },
+    teamA: {
+      backgroundColor: colors.depth,
+      borderRightColor: rgba(colors.overlayRgb, 0.06),
+      borderRightWidth: 1,
+    },
+    teamB: { backgroundColor: colors.navy },
+    serveRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 4,
+      position: "absolute",
+      top: 12,
+    },
+    serveDot: {
+      backgroundColor: colors.aqua,
+      borderRadius: 3,
+      height: 6,
+      width: 6,
+    },
+    serveText: { color: colors.muted, fontSize: 6, letterSpacing: 0.7 },
+    teamPeople: { alignItems: "center", flexDirection: "row" },
+    scoreAvatar: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderColor: colors.depth,
+      borderRadius: 13,
+      borderWidth: 2,
+      height: 26,
+      justifyContent: "center",
+      marginLeft: -4,
+      width: 26,
+    },
+    scoreAvatarText: { color: colors.bone, fontSize: 6, fontWeight: "900" },
+    teamName: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "800",
+      marginLeft: 6,
+    },
+    bigScore: {
+      color: colors.bone,
+      fontSize: 124,
+      fontWeight: "900",
+      letterSpacing: -10,
+      lineHeight: 130,
+      marginVertical: 4,
+    },
+    tapHint: { color: colors.muted, fontSize: 5.5, letterSpacing: 0.6 },
+    versus: {
+      alignItems: "center",
+      backgroundColor: colors.ink,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      height: 34,
+      justifyContent: "center",
+      left: "50%",
+      marginLeft: -17,
+      marginTop: -17,
+      position: "absolute",
+      top: "50%",
+      width: 34,
+      zIndex: 3,
+    },
+    versusText: { color: colors.muted, fontSize: 6, fontWeight: "800" },
+    scorerBottom: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.07),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "space-between",
+      padding: 8,
+    },
+    secondaryAction: {
+      backgroundColor: rgba(colors.overlayRgb, 0.05),
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    secondaryActionText: { color: colors.bone, fontSize: 7, fontWeight: "700" },
+    syncSummary: { alignItems: "center", flexDirection: "row", gap: 6 },
+    sets: { flexDirection: "row", gap: 4 },
+    setBox: {
+      backgroundColor: rgba(colors.overlayRgb, 0.04),
+      borderRadius: 7,
+      paddingHorizontal: 7,
+      paddingVertical: 4,
+    },
+    setBoxActive: { backgroundColor: rgba(colors.accentRgb, 0.09) },
+    setLabel: { color: colors.muted, fontSize: 5 },
+    setScore: {
+      color: colors.bone,
+      fontSize: 8,
+      fontWeight: "800",
+      marginTop: 2,
+    },
+    moreScore: { padding: 6 },
+    moreScoreText: { color: colors.muted },
+    exitScore: { left: 9, position: "absolute", top: 12, zIndex: 8 },
+    exitScoreText: { color: colors.aqua, fontSize: 8, fontWeight: "700" },
+    balanceCard: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.warningRgb, 0.16),
+      borderRadius: 19,
+      borderWidth: 1,
+      marginTop: 18,
+      padding: 16,
+    },
+    cardTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    brandSmall: {
+      color: colors.warning,
+      fontSize: 7,
+      fontWeight: "900",
+      letterSpacing: 1.3,
+    },
+    balanceLabel: {
+      color: colors.muted,
+      fontSize: 7,
+      letterSpacing: 1,
+      marginTop: 34,
+    },
+    balanceValue: {
+      color: colors.bone,
+      fontSize: 39,
+      fontWeight: "900",
+      letterSpacing: -2.4,
+      marginTop: 4,
+    },
+    balanceActions: { flexDirection: "row", gap: 7, marginTop: 19 },
+    balanceAction: {
+      backgroundColor: rgba(colors.overlayRgb, 0.06),
+      borderRadius: 16,
+      color: colors.bone,
+      fontSize: 7.5,
+      fontWeight: "700",
+      overflow: "hidden",
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    moneyMetrics: { flexDirection: "row", gap: 7, marginTop: 9 },
+    transactions: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 16,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    transactionRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.06),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      minHeight: 64,
+      padding: 9,
+    },
+    transactionIcon: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.positiveRgb, 0.08),
+      borderRadius: 9,
+      height: 34,
+      justifyContent: "center",
+      width: 34,
+    },
+    transactionAmount: { color: colors.bone, fontSize: 9, fontWeight: "800" },
+    boundaryNote: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.05),
+      borderColor: rgba(colors.accentRgb, 0.13),
+      borderRadius: 13,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 13,
+      padding: 10,
+    },
+    boundaryIcon: { color: colors.aqua, fontSize: 16 },
+    organizationCard: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      marginTop: 17,
+      padding: 12,
+    },
+    orgAvatar: {
+      alignItems: "center",
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 11,
+      height: 42,
+      justifyContent: "center",
+      width: 42,
+    },
+    orgAvatarText: { color: colors.onAccent, fontSize: 11, fontWeight: "900" },
+    orgName: { color: colors.bone, fontSize: 12, fontWeight: "800" },
+    menuEyebrow: {
+      color: colors.warning,
+      fontSize: 7,
+      fontWeight: "800",
+      letterSpacing: 1,
+      marginBottom: 7,
+      marginTop: 22,
+    },
+    menuCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 15,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    menuRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.06),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      minHeight: 55,
+      padding: 10,
+    },
+    menuIcon: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.warningRgb, 0.08),
+      borderRadius: 8,
+      color: colors.warning,
+      fontSize: 8,
+      fontWeight: "900",
+      height: 30,
+      lineHeight: 30,
+      textAlign: "center",
+      width: 30,
+    },
+    proNote: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.warningRgb, 0.12),
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 11,
+      marginTop: 22,
+      padding: 15,
+    },
+    tabBar: {
+      backgroundColor: rgba(colors.depthRgb, 0.98),
+      borderTopColor: rgba(colors.overlayRgb, 0.08),
+      borderTopWidth: 1,
+      bottom: 0,
+      flexDirection: "row",
+      left: 0,
+      paddingBottom: Platform.OS === "ios" ? 22 : 9,
+      paddingHorizontal: 8,
+      paddingTop: 8,
+      position: "absolute",
+      right: 0,
+    },
+    tabItem: {
+      alignItems: "center",
+      flex: 1,
+      gap: 3,
+      paddingVertical: 4,
+      position: "relative",
+    },
+    tabIcon: { color: colors.muted, fontSize: 17 },
+    tabLabel: { color: colors.muted, fontSize: 7, fontWeight: "600" },
+    tabActive: { color: colors.warning },
+    tabIndicator: {
+      backgroundColor: colors.warning,
+      borderRadius: 2,
+      height: 2,
+      position: "absolute",
+      top: -9,
+      width: 20,
+    },
+    scoreTab: {
+      backgroundColor: colors.warning,
+      borderRadius: 25,
+      height: 50,
+      marginTop: -18,
+      maxWidth: 50,
+      paddingTop: 5,
+    },
+    scoreTabIcon: { color: colors.onAccent, fontSize: 22, lineHeight: 23 },
+    scoreTabLabel: { color: colors.onAccent, fontWeight: "800" },
+  });
+}
+
+const lightStyles = createStyles(lightColors);
+const darkStyles = createStyles(darkColors);
+activePalette = lightColors;
+let activeStyles = lightStyles;
+const styles = new Proxy(lightStyles, {
+  get(_target, property: keyof typeof lightStyles) {
+    return activeStyles[property];
+  },
+}) as typeof lightStyles;

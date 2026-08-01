@@ -7,10 +7,11 @@ import {
   demoPlayer,
   demoWalletEntries,
 } from "@duna/core/demo";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import { StatusBar } from "expo-status-bar";
 import * as WebBrowser from "expo-web-browser";
-import { useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import {
   Modal,
   Platform,
@@ -27,7 +28,38 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { dunaWebUrl } from "./mobile-api";
 import { PlayerRuntimeProvider, usePlayerRuntime } from "./runtime";
 
-const colors = {
+const lightColors = {
+  canvas: "#f8f7f3",
+  ink: "#101828",
+  depth: "#ffffff",
+  navy: "#f1ece2",
+  navyLift: "#e8eef7",
+  bone: "#101828",
+  muted: "#667085",
+  aqua: "#235a96",
+  aquaDeep: "#173a67",
+  sand: "#d7bd91",
+  flare: "#de6842",
+  positive: "#2f7d57",
+  warning: "#a86f18",
+  danger: "#b84444",
+  onAccent: "#ffffff",
+  overlayRgb: "23,58,103",
+  accentRgb: "35,90,150",
+  warningRgb: "168,111,24",
+  positiveRgb: "47,125,87",
+  dangerRgb: "184,68,68",
+  flareRgb: "222,104,66",
+  inkRgb: "16,24,40",
+  depthRgb: "255,255,255",
+} as const;
+
+type Palette = {
+  readonly [Key in keyof typeof lightColors]: string;
+};
+
+const darkColors: Palette = {
+  canvas: "#070b0d",
   ink: "#070b0d",
   depth: "#0c1418",
   navy: "#10242b",
@@ -41,7 +73,49 @@ const colors = {
   positive: "#85d49b",
   warning: "#f7c86b",
   danger: "#f27878",
-} as const;
+  onAccent: "#070b0d",
+  overlayRgb: "255,255,255",
+  accentRgb: "99,227,219",
+  warningRgb: "247,200,107",
+  positiveRgb: "133,212,155",
+  dangerRgb: "242,120,120",
+  flareRgb: "255,106,61",
+  inkRgb: "7,11,13",
+  depthRgb: "12,20,24",
+};
+
+type ThemeName = "light" | "dark";
+
+let activePalette: Palette = lightColors;
+const colors = new Proxy(lightColors, {
+  get(_target, property: keyof Palette) {
+    return activePalette[property];
+  },
+}) as Palette;
+
+function rgba(rgb: string, alpha: number) {
+  return `rgba(${rgb},${alpha})`;
+}
+
+const ThemeContext = createContext<{
+  readonly theme: ThemeName;
+  readonly toggle: () => void;
+}>({ theme: "light", toggle: () => undefined });
+
+function ThemeButton() {
+  const { theme, toggle } = useContext(ThemeContext);
+  return (
+    <Pressable
+      accessibilityLabel={`Use ${theme === "light" ? "dark" : "light"} mode`}
+      onPress={toggle}
+      style={styles.themeButton}
+    >
+      <Text style={styles.themeButtonText}>
+        {theme === "light" ? "☾" : "☀"}
+      </Text>
+    </Pressable>
+  );
+}
 
 type Tab = "home" | "discover" | "play" | "wallet" | "you";
 
@@ -99,20 +173,20 @@ function Pill({
 }) {
   const palette: Record<typeof tone, ViewStyle> = {
     neutral: {
-      backgroundColor: "rgba(255,255,255,.06)",
-      borderColor: "rgba(255,255,255,.1)",
+      backgroundColor: rgba(colors.overlayRgb, 0.06),
+      borderColor: rgba(colors.overlayRgb, 0.1),
     },
     positive: {
-      backgroundColor: "rgba(133,212,155,.1)",
-      borderColor: "rgba(133,212,155,.25)",
+      backgroundColor: rgba(colors.positiveRgb, 0.1),
+      borderColor: rgba(colors.positiveRgb, 0.25),
     },
     live: {
-      backgroundColor: "rgba(255,106,61,.1)",
-      borderColor: "rgba(255,106,61,.3)",
+      backgroundColor: rgba(colors.flareRgb, 0.1),
+      borderColor: rgba(colors.flareRgb, 0.3),
     },
     warning: {
-      backgroundColor: "rgba(247,200,107,.1)",
-      borderColor: "rgba(247,200,107,.25)",
+      backgroundColor: rgba(colors.warningRgb, 0.1),
+      borderColor: rgba(colors.warningRgb, 0.25),
     },
   };
   return (
@@ -170,6 +244,7 @@ function AppHeader({ eyebrow }: { readonly eyebrow?: string }) {
         {eyebrow && <Text style={styles.headerEyebrow}>{eyebrow}</Text>}
       </View>
       <View style={styles.headerActions}>
+        <ThemeButton />
         <Pressable accessibilityLabel="Ask Duna" style={styles.askButton}>
           <Text style={styles.askButtonText}>✦</Text>
         </Pressable>
@@ -910,8 +985,8 @@ function WalletScreen() {
                 {
                   backgroundColor:
                     entry.amount.amountMinor > 0
-                      ? "rgba(133,212,155,.1)"
-                      : "rgba(255,255,255,.06)",
+                      ? rgba(colors.positiveRgb, 0.1)
+                      : rgba(colors.overlayRgb, 0.06),
                 },
               ]}
             >
@@ -1141,7 +1216,9 @@ function BookingModal({
     readonly body: string;
     readonly label: string;
   }>();
+  const [purchaseKind, setPurchaseKind] = useState<"entry" | "ticket">("entry");
   const [divisionId, setDivisionId] = useState<string>();
+  const [ticketTypeId, setTicketTypeId] = useState<string>();
   const events = dashboard?.events ?? demoEvents;
   const player = dashboard?.player ?? demoPlayer;
   const event = eventIndex === null ? null : events[eventIndex];
@@ -1150,12 +1227,33 @@ function BookingModal({
   const division =
     event.divisions?.find((candidate) => candidate.id === divisionId) ??
     event.divisions?.[0];
-  const listedPrice = division?.price ?? event.price;
+  const ticket =
+    event.tickets?.find((candidate) => candidate.id === ticketTypeId) ??
+    event.tickets?.[0];
+  const listedPrice =
+    purchaseKind === "ticket"
+      ? (ticket?.price ?? event.price)
+      : (division?.price ?? event.price);
+  const selectedTeamSize =
+    division?.teamSize ??
+    {
+      solo: 1,
+      doubles: 2,
+      "three-person": 3,
+      "four-person": 4,
+      "six-person": 6,
+    }[division?.teamFormat ?? "solo"];
+  const requiresGuidedCheckout =
+    purchaseKind === "ticket" ||
+    selectedTeamSize > 1 ||
+    Boolean(event.policies?.length);
 
   function close() {
     setError(undefined);
     setComplete(undefined);
+    setPurchaseKind("entry");
     setDivisionId(undefined);
+    setTicketTypeId(undefined);
     setBusy(false);
     onClose();
   }
@@ -1165,6 +1263,19 @@ function BookingModal({
     setBusy(true);
     setError(undefined);
     try {
+      if (requiresGuidedCheckout) {
+        const selection =
+          purchaseKind === "ticket" && ticket
+            ? `?ticket=${encodeURIComponent(ticket.id)}`
+            : division
+              ? `?division=${encodeURIComponent(division.id)}`
+              : "";
+        await WebBrowser.openBrowserAsync(
+          `${dunaWebUrl}/app/checkout/${selectedEvent.slug}${selection}`,
+        );
+        await refresh();
+        return;
+      }
       const result = await client.player.startEventCheckout.mutate({
         sessionId: selectedEvent.id,
         divisionId: division?.id,
@@ -1260,47 +1371,207 @@ function BookingModal({
               {event.venueName} ·{" "}
               {formatVenueTime(event.startsAt, event.timezone)}
             </Text>
-            {event.divisions && event.divisions.length > 0 && (
-              <View style={styles.checkoutSection}>
-                <Text style={styles.eyebrow}>DIVISION</Text>
-                <View style={styles.filterRow}>
-                  {event.divisions.map((option) => (
-                    <Pressable
-                      key={option.id}
-                      onPress={() => setDivisionId(option.id)}
-                      style={[
-                        styles.filterChip,
-                        division?.id === option.id && styles.filterChipActive,
-                      ]}
-                    >
-                      <Text
+            {event.shortSummary && (
+              <Text style={styles.checkoutSummaryText}>
+                {event.shortSummary}
+              </Text>
+            )}
+            {event.divisions?.length && event.tickets?.length ? (
+              <View style={styles.purchaseKindRow}>
+                <Pressable
+                  onPress={() => setPurchaseKind("entry")}
+                  style={[
+                    styles.purchaseKindButton,
+                    purchaseKind === "entry" && styles.purchaseKindButtonActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.purchaseKindText,
+                      purchaseKind === "entry" && styles.purchaseKindTextActive,
+                    ]}
+                  >
+                    PLAY
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setPurchaseKind("ticket")}
+                  style={[
+                    styles.purchaseKindButton,
+                    purchaseKind === "ticket" &&
+                      styles.purchaseKindButtonActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.purchaseKindText,
+                      purchaseKind === "ticket" &&
+                        styles.purchaseKindTextActive,
+                    ]}
+                  >
+                    ATTEND
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {purchaseKind === "entry" &&
+              event.divisions &&
+              event.divisions.length > 0 && (
+                <View style={styles.checkoutSection}>
+                  <Text style={styles.eyebrow}>DIVISION</Text>
+                  <View style={styles.filterRow}>
+                    {event.divisions.map((option) => (
+                      <Pressable
+                        key={option.id}
+                        onPress={() => setDivisionId(option.id)}
                         style={[
-                          styles.filterText,
-                          division?.id === option.id && styles.filterTextActive,
+                          styles.filterChip,
+                          division?.id === option.id && styles.filterChipActive,
                         ]}
                       >
-                        {option.name}
-                      </Text>
-                    </Pressable>
-                  ))}
+                        <Text
+                          style={[
+                            styles.filterText,
+                            division?.id === option.id &&
+                              styles.filterTextActive,
+                          ]}
+                        >
+                          {option.name}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  {division && (
+                    <View style={styles.mobileDivisionDetail}>
+                      <View>
+                        <Text style={styles.rowMeta}>TEAM</Text>
+                        <Text style={styles.rowTitle}>
+                          {division.teamFormat?.replace("-", " ") ??
+                            division.discipline.replace("-", " ")}
+                        </Text>
+                      </View>
+                      <View>
+                        <Text style={styles.rowMeta}>FORMAT</Text>
+                        <Text style={styles.rowTitle}>
+                          {division.tournamentFormat?.replaceAll("-", " ") ??
+                            "Configured play"}
+                        </Text>
+                      </View>
+                      <View>
+                        <Text style={styles.rowMeta}>SEEDING</Text>
+                        <Text style={styles.rowTitle}>
+                          {division.seeding?.replaceAll("-", " ") ??
+                            division.ratingBasis.replaceAll("-", " ")}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              )}
+            {purchaseKind === "ticket" && event.tickets?.length ? (
+              <View style={styles.checkoutSection}>
+                <Text style={styles.eyebrow}>TICKET</Text>
+                <View style={styles.mobileTicketList}>
+                  {event.tickets
+                    .filter((option) => option.availableOnline)
+                    .map((option) => (
+                      <Pressable
+                        key={option.id}
+                        onPress={() => setTicketTypeId(option.id)}
+                        style={[
+                          styles.mobileTicketRow,
+                          ticket?.id === option.id &&
+                            styles.mobileTicketRowActive,
+                        ]}
+                      >
+                        <View style={styles.flex}>
+                          <Text style={styles.rowTitle}>{option.name}</Text>
+                          <Text numberOfLines={2} style={styles.rowMeta}>
+                            {option.description ??
+                              `${option.remaining ?? "Unlimited"} available`}
+                          </Text>
+                        </View>
+                        <Text style={styles.moneyAmount}>
+                          {option.price.amountMinor
+                            ? formatMoney(
+                                option.price.amountMinor,
+                                option.price.currency,
+                              )
+                            : "FREE"}
+                        </Text>
+                      </Pressable>
+                    ))}
+                </View>
+              </View>
+            ) : null}
+            {purchaseKind === "entry" && (
+              <View style={styles.checkoutSection}>
+                <Text style={styles.eyebrow}>WHO’S PLAYING</Text>
+                <View style={styles.checkoutPlayer}>
+                  <View style={styles.miniAvatar}>
+                    <Text style={styles.miniAvatarText}>{player.initials}</Text>
+                  </View>
+                  <View style={styles.flex}>
+                    <Text style={styles.rowTitle}>{player.displayName}</Text>
+                    <Text style={styles.rowMeta}>
+                      {player.rating.display.toFixed(2)} sand rating ·{" "}
+                      {player.rating.confidence}
+                    </Text>
+                  </View>
                 </View>
               </View>
             )}
-            <View style={styles.checkoutSection}>
-              <Text style={styles.eyebrow}>WHO’S PLAYING</Text>
-              <View style={styles.checkoutPlayer}>
-                <View style={styles.miniAvatar}>
-                  <Text style={styles.miniAvatarText}>{player.initials}</Text>
-                </View>
+            {purchaseKind === "entry" && selectedTeamSize > 1 && (
+              <View style={styles.mobileTeamNotice}>
+                <Text style={styles.mobileTeamIcon}>◎</Text>
                 <View style={styles.flex}>
-                  <Text style={styles.rowTitle}>{player.displayName}</Text>
+                  <Text style={styles.rowTitle}>
+                    Build a {selectedTeamSize}-player team
+                  </Text>
                   <Text style={styles.rowMeta}>
-                    {player.rating.display.toFixed(2)} sand rating ·{" "}
-                    {player.rating.confidence}
+                    Search Duna, invite by phone or email, and choose who pays
+                    in the guided checkout.
                   </Text>
                 </View>
               </View>
-            </View>
+            )}
+            {event.features && event.features.length > 0 && (
+              <View style={styles.checkoutSection}>
+                <Text style={styles.eyebrow}>EVENT FEATURES</Text>
+                {event.features.map((feature) => (
+                  <View key={feature.id} style={styles.mobileFeatureRow}>
+                    <Text style={styles.mobileFeatureIcon}>
+                      {feature.kind === "guest"
+                        ? "★"
+                        : feature.kind === "activity"
+                          ? "✦"
+                          : "◇"}
+                    </Text>
+                    <View style={styles.flex}>
+                      <Text style={styles.rowTitle}>{feature.title}</Text>
+                      {feature.description && (
+                        <Text style={styles.rowMeta}>
+                          {feature.description}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+            {event.policies && event.policies.length > 0 && (
+              <View style={styles.mobilePolicyNotice}>
+                <Text style={styles.mobilePolicyIcon}>✓</Text>
+                <View style={styles.flex}>
+                  <Text style={styles.rowTitle}>
+                    {event.policies.length} policies + waivers
+                  </Text>
+                  <Text style={styles.rowMeta}>
+                    Required waivers unlock only after you read them in full.
+                  </Text>
+                </View>
+              </View>
+            )}
             <View style={styles.checkoutSection}>
               <Text style={styles.eyebrow}>PAYMENT</Text>
               <View style={styles.paymentRow}>
@@ -1355,10 +1626,14 @@ function BookingModal({
                 {mode === "preview"
                   ? "Preview only · checkout disabled"
                   : busy
-                    ? "Preparing secure checkout…"
-                    : listedPrice.amountMinor
-                      ? "Continue to Stripe"
-                      : "Confirm free registration"}
+                    ? "Opening secure checkout…"
+                    : requiresGuidedCheckout
+                      ? purchaseKind === "ticket"
+                        ? "Choose tickets securely"
+                        : "Complete team + agreements"
+                      : listedPrice.amountMinor
+                        ? "Continue to Stripe"
+                        : "Confirm free registration"}
               </Text>
             </Pressable>
             <Text style={styles.paymentTrust}>
@@ -1630,23 +1905,45 @@ function TabBar({
 function DunaApp() {
   const [tab, setTab] = useState<Tab>("home");
   const [eventIndex, setEventIndex] = useState<number | null>(null);
+  const [theme, setTheme] = useState<ThemeName>("light");
+
+  useEffect(() => {
+    void AsyncStorage.getItem("duna-theme").then((stored) => {
+      if (stored === "dark") setTheme("dark");
+    });
+  }, []);
+
+  activePalette = theme === "dark" ? darkColors : lightColors;
+  activeStyles = theme === "dark" ? darkStyles : lightStyles;
+
   return (
-    <SafeAreaView edges={["top"]} style={styles.safe}>
-      <StatusBar style="light" />
-      <View style={styles.app}>
-        <PreviewBanner />
-        {tab === "home" && <HomeScreen onBook={setEventIndex} />}
-        {tab === "discover" && <DiscoverScreen onBook={setEventIndex} />}
-        {tab === "play" && <PlayScreen />}
-        {tab === "wallet" && <WalletScreen />}
-        {tab === "you" && <ProfileScreen />}
-        <TabBar active={tab} onChange={setTab} />
-        <BookingModal
-          eventIndex={eventIndex}
-          onClose={() => setEventIndex(null)}
-        />
-      </View>
-    </SafeAreaView>
+    <ThemeContext.Provider
+      value={{
+        theme,
+        toggle: () => {
+          const next = theme === "light" ? "dark" : "light";
+          setTheme(next);
+          void AsyncStorage.setItem("duna-theme", next);
+        },
+      }}
+    >
+      <SafeAreaView edges={["top"]} style={styles.safe}>
+        <StatusBar style={theme === "dark" ? "light" : "dark"} />
+        <View style={styles.app}>
+          <PreviewBanner />
+          {tab === "home" && <HomeScreen onBook={setEventIndex} />}
+          {tab === "discover" && <DiscoverScreen onBook={setEventIndex} />}
+          {tab === "play" && <PlayScreen />}
+          {tab === "wallet" && <WalletScreen />}
+          {tab === "you" && <ProfileScreen />}
+          <TabBar active={tab} onChange={setTab} />
+          <BookingModal
+            eventIndex={eventIndex}
+            onClose={() => setEventIndex(null)}
+          />
+        </View>
+      </SafeAreaView>
+    </ThemeContext.Provider>
   );
 }
 
@@ -1660,1026 +1957,1162 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { backgroundColor: colors.ink, flex: 1 },
-  app: { backgroundColor: colors.ink, flex: 1 },
-  buttonDisabled: { opacity: 0.45 },
-  flex: { flex: 1, minWidth: 0 },
-  formError: {
-    color: colors.danger,
-    fontSize: 11,
-    lineHeight: 17,
-    marginTop: 12,
-  },
-  formInput: {
-    backgroundColor: "rgba(255,255,255,.04)",
-    borderColor: "rgba(255,255,255,.1)",
-    borderRadius: 12,
-    borderWidth: 1,
-    color: colors.bone,
-    fontSize: 12,
-    minHeight: 46,
-    paddingHorizontal: 13,
-    paddingVertical: 11,
-  },
-  formRow: { flexDirection: "row", gap: 8 },
-  formRowInput: { flex: 1, minWidth: 0 },
-  formStack: { gap: 10, marginTop: 20 },
-  formTextarea: { minHeight: 88, textAlignVertical: "top" },
-  previewBanner: {
-    alignItems: "center",
-    backgroundColor: "rgba(247,200,107,.12)",
-    borderBottomColor: "rgba(247,200,107,.24)",
-    borderBottomWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  previewBannerText: {
-    color: colors.warning,
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textAlign: "center",
-  },
-  screenContent: { paddingBottom: 118, paddingHorizontal: 18 },
-  toggleRow: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,.03)",
-    borderRadius: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 12,
-  },
-  appHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingBottom: 22,
-    paddingTop: 10,
-  },
-  headerActions: { flexDirection: "row", gap: 8 },
-  wordmark: { alignItems: "center", flexDirection: "row", gap: 8 },
-  mark: {
-    alignItems: "center",
-    borderColor: colors.aqua,
-    borderRadius: 15,
-    borderWidth: 2,
-    height: 30,
-    justifyContent: "center",
-    position: "relative",
-    width: 30,
-  },
-  markArc: {
-    borderColor: colors.bone,
-    borderRadius: 15,
-    borderTopWidth: 2,
-    height: 13,
-    position: "absolute",
-    top: 8,
-    transform: [{ rotate: "180deg" }],
-    width: 18,
-  },
-  markDot: {
-    backgroundColor: colors.flare,
-    borderRadius: 2,
-    bottom: 5,
-    height: 4,
-    position: "absolute",
-    width: 4,
-  },
-  wordmarkText: {
-    color: colors.bone,
-    fontSize: 17,
-    fontWeight: "900",
-    letterSpacing: 3,
-  },
-  proPill: {
-    backgroundColor: "rgba(247,200,107,.12)",
-    borderRadius: 6,
-    color: colors.warning,
-    fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 1,
-    overflow: "hidden",
-    paddingHorizontal: 5,
-    paddingVertical: 3,
-  },
-  headerEyebrow: {
-    color: colors.muted,
-    fontSize: 8,
-    letterSpacing: 1.2,
-    marginTop: 5,
-  },
-  askButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(99,227,219,.09)",
-    borderColor: "rgba(99,227,219,.18)",
-    borderRadius: 19,
-    borderWidth: 1,
-    height: 38,
-    justifyContent: "center",
-    width: 38,
-  },
-  askButtonText: { color: colors.aqua, fontSize: 17 },
-  avatarButton: {
-    alignItems: "center",
-    backgroundColor: colors.navyLift,
-    borderRadius: 19,
-    height: 38,
-    justifyContent: "center",
-    position: "relative",
-    width: 38,
-  },
-  avatarText: { color: colors.bone, fontSize: 10, fontWeight: "800" },
-  notificationDot: {
-    backgroundColor: colors.flare,
-    borderColor: colors.ink,
-    borderRadius: 5,
-    borderWidth: 2,
-    height: 9,
-    position: "absolute",
-    right: 0,
-    top: 0,
-    width: 9,
-  },
-  homeGreeting: {
-    alignItems: "flex-end",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  homeGreetingCompact: {
-    alignItems: "flex-start",
-    flexDirection: "column",
-    gap: 14,
-  },
-  displayTitle: {
-    color: colors.bone,
-    fontSize: 42,
-    fontWeight: "900",
-    letterSpacing: -2.2,
-    lineHeight: 42,
-  },
-  displayTitleCompact: {
-    fontSize: 39,
-    letterSpacing: -2,
-    lineHeight: 40,
-  },
-  scoreAction: {
-    backgroundColor: colors.aqua,
-    borderRadius: 22,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-  },
-  scoreActionText: { color: colors.ink, fontSize: 11, fontWeight: "800" },
-  heroGrid: { gap: 10 },
-  ratingCard: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 22,
-    borderWidth: 1,
-    overflow: "hidden",
-    padding: 16,
-  },
-  nextCard: {
-    backgroundColor: colors.navy,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 22,
-    borderWidth: 1,
-    minHeight: 260,
-    overflow: "hidden",
-    padding: 16,
-  },
-  cardTitleRow: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  eyebrow: {
-    color: colors.aqua,
-    fontSize: 8,
-    fontWeight: "700",
-    letterSpacing: 1.15,
-  },
-  cardTitle: {
-    color: colors.bone,
-    fontSize: 19,
-    fontWeight: "800",
-    letterSpacing: -0.7,
-    marginTop: 5,
-  },
-  pill: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    borderRadius: 20,
-    borderWidth: 1,
-    minHeight: 22,
-    justifyContent: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  pillText: {
-    color: colors.muted,
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.7,
-  },
-  ratingOrbit: {
-    alignItems: "center",
-    alignSelf: "center",
-    borderColor: "rgba(99,227,219,.18)",
-    borderRadius: 92,
-    borderWidth: 1,
-    height: 184,
-    justifyContent: "center",
-    marginVertical: 20,
-    position: "relative",
-    width: 184,
-  },
-  ratingOrbitCompact: { height: 145, marginVertical: 0, width: 145 },
-  ratingOrbitInner: {
-    alignItems: "center",
-    borderColor: colors.aqua,
-    borderRadius: 72,
-    borderTopWidth: 5,
-    borderRightWidth: 2,
-    borderBottomWidth: 1,
-    borderLeftWidth: 2,
-    height: 144,
-    justifyContent: "center",
-    transform: [{ rotate: "-12deg" }],
-    width: 144,
-  },
-  ratingOrbitInnerCompact: { borderRadius: 55, height: 110, width: 110 },
-  ratingLabel: {
-    color: colors.muted,
-    fontSize: 6,
-    letterSpacing: 0.9,
-    transform: [{ rotate: "12deg" }],
-  },
-  ratingValue: {
-    color: colors.bone,
-    fontSize: 45,
-    fontWeight: "900",
-    letterSpacing: -3,
-    lineHeight: 48,
-    transform: [{ rotate: "12deg" }],
-  },
-  ratingValueCompact: { fontSize: 34, lineHeight: 36 },
-  ratingDelta: {
-    color: colors.positive,
-    fontSize: 8,
-    fontWeight: "700",
-    transform: [{ rotate: "12deg" }],
-  },
-  lockedLabel: {
-    backgroundColor: colors.aqua,
-    borderRadius: 9,
-    bottom: 7,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    position: "absolute",
-  },
-  lockedText: {
-    color: colors.ink,
-    fontSize: 6,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-  },
-  ratingStats: {
-    borderTopColor: "rgba(255,255,255,.07)",
-    borderTopWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingTop: 14,
-  },
-  statValue: { color: colors.bone, fontSize: 15, fontWeight: "800" },
-  statLabel: { color: colors.muted, fontSize: 8, marginTop: 3 },
-  nextDate: {
-    color: colors.aqua,
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-    marginTop: 26,
-  },
-  nextDay: {
-    color: colors.bone,
-    fontSize: 64,
-    fontWeight: "900",
-    letterSpacing: -4,
-    lineHeight: 67,
-  },
-  nextTitle: {
-    color: colors.bone,
-    fontSize: 22,
-    fontWeight: "800",
-    letterSpacing: -0.7,
-  },
-  nextMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
-  avatarStack: { flexDirection: "row", marginTop: 15 },
-  miniAvatar: {
-    alignItems: "center",
-    backgroundColor: colors.navyLift,
-    borderColor: colors.depth,
-    borderRadius: 18,
-    borderWidth: 2,
-    height: 34,
-    justifyContent: "center",
-    marginLeft: -5,
-    width: 34,
-  },
-  miniAvatarText: { color: colors.bone, fontSize: 8, fontWeight: "800" },
-  cardLink: {
-    borderTopColor: "rgba(255,255,255,.07)",
-    borderTopWidth: 1,
-    marginTop: 14,
-    paddingTop: 12,
-  },
-  cardLinkText: { color: colors.aqua, fontSize: 10, fontWeight: "700" },
-  metricStrip: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 17,
-    borderWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 10,
-    paddingVertical: 13,
-  },
-  metricNumber: {
-    color: colors.bone,
-    fontSize: 14,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  metricLabel: {
-    color: colors.muted,
-    fontSize: 7,
-    marginTop: 4,
-    textAlign: "center",
-  },
-  sectionHeader: {
-    alignItems: "flex-end",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 12,
-    marginTop: 32,
-  },
-  sectionTitle: {
-    color: colors.bone,
-    fontSize: 25,
-    fontWeight: "900",
-    letterSpacing: -1.2,
-    lineHeight: 28,
-    marginTop: 4,
-  },
-  sectionAction: { color: colors.aqua, fontSize: 9, fontWeight: "700" },
-  horizontalBleed: { marginHorizontal: -18, paddingHorizontal: 18 },
-  eventCard: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 17,
-    borderWidth: 1,
-    marginRight: 10,
-    overflow: "hidden",
-    width: 220,
-  },
-  eventArt: {
-    height: 125,
-    overflow: "hidden",
-    padding: 10,
-    position: "relative",
-  },
-  courtLine: {
-    borderColor: "rgba(255,255,255,.28)",
-    borderWidth: 1,
-    bottom: -18,
-    left: 32,
-    position: "absolute",
-    right: 32,
-    top: 58,
-    transform: [{ perspective: 250 }, { rotateX: "48deg" }],
-  },
-  eventBadges: { flexDirection: "row" },
-  eventArrow: {
-    color: colors.bone,
-    fontSize: 16,
-    position: "absolute",
-    right: 10,
-    top: 10,
-  },
-  eventBody: { padding: 12 },
-  eventTime: {
-    color: colors.aqua,
-    fontSize: 8,
-    fontWeight: "700",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-  },
-  eventTitle: {
-    color: colors.bone,
-    fontSize: 16,
-    fontWeight: "800",
-    letterSpacing: -0.5,
-    marginTop: 6,
-    minHeight: 39,
-  },
-  eventMeta: { color: colors.muted, fontSize: 8, marginTop: 5 },
-  eventFooter: {
-    alignItems: "center",
-    borderTopColor: "rgba(255,255,255,.06)",
-    borderTopWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 11,
-    paddingTop: 9,
-  },
-  eventPrice: { color: colors.bone, fontSize: 10, fontWeight: "800" },
-  eventSpots: { color: colors.muted, fontSize: 8 },
-  listCard: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 17,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  matchRow: {
-    alignItems: "center",
-    borderBottomColor: "rgba(255,255,255,.06)",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 74,
-    padding: 12,
-  },
-  resultBadge: {
-    alignItems: "center",
-    borderRadius: 9,
-    height: 32,
-    justifyContent: "center",
-    width: 32,
-  },
-  resultText: { color: colors.ink, fontSize: 12, fontWeight: "900" },
-  rowTitle: { color: colors.bone, fontSize: 11, fontWeight: "700" },
-  rowMeta: { color: colors.muted, fontSize: 8, marginTop: 3 },
-  matchScore: { alignItems: "flex-end" },
-  aiInsight: {
-    backgroundColor: colors.navy,
-    borderColor: "rgba(99,227,219,.13)",
-    borderRadius: 17,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 28,
-    padding: 15,
-  },
-  aiIcon: {
-    alignItems: "center",
-    backgroundColor: colors.aqua,
-    borderRadius: 10,
-    height: 36,
-    justifyContent: "center",
-    width: 36,
-  },
-  aiIconText: { color: colors.ink, fontSize: 17 },
-  aiTitle: {
-    color: colors.bone,
-    fontSize: 14,
-    fontWeight: "800",
-    letterSpacing: -0.4,
-    marginTop: 6,
-  },
-  aiBody: { color: colors.muted, fontSize: 9, lineHeight: 14, marginTop: 5 },
-  searchField: {
-    alignItems: "center",
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.08)",
-    borderRadius: 24,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 20,
-    paddingHorizontal: 14,
-  },
-  searchIcon: { color: colors.muted, fontSize: 20 },
-  searchInput: { color: colors.bone, flex: 1, fontSize: 11, height: 46 },
-  filterRow: { flexDirection: "row", gap: 7, marginTop: 14, paddingRight: 36 },
-  filterChip: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.08)",
-    borderRadius: 18,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  filterChipActive: { backgroundColor: colors.aqua, borderColor: colors.aqua },
-  filterText: { color: colors.muted, fontSize: 9, fontWeight: "600" },
-  filterTextActive: { color: colors.ink, fontWeight: "800" },
-  mapCard: {
-    backgroundColor: colors.navy,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 20,
-    borderWidth: 1,
-    height: 260,
-    marginTop: 16,
-    overflow: "hidden",
-    position: "relative",
-  },
-  mapWater: {
-    backgroundColor: colors.aquaDeep,
-    bottom: 0,
-    left: 0,
-    position: "absolute",
-    top: 0,
-    width: "34%",
-  },
-  mapShore: {
-    backgroundColor: "#735f3e",
-    bottom: -50,
-    left: "28%",
-    position: "absolute",
-    top: -60,
-    transform: [{ rotate: "-10deg" }],
-    width: "28%",
-  },
-  mapPin: {
-    alignItems: "center",
-    backgroundColor: colors.aqua,
-    borderColor: colors.ink,
-    borderRadius: 16,
-    borderWidth: 3,
-    height: 32,
-    justifyContent: "center",
-    position: "absolute",
-    width: 32,
-  },
-  mapPinText: { color: colors.ink, fontSize: 8, fontWeight: "900" },
-  mapLabel: {
-    backgroundColor: "rgba(7,11,13,.82)",
-    borderRadius: 10,
-    bottom: 12,
-    left: 12,
-    padding: 10,
-    position: "absolute",
-  },
-  mapLabelTitle: { color: colors.bone, fontSize: 11, fontWeight: "800" },
-  mapLabelText: { color: colors.muted, fontSize: 8, marginTop: 2 },
-  eventGrid: { gap: 10 },
-  successBanner: {
-    alignItems: "center",
-    backgroundColor: "rgba(133,212,155,.08)",
-    borderColor: "rgba(133,212,155,.2)",
-    borderRadius: 14,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 9,
-    marginBottom: 12,
-    padding: 11,
-  },
-  successIcon: { color: colors.positive, fontSize: 16 },
-  closeText: { color: colors.bone, fontSize: 28, fontWeight: "300" },
-  weekCard: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: 15,
-  },
-  weekDays: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginVertical: 18,
-  },
-  weekDay: {
-    alignItems: "center",
-    borderRadius: 20,
-    height: 54,
-    justifyContent: "center",
-    position: "relative",
-    width: 38,
-  },
-  weekDayActive: { backgroundColor: colors.aqua },
-  weekDayLabel: { color: colors.muted, fontSize: 7 },
-  weekDayNumber: {
-    color: colors.bone,
-    fontSize: 11,
-    fontWeight: "700",
-    marginTop: 4,
-  },
-  weekDayTextActive: { color: colors.ink },
-  weekDot: {
-    backgroundColor: colors.aqua,
-    borderRadius: 2,
-    bottom: 5,
-    height: 3,
-    position: "absolute",
-    width: 3,
-  },
-  bookingRow: {
-    alignItems: "center",
-    borderTopColor: "rgba(255,255,255,.06)",
-    borderTopWidth: 1,
-    flexDirection: "row",
-    gap: 9,
-    minHeight: 69,
-    paddingVertical: 9,
-  },
-  bookingTime: { width: 35 },
-  bookingTimeMain: { color: colors.bone, fontSize: 10, fontWeight: "700" },
-  bookingTimeSuffix: { color: colors.muted, fontSize: 6 },
-  bookingAccent: { borderRadius: 2, height: 35, width: 3 },
-  pickupRow: {
-    alignItems: "center",
-    borderBottomColor: "rgba(255,255,255,.06)",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 76,
-    padding: 11,
-  },
-  pickupDate: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,.05)",
-    borderRadius: 9,
-    padding: 6,
-    width: 38,
-  },
-  pickupDay: { color: colors.aqua, fontSize: 6, fontWeight: "800" },
-  pickupNumber: { color: colors.bone, fontSize: 15, fontWeight: "900" },
-  pickupSpots: {
-    color: colors.aqua,
-    fontSize: 13,
-    fontWeight: "800",
-    textAlign: "right",
-  },
-  chevron: { color: colors.muted, fontSize: 22 },
-  hostCard: {
-    alignItems: "center",
-    backgroundColor: colors.navy,
-    borderColor: "rgba(99,227,219,.14)",
-    borderRadius: 20,
-    borderWidth: 1,
-    marginTop: 28,
-    padding: 22,
-    textAlign: "center",
-  },
-  hostMark: {
-    alignItems: "center",
-    backgroundColor: "rgba(99,227,219,.1)",
-    borderRadius: 22,
-    height: 44,
-    justifyContent: "center",
-    marginBottom: 12,
-    width: 44,
-  },
-  hostMarkText: { color: colors.aqua, fontSize: 22 },
-  bodyText: { color: colors.muted, fontSize: 9, lineHeight: 14, marginTop: 5 },
-  primaryButton: {
-    alignItems: "center",
-    alignSelf: "center",
-    backgroundColor: colors.aqua,
-    borderRadius: 22,
-    marginTop: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-  },
-  primaryButtonText: { color: colors.ink, fontSize: 11, fontWeight: "900" },
-  walletCard: {
-    backgroundColor: colors.navy,
-    borderColor: "rgba(99,227,219,.18)",
-    borderRadius: 22,
-    borderWidth: 1,
-    marginTop: 20,
-    overflow: "hidden",
-    padding: 18,
-    position: "relative",
-  },
-  walletTop: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  walletLabel: {
-    color: colors.muted,
-    fontSize: 7,
-    letterSpacing: 1.2,
-    marginTop: 40,
-  },
-  walletBalance: {
-    color: colors.bone,
-    fontSize: 48,
-    fontWeight: "900",
-    letterSpacing: -3,
-    marginTop: 5,
-  },
-  walletMeta: { color: colors.muted, fontSize: 8, marginTop: 4 },
-  walletActions: { flexDirection: "row", gap: 8, marginTop: 25 },
-  walletActionText: {
-    backgroundColor: "rgba(255,255,255,.08)",
-    borderRadius: 18,
-    color: colors.bone,
-    fontSize: 9,
-    fontWeight: "700",
-    overflow: "hidden",
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  walletWave: {
-    borderColor: "rgba(99,227,219,.12)",
-    borderRadius: 130,
-    borderWidth: 1,
-    height: 240,
-    position: "absolute",
-    right: -130,
-    top: -120,
-    width: 240,
-  },
-  walletInfoGrid: {
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "space-between",
-    marginTop: 10,
-  },
-  walletRow: {
-    alignItems: "center",
-    borderBottomColor: "rgba(255,255,255,.06)",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    padding: 12,
-  },
-  moneyDirection: {
-    alignItems: "center",
-    borderRadius: 10,
-    height: 34,
-    justifyContent: "center",
-    width: 34,
-  },
-  moneyAmount: { color: colors.bone, fontSize: 10, fontWeight: "800" },
-  trustNote: {
-    alignItems: "flex-start",
-    backgroundColor: "rgba(99,227,219,.05)",
-    borderColor: "rgba(99,227,219,.13)",
-    borderRadius: 14,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 9,
-    marginTop: 16,
-    padding: 12,
-  },
-  trustIcon: { color: colors.aqua, fontSize: 17 },
-  profileHero: {
-    backgroundColor: colors.navy,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 22,
-    borderWidth: 1,
-    gap: 20,
-    marginTop: 4,
-    overflow: "hidden",
-    padding: 16,
-  },
-  profileIdentity: { alignItems: "center", flexDirection: "row", gap: 12 },
-  profileAvatar: {
-    alignItems: "center",
-    backgroundColor: colors.aquaDeep,
-    borderRadius: 17,
-    height: 66,
-    justifyContent: "center",
-    width: 66,
-  },
-  profileAvatarText: { color: colors.bone, fontSize: 20, fontWeight: "900" },
-  profileName: {
-    color: colors.bone,
-    fontSize: 24,
-    fontWeight: "900",
-    letterSpacing: -1,
-    marginTop: 7,
-  },
-  profileHandle: { color: colors.muted, fontSize: 8, marginTop: 2 },
-  progressCard: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 18,
-    borderWidth: 1,
-    marginTop: 10,
-    padding: 14,
-  },
-  mobileChart: {
-    backgroundColor: "rgba(255,255,255,.02)",
-    height: 170,
-    marginTop: 15,
-    position: "relative",
-  },
-  chartPoint: {
-    backgroundColor: colors.aqua,
-    borderColor: colors.depth,
-    borderRadius: 6,
-    borderWidth: 2,
-    height: 10,
-    position: "absolute",
-    width: 10,
-    zIndex: 2,
-  },
-  chartLine: {
-    backgroundColor: "rgba(99,227,219,.14)",
-    bottom: "20%",
-    height: 2,
-    left: "4%",
-    position: "absolute",
-    right: "4%",
-    transform: [{ rotate: "-14deg" }],
-  },
-  chartLabels: { flexDirection: "row", justifyContent: "space-between" },
-  chemistryCard: {
-    backgroundColor: colors.navy,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 18,
-    borderWidth: 1,
-    marginTop: 10,
-    padding: 14,
-  },
-  chemistryPartner: {
-    alignItems: "center",
-    borderTopColor: "rgba(255,255,255,.07)",
-    borderTopWidth: 1,
-    flexDirection: "row",
-    gap: 9,
-    marginTop: 14,
-    paddingTop: 12,
-  },
-  achievementRow: { flexDirection: "row", gap: 9, paddingRight: 36 },
-  achievementCard: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 15,
-    borderWidth: 1,
-    minHeight: 130,
-    padding: 13,
-    width: 155,
-  },
-  achievementIcon: { color: colors.aqua, fontSize: 22, marginBottom: 20 },
-  profileMenu: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 17,
-    borderWidth: 1,
-    marginTop: 25,
-    overflow: "hidden",
-  },
-  profileMenuRow: {
-    alignItems: "center",
-    borderBottomColor: "rgba(255,255,255,.06)",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 14,
-  },
-  tabBar: {
-    backgroundColor: "rgba(12,20,24,.98)",
-    borderTopColor: "rgba(255,255,255,.08)",
-    borderTopWidth: 1,
-    bottom: 0,
-    flexDirection: "row",
-    left: 0,
-    paddingBottom: Platform.OS === "ios" ? 22 : 9,
-    paddingHorizontal: 8,
-    paddingTop: 8,
-    position: "absolute",
-    right: 0,
-  },
-  tabItem: {
-    alignItems: "center",
-    flex: 1,
-    gap: 3,
-    paddingVertical: 4,
-    position: "relative",
-  },
-  tabIcon: { color: colors.muted, fontSize: 19 },
-  tabLabel: { color: colors.muted, fontSize: 7, fontWeight: "600" },
-  tabActive: { color: colors.aqua },
-  tabIndicator: {
-    backgroundColor: colors.aqua,
-    borderRadius: 2,
-    height: 2,
-    position: "absolute",
-    top: -9,
-    width: 20,
-  },
-  modalSafe: { backgroundColor: colors.ink, flex: 1 },
-  modalContent: { padding: 18, paddingBottom: 45 },
-  modalHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 15,
-  },
-  modalHeaderTitle: { color: colors.bone, fontSize: 12, fontWeight: "800" },
-  checkoutArt: {
-    backgroundColor: colors.aquaDeep,
-    borderRadius: 18,
-    height: 190,
-    overflow: "hidden",
-    padding: 12,
-    position: "relative",
-  },
-  checkoutTitle: {
-    color: colors.bone,
-    fontSize: 29,
-    fontWeight: "900",
-    letterSpacing: -1.4,
-    marginTop: 18,
-  },
-  checkoutMeta: { color: colors.muted, fontSize: 9, marginTop: 5 },
-  checkoutSection: {
-    backgroundColor: colors.depth,
-    borderColor: "rgba(255,255,255,.07)",
-    borderRadius: 16,
-    borderWidth: 1,
-    marginTop: 18,
-    padding: 13,
-  },
-  checkoutPlayer: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,.03)",
-    borderRadius: 11,
-    flexDirection: "row",
-    gap: 9,
-    marginTop: 10,
-    padding: 9,
-  },
-  checkText: { color: colors.positive, fontSize: 15 },
-  paymentRow: {
-    alignItems: "center",
-    backgroundColor: "rgba(99,227,219,.05)",
-    borderColor: "rgba(99,227,219,.16)",
-    borderRadius: 11,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 9,
-    marginTop: 9,
-    padding: 10,
-  },
-  paymentIcon: { color: colors.aqua, fontSize: 17 },
-  orderMath: {
-    borderBottomColor: "rgba(255,255,255,.08)",
-    borderBottomWidth: 1,
-    borderTopColor: "rgba(255,255,255,.08)",
-    borderTopWidth: 1,
-    marginTop: 20,
-    paddingVertical: 10,
-  },
-  totalRow: {
-    borderTopColor: "rgba(255,255,255,.08)",
-    borderTopWidth: 1,
-    marginTop: 8,
-    paddingTop: 10,
-  },
-  totalAmount: { color: colors.bone, fontSize: 15, fontWeight: "900" },
-  payButton: {
-    alignItems: "center",
-    backgroundColor: colors.aqua,
-    borderRadius: 24,
-    marginTop: 18,
-    padding: 14,
-  },
-  payButtonText: { color: colors.ink, fontSize: 12, fontWeight: "900" },
-  paymentTrust: {
-    color: colors.muted,
-    fontSize: 7,
-    marginTop: 9,
-    textAlign: "center",
-  },
-  completeState: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-    padding: 25,
-  },
-  completeIcon: {
-    alignItems: "center",
-    backgroundColor: "rgba(133,212,155,.1)",
-    borderColor: "rgba(133,212,155,.25)",
-    borderRadius: 38,
-    borderWidth: 1,
-    height: 76,
-    justifyContent: "center",
-    marginBottom: 15,
-    width: 76,
-  },
-  completeIconText: { color: colors.positive, fontSize: 28 },
-  completeTitle: {
-    color: colors.bone,
-    fontSize: 48,
-    fontWeight: "900",
-    letterSpacing: -2.5,
-    marginTop: 17,
-  },
-  completeBody: {
-    color: colors.muted,
-    fontSize: 11,
-    lineHeight: 17,
-    marginTop: 8,
-    maxWidth: 300,
-    textAlign: "center",
-  },
-});
+function createStyles(palette: Palette) {
+  activePalette = palette;
+  return StyleSheet.create({
+    safe: { backgroundColor: colors.canvas, flex: 1 },
+    app: { backgroundColor: colors.canvas, flex: 1 },
+    buttonDisabled: { opacity: 0.45 },
+    flex: { flex: 1, minWidth: 0 },
+    formError: {
+      color: colors.danger,
+      fontSize: 11,
+      lineHeight: 17,
+      marginTop: 12,
+    },
+    formInput: {
+      backgroundColor: rgba(colors.overlayRgb, 0.04),
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 12,
+      borderWidth: 1,
+      color: colors.bone,
+      fontSize: 12,
+      minHeight: 46,
+      paddingHorizontal: 13,
+      paddingVertical: 11,
+    },
+    formRow: { flexDirection: "row", gap: 8 },
+    formRowInput: { flex: 1, minWidth: 0 },
+    formStack: { gap: 10, marginTop: 20 },
+    formTextarea: { minHeight: 88, textAlignVertical: "top" },
+    previewBanner: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.warningRgb, 0.12),
+      borderBottomColor: rgba(colors.warningRgb, 0.24),
+      borderBottomWidth: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+    },
+    previewBannerText: {
+      color: colors.warning,
+      fontSize: 7,
+      fontWeight: "800",
+      letterSpacing: 0.8,
+      textAlign: "center",
+    },
+    screenContent: { paddingBottom: 118, paddingHorizontal: 18 },
+    toggleRow: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.03),
+      borderRadius: 12,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      padding: 12,
+    },
+    appHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingBottom: 22,
+      paddingTop: 10,
+    },
+    headerActions: { flexDirection: "row", gap: 8 },
+    themeButton: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 18,
+      borderWidth: 1,
+      height: 36,
+      justifyContent: "center",
+      width: 36,
+    },
+    themeButtonText: {
+      color: colors.bone,
+      fontSize: 17,
+      lineHeight: 20,
+    },
+    wordmark: { alignItems: "center", flexDirection: "row", gap: 8 },
+    mark: {
+      alignItems: "center",
+      borderColor: colors.aqua,
+      borderRadius: 15,
+      borderWidth: 2,
+      height: 30,
+      justifyContent: "center",
+      position: "relative",
+      width: 30,
+    },
+    markArc: {
+      borderColor: colors.bone,
+      borderRadius: 15,
+      borderTopWidth: 2,
+      height: 13,
+      position: "absolute",
+      top: 8,
+      transform: [{ rotate: "180deg" }],
+      width: 18,
+    },
+    markDot: {
+      backgroundColor: colors.flare,
+      borderRadius: 2,
+      bottom: 5,
+      height: 4,
+      position: "absolute",
+      width: 4,
+    },
+    wordmarkText: {
+      color: colors.bone,
+      fontSize: 17,
+      fontWeight: "900",
+      letterSpacing: 3,
+    },
+    proPill: {
+      backgroundColor: rgba(colors.warningRgb, 0.12),
+      borderRadius: 6,
+      color: colors.warning,
+      fontSize: 8,
+      fontWeight: "800",
+      letterSpacing: 1,
+      overflow: "hidden",
+      paddingHorizontal: 5,
+      paddingVertical: 3,
+    },
+    headerEyebrow: {
+      color: colors.muted,
+      fontSize: 8,
+      letterSpacing: 1.2,
+      marginTop: 5,
+    },
+    askButton: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.09),
+      borderColor: rgba(colors.accentRgb, 0.18),
+      borderRadius: 19,
+      borderWidth: 1,
+      height: 38,
+      justifyContent: "center",
+      width: 38,
+    },
+    askButtonText: { color: colors.aqua, fontSize: 17 },
+    avatarButton: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 19,
+      height: 38,
+      justifyContent: "center",
+      position: "relative",
+      width: 38,
+    },
+    avatarText: { color: colors.bone, fontSize: 10, fontWeight: "800" },
+    notificationDot: {
+      backgroundColor: colors.flare,
+      borderColor: colors.ink,
+      borderRadius: 5,
+      borderWidth: 2,
+      height: 9,
+      position: "absolute",
+      right: 0,
+      top: 0,
+      width: 9,
+    },
+    homeGreeting: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 20,
+    },
+    homeGreetingCompact: {
+      alignItems: "flex-start",
+      flexDirection: "column",
+      gap: 14,
+    },
+    displayTitle: {
+      color: colors.bone,
+      fontSize: 42,
+      fontWeight: "900",
+      letterSpacing: -2.2,
+      lineHeight: 42,
+    },
+    displayTitleCompact: {
+      fontSize: 39,
+      letterSpacing: -2,
+      lineHeight: 40,
+    },
+    scoreAction: {
+      backgroundColor: colors.aqua,
+      borderRadius: 22,
+      paddingHorizontal: 14,
+      paddingVertical: 11,
+    },
+    scoreActionText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    heroGrid: { gap: 10 },
+    ratingCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 22,
+      borderWidth: 1,
+      overflow: "hidden",
+      padding: 16,
+    },
+    nextCard: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 22,
+      borderWidth: 1,
+      minHeight: 260,
+      overflow: "hidden",
+      padding: 16,
+    },
+    cardTitleRow: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    eyebrow: {
+      color: colors.aqua,
+      fontSize: 8,
+      fontWeight: "700",
+      letterSpacing: 1.15,
+    },
+    cardTitle: {
+      color: colors.bone,
+      fontSize: 19,
+      fontWeight: "800",
+      letterSpacing: -0.7,
+      marginTop: 5,
+    },
+    pill: {
+      alignItems: "center",
+      alignSelf: "flex-start",
+      borderRadius: 20,
+      borderWidth: 1,
+      minHeight: 22,
+      justifyContent: "center",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    pillText: {
+      color: colors.muted,
+      fontSize: 7,
+      fontWeight: "800",
+      letterSpacing: 0.7,
+    },
+    ratingOrbit: {
+      alignItems: "center",
+      alignSelf: "center",
+      borderColor: rgba(colors.accentRgb, 0.18),
+      borderRadius: 92,
+      borderWidth: 1,
+      height: 184,
+      justifyContent: "center",
+      marginVertical: 20,
+      position: "relative",
+      width: 184,
+    },
+    ratingOrbitCompact: { height: 145, marginVertical: 0, width: 145 },
+    ratingOrbitInner: {
+      alignItems: "center",
+      borderColor: colors.aqua,
+      borderRadius: 72,
+      borderTopWidth: 5,
+      borderRightWidth: 2,
+      borderBottomWidth: 1,
+      borderLeftWidth: 2,
+      height: 144,
+      justifyContent: "center",
+      transform: [{ rotate: "-12deg" }],
+      width: 144,
+    },
+    ratingOrbitInnerCompact: { borderRadius: 55, height: 110, width: 110 },
+    ratingLabel: {
+      color: colors.muted,
+      fontSize: 6,
+      letterSpacing: 0.9,
+      transform: [{ rotate: "12deg" }],
+    },
+    ratingValue: {
+      color: colors.bone,
+      fontSize: 45,
+      fontWeight: "900",
+      letterSpacing: -3,
+      lineHeight: 48,
+      transform: [{ rotate: "12deg" }],
+    },
+    ratingValueCompact: { fontSize: 34, lineHeight: 36 },
+    ratingDelta: {
+      color: colors.positive,
+      fontSize: 8,
+      fontWeight: "700",
+      transform: [{ rotate: "12deg" }],
+    },
+    lockedLabel: {
+      backgroundColor: colors.aqua,
+      borderRadius: 9,
+      bottom: 7,
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      position: "absolute",
+    },
+    lockedText: {
+      color: colors.onAccent,
+      fontSize: 6,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    ratingStats: {
+      borderTopColor: rgba(colors.overlayRgb, 0.07),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingTop: 14,
+    },
+    statValue: { color: colors.bone, fontSize: 15, fontWeight: "800" },
+    statLabel: { color: colors.muted, fontSize: 8, marginTop: 3 },
+    nextDate: {
+      color: colors.aqua,
+      fontSize: 9,
+      fontWeight: "800",
+      letterSpacing: 1.2,
+      marginTop: 26,
+    },
+    nextDay: {
+      color: colors.bone,
+      fontSize: 64,
+      fontWeight: "900",
+      letterSpacing: -4,
+      lineHeight: 67,
+    },
+    nextTitle: {
+      color: colors.bone,
+      fontSize: 22,
+      fontWeight: "800",
+      letterSpacing: -0.7,
+    },
+    nextMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
+    avatarStack: { flexDirection: "row", marginTop: 15 },
+    miniAvatar: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderColor: colors.depth,
+      borderRadius: 18,
+      borderWidth: 2,
+      height: 34,
+      justifyContent: "center",
+      marginLeft: -5,
+      width: 34,
+    },
+    miniAvatarText: { color: colors.bone, fontSize: 8, fontWeight: "800" },
+    cardLink: {
+      borderTopColor: rgba(colors.overlayRgb, 0.07),
+      borderTopWidth: 1,
+      marginTop: 14,
+      paddingTop: 12,
+    },
+    cardLinkText: { color: colors.aqua, fontSize: 10, fontWeight: "700" },
+    metricStrip: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-around",
+      marginTop: 10,
+      paddingVertical: 13,
+    },
+    metricNumber: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+    metricLabel: {
+      color: colors.muted,
+      fontSize: 7,
+      marginTop: 4,
+      textAlign: "center",
+    },
+    sectionHeader: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 12,
+      marginTop: 32,
+    },
+    sectionTitle: {
+      color: colors.bone,
+      fontSize: 25,
+      fontWeight: "900",
+      letterSpacing: -1.2,
+      lineHeight: 28,
+      marginTop: 4,
+    },
+    sectionAction: { color: colors.aqua, fontSize: 9, fontWeight: "700" },
+    horizontalBleed: { marginHorizontal: -18, paddingHorizontal: 18 },
+    eventCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 17,
+      borderWidth: 1,
+      marginRight: 10,
+      overflow: "hidden",
+      width: 220,
+    },
+    eventArt: {
+      height: 125,
+      overflow: "hidden",
+      padding: 10,
+      position: "relative",
+    },
+    courtLine: {
+      borderColor: rgba(colors.overlayRgb, 0.28),
+      borderWidth: 1,
+      bottom: -18,
+      left: 32,
+      position: "absolute",
+      right: 32,
+      top: 58,
+      transform: [{ perspective: 250 }, { rotateX: "48deg" }],
+    },
+    eventBadges: { flexDirection: "row" },
+    eventArrow: {
+      color: colors.bone,
+      fontSize: 16,
+      position: "absolute",
+      right: 10,
+      top: 10,
+    },
+    eventBody: { padding: 12 },
+    eventTime: {
+      color: colors.aqua,
+      fontSize: 8,
+      fontWeight: "700",
+      letterSpacing: 0.6,
+      textTransform: "uppercase",
+    },
+    eventTitle: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "800",
+      letterSpacing: -0.5,
+      marginTop: 6,
+      minHeight: 39,
+    },
+    eventMeta: { color: colors.muted, fontSize: 8, marginTop: 5 },
+    eventFooter: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.06),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 11,
+      paddingTop: 9,
+    },
+    eventPrice: { color: colors.bone, fontSize: 10, fontWeight: "800" },
+    eventSpots: { color: colors.muted, fontSize: 8 },
+    listCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 17,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    matchRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.06),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 74,
+      padding: 12,
+    },
+    resultBadge: {
+      alignItems: "center",
+      borderRadius: 9,
+      height: 32,
+      justifyContent: "center",
+      width: 32,
+    },
+    resultText: { color: colors.onAccent, fontSize: 12, fontWeight: "900" },
+    rowTitle: { color: colors.bone, fontSize: 11, fontWeight: "700" },
+    rowMeta: { color: colors.muted, fontSize: 8, marginTop: 3 },
+    matchScore: { alignItems: "flex-end" },
+    aiInsight: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.accentRgb, 0.13),
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 28,
+      padding: 15,
+    },
+    aiIcon: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 10,
+      height: 36,
+      justifyContent: "center",
+      width: 36,
+    },
+    aiIconText: { color: colors.onAccent, fontSize: 17 },
+    aiTitle: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "800",
+      letterSpacing: -0.4,
+      marginTop: 6,
+    },
+    aiBody: { color: colors.muted, fontSize: 9, lineHeight: 14, marginTop: 5 },
+    searchField: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 24,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 20,
+      paddingHorizontal: 14,
+    },
+    searchIcon: { color: colors.muted, fontSize: 20 },
+    searchInput: { color: colors.bone, flex: 1, fontSize: 11, height: 46 },
+    filterRow: {
+      flexDirection: "row",
+      gap: 7,
+      marginTop: 14,
+      paddingRight: 36,
+    },
+    filterChip: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    filterChipActive: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.aqua,
+    },
+    filterText: { color: colors.muted, fontSize: 9, fontWeight: "600" },
+    filterTextActive: { color: colors.onAccent, fontWeight: "800" },
+    mapCard: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 20,
+      borderWidth: 1,
+      height: 260,
+      marginTop: 16,
+      overflow: "hidden",
+      position: "relative",
+    },
+    mapWater: {
+      backgroundColor: colors.aquaDeep,
+      bottom: 0,
+      left: 0,
+      position: "absolute",
+      top: 0,
+      width: "34%",
+    },
+    mapShore: {
+      backgroundColor: "#735f3e",
+      bottom: -50,
+      left: "28%",
+      position: "absolute",
+      top: -60,
+      transform: [{ rotate: "-10deg" }],
+      width: "28%",
+    },
+    mapPin: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderColor: colors.ink,
+      borderRadius: 16,
+      borderWidth: 3,
+      height: 32,
+      justifyContent: "center",
+      position: "absolute",
+      width: 32,
+    },
+    mapPinText: { color: colors.onAccent, fontSize: 8, fontWeight: "900" },
+    mapLabel: {
+      backgroundColor: rgba(colors.inkRgb, 0.82),
+      borderRadius: 10,
+      bottom: 12,
+      left: 12,
+      padding: 10,
+      position: "absolute",
+    },
+    mapLabelTitle: { color: colors.bone, fontSize: 11, fontWeight: "800" },
+    mapLabelText: { color: colors.muted, fontSize: 8, marginTop: 2 },
+    eventGrid: { gap: 10 },
+    successBanner: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.positiveRgb, 0.08),
+      borderColor: rgba(colors.positiveRgb, 0.2),
+      borderRadius: 14,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      marginBottom: 12,
+      padding: 11,
+    },
+    successIcon: { color: colors.positive, fontSize: 16 },
+    closeText: { color: colors.bone, fontSize: 28, fontWeight: "300" },
+    weekCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 20,
+      borderWidth: 1,
+      padding: 15,
+    },
+    weekDays: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginVertical: 18,
+    },
+    weekDay: {
+      alignItems: "center",
+      borderRadius: 20,
+      height: 54,
+      justifyContent: "center",
+      position: "relative",
+      width: 38,
+    },
+    weekDayActive: { backgroundColor: colors.aqua },
+    weekDayLabel: { color: colors.muted, fontSize: 7 },
+    weekDayNumber: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "700",
+      marginTop: 4,
+    },
+    weekDayTextActive: { color: colors.onAccent },
+    weekDot: {
+      backgroundColor: colors.aqua,
+      borderRadius: 2,
+      bottom: 5,
+      height: 3,
+      position: "absolute",
+      width: 3,
+    },
+    bookingRow: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.06),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      minHeight: 69,
+      paddingVertical: 9,
+    },
+    bookingTime: { width: 35 },
+    bookingTimeMain: { color: colors.bone, fontSize: 10, fontWeight: "700" },
+    bookingTimeSuffix: { color: colors.muted, fontSize: 6 },
+    bookingAccent: { borderRadius: 2, height: 35, width: 3 },
+    pickupRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.06),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 76,
+      padding: 11,
+    },
+    pickupDate: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.05),
+      borderRadius: 9,
+      padding: 6,
+      width: 38,
+    },
+    pickupDay: { color: colors.aqua, fontSize: 6, fontWeight: "800" },
+    pickupNumber: { color: colors.bone, fontSize: 15, fontWeight: "900" },
+    pickupSpots: {
+      color: colors.aqua,
+      fontSize: 13,
+      fontWeight: "800",
+      textAlign: "right",
+    },
+    chevron: { color: colors.muted, fontSize: 22 },
+    hostCard: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.accentRgb, 0.14),
+      borderRadius: 20,
+      borderWidth: 1,
+      marginTop: 28,
+      padding: 22,
+      textAlign: "center",
+    },
+    hostMark: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderRadius: 22,
+      height: 44,
+      justifyContent: "center",
+      marginBottom: 12,
+      width: 44,
+    },
+    hostMarkText: { color: colors.aqua, fontSize: 22 },
+    bodyText: {
+      color: colors.muted,
+      fontSize: 9,
+      lineHeight: 14,
+      marginTop: 5,
+    },
+    primaryButton: {
+      alignItems: "center",
+      alignSelf: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 22,
+      marginTop: 16,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+    },
+    primaryButtonText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    walletCard: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.accentRgb, 0.18),
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 20,
+      overflow: "hidden",
+      padding: 18,
+      position: "relative",
+    },
+    walletTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    walletLabel: {
+      color: colors.muted,
+      fontSize: 7,
+      letterSpacing: 1.2,
+      marginTop: 40,
+    },
+    walletBalance: {
+      color: colors.bone,
+      fontSize: 48,
+      fontWeight: "900",
+      letterSpacing: -3,
+      marginTop: 5,
+    },
+    walletMeta: { color: colors.muted, fontSize: 8, marginTop: 4 },
+    walletActions: { flexDirection: "row", gap: 8, marginTop: 25 },
+    walletActionText: {
+      backgroundColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      color: colors.bone,
+      fontSize: 9,
+      fontWeight: "700",
+      overflow: "hidden",
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+    },
+    walletWave: {
+      borderColor: rgba(colors.accentRgb, 0.12),
+      borderRadius: 130,
+      borderWidth: 1,
+      height: 240,
+      position: "absolute",
+      right: -130,
+      top: -120,
+      width: 240,
+    },
+    walletInfoGrid: {
+      flexDirection: "row",
+      gap: 10,
+      justifyContent: "space-between",
+      marginTop: 10,
+    },
+    walletRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.06),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      padding: 12,
+    },
+    moneyDirection: {
+      alignItems: "center",
+      borderRadius: 10,
+      height: 34,
+      justifyContent: "center",
+      width: 34,
+    },
+    moneyAmount: { color: colors.bone, fontSize: 10, fontWeight: "800" },
+    trustNote: {
+      alignItems: "flex-start",
+      backgroundColor: rgba(colors.accentRgb, 0.05),
+      borderColor: rgba(colors.accentRgb, 0.13),
+      borderRadius: 14,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      marginTop: 16,
+      padding: 12,
+    },
+    trustIcon: { color: colors.aqua, fontSize: 17 },
+    profileHero: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 22,
+      borderWidth: 1,
+      gap: 20,
+      marginTop: 4,
+      overflow: "hidden",
+      padding: 16,
+    },
+    profileIdentity: { alignItems: "center", flexDirection: "row", gap: 12 },
+    profileAvatar: {
+      alignItems: "center",
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 17,
+      height: 66,
+      justifyContent: "center",
+      width: 66,
+    },
+    profileAvatarText: {
+      color: colors.onAccent,
+      fontSize: 20,
+      fontWeight: "900",
+    },
+    profileName: {
+      color: colors.bone,
+      fontSize: 24,
+      fontWeight: "900",
+      letterSpacing: -1,
+      marginTop: 7,
+    },
+    profileHandle: { color: colors.muted, fontSize: 8, marginTop: 2 },
+    progressCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 18,
+      borderWidth: 1,
+      marginTop: 10,
+      padding: 14,
+    },
+    mobileChart: {
+      backgroundColor: rgba(colors.overlayRgb, 0.02),
+      height: 170,
+      marginTop: 15,
+      position: "relative",
+    },
+    chartPoint: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.depth,
+      borderRadius: 6,
+      borderWidth: 2,
+      height: 10,
+      position: "absolute",
+      width: 10,
+      zIndex: 2,
+    },
+    chartLine: {
+      backgroundColor: rgba(colors.accentRgb, 0.14),
+      bottom: "20%",
+      height: 2,
+      left: "4%",
+      position: "absolute",
+      right: "4%",
+      transform: [{ rotate: "-14deg" }],
+    },
+    chartLabels: { flexDirection: "row", justifyContent: "space-between" },
+    chemistryCard: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 18,
+      borderWidth: 1,
+      marginTop: 10,
+      padding: 14,
+    },
+    chemistryPartner: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.07),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      marginTop: 14,
+      paddingTop: 12,
+    },
+    achievementRow: { flexDirection: "row", gap: 9, paddingRight: 36 },
+    achievementCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 15,
+      borderWidth: 1,
+      minHeight: 130,
+      padding: 13,
+      width: 155,
+    },
+    achievementIcon: { color: colors.aqua, fontSize: 22, marginBottom: 20 },
+    profileMenu: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 17,
+      borderWidth: 1,
+      marginTop: 25,
+      overflow: "hidden",
+    },
+    profileMenuRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.06),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      padding: 14,
+    },
+    tabBar: {
+      backgroundColor: rgba(colors.depthRgb, 0.98),
+      borderTopColor: rgba(colors.overlayRgb, 0.08),
+      borderTopWidth: 1,
+      bottom: 0,
+      flexDirection: "row",
+      left: 0,
+      paddingBottom: Platform.OS === "ios" ? 22 : 9,
+      paddingHorizontal: 8,
+      paddingTop: 8,
+      position: "absolute",
+      right: 0,
+    },
+    tabItem: {
+      alignItems: "center",
+      flex: 1,
+      gap: 3,
+      paddingVertical: 4,
+      position: "relative",
+    },
+    tabIcon: { color: colors.muted, fontSize: 19 },
+    tabLabel: { color: colors.muted, fontSize: 7, fontWeight: "600" },
+    tabActive: { color: colors.aqua },
+    tabIndicator: {
+      backgroundColor: colors.aqua,
+      borderRadius: 2,
+      height: 2,
+      position: "absolute",
+      top: -9,
+      width: 20,
+    },
+    modalSafe: { backgroundColor: colors.canvas, flex: 1 },
+    modalContent: { padding: 18, paddingBottom: 45 },
+    modalHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 15,
+    },
+    modalHeaderTitle: { color: colors.bone, fontSize: 12, fontWeight: "800" },
+    checkoutArt: {
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 18,
+      height: 190,
+      overflow: "hidden",
+      padding: 12,
+      position: "relative",
+    },
+    checkoutTitle: {
+      color: colors.bone,
+      fontSize: 29,
+      fontWeight: "900",
+      letterSpacing: -1.4,
+      marginTop: 18,
+    },
+    checkoutMeta: { color: colors.muted, fontSize: 9, marginTop: 5 },
+    checkoutSummaryText: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 17,
+      marginTop: 8,
+    },
+    purchaseKindRow: {
+      backgroundColor: rgba(colors.overlayRgb, 0.04),
+      borderRadius: 14,
+      flexDirection: "row",
+      gap: 4,
+      marginTop: 16,
+      padding: 4,
+    },
+    purchaseKindButton: {
+      alignItems: "center",
+      borderRadius: 11,
+      flex: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+    },
+    purchaseKindButtonActive: {
+      backgroundColor: colors.depth,
+      shadowColor: colors.ink,
+      shadowOffset: { height: 2, width: 0 },
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+    },
+    purchaseKindText: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    purchaseKindTextActive: { color: colors.aqua },
+    checkoutSection: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 16,
+      borderWidth: 1,
+      marginTop: 18,
+      padding: 13,
+    },
+    mobileDivisionDetail: {
+      borderTopColor: rgba(colors.overlayRgb, 0.08),
+      borderTopWidth: 1,
+      marginTop: 9,
+      paddingTop: 9,
+    },
+    mobileTicketList: { gap: 8, marginTop: 10 },
+    mobileTicketRow: {
+      backgroundColor: rgba(colors.overlayRgb, 0.025),
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 12,
+      borderWidth: 1,
+      padding: 11,
+    },
+    mobileTicketRowActive: {
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderColor: rgba(colors.accentRgb, 0.34),
+    },
+    mobileTeamNotice: {
+      alignItems: "flex-start",
+      backgroundColor: rgba(colors.accentRgb, 0.07),
+      borderColor: rgba(colors.accentRgb, 0.18),
+      borderRadius: 14,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 13,
+      padding: 12,
+    },
+    mobileTeamIcon: { color: colors.aqua, fontSize: 17, marginTop: 1 },
+    mobileFeatureRow: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 10,
+    },
+    mobileFeatureIcon: { color: colors.aqua, fontSize: 12, marginTop: 1 },
+    mobilePolicyNotice: {
+      alignItems: "flex-start",
+      backgroundColor: rgba(colors.warningRgb, 0.08),
+      borderColor: rgba(colors.warningRgb, 0.2),
+      borderRadius: 13,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      marginTop: 14,
+      padding: 11,
+    },
+    mobilePolicyIcon: { color: colors.warning, fontSize: 14, marginTop: 1 },
+    checkoutPlayer: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.03),
+      borderRadius: 11,
+      flexDirection: "row",
+      gap: 9,
+      marginTop: 10,
+      padding: 9,
+    },
+    checkText: { color: colors.positive, fontSize: 15 },
+    paymentRow: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.05),
+      borderColor: rgba(colors.accentRgb, 0.16),
+      borderRadius: 11,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      marginTop: 9,
+      padding: 10,
+    },
+    paymentIcon: { color: colors.aqua, fontSize: 17 },
+    orderMath: {
+      borderBottomColor: rgba(colors.overlayRgb, 0.08),
+      borderBottomWidth: 1,
+      borderTopColor: rgba(colors.overlayRgb, 0.08),
+      borderTopWidth: 1,
+      marginTop: 20,
+      paddingVertical: 10,
+    },
+    totalRow: {
+      borderTopColor: rgba(colors.overlayRgb, 0.08),
+      borderTopWidth: 1,
+      marginTop: 8,
+      paddingTop: 10,
+    },
+    totalAmount: { color: colors.bone, fontSize: 15, fontWeight: "900" },
+    payButton: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 24,
+      marginTop: 18,
+      padding: 14,
+    },
+    payButtonText: { color: colors.onAccent, fontSize: 12, fontWeight: "900" },
+    paymentTrust: {
+      color: colors.muted,
+      fontSize: 7,
+      marginTop: 9,
+      textAlign: "center",
+    },
+    completeState: {
+      alignItems: "center",
+      flex: 1,
+      justifyContent: "center",
+      padding: 25,
+    },
+    completeIcon: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.positiveRgb, 0.1),
+      borderColor: rgba(colors.positiveRgb, 0.25),
+      borderRadius: 38,
+      borderWidth: 1,
+      height: 76,
+      justifyContent: "center",
+      marginBottom: 15,
+      width: 76,
+    },
+    completeIconText: { color: colors.positive, fontSize: 28 },
+    completeTitle: {
+      color: colors.bone,
+      fontSize: 48,
+      fontWeight: "900",
+      letterSpacing: -2.5,
+      marginTop: 17,
+    },
+    completeBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 17,
+      marginTop: 8,
+      maxWidth: 300,
+      textAlign: "center",
+    },
+  });
+}
+
+const lightStyles = createStyles(lightColors);
+const darkStyles = createStyles(darkColors);
+activePalette = lightColors;
+let activeStyles = lightStyles;
+const styles = new Proxy(lightStyles, {
+  get(_target, property: keyof typeof lightStyles) {
+    return activeStyles[property];
+  },
+}) as typeof lightStyles;

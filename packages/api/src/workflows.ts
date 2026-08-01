@@ -9,6 +9,7 @@ import {
   organizations,
   pickupParticipants,
   registrations,
+  tickets,
   webhookEvents,
   workflowJobs,
 } from "@duna/db";
@@ -238,8 +239,11 @@ async function synchronizeConnectAccount(input: {
   ) {
     throw new Error("Stripe account metadata conflicts with the Duna mapping");
   }
-  const chargesEnabled = input.object.charges_enabled === true;
-  const accountType = optionalString(input.object, "type") ?? "express";
+  const transfersEnabled = connectAccountTransfersReady(input.object);
+  const chargesEnabled = connectAccountMoneyReady(input.object);
+  const accountType =
+    optionalString(input.object, "type") ??
+    (transfersEnabled ? "v2-recipient" : "connected");
   await database.batch([
     database
       .update(organizations)
@@ -257,12 +261,30 @@ async function synchronizeConnectAccount(input: {
       entityType: "organization",
       entityId: organization.id,
       reason: chargesEnabled
-        ? "Stripe confirmed that connected charges are enabled."
+        ? "Stripe confirmed that the connected account can receive Duna payments."
         : "Stripe connected-account requirements remain incomplete or restricted.",
       traceId: input.traceId,
       createdAt: input.occurredAt,
     }),
   ]);
+}
+
+function connectAccountTransfersReady(
+  object: Readonly<Record<string, unknown>>,
+): boolean {
+  const capabilities = object.capabilities as
+    Readonly<Record<string, unknown>> | undefined;
+  return (
+    capabilities?.transfers === "active" && object.payouts_enabled === true
+  );
+}
+
+export function connectAccountMoneyReady(
+  object: Readonly<Record<string, unknown>>,
+): boolean {
+  return (
+    object.charges_enabled === true || connectAccountTransfersReady(object)
+  );
 }
 
 async function processStripeWorkflow(
@@ -389,6 +411,13 @@ async function processStripeWorkflow(
             updatedAt: failedAt,
           })
           .where(eq(pickupParticipants.orderId, orderId)),
+        database
+          .update(tickets)
+          .set({
+            status: "void",
+            updatedAt: failedAt,
+          })
+          .where(eq(tickets.orderId, orderId)),
         database
           .update(courtBookings)
           .set({

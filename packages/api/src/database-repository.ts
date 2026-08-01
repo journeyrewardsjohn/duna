@@ -4,6 +4,8 @@ import {
   courtBookings,
   courts,
   divisions,
+  eventBlueprints,
+  eventPolicyAcceptances,
   eventTypes,
   getDatabase,
   guardianships,
@@ -27,6 +29,8 @@ import {
   sessions,
   teamMembers,
   teams,
+  tickets,
+  ticketTypes,
   venues,
   walletAccounts,
   walletLedger,
@@ -38,7 +42,18 @@ import {
   type BookingSummary,
   type Currency,
   type EventKind,
+  type EventFeature,
+  type EventLocation,
+  type EventMedia,
+  type EventPolicy,
   type EventSummary,
+  type EventTeamFormat,
+  type EventSurface,
+  type EventGender,
+  type EventPoolPlay,
+  type EventSeedingMethod,
+  type LeagueRecurrence,
+  type TournamentFormat,
   type MatchSummary,
   type Metric,
   type OrganizationSummary,
@@ -432,6 +447,19 @@ interface ScopedEvent {
   readonly organizationId?: string;
 }
 
+interface StoredDivisionSettings {
+  readonly teamFormat?: EventTeamFormat;
+  readonly surface?: EventSurface;
+  readonly gender?: EventGender;
+  readonly ratingMinimum?: number;
+  readonly ratingMaximum?: number;
+  readonly ageMinimum?: number;
+  readonly ageMaximum?: number;
+  readonly tournamentFormat?: TournamentFormat;
+  readonly poolPlay?: EventPoolPlay;
+  readonly seeding?: EventSeedingMethod;
+}
+
 async function loadEvents(input?: {
   readonly includeUnlistedPickups?: boolean;
 }): Promise<ScopedEvent[]> {
@@ -442,6 +470,9 @@ async function loadEvents(input?: {
     divisionRows,
     registrationRows,
     pickupParticipantRows,
+    blueprintRows,
+    ticketTypeRows,
+    issuedTicketRows,
   ] = await Promise.all([
     database
       .select({
@@ -503,9 +534,15 @@ async function loadEvents(input?: {
         id: divisions.id,
         sessionId: divisions.sessionId,
         name: divisions.name,
+        description: divisions.description,
         discipline: divisions.discipline,
         ratingBasis: divisions.ratingBasis,
         capacity: divisions.capacity,
+        minimumTeams: divisions.minimumTeams,
+        maximumTeams: divisions.maximumTeams,
+        teamSize: divisions.teamSize,
+        priceBasis: divisions.priceBasis,
+        settings: divisions.settings,
         entryFeeMinor: divisions.entryFeeMinor,
         currency: divisions.currency,
       })
@@ -534,6 +571,42 @@ async function loadEvents(input?: {
           "confirmed",
           "checked-in",
         ]),
+      ),
+    database
+      .select({
+        sessionId: eventBlueprints.sessionId,
+        shortSummary: eventBlueprints.shortSummary,
+        description: eventBlueprints.description,
+        media: eventBlueprints.media,
+        location: eventBlueprints.location,
+        features: eventBlueprints.features,
+        policies: eventBlueprints.policies,
+        recurrence: eventBlueprints.recurrence,
+      })
+      .from(eventBlueprints),
+    database
+      .select({
+        id: ticketTypes.id,
+        sessionId: ticketTypes.sessionId,
+        name: ticketTypes.name,
+        description: ticketTypes.description,
+        priceMinor: ticketTypes.priceMinor,
+        currency: ticketTypes.currency,
+        quantity: ticketTypes.quantity,
+        waitlistEnabled: ticketTypes.waitlistEnabled,
+        approvalRequired: ticketTypes.approvalRequired,
+        availableOnline: ticketTypes.availableOnline,
+        availableInPerson: ticketTypes.availableInPerson,
+      })
+      .from(ticketTypes),
+    database
+      .select({
+        ticketTypeId: tickets.ticketTypeId,
+        status: tickets.status,
+      })
+      .from(tickets)
+      .where(
+        inArray(tickets.status, ["held", "issued", "transferred", "scanned"]),
       ),
   ]);
   const organizationIds = new Set<string>();
@@ -591,6 +664,16 @@ async function loadEvents(input?: {
       );
     }
   }
+  const blueprintBySession = new Map(
+    blueprintRows.map((blueprint) => [blueprint.sessionId, blueprint] as const),
+  );
+  const issuedTicketCount = new Map<string, number>();
+  for (const ticket of issuedTicketRows) {
+    issuedTicketCount.set(
+      ticket.ticketTypeId,
+      (issuedTicketCount.get(ticket.ticketTypeId) ?? 0) + 1,
+    );
+  }
   const sessionEvents: ScopedEvent[] = sessionRows.map((row) => {
     const kind = (row.programKind ??
       row.eventTypeKind ??
@@ -601,31 +684,80 @@ async function loadEvents(input?: {
       row.venueOrganizationId ??
       undefined;
     const occupied = registrationCount.get(row.id) ?? 0;
-    const eventDivisions = divisionRows
+    const blueprint = blueprintBySession.get(row.id);
+    const blueprintLocation = blueprint?.location as EventLocation | undefined;
+    const eventDivisions: NonNullable<EventSummary["divisions"]> = divisionRows
       .filter((division) => division.sessionId === row.id)
-      .map((division) => ({
-        id: division.id,
-        name: division.name,
-        discipline: division.discipline,
-        ratingBasis: division.ratingBasis,
+      .map((division) => {
+        const settings = division.settings as unknown as StoredDivisionSettings;
+        return {
+          id: division.id,
+          name: division.name,
+          description: division.description ?? undefined,
+          discipline: division.discipline,
+          ratingBasis: division.ratingBasis,
+          price: {
+            amountMinor: division.entryFeeMinor,
+            currency: currency(division.currency),
+          },
+          spotsRemaining: Math.max(
+            0,
+            division.capacity -
+              (divisionRegistrationCount.get(division.id) ?? 0),
+          ),
+          capacity: division.capacity,
+          minimumTeams: division.minimumTeams,
+          maximumTeams: division.maximumTeams ?? undefined,
+          teamFormat: settings.teamFormat,
+          teamSize: division.teamSize,
+          surface: settings.surface,
+          gender: settings.gender,
+          priceBasis:
+            division.priceBasis === "per-person" ? "per-person" : "per-team",
+          ratingMinimum: settings.ratingMinimum,
+          ratingMaximum: settings.ratingMaximum,
+          ageMinimum: settings.ageMinimum,
+          ageMaximum: settings.ageMaximum,
+          tournamentFormat: settings.tournamentFormat,
+          poolPlay: settings.poolPlay,
+          seeding: settings.seeding,
+        };
+      });
+    const eventTickets: NonNullable<EventSummary["tickets"]> = ticketTypeRows
+      .filter((ticket) => ticket.sessionId === row.id)
+      .map((ticket) => ({
+        id: ticket.id,
+        name: ticket.name,
+        description: ticket.description ?? undefined,
         price: {
-          amountMinor: division.entryFeeMinor,
-          currency: currency(division.currency),
+          amountMinor: ticket.priceMinor,
+          currency: currency(ticket.currency),
         },
-        spotsRemaining: Math.max(
-          0,
-          division.capacity - (divisionRegistrationCount.get(division.id) ?? 0),
-        ),
-        capacity: division.capacity,
+        quantity: ticket.quantity ?? undefined,
+        remaining:
+          ticket.quantity === null
+            ? undefined
+            : Math.max(
+                0,
+                ticket.quantity - (issuedTicketCount.get(ticket.id) ?? 0),
+              ),
+        waitlistEnabled: ticket.waitlistEnabled,
+        approvalRequired: ticket.approvalRequired,
+        availableOnline: ticket.availableOnline,
+        availableInPerson: ticket.availableInPerson,
       }));
+    const optionPrices = [
+      ...eventDivisions.map((division) => division.price.amountMinor),
+      ...eventTickets.map((ticket) => ticket.price.amountMinor),
+    ];
     const startingPrice =
-      eventDivisions.length > 0
-        ? Math.min(
-            ...eventDivisions.map((division) => division.price.amountMinor),
-          )
+      optionPrices.length > 0
+        ? Math.min(...optionPrices)
         : (row.priceMinor ?? 0);
     const startingCurrency =
-      eventDivisions[0]?.price.currency ?? currency(row.priceCurrency ?? "USD");
+      eventDivisions[0]?.price.currency ??
+      eventTickets[0]?.price.currency ??
+      currency(row.priceCurrency ?? "USD");
     return {
       organizationId,
       event: {
@@ -636,7 +768,12 @@ async function loadEvents(input?: {
         organizationName:
           (organizationId && organizationNames.get(organizationId)) ??
           "Independent organizer",
-        venueName: row.venueName ?? "Location shared after registration",
+        venueName:
+          blueprintLocation?.venueName ??
+          row.venueName ??
+          "Location shared after registration",
+        shortSummary: blueprint?.shortSummary ?? undefined,
+        description: blueprint?.description ?? undefined,
         startsAt: row.startsAt.toISOString(),
         endsAt: row.endsAt.toISOString(),
         timezone: row.timezone,
@@ -647,6 +784,25 @@ async function loadEvents(input?: {
         spotsRemaining: Math.max(0, row.capacity - occupied),
         capacity: row.capacity,
         divisions: eventDivisions.length > 0 ? eventDivisions : undefined,
+        tickets: eventTickets.length > 0 ? eventTickets : undefined,
+        media:
+          blueprint && blueprint.media.length > 0
+            ? (blueprint.media as unknown as readonly EventMedia[])
+            : undefined,
+        location: blueprint
+          ? (blueprint.location as unknown as EventLocation)
+          : undefined,
+        features:
+          blueprint && blueprint.features.length > 0
+            ? (blueprint.features as unknown as readonly EventFeature[])
+            : undefined,
+        policies:
+          blueprint && blueprint.policies.length > 0
+            ? (blueprint.policies as unknown as readonly EventPolicy[])
+            : undefined,
+        recurrence: blueprint?.recurrence
+          ? (blueprint.recurrence as unknown as LeagueRecurrence)
+          : undefined,
         live: row.status === "live",
         tags: [titleCase(kind), titleCase(row.status)],
       },
@@ -1693,6 +1849,9 @@ export const databaseRepository = {
         ratingRows,
         reportRows,
         orderRows,
+        sessionRows,
+        policyAcceptanceRows,
+        pendingTicketRows,
         queues,
         audit,
       ] = await Promise.all([
@@ -1713,6 +1872,22 @@ export const databaseRepository = {
           .select({ totalMinor: orders.totalMinor, status: orders.status })
           .from(orders)
           .where(inArray(orders.status, ["paid", "partially-refunded"])),
+        database.select({ status: sessions.status }).from(sessions),
+        database
+          .select({ id: eventPolicyAcceptances.id })
+          .from(eventPolicyAcceptances),
+        database
+          .select({ id: tickets.id })
+          .from(tickets)
+          .innerJoin(ticketTypes, eq(tickets.ticketTypeId, ticketTypes.id))
+          .innerJoin(orders, eq(tickets.orderId, orders.id))
+          .where(
+            and(
+              eq(tickets.status, "held"),
+              eq(ticketTypes.approvalRequired, true),
+              eq(orders.status, "paid"),
+            ),
+          ),
         loadAdminQueues(),
         loadAudit(),
       ]);
@@ -1734,6 +1909,22 @@ export const databaseRepository = {
           label: "Open safety SLAs",
           value: String(reportRows.length),
           tone: reportRows.length > 0 ? "warning" : "positive",
+        },
+        {
+          label: "Live event inventory",
+          value: String(
+            sessionRows.filter((session) =>
+              publicSessionStatuses.includes(
+                session.status as (typeof publicSessionStatuses)[number],
+              ),
+            ).length,
+          ),
+        },
+        {
+          label: "Ticket approvals",
+          value: String(pendingTicketRows.length),
+          tone: pendingTicketRows.length > 0 ? "warning" : "positive",
+          change: `${policyAcceptanceRows.length} policy records`,
         },
       ];
       return {
@@ -1760,6 +1951,14 @@ export const databaseRepository = {
             service: "Wallet reconciliation",
             status: "attention",
             detail: "Processor balance feed required",
+          },
+          {
+            service: "Event safeguards",
+            status: pendingTicketRows.length > 0 ? "attention" : "configured",
+            detail:
+              pendingTicketRows.length > 0
+                ? `${pendingTicketRows.length} paid tickets await host approval`
+                : `${policyAcceptanceRows.length} exact policy acceptances recorded`,
           },
           {
             service: "Messaging",

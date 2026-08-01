@@ -6,7 +6,7 @@
     "version": "1.0.0",
     "platforms": ["ios", "android"],
     "orientation": "portrait",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
@@ -19,7 +19,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#070b0d"
+        "backgroundColor": "#F7F3EA"
       },
       "package": "com.duna.player",
       "permissions": ["ACCESS_COARSE_LOCATION"]
@@ -36,7 +36,7 @@
           "image": "./assets/splash.png",
           "imageWidth": 220,
           "resizeMode": "contain",
-          "backgroundColor": "#070b0d"
+          "backgroundColor": "#F7F3EA"
         }
       ]
     ],

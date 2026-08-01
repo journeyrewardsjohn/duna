@@ -61,13 +61,20 @@ import {
   scoreStateSchema,
   stripeOnboardingResultSchema,
   scoreEventSchema,
+  teamClaimSummarySchema,
+  ticketApprovalResultSchema,
+  ticketApprovalSummarySchema,
   ticketScanResultSchema,
   tournamentScheduleSchema,
   venueSummarySchema,
 } from "./contracts";
 import {
+  approveTicketOrder,
+  claimTeamEntry,
   CheckoutError,
   getEventCheckoutStatus,
+  loadPendingTicketApprovals,
+  loadTeamClaim,
   startEventCheckout,
 } from "./checkout";
 import {
@@ -114,6 +121,7 @@ import {
 import {
   activateCourt,
   createCourt,
+  createEventDraft,
   createProgramSession,
   createRatePlan,
   createVenue,
@@ -208,6 +216,222 @@ const courtWindowSchema = timeRangeSchema.extend({
   courtId: z.string().min(1),
   divisionIds: z.array(z.string().min(1)).min(1),
 });
+
+const eventDraftDivisionSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    description: z.string().trim().max(1_000).optional(),
+    minimumTeams: z.number().int().min(1).max(512),
+    maximumTeams: z.number().int().min(1).max(512),
+    teamFormat: z.enum([
+      "solo",
+      "doubles",
+      "three-person",
+      "four-person",
+      "six-person",
+    ]),
+    surface: z.enum(["sand", "grass", "water", "indoor-sand"]),
+    gender: z.enum(["mens", "womens", "coed", "open"]),
+    priceBasis: z.enum(["per-person", "per-team"]),
+    priceMinor: z.number().int().min(0).max(100_000_000),
+    ratingEnabled: z.boolean(),
+    ratingMinimum: z.number().min(0).max(10).optional(),
+    ratingMaximum: z.number().min(0).max(10).optional(),
+    ageEnabled: z.boolean(),
+    ageMinimum: z.number().int().min(0).max(120).optional(),
+    ageMaximum: z.number().int().min(1).max(120).optional(),
+    tournamentFormat: z.enum([
+      "kob-qob",
+      "single-elimination",
+      "double-elimination-true",
+      "double-elimination-crossover",
+    ]),
+    poolPlay: z.object({
+      enabled: z.boolean(),
+      teamsPerPool: z.number().int().min(2).max(64),
+      format: z.enum(["full", "olympic-crossover"]),
+      teamsAdvancing: z.number().int().min(1).max(64),
+    }),
+    seeding: z.enum([
+      "first-come",
+      "sand-rating-score",
+      "sand-rating-best-8",
+      "sand-rating-ttm",
+      "manual",
+    ]),
+  })
+  .superRefine((division, context) => {
+    if (division.maximumTeams < division.minimumTeams) {
+      context.addIssue({
+        code: "custom",
+        path: ["maximumTeams"],
+        message: "Maximum teams must be at least the minimum.",
+      });
+    }
+    if (
+      division.ratingEnabled &&
+      (division.ratingMinimum === undefined ||
+        division.ratingMaximum === undefined ||
+        division.ratingMaximum < division.ratingMinimum)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["ratingMaximum"],
+        message: "Complete a valid rating range.",
+      });
+    }
+    if (
+      division.ageEnabled &&
+      (division.ageMinimum === undefined ||
+        division.ageMaximum === undefined ||
+        division.ageMaximum < division.ageMinimum)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["ageMaximum"],
+        message: "Complete a valid age range.",
+      });
+    }
+    if (
+      division.poolPlay.enabled &&
+      division.poolPlay.teamsAdvancing > division.poolPlay.teamsPerPool
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["poolPlay", "teamsAdvancing"],
+        message: "Advancing teams cannot exceed teams per pool.",
+      });
+    }
+  });
+
+const eventDraftTicketSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    description: z.string().trim().max(1_000).optional(),
+    priceMinor: z.number().int().min(0).max(100_000_000),
+    quantity: z.number().int().min(1).max(1_000_000).optional(),
+    waitlistEnabled: z.boolean(),
+    approvalRequired: z.boolean(),
+    availableOnline: z.boolean(),
+    availableInPerson: z.boolean(),
+  })
+  .refine(
+    (ticket) => ticket.availableOnline || ticket.availableInPerson,
+    "Choose at least one ticket channel.",
+  );
+
+const eventDraftFeatureSchema = z.object({
+  id: z.string().min(1).max(80),
+  kind: z.enum(["guest", "activity", "sponsor"]),
+  title: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(500).optional(),
+  personId: z.string().uuid().optional(),
+  personHandle: z.string().max(80).optional(),
+  personInitials: z.string().max(8).optional(),
+  imageUrl: z.string().max(2_000).optional(),
+});
+
+const eventDraftPolicySchema = z.object({
+  id: z.string().min(1).max(80),
+  kind: z.enum(["policy", "waiver"]),
+  title: z.string().trim().min(1).max(120),
+  markdown: z.string().trim().min(1).max(50_000),
+  required: z.boolean(),
+  requireFullScroll: z.boolean(),
+});
+
+const leagueRecurrenceInputSchema = z.object({
+  interval: z.enum(["weekly", "biweekly"]),
+  days: z
+    .array(
+      z.object({
+        day: z.enum([
+          "monday",
+          "tuesday",
+          "wednesday",
+          "thursday",
+          "friday",
+          "saturday",
+          "sunday",
+        ]),
+        startsAt: z.string().regex(/^\d{2}:\d{2}$/),
+        endsAt: z.string().regex(/^\d{2}:\d{2}$/),
+      }),
+    )
+    .min(1)
+    .max(7),
+  substitutesAllowed: z.boolean(),
+  substituteApprovalRequired: z.boolean(),
+  teamAssignment: z.enum(["signup", "rating-balanced", "manual"]),
+});
+
+const createEventDraftInputSchema = z
+  .object({
+    title: z.string().trim().min(3).max(140),
+    shortSummary: z.string().trim().max(180).optional(),
+    description: z.string().trim().max(10_000).optional(),
+    kind: z.enum(["tournament", "league"]),
+    media: z
+      .array(
+        z.object({
+          id: z.string().min(1).max(80),
+          kind: z.enum(["image", "video"]),
+          url: z.string().min(1).max(2_000),
+          alt: z.string().max(240).optional(),
+          posterUrl: z.string().max(2_000).optional(),
+        }),
+      )
+      .max(12),
+    location: z.object({
+      mode: z.enum(["venue", "address", "online"]),
+      venueId: z.string().uuid().optional(),
+      venueName: z.string().trim().min(1).max(160),
+      address: z.string().trim().max(500).optional(),
+      onlineUrl: z.string().url().max(2_000).optional(),
+      courtIds: z.array(z.string().uuid()).max(64),
+      courtNames: z.array(z.string().trim().min(1).max(80)).max(64),
+    }),
+    timezone: z.string().trim().min(1).max(64),
+    localStartsAt: z.string().min(16).max(16),
+    localEndsAt: z.string().min(16).max(16),
+    divisions: z.array(eventDraftDivisionSchema).min(1).max(64),
+    tickets: z.array(eventDraftTicketSchema).max(64),
+    features: z.array(eventDraftFeatureSchema).max(64),
+    policies: z.array(eventDraftPolicySchema).max(32),
+    recurrence: leagueRecurrenceInputSchema.optional(),
+    confirmedPrice: z.literal(true),
+    idempotencyKey: z.string().uuid(),
+  })
+  .superRefine((event, context) => {
+    if (event.location.mode === "venue" && !event.location.venueId) {
+      context.addIssue({
+        code: "custom",
+        path: ["location", "venueId"],
+        message: "Choose a connected venue.",
+      });
+    }
+    if (event.location.mode === "address" && !event.location.address) {
+      context.addIssue({
+        code: "custom",
+        path: ["location", "address"],
+        message: "Add the event address.",
+      });
+    }
+    if (event.location.mode === "online" && !event.location.onlineUrl) {
+      context.addIssue({
+        code: "custom",
+        path: ["location", "onlineUrl"],
+        message: "Add the online event URL.",
+      });
+    }
+    if (event.kind === "league" && !event.recurrence) {
+      context.addIssue({
+        code: "custom",
+        path: ["recurrence"],
+        message: "Add the league schedule.",
+      });
+    }
+  });
 
 async function runIdempotentMutation<T extends object>(input: {
   readonly key: string;
@@ -1176,7 +1400,38 @@ const playerRouter = router({
       z.object({
         sessionId: z.string().uuid(),
         divisionId: z.string().uuid().optional(),
+        ticketTypeId: z.string().uuid().optional(),
+        ticketQuantity: z.number().int().min(1).max(10).optional(),
+        teamPaymentMode: z.enum(["self", "team"]).optional(),
+        teamRoster: z
+          .array(
+            z
+              .object({
+                personId: z.string().uuid().optional(),
+                inviteTarget: z.string().trim().min(3).max(320).optional(),
+                displayName: z.string().trim().min(1).max(120).optional(),
+              })
+              .refine(
+                (member) =>
+                  Boolean(
+                    member.personId ||
+                    member.inviteTarget ||
+                    member.displayName,
+                  ),
+                "Each team member needs a Duna player or invite.",
+              ),
+          )
+          .max(5)
+          .optional(),
         subjectPersonId: z.string().uuid().optional(),
+        acceptedPolicyIds: z
+          .array(z.string().trim().min(1).max(128))
+          .max(64)
+          .default([]),
+        readPolicyIds: z
+          .array(z.string().trim().min(1).max(128))
+          .max(64)
+          .default([]),
         isDunaPlus: z.boolean(),
         successUrl: z.url(),
         cancelUrl: z.url(),
@@ -1196,7 +1451,13 @@ const playerRouter = router({
               actor: ctx.actor!,
               sessionId: input.sessionId,
               divisionId: input.divisionId,
+              ticketTypeId: input.ticketTypeId,
+              ticketQuantity: input.ticketQuantity,
+              teamPaymentMode: input.teamPaymentMode,
+              teamRoster: input.teamRoster,
               subjectPersonId: input.subjectPersonId,
+              acceptedPolicyIds: input.acceptedPolicyIds,
+              readPolicyIds: input.readPolicyIds,
               isDunaPlus: input.isDunaPlus,
               successUrl: input.successUrl,
               cancelUrl: input.cancelUrl,
@@ -1224,6 +1485,57 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
+  teamClaim: protectedProcedure
+    .input(z.object({ claimToken: z.string().uuid() }))
+    .output(teamClaimSummarySchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadTeamClaim({
+          actor: ctx.actor!,
+          claimToken: input.claimToken,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  claimTeamEntry: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "team-entry-claim",
+        capacity: 8,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        claimToken: z.string().uuid(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(teamClaimSummarySchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.claimTeamEntry",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await claimTeamEntry({
+              actor: ctx.actor!,
+              claimToken: input.claimToken,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   submitForm: protectedProcedure
     .use(
       rateLimitMiddleware({
@@ -1834,6 +2146,30 @@ const operatorRouter = router({
         },
       }),
     ),
+  createEventDraft: organizationProcedure("sessions:write")
+    .input(createEventDraftInputSchema)
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createEventDraft",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createEventDraft({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   publishSession: organizationProcedure("sessions:write")
     .input(
       z.object({
@@ -1935,6 +2271,53 @@ const operatorRouter = router({
               actor: ctx.actor!,
               refreshUrl: input.refreshUrl,
               returnUrl: input.returnUrl,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  pendingTicketApprovals: organizationProcedure("payments:write")
+    .output(z.array(ticketApprovalSummarySchema).readonly())
+    .query(({ ctx }) =>
+      loadPendingTicketApprovals({
+        actor: ctx.actor!,
+      }),
+    ),
+  approveTicketOrder: organizationProcedure("payments:write")
+    .use(
+      rateLimitMiddleware({
+        id: "ticket-approval",
+        capacity: 120,
+        refillPerMinute: 60,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z.object({
+        orderId: z.string().uuid(),
+        ticketTypeId: z.string().uuid(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(ticketApprovalResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.approveTicketOrder",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await approveTicketOrder({
+              actor: ctx.actor!,
+              orderId: input.orderId,
+              ticketTypeId: input.ticketTypeId,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,

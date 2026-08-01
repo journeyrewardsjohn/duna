@@ -1,4 +1,5 @@
 import { Badge, DunaMark } from "@duna/ui";
+import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { Bell, ChevronDown, Search, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -60,6 +61,7 @@ export function AdminShell({
             <kbd>⌘ K</kbd>
           </label>
           <div>
+            <ThemeToggle />
             <Badge tone="positive">All systems operational</Badge>
             <button aria-label="Notifications" className="icon-button">
               <Bell aria-hidden size={18} />

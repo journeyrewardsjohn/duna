@@ -19,6 +19,7 @@ if (!key.startsWith("sk_test_")) {
 
 const stripe = new Stripe(key, {
   appInfo: { name: "Duna bootstrap", version: "0.1.0" },
+  apiVersion: "2026-07-29.dahlia",
   maxNetworkRetries: 3,
 });
 

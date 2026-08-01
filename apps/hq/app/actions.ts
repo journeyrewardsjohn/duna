@@ -3,11 +3,13 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getServerCaller } from "@/lib/api";
+import { createEventMediaUpload } from "@/lib/media-storage";
 
 export interface OperatorActionState {
   readonly status: "idle" | "success" | "error";
   readonly message: string;
   readonly onboardingUrl?: string;
+  readonly entityId?: string;
 }
 
 function field(formData: FormData, name: string): string {
@@ -54,8 +56,9 @@ function result(
   status: OperatorActionState["status"],
   message: string,
   onboardingUrl?: string,
+  entityId?: string,
 ): OperatorActionState {
-  return { status, message, onboardingUrl };
+  return { status, message, onboardingUrl, entityId };
 }
 
 function errorState(error: unknown): OperatorActionState {
@@ -70,9 +73,81 @@ function revalidateOperator() {
   revalidatePath("/calendar");
   revalidatePath("/programs");
   revalidatePath("/events");
+  revalidatePath("/leagues");
   revalidatePath("/payments");
   revalidatePath("/messages");
   revalidatePath("/settings");
+}
+
+type ServerCaller = Awaited<ReturnType<typeof getServerCaller>>;
+type CreateEventDraftPayload = Parameters<
+  ServerCaller["operator"]["createEventDraft"]
+>[0];
+
+export async function createEventMediaUploadAction(input: {
+  readonly fileName: string;
+  readonly contentType: string;
+  readonly size: number;
+}) {
+  const caller = await getServerCaller();
+  const dashboard = await caller.operator.dashboard();
+  return createEventMediaUpload({
+    organizationId: dashboard.organization.id,
+    fileName: input.fileName.slice(0, 180),
+    contentType: input.contentType,
+    size: input.size,
+  });
+}
+
+export async function createEventDraftAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const serialized = field(formData, "eventDraft");
+    if (!serialized) throw new Error("The event draft is empty.");
+    const parsed = JSON.parse(serialized) as Omit<
+      CreateEventDraftPayload,
+      "confirmedPrice" | "idempotencyKey"
+    >;
+    const caller = await getServerCaller();
+    const created = await caller.operator.createEventDraft({
+      ...parsed,
+      confirmedPrice: confirmed(formData, "confirmedPrice"),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Event draft saved. Money and publication remain gated.",
+      undefined,
+      created.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function approveTicketOrderAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    const approved = await caller.operator.approveTicketOrder({
+      orderId: field(formData, "orderId"),
+      ticketTypeId: field(formData, "ticketTypeId"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      `${approved.quantity} ticket${approved.quantity === 1 ? "" : "s"} approved and ready to scan.`,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
 }
 
 export async function createRatePlanAction(

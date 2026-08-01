@@ -76,11 +76,117 @@ export const eventKindSchema = z.enum([
 export const eventDivisionSummarySchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
+  description: z.string().optional(),
   discipline: z.enum(["beach-2s", "beach-4s", "beach-6s", "grass", "indoor"]),
   ratingBasis: z.string(),
   price: moneySchema,
   spotsRemaining: z.number().int().nonnegative(),
   capacity: z.number().int().positive(),
+  minimumTeams: z.number().int().positive().optional(),
+  maximumTeams: z.number().int().positive().optional(),
+  teamFormat: z
+    .enum(["solo", "doubles", "three-person", "four-person", "six-person"])
+    .optional(),
+  teamSize: z.number().int().min(1).max(6).optional(),
+  surface: z.enum(["sand", "grass", "water", "indoor-sand"]).optional(),
+  gender: z.enum(["mens", "womens", "coed", "open"]).optional(),
+  priceBasis: z.enum(["per-person", "per-team"]).optional(),
+  ratingMinimum: z.number().optional(),
+  ratingMaximum: z.number().optional(),
+  ageMinimum: z.number().int().nonnegative().optional(),
+  ageMaximum: z.number().int().positive().optional(),
+  tournamentFormat: z
+    .enum([
+      "kob-qob",
+      "single-elimination",
+      "double-elimination-true",
+      "double-elimination-crossover",
+    ])
+    .optional(),
+  poolPlay: z
+    .object({
+      enabled: z.boolean(),
+      teamsPerPool: z.number().int().min(2),
+      format: z.enum(["full", "olympic-crossover"]),
+      teamsAdvancing: z.number().int().positive(),
+    })
+    .optional(),
+  seeding: z
+    .enum([
+      "first-come",
+      "sand-rating-score",
+      "sand-rating-best-8",
+      "sand-rating-ttm",
+      "manual",
+    ])
+    .optional(),
+});
+export const eventTicketSummarySchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  description: z.string().optional(),
+  price: moneySchema,
+  quantity: z.number().int().positive().optional(),
+  remaining: z.number().int().nonnegative().optional(),
+  waitlistEnabled: z.boolean(),
+  approvalRequired: z.boolean(),
+  availableOnline: z.boolean(),
+  availableInPerson: z.boolean(),
+});
+export const eventMediaSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["image", "video"]),
+  url: z.string(),
+  alt: z.string().optional(),
+  posterUrl: z.string().optional(),
+});
+export const eventLocationSchema = z.object({
+  mode: z.enum(["venue", "address", "online"]),
+  venueName: z.string(),
+  address: z.string().optional(),
+  onlineUrl: z.string().optional(),
+  courtNames: z.array(z.string()).readonly().optional(),
+});
+export const eventFeatureSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["guest", "activity", "sponsor"]),
+  title: z.string(),
+  description: z.string().optional(),
+  personId: z.string().optional(),
+  personHandle: z.string().optional(),
+  personInitials: z.string().optional(),
+  imageUrl: z.string().optional(),
+});
+export const eventPolicySchema = z.object({
+  id: z.string(),
+  kind: z.enum(["policy", "waiver"]),
+  title: z.string(),
+  markdown: z.string(),
+  required: z.boolean(),
+  requireFullScroll: z.boolean(),
+});
+export const leagueRecurrenceSchema = z.object({
+  interval: z.enum(["weekly", "biweekly"]),
+  days: z
+    .array(
+      z.object({
+        day: z.enum([
+          "monday",
+          "tuesday",
+          "wednesday",
+          "thursday",
+          "friday",
+          "saturday",
+          "sunday",
+        ]),
+        startsAt: z.string(),
+        endsAt: z.string(),
+      }),
+    )
+    .readonly(),
+  substitutesAllowed: z.boolean(),
+  substituteApprovalRequired: z.boolean(),
+  teamAssignment: z.enum(["signup", "rating-balanced", "manual"]),
 });
 export const eventSummarySchema = z.object({
   id: z.string(),
@@ -89,6 +195,7 @@ export const eventSummarySchema = z.object({
   kind: eventKindSchema,
   organizationName: z.string(),
   venueName: z.string(),
+  shortSummary: z.string().optional(),
   description: z.string().optional(),
   format: z.string().optional(),
   recordMatches: z.boolean().optional(),
@@ -100,6 +207,12 @@ export const eventSummarySchema = z.object({
   capacity: z.number().int().positive(),
   ratingRange: z.tuple([z.number(), z.number()]).readonly().optional(),
   divisions: z.array(eventDivisionSummarySchema).readonly().optional(),
+  tickets: z.array(eventTicketSummarySchema).readonly().optional(),
+  media: z.array(eventMediaSchema).readonly().optional(),
+  location: eventLocationSchema.optional(),
+  features: z.array(eventFeatureSchema).readonly().optional(),
+  policies: z.array(eventPolicySchema).readonly().optional(),
+  recurrence: leagueRecurrenceSchema.optional(),
   live: z.boolean().optional(),
   imageUrl: z.string().optional(),
   tags: z.array(z.string()).readonly(),
@@ -479,7 +592,14 @@ export const operatorScorableMatchSchema = z.object({
 
 export const operatorMutationResultSchema = z.object({
   id: z.string().uuid(),
-  entity: z.enum(["rate-plan", "venue", "court", "session", "message-draft"]),
+  entity: z.enum([
+    "rate-plan",
+    "venue",
+    "court",
+    "session",
+    "event",
+    "message-draft",
+  ]),
   status: z.string(),
 });
 
@@ -489,10 +609,32 @@ export const stripeOnboardingResultSchema = z.object({
   chargesEnabled: z.boolean(),
 });
 
+export const ticketApprovalSummarySchema = z.object({
+  orderId: z.string().uuid(),
+  ticketTypeId: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  eventTitle: z.string(),
+  ticketName: z.string(),
+  buyerName: z.string(),
+  quantity: z.number().int().positive(),
+  totalMinor: z.number().int().nonnegative(),
+  currency: currencySchema,
+  purchasedAt: z.iso.datetime(),
+});
+
+export const ticketApprovalResultSchema = z.object({
+  orderId: z.string().uuid(),
+  ticketTypeId: z.string().uuid(),
+  quantity: z.number().int().positive(),
+  status: z.literal("issued"),
+});
+
 export type OperatorWorkspace = z.infer<typeof operatorWorkspaceSchema>;
 export type OperatorMutationResult = z.infer<
   typeof operatorMutationResultSchema
 >;
+export type TicketApprovalSummary = z.infer<typeof ticketApprovalSummarySchema>;
+export type TicketApprovalResult = z.infer<typeof ticketApprovalResultSchema>;
 export type StripeOnboardingResult = z.infer<
   typeof stripeOnboardingResultSchema
 >;
@@ -905,6 +1047,8 @@ export const eventCheckoutResultSchema = z.object({
   orderId: z.string().uuid().optional(),
   registrationId: z.string().uuid().optional(),
   registrationStatus: z.enum(["confirmed", "waitlisted", "pending"]).optional(),
+  fulfillmentStatus: z.enum(["confirmed", "pending-approval"]).optional(),
+  teamClaimToken: z.string().min(16).max(128).optional(),
   checkoutSessionId: z.string().optional(),
   checkoutUrl: z.url().optional(),
   expiresAt: z.iso.datetime().optional(),
@@ -938,7 +1082,30 @@ export const eventCheckoutStatusSchema = z.object({
       "checked-in",
     ])
     .optional(),
+  fulfillmentStatus: z.enum(["confirmed", "pending-approval"]).optional(),
   complete: z.boolean(),
+});
+
+export const teamClaimSummarySchema = z.object({
+  eventTitle: z.string(),
+  eventSlug: z.string(),
+  divisionName: z.string(),
+  captainName: z.string(),
+  expectedTeamSize: z.number().int().min(2).max(6),
+  claimedPlayers: z.number().int().min(1).max(6),
+  paymentMode: z.enum(["self", "team"]),
+  status: z.enum(["assembling", "ready", "confirmed", "cancelled", "expired"]),
+  expiresAt: z.iso.datetime(),
+  alreadyClaimed: z.boolean(),
+  paymentRequired: z.boolean(),
+  roster: z
+    .array(
+      z.object({
+        displayName: z.string(),
+        status: z.enum(["captain", "selected", "invited", "claimed"]),
+      }),
+    )
+    .readonly(),
 });
 
 export const featureFlagSummarySchema = z.object({

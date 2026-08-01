@@ -83,14 +83,124 @@ export type EventKind =
   | "court-rental"
   | "pickup";
 
+export type EventTeamFormat =
+  "solo" | "doubles" | "three-person" | "four-person" | "six-person";
+
+export type EventSurface = "sand" | "grass" | "water" | "indoor-sand";
+
+export type EventGender = "mens" | "womens" | "coed" | "open";
+
+export type TournamentFormat =
+  | "kob-qob"
+  | "single-elimination"
+  | "double-elimination-true"
+  | "double-elimination-crossover";
+
+export type EventSeedingMethod =
+  | "first-come"
+  | "sand-rating-score"
+  | "sand-rating-best-8"
+  | "sand-rating-ttm"
+  | "manual";
+
+export interface EventMedia {
+  readonly id: string;
+  readonly kind: "image" | "video";
+  readonly url: string;
+  readonly alt?: string;
+  readonly posterUrl?: string;
+}
+
+export interface EventLocation {
+  readonly mode: "venue" | "address" | "online";
+  readonly venueName: string;
+  readonly address?: string;
+  readonly onlineUrl?: string;
+  readonly courtNames?: readonly string[];
+}
+
+export interface EventFeature {
+  readonly id: string;
+  readonly kind: "guest" | "activity" | "sponsor";
+  readonly title: string;
+  readonly description?: string;
+  readonly personId?: string;
+  readonly personHandle?: string;
+  readonly personInitials?: string;
+  readonly imageUrl?: string;
+}
+
+export interface EventPolicy {
+  readonly id: string;
+  readonly kind: "policy" | "waiver";
+  readonly title: string;
+  readonly markdown: string;
+  readonly required: boolean;
+  readonly requireFullScroll: boolean;
+}
+
+export interface LeagueRecurrence {
+  readonly interval: "weekly" | "biweekly";
+  readonly days: readonly {
+    readonly day:
+      | "monday"
+      | "tuesday"
+      | "wednesday"
+      | "thursday"
+      | "friday"
+      | "saturday"
+      | "sunday";
+    readonly startsAt: string;
+    readonly endsAt: string;
+  }[];
+  readonly substitutesAllowed: boolean;
+  readonly substituteApprovalRequired: boolean;
+  readonly teamAssignment: "signup" | "rating-balanced" | "manual";
+}
+
+export interface EventPoolPlay {
+  readonly enabled: boolean;
+  readonly teamsPerPool: number;
+  readonly format: "full" | "olympic-crossover";
+  readonly teamsAdvancing: number;
+}
+
 export interface EventDivisionSummary {
   readonly id: string;
   readonly name: string;
+  readonly description?: string;
   readonly discipline: Discipline;
   readonly ratingBasis: string;
   readonly price: Money;
   readonly spotsRemaining: number;
   readonly capacity: number;
+  readonly minimumTeams?: number;
+  readonly maximumTeams?: number;
+  readonly teamFormat?: EventTeamFormat;
+  readonly teamSize?: number;
+  readonly surface?: EventSurface;
+  readonly gender?: EventGender;
+  readonly priceBasis?: "per-person" | "per-team";
+  readonly ratingMinimum?: number;
+  readonly ratingMaximum?: number;
+  readonly ageMinimum?: number;
+  readonly ageMaximum?: number;
+  readonly tournamentFormat?: TournamentFormat;
+  readonly poolPlay?: EventPoolPlay;
+  readonly seeding?: EventSeedingMethod;
+}
+
+export interface EventTicketSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string;
+  readonly price: Money;
+  readonly quantity?: number;
+  readonly remaining?: number;
+  readonly waitlistEnabled: boolean;
+  readonly approvalRequired: boolean;
+  readonly availableOnline: boolean;
+  readonly availableInPerson: boolean;
 }
 
 export interface EventSummary {
@@ -100,6 +210,7 @@ export interface EventSummary {
   readonly kind: EventKind;
   readonly organizationName: string;
   readonly venueName: string;
+  readonly shortSummary?: string;
   readonly description?: string;
   readonly format?: string;
   readonly recordMatches?: boolean;
@@ -111,6 +222,12 @@ export interface EventSummary {
   readonly capacity: number;
   readonly ratingRange?: readonly [number, number];
   readonly divisions?: readonly EventDivisionSummary[];
+  readonly tickets?: readonly EventTicketSummary[];
+  readonly media?: readonly EventMedia[];
+  readonly location?: EventLocation;
+  readonly features?: readonly EventFeature[];
+  readonly policies?: readonly EventPolicy[];
+  readonly recurrence?: LeagueRecurrence;
   readonly live?: boolean;
   readonly imageUrl?: string;
   readonly tags: readonly string[];

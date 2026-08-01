@@ -134,6 +134,34 @@
       "when": 1785450099771,
       "tag": "0018_smiling_professor_monster",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785539711321,
+      "tag": "0019_confused_snowbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785540960969,
+      "tag": "0020_uneven_hellion",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1785542323178,
+      "tag": "0021_greedy_jasper_sitwell",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785542342590,
+      "tag": "0022_normal_anthem",
+      "breakpoints": true
     }
   ]
 }

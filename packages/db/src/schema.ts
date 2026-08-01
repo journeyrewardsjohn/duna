@@ -685,12 +685,44 @@ export const sessions = pgTable(
   ],
 );
 
+export const eventBlueprints = pgTable("event_blueprints", {
+  sessionId: uuid("session_id")
+    .primaryKey()
+    .references(() => sessions.id, { onDelete: "cascade" }),
+  shortSummary: text("short_summary"),
+  description: text("description"),
+  media: jsonb("media")
+    .notNull()
+    .$type<readonly Record<string, unknown>[]>()
+    .default([]),
+  location: jsonb("location")
+    .notNull()
+    .$type<Record<string, unknown>>()
+    .default({}),
+  features: jsonb("features")
+    .notNull()
+    .$type<readonly Record<string, unknown>[]>()
+    .default([]),
+  policies: jsonb("policies")
+    .notNull()
+    .$type<readonly Record<string, unknown>[]>()
+    .default([]),
+  recurrence: jsonb("recurrence").$type<Record<string, unknown>>(),
+  registrationSettings: jsonb("registration_settings")
+    .notNull()
+    .$type<Record<string, unknown>>()
+    .default({}),
+  createdAt,
+  updatedAt,
+});
+
 export const divisions = pgTable("divisions", {
   id: uuid("id").primaryKey().defaultRandom(),
   sessionId: uuid("session_id")
     .notNull()
     .references(() => sessions.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  description: text("description"),
   discipline: disciplineEnum("discipline").notNull(),
   eligibilityRuleId: uuid("eligibility_rule_id").references(
     () => eligibilityRules.id,
@@ -699,6 +731,16 @@ export const divisions = pgTable("divisions", {
     .notNull()
     .default("anti-sandbag"),
   capacity: integer("capacity").notNull(),
+  minimumTeams: integer("minimum_teams").notNull().default(2),
+  maximumTeams: integer("maximum_teams"),
+  teamSize: integer("team_size").notNull().default(2),
+  priceBasis: varchar("price_basis", { length: 24 })
+    .notNull()
+    .default("per-team"),
+  settings: jsonb("settings")
+    .notNull()
+    .$type<Record<string, unknown>>()
+    .default({}),
   entryFeeMinor: integer("entry_fee_minor").notNull(),
   currency: varchar("currency", { length: 3 }).notNull(),
   createdAt,
@@ -1233,6 +1275,57 @@ export const orderItems = pgTable("order_items", {
   createdAt,
 });
 
+export const eventPolicyAcceptances = pgTable(
+  "event_policy_acceptances",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    acceptanceKey: varchar("acceptance_key", { length: 128 })
+      .notNull()
+      .unique(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    policyId: varchar("policy_id", { length: 128 }).notNull(),
+    policyKind: varchar("policy_kind", { length: 16 }).notNull(),
+    policyTitle: text("policy_title").notNull(),
+    documentText: text("document_text").notNull(),
+    documentTextHash: varchar("document_text_hash", { length: 128 }).notNull(),
+    subjectPersonId: uuid("subject_person_id")
+      .notNull()
+      .references(() => people.id),
+    acceptedByPersonId: uuid("accepted_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    orderId: uuid("order_id").references(() => orders.id),
+    registrationId: uuid("registration_id").references(() => registrations.id),
+    fullScrollConfirmed: boolean("full_scroll_confirmed")
+      .notNull()
+      .default(false),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    acceptedAt: timestamp("accepted_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    createdAt,
+  },
+  (table) => [
+    index("event_policy_acceptance_session_idx").on(
+      table.sessionId,
+      table.subjectPersonId,
+      table.acceptedAt,
+    ),
+    index("event_policy_acceptance_order_idx").on(table.orderId),
+    check(
+      "event_policy_acceptance_kind",
+      sql`${table.policyKind} IN ('policy', 'waiver')`,
+    ),
+    check(
+      "event_policy_acceptance_reference",
+      sql`${table.orderId} IS NOT NULL OR ${table.registrationId} IS NOT NULL`,
+    ),
+  ],
+);
+
 export const appliedFees = pgTable("applied_fees", {
   id: uuid("id").primaryKey().defaultRandom(),
   orderId: uuid("order_id")
@@ -1492,6 +1585,7 @@ export const ticketTypes = pgTable(
       .references(() => sessions.id, { onDelete: "cascade" }),
     groupId: uuid("group_id").references(() => ticketGroups.id),
     name: text("name").notNull(),
+    description: text("description"),
     priceMinor: integer("price_minor").notNull(),
     currency: varchar("currency", { length: 3 }).notNull(),
     quantity: integer("quantity"),
@@ -1514,6 +1608,9 @@ export const ticketTypes = pgTable(
       mode: "date",
     }),
     hidden: boolean("hidden").notNull().default(false),
+    availableOnline: boolean("available_online").notNull().default(true),
+    availableInPerson: boolean("available_in_person").notNull().default(false),
+    waitlistEnabled: boolean("waitlist_enabled").notNull().default(false),
     passwordHash: text("password_hash"),
     approvalRequired: boolean("approval_required").notNull().default(false),
     transferability: varchar("transferability", { length: 24 })
@@ -1645,28 +1742,59 @@ export const waitlistEntries = pgTable(
   ],
 );
 
-export const teamEntries = pgTable("team_entries", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  registrationId: uuid("registration_id")
-    .notNull()
-    .references(() => registrations.id),
-  payingPersonId: uuid("paying_person_id")
-    .notNull()
-    .references(() => people.id),
-  partnerPersonId: uuid("partner_person_id").references(() => people.id),
-  claimToken: varchar("claim_token", { length: 128 }).notNull().unique(),
-  claimExpiresAt: timestamp("claim_expires_at", {
-    withTimezone: true,
-    mode: "date",
-  }).notNull(),
-  claimedAt: timestamp("claimed_at", { withTimezone: true, mode: "date" }),
-  rosterLockedAt: timestamp("roster_locked_at", {
-    withTimezone: true,
-    mode: "date",
-  }),
-  createdAt,
-  updatedAt,
-});
+export const teamEntries = pgTable(
+  "team_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    registrationId: uuid("registration_id")
+      .notNull()
+      .references(() => registrations.id),
+    payingPersonId: uuid("paying_person_id")
+      .notNull()
+      .references(() => people.id),
+    partnerPersonId: uuid("partner_person_id").references(() => people.id),
+    expectedTeamSize: integer("expected_team_size").notNull().default(2),
+    paymentMode: varchar("payment_mode", { length: 16 })
+      .notNull()
+      .default("self"),
+    roster: jsonb("roster")
+      .notNull()
+      .$type<
+        readonly {
+          readonly personId?: string;
+          readonly inviteTarget?: string;
+          readonly displayName?: string;
+          readonly status: "selected" | "invited" | "claimed";
+        }[]
+      >()
+      .default([]),
+    status: varchar("status", { length: 24 }).notNull().default("assembling"),
+    claimToken: varchar("claim_token", { length: 128 }).notNull().unique(),
+    claimExpiresAt: timestamp("claim_expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true, mode: "date" }),
+    rosterLockedAt: timestamp("roster_locked_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("team_entry_registration_unique").on(table.registrationId),
+    check("team_entry_expected_size", sql`${table.expectedTeamSize} >= 2`),
+    check(
+      "team_entry_payment_mode",
+      sql`${table.paymentMode} IN ('self', 'team')`,
+    ),
+    check(
+      "team_entry_status",
+      sql`${table.status} IN ('assembling', 'ready', 'confirmed', 'cancelled', 'expired')`,
+    ),
+  ],
+);
 
 export const promoCodes = pgTable(
   "promo_codes",

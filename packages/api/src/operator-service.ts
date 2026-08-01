@@ -2,6 +2,8 @@ import {
   auditLog,
   consents,
   courts,
+  divisions,
+  eventBlueprints,
   eventTypes,
   getDatabase,
   guardianships,
@@ -13,6 +15,7 @@ import {
   ratePlans,
   registrations,
   sessions,
+  ticketTypes,
   venues,
 } from "@duna/db";
 import { demoOrganization } from "@duna/core/demo";
@@ -30,6 +33,122 @@ import { createConnectOnboarding } from "./payments";
 
 type CurrencyCode = OperatorWorkspace["organization"]["currency"];
 type EventKind = OperatorWorkspace["sessions"][number]["kind"];
+
+export interface EventDraftDivisionInput {
+  readonly name: string;
+  readonly description?: string;
+  readonly minimumTeams: number;
+  readonly maximumTeams: number;
+  readonly teamFormat:
+    "solo" | "doubles" | "three-person" | "four-person" | "six-person";
+  readonly surface: "sand" | "grass" | "water" | "indoor-sand";
+  readonly gender: "mens" | "womens" | "coed" | "open";
+  readonly priceBasis: "per-person" | "per-team";
+  readonly priceMinor: number;
+  readonly ratingEnabled: boolean;
+  readonly ratingMinimum?: number;
+  readonly ratingMaximum?: number;
+  readonly ageEnabled: boolean;
+  readonly ageMinimum?: number;
+  readonly ageMaximum?: number;
+  readonly tournamentFormat:
+    | "kob-qob"
+    | "single-elimination"
+    | "double-elimination-true"
+    | "double-elimination-crossover";
+  readonly poolPlay: {
+    readonly enabled: boolean;
+    readonly teamsPerPool: number;
+    readonly format: "full" | "olympic-crossover";
+    readonly teamsAdvancing: number;
+  };
+  readonly seeding:
+    | "first-come"
+    | "sand-rating-score"
+    | "sand-rating-best-8"
+    | "sand-rating-ttm"
+    | "manual";
+}
+
+export interface EventDraftTicketInput {
+  readonly name: string;
+  readonly description?: string;
+  readonly priceMinor: number;
+  readonly quantity?: number;
+  readonly waitlistEnabled: boolean;
+  readonly approvalRequired: boolean;
+  readonly availableOnline: boolean;
+  readonly availableInPerson: boolean;
+}
+
+export interface CreateEventDraftInput {
+  readonly actor: ApiActor;
+  readonly title: string;
+  readonly shortSummary?: string;
+  readonly description?: string;
+  readonly kind: "tournament" | "league";
+  readonly media: readonly {
+    readonly id: string;
+    readonly kind: "image" | "video";
+    readonly url: string;
+    readonly alt?: string;
+    readonly posterUrl?: string;
+  }[];
+  readonly location: {
+    readonly mode: "venue" | "address" | "online";
+    readonly venueId?: string;
+    readonly venueName: string;
+    readonly address?: string;
+    readonly onlineUrl?: string;
+    readonly courtIds: readonly string[];
+    readonly courtNames: readonly string[];
+  };
+  readonly timezone: string;
+  readonly localStartsAt: string;
+  readonly localEndsAt: string;
+  readonly divisions: readonly EventDraftDivisionInput[];
+  readonly tickets: readonly EventDraftTicketInput[];
+  readonly features: readonly {
+    readonly id: string;
+    readonly kind: "guest" | "activity" | "sponsor";
+    readonly title: string;
+    readonly description?: string;
+    readonly personId?: string;
+    readonly personHandle?: string;
+    readonly personInitials?: string;
+    readonly imageUrl?: string;
+  }[];
+  readonly policies: readonly {
+    readonly id: string;
+    readonly kind: "policy" | "waiver";
+    readonly title: string;
+    readonly markdown: string;
+    readonly required: boolean;
+    readonly requireFullScroll: boolean;
+  }[];
+  readonly recurrence?: {
+    readonly interval: "weekly" | "biweekly";
+    readonly days: readonly {
+      readonly day:
+        | "monday"
+        | "tuesday"
+        | "wednesday"
+        | "thursday"
+        | "friday"
+        | "saturday"
+        | "sunday";
+      readonly startsAt: string;
+      readonly endsAt: string;
+    }[];
+    readonly substitutesAllowed: boolean;
+    readonly substituteApprovalRequired: boolean;
+    readonly teamAssignment: "signup" | "rating-balanced" | "manual";
+  };
+  readonly confirmedPrice: boolean;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}
 
 export class OperatorServiceError extends Error {
   constructor(
@@ -100,6 +219,32 @@ function currency(value: string): CurrencyCode {
     "INVALID_CONFIGURATION",
     `Unsupported organization currency: ${value}.`,
   );
+}
+
+function teamSize(format: EventDraftDivisionInput["teamFormat"]): number {
+  switch (format) {
+    case "solo":
+      return 1;
+    case "doubles":
+      return 2;
+    case "three-person":
+      return 3;
+    case "four-person":
+      return 4;
+    case "six-person":
+      return 6;
+  }
+}
+
+function divisionDiscipline(
+  division: EventDraftDivisionInput,
+): "beach-2s" | "beach-4s" | "beach-6s" | "grass" | "indoor" {
+  if (division.surface === "grass") return "grass";
+  if (division.surface === "indoor-sand") return "indoor";
+  const size = teamSize(division.teamFormat);
+  if (size >= 6) return "beach-6s";
+  if (size >= 3) return "beach-4s";
+  return "beach-2s";
 }
 
 function timeZone(value: string): string {
@@ -963,6 +1108,326 @@ export async function createProgramSession(input: {
   return { id: sessionId, entity: "session", status: "draft" };
 }
 
+export async function createEventDraft(
+  input: CreateEventDraftInput,
+): Promise<OperatorMutationResult> {
+  requireDatabase();
+  if (!input.confirmedPrice) {
+    throw new OperatorServiceError(
+      "PRICE_CONFIRMATION_REQUIRED",
+      "Confirm the exact division and ticket prices before saving the draft.",
+    );
+  }
+  if (input.divisions.length === 0) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Add at least one division before saving this event.",
+    );
+  }
+  const divisionNames = new Set<string>();
+  for (const division of input.divisions) {
+    const normalizedName = division.name.trim().toLowerCase();
+    if (!normalizedName || divisionNames.has(normalizedName)) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        "Every division needs a unique name.",
+      );
+    }
+    divisionNames.add(normalizedName);
+    if (
+      division.minimumTeams < 1 ||
+      division.maximumTeams < division.minimumTeams
+    ) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        `${division.name}: maximum teams must be at least the minimum.`,
+      );
+    }
+    if (
+      division.ratingEnabled &&
+      (division.ratingMinimum === undefined ||
+        division.ratingMaximum === undefined ||
+        division.ratingMaximum < division.ratingMinimum)
+    ) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        `${division.name}: complete a valid rating range or turn it off.`,
+      );
+    }
+    if (
+      division.ageEnabled &&
+      (division.ageMinimum === undefined ||
+        division.ageMaximum === undefined ||
+        division.ageMaximum < division.ageMinimum)
+    ) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        `${division.name}: complete a valid age range or turn it off.`,
+      );
+    }
+    if (
+      division.poolPlay.enabled &&
+      (division.poolPlay.teamsAdvancing > division.poolPlay.teamsPerPool ||
+        division.poolPlay.teamsPerPool > division.maximumTeams)
+    ) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        `${division.name}: pool progression cannot exceed the pool or division size.`,
+      );
+    }
+  }
+  for (const ticket of input.tickets) {
+    if (!ticket.availableOnline && !ticket.availableInPerson) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        `${ticket.name}: choose online, in-person, or both.`,
+      );
+    }
+  }
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const organization = await organizationRow(organizationId);
+  const venue = input.location.venueId
+    ? await database.query.venues.findFirst({
+        where: eq(venues.id, input.location.venueId),
+      })
+    : undefined;
+  if (input.location.mode === "venue" && !venue) {
+    throw new OperatorServiceError(
+      "RESOURCE_NOT_FOUND",
+      "Choose a connected venue for this event.",
+    );
+  }
+  if (venue && venue.organizationId !== organizationId) {
+    throw new OperatorServiceError(
+      "RESOURCE_WRONG_ORGANIZATION",
+      "The selected venue belongs to another organization.",
+    );
+  }
+  if (input.location.courtIds.length > 0) {
+    if (!venue) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        "Connected courts require a connected venue.",
+      );
+    }
+    const selectedCourts = await database
+      .select({ id: courts.id, venueId: courts.venueId })
+      .from(courts)
+      .where(inArray(courts.id, [...input.location.courtIds]));
+    if (
+      selectedCourts.length !== input.location.courtIds.length ||
+      selectedCourts.some((court) => court.venueId !== venue.id)
+    ) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        "Every selected court must belong to the selected venue.",
+      );
+    }
+  }
+  if (
+    input.location.mode === "online" &&
+    !input.location.onlineUrl?.startsWith("https://")
+  ) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Online events require a secure HTTPS location.",
+    );
+  }
+  if (input.location.mode === "address" && !input.location.address?.trim()) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Add the event address.",
+    );
+  }
+  const eventTimezone = timeZone(venue?.timezone ?? input.timezone);
+  const startsAt = venueWallTimeToUtc(input.localStartsAt, eventTimezone);
+  const endsAt = venueWallTimeToUtc(input.localEndsAt, eventTimezone);
+  if (
+    endsAt.getTime() <= startsAt.getTime() ||
+    startsAt.getTime() <= input.now.getTime()
+  ) {
+    throw new OperatorServiceError(
+      "INVALID_SCHEDULE",
+      "The event must start in the future and end after it begins.",
+    );
+  }
+  const capacity = input.divisions.reduce(
+    (total, division) =>
+      total + division.maximumTeams * teamSize(division.teamFormat),
+    0,
+  );
+  const minimumCapacity = input.divisions.reduce(
+    (total, division) =>
+      total + division.minimumTeams * teamSize(division.teamFormat),
+    0,
+  );
+  const offeredPrices = [
+    ...input.divisions.map((division) => division.priceMinor),
+    ...input.tickets.map((ticket) => ticket.priceMinor),
+  ];
+  const startingPrice = offeredPrices.length ? Math.min(...offeredPrices) : 0;
+  const storedCurrency = currency(organization.currency);
+  const programId = crypto.randomUUID();
+  const eventTypeId = crypto.randomUUID();
+  const sessionId = crypto.randomUUID();
+  const slug = await uniqueSessionSlug(input.title);
+  const values = {
+    title: input.title.trim(),
+    shortSummary: input.shortSummary?.trim() || undefined,
+    description: input.description?.trim() || undefined,
+    kind: input.kind,
+    startsAt: startsAt.toISOString(),
+    endsAt: endsAt.toISOString(),
+    timezone: eventTimezone,
+    venueId: venue?.id,
+    courtId: input.location.courtIds[0],
+    capacity,
+    minimumCapacity,
+    priceMinor: startingPrice,
+    currency: storedCurrency,
+  };
+  await database.batch([
+    database.insert(programs).values({
+      id: programId,
+      organizationId,
+      slug: `${slug}-program`.slice(0, 80),
+      title: values.title,
+      description: values.description,
+      kind: values.kind,
+      status: "draft",
+    }),
+    database.insert(eventTypes).values({
+      id: eventTypeId,
+      organizationId,
+      title: values.title,
+      kind: values.kind,
+      durationMinutes: Math.round(
+        (endsAt.getTime() - startsAt.getTime()) / 60_000,
+      ),
+      capacity: values.capacity,
+      minimumCapacity: values.minimumCapacity,
+      priceMinor: values.priceMinor,
+      currency: values.currency,
+      cancellationPolicy: {
+        refundBeforeHours: 48,
+        creditBeforeHours: 12,
+        lateCancellation: "non-refundable",
+      },
+    }),
+    database.insert(sessions).values({
+      id: sessionId,
+      programId,
+      eventTypeId,
+      venueId: values.venueId,
+      courtId: values.courtId,
+      createdByPersonId: input.actor.personId,
+      title: values.title,
+      slug,
+      startsAt,
+      endsAt,
+      timezone: values.timezone,
+      status: "draft",
+      capacity: values.capacity,
+      minimumCapacity: values.minimumCapacity,
+    }),
+    database.insert(eventBlueprints).values({
+      sessionId,
+      shortSummary: values.shortSummary,
+      description: values.description,
+      media: input.media,
+      location: {
+        mode: input.location.mode,
+        venueName: input.location.venueName.trim(),
+        address: input.location.address?.trim() || undefined,
+        onlineUrl: input.location.onlineUrl?.trim() || undefined,
+        courtNames: input.location.courtNames,
+      },
+      features: input.features,
+      policies: input.policies,
+      recurrence: input.recurrence,
+      registrationSettings: {
+        teamConfirmationRequired: true,
+        allowPlayerSearch: true,
+        allowInviteLink: true,
+        allowEmailInvite: true,
+        allowSmsInvite: true,
+        paymentResponsibility: ["self", "entire-team"],
+      },
+    }),
+    ...input.divisions.map((division) =>
+      database.insert(divisions).values({
+        id: crypto.randomUUID(),
+        sessionId,
+        name: division.name.trim(),
+        description: division.description?.trim() || undefined,
+        discipline: divisionDiscipline(division),
+        ratingBasis: division.seeding,
+        capacity: division.maximumTeams * teamSize(division.teamFormat),
+        minimumTeams: division.minimumTeams,
+        maximumTeams: division.maximumTeams,
+        teamSize: teamSize(division.teamFormat),
+        priceBasis: division.priceBasis,
+        settings: {
+          teamFormat: division.teamFormat,
+          surface: division.surface,
+          gender: division.gender,
+          ratingMinimum: division.ratingEnabled
+            ? division.ratingMinimum
+            : undefined,
+          ratingMaximum: division.ratingEnabled
+            ? division.ratingMaximum
+            : undefined,
+          ageMinimum: division.ageEnabled ? division.ageMinimum : undefined,
+          ageMaximum: division.ageEnabled ? division.ageMaximum : undefined,
+          tournamentFormat: division.tournamentFormat,
+          poolPlay: division.poolPlay,
+          seeding: division.seeding,
+        },
+        entryFeeMinor: division.priceMinor,
+        currency: values.currency,
+      }),
+    ),
+    ...input.tickets.map((ticket) =>
+      database.insert(ticketTypes).values({
+        id: crypto.randomUUID(),
+        sessionId,
+        name: ticket.name.trim(),
+        description: ticket.description?.trim() || undefined,
+        priceMinor: ticket.priceMinor,
+        currency: values.currency,
+        quantity: ticket.quantity,
+        availableOnline: ticket.availableOnline,
+        availableInPerson: ticket.availableInPerson,
+        waitlistEnabled: ticket.waitlistEnabled,
+        approvalRequired: ticket.approvalRequired,
+      }),
+    ),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "event.draft_created",
+      entityType: "session",
+      entityId: sessionId,
+      afterHash: stableHash({
+        ...values,
+        divisions: input.divisions,
+        tickets: input.tickets,
+        features: input.features,
+        policies: input.policies,
+        recurrence: input.recurrence,
+      }),
+      reason:
+        "Operator confirmed event pricing and created a private event draft.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return { id: sessionId, entity: "event", status: "draft" };
+}
+
 export async function publishSession(input: {
   readonly actor: ApiActor;
   readonly sessionId: string;
@@ -988,11 +1453,13 @@ export async function publishSession(input: {
         eventOrganizationId: eventTypes.organizationId,
         priceMinor: eventTypes.priceMinor,
         venueStatus: venues.status,
+        blueprintLocation: eventBlueprints.location,
       })
       .from(sessions)
       .leftJoin(programs, eq(sessions.programId, programs.id))
       .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
       .leftJoin(venues, eq(sessions.venueId, venues.id))
+      .leftJoin(eventBlueprints, eq(sessions.id, eventBlueprints.sessionId))
       .where(eq(sessions.id, input.sessionId))
       .limit(1)
   )[0];
@@ -1011,10 +1478,19 @@ export async function publishSession(input: {
       "Session belongs to another organization.",
     );
   }
-  if (!row.session.eventTypeId || row.venueStatus !== "active") {
+  const locationMode =
+    row.blueprintLocation && typeof row.blueprintLocation.mode === "string"
+      ? row.blueprintLocation.mode
+      : undefined;
+  const customLocationReady =
+    locationMode === "address" || locationMode === "online";
+  if (
+    !row.session.eventTypeId ||
+    (row.venueStatus !== "active" && !customLocationReady)
+  ) {
     throw new OperatorServiceError(
       "INVALID_CONFIGURATION",
-      "Attach a configured event type and active venue before publishing.",
+      "Attach an active venue, event address, or online location before publishing.",
     );
   }
   if (row.session.startsAt.getTime() <= input.now.getTime()) {
@@ -1286,10 +1762,22 @@ export async function startStripeOnboarding(input: {
   requireDatabase();
   const organizationId = requireOrganization(input.actor);
   const organization = await organizationRow(organizationId);
+  const operator = await getDatabase().query.people.findFirst({
+    where: eq(people.id, input.actor.personId),
+  });
+  if (!operator?.email) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Add an email address to your Duna profile before starting Stripe onboarding.",
+    );
+  }
   const onboarding = await createConnectOnboarding({
     accountId: organization.stripeAccountId ?? undefined,
     personOrOrganizationId: organization.id,
     partyType: organization.plan === "coach" ? "coach" : "club",
+    contactEmail: operator.email,
+    displayName: organization.name,
+    countryCode: organization.countryCode,
     refreshUrl: validateCallbackUrl(input.refreshUrl),
     returnUrl: validateCallbackUrl(input.returnUrl),
   });
@@ -1299,7 +1787,7 @@ export async function startStripeOnboarding(input: {
       .update(organizations)
       .set({
         stripeAccountId: onboarding.accountId,
-        stripeAccountType: "express",
+        stripeAccountType: "v2-recipient",
         updatedAt: input.now,
       })
       .where(eq(organizations.id, organizationId)),

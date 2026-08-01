@@ -1,4 +1,22 @@
-export const colors = {
+export const lightColors = {
+  ink: "#101828",
+  depth: "#ffffff",
+  navy: "#f1ece2",
+  navyLift: "#e8eef7",
+  bone: "#101828",
+  boneMuted: "#667085",
+  sand: "#d7bd91",
+  sandLight: "#f3eadb",
+  aqua: "#235a96",
+  aquaDeep: "#173a67",
+  flare: "#de6842",
+  positive: "#2f7d57",
+  warning: "#a86f18",
+  danger: "#b84444",
+  white: "#ffffff",
+} as const;
+
+export const darkColors = {
   ink: "#070b0d",
   depth: "#0c1418",
   navy: "#10242b",
@@ -15,6 +33,8 @@ export const colors = {
   danger: "#f27878",
   white: "#ffffff",
 } as const;
+
+export const colors = lightColors;
 
 export const spacing = {
   1: 4,
@@ -51,6 +71,8 @@ export const motion = {
 
 export const nativeTokens = {
   colors,
+  lightColors,
+  darkColors,
   spacing,
   radii,
   typography,

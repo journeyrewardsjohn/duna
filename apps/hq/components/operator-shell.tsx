@@ -1,5 +1,6 @@
 import type { OrganizationSummary } from "@duna/core";
 import { Badge, DunaMark } from "@duna/ui";
+import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { Bell, ChevronDown, Search, Sparkles } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -72,6 +73,7 @@ export function OperatorShell({
             <kbd>⌘ K</kbd>
           </label>
           <div>
+            <ThemeToggle />
             <Link className="hq-ai-button" href="/ai">
               <Sparkles aria-hidden size={16} /> Ask Duna
             </Link>

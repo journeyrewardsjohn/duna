@@ -330,9 +330,14 @@ export default async function HomePage() {
             Coaches start free. Clubs pay simple software plus the processing
             rate they already expect.
           </p>
-          <a href={process.env.NEXT_PUBLIC_HQ_URL ?? "http://localhost:3001"}>
-            Explore Duna for operators <ArrowRight aria-hidden size={17} />
-          </a>
+          <div className="operator-callout__actions">
+            <Link href="/create">
+              Create an event <ArrowRight aria-hidden size={17} />
+            </Link>
+            <a href={process.env.NEXT_PUBLIC_HQ_URL ?? "http://localhost:3001"}>
+              Explore Duna HQ
+            </a>
+          </div>
         </div>
       </section>
 

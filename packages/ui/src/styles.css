@@ -1,4 +1,47 @@
 :root {
+  color-scheme: light;
+  --color-ink: #101828;
+  --color-depth: #fff;
+  --color-navy: #f1ece2;
+  --color-navy-lift: #e8eef7;
+  --color-bone: #101828;
+  --color-bone-muted: #667085;
+  --color-sand: #d7bd91;
+  --color-sand-light: #f3eadb;
+  --color-aqua: #235a96;
+  --color-aqua-deep: #173a67;
+  --color-flare: #de6842;
+  --color-positive: #2f7d57;
+  --color-warning: #a86f18;
+  --color-danger: #b84444;
+  --color-white: #fff;
+  --color-canvas: #f8f7f3;
+  --color-canvas-soft: #f1f3f6;
+  --color-surface: #fff;
+  --color-surface-raised: #fff;
+  --color-line: #e4e1da;
+  --color-line-strong: #d6d1c7;
+  --overlay-rgb: 23 58 103;
+  --text-rgb: 16 24 40;
+  --muted-rgb: 102 112 133;
+  --ink-rgb: 16 24 40;
+  --depth-rgb: 255 255 255;
+  --accent-rgb: 35 90 150;
+  --warning-rgb: 168 111 24;
+  --positive-rgb: 47 125 87;
+  --font-display: "Archivo", "Arial Black", sans-serif;
+  --font-body: "Instrument Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", monospace;
+  --shadow-small: 0 10px 30px rgb(16 24 40 / 7%);
+  --shadow-large: 0 28px 80px rgb(16 24 40 / 12%);
+  --radius-small: 12px;
+  --radius-medium: 18px;
+  --radius-large: 26px;
+  --focus: 0 0 0 3px rgb(35 90 150 / 22%);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
   --color-ink: #070b0d;
   --color-depth: #0c1418;
   --color-navy: #10242b;
@@ -13,16 +56,23 @@
   --color-positive: #85d49b;
   --color-warning: #f7c86b;
   --color-danger: #f27878;
-  --color-white: #fff;
-  --font-display: "Archivo", "Arial Black", sans-serif;
-  --font-body: "Instrument Sans", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "SFMono-Regular", monospace;
+  --color-canvas: #070b0d;
+  --color-canvas-soft: #0c1418;
+  --color-surface: #0c1418;
+  --color-surface-raised: #10242b;
+  --color-line: rgb(var(--overlay-rgb) / 8%);
+  --color-line-strong: rgb(var(--overlay-rgb) / 13%);
+  --overlay-rgb: 255 255 255;
+  --text-rgb: 243 239 229;
+  --muted-rgb: 216 210 196;
+  --ink-rgb: 7 11 13;
+  --depth-rgb: 12 20 24;
+  --accent-rgb: 99 227 219;
+  --warning-rgb: 247 200 107;
+  --positive-rgb: 133 212 155;
   --shadow-small: 0 12px 28px rgb(0 0 0 / 16%);
   --shadow-large: 0 28px 90px rgb(0 0 0 / 28%);
-  --radius-small: 10px;
-  --radius-medium: 16px;
-  --radius-large: 24px;
-  --focus: 0 0 0 3px rgb(99 227 219 / 38%);
+  --focus: 0 0 0 3px rgb(var(--accent-rgb) / 38%);
 }
 
 .duna-mark {
@@ -82,31 +132,31 @@
 
 .duna-button--primary {
   background: var(--color-aqua);
-  color: var(--color-ink);
+  color: var(--color-white);
 }
 
 .duna-button--primary:hover {
-  background: #85ece5;
+  background: var(--color-aqua-deep);
 }
 
 .duna-button--secondary {
-  background: transparent;
-  border-color: rgb(243 239 229 / 28%);
-  color: var(--color-bone);
+  background: var(--color-surface);
+  border-color: var(--color-line-strong);
+  color: var(--color-ink);
 }
 
 .duna-button--secondary:hover {
-  border-color: rgb(243 239 229 / 55%);
+  border-color: var(--color-aqua);
 }
 
 .duna-button--ghost {
-  background: rgb(255 255 255 / 6%);
+  background: rgb(var(--overlay-rgb) / 6%);
   color: inherit;
 }
 
 .duna-button--danger {
   background: var(--color-danger);
-  color: var(--color-ink);
+  color: var(--color-white);
 }
 
 .duna-button--small {
@@ -121,8 +171,8 @@
 
 .duna-badge {
   align-items: center;
-  background: rgb(255 255 255 / 7%);
-  border: 1px solid rgb(255 255 255 / 10%);
+  background: rgb(var(--overlay-rgb) / 7%);
+  border: 1px solid rgb(var(--overlay-rgb) / 10%);
   border-radius: 999px;
   color: var(--color-bone-muted);
   display: inline-flex;
@@ -143,14 +193,14 @@
 }
 
 .duna-badge--positive {
-  background: rgb(133 212 155 / 13%);
-  border-color: rgb(133 212 155 / 35%);
+  background: rgb(var(--positive-rgb) / 13%);
+  border-color: rgb(var(--positive-rgb) / 35%);
   color: var(--color-positive);
 }
 
 .duna-badge--warning {
-  background: rgb(247 200 107 / 12%);
-  border-color: rgb(247 200 107 / 35%);
+  background: rgb(var(--warning-rgb) / 12%);
+  border-color: rgb(var(--warning-rgb) / 35%);
   color: var(--color-warning);
 }
 
@@ -161,9 +211,10 @@
 }
 
 .duna-surface {
-  background: rgb(255 255 255 / 4%);
-  border: 1px solid rgb(255 255 255 / 9%);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-large);
+  box-shadow: var(--shadow-small);
 }
 
 .duna-surface--interactive {
@@ -173,8 +224,43 @@
 }
 
 .duna-surface--interactive:hover {
-  border-color: rgb(99 227 219 / 28%);
+  border-color: rgb(var(--accent-rgb) / 28%);
   transform: translateY(-2px);
+}
+
+.theme-toggle {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  color: var(--color-ink);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 42px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+  width: 42px;
+}
+
+.theme-toggle:hover {
+  border-color: var(--color-aqua);
+  transform: translateY(-1px);
+}
+
+.theme-toggle:focus-visible {
+  box-shadow: var(--focus);
+  outline: none;
+}
+
+.theme-toggle svg {
+  height: 18px;
+  width: 18px;
 }
 
 .duna-numeric {

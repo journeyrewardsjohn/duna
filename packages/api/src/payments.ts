@@ -13,6 +13,7 @@ export function getStripeClient(): Stripe {
   }
   stripeClient ??= new Stripe(secretKey, {
     appInfo: { name: "Duna", version: "0.1.0" },
+    apiVersion: "2026-07-29.dahlia",
     maxNetworkRetries: 2,
   });
   return stripeClient;
@@ -258,6 +259,9 @@ export async function createConnectOnboarding(input: {
   readonly accountId?: string;
   readonly personOrOrganizationId: string;
   readonly partyType: "club" | "coach" | "player";
+  readonly contactEmail: string;
+  readonly displayName: string;
+  readonly countryCode: string;
   readonly refreshUrl: string;
   readonly returnUrl: string;
 }): Promise<{ readonly accountId: string; readonly url: string }> {
@@ -265,23 +269,49 @@ export async function createConnectOnboarding(input: {
   const accountId =
     input.accountId ??
     (
-      await stripe.accounts.create({
-        type: "express",
+      await stripe.v2.core.accounts.create({
+        contact_email: input.contactEmail,
+        display_name: input.displayName,
+        dashboard: "express",
+        defaults: {
+          responsibilities: {
+            fees_collector: "application",
+            losses_collector: "application",
+          },
+        },
+        identity: {
+          country: input.countryCode.toLowerCase(),
+        },
+        configuration: {
+          recipient: {
+            capabilities: {
+              stripe_balance: {
+                stripe_transfers: { requested: true },
+              },
+            },
+          },
+        },
+        include: ["configuration.recipient", "identity", "requirements"],
         metadata: {
           dunaEntityId: input.personOrOrganizationId,
           dunaPartyType: input.partyType,
         },
-        capabilities: {
-          card_payments: { requested: input.partyType !== "player" },
-          transfers: { requested: true },
-        },
       })
     ).id;
-  const link = await stripe.accountLinks.create({
+  const link = await stripe.v2.core.accountLinks.create({
     account: accountId,
-    refresh_url: input.refreshUrl,
-    return_url: input.returnUrl,
-    type: "account_onboarding",
+    use_case: {
+      type: "account_onboarding",
+      account_onboarding: {
+        configurations: ["recipient"],
+        refresh_url: input.refreshUrl,
+        return_url: input.returnUrl,
+        collection_options: {
+          fields: "eventually_due",
+          future_requirements: "include",
+        },
+      },
+    },
   });
   return { accountId, url: link.url };
 }

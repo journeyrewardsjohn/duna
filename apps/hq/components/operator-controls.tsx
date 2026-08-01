@@ -4,6 +4,7 @@ import type { OperatorWorkspace } from "@duna/api";
 import { formatMoney } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
+  ArrowRight,
   ArrowUpRight,
   Building2,
   CalendarPlus,
@@ -18,6 +19,7 @@ import {
   Sparkles,
   Waves,
 } from "lucide-react";
+import Link from "next/link";
 import { useActionState, type ReactNode } from "react";
 import {
   activateCourtAction,
@@ -1024,20 +1026,35 @@ export function OperatorControls({
       </>
     );
   }
-  if (
-    module === "calendar" ||
-    module === "programs" ||
-    module === "events" ||
-    module === "leagues"
-  ) {
-    const defaultKind =
-      module === "leagues"
-        ? "league"
-        : module === "events"
-          ? "tournament"
-          : module === "calendar"
-            ? "open-play"
-            : "clinic";
+  if (module === "events" || module === "leagues") {
+    const kind = module === "leagues" ? "league" : "tournament";
+    return (
+      <>
+        <SessionDrafts workspace={workspace} />
+        <section className="hq-card guided-create-card">
+          <span className="guided-create-card__icon">
+            <Sparkles aria-hidden size={24} />
+          </span>
+          <div>
+            <span className="hq-eyebrow">Guided create</span>
+            <h2>Build a {kind} without fighting a wall of settings.</h2>
+            <p>
+              Start with the type, then Duna reveals the right divisions,
+              schedule, tickets, guests, policies, and Money gate.
+            </p>
+          </div>
+          <Link
+            className="hq-button hq-button--primary"
+            href={`/events/create?type=${kind}`}
+          >
+            Open guided flow <ArrowRight aria-hidden size={16} />
+          </Link>
+        </section>
+      </>
+    );
+  }
+  if (module === "calendar" || module === "programs") {
+    const defaultKind = module === "calendar" ? "open-play" : "clinic";
     return (
       <>
         <SessionDrafts workspace={workspace} />

@@ -1,4 +1,8 @@
-import type { OperatorDashboard, OperatorWorkspace } from "@duna/api";
+import type {
+  OperatorDashboard,
+  OperatorWorkspace,
+  TicketApprovalSummary,
+} from "@duna/api";
 import { formatMoney, formatVenueTime, type PersonSummary } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
@@ -17,6 +21,7 @@ import {
 import Link from "next/link";
 import type { OperatorModule } from "./navigation";
 import { OperatorControls } from "./operator-controls";
+import { TicketApprovalQueue } from "./ticket-approval-queue";
 
 const moduleCopy: Record<
   Exclude<OperatorModule, "overview">,
@@ -385,11 +390,13 @@ export function ModulePanel({
   dashboard,
   members,
   workspace,
+  ticketApprovals,
 }: {
   readonly module: OperatorModule;
   readonly dashboard: OperatorDashboard;
   readonly members: readonly PersonSummary[];
   readonly workspace: OperatorWorkspace;
+  readonly ticketApprovals: readonly TicketApprovalSummary[];
 }) {
   if (module === "overview") return null;
   const copy = moduleCopy[module];
@@ -406,6 +413,12 @@ export function ModulePanel({
               ? Bot
               : Trophy;
   const Icon = icon;
+  const createHref =
+    module === "events"
+      ? "/events/create?type=tournament"
+      : module === "leagues"
+        ? "/events/create?type=league"
+        : "#operator-create";
 
   return (
     <main className="hq-page module-page">
@@ -415,7 +428,7 @@ export function ModulePanel({
           <h1>{copy.title}</h1>
           <p>{copy.description}</p>
         </div>
-        <Link className="hq-button hq-button--primary" href="#operator-create">
+        <Link className="hq-button hq-button--primary" href={createHref}>
           <Plus size={17} /> Create
         </Link>
       </header>
@@ -432,6 +445,12 @@ export function ModulePanel({
           Overview <ArrowRight size={15} />
         </Link>
       </section>
+
+      {(module === "events" ||
+        module === "leagues" ||
+        module === "payments") && (
+        <TicketApprovalQueue approvals={ticketApprovals} />
+      )}
 
       {module === "calendar" ? (
         <CalendarPanel dashboard={dashboard} />

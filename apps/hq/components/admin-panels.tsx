@@ -9,6 +9,7 @@ import {
   Activity,
   ArrowRight,
   Building2,
+  CalendarDays,
   Check,
   CircleAlert,
   Flag,
@@ -16,6 +17,7 @@ import {
   RefreshCw,
   ScrollText,
   ShieldCheck,
+  TicketCheck,
   UsersRound,
   WalletCards,
 } from "lucide-react";
@@ -29,6 +31,8 @@ const adminMetricIcons = [
   Building2,
   UsersRound,
   ShieldCheck,
+  CalendarDays,
+  TicketCheck,
 ] as const;
 
 const copy: Record<

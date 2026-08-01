@@ -10,6 +10,7 @@ import "@fontsource/jetbrains-mono/600.css";
 import "@duna/ui/styles.css";
 import "./globals.css";
 
+import { themeBootScript } from "@duna/ui/theme";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
@@ -22,8 +23,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  colorScheme: "dark",
-  themeColor: "#070b0d",
+  colorScheme: "light dark",
+  themeColor: "#f8f7f3",
   width: "device-width",
   initialScale: 1,
 };
@@ -32,7 +33,10 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en">
+    <html data-theme="light" lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+      </head>
       <body>{children}</body>
     </html>
   );

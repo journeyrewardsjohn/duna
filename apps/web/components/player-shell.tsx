@@ -2,6 +2,7 @@
 
 import type { PersonSummary } from "@duna/core";
 import { DunaMark, Numeric } from "@duna/ui";
+import { ThemeToggle } from "@duna/ui/theme-toggle";
 import {
   CalendarDays,
   Compass,
@@ -94,6 +95,7 @@ export function PlayerShell({
             <strong>{player.homeMarket}</strong>
           </div>
           <div className="player-topbar__actions">
+            <ThemeToggle />
             <button aria-label="Messages">
               <MessageCircle aria-hidden size={19} />
             </button>
