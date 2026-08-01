@@ -1,4 +1,5 @@
 import { DunaMark } from "@duna/ui";
+import { isClerkConfigured } from "@duna/api/clerk-environment";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { ArrowUpRight, Menu } from "lucide-react";
 import Link from "next/link";
@@ -27,9 +28,7 @@ export function SiteHeader() {
           >
             Duna HQ <ArrowUpRight aria-hidden size={15} />
           </a>
-          <WebAuthButton
-            configured={Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)}
-          />
+          <WebAuthButton configured={isClerkConfigured()} />
           <button aria-label="Open menu" className="site-header__menu">
             <Menu aria-hidden size={21} />
           </button>

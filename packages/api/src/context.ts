@@ -10,6 +10,10 @@ import {
   people,
 } from "@duna/db";
 import { and, eq } from "drizzle-orm";
+import {
+  isClerkConfigured as hasClerkCredentials,
+  resolveClerkCredentials,
+} from "./clerk-environment";
 
 export type ApiAgeBand = "unknown" | "under-13" | "teen" | "adult";
 
@@ -136,17 +140,17 @@ let clerkClient: ClerkClient | undefined;
 
 function isClerkConfigured(): boolean {
   return Boolean(
-    process.env.CLERK_SECRET_KEY &&
-    (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-      process.env.CLERK_JWT_KEY),
+    hasClerkCredentials() ||
+    (process.env.CLERK_SECRET_KEY && process.env.CLERK_JWT_KEY),
   );
 }
 
 function getClerkClient(): ClerkClient {
   if (!clerkClient) {
+    const credentials = resolveClerkCredentials();
     clerkClient = createClerkClient({
-      secretKey: process.env.CLERK_SECRET_KEY,
-      publishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+      secretKey: credentials?.secretKey ?? process.env.CLERK_SECRET_KEY,
+      publishableKey: credentials?.publishableKey,
       jwtKey: process.env.CLERK_JWT_KEY,
       telemetry: { disabled: true },
     });

@@ -1,7 +1,8 @@
 import { SignUp } from "@clerk/nextjs";
+import { resolveClerkCredentials } from "@duna/api/clerk-environment";
 
 export default function SignUpPage() {
-  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) return null;
+  if (!resolveClerkCredentials()) return null;
   return (
     <main className="auth-page">
       <SignUp path="/sign-up" routing="path" signInUrl="/sign-in" />

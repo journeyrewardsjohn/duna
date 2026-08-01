@@ -1,4 +1,5 @@
 import { ClerkProvider } from "@clerk/nextjs";
+import { resolveClerkCredentials } from "@duna/api/clerk-environment";
 import type { ReactNode } from "react";
 
 export function DunaClerkProvider({
@@ -6,8 +7,11 @@ export function DunaClerkProvider({
 }: {
   readonly children: ReactNode;
 }) {
-  return process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? (
-    <ClerkProvider>{children}</ClerkProvider>
+  const credentials = resolveClerkCredentials();
+  return credentials ? (
+    <ClerkProvider publishableKey={credentials.publishableKey}>
+      {children}
+    </ClerkProvider>
   ) : (
     children
   );

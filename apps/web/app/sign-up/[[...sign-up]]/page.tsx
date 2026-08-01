@@ -1,4 +1,5 @@
 import { SignUp } from "@clerk/nextjs";
+import { resolveClerkCredentials } from "@duna/api/clerk-environment";
 
 export default async function SignUpPage({
   searchParams,
@@ -10,7 +11,7 @@ export default async function SignUpPage({
     query.redirect_url?.startsWith("/") && !query.redirect_url.startsWith("//")
       ? query.redirect_url
       : undefined;
-  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) return null;
+  if (!resolveClerkCredentials()) return null;
   return (
     <main className="auth-page">
       <SignUp

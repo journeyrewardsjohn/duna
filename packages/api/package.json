@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./clerk-environment": "./src/clerk-environment.ts",
     "./context": "./src/context.ts",
     "./payments": "./src/payments.ts",
     "./webhooks": "./src/webhooks.ts"

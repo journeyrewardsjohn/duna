@@ -1,9 +1,10 @@
 import { SignIn } from "@clerk/nextjs";
+import { resolveClerkCredentials } from "@duna/api/clerk-environment";
 import { DunaMark } from "@duna/ui";
 import Link from "next/link";
 
 export default function SignInPage() {
-  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
+  if (!resolveClerkCredentials()) {
     const playerAppUrl =
       process.env.NEXT_PUBLIC_APP_URL ?? "https://duna-web.vercel.app";
     return (

@@ -1,4 +1,5 @@
 import { SignIn } from "@clerk/nextjs";
+import { resolveClerkCredentials } from "@duna/api/clerk-environment";
 import { DunaMark } from "@duna/ui";
 import Link from "next/link";
 
@@ -12,7 +13,7 @@ export default async function SignInPage({
     query.redirect_url?.startsWith("/") && !query.redirect_url.startsWith("//")
       ? query.redirect_url
       : undefined;
-  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
+  if (!resolveClerkCredentials()) {
     return (
       <main className="auth-page">
         <section className="auth-setup-card">

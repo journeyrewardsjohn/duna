@@ -1,4 +1,5 @@
 import type { OrganizationSummary } from "@duna/core";
+import { isClerkConfigured } from "@duna/api/clerk-environment";
 import { Badge, DunaMark } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { Bell, Search, Sparkles } from "lucide-react";
@@ -82,11 +83,7 @@ export function OperatorShell({
               <Bell aria-hidden size={18} />
               <i />
             </button>
-            <AuthControls
-              configured={Boolean(
-                process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
-              )}
-            />
+            <AuthControls configured={isClerkConfigured()} />
           </div>
         </header>
         <div className="hq-content">{children}</div>

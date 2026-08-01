@@ -1,16 +1,24 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
+import { resolveClerkCredentials } from "@duna/api/clerk-environment";
 import { NextResponse } from "next/server";
 
-const authenticatedProxy = clerkMiddleware(async (auth, request) => {
-  const pathname = request.nextUrl.pathname;
-  if (pathname === "/app" || pathname.startsWith("/app/")) {
-    await auth.protect();
-  }
-});
+const clerkCredentials = resolveClerkCredentials();
+const authenticatedProxy = clerkCredentials
+  ? clerkMiddleware(
+      async (auth, request) => {
+        const pathname = request.nextUrl.pathname;
+        if (pathname === "/app" || pathname.startsWith("/app/")) {
+          await auth.protect();
+        }
+      },
+      {
+        publishableKey: clerkCredentials.publishableKey,
+        secretKey: clerkCredentials.secretKey,
+      },
+    )
+  : undefined;
 
-export default process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-  ? authenticatedProxy
-  : () => NextResponse.next();
+export default authenticatedProxy ?? (() => NextResponse.next());
 
 export const config = {
   matcher: [

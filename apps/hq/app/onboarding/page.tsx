@@ -1,4 +1,5 @@
 import { OrganizationList } from "@clerk/nextjs";
+import { resolveClerkCredentials } from "@duna/api/clerk-environment";
 import { DunaMark } from "@duna/ui";
 
 export default function OrganizationOnboardingPage() {
@@ -17,7 +18,7 @@ export default function OrganizationOnboardingPage() {
             secure Duna organization.
           </p>
         </div>
-        {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? (
+        {resolveClerkCredentials() ? (
           <OrganizationList
             afterCreateOrganizationUrl="/"
             afterSelectOrganizationUrl="/"
