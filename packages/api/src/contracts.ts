@@ -37,6 +37,11 @@ export const personSummarySchema = z.object({
   roles: z.array(personRoleSchema).readonly(),
   isMinor: z.boolean().optional(),
   guardianIds: z.array(z.string()).readonly().optional(),
+  avatarUrl: z.string().optional(),
+  profileClaimStatus: z
+    .enum(["claimed", "unclaimed", "claim-pending", "merged"])
+    .optional(),
+  isProfessional: z.boolean().optional(),
 });
 export const organizationSummarySchema = z.object({
   id: z.string(),

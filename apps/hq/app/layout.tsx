@@ -13,6 +13,7 @@ import "./globals.css";
 import { themeBootScript } from "@duna/ui/theme";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { DunaClerkProvider } from "@/components/clerk-provider";
 
 export const metadata: Metadata = {
   title: {
@@ -37,7 +38,9 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <DunaClerkProvider>{children}</DunaClerkProvider>
+      </body>
     </html>
   );
 }

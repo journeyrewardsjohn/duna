@@ -2,6 +2,7 @@ import type {
   AdminOverview as AdminOverviewData,
   FeatureFlagCollection,
   GuardianReviewItem,
+  SandDataOverview,
 } from "@duna/api";
 import type { OrganizationSummary } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
@@ -25,6 +26,12 @@ import Link from "next/link";
 import type { AdminModule } from "./navigation";
 import { FeatureFlagControls } from "./feature-flag-controls";
 import { GuardianReviewCard } from "./guardian-review-card";
+import {
+  PlayerMappingPanel,
+  ProfileMergePanel,
+  RatingsLabPanel,
+  SandDataPanel,
+} from "./sand-admin-controls";
 
 const adminMetricIcons = [
   WalletCards,
@@ -60,6 +67,30 @@ const copy: Record<
     title: "Ratings",
     description:
       "Rated-player coverage and immutable rating-related audit activity.",
+  },
+  "sand-data": {
+    eyebrow: "Source evidence + scraper health",
+    title: "Sand data",
+    description:
+      "VolleyballLife, BVBInfo, FIVB, and world-ranking evidence in one staged pipeline.",
+  },
+  "player-mapping": {
+    eyebrow: "Canonical identity resolution",
+    title: "Player mapping",
+    description:
+      "Resolve source profiles to one Duna identity before matches become rating evidence.",
+  },
+  "ratings-lab": {
+    eyebrow: "Replayable model evaluation",
+    title: "Ratings lab",
+    description:
+      "Measure prediction accuracy and calibration, then version rating parameters safely.",
+  },
+  "profile-merge": {
+    eyebrow: "Duplicate identity repair",
+    title: "Merge profiles",
+    description:
+      "Move unclaimed source identities into a canonical Duna player with a complete audit record.",
   },
   payments: {
     eyebrow: "Platform financial operations",
@@ -362,12 +393,14 @@ export function AdminPanel({
   organizations,
   guardianReviews,
   featureFlags,
+  sandData,
 }: {
   readonly module: AdminModule;
   readonly overview: AdminOverviewData;
   readonly organizations: readonly OrganizationSummary[];
   readonly guardianReviews: readonly GuardianReviewItem[];
   readonly featureFlags: FeatureFlagCollection;
+  readonly sandData?: SandDataOverview;
 }) {
   if (module === "overview") return null;
   const content = copy[module];
@@ -378,13 +411,18 @@ export function AdminPanel({
         ? ShieldCheck
         : module === "ratings"
           ? Activity
-          : module === "payments"
-            ? WalletCards
-            : module === "audit"
-              ? ScrollText
-              : module === "flags"
-                ? Flag
-                : HeartPulse;
+          : module === "sand-data" ||
+              module === "player-mapping" ||
+              module === "ratings-lab" ||
+              module === "profile-merge"
+            ? Activity
+            : module === "payments"
+              ? WalletCards
+              : module === "audit"
+                ? ScrollText
+                : module === "flags"
+                  ? Flag
+                  : HeartPulse;
   const ratedPlayers = overview.metrics.find(
     (metric) => metric.label === "Rated players",
   );
@@ -442,6 +480,14 @@ export function AdminPanel({
           </section>
           <AuditList overview={{ ...overview, audit: filteredAudit }} />
         </div>
+      ) : module === "sand-data" && sandData ? (
+        <SandDataPanel data={sandData} />
+      ) : module === "player-mapping" && sandData ? (
+        <PlayerMappingPanel data={sandData} />
+      ) : module === "ratings-lab" && sandData ? (
+        <RatingsLabPanel data={sandData} />
+      ) : module === "profile-merge" ? (
+        <ProfileMergePanel />
       ) : module === "payments" ? (
         <div className="module-grid module-grid--two">
           <section className="hq-card module-feature-card">

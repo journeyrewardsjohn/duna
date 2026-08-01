@@ -11,6 +11,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@clerk/nextjs": "7.6.3",
     "@duna/api": "workspace:*",
     "@duna/core": "workspace:*",
     "@duna/ui": "workspace:*",

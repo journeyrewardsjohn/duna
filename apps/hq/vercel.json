@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/sand?mode=live",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/sand?mode=index",
+      "schedule": "15 */6 * * *"
+    },
+    {
+      "path": "/api/cron/sand?mode=rankings",
+      "schedule": "10 10 * * *"
+    }
+  ]
+}

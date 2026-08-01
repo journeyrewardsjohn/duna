@@ -12,6 +12,8 @@ export * from "./match-service";
 export * from "./operator-service";
 export * from "./privacy";
 export * from "./risk";
+export * from "./sand-data/service";
+export * from "./sand-data/types";
 export * from "./payments";
 export * from "./rate-limit";
 export * from "./repository-contract";

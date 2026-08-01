@@ -211,6 +211,10 @@ async function loadPeople(
         ],
         isMinor: person.isMinor,
         guardianIds: guardiansByMinor.get(person.id),
+        avatarUrl: person.avatarUrl ?? undefined,
+        profileClaimStatus:
+          person.profileClaimStatus as PersonSummary["profileClaimStatus"],
+        isProfessional: person.isProfessional,
         rating: rating
           ? {
               display: rating.display,

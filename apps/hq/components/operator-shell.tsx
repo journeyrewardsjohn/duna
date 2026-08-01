@@ -1,10 +1,11 @@
 import type { OrganizationSummary } from "@duna/core";
 import { Badge, DunaMark } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
-import { Bell, ChevronDown, Search, Sparkles } from "lucide-react";
+import { Bell, Search, Sparkles } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { operatorModules, type OperatorModule } from "./navigation";
+import { AuthControls } from "./auth-controls";
 
 export function OperatorShell({
   active,
@@ -81,10 +82,11 @@ export function OperatorShell({
               <Bell aria-hidden size={18} />
               <i />
             </button>
-            <button className="user-menu">
-              <span>SR</span>
-              <ChevronDown aria-hidden size={14} />
-            </button>
+            <AuthControls
+              configured={Boolean(
+                process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+              )}
+            />
           </div>
         </header>
         <div className="hq-content">{children}</div>

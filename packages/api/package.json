@@ -24,6 +24,7 @@
     "@duna/pricing": "workspace:*",
     "@duna/rating": "workspace:*",
     "@duna/scheduling": "workspace:*",
+    "@mendable/firecrawl-js": "4.32.0",
     "@trpc/server": "^11.18.0",
     "drizzle-orm": "^0.45.2",
     "jose": "^6.2.5",

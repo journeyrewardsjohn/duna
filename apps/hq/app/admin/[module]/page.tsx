@@ -24,6 +24,12 @@ export default async function AdminModulePage({
   const item = adminModules.find((entry) => entry.slug === module);
   if (!item || module === "overview") notFound();
   const caller = await getServerCaller();
+  const needsSandData = [
+    "sand-data",
+    "player-mapping",
+    "ratings-lab",
+    "profile-merge",
+  ].includes(module);
   const result = await Promise.all([
     caller.admin.overview(),
     caller.admin.organizations(),
@@ -31,13 +37,17 @@ export default async function AdminModulePage({
     module === "flags"
       ? caller.admin.featureFlags()
       : Promise.resolve({ flags: [], canManage: false }),
+    needsSandData ? caller.admin.sandData() : Promise.resolve(undefined),
   ])
-    .then(([overview, organizations, guardianReviews, featureFlags]) => ({
-      overview,
-      organizations,
-      guardianReviews,
-      featureFlags,
-    }))
+    .then(
+      ([overview, organizations, guardianReviews, featureFlags, sandData]) => ({
+        overview,
+        organizations,
+        guardianReviews,
+        featureFlags,
+        sandData,
+      }),
+    )
     .catch((error: unknown) => {
       if (
         error instanceof Error &&
@@ -56,6 +66,7 @@ export default async function AdminModulePage({
         overview={result.overview}
         guardianReviews={result.guardianReviews}
         featureFlags={result.featureFlags}
+        sandData={result.sandData}
       />
     </AdminShell>
   );

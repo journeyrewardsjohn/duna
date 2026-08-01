@@ -44,6 +44,10 @@ export interface PersonSummary {
   readonly roles: readonly PersonRole[];
   readonly isMinor?: boolean;
   readonly guardianIds?: readonly string[];
+  readonly avatarUrl?: string;
+  readonly profileClaimStatus?:
+    "claimed" | "unclaimed" | "claim-pending" | "merged";
+  readonly isProfessional?: boolean;
 }
 
 export interface OrganizationSummary {

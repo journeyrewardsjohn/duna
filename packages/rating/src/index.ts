@@ -58,6 +58,33 @@ export interface RatingConfig {
   readonly repeatOpponentWindowDays: number;
 }
 
+export interface RatingPrediction {
+  readonly expectedTeamA: number;
+  readonly actualTeamA: 0 | 1;
+}
+
+export interface RatingCalibrationBucket {
+  readonly lowerBound: number;
+  readonly upperBound: number;
+  readonly predictions: number;
+  readonly averageExpected: number;
+  readonly observedWinRate: number;
+}
+
+export interface RatingEvaluation {
+  readonly sampleSize: number;
+  readonly accuracy: number;
+  readonly brierScore: number;
+  readonly calibration: readonly RatingCalibrationBucket[];
+}
+
+export interface ExternalRatingPrior {
+  readonly source: "truvolley" | "bvbinfo" | "fivb" | "manual";
+  readonly display: number;
+  readonly confidence: number;
+  readonly evidenceMatches?: number;
+}
+
 export const defaultRatingConfig: RatingConfig = {
   weakLinkAlpha: 0.62,
   baseK: 42,
@@ -386,4 +413,172 @@ export function warmStartFromDiscipline(input: {
     350,
   );
   return createInitialRating({ playerId: input.playerId, mu, phi });
+}
+
+/**
+ * Converts a public 1–8 Sand Rating into the internal mean. External ratings
+ * are always treated as priors; imported match evidence remains authoritative.
+ */
+export function muFromDisplay(display: number): number {
+  if (!Number.isFinite(display)) {
+    throw new Error("display must be finite");
+  }
+  return round(
+    RECREATIONAL_ANCHOR_MU +
+      (clamp(display, DISPLAY_MIN, DISPLAY_MAX) - RECREATIONAL_ANCHOR_DISPLAY) *
+        MU_PER_DISPLAY_POINT,
+  );
+}
+
+/**
+ * Blends a sparse Duna state with a mapped external prior. The influence
+ * decays to zero as verified Duna evidence accumulates.
+ */
+export function blendExternalPrior(input: {
+  readonly state: RatingState;
+  readonly prior: ExternalRatingPrior;
+  readonly sparseThreshold?: number;
+  readonly blendCap?: number;
+}): RatingState {
+  const sparseThreshold = Math.max(1, input.sparseThreshold ?? 12);
+  const blendCap = clamp(input.blendCap ?? 0.45, 0, 0.75);
+  const evidenceDecay = clamp(
+    1 - input.state.ratedMatches / sparseThreshold,
+    0,
+    1,
+  );
+  const priorConfidence = clamp(input.prior.confidence, 0, 1);
+  const evidenceConfidence = clamp(
+    (input.prior.evidenceMatches ?? 0) / sparseThreshold,
+    0.25,
+    1,
+  );
+  const weight =
+    blendCap * evidenceDecay * priorConfidence * evidenceConfidence;
+  if (weight <= 0) return input.state;
+
+  const mu =
+    input.state.mu * (1 - weight) + muFromDisplay(input.prior.display) * weight;
+  const phi = clamp(input.state.phi * (1 - weight * 0.35), 55, 350);
+  return {
+    ...input.state,
+    mu: round(mu),
+    phi: round(phi),
+    display: displayFromMu(mu),
+    confidence: confidenceFromPhi(phi),
+  };
+}
+
+/**
+ * Produces a conservative initial prior for professional imports. World rank
+ * is deliberately not added to the canonical rating; it is a separate badge.
+ */
+export function professionalSeed(input: {
+  readonly playerId: string;
+  readonly source: "bvbinfo" | "fivb";
+  readonly seed?: number;
+  readonly finish?: number;
+}): RatingState {
+  const seedSignal =
+    input.seed && input.seed > 0 ? clamp((65 - input.seed) / 64, 0, 1) : 0.35;
+  const finishSignal =
+    input.finish && input.finish > 0
+      ? clamp((65 - input.finish) / 64, 0, 1)
+      : 0.35;
+  const sourceFloor = input.source === "fivb" ? 6.2 : 5.7;
+  const display = clamp(
+    sourceFloor + seedSignal * 0.45 + finishSignal * 0.55,
+    5.5,
+    7.65,
+  );
+  return createInitialRating({
+    playerId: input.playerId,
+    mu: muFromDisplay(display),
+    phi: 210,
+  });
+}
+
+/**
+ * A display-only signal used alongside a player's Sand Rating. It never
+ * mutates rating state and therefore cannot double-count professional form.
+ */
+export function worldRankingSignal(rank: number): number {
+  if (!Number.isInteger(rank) || rank < 1) {
+    throw new Error("rank must be a positive integer");
+  }
+  return round(700 * Math.exp(-(rank - 1) / 70), 2);
+}
+
+export function evaluatePredictions(
+  predictions: readonly RatingPrediction[],
+  bucketCount = 10,
+): RatingEvaluation {
+  if (!Number.isInteger(bucketCount) || bucketCount < 2 || bucketCount > 20) {
+    throw new Error("bucketCount must be an integer between 2 and 20");
+  }
+  if (predictions.length === 0) {
+    return {
+      sampleSize: 0,
+      accuracy: 0,
+      brierScore: 0,
+      calibration: [],
+    };
+  }
+  const safe = predictions.map((prediction) => ({
+    expectedTeamA: clamp(prediction.expectedTeamA, 0, 1),
+    actualTeamA: prediction.actualTeamA,
+  }));
+  const accuracy =
+    safe.filter(
+      (prediction) =>
+        (prediction.expectedTeamA >= 0.5 ? 1 : 0) === prediction.actualTeamA,
+    ).length / safe.length;
+  const brierScore =
+    safe.reduce(
+      (total, prediction) =>
+        total + (prediction.expectedTeamA - prediction.actualTeamA) ** 2,
+      0,
+    ) / safe.length;
+  const calibration = Array.from({ length: bucketCount }, (_, index) => {
+    const lowerBound = index / bucketCount;
+    const upperBound = (index + 1) / bucketCount;
+    const rows = safe.filter((prediction) => {
+      const bucket = Math.min(
+        bucketCount - 1,
+        Math.floor(prediction.expectedTeamA * bucketCount),
+      );
+      return bucket === index;
+    });
+    return {
+      lowerBound: round(lowerBound, 2),
+      upperBound: round(upperBound, 2),
+      predictions: rows.length,
+      averageExpected:
+        rows.length === 0
+          ? 0
+          : round(
+              rows.reduce(
+                (total, prediction) => total + prediction.expectedTeamA,
+                0,
+              ) / rows.length,
+              4,
+            ),
+      observedWinRate:
+        rows.length === 0
+          ? 0
+          : round(
+              rows.reduce(
+                (total, prediction) => total + prediction.actualTeamA,
+                0,
+              ) / rows.length,
+              4,
+            ),
+    };
+  });
+  return {
+    sampleSize: safe.length,
+    accuracy: round(accuracy, 4),
+    brierScore: round(brierScore, 4),
+    calibration,
+  };
 }

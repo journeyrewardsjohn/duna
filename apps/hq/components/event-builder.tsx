@@ -31,6 +31,7 @@ import {
   type OperatorActionState,
 } from "@/app/actions";
 import { createEventMediaPath } from "@/lib/media-storage";
+import { PlaceSearch } from "./place-search";
 
 type EventKind = "tournament" | "league";
 type LocationMode = "venue" | "address" | "online";
@@ -1252,14 +1253,11 @@ export function EventBuilder({
                           value={customCourts}
                         />
                       </label>
-                      <label className="event-field--full">
-                        <span>Address</span>
-                        <input
-                          onChange={(event) => setAddress(event.target.value)}
-                          placeholder="100 Manhattan Beach Blvd, Manhattan Beach, CA"
-                          value={address}
-                        />
-                      </label>
+                      <PlaceSearch
+                        onAddress={setAddress}
+                        onVenueName={setVenueName}
+                        value={address}
+                      />
                     </>
                   )}
                   {locationMode === "online" && (

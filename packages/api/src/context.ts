@@ -265,20 +265,80 @@ async function resolveClerkActor(input: {
   }
   const database = getDatabase();
   const person = await resolveClerkPerson(input.client, input.clerkUserId);
+  const clerkUser = await input.client.users.getUser(input.clerkUserId);
+  const configuredSuperAdmins = new Set(
+    (process.env.DUNA_SUPER_ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((email: string) => email.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const configuredAdmins = new Set(
+    (process.env.DUNA_ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((email: string) => email.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const email = clerkUser.primaryEmailAddress?.emailAddress.toLowerCase();
+  const metadataRole =
+    typeof clerkUser.privateMetadata.dunaRole === "string"
+      ? clerkUser.privateMetadata.dunaRole
+      : typeof clerkUser.publicMetadata.dunaRole === "string"
+        ? clerkUser.publicMetadata.dunaRole
+        : undefined;
+  const platformRole =
+    metadataRole === "super-admin" ||
+    (email && configuredSuperAdmins.has(email))
+      ? "super-admin"
+      : metadataRole === "admin" || (email && configuredAdmins.has(email))
+        ? "admin"
+        : undefined;
+  if (platformRole) {
+    await database
+      .insert(adminRoles)
+      .values({
+        personId: person.id,
+        role: platformRole,
+        scopes: [],
+        grantedByPersonId: person.id,
+      })
+      .onConflictDoNothing();
+  }
   const organization = input.clerkOrganizationId
     ? await resolveClerkOrganization(input.client, input.clerkOrganizationId)
     : undefined;
 
-  if (
-    organization &&
-    input.clerkOrganizationRole?.replace(/^org:/, "") === "admin"
-  ) {
+  const clerkOrganizationRole =
+    input.clerkOrganizationRole?.replace(/^org:/, "") ?? undefined;
+  const organizationRoleByClerkRole: Readonly<
+    Record<
+      string,
+      | "owner"
+      | "manager"
+      | "coach"
+      | "front-desk"
+      | "scorekeeper"
+      | "accountant"
+    >
+  > = {
+    admin: "owner",
+    owner: "owner",
+    manager: "manager",
+    coach: "coach",
+    member: "coach",
+    "front-desk": "front-desk",
+    scorekeeper: "scorekeeper",
+    accountant: "accountant",
+  };
+  const organizationRole = clerkOrganizationRole
+    ? organizationRoleByClerkRole[clerkOrganizationRole]
+    : undefined;
+  if (organization && organizationRole) {
     await database
       .insert(organizationMemberships)
       .values({
         organizationId: organization.id,
         personId: person.id,
-        role: "manager",
+        role: organizationRole,
         scopes: [],
       })
       .onConflictDoNothing();

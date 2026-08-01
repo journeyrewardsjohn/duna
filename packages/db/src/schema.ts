@@ -214,6 +214,14 @@ export const people = pgTable(
     familyName: text("family_name"),
     displayName: text("display_name").notNull(),
     handle: varchar("handle", { length: 48 }).notNull().unique(),
+    avatarUrl: text("avatar_url"),
+    profileClaimStatus: varchar("profile_claim_status", { length: 24 })
+      .notNull()
+      .default("claimed"),
+    isProfessional: boolean("is_professional").notNull().default(false),
+    professionalSince: date("professional_since", { mode: "string" }),
+    professionalDefinition: text("professional_definition"),
+    genderCategory: varchar("gender_category", { length: 16 }),
     birthDate: date("birth_date", { mode: "string" }),
     isMinor: boolean("is_minor").notNull().default(false),
     ageBand: varchar("age_band", { length: 16 }).notNull().default("unknown"),
@@ -249,6 +257,10 @@ export const people = pgTable(
     check(
       "people_minor_age_band_check",
       sql`${table.ageBand} NOT IN ('under-13', 'teen') OR ${table.isMinor}`,
+    ),
+    check(
+      "people_profile_claim_status_check",
+      sql`${table.profileClaimStatus} IN ('claimed', 'unclaimed', 'claim-pending', 'merged')`,
     ),
   ],
 );
@@ -1159,6 +1171,366 @@ export const importLinks = pgTable(
     uniqueIndex("import_link_source_person_unique").on(
       table.sourceId,
       table.externalPersonId,
+    ),
+  ],
+);
+
+export const externalPlayerProfiles = pgTable(
+  "external_player_profiles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => importSources.id, { onDelete: "cascade" }),
+    externalPersonId: text("external_person_id").notNull(),
+    personId: uuid("person_id").references(() => people.id),
+    displayName: text("display_name").notNull(),
+    normalizedName: text("normalized_name").notNull(),
+    profileUrl: text("profile_url"),
+    hometown: text("hometown"),
+    countryCode: varchar("country_code", { length: 3 }),
+    birthDate: date("birth_date", { mode: "string" }),
+    avatarUrl: text("avatar_url"),
+    mappingState: varchar("mapping_state", { length: 24 })
+      .notNull()
+      .default("unresolved"),
+    mappingScoreBps: integer("mapping_score_bps"),
+    mappingEvidence: jsonb("mapping_evidence")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    isProfessional: boolean("is_professional").notNull().default(false),
+    externalRating: doublePrecision("external_rating"),
+    externalRatingConfidence: doublePrecision("external_rating_confidence"),
+    externalMatchCount: integer("external_match_count"),
+    rawProfile: jsonb("raw_profile")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    lastSeenAt: timestamp("last_seen_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    lastImportedAt: timestamp("last_imported_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("external_player_source_person_unique").on(
+      table.sourceId,
+      table.externalPersonId,
+    ),
+    index("external_player_normalized_name_idx").on(table.normalizedName),
+    index("external_player_mapping_queue_idx").on(
+      table.mappingState,
+      table.mappingScoreBps,
+    ),
+    check(
+      "external_player_mapping_state_check",
+      sql`${table.mappingState} IN ('unresolved', 'suggested', 'linked', 'rejected', 'merged')`,
+    ),
+    check(
+      "external_player_mapping_score_check",
+      sql`${table.mappingScoreBps} IS NULL OR ${table.mappingScoreBps} BETWEEN 0 AND 10000`,
+    ),
+  ],
+);
+
+export const sandIngestionRuns = pgTable(
+  "sand_ingestion_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => importSources.id),
+    mode: varchar("mode", { length: 32 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("running"),
+    requestedUrl: text("requested_url"),
+    requestedExternalId: text("requested_external_id"),
+    engine: varchar("engine", { length: 24 }).notNull(),
+    counters: jsonb("counters")
+      .notNull()
+      .$type<Record<string, number>>()
+      .default({}),
+    checkpoint: jsonb("checkpoint")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    errorKind: varchar("error_kind", { length: 48 }),
+    errorMessage: text("error_message"),
+    createdByPersonId: uuid("created_by_person_id").references(() => people.id),
+    startedAt: timestamp("started_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+  },
+  (table) => [
+    index("sand_ingestion_source_started_idx").on(
+      table.sourceId,
+      table.startedAt,
+    ),
+    check(
+      "sand_ingestion_status_check",
+      sql`${table.status} IN ('running', 'succeeded', 'partial', 'failed', 'unavailable')`,
+    ),
+  ],
+);
+
+export const importedMatches = pgTable(
+  "imported_matches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => importSources.id),
+    ingestionRunId: uuid("ingestion_run_id").references(
+      () => sandIngestionRuns.id,
+    ),
+    externalMatchId: text("external_match_id").notNull(),
+    externalEventId: text("external_event_id"),
+    sourceUrl: text("source_url"),
+    sourceFingerprint: varchar("source_fingerprint", {
+      length: 128,
+    }).notNull(),
+    crossSourceFingerprint: varchar("cross_source_fingerprint", {
+      length: 128,
+    }).notNull(),
+    title: text("title").notNull(),
+    roundLabel: text("round_label"),
+    location: text("location"),
+    genderCategory: varchar("gender_category", { length: 16 }),
+    discipline: disciplineEnum("discipline").notNull().default("beach-2s"),
+    playedAt: timestamp("played_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    participants: jsonb("participants").notNull().$type<
+      readonly {
+        externalPersonId: string;
+        name: string;
+        side: "A" | "B";
+        personId?: string;
+      }[]
+    >(),
+    sets: jsonb("sets").notNull().$type<readonly { a: number; b: number }[]>(),
+    winnerSide: varchar("winner_side", { length: 1 }),
+    importState: varchar("import_state", { length: 24 })
+      .notNull()
+      .default("staged"),
+    exclusionReason: text("exclusion_reason"),
+    possibleDuplicateOfId: uuid("possible_duplicate_of_id"),
+    canonicalMatchId: uuid("canonical_match_id").references(() => matches.id),
+    approvedByPersonId: uuid("approved_by_person_id").references(
+      () => people.id,
+    ),
+    approvedAt: timestamp("approved_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    rawPayload: jsonb("raw_payload")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("imported_match_source_external_unique").on(
+      table.sourceId,
+      table.externalMatchId,
+    ),
+    uniqueIndex("imported_match_source_fingerprint_unique").on(
+      table.sourceId,
+      table.sourceFingerprint,
+    ),
+    index("imported_match_cross_source_idx").on(table.crossSourceFingerprint),
+    index("imported_match_queue_idx").on(table.importState, table.playedAt),
+    check(
+      "imported_match_state_check",
+      sql`${table.importState} IN ('staged', 'needs-mapping', 'ready', 'approved', 'duplicate', 'excluded', 'rejected')`,
+    ),
+    check(
+      "imported_match_winner_check",
+      sql`${table.winnerSide} IS NULL OR ${table.winnerSide} IN ('A', 'B')`,
+    ),
+  ],
+);
+
+export const professionalEvents = pgTable(
+  "professional_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => importSources.id),
+    externalEventId: text("external_event_id").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    name: text("name").notNull(),
+    location: text("location"),
+    countryCode: varchar("country_code", { length: 3 }),
+    category: text("category"),
+    genderCategory: varchar("gender_category", { length: 16 }).notNull(),
+    startsOn: date("starts_on", { mode: "string" }),
+    endsOn: date("ends_on", { mode: "string" }),
+    status: varchar("status", { length: 24 }).notNull(),
+    live: boolean("live").notNull().default(false),
+    teamCount: integer("team_count").notNull().default(0),
+    matchCount: integer("match_count").notNull().default(0),
+    rawPayload: jsonb("raw_payload")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    lastSyncedAt: timestamp("last_synced_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("professional_event_source_external_unique").on(
+      table.sourceId,
+      table.externalEventId,
+    ),
+    index("professional_event_live_date_idx").on(
+      table.live,
+      table.startsOn,
+      table.endsOn,
+    ),
+  ],
+);
+
+export const worldRankings = pgTable(
+  "world_rankings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => importSources.id),
+    rankingDate: date("ranking_date", { mode: "string" }).notNull(),
+    genderCategory: varchar("gender_category", { length: 16 }).notNull(),
+    rank: integer("rank").notNull(),
+    points: doublePrecision("points").notNull().default(0),
+    externalPersonId: text("external_person_id").notNull(),
+    displayName: text("display_name").notNull(),
+    countryCode: varchar("country_code", { length: 3 }),
+    personId: uuid("person_id").references(() => people.id),
+    previousRank: integer("previous_rank"),
+    rawPayload: jsonb("raw_payload")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("world_ranking_snapshot_person_unique").on(
+      table.sourceId,
+      table.rankingDate,
+      table.genderCategory,
+      table.externalPersonId,
+    ),
+    index("world_ranking_current_idx").on(
+      table.rankingDate,
+      table.genderCategory,
+      table.rank,
+    ),
+  ],
+);
+
+export const ratingConfigurations = pgTable(
+  "rating_configurations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    version: integer("version").notNull(),
+    algorithmVersion: varchar("algorithm_version", { length: 48 }).notNull(),
+    active: boolean("active").notNull().default(false),
+    parameters: jsonb("parameters")
+      .notNull()
+      .$type<Record<string, number | boolean | string>>(),
+    notes: text("notes"),
+    createdByPersonId: uuid("created_by_person_id").references(() => people.id),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("rating_configuration_name_version_unique").on(
+      table.name,
+      table.version,
+    ),
+    index("rating_configuration_active_idx").on(table.active),
+  ],
+);
+
+export const ratingEvaluations = pgTable(
+  "rating_evaluations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    configurationId: uuid("configuration_id")
+      .notNull()
+      .references(() => ratingConfigurations.id),
+    sampleSize: integer("sample_size").notNull(),
+    predictionAccuracy: doublePrecision("prediction_accuracy").notNull(),
+    brierScore: doublePrecision("brier_score").notNull(),
+    calibration: jsonb("calibration").notNull().$type<
+      readonly {
+        lowerBound: number;
+        upperBound: number;
+        predictions: number;
+        averageExpected: number;
+        observedWinRate: number;
+      }[]
+    >(),
+    dateFrom: date("date_from", { mode: "string" }),
+    dateTo: date("date_to", { mode: "string" }),
+    createdByPersonId: uuid("created_by_person_id").references(() => people.id),
+    createdAt,
+  },
+  (table) => [
+    index("rating_evaluation_configuration_idx").on(
+      table.configurationId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const profileMergeRecords = pgTable(
+  "profile_merge_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourcePersonId: uuid("source_person_id")
+      .notNull()
+      .references(() => people.id),
+    targetPersonId: uuid("target_person_id")
+      .notNull()
+      .references(() => people.id),
+    status: varchar("status", { length: 24 }).notNull().default("completed"),
+    reason: text("reason").notNull(),
+    movedCounts: jsonb("moved_counts")
+      .notNull()
+      .$type<Record<string, number>>()
+      .default({}),
+    performedByPersonId: uuid("performed_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    createdAt,
+  },
+  (table) => [
+    index("profile_merge_target_idx").on(table.targetPersonId, table.createdAt),
+    check(
+      "profile_merge_distinct_people_check",
+      sql`${table.sourcePersonId} <> ${table.targetPersonId}`,
     ),
   ],
 );

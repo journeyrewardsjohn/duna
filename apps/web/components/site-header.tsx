@@ -2,6 +2,7 @@ import { DunaMark } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { ArrowUpRight, Menu } from "lucide-react";
 import Link from "next/link";
+import { WebAuthButton } from "./web-auth-button";
 
 export function SiteHeader() {
   return (
@@ -14,6 +15,7 @@ export function SiteHeader() {
           <Link href="/app/discover">Discover</Link>
           <Link href="/app/play">Play</Link>
           <Link href="/create">Create an event</Link>
+          <Link href="/pro">Pro tour</Link>
           <Link href="/clubs/south-bay-volleyball">For clubs</Link>
           <Link href="/app/profile">Sand Rating</Link>
         </nav>
@@ -25,9 +27,9 @@ export function SiteHeader() {
           >
             Duna HQ <ArrowUpRight aria-hidden size={15} />
           </a>
-          <Link className="site-header__enter" href="/app">
-            Enter Duna
-          </Link>
+          <WebAuthButton
+            configured={Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)}
+          />
           <button aria-label="Open menu" className="site-header__menu">
             <Menu aria-hidden size={21} />
           </button>

@@ -1,6 +1,15 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { createInitialRating, displayFromMu, rateDoublesMatch } from "./index";
+import {
+  blendExternalPrior,
+  createInitialRating,
+  displayFromMu,
+  evaluatePredictions,
+  muFromDisplay,
+  professionalSeed,
+  rateDoublesMatch,
+  worldRankingSignal,
+} from "./index";
 
 function player(playerId: string, mu: number, phi = 120) {
   return {
@@ -85,5 +94,56 @@ describe("Sand Rating engine", () => {
         },
       ),
     );
+  });
+
+  it("round-trips public display values into the internal mean", () => {
+    expect(displayFromMu(muFromDisplay(3))).toBe(3);
+    expect(displayFromMu(muFromDisplay(7.5))).toBe(7.5);
+  });
+
+  it("uses external ratings only while Duna evidence is sparse", () => {
+    const sparse = createInitialRating({ playerId: "sparse" });
+    const blended = blendExternalPrior({
+      state: sparse,
+      prior: {
+        source: "truvolley",
+        display: 6,
+        confidence: 0.9,
+        evidenceMatches: 20,
+      },
+    });
+    expect(blended.display).toBeGreaterThan(sparse.display);
+    const mature = { ...sparse, ratedMatches: 20 };
+    expect(
+      blendExternalPrior({
+        state: mature,
+        prior: { source: "truvolley", display: 7, confidence: 1 },
+      }),
+    ).toEqual(mature);
+  });
+
+  it("keeps professional ranking as a separate display signal", () => {
+    expect(worldRankingSignal(1)).toBe(700);
+    expect(worldRankingSignal(50)).toBeLessThan(700);
+    expect(professionalSeed({ playerId: "pro", source: "fivb" }).display).toBe(
+      6.55,
+    );
+  });
+
+  it("evaluates prediction accuracy, Brier score, and calibration", () => {
+    const evaluation = evaluatePredictions([
+      { expectedTeamA: 0.8, actualTeamA: 1 },
+      { expectedTeamA: 0.3, actualTeamA: 0 },
+      { expectedTeamA: 0.6, actualTeamA: 0 },
+    ]);
+    expect(evaluation.sampleSize).toBe(3);
+    expect(evaluation.accuracy).toBeCloseTo(2 / 3, 4);
+    expect(evaluation.brierScore).toBeCloseTo(0.1633, 4);
+    expect(
+      evaluation.calibration.reduce(
+        (total, bucket) => total + bucket.predictions,
+        0,
+      ),
+    ).toBe(3);
   });
 });

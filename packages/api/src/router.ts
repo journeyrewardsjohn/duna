@@ -146,6 +146,22 @@ import {
   startSelfReportedMatch,
 } from "./match-service";
 import {
+  approveImportedMatch,
+  createRatingConfiguration,
+  evaluateCurrentRating,
+  importSandSource,
+  linkExternalPlayer,
+  loadPublicPlayerPerformanceByHandle,
+  loadPublicProCoverage,
+  loadSandDataOverview,
+  mergeUnclaimedProfile,
+  refreshFivbEventIndex,
+  refreshWorldRankings,
+  rejectImportedMatch,
+  SandDataServiceError,
+  searchDunaPlayers,
+} from "./sand-data/service";
+import {
   buildPersonDataExport,
   cancelAccountDeletion,
   PrivacyError,
@@ -596,6 +612,20 @@ function throwDomainError(error: unknown): never {
               : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
+  if (error instanceof SandDataServiceError) {
+    const code =
+      error.code === "MATCH_NOT_FOUND" || error.code === "PLAYER_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "MAPPING_CONFLICT" || error.code === "MERGE_CONFLICT"
+          ? "CONFLICT"
+          : error.code === "SUPER_ADMIN_REQUIRED"
+            ? "FORBIDDEN"
+            : error.code === "DATABASE_REQUIRED" ||
+                error.code === "SOURCE_UNAVAILABLE"
+              ? "INTERNAL_SERVER_ERROR"
+              : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
   throw error;
 }
 
@@ -698,6 +728,16 @@ const publicRouter = router({
       if (!player) throw new TRPCError({ code: "NOT_FOUND" });
       return player;
     }),
+  playerPerformance: publicProcedure
+    .input(z.object({ handle: z.string().trim().min(1).max(48) }))
+    .query(async ({ input }) => {
+      const performance = await loadPublicPlayerPerformanceByHandle(
+        input.handle,
+      );
+      if (!performance) throw new TRPCError({ code: "NOT_FOUND" });
+      return performance;
+    }),
+  proCoverage: publicProcedure.query(() => loadPublicProCoverage()),
   organizationBySlug: publicProcedure
     .input(z.object({ slug: z.string().min(1) }))
     .output(organizationSummarySchema)
@@ -2610,6 +2650,202 @@ const adminRouter = router({
   overview: adminProcedure
     .output(adminOverviewSchema)
     .query(() => getRepository().admin.overview()),
+  sandData: adminProcedure.query(async () => {
+    try {
+      return await loadSandDataOverview();
+    } catch (error) {
+      return throwDomainError(error);
+    }
+  }),
+  sandPlayerSearch: adminProcedure
+    .input(z.object({ query: z.string().trim().min(2).max(80) }))
+    .query(async ({ input }) => {
+      try {
+        return await searchDunaPlayers(input.query);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  importSandSource: adminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-sand-source-import",
+        capacity: 20,
+        refillPerMinute: 2,
+      }),
+    )
+    .input(
+      z.object({
+        source: z.enum(["bvbinfo", "volleyball-life", "fivb-12ndr"]),
+        externalId: z.string().trim().min(1).max(400),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await importSandSource({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  refreshFivbIndex: adminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-fivb-index-refresh",
+        capacity: 4,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(
+      z
+        .object({
+          season: z.number().int().min(1990).max(2100).optional(),
+        })
+        .optional(),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await refreshFivbEventIndex({
+          season: input?.season,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  refreshWorldRankings: adminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-world-rankings-refresh",
+        capacity: 4,
+        refillPerMinute: 1,
+      }),
+    )
+    .mutation(async ({ ctx }) => {
+      try {
+        return await refreshWorldRankings({
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  linkSandPlayer: adminProcedure
+    .input(
+      z.object({
+        externalProfileId: z.string().uuid(),
+        personId: z.string().uuid(),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await linkExternalPlayer({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  approveSandMatch: adminProcedure
+    .input(
+      z.object({
+        importedMatchId: z.string().uuid(),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await approveImportedMatch({
+          ...input,
+          actor: ctx.actor!,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  reviewSandMatch: adminProcedure
+    .input(
+      z.object({
+        importedMatchId: z.string().uuid(),
+        decision: z.enum(["rejected", "excluded", "duplicate"]),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await rejectImportedMatch({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  mergeSandProfiles: adminProcedure
+    .input(
+      z.object({
+        sourcePersonId: z.string().uuid(),
+        targetPersonId: z.string().uuid(),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await mergeUnclaimedProfile({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  evaluateRating: adminProcedure.mutation(async ({ ctx }) => {
+    try {
+      return await evaluateCurrentRating({
+        actor: ctx.actor!,
+        now: ctx.now,
+      });
+    } catch (error) {
+      return throwDomainError(error);
+    }
+  }),
+  createRatingConfiguration: adminProcedure
+    .input(
+      z.object({
+        name: z.string().trim().min(3).max(100),
+        parameters: z.record(
+          z.string(),
+          z.union([z.number(), z.boolean(), z.string()]),
+        ),
+        notes: z.string().trim().max(1_000).optional(),
+        activate: z.boolean(),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await createRatingConfiguration({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   organizations: adminProcedure
     .output(z.array(organizationSummarySchema).readonly())
     .query(() => getRepository().admin.organizations()),

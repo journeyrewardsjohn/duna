@@ -1022,6 +1022,11 @@ async function applyVerifiedRatings(input: {
   readonly requestId: string;
   readonly ipAddress?: string;
   readonly now: Date;
+  readonly setScores?: readonly { readonly a: number; readonly b: number }[];
+  readonly verification?:
+    "both-confirmed" | "imported-professional" | "imported-amateur";
+  readonly verificationWeightBps?: number;
+  readonly reason?: string;
 }): Promise<void> {
   const database = getDatabase();
   const allPersonIds = [
@@ -1075,11 +1080,22 @@ async function applyVerifiedRatings(input: {
       ratingStateFor(personId, ratingByPerson.get(personId), input.now),
     ]),
   );
-  const score = foldScore(
-    rallyRows.map(storedScoreEvent),
-    matchFormat(input.participation.match.format),
-  );
-  if (!score.winner) {
+  const foldedScore = input.setScores
+    ? undefined
+    : foldScore(
+        rallyRows.map(storedScoreEvent),
+        matchFormat(input.participation.match.format),
+      );
+  const setScores =
+    input.setScores ??
+    foldedScore?.sets
+      .filter((set) => set.winner)
+      .map((set) => ({ a: set.a, b: set.b })) ??
+    [];
+  const hasWinner =
+    setScores.filter((set) => set.a > set.b).length !==
+    setScores.filter((set) => set.b > set.a).length;
+  if (!hasWinner) {
     throw new MatchServiceError(
       "RATING_PROJECTION_FAILED",
       "A verified match must have a winner.",
@@ -1092,10 +1108,8 @@ async function applyVerifiedRatings(input: {
     teamB: input.participation.teamBIds.map((personId) => ({
       state: stateByPerson.get(personId)!.state,
     })) as [{ state: RatingState }, { state: RatingState }],
-    setScores: score.sets
-      .filter((set) => set.winner)
-      .map((set) => ({ a: set.a, b: set.b })),
-    verificationWeight: 1,
+    setScores,
+    verificationWeight: (input.verificationWeightBps ?? 10_000) / 10_000,
   });
   const nextSequence = (personId: string) =>
     (eventRows.find((event) => event.personId === personId)?.sequence ?? 0) + 1;
@@ -1105,8 +1119,8 @@ async function applyVerifiedRatings(input: {
         .update(matches)
         .set({
           status: "verified",
-          verification: "both-confirmed",
-          verificationWeightBps: 10_000,
+          verification: input.verification ?? "both-confirmed",
+          verificationWeightBps: input.verificationWeightBps ?? 10_000,
           ratingEligible: true,
           ratingAppliedAt: input.now,
           updatedAt: input.now,
@@ -1169,7 +1183,7 @@ async function applyVerifiedRatings(input: {
             string,
             number | string | boolean
           >,
-          verificationWeightBps: 10_000,
+          verificationWeightBps: input.verificationWeightBps ?? 10_000,
           createdAt: input.now,
         }),
       ),
@@ -1187,6 +1201,7 @@ async function applyVerifiedRatings(input: {
           })),
         }),
         reason:
+          input.reason ??
           "Both sides confirmed the result; deterministic rating updates were applied.",
         traceId: input.requestId,
         ipAddress: input.ipAddress,
@@ -1200,6 +1215,44 @@ async function applyVerifiedRatings(input: {
     if (current?.status === "verified" && current.ratingAppliedAt) return;
     throw error;
   }
+}
+
+export async function applyApprovedImportedMatchRating(input: {
+  readonly actor: ApiActor;
+  readonly matchId: string;
+  readonly setScores: readonly { readonly a: number; readonly b: number }[];
+  readonly verification: "imported-professional" | "imported-amateur";
+  readonly verificationWeightBps: number;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<void> {
+  requireDatabase();
+  const participation = await matchParticipants(input.matchId);
+  if (
+    participation.match.status === "verified" &&
+    participation.match.ratingAppliedAt
+  ) {
+    return;
+  }
+  if (participation.match.status !== "pending-verification") {
+    throw new MatchServiceError(
+      "MATCH_NOT_CONFIRMABLE",
+      "The imported match is not staged for rating approval.",
+    );
+  }
+  await applyVerifiedRatings({
+    actor: input.actor,
+    participation,
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+    now: input.now,
+    setScores: input.setScores,
+    verification: input.verification,
+    verificationWeightBps: input.verificationWeightBps,
+    reason:
+      "A platform administrator approved mapped external match evidence; deterministic rating updates were applied.",
+  });
 }
 
 export async function confirmMatchResult(input: {

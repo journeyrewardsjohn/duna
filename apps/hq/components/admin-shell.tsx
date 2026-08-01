@@ -1,9 +1,10 @@
 import { Badge, DunaMark } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
-import { Bell, ChevronDown, Search, ShieldCheck } from "lucide-react";
+import { Bell, Search, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { adminModules, type AdminModule } from "./navigation";
+import { AuthControls } from "./auth-controls";
 
 export function AdminShell({
   active,
@@ -66,10 +67,11 @@ export function AdminShell({
             <button aria-label="Notifications" className="icon-button">
               <Bell aria-hidden size={18} />
             </button>
-            <button className="user-menu">
-              <span>JS</span>
-              <ChevronDown aria-hidden size={14} />
-            </button>
+            <AuthControls
+              configured={Boolean(
+                process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+              )}
+            />
           </div>
         </header>
         <div className="hq-content">{children}</div>

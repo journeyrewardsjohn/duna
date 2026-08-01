@@ -12,6 +12,7 @@
     "test:watch": "vitest --passWithNoTests"
   },
   "dependencies": {
+    "@clerk/nextjs": "7.6.3",
     "@duna/api": "workspace:*",
     "@duna/core": "workspace:*",
     "@duna/league-engine": "workspace:*",
