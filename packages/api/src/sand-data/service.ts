@@ -1624,12 +1624,23 @@ export async function loadPublicProCoverage() {
   ]);
   const rankingDate = latestDate[0]?.date;
   const rankingRows = rankingDate
-    ? await database
-        .select()
-        .from(worldRankings)
-        .where(eq(worldRankings.rankingDate, rankingDate))
-        .orderBy(asc(worldRankings.genderCategory), asc(worldRankings.rank))
-        .limit(40)
+    ? (
+        await Promise.all(
+          (["men", "women"] as const).map((genderCategory) =>
+            database
+              .select()
+              .from(worldRankings)
+              .where(
+                and(
+                  eq(worldRankings.rankingDate, rankingDate),
+                  eq(worldRankings.genderCategory, genderCategory),
+                ),
+              )
+              .orderBy(asc(worldRankings.rank))
+              .limit(20),
+          ),
+        )
+      ).flat()
     : [];
   return {
     events: eventRows.map((event) => ({
