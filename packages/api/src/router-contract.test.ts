@@ -88,6 +88,22 @@ describe("tRPC contract surface", () => {
     });
   });
 
+  it("limits event media upload authorization to event-writing staff", async () => {
+    const coach = createCaller(
+      createApiContext({ actor: createDemoActor(["coach"]) }),
+    );
+    await expect(coach.operator.eventMediaUploadContext()).resolves.toEqual({
+      organizationId: expect.any(String),
+    });
+
+    const accountant = createCaller(
+      createApiContext({ actor: createDemoActor(["accountant"]) }),
+    );
+    await expect(
+      accountant.operator.eventMediaUploadContext(),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
   it("keeps rollout mutations behind the super-admin role", async () => {
     const caller = createCaller(
       createApiContext({ actor: createDemoActor(["admin"]) }),

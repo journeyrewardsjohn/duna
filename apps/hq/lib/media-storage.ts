@@ -1,102 +1,105 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+const mediaTypes = {
+  "image/avif": { extension: "avif", kind: "image", maxBytes: 15_000_000 },
+  "image/jpeg": { extension: "jpg", kind: "image", maxBytes: 15_000_000 },
+  "image/png": { extension: "png", kind: "image", maxBytes: 15_000_000 },
+  "image/webp": { extension: "webp", kind: "image", maxBytes: 15_000_000 },
+  "video/mp4": { extension: "mp4", kind: "video", maxBytes: 250_000_000 },
+  "video/quicktime": {
+    extension: "mov",
+    kind: "video",
+    maxBytes: 250_000_000,
+  },
+  "video/webm": {
+    extension: "webm",
+    kind: "video",
+    maxBytes: 250_000_000,
+  },
+} as const;
 
-const imageTypes = new Set([
-  "image/avif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-]);
-const videoTypes = new Set(["video/mp4", "video/quicktime", "video/webm"]);
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const extensionByType: Readonly<Record<string, string>> = {
-  "image/avif": "avif",
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "video/mp4": "mp4",
-  "video/quicktime": "mov",
-  "video/webm": "webm",
-};
+export type EventMediaKind = "image" | "video";
 
-function storageConfiguration() {
-  const accountId = process.env.R2_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  const bucket = process.env.R2_BUCKET;
-  const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL;
-  if (
-    !accountId ||
-    !accessKeyId ||
-    !secretAccessKey ||
-    !bucket ||
-    !publicBaseUrl
-  ) {
-    throw new Error(
-      "Owned media storage is not connected yet. Add the R2 account, bucket, credentials, and public delivery URL in Settings.",
-    );
-  }
-  return {
-    accountId,
-    accessKeyId,
-    secretAccessKey,
-    bucket,
-    publicBaseUrl: publicBaseUrl.replace(/\/+$/, ""),
-  };
-}
-
-export async function createEventMediaUpload(input: {
-  readonly organizationId: string;
+export interface EventMediaInput {
   readonly fileName: string;
   readonly contentType: string;
   readonly size: number;
-}) {
-  const kind: "image" | "video" | undefined = imageTypes.has(input.contentType)
-    ? "image"
-    : videoTypes.has(input.contentType)
-      ? "video"
-      : undefined;
-  if (!kind) {
+}
+
+export interface ValidatedEventMedia {
+  readonly contentType: keyof typeof mediaTypes;
+  readonly extension: string;
+  readonly kind: EventMediaKind;
+  readonly maxBytes: number;
+}
+
+function mediaType(contentType: string): ValidatedEventMedia | undefined {
+  const configuration =
+    mediaTypes[contentType as keyof typeof mediaTypes] ?? undefined;
+  if (!configuration) return undefined;
+  return {
+    contentType: contentType as keyof typeof mediaTypes,
+    extension: configuration.extension,
+    kind: configuration.kind,
+    maxBytes: configuration.maxBytes,
+  };
+}
+
+export function validateEventMediaInput(
+  input: EventMediaInput,
+): ValidatedEventMedia {
+  const configuration = mediaType(input.contentType);
+  if (!configuration) {
     throw new Error("Use a JPEG, PNG, WebP, AVIF, MP4, MOV, or WebM file.");
   }
-  const maxBytes = kind === "image" ? 15_000_000 : 250_000_000;
+  if (!input.fileName.trim() || input.fileName.length > 180) {
+    throw new Error("Choose a media file with a valid filename.");
+  }
   if (
     !Number.isSafeInteger(input.size) ||
     input.size <= 0 ||
-    input.size > maxBytes
+    input.size > configuration.maxBytes
   ) {
     throw new Error(
-      kind === "image"
+      configuration.kind === "image"
         ? "Images must be smaller than 15 MB."
         : "Videos must be smaller than 250 MB.",
     );
   }
-  const configuration = storageConfiguration();
-  const extension = extensionByType[input.contentType] ?? "bin";
-  const key = `events/${input.organizationId}/${crypto.randomUUID()}.${extension}`;
-  const client = new S3Client({
-    region: "auto",
-    endpoint: `https://${configuration.accountId}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: configuration.accessKeyId,
-      secretAccessKey: configuration.secretAccessKey,
-    },
-  });
-  const command = new PutObjectCommand({
-    Bucket: configuration.bucket,
-    Key: key,
-    ContentType: input.contentType,
-    CacheControl: "public, max-age=31536000, immutable",
-    Metadata: {
-      "duna-organization": input.organizationId,
-      "original-name": input.fileName.slice(0, 180),
-    },
-  });
-  return {
-    kind,
-    key,
-    maxBytes,
-    uploadUrl: await getSignedUrl(client, command, { expiresIn: 600 }),
-    publicUrl: `${configuration.publicBaseUrl}/${key}`,
-  };
+  return configuration;
+}
+
+export function createEventMediaPath(
+  organizationId: string,
+  contentType: string,
+  identifier = crypto.randomUUID(),
+): string {
+  const configuration = mediaType(contentType);
+  if (
+    !configuration ||
+    !uuidPattern.test(organizationId) ||
+    !uuidPattern.test(identifier)
+  ) {
+    throw new Error("Duna could not create a safe event media path.");
+  }
+  return `events/${organizationId}/${identifier}.${configuration.extension}`;
+}
+
+export function assertEventMediaPath(
+  pathname: string,
+  organizationId: string,
+  extension: string,
+): void {
+  const prefix = `events/${organizationId}/`;
+  const identifier = pathname.slice(prefix.length, -(extension.length + 1));
+  if (
+    !uuidPattern.test(organizationId) ||
+    !pathname.startsWith(prefix) ||
+    !pathname.endsWith(`.${extension}`) ||
+    !uuidPattern.test(identifier) ||
+    pathname !== `${prefix}${identifier}.${extension}`
+  ) {
+    throw new Error("The event media destination is invalid.");
+  }
 }

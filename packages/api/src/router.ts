@@ -2146,6 +2146,19 @@ const operatorRouter = router({
         },
       }),
     ),
+  eventMediaUploadContext: organizationProcedure("sessions:write")
+    .use(
+      rateLimitMiddleware({
+        id: "operator-event-media-upload",
+        capacity: 30,
+        refillPerMinute: 15,
+        scope: "organization",
+      }),
+    )
+    .output(z.object({ organizationId: z.string().uuid() }))
+    .query(({ ctx }) => ({
+      organizationId: ctx.actor!.organizationId!,
+    })),
   createEventDraft: organizationProcedure("sessions:write")
     .input(createEventDraftInputSchema)
     .output(operatorMutationResultSchema)

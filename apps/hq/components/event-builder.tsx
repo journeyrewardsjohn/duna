@@ -3,6 +3,7 @@
 import type { OperatorWorkspace } from "@duna/api";
 import { formatMoney } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
+import { upload } from "@vercel/blob/client";
 import {
   ArrowLeft,
   ArrowRight,
@@ -27,9 +28,9 @@ import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
 import {
   createEventDraftAction,
-  createEventMediaUploadAction,
   type OperatorActionState,
 } from "@/app/actions";
+import { createEventMediaPath } from "@/lib/media-storage";
 
 type EventKind = "tournament" | "league";
 type LocationMode = "venue" | "address" | "online";
@@ -668,26 +669,36 @@ export function EventBuilder({
           ? "Image optimized. Uploading to Duna storage…"
           : "Uploading to Duna storage…",
       );
-      const target = await createEventMediaUploadAction({
-        fileName: prepared.name,
-        contentType: prepared.type,
-        size: prepared.size,
-      });
-      const uploaded = await fetch(target.uploadUrl, {
-        method: "PUT",
-        headers: { "content-type": prepared.type },
-        body: prepared,
-      });
-      if (!uploaded.ok) {
-        throw new Error(
-          "The upload could not reach Duna storage. Check the R2 CORS origin and try again.",
-        );
+      const kind = prepared.type.startsWith("image/") ? "image" : "video";
+      const stored = await upload(
+        createEventMediaPath(workspace.organization.id, prepared.type),
+        prepared,
+        {
+          access: "public",
+          clientPayload: JSON.stringify({
+            organizationId: workspace.organization.id,
+            fileName: prepared.name,
+            contentType: prepared.type,
+            size: prepared.size,
+          }),
+          contentType: prepared.type,
+          handleUploadUrl: "/api/media/upload",
+          multipart: prepared.size > 100_000_000,
+          onUploadProgress: ({ percentage }) => {
+            setMediaUploadMessage(
+              `Uploading to Duna storage… ${Math.round(percentage)}%`,
+            );
+          },
+        },
+      );
+      if (!stored.url) {
+        throw new Error("Duna storage did not return a delivery URL.");
       }
-      setMediaKind(target.kind);
-      setMediaUrl(target.publicUrl);
+      setMediaKind(kind);
+      setMediaUrl(stored.url);
       setMediaUploadState("ready");
       setMediaUploadMessage(
-        target.kind === "image"
+        kind === "image"
           ? "Optimized image stored and ready."
           : "Video stored and ready for Duna delivery.",
       );

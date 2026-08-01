@@ -3,7 +3,6 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getServerCaller } from "@/lib/api";
-import { createEventMediaUpload } from "@/lib/media-storage";
 
 export interface OperatorActionState {
   readonly status: "idle" | "success" | "error";
@@ -83,21 +82,6 @@ type ServerCaller = Awaited<ReturnType<typeof getServerCaller>>;
 type CreateEventDraftPayload = Parameters<
   ServerCaller["operator"]["createEventDraft"]
 >[0];
-
-export async function createEventMediaUploadAction(input: {
-  readonly fileName: string;
-  readonly contentType: string;
-  readonly size: number;
-}) {
-  const caller = await getServerCaller();
-  const dashboard = await caller.operator.dashboard();
-  return createEventMediaUpload({
-    organizationId: dashboard.organization.id,
-    fileName: input.fileName.slice(0, 180),
-    contentType: input.contentType,
-    size: input.size,
-  });
-}
 
 export async function createEventDraftAction(
   _previous: OperatorActionState,
