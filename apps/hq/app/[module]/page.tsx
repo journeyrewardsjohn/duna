@@ -23,9 +23,8 @@ export default async function OperatorModulePage({
   const item = operatorModules.find((entry) => entry.slug === module);
   if (!item || module === "overview") notFound();
   const caller = await getServerCaller();
-  const [dashboard, members, workspace, ticketApprovals] = await Promise.all([
+  const [dashboard, workspace, ticketApprovals] = await Promise.all([
     caller.operator.dashboard(),
-    caller.operator.members(),
     caller.operator.workspace(),
     caller.operator.pendingTicketApprovals(),
   ]);
@@ -37,7 +36,6 @@ export default async function OperatorModulePage({
     >
       <ModulePanel
         dashboard={dashboard}
-        members={members}
         module={module as OperatorModule}
         ticketApprovals={ticketApprovals}
         workspace={workspace}

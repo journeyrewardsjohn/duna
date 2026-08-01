@@ -1397,13 +1397,19 @@ function MoreScreen() {
   const sections = [
     [
       "OPERATIONS",
-      ["Calendar", "Programs", "Events + leagues", "Messages", "Reports"],
+      [
+        "Calendar",
+        "Products + services",
+        "Events + leagues",
+        "Messages",
+        "Reports",
+      ],
     ],
     [
       "BUSINESS",
       [
-        "Products + pricing",
-        "Memberships + packages",
+        "Money + tax",
+        "Memberships + credits",
         "Retail + inventory",
         "Coach payroll support",
       ],
@@ -1421,12 +1427,12 @@ function MoreScreen() {
   ] as const;
   const routes: Readonly<Record<string, string>> = {
     Calendar: "calendar",
-    Programs: "programs",
+    "Products + services": "products",
     "Events + leagues": "leagues",
     Messages: "messages",
     Reports: "reports",
-    "Products + pricing": "money",
-    "Memberships + packages": "memberships",
+    "Money + tax": "money",
+    "Memberships + credits": "products",
     "Retail + inventory": "inventory",
     "Coach payroll support": "money",
     "Venues + courts": "facilities",

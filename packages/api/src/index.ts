@@ -3,6 +3,8 @@ export * from "./workos-environment";
 export * from "./contracts";
 export * from "./auth";
 export * from "./checkout";
+export * from "./catalog-service";
+export * from "./catalog-checkout";
 export * from "./court-checkout";
 export * from "./commerce";
 export * from "./feature-flags";

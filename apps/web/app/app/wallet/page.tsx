@@ -8,21 +8,29 @@ import {
   Plus,
   ReceiptText,
   ShieldCheck,
+  WalletCards,
 } from "lucide-react";
+import Link from "next/link";
 import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Wallet" };
 
 export default async function WalletPage() {
   const caller = await getServerCaller();
-  const wallet = await caller.player.wallet();
+  const [wallet, organizationWallets] = await Promise.all([
+    caller.player.wallet(),
+    caller.player.organizationWallets(),
+  ]);
   return (
     <main className="standard-page wallet-page">
       <section className="page-heading-row">
         <div>
           <span className="page-eyebrow">Stripe-managed balance</span>
-          <h1>Duna Wallet.</h1>
-          <p>Load, earn, play, and get paid—all without chasing a transfer.</p>
+          <h1>Money + club credits.</h1>
+          <p>
+            Keep cash, prize earnings, memberships, and each organization’s
+            credits clear and separate.
+          </p>
         </div>
         <Badge
           tone={wallet.taxFormStatus === "pending" ? "warning" : "positive"}
@@ -82,6 +90,73 @@ export default async function WalletPage() {
             </div>
             <ArrowUpRight aria-hidden size={17} />
           </article>
+        </div>
+      </section>
+
+      <section className="dashboard-section organization-credit-section">
+        <div className="dashboard-section__heading">
+          <div>
+            <span className="page-eyebrow">Closed-loop benefits</span>
+            <h2>Organization credits</h2>
+          </div>
+          <p>Credits stay with the organization that issued them.</p>
+        </div>
+        <div className="organization-credit-grid">
+          {organizationWallets.map((organizationWallet) => (
+            <article key={organizationWallet.organizationId}>
+              <div className="organization-credit-card__top">
+                <span className="wallet-side-cards__icon">
+                  <WalletCards aria-hidden size={20} />
+                </span>
+                <Badge
+                  tone={
+                    organizationWallet.status === "active"
+                      ? "positive"
+                      : "warning"
+                  }
+                >
+                  {organizationWallet.status}
+                </Badge>
+              </div>
+              <small>{organizationWallet.organizationName}</small>
+              <Numeric>{organizationWallet.credits}</Numeric>
+              <span>credits available</span>
+              {organizationWallet.membershipName && (
+                <p>
+                  <strong>{organizationWallet.membershipName}</strong>
+                  <span>
+                    {organizationWallet.membershipStatus ?? "membership"}
+                  </span>
+                </p>
+              )}
+              {organizationWallet.nextExpirationAt && (
+                <p>
+                  <strong>
+                    {organizationWallet.nextExpiringCredits} expiring
+                  </strong>
+                  <span>
+                    {new Intl.DateTimeFormat("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    }).format(new Date(organizationWallet.nextExpirationAt))}
+                  </span>
+                </p>
+              )}
+              <Link href={`/clubs/${organizationWallet.organizationSlug}`}>
+                Shop and book <ArrowUpRight aria-hidden size={15} />
+              </Link>
+            </article>
+          ))}
+          {organizationWallets.length === 0 && (
+            <article className="organization-credit-card--empty">
+              <WalletCards aria-hidden size={22} />
+              <strong>No organization credits yet</strong>
+              <span>
+                Memberships and credit packs you purchase will appear here.
+              </span>
+            </article>
+          )}
         </div>
       </section>
 

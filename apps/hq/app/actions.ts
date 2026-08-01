@@ -89,6 +89,7 @@ function revalidateOperator() {
   revalidatePath("/");
   revalidatePath("/calendar");
   revalidatePath("/programs");
+  revalidatePath("/products");
   revalidatePath("/events");
   revalidatePath("/leagues");
   revalidatePath("/payments");
@@ -96,6 +97,379 @@ function revalidateOperator() {
   revalidatePath("/members");
   revalidatePath("/settings");
   revalidatePath("/locations");
+}
+
+export async function createCatalogItemAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const type = field(formData, "type");
+    if (
+      type !== "event" &&
+      type !== "service" &&
+      type !== "good" &&
+      type !== "plan"
+    ) {
+      throw new Error("Choose Event, Service, Good, or Plan.");
+    }
+    const visibility = field(formData, "visibility");
+    if (
+      visibility !== "public" &&
+      visibility !== "members" &&
+      visibility !== "private"
+    ) {
+      throw new Error("Choose who can see this product.");
+    }
+    const recurringInterval = optionalField(formData, "recurringInterval");
+    if (
+      recurringInterval !== undefined &&
+      recurringInterval !== "week" &&
+      recurringInterval !== "month" &&
+      recurringInterval !== "year"
+    ) {
+      throw new Error("Choose a valid billing interval.");
+    }
+    const optionsValue = optionalField(formData, "options");
+    const configurationValue = optionalField(formData, "configuration");
+    const caller = await getServerCaller();
+    const created = await caller.operator.createCatalogItem({
+      type,
+      subtype: field(formData, "subtype"),
+      title: field(formData, "title"),
+      shortSummary: optionalField(formData, "shortSummary"),
+      description: optionalField(formData, "description"),
+      visibility,
+      taxable: field(formData, "taxable") === "true",
+      stripeTaxCode: optionalField(formData, "stripeTaxCode"),
+      allowCard: field(formData, "allowCard") === "true",
+      allowCash: field(formData, "allowCash") === "true",
+      allowCredits: field(formData, "allowCredits") === "true",
+      membershipRequired: field(formData, "membershipRequired") === "true",
+      priceMinor: optionalMoneyMinor(formData, "price"),
+      memberPriceMinor: optionalMoneyMinor(formData, "memberPrice"),
+      nonMemberPriceMinor: optionalMoneyMinor(formData, "nonMemberPrice"),
+      creditCost: optionalField(formData, "creditCost")
+        ? numberField(formData, "creditCost")
+        : undefined,
+      recurringInterval,
+      recurringIntervalCount: recurringInterval
+        ? numberField(formData, "recurringIntervalCount")
+        : undefined,
+      options: optionsValue
+        ? (JSON.parse(optionsValue) as {
+            name: string;
+            values: string[];
+          }[])
+        : [],
+      configuration: configurationValue
+        ? (JSON.parse(configurationValue) as Record<string, unknown>)
+        : {},
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Product draft created. It remains private until you publish it.",
+      undefined,
+      created.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function createInventoryStockAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const purpose = field(formData, "purpose");
+    if (
+      purpose !== "sale" &&
+      purpose !== "rental" &&
+      purpose !== "coach-use" &&
+      purpose !== "operations"
+    ) {
+      throw new Error("Choose how this inventory will be used.");
+    }
+    const trackingMode =
+      field(formData, "trackingMode") === "serialized"
+        ? "serialized"
+        : "quantity";
+    const depreciationMethod = optionalField(formData, "depreciationMethod") as
+      | "straight-line"
+      | "declining-balance"
+      | "section-179"
+      | "bonus"
+      | "none"
+      | undefined;
+    const caller = await getServerCaller();
+    const created = await caller.operator.createInventoryStock({
+      catalogVariantId: field(formData, "catalogVariantId"),
+      inventoryLocationId: optionalField(formData, "inventoryLocationId"),
+      locationName: optionalField(formData, "locationName"),
+      venueId: optionalField(formData, "venueId"),
+      purpose,
+      trackingMode,
+      quantity: numberField(formData, "quantity"),
+      reorderPoint: numberField(formData, "reorderPoint"),
+      serialNumber: optionalField(formData, "serialNumber"),
+      assetTag: optionalField(formData, "assetTag"),
+      condition: field(formData, "condition") || "new",
+      unitCostMinor: optionalMoneyMinor(formData, "unitCost"),
+      acquiredAt: optionalField(formData, "acquiredAt"),
+      vendorName: optionalField(formData, "vendorName"),
+      vendorReference: optionalField(formData, "vendorReference"),
+      receiptUrl: optionalField(formData, "receiptUrl"),
+      placedInServiceAt: optionalField(formData, "placedInServiceAt"),
+      depreciationMethod,
+      usefulLifeMonths: optionalField(formData, "usefulLifeMonths")
+        ? numberField(formData, "usefulLifeMonths")
+        : undefined,
+      salvageValueMinor: optionalMoneyMinor(formData, "salvageValue"),
+      taxAssetClass: optionalField(formData, "taxAssetClass"),
+      notes: optionalField(formData, "notes"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Inventory received with an immutable movement record.",
+      undefined,
+      created.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function setCatalogItemStatusAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const status = field(formData, "status");
+    if (status !== "draft" && status !== "active" && status !== "archived") {
+      throw new Error("Choose draft, active, or archived.");
+    }
+    const caller = await getServerCaller();
+    await caller.operator.setCatalogItemStatus({
+      catalogItemId: field(formData, "catalogItemId"),
+      status,
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      status === "active"
+        ? "Product published and now available on the organization profile."
+        : status === "archived"
+          ? "Product archived."
+          : "Product returned to draft.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function updateCommerceSettingsAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.updateCommerceSettings({
+      legalName: optionalField(formData, "legalName"),
+      addressLine1: field(formData, "addressLine1"),
+      addressLine2: optionalField(formData, "addressLine2"),
+      locality: field(formData, "locality"),
+      administrativeArea: field(formData, "administrativeArea"),
+      postalCode: field(formData, "postalCode"),
+      countryCode: field(formData, "countryCode") || "US",
+      stripeTaxEnabled: field(formData, "stripeTaxEnabled") === "true",
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Business address and automatic-tax preference saved.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function updateThemeAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const heroMediaType = optionalField(formData, "heroMediaType");
+    if (
+      heroMediaType !== undefined &&
+      heroMediaType !== "image" &&
+      heroMediaType !== "video"
+    ) {
+      throw new Error("Choose image or video for the hero.");
+    }
+    const cardStyle = field(formData, "cardStyle");
+    if (
+      cardStyle !== "soft" &&
+      cardStyle !== "crisp" &&
+      cardStyle !== "borderless"
+    ) {
+      throw new Error("Choose a valid card style.");
+    }
+    const caller = await getServerCaller();
+    await caller.operator.updateTheme({
+      logoUrl: optionalField(formData, "logoUrl"),
+      heroMediaType,
+      heroMediaUrl: optionalField(formData, "heroMediaUrl"),
+      heroPosterUrl: optionalField(formData, "heroPosterUrl"),
+      tagline: optionalField(formData, "tagline"),
+      profileSummary: optionalField(formData, "profileSummary"),
+      palette: {
+        primary: field(formData, "primary"),
+        accent: field(formData, "accent"),
+        sand: field(formData, "sand"),
+        ink: field(formData, "ink"),
+        canvas: field(formData, "canvas"),
+      },
+      cardStyle,
+      publish: field(formData, "publish") === "true",
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      field(formData, "publish") === "true"
+        ? "Theme Kit published to the organization profile."
+        : "Theme Kit draft saved.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function issueOrganizationCreditsAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    const created = await caller.operator.issueOrganizationCredits({
+      personId: field(formData, "personId"),
+      credits: numberField(formData, "credits"),
+      expiresAt: optionalField(formData, "expiresAt")
+        ? new Date(field(formData, "expiresAt")).toISOString()
+        : undefined,
+      reason: field(formData, "reason"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Organization credits posted as a balanced ledger entry.",
+      undefined,
+      created.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function refundOrganizationOrderAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const disposition = field(formData, "disposition");
+    if (
+      disposition !== "original-payment" &&
+      disposition !== "organization-credit"
+    ) {
+      throw new Error("Choose the original payment or organization credits.");
+    }
+    const caller = await getServerCaller();
+    const created = await caller.operator.refundOrganizationOrder({
+      orderId: field(formData, "orderId"),
+      amountMinor: moneyMinor(formData, "amount"),
+      disposition,
+      credits:
+        disposition === "organization-credit"
+          ? numberField(formData, "credits")
+          : undefined,
+      reason: field(formData, "reason"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      disposition === "organization-credit"
+        ? "Refund recorded and organization credits issued."
+        : "Stripe refund submitted and the reversal journal posted.",
+      undefined,
+      created.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function proposeCalendarChangeAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    const created = await caller.operator.proposeCalendarChange({
+      sessionId: field(formData, "sessionId"),
+      startsAt: new Date(field(formData, "startsAt")).toISOString(),
+      endsAt: new Date(field(formData, "endsAt")).toISOString(),
+      courtId: optionalField(formData, "courtId"),
+      coachPersonId: optionalField(formData, "coachPersonId"),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    return result(
+      created.status === "conflict" ? "error" : "success",
+      created.status === "conflict"
+        ? "That move conflicts with a reserved resource."
+        : "Move preview ready. Confirm it to update the schedule and notify affected players.",
+      undefined,
+      created.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function confirmCalendarChangeAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.confirmCalendarChange({
+      proposalId: field(formData, "proposalId"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Schedule moved, resources re-reserved, and the change recorded.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
 }
 
 type ServerCaller = Awaited<ReturnType<typeof getServerCaller>>;

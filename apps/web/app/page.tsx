@@ -286,10 +286,10 @@ export default async function HomePage() {
               <CircleDollarSign aria-hidden />
             </span>
             <p>04</p>
-            <h3>Get paid at the beach</h3>
+            <h3>Pay without the chase</h3>
             <span>
-              Purses land in Duna Wallet the moment the bracket closes. No
-              checks. No chase.
+              Purchases, organization credits, refunds, and receipts stay
+              together in one honest history.
             </span>
           </article>
         </div>
@@ -335,9 +335,8 @@ export default async function HomePage() {
           <Badge>For clubs, coaches + facilities</Badge>
           <h2>Run the whole beach from one place.</h2>
           <p>
-            Scheduling, memberships, payments, Tap to Pay, leagues, ticketing,
-            staff, messaging, reporting, and the player network that fills it
-            all.
+            Scheduling, memberships, payments, leagues, ticketing, staff,
+            messaging, reporting, and the player network that fills it all.
           </p>
           <p className="operator-callout__promise">
             Coaches start free. Clubs pay simple software plus the processing

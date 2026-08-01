@@ -32,6 +32,8 @@ import {
   auditEventSchema,
   availableSlotSchema,
   bracketSchema,
+  catalogCheckoutResultSchema,
+  catalogCheckoutStatusSchema,
   consentRecordResultSchema,
   courtScheduleProposalSchema,
   availabilityAlertResultSchema,
@@ -55,6 +57,7 @@ import {
   operatorMutationResultSchema,
   operatorScorableMatchSchema,
   operatorWorkspaceSchema,
+  organizationWalletSummarySchema,
   organizationSummarySchema,
   personSummarySchema,
   playerInvitationClaimResultSchema,
@@ -63,6 +66,7 @@ import {
   playerSettingsSchema,
   playerWalletSchema,
   pricingSchema,
+  publicOrganizationStorefrontSchema,
   registrationResultSchema,
   scoreStateSchema,
   stripeOnboardingResultSchema,
@@ -74,6 +78,10 @@ import {
   tournamentScheduleSchema,
   venueSummarySchema,
 } from "./contracts";
+import {
+  getCatalogCheckoutStatus,
+  startCatalogCheckout,
+} from "./catalog-checkout";
 import {
   approveTicketOrder,
   claimTeamEntry,
@@ -99,6 +107,19 @@ import {
   registerForSession,
   scanTicketConnected,
 } from "./commerce";
+import {
+  confirmCalendarChange,
+  createCatalogItem,
+  createInventoryStock,
+  issueOrganizationCredits,
+  loadPlayerOrganizationWallets,
+  loadPublicOrganizationStorefront,
+  proposeCalendarChange,
+  refundOrganizationOrder,
+  setCatalogItemStatus,
+  updateOrganizationCommerceSettings,
+  updateOrganizationTheme,
+} from "./catalog-service";
 import {
   FormSubmissionError,
   recordConsent,
@@ -826,12 +847,74 @@ const publicRouter = router({
       if (!organization) throw new TRPCError({ code: "NOT_FOUND" });
       return organization;
     }),
+  organizationStorefront: publicProcedure
+    .input(z.object({ slug: z.string().trim().min(1).max(64) }))
+    .output(publicOrganizationStorefrontSchema)
+    .query(async ({ input }) => {
+      const storefront = await loadPublicOrganizationStorefront(input.slug);
+      if (!storefront) throw new TRPCError({ code: "NOT_FOUND" });
+      return storefront;
+    }),
 });
 
 const playerRouter = router({
   dashboard: protectedProcedure
     .output(playerDashboardSchema)
     .query(({ ctx }) => getRepository().player.dashboard(ctx.actor!.personId)),
+  startCatalogCheckout: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "catalog-checkout",
+        capacity: 12,
+        refillPerMinute: 6,
+      }),
+    )
+    .input(
+      z.object({
+        catalogItemId: z.string().uuid(),
+        catalogVariantId: z.string().uuid(),
+        paymentMethod: z.enum(["card", "credit"]),
+        quantity: z.number().int().min(1).max(50),
+        successUrl: z.url(),
+        cancelUrl: z.url(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(catalogCheckoutResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.startCatalogCheckout",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await startCatalogCheckout({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  catalogCheckoutStatus: protectedProcedure
+    .input(z.object({ checkoutSessionId: z.string().min(1).max(255) }))
+    .output(catalogCheckoutStatusSchema)
+    .query(({ ctx, input }) =>
+      getCatalogCheckoutStatus(input.checkoutSessionId, ctx.actor!.personId),
+    ),
+  organizationWallets: protectedProcedure
+    .output(z.array(organizationWalletSummarySchema).readonly())
+    .query(({ ctx }) =>
+      ctx.actor!.isDemo && !process.env.DATABASE_URL
+        ? []
+        : loadPlayerOrganizationWallets(ctx.actor!.personId, ctx.now),
+    ),
   claimOrganizationInvitation: protectedProcedure
     .use(
       rateLimitMiddleware({
@@ -2059,6 +2142,381 @@ const operatorRouter = router({
       ctx.actor!.isDemo && !process.env.DATABASE_URL
         ? loadDemoOperatorWorkspace(ctx.actor!.organizationId!)
         : loadOperatorWorkspace(ctx.actor!.organizationId!),
+    ),
+  createCatalogItem: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        type: z.enum(["event", "service", "good", "plan"]),
+        subtype: z.string().trim().min(2).max(64),
+        title: z.string().trim().min(2).max(140),
+        shortSummary: z.string().trim().max(240).optional(),
+        description: z.string().trim().max(20_000).optional(),
+        visibility: z.enum(["public", "members", "private"]).default("public"),
+        taxable: z.boolean().default(false),
+        stripeTaxCode: z.string().trim().max(48).optional(),
+        allowCard: z.boolean().default(true),
+        allowCash: z.boolean().default(false),
+        allowCredits: z.boolean().default(false),
+        membershipRequired: z.boolean().default(false),
+        priceMinor: z.number().int().min(0).max(100_000_000).optional(),
+        memberPriceMinor: z.number().int().min(0).max(100_000_000).optional(),
+        nonMemberPriceMinor: z
+          .number()
+          .int()
+          .min(0)
+          .max(100_000_000)
+          .optional(),
+        creditCost: z.number().int().positive().max(100_000).optional(),
+        recurringInterval: z.enum(["week", "month", "year"]).optional(),
+        recurringIntervalCount: z.number().int().min(1).max(52).optional(),
+        options: z
+          .array(
+            z.object({
+              name: z.string().trim().min(1).max(48),
+              values: z.array(z.string().trim().min(1).max(96)).min(1).max(100),
+            }),
+          )
+          .max(12)
+          .default([]),
+        configuration: z.record(z.string(), z.unknown()).default({}),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createCatalogItem",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createCatalogItem({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createInventoryStock: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        catalogVariantId: z.string().uuid(),
+        inventoryLocationId: z.string().uuid().optional(),
+        locationName: z.string().trim().min(2).max(120).optional(),
+        venueId: z.string().uuid().optional(),
+        purpose: z.enum(["sale", "rental", "coach-use", "operations"]),
+        trackingMode: z.enum(["quantity", "serialized"]),
+        quantity: z.number().int().positive().max(1_000_000),
+        reorderPoint: z.number().int().min(0).max(1_000_000).default(0),
+        serialNumber: z.string().trim().max(128).optional(),
+        assetTag: z.string().trim().max(128).optional(),
+        condition: z.string().trim().min(2).max(48).default("new"),
+        unitCostMinor: z.number().int().min(0).max(100_000_000).optional(),
+        acquiredAt: z.iso.date().optional(),
+        vendorName: z.string().trim().max(160).optional(),
+        vendorReference: z.string().trim().max(160).optional(),
+        receiptUrl: z.url().optional(),
+        placedInServiceAt: z.iso.date().optional(),
+        depreciationMethod: z
+          .enum([
+            "straight-line",
+            "declining-balance",
+            "section-179",
+            "bonus",
+            "none",
+          ])
+          .optional(),
+        usefulLifeMonths: z.number().int().positive().max(600).optional(),
+        salvageValueMinor: z.number().int().min(0).max(100_000_000).optional(),
+        taxAssetClass: z.string().trim().max(96).optional(),
+        notes: z.string().trim().max(2_000).optional(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createInventoryStock",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createInventoryStock({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  setCatalogItemStatus: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        catalogItemId: z.string().uuid(),
+        status: z.enum(["draft", "active", "archived"]),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.setCatalogItemStatus",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await setCatalogItemStatus({
+              actor: ctx.actor!,
+              catalogItemId: input.catalogItemId,
+              status: input.status,
+              confirmed: input.confirmed,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  updateCommerceSettings: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        legalName: z.string().trim().max(180).optional(),
+        addressLine1: z.string().trim().min(2).max(160),
+        addressLine2: z.string().trim().max(160).optional(),
+        locality: z.string().trim().min(2).max(100),
+        administrativeArea: z.string().trim().min(1).max(100),
+        postalCode: z.string().trim().min(2).max(24),
+        countryCode: z.string().trim().length(2),
+        stripeTaxEnabled: z.boolean(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.updateCommerceSettings",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateOrganizationCommerceSettings({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  updateTheme: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        logoUrl: z.url().optional(),
+        heroMediaType: z.enum(["image", "video"]).optional(),
+        heroMediaUrl: z.url().optional(),
+        heroPosterUrl: z.url().optional(),
+        tagline: z.string().trim().max(180).optional(),
+        profileSummary: z.string().trim().max(2_000).optional(),
+        palette: z.object({
+          primary: z.string().regex(/^#[0-9a-f]{6}$/i),
+          accent: z.string().regex(/^#[0-9a-f]{6}$/i),
+          sand: z.string().regex(/^#[0-9a-f]{6}$/i),
+          ink: z.string().regex(/^#[0-9a-f]{6}$/i),
+          canvas: z.string().regex(/^#[0-9a-f]{6}$/i),
+        }),
+        cardStyle: z.enum(["soft", "crisp", "borderless"]),
+        publish: z.boolean(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.updateTheme",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateOrganizationTheme({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  issueOrganizationCredits: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        personId: z.string().uuid(),
+        credits: z.number().int().positive().max(1_000_000),
+        expiresAt: z.iso.datetime().optional(),
+        reason: z.string().trim().min(5).max(1_000),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.issueOrganizationCredits",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await issueOrganizationCredits({
+              actor: ctx.actor!,
+              personId: input.personId,
+              credits: input.credits,
+              expiresAt: input.expiresAt
+                ? new Date(input.expiresAt)
+                : undefined,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  proposeCalendarChange: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        startsAt: z.iso.datetime(),
+        endsAt: z.iso.datetime(),
+        courtId: z.string().uuid().optional(),
+        coachPersonId: z.string().uuid().optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.proposeCalendarChange",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await proposeCalendarChange({
+              actor: ctx.actor!,
+              sessionId: input.sessionId,
+              startsAt: new Date(input.startsAt),
+              endsAt: new Date(input.endsAt),
+              courtId: input.courtId,
+              coachPersonId: input.coachPersonId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  confirmCalendarChange: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        proposalId: z.string().uuid(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.confirmCalendarChange",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await confirmCalendarChange({
+              actor: ctx.actor!,
+              proposalId: input.proposalId,
+              confirmed: input.confirmed,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  refundOrganizationOrder: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        orderId: z.string().uuid(),
+        amountMinor: z.number().int().positive().max(100_000_000),
+        disposition: z.enum(["original-payment", "organization-credit"]),
+        credits: z.number().int().positive().max(1_000_000).optional(),
+        reason: z.string().trim().min(5).max(1_000),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.refundOrganizationOrder",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await refundOrganizationOrder({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
     ),
   organization: organizationProcedure("members:read")
     .output(organizationSummarySchema)

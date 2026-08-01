@@ -27,6 +27,10 @@ import {
 import { demoOrganization } from "@duna/core/demo";
 import { and, asc, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
+import {
+  loadDemoCommerceWorkspace,
+  loadOperatorCommerceWorkspace,
+} from "./catalog-service";
 import type {
   OperatorMutationResult,
   OperatorWorkspace,
@@ -371,6 +375,9 @@ export function loadDemoOperatorWorkspace(
       currency: "USD",
       timezone: demoOrganization.timezone,
       stripeChargesEnabled: false,
+      countryCode: "US",
+      stripeTaxEnabled: false,
+      taxRegistrationStatus: "not-configured",
     },
     ratePlans: [],
     venues: [],
@@ -384,6 +391,7 @@ export function loadDemoOperatorWorkspace(
       sms: false,
       push: false,
     },
+    ...loadDemoCommerceWorkspace(),
   };
 }
 
@@ -394,6 +402,7 @@ export async function loadOperatorWorkspace(
   const database = getDatabase();
   const organization = await organizationRow(organizationId);
   const now = new Date();
+  const commerce = await loadOperatorCommerceWorkspace(organizationId, now);
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60_000);
   const thirtyDaysAhead = new Date(now.getTime() + 30 * 24 * 60 * 60_000);
   const [
@@ -756,6 +765,20 @@ export async function loadOperatorWorkspace(
       timezone: organization.timezone,
       stripeAccountId: organization.stripeAccountId ?? undefined,
       stripeChargesEnabled: organization.stripeChargesEnabled,
+      legalName: organization.legalName ?? undefined,
+      countryCode: organization.countryCode,
+      addressLine1: organization.addressLine1 ?? undefined,
+      addressLine2: organization.addressLine2 ?? undefined,
+      locality: organization.locality ?? undefined,
+      administrativeArea: organization.administrativeArea ?? undefined,
+      postalCode: organization.postalCode ?? undefined,
+      stripeTaxEnabled: organization.stripeTaxEnabled,
+      taxRegistrationStatus:
+        organization.taxRegistrationStatus === "pending" ||
+        organization.taxRegistrationStatus === "active" ||
+        organization.taxRegistrationStatus === "restricted"
+          ? organization.taxRegistrationStatus
+          : "not-configured",
     },
     ratePlans: ratePlanRows.map((row) => ({
       id: row.id,
@@ -921,6 +944,7 @@ export async function loadOperatorWorkspace(
       createdAt: row.createdAt.toISOString(),
     })),
     deliveryProviders: providerReadiness(),
+    ...commerce,
   };
 }
 

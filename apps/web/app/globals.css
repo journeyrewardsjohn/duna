@@ -7878,6 +7878,625 @@ html {
   }
 }
 
+.club-profile {
+  --club-primary: #173a63;
+  --club-accent: #2b67a4;
+  --club-sand: #e9dfc9;
+  --club-ink: #101828;
+  --club-canvas: #fafaf7;
+  background: var(--club-canvas);
+  color: var(--club-ink);
+}
+
+.club-profile .club-hero {
+  background:
+    radial-gradient(
+      circle at 82% 18%,
+      color-mix(in srgb, var(--club-sand) 55%, transparent),
+      transparent 32%
+    ),
+    var(--club-canvas);
+}
+
+.club-profile .club-hero__art {
+  background-color: color-mix(in srgb, var(--club-primary) 88%, black);
+  background-position: center;
+  background-size: cover;
+  overflow: hidden;
+  position: relative;
+}
+
+.club-profile .club-hero__art video {
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+}
+
+.club-profile .club-hero__art::after {
+  background: linear-gradient(180deg, transparent 25%, rgb(9 25 44 / 64%));
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.club-profile .club-hero__art > span {
+  position: relative;
+  z-index: 2;
+}
+
+.club-profile .club-hero__copy > a,
+.club-product-card__body > a {
+  align-items: center;
+  background: var(--club-primary);
+  border-radius: 999px;
+  color: white;
+  display: inline-flex;
+  font-weight: 750;
+  gap: 0.55rem;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.club-profile .club-hero__copy > a {
+  padding: 0.9rem 1.2rem;
+}
+
+.club-hero__logo {
+  height: 48px;
+  max-width: 180px;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.club-profile-nav {
+  align-items: center;
+  background: color-mix(in srgb, var(--club-canvas) 94%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--club-ink) 12%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--club-ink) 12%, transparent);
+  display: flex;
+  gap: 0.4rem;
+  margin: 0 auto;
+  max-width: 1240px;
+  overflow-x: auto;
+  padding: 0.75rem clamp(1rem, 4vw, 2.5rem);
+  position: sticky;
+  top: 0;
+  z-index: 9;
+}
+
+.club-profile-nav a {
+  border-radius: 999px;
+  color: var(--club-ink);
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.7rem 0.9rem;
+  text-decoration: none;
+}
+
+.club-profile-nav a:hover {
+  background: color-mix(in srgb, var(--club-sand) 50%, white);
+}
+
+.club-offerings {
+  display: grid;
+  gap: 1.35rem;
+  margin-top: clamp(2.5rem, 7vw, 5rem);
+  scroll-margin-top: 90px;
+}
+
+.club-offerings > header {
+  align-items: end;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.club-offerings > header > div {
+  max-width: 720px;
+}
+
+.club-offerings h2 {
+  color: var(--club-ink);
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  letter-spacing: -0.055em;
+  margin: 0.3rem 0 0.55rem;
+}
+
+.club-offerings header p {
+  color: color-mix(in srgb, var(--club-ink) 67%, transparent);
+  line-height: 1.65;
+  margin: 0;
+}
+
+.club-offerings__icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--club-sand) 60%, white);
+  border-radius: 18px;
+  color: var(--club-primary);
+  display: flex;
+  height: 52px;
+  justify-content: center;
+  width: 52px;
+}
+
+.club-product-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.club-product-card {
+  background: white;
+  border: 1px solid color-mix(in srgb, var(--club-ink) 11%, transparent);
+  border-radius: 24px;
+  box-shadow: 0 14px 40px rgb(16 24 40 / 5%);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.club-profile--crisp .club-product-card {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.club-profile--borderless .club-product-card {
+  border: 0;
+}
+
+.club-product-card__media {
+  align-items: flex-start;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--club-sand) 75%, white),
+    color-mix(in srgb, var(--club-accent) 28%, white)
+  );
+  background-position: center;
+  background-size: cover;
+  display: flex;
+  height: 190px;
+  justify-content: space-between;
+  padding: 1rem;
+}
+
+.club-product-card__media > span:first-child:not(.duna-badge) {
+  align-items: center;
+  background: rgb(255 255 255 / 82%);
+  border-radius: 999px;
+  color: var(--club-primary);
+  display: flex;
+  font-size: 1.2rem;
+  font-weight: 800;
+  height: 54px;
+  justify-content: center;
+  width: 54px;
+}
+
+.club-product-card__media .duna-badge {
+  backdrop-filter: blur(12px);
+  background: rgb(255 255 255 / 84%);
+  color: var(--club-ink);
+  margin-left: auto;
+  text-transform: capitalize;
+}
+
+.club-product-card__body {
+  display: grid;
+  gap: 1rem;
+  padding: 1.15rem;
+}
+
+.club-product-card h3 {
+  color: var(--club-ink);
+  font-size: 1.25rem;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+
+.club-product-card p {
+  color: color-mix(in srgb, var(--club-ink) 62%, transparent);
+  display: -webkit-box;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  margin: 0.45rem 0 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.club-product-card__meta {
+  align-items: end;
+  display: flex;
+  justify-content: space-between;
+}
+
+.club-product-card__meta strong {
+  color: var(--club-primary);
+  font-size: 1rem;
+}
+
+.club-product-card__meta span {
+  color: color-mix(in srgb, var(--club-ink) 55%, transparent);
+  font-size: 0.7rem;
+}
+
+.club-product-card__body > a {
+  padding: 0.75rem 0.9rem;
+  width: 100%;
+}
+
+@media (max-width: 980px) {
+  .club-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .club-product-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .club-offerings > header {
+    align-items: start;
+  }
+
+  .club-offerings__icon {
+    flex: 0 0 44px;
+    height: 44px;
+    width: 44px;
+  }
+
+  .club-profile-nav {
+    padding-inline: 1rem;
+  }
+}
+
+.catalog-product-page {
+  background: #f6f7f8;
+}
+
+.catalog-product-shell {
+  margin: 0 auto;
+  max-width: 1240px;
+  padding: clamp(1.25rem, 4vw, 3rem);
+}
+
+.catalog-product-back {
+  align-items: center;
+  color: #536174;
+  display: inline-flex;
+  font-size: 0.8rem;
+  font-weight: 700;
+  gap: 0.45rem;
+  margin-bottom: 1.25rem;
+  text-decoration: none;
+}
+
+.catalog-product-layout {
+  align-items: start;
+  display: grid;
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
+}
+
+.catalog-product-main {
+  background: white;
+  border: 1px solid #e5e9ef;
+  border-radius: 28px;
+  overflow: hidden;
+}
+
+.catalog-product-hero {
+  align-items: flex-start;
+  background:
+    radial-gradient(circle at 75% 22%, rgb(255 255 255 / 55%), transparent 28%),
+    linear-gradient(135deg, #e9dfc9, #c7d9ec);
+  background-position: center;
+  background-size: cover;
+  display: flex;
+  height: clamp(260px, 42vw, 520px);
+  justify-content: space-between;
+  padding: 1.25rem;
+}
+
+.catalog-product-hero > span:first-child:not(.duna-badge) {
+  align-items: center;
+  background: rgb(255 255 255 / 78%);
+  border-radius: 50%;
+  color: #173a63;
+  display: flex;
+  font-size: clamp(2rem, 5vw, 4rem);
+  font-weight: 800;
+  height: 120px;
+  justify-content: center;
+  margin: auto;
+  width: 120px;
+}
+
+.catalog-product-hero .duna-badge {
+  backdrop-filter: blur(12px);
+  background: rgb(255 255 255 / 84%);
+  color: #101828;
+  margin-left: auto;
+  text-transform: capitalize;
+}
+
+.catalog-product-copy {
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+}
+
+.catalog-product-copy h1 {
+  color: #101828;
+  font-size: clamp(2.3rem, 6vw, 5rem);
+  letter-spacing: -0.065em;
+  line-height: 0.94;
+  margin: 0.55rem 0 1rem;
+}
+
+.catalog-product-summary {
+  color: #536174;
+  font-size: clamp(1.05rem, 2vw, 1.3rem);
+  line-height: 1.55;
+  max-width: 680px;
+}
+
+.catalog-product-description {
+  border-top: 1px solid #e8ebef;
+  color: #39475a;
+  line-height: 1.75;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  white-space: pre-wrap;
+}
+
+.catalog-product-benefits {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 2rem;
+}
+
+.catalog-product-benefits article {
+  align-items: start;
+  background: #f7f8fa;
+  border-radius: 16px;
+  color: #173a63;
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.catalog-product-benefits article > span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.catalog-product-benefits strong {
+  color: #101828;
+  font-size: 0.83rem;
+}
+
+.catalog-product-benefits small {
+  color: #6b7687;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.catalog-checkout-panel {
+  background: white;
+  border: 1px solid #e3e7ed;
+  border-radius: 24px;
+  box-shadow: 0 18px 56px rgb(16 24 40 / 8%);
+  display: grid;
+  gap: 1.1rem;
+  padding: 1.25rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.catalog-checkout-panel > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.catalog-checkout-panel > header > span {
+  color: #101828;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.catalog-checkout-panel > label {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.catalog-checkout-panel > label > span {
+  color: #536174;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.catalog-checkout-panel select {
+  background: #f7f8fa;
+  border: 1px solid #dfe4ea;
+  border-radius: 12px;
+  color: #101828;
+  font: inherit;
+  padding: 0.8rem;
+}
+
+.catalog-payment-methods {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.catalog-payment-methods > button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #dfe4ea;
+  border-radius: 14px;
+  color: #173a63;
+  cursor: pointer;
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  text-align: left;
+}
+
+.catalog-payment-methods > button.active {
+  background: #eef4fb;
+  border-color: #2b67a4;
+  box-shadow: 0 0 0 2px rgb(43 103 164 / 10%);
+}
+
+.catalog-payment-methods > button span {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.catalog-payment-methods strong {
+  color: #101828;
+  font-size: 0.82rem;
+}
+
+.catalog-payment-methods small {
+  color: #677386;
+  font-size: 0.7rem;
+}
+
+.catalog-quantity,
+.catalog-checkout-total {
+  align-items: center;
+  border-top: 1px solid #e7eaef;
+  display: flex;
+  justify-content: space-between;
+  padding-top: 1rem;
+}
+
+.catalog-quantity > span {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.catalog-quantity small {
+  color: #6c7788;
+}
+
+.catalog-quantity > div {
+  align-items: center;
+  background: #f5f7f9;
+  border-radius: 999px;
+  display: flex;
+  gap: 0.85rem;
+  padding: 0.3rem;
+}
+
+.catalog-quantity button {
+  align-items: center;
+  background: white;
+  border: 1px solid #dde2e8;
+  border-radius: 50%;
+  color: #173a63;
+  cursor: pointer;
+  display: flex;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.catalog-checkout-total span {
+  color: #667386;
+}
+
+.catalog-checkout-total strong {
+  color: #173a63;
+  font-size: 1.55rem;
+  letter-spacing: -0.04em;
+}
+
+.catalog-checkout-button {
+  background: #173a63;
+  border: 0;
+  border-radius: 999px;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 0.95rem 1rem;
+}
+
+.catalog-checkout-button:disabled {
+  background: #c7ced8;
+  cursor: not-allowed;
+}
+
+.catalog-checkout-panel > p {
+  color: #9b4d30;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.catalog-checkout-panel > p.catalog-checkout-success {
+  align-items: center;
+  background: #edf8f0;
+  border-radius: 12px;
+  color: #276442;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.catalog-checkout-trust {
+  align-items: start;
+  color: #6a7587;
+  display: flex;
+  font-size: 0.68rem;
+  gap: 0.55rem;
+  line-height: 1.45;
+}
+
+.catalog-checkout-trust svg {
+  color: #2b67a4;
+  flex: 0 0 auto;
+}
+
+.catalog-sign-in-link {
+  color: #2b67a4;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .catalog-product-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-checkout-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 560px) {
+  .catalog-product-shell {
+    padding-inline: 0.8rem;
+  }
+
+  .catalog-product-main,
+  .catalog-checkout-panel {
+    border-radius: 18px;
+  }
+
+  .catalog-product-benefits {
+    grid-template-columns: 1fr;
+  }
+}
+
 body {
   background: var(--color-canvas);
   color: var(--color-bone);
@@ -11402,13 +12021,18 @@ a {
   background: var(--color-ink);
   border: 0;
   border-radius: 999px;
-  color: var(--color-bone);
+  color: #fff;
   display: flex;
   font-size: 0.68rem;
   font-weight: 700;
   gap: 0.4rem;
   min-height: 42px;
   padding: 0 0.9rem;
+}
+
+.wallet-balance-card__actions button:disabled {
+  color: #fff;
+  opacity: 0.74;
 }
 
 .wallet-balance-card > small {
@@ -11463,6 +12087,92 @@ a {
 .wallet-side-cards span:last-child {
   color: var(--color-bone-muted);
   font-size: 0.62rem;
+}
+
+.organization-credit-section {
+  margin-top: 1.25rem;
+}
+
+.organization-credit-section .dashboard-section__heading > p {
+  color: var(--color-bone-muted);
+  font-size: 0.68rem;
+  margin: 0;
+}
+
+.organization-credit-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.organization-credit-grid > article {
+  background: var(--color-depth);
+  border: 1px solid rgb(var(--overlay-rgb) / 8%);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  min-height: 230px;
+  padding: 1.1rem;
+}
+
+.organization-credit-card__top {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1.4rem;
+}
+
+.organization-credit-grid > article > small {
+  color: var(--color-bone-muted);
+  font-size: 0.66rem;
+}
+
+.organization-credit-grid > article > .duna-numeric {
+  font-size: 2.8rem;
+  letter-spacing: -0.07em;
+  line-height: 1;
+}
+
+.organization-credit-grid > article > span {
+  color: var(--color-bone-muted);
+  font-size: 0.62rem;
+}
+
+.organization-credit-grid > article > p {
+  border-top: 1px solid rgb(var(--overlay-rgb) / 7%);
+  display: flex;
+  font-size: 0.64rem;
+  justify-content: space-between;
+  margin: 0.8rem 0 0;
+  padding-top: 0.7rem;
+}
+
+.organization-credit-grid > article > p span {
+  color: var(--color-bone-muted);
+  text-transform: capitalize;
+}
+
+.organization-credit-grid > article > a {
+  align-items: center;
+  color: var(--color-aqua);
+  display: inline-flex;
+  font-size: 0.65rem;
+  font-weight: 700;
+  gap: 0.3rem;
+  margin-top: auto;
+  padding-top: 1rem;
+}
+
+.organization-credit-grid > .organization-credit-card--empty {
+  align-items: flex-start;
+  color: var(--color-bone-muted);
+  gap: 0.55rem;
+  justify-content: center;
+}
+
+.organization-credit-card--empty strong {
+  color: var(--color-bone);
+  font-size: 0.8rem;
 }
 
 .wallet-activity {

@@ -1,11 +1,135 @@
+import type { PublicCatalogItem } from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
-import { ArrowRight, Check, MapPin, ShieldCheck, Users } from "lucide-react";
+import {
+  ArrowRight,
+  CalendarDays,
+  Check,
+  CreditCard,
+  MapPin,
+  ShieldCheck,
+  ShoppingBag,
+  Sparkles,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { CSSProperties, ReactNode } from "react";
 import { EventCard } from "@/components/event-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
+
+function priceLabel(item: PublicCatalogItem): string {
+  const prices = item.variants[0]?.prices ?? [];
+  const moneyPrices = prices.filter(
+    (price) => price.paymentKind === "card" && price.amountMinor !== undefined,
+  );
+  const money = moneyPrices.toSorted(
+    (left, right) => (left.amountMinor ?? 0) - (right.amountMinor ?? 0),
+  )[0];
+  const credits = prices.find(
+    (price) =>
+      price.paymentKind === "credit" && price.creditAmount !== undefined,
+  );
+  const parts: string[] = [];
+  if (money?.amountMinor !== undefined && money.currency) {
+    parts.push(
+      `${moneyPrices.length > 1 ? "From " : ""}${new Intl.NumberFormat(
+        "en-US",
+        {
+          style: "currency",
+          currency: money.currency,
+          maximumFractionDigits: 2,
+        },
+      ).format(money.amountMinor / 100)}`,
+    );
+    if (money.recurringInterval) {
+      parts[0] += ` / ${money.recurringInterval}`;
+    }
+  }
+  if (credits?.creditAmount) parts.push(`${credits.creditAmount} credits`);
+  if (item.allowCash && parts.length === 0) parts.push("Cash");
+  return parts.join(" or ") || "Free";
+}
+
+function CatalogSection({
+  eyebrow,
+  title,
+  description,
+  icon,
+  items,
+  slug,
+  id,
+}: {
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly description: string;
+  readonly icon: ReactNode;
+  readonly items: readonly PublicCatalogItem[];
+  readonly slug: string;
+  readonly id: string;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <section className="club-offerings" id={id}>
+      <header>
+        <div>
+          <span className="section__eyebrow">{eyebrow}</span>
+          <h2>{title}</h2>
+          <p>{description}</p>
+        </div>
+        <span className="club-offerings__icon">{icon}</span>
+      </header>
+      <div className="club-product-grid">
+        {items.map((item) => {
+          const media = item.media[0];
+          const available = item.variants.reduce(
+            (total, variant) => total + (variant.availableQuantity ?? 0),
+            0,
+          );
+          return (
+            <article className="club-product-card" key={item.id}>
+              <div
+                className="club-product-card__media"
+                style={
+                  media?.kind === "image"
+                    ? { backgroundImage: `url("${media.url}")` }
+                    : undefined
+                }
+              >
+                {!media && <span>{item.title.slice(0, 2).toUpperCase()}</span>}
+                <Badge>{item.subtype.replaceAll("-", " ")}</Badge>
+              </div>
+              <div className="club-product-card__body">
+                <div>
+                  <h3>{item.title}</h3>
+                  <p>
+                    {item.shortSummary ??
+                      item.description ??
+                      "View details, eligibility, and purchase options."}
+                  </p>
+                </div>
+                <div className="club-product-card__meta">
+                  <strong>{priceLabel(item)}</strong>
+                  <span>
+                    {item.membershipRequired || item.visibility === "members"
+                      ? "Members only"
+                      : item.type === "good"
+                        ? `${available} available`
+                        : "Open to book"}
+                  </span>
+                </div>
+                <Link href={`/clubs/${slug}/products/${item.slug}`}>
+                  View details <ArrowRight size={16} />
+                </Link>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 export default async function ClubPage({
   params,
@@ -14,8 +138,9 @@ export default async function ClubPage({
 }) {
   const { slug } = await params;
   const caller = await getServerCaller();
-  const [organization, allEvents, allVenues] = await Promise.all([
+  const [organization, storefront, allEvents, allVenues] = await Promise.all([
     caller.public.organizationBySlug({ slug }).catch(() => undefined),
+    caller.public.organizationStorefront({ slug }).catch(() => undefined),
     caller.public.events(),
     caller.public.venues(),
   ]);
@@ -32,11 +157,56 @@ export default async function ClubPage({
     .map((part) => part[0])
     .join("")
     .toUpperCase();
+  const theme = storefront?.theme ?? {
+    palette: {
+      primary: "#173A63",
+      accent: "#2B67A4",
+      sand: "#E9DFC9",
+      ink: "#101828",
+      canvas: "#FAFAF7",
+    },
+    typography: { heading: "Instrument Sans", body: "Archivo" },
+    cardStyle: "soft" as const,
+    profileLayout: "editorial",
+  };
+  const themeStyle = {
+    "--club-primary": theme.palette.primary,
+    "--club-accent": theme.palette.accent,
+    "--club-sand": theme.palette.sand,
+    "--club-ink": theme.palette.ink,
+    "--club-canvas": theme.palette.canvas,
+  } as CSSProperties;
+  const catalog = storefront?.catalog ?? [];
+  const catalogEvents = catalog.filter((item) => item.type === "event");
+  const services = catalog.filter((item) => item.type === "service");
+  const plans = catalog.filter((item) => item.type === "plan");
+  const goods = catalog.filter((item) => item.type === "good");
+
   return (
-    <main className="public-detail">
+    <main
+      className={`public-detail club-profile club-profile--${theme.cardStyle}`}
+      style={themeStyle}
+    >
       <SiteHeader />
       <section className="club-hero">
-        <div className="club-hero__art">
+        <div
+          className="club-hero__art"
+          style={
+            theme.heroMediaType === "image" && theme.heroMediaUrl
+              ? { backgroundImage: `url("${theme.heroMediaUrl}")` }
+              : undefined
+          }
+        >
+          {theme.heroMediaType === "video" && theme.heroMediaUrl && (
+            <video
+              autoPlay
+              loop
+              muted
+              playsInline
+              poster={theme.heroPosterUrl}
+              src={theme.heroMediaUrl}
+            />
+          )}
           <div />
           <span>{mark}</span>
         </div>
@@ -45,15 +215,23 @@ export default async function ClubPage({
             <Badge tone="positive">Verified club</Badge>
             <Badge>{organization.plan.replace("-", " ")}</Badge>
           </div>
+          {theme.logoUrl && (
+            <img
+              alt={`${organization.name} logo`}
+              className="club-hero__logo"
+              src={theme.logoUrl}
+            />
+          )}
           <h1>{organization.name}</h1>
           <p>
-            Structured training, serious competition, and easy ways into the
-            South Bay beach community.
+            {theme.tagline ??
+              theme.profileSummary ??
+              "Training, competition, and community in one simple place."}
           </p>
           <div className="club-hero__stats">
             <span>
               <Numeric>{organization.memberCount}</Numeric>
-              <small>members</small>
+              <small>players</small>
             </span>
             <span>
               <Numeric>{organization.staffCount}</Numeric>
@@ -64,13 +242,20 @@ export default async function ClubPage({
               <small>venues</small>
             </span>
           </div>
-          <Link href="/app/discover">
-            Explore programs <ArrowRight size={17} />
-          </Link>
+          <a href="#book">
+            Explore what’s available <ArrowRight size={17} />
+          </a>
         </div>
       </section>
+      <nav aria-label="Club profile" className="club-profile-nav">
+        <a href="#book">Events</a>
+        {services.length > 0 && <a href="#services">Services</a>}
+        {plans.length > 0 && <a href="#plans">Memberships + credits</a>}
+        {goods.length > 0 && <a href="#shop">Shop</a>}
+        <a href="#locations">Locations</a>
+      </nav>
       <section className="club-body">
-        <div className="section__heading">
+        <div className="section__heading" id="book">
           <div>
             <span className="section__eyebrow">Book now</span>
             <h2>What’s happening.</h2>
@@ -80,13 +265,49 @@ export default async function ClubPage({
           {events.slice(0, 4).map((event) => (
             <EventCard event={event} key={event.id} />
           ))}
-          {events.length === 0 && (
+          {events.length === 0 && catalogEvents.length === 0 && (
             <article className="empty-state">
-              <h3>No published sessions yet.</h3>
+              <h3>No published events yet.</h3>
               <p>This club’s next public offering will appear here.</p>
             </article>
           )}
         </div>
+        <CatalogSection
+          description="Leagues, tournaments, clinics, and open play with clear eligibility and pricing."
+          eyebrow="Events"
+          icon={<CalendarDays />}
+          id="catalog-events"
+          items={catalogEvents}
+          slug={slug}
+          title="Choose your next run."
+        />
+        <CatalogSection
+          description="Book private coaching, group training, assessments, and recurring programs."
+          eyebrow="Services"
+          icon={<Sparkles />}
+          id="services"
+          items={services}
+          slug={slug}
+          title="Train with intention."
+        />
+        <CatalogSection
+          description="Member pricing and organization credits stay with this club and remain visible in your wallet."
+          eyebrow="Memberships + credit packs"
+          icon={<CreditCard />}
+          id="plans"
+          items={plans}
+          slug={slug}
+          title="A simpler way to play more."
+        />
+        <CatalogSection
+          description="Club goods and available equipment for sale, rental, or pickup."
+          eyebrow="Shop"
+          icon={<ShoppingBag />}
+          id="shop"
+          items={goods}
+          slug={slug}
+          title="Gear from the club."
+        />
         <div className="club-values">
           <article>
             <Users />
@@ -96,15 +317,15 @@ export default async function ClubPage({
           <article>
             <ShieldCheck />
             <strong>Built-in safety</strong>
-            <p>Verified coaches, guardian structure, versioned waivers.</p>
+            <p>Verified coaches, guardian structure, and versioned waivers.</p>
           </article>
           <article>
             <Check />
             <strong>One clean account</strong>
-            <p>Bookings, packages, memberships, events, and messages.</p>
+            <p>Bookings, credits, memberships, purchases, and messages.</p>
           </article>
         </div>
-        <div className="club-locations">
+        <div className="club-locations" id="locations">
           <div>
             <span className="section__eyebrow">Where we play</span>
             <h2>

@@ -212,6 +212,120 @@ export async function createCourtCheckoutSession(input: {
   };
 }
 
+export async function createCatalogCheckoutSession(input: {
+  readonly orderId: string;
+  readonly personId: string;
+  readonly customerEmail?: string;
+  readonly organizationId: string;
+  readonly catalogItemId: string;
+  readonly catalogVariantId: string;
+  readonly stripePriceId: string;
+  readonly quantity: number;
+  readonly amountMinor: number;
+  readonly applicationFeeMinor: number;
+  readonly connectedAccountId: string;
+  readonly recurring: boolean;
+  readonly automaticTaxEnabled: boolean;
+  readonly collectShippingAddress: boolean;
+  readonly successUrl: string;
+  readonly cancelUrl: string;
+  readonly expiresAt: Date;
+  readonly idempotencyKey: string;
+}): Promise<{
+  readonly id: string;
+  readonly url: string | null;
+  readonly expiresAt: string;
+}> {
+  if (!Number.isSafeInteger(input.quantity) || input.quantity < 1) {
+    throw new Error("Catalog checkout quantity must be a positive integer");
+  }
+  if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
+    throw new Error("Catalog checkout amount must be positive");
+  }
+  if (
+    !Number.isSafeInteger(input.applicationFeeMinor) ||
+    input.applicationFeeMinor < 0 ||
+    input.applicationFeeMinor > input.amountMinor
+  ) {
+    throw new Error("Catalog checkout application fee is invalid");
+  }
+  if (input.recurring && input.quantity !== 1) {
+    throw new Error("Recurring plans must be purchased one at a time");
+  }
+  const metadata = {
+    dunaOrderId: input.orderId,
+    dunaPersonId: input.personId,
+    dunaOrganizationId: input.organizationId,
+    dunaCatalogItemId: input.catalogItemId,
+    dunaCatalogVariantId: input.catalogVariantId,
+    product: "organization-catalog",
+  };
+  const applicationFeePercent =
+    Math.round((input.applicationFeeMinor / input.amountMinor) * 10_000) / 100;
+  const session = await getStripeClient().checkout.sessions.create(
+    {
+      mode: input.recurring ? "subscription" : "payment",
+      client_reference_id: input.personId,
+      customer_email: input.customerEmail,
+      line_items: [{ price: input.stripePriceId, quantity: input.quantity }],
+      success_url: input.successUrl,
+      cancel_url: input.cancelUrl,
+      expires_at: Math.floor(input.expiresAt.getTime() / 1_000),
+      billing_address_collection: input.automaticTaxEnabled
+        ? "required"
+        : "auto",
+      shipping_address_collection: input.collectShippingAddress
+        ? {
+            allowed_countries: [
+              "US",
+              "CA",
+              "AU",
+              "BR",
+              "GB",
+              "FR",
+              "DE",
+              "ES",
+              "IT",
+              "NL",
+            ],
+          }
+        : undefined,
+      automatic_tax: {
+        enabled: input.automaticTaxEnabled,
+        liability: input.automaticTaxEnabled
+          ? {
+              type: "account",
+              account: input.connectedAccountId,
+            }
+          : undefined,
+      },
+      payment_intent_data: input.recurring
+        ? undefined
+        : {
+            application_fee_amount: input.applicationFeeMinor,
+            on_behalf_of: input.connectedAccountId,
+            transfer_data: { destination: input.connectedAccountId },
+            metadata,
+          },
+      subscription_data: input.recurring
+        ? {
+            application_fee_percent: applicationFeePercent,
+            on_behalf_of: input.connectedAccountId,
+            transfer_data: { destination: input.connectedAccountId },
+            metadata,
+          }
+        : undefined,
+      metadata,
+    },
+    { idempotencyKey: input.idempotencyKey },
+  );
+  return {
+    id: session.id,
+    url: session.url,
+    expiresAt: new Date(session.expires_at * 1_000).toISOString(),
+  };
+}
+
 export async function createBillingPortalSession(input: {
   readonly customerId: string;
   readonly returnUrl: string;
@@ -365,12 +479,16 @@ export async function refundPayment(input: {
   readonly amountMinor?: number;
   readonly reason: "duplicate" | "fraudulent" | "requested_by_customer";
   readonly idempotencyKey: string;
+  readonly reverseTransfer?: boolean;
+  readonly refundApplicationFee?: boolean;
 }): Promise<{ readonly id: string; readonly status: string | null }> {
   const refund = await getStripeClient().refunds.create(
     {
       payment_intent: input.paymentIntentId,
       amount: input.amountMinor,
       reason: input.reason,
+      reverse_transfer: input.reverseTransfer,
+      refund_application_fee: input.refundApplicationFee,
       metadata: { initiatedBy: "duna" },
     },
     { idempotencyKey: input.idempotencyKey },

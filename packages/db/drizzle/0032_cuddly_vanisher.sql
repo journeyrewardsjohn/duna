@@ -1,0 +1,1 @@
+ALTER TABLE "refund_records" ALTER COLUMN "ledger_journal_id" DROP NOT NULL;

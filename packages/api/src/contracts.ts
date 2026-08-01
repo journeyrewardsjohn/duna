@@ -624,21 +624,331 @@ export const operatorInvitationSchema = z.object({
   createdAt: z.iso.datetime(),
 });
 
+export const operatorCatalogPriceSchema = z.object({
+  id: z.string().uuid(),
+  audience: z.enum(["everyone", "member", "non-member"]),
+  paymentKind: z.enum(["card", "cash", "credit"]),
+  amountMinor: z.number().int().nonnegative().optional(),
+  currency: currencySchema.optional(),
+  creditAmount: z.number().int().positive().optional(),
+  recurringInterval: z.enum(["week", "month", "year"]).optional(),
+  recurringIntervalCount: z.number().int().positive().optional(),
+  active: z.boolean(),
+});
+
+export const operatorCatalogVariantSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  sku: z.string().optional(),
+  optionCoordinates: z.record(z.string(), z.string()),
+  status: z.enum(["draft", "active", "archived"]),
+  prices: z.array(operatorCatalogPriceSchema).readonly(),
+});
+
+export const operatorCatalogItemSchema = z.object({
+  id: z.string().uuid(),
+  type: z.enum(["event", "service", "good", "plan"]),
+  subtype: z.string(),
+  slug: z.string(),
+  title: z.string(),
+  shortSummary: z.string().optional(),
+  description: z.string().optional(),
+  status: z.enum(["draft", "active", "archived"]),
+  visibility: z.enum(["public", "members", "private"]),
+  taxable: z.boolean(),
+  stripeTaxCode: z.string().optional(),
+  allowCard: z.boolean(),
+  allowCash: z.boolean(),
+  allowCredits: z.boolean(),
+  membershipRequired: z.boolean(),
+  defaultFulfillment: z.string(),
+  configuration: z.record(z.string(), z.unknown()),
+  variants: z.array(operatorCatalogVariantSchema).readonly(),
+  media: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        kind: z.enum(["image", "video"]),
+        url: z.string(),
+        posterUrl: z.string().optional(),
+        alt: z.string().optional(),
+      }),
+    )
+    .readonly(),
+  inventoryOnHand: z.number().int().nonnegative(),
+  inventoryReserved: z.number().int().nonnegative(),
+  publishedAt: z.iso.datetime().optional(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const publicCatalogPriceSchema = operatorCatalogPriceSchema.pick({
+  id: true,
+  audience: true,
+  paymentKind: true,
+  amountMinor: true,
+  currency: true,
+  creditAmount: true,
+  recurringInterval: true,
+  recurringIntervalCount: true,
+});
+
+export const publicCatalogVariantSchema = operatorCatalogVariantSchema
+  .pick({
+    id: true,
+    title: true,
+    sku: true,
+    optionCoordinates: true,
+    prices: true,
+  })
+  .extend({
+    prices: z.array(publicCatalogPriceSchema).readonly(),
+    availableQuantity: z.number().int().nonnegative().optional(),
+  });
+
+export const publicCatalogItemSchema = operatorCatalogItemSchema
+  .pick({
+    id: true,
+    type: true,
+    subtype: true,
+    slug: true,
+    title: true,
+    shortSummary: true,
+    description: true,
+    visibility: true,
+    taxable: true,
+    allowCard: true,
+    allowCash: true,
+    allowCredits: true,
+    membershipRequired: true,
+    defaultFulfillment: true,
+    configuration: true,
+    media: true,
+  })
+  .extend({
+    variants: z.array(publicCatalogVariantSchema).readonly(),
+  });
+
+export const operatorInventoryItemSchema = z.object({
+  id: z.string().uuid(),
+  catalogItemId: z.string().uuid(),
+  catalogVariantId: z.string().uuid(),
+  itemTitle: z.string(),
+  variantTitle: z.string(),
+  locationName: z.string(),
+  purpose: z.enum(["sale", "rental", "coach-use", "operations"]),
+  trackingMode: z.enum(["quantity", "serialized"]),
+  quantityOnHand: z.number().int().nonnegative(),
+  quantityReserved: z.number().int().nonnegative(),
+  reorderPoint: z.number().int().nonnegative(),
+  serialNumber: z.string().optional(),
+  assetTag: z.string().optional(),
+  condition: z.string(),
+  unitCostMinor: z.number().int().nonnegative().optional(),
+  currency: currencySchema.optional(),
+  acquiredAt: z.iso.date().optional(),
+  vendorName: z.string().optional(),
+  depreciationMethod: z.string().optional(),
+  usefulLifeMonths: z.number().int().positive().optional(),
+  bookValueMinor: z.number().int().nonnegative().optional(),
+});
+
+export const operatorInventoryLocationSchema = z.object({
+  id: z.string().uuid(),
+  venueId: z.string().uuid().optional(),
+  name: z.string(),
+  kind: z.enum(["venue", "warehouse", "vehicle", "coach-kit", "virtual"]),
+  active: z.boolean(),
+});
+
+export const operatorPersonRelationshipSchema = z.object({
+  personId: z.string().uuid(),
+  displayName: z.string(),
+  avatarUrl: z.string().optional(),
+  email: z.string().email().optional(),
+  phoneE164: z.string().optional(),
+  isMinor: z.boolean(),
+  roles: z
+    .array(
+      z.enum([
+        "player",
+        "guardian",
+        "owner",
+        "manager",
+        "coach",
+        "front-desk",
+        "scorekeeper",
+        "accountant",
+      ]),
+    )
+    .readonly(),
+  status: z.enum(["active", "inactive", "pending"]),
+  membershipStatus: z.string().optional(),
+  membershipName: z.string().optional(),
+  creditBalance: z.number().int().nonnegative(),
+  lifetimeSpendMinor: z.number().int().nonnegative(),
+  purchaseCount: z.number().int().nonnegative(),
+  recentPurchases: z
+    .array(
+      z.object({
+        orderId: z.string().uuid(),
+        description: z.string(),
+        amountMinor: z.number().int().nonnegative(),
+        currency: currencySchema,
+        status: z.string(),
+        purchasedAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
+  upcomingCount: z.number().int().nonnegative(),
+  joinedAt: z.iso.datetime(),
+});
+
+export const operatorCalendarEntrySchema = z.object({
+  id: z.string(),
+  sourceType: z.enum(["session", "booking", "busy-block"]),
+  title: z.string(),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
+  timezone: z.string(),
+  status: z.string(),
+  venueName: z.string().optional(),
+  courtId: z.string().uuid().optional(),
+  courtName: z.string().optional(),
+  coachPersonId: z.string().uuid().optional(),
+  coachName: z.string().optional(),
+  participantCount: z.number().int().nonnegative(),
+  capacity: z.number().int().nonnegative(),
+  color: z.string(),
+  draggable: z.boolean(),
+});
+
+export const operatorCalendarConnectionSchema = z.object({
+  id: z.string().uuid(),
+  personId: z.string().uuid(),
+  personName: z.string(),
+  provider: z.enum(["google", "apple", "ical"]),
+  syncDirection: z.enum(["busy-only", "duna-to-external", "two-way"]),
+  status: z.enum([
+    "pending",
+    "active",
+    "reauthorization-required",
+    "paused",
+    "revoked",
+  ]),
+  lastSyncedAt: z.iso.datetime().optional(),
+});
+
+export const operatorThemeSchema = z.object({
+  logoUrl: z.string().optional(),
+  markUrl: z.string().optional(),
+  heroMediaType: z.enum(["image", "video"]).optional(),
+  heroMediaUrl: z.string().optional(),
+  heroPosterUrl: z.string().optional(),
+  tagline: z.string().optional(),
+  profileSummary: z.string().optional(),
+  palette: z.object({
+    primary: z.string(),
+    accent: z.string(),
+    sand: z.string(),
+    ink: z.string(),
+    canvas: z.string(),
+  }),
+  typography: z.object({
+    heading: z.string(),
+    body: z.string(),
+  }),
+  cardStyle: z.enum(["soft", "crisp", "borderless"]),
+  profileLayout: z.string(),
+  publishedAt: z.iso.datetime().optional(),
+});
+
+export const publicOrganizationStorefrontSchema = z.object({
+  organizationId: z.string().uuid(),
+  slug: z.string(),
+  name: z.string(),
+  currency: currencySchema,
+  timezone: z.string(),
+  paymentsReady: z.boolean(),
+  theme: operatorThemeSchema,
+  catalog: z.array(publicCatalogItemSchema).readonly(),
+});
+
+export const organizationWalletSummarySchema = z.object({
+  organizationId: z.string().uuid(),
+  organizationSlug: z.string(),
+  organizationName: z.string(),
+  credits: z.number().int().nonnegative(),
+  status: z.enum(["active", "frozen", "closed"]),
+  nextExpirationAt: z.iso.datetime().optional(),
+  nextExpiringCredits: z.number().int().nonnegative(),
+  membershipName: z.string().optional(),
+  membershipStatus: z.string().optional(),
+});
+
 export const operatorWorkspaceSchema = z.object({
   organization: z.object({
     id: z.string().uuid(),
     name: z.string(),
+    legalName: z.string().optional(),
     plan: z.enum(["coach", "small-club", "club", "multi-venue"]),
     currency: currencySchema,
     timezone: z.string(),
     stripeAccountId: z.string().optional(),
     stripeChargesEnabled: z.boolean(),
+    addressLine1: z.string().optional(),
+    addressLine2: z.string().optional(),
+    locality: z.string().optional(),
+    administrativeArea: z.string().optional(),
+    postalCode: z.string().optional(),
+    countryCode: z.string(),
+    stripeTaxEnabled: z.boolean(),
+    taxRegistrationStatus: z.enum([
+      "not-configured",
+      "pending",
+      "active",
+      "restricted",
+    ]),
   }),
   ratePlans: z.array(operatorRatePlanSchema).readonly(),
   venues: z.array(operatorVenueSchema).readonly(),
   sessions: z.array(operatorSessionSchema).readonly(),
   participants: z.array(operatorParticipantSchema).readonly(),
+  people: z.array(operatorPersonRelationshipSchema).readonly(),
   invitations: z.array(operatorInvitationSchema).readonly(),
+  catalog: z.array(operatorCatalogItemSchema).readonly(),
+  inventory: z.array(operatorInventoryItemSchema).readonly(),
+  inventoryLocations: z.array(operatorInventoryLocationSchema).readonly(),
+  calendar: z.object({
+    entries: z.array(operatorCalendarEntrySchema).readonly(),
+    connections: z.array(operatorCalendarConnectionSchema).readonly(),
+    resourceConflicts: z.number().int().nonnegative(),
+  }),
+  theme: operatorThemeSchema,
+  ledger: z.object({
+    postedJournalCount: z.number().int().nonnegative(),
+    draftJournalCount: z.number().int().nonnegative(),
+    lastReconciledAt: z.iso.datetime().optional(),
+    reconciliationStatus: z.enum([
+      "not-started",
+      "matched",
+      "drift",
+      "investigating",
+      "resolved",
+    ]),
+    creditLiability: z.number().int().nonnegative(),
+  }),
+  recommendations: z
+    .array(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+        detail: z.string(),
+        action: z.string(),
+        href: z.string(),
+        tone: z.enum(["growth", "attention", "setup"]),
+      }),
+    )
+    .readonly(),
   messageRecipients: z.array(operatorMessageRecipientSchema).readonly(),
   messageDrafts: z.array(operatorMessageDraftSchema).readonly(),
   deliveryProviders: z.object({
@@ -686,6 +996,13 @@ export const operatorMutationResultSchema = z.object({
     "schedule",
     "schedule-override",
     "player-invitation",
+    "catalog-item",
+    "inventory-item",
+    "organization-theme",
+    "organization-settings",
+    "calendar-change",
+    "credit-adjustment",
+    "refund",
   ]),
   status: z.string(),
 });
@@ -744,6 +1061,10 @@ export const ticketApprovalResultSchema = z.object({
 });
 
 export type OperatorWorkspace = z.infer<typeof operatorWorkspaceSchema>;
+export type PublicCatalogItem = z.infer<typeof publicCatalogItemSchema>;
+export type PublicOrganizationStorefront = z.infer<
+  typeof publicOrganizationStorefrontSchema
+>;
 export type OperatorMutationResult = z.infer<
   typeof operatorMutationResultSchema
 >;
@@ -1172,6 +1493,38 @@ export const courtCheckoutStatusSchema = z.object({
   totalAmountMinor: z.number().int().nonnegative().optional(),
   paymentMode: z.enum(["full", "split"]).optional(),
   participants: z.array(courtBookingParticipantSchema).readonly().optional(),
+});
+
+export const catalogCheckoutResultSchema = z.object({
+  mode: z.enum(["stripe", "organization-credit", "free", "unavailable"]),
+  orderId: z.string().uuid(),
+  orderStatus: z.enum(["pending", "paid"]),
+  checkoutSessionId: z.string().optional(),
+  checkoutUrl: z.url().optional(),
+  expiresAt: z.iso.datetime().optional(),
+  paymentMethod: z.enum(["card", "credit"]),
+  quantity: z.number().int().positive(),
+  amountMinor: z.number().int().nonnegative(),
+  creditsApplied: z.number().int().nonnegative(),
+  currency: currencySchema,
+});
+
+export const catalogCheckoutStatusSchema = z.object({
+  orderId: z.string().uuid(),
+  orderStatus: z.enum([
+    "draft",
+    "pending",
+    "paid",
+    "partially-refunded",
+    "refunded",
+    "failed",
+    "disputed",
+    "cancelled",
+  ]),
+  fulfillmentStatus: z
+    .enum(["held", "pending", "ready", "fulfilled", "cancelled", "refunded"])
+    .optional(),
+  complete: z.boolean(),
 });
 
 export const availabilityAlertResultSchema = z.object({

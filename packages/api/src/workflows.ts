@@ -1,5 +1,7 @@
 import {
   auditLog,
+  catalogFulfillments,
+  catalogPrices,
   courtBookingParticipants,
   courtBookings,
   getDatabase,
@@ -7,7 +9,9 @@ import {
   memberships,
   membershipTiers,
   orders,
+  orderTaxContexts,
   organizations,
+  payments,
   pickupParticipants,
   registrations,
   tickets,
@@ -15,6 +19,10 @@ import {
   workflowJobs,
 } from "@duna/db";
 import { and, asc, eq, lte, or, sql } from "drizzle-orm";
+import {
+  fulfillPaidCatalogOrder,
+  releaseCatalogOrderInventory,
+} from "./catalog-checkout";
 
 export type WorkflowStatus =
   "queued" | "running" | "retry" | "succeeded" | "failed";
@@ -152,6 +160,36 @@ async function synchronizeMembership(input: {
       createdAt: input.occurredAt,
       updatedAt: input.occurredAt,
     });
+  }
+  const catalogOrderId =
+    typeof metadata?.dunaOrderId === "string"
+      ? metadata.dunaOrderId
+      : undefined;
+  if (catalogOrderId) {
+    const catalogPrice = await database.query.catalogPrices.findFirst({
+      where: eq(catalogPrices.stripePriceId, priceId),
+    });
+    if (catalogPrice) {
+      await database
+        .update(catalogFulfillments)
+        .set({
+          status:
+            status === "active" || status === "trialing"
+              ? "fulfilled"
+              : "pending",
+          fulfilledAt:
+            status === "active" || status === "trialing"
+              ? input.occurredAt
+              : null,
+          updatedAt: input.occurredAt,
+        })
+        .where(
+          and(
+            eq(catalogFulfillments.orderId, catalogOrderId),
+            eq(catalogFulfillments.catalogItemId, catalogPrice.catalogItemId),
+          ),
+        );
+    }
   }
   await database.insert(auditLog).values({
     actorType: "system",
@@ -350,7 +388,8 @@ async function processStripeWorkflow(
         ? object.currency.toUpperCase()
         : undefined;
     if (
-      amountReceived !== order.totalMinor ||
+      amountReceived === undefined ||
+      amountReceived < order.totalMinor ||
       paymentCurrency !== order.currency
     ) {
       throw new Error("Stripe payment amount does not match the Duna order");
@@ -368,6 +407,27 @@ async function processStripeWorkflow(
             typeof object.latest_charge.id === "string"
           ? object.latest_charge.id
           : null;
+    if (amountReceived !== order.totalMinor) {
+      const taxTotalMinor = amountReceived - order.totalMinor;
+      await database.batch([
+        database
+          .update(orders)
+          .set({
+            taxTotalMinor: order.taxTotalMinor + taxTotalMinor,
+            totalMinor: amountReceived,
+            updatedAt: occurredAt,
+          })
+          .where(eq(orders.id, order.id)),
+        database
+          .update(orderTaxContexts)
+          .set({
+            taxAmountMinor: taxTotalMinor,
+            status: "committed",
+            committedAt: occurredAt,
+          })
+          .where(eq(orderTaxContexts.orderId, order.id)),
+      ]);
+    }
     await database.execute(sql`
       SELECT duna_project_order_payment(
         ${order.id}::uuid,
@@ -377,6 +437,85 @@ async function processStripeWorkflow(
         ${eventPayload.id ?? webhook.providerEventId}::text
       )
     `);
+    await fulfillPaidCatalogOrder(order.id, occurredAt);
+  } else if (action === "checkout.completed") {
+    const mode = optionalString(object, "mode");
+    if (mode === "subscription") {
+      const paymentStatus = optionalString(object, "payment_status");
+      if (paymentStatus !== "paid" && paymentStatus !== "no_payment_required") {
+        throw new Error(
+          "Subscription checkout completed without a settled payment status",
+        );
+      }
+      const metadata = object.metadata as
+        Readonly<Record<string, unknown>> | undefined;
+      const orderId =
+        typeof metadata?.dunaOrderId === "string"
+          ? metadata.dunaOrderId
+          : undefined;
+      if (!orderId) {
+        throw new Error("Subscription checkout is missing dunaOrderId");
+      }
+      const order = await database.query.orders.findFirst({
+        where: eq(orders.id, orderId),
+      });
+      if (!order) throw new Error("Subscription checkout order was not found");
+      const amountTotal =
+        typeof object.amount_total === "number"
+          ? object.amount_total
+          : order.totalMinor;
+      const checkoutCurrency =
+        typeof object.currency === "string"
+          ? object.currency.toUpperCase()
+          : order.currency;
+      if (
+        checkoutCurrency !== order.currency ||
+        amountTotal < order.totalMinor
+      ) {
+        throw new Error(
+          "Subscription checkout amount does not match its order",
+        );
+      }
+      const taxTotalMinor = amountTotal - order.totalMinor;
+      await database.batch([
+        database
+          .update(orders)
+          .set({
+            status: "paid",
+            taxTotalMinor: order.taxTotalMinor + taxTotalMinor,
+            totalMinor: amountTotal,
+            updatedAt: occurredAt,
+          })
+          .where(eq(orders.id, order.id)),
+        database
+          .update(orderTaxContexts)
+          .set({
+            taxAmountMinor: taxTotalMinor,
+            status: "committed",
+            committedAt: occurredAt,
+          })
+          .where(eq(orderTaxContexts.orderId, order.id)),
+      ]);
+      const existingPayment = await database.query.payments.findFirst({
+        where: and(
+          eq(payments.orderId, order.id),
+          eq(payments.method, "stripe-subscription-checkout"),
+          eq(payments.status, "succeeded"),
+        ),
+      });
+      if (!existingPayment) {
+        await database.insert(payments).values({
+          orderId: order.id,
+          method: "stripe-subscription-checkout",
+          amountMinor: amountTotal,
+          currency: order.currency,
+          status: "succeeded",
+          createdAt: occurredAt,
+          updatedAt: occurredAt,
+        });
+      }
+      await fulfillPaidCatalogOrder(order.id, occurredAt);
+    }
   } else if (
     action === "order.payment_failed" ||
     action === "order.checkout_expired"
@@ -389,6 +528,16 @@ async function processStripeWorkflow(
         : undefined;
     if (orderId) {
       const failedAt = occurredAt;
+      const failedOrder = await database.query.orders.findFirst({
+        where: eq(orders.id, orderId),
+      });
+      if (failedOrder?.organizationId) {
+        await releaseCatalogOrderInventory(
+          failedOrder.organizationId,
+          orderId,
+          failedAt,
+        );
+      }
       await database.batch([
         database
           .update(orders)
@@ -435,6 +584,10 @@ async function processStripeWorkflow(
             updatedAt: failedAt,
           })
           .where(eq(courtBookingParticipants.orderId, orderId)),
+        database
+          .update(catalogFulfillments)
+          .set({ status: "cancelled", updatedAt: failedAt })
+          .where(eq(catalogFulfillments.orderId, orderId)),
         database.insert(auditLog).values({
           actorType: "system",
           action,

@@ -47,6 +47,12 @@ import {
 } from "@/app/actions";
 import { createVenueMediaPath, optimizeImageUpload } from "@/lib/media-storage";
 import type { OperatorModule } from "./navigation";
+import {
+  CommerceSettingsControls,
+  PeopleRefundControls,
+  PeopleWalletControls,
+  ProductCatalogControls,
+} from "./commerce-controls";
 
 const initialOperatorActionState: OperatorActionState = {
   status: "idle",
@@ -1742,7 +1748,18 @@ export function OperatorControls({
     return <MessageComposer workspace={workspace} />;
   }
   if (module === "members") {
-    return <PlayerInvitationComposer workspace={workspace} />;
+    return (
+      <div className="commerce-controls">
+        <div className="operator-controls-grid">
+          <PeopleWalletControls workspace={workspace} />
+          <PeopleRefundControls workspace={workspace} />
+        </div>
+        <PlayerInvitationComposer workspace={workspace} />
+      </div>
+    );
+  }
+  if (module === "products") {
+    return <ProductCatalogControls workspace={workspace} />;
   }
   if (module === "payments") {
     return (
@@ -1755,11 +1772,11 @@ export function OperatorControls({
   if (module === "settings") {
     return (
       <>
+        <CommerceSettingsControls workspace={workspace} />
         <div className="operator-controls-grid">
           <StripeOnboarding workspace={workspace} />
           <RatePlanComposer workspace={workspace} />
         </div>
-        <FacilitiesControls workspace={workspace} />
       </>
     );
   }
@@ -1793,13 +1810,12 @@ export function OperatorControls({
       </>
     );
   }
-  if (module === "calendar" || module === "programs") {
-    const defaultKind = module === "calendar" ? "open-play" : "clinic";
+  if (module === "calendar") {
     return (
       <>
         <SessionDrafts workspace={workspace} />
-        <SessionComposer workspace={workspace} defaultKind={defaultKind} />
-        {module === "calendar" && <FacilitiesControls workspace={workspace} />}
+        <SessionComposer workspace={workspace} defaultKind="open-play" />
+        <FacilitiesControls workspace={workspace} />
       </>
     );
   }

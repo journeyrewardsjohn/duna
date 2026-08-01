@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   date,
@@ -201,6 +202,72 @@ export const riskTierEnum = pgEnum("agent_risk_tier", [
   "propose",
   "confirm-always",
 ]);
+export const catalogItemTypeEnum = pgEnum("catalog_item_type", [
+  "event",
+  "service",
+  "good",
+  "plan",
+]);
+export const catalogStatusEnum = pgEnum("catalog_status", [
+  "draft",
+  "active",
+  "archived",
+]);
+export const catalogAudienceEnum = pgEnum("catalog_audience", [
+  "everyone",
+  "member",
+  "non-member",
+]);
+export const catalogPaymentKindEnum = pgEnum("catalog_payment_kind", [
+  "card",
+  "cash",
+  "credit",
+]);
+export const inventoryPurposeEnum = pgEnum("inventory_purpose", [
+  "sale",
+  "rental",
+  "coach-use",
+  "operations",
+]);
+export const inventoryMovementKindEnum = pgEnum("inventory_movement_kind", [
+  "receive",
+  "sale",
+  "rent-out",
+  "rent-return",
+  "coach-checkout",
+  "coach-return",
+  "adjustment",
+  "damage",
+  "retire",
+]);
+export const journalStatusEnum = pgEnum("journal_status", ["draft", "posted"]);
+export const ledgerAccountTypeEnum = pgEnum("ledger_account_type", [
+  "asset",
+  "liability",
+  "equity",
+  "revenue",
+  "expense",
+  "memo",
+]);
+export const ledgerEntrySideEnum = pgEnum("ledger_entry_side", [
+  "debit",
+  "credit",
+]);
+export const ledgerUnitKindEnum = pgEnum("ledger_unit_kind", [
+  "money",
+  "organization-credit",
+]);
+export const reservationStatusEnum = pgEnum("resource_reservation_status", [
+  "held",
+  "confirmed",
+  "released",
+  "cancelled",
+]);
+export const calendarProviderEnum = pgEnum("calendar_provider", [
+  "google",
+  "apple",
+  "ical",
+]);
 
 // Identity
 export const people = pgTable(
@@ -371,6 +438,15 @@ export const organizations = pgTable(
       .default("America/New_York"),
     currency: varchar("currency", { length: 3 }).notNull().default("USD"),
     countryCode: varchar("country_code", { length: 2 }).notNull().default("US"),
+    addressLine1: text("address_line_1"),
+    addressLine2: text("address_line_2"),
+    locality: text("locality"),
+    administrativeArea: text("administrative_area"),
+    postalCode: varchar("postal_code", { length: 24 }),
+    stripeTaxEnabled: boolean("stripe_tax_enabled").notNull().default(false),
+    taxRegistrationStatus: varchar("tax_registration_status", { length: 24 })
+      .notNull()
+      .default("not-configured"),
     stripeAccountId: varchar("stripe_account_id", { length: 128 }),
     stripeAccountType: varchar("stripe_account_type", { length: 24 }),
     stripeChargesEnabled: boolean("stripe_charges_enabled")
@@ -385,6 +461,70 @@ export const organizations = pgTable(
     check(
       "organization_currency_uppercase",
       sql`${table.currency} = upper(${table.currency})`,
+    ),
+    check(
+      "organization_tax_status_valid",
+      sql`${table.taxRegistrationStatus} IN ('not-configured', 'pending', 'active', 'restricted')`,
+    ),
+  ],
+);
+
+export const organizationThemes = pgTable(
+  "organization_themes",
+  {
+    organizationId: uuid("organization_id")
+      .primaryKey()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    logoUrl: text("logo_url"),
+    markUrl: text("mark_url"),
+    heroMediaType: varchar("hero_media_type", { length: 16 }),
+    heroMediaUrl: text("hero_media_url"),
+    heroPosterUrl: text("hero_poster_url"),
+    tagline: text("tagline"),
+    profileSummary: text("profile_summary"),
+    palette: jsonb("palette")
+      .notNull()
+      .$type<{
+        primary: string;
+        accent: string;
+        sand: string;
+        ink: string;
+        canvas: string;
+      }>()
+      .default({
+        primary: "#173A63",
+        accent: "#2B67A4",
+        sand: "#E9DFC9",
+        ink: "#101828",
+        canvas: "#FAFAF7",
+      }),
+    typography: jsonb("typography")
+      .notNull()
+      .$type<{ heading: string; body: string }>()
+      .default({ heading: "Instrument Sans", body: "Archivo" }),
+    cardStyle: varchar("card_style", { length: 24 }).notNull().default("soft"),
+    profileLayout: varchar("profile_layout", { length: 24 })
+      .notNull()
+      .default("editorial"),
+    socialLinks: jsonb("social_links")
+      .notNull()
+      .$type<readonly { label: string; url: string }[]>()
+      .default([]),
+    publishedAt: timestamp("published_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    check(
+      "organization_theme_hero_type_valid",
+      sql`${table.heroMediaType} IS NULL OR ${table.heroMediaType} IN ('image', 'video')`,
+    ),
+    check(
+      "organization_theme_card_style_valid",
+      sql`${table.cardStyle} IN ('soft', 'crisp', 'borderless')`,
     ),
   ],
 );
@@ -866,6 +1006,274 @@ export const eventBlueprints = pgTable("event_blueprints", {
   updatedAt,
 });
 
+// Organization catalog: events, services, goods, and plans share one sellable model.
+export const catalogItems = pgTable(
+  "catalog_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    type: catalogItemTypeEnum("type").notNull(),
+    subtype: varchar("subtype", { length: 48 }).notNull(),
+    slug: varchar("slug", { length: 96 }).notNull(),
+    title: text("title").notNull(),
+    shortSummary: text("short_summary"),
+    description: text("description"),
+    status: catalogStatusEnum("status").notNull().default("draft"),
+    visibility: varchar("visibility", { length: 24 })
+      .notNull()
+      .default("public"),
+    taxable: boolean("taxable").notNull().default(true),
+    stripeTaxCode: varchar("stripe_tax_code", { length: 64 }),
+    allowCard: boolean("allow_card").notNull().default(true),
+    allowCash: boolean("allow_cash").notNull().default(false),
+    allowCredits: boolean("allow_credits").notNull().default(false),
+    membershipRequired: boolean("membership_required").notNull().default(false),
+    defaultFulfillment: varchar("default_fulfillment", { length: 32 })
+      .notNull()
+      .default("registration"),
+    configuration: jsonb("configuration")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    createdByPersonId: uuid("created_by_person_id").references(() => people.id),
+    publishedAt: timestamp("published_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    archivedAt: timestamp("archived_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("catalog_item_org_slug_unique").on(
+      table.organizationId,
+      table.slug,
+    ),
+    index("catalog_item_org_type_status_idx").on(
+      table.organizationId,
+      table.type,
+      table.status,
+    ),
+    check(
+      "catalog_item_visibility_valid",
+      sql`${table.visibility} IN ('public', 'members', 'private')`,
+    ),
+    check(
+      "catalog_item_subtype_valid",
+      sql`(${table.type} = 'event' AND ${table.subtype} IN ('tournament', 'league', 'clinic', 'open-play', 'pickup')) OR (${table.type} = 'service' AND ${table.subtype} IN ('private-lesson', 'group-lesson', 'program', 'court-rental', 'assessment', 'other')) OR (${table.type} = 'good' AND ${table.subtype} IN ('apparel', 'equipment', 'rental', 'swag', 'consumable', 'other')) OR (${table.type} = 'plan' AND ${table.subtype} IN ('membership', 'credit-pack'))`,
+    ),
+    check(
+      "catalog_item_payment_method",
+      sql`${table.allowCard} OR ${table.allowCash} OR ${table.allowCredits}`,
+    ),
+  ],
+);
+
+export const catalogOptions = pgTable(
+  "catalog_options",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    catalogItemId: uuid("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    code: varchar("code", { length: 48 }).notNull(),
+    name: text("name").notNull(),
+    values: jsonb("values").notNull().$type<readonly string[]>(),
+    required: boolean("required").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("catalog_option_item_code_unique").on(
+      table.catalogItemId,
+      table.code,
+    ),
+    index("catalog_option_org_item_idx").on(
+      table.organizationId,
+      table.catalogItemId,
+    ),
+    check(
+      "catalog_option_values_present",
+      sql`jsonb_array_length(${table.values}) > 0`,
+    ),
+  ],
+);
+
+export const catalogVariants = pgTable(
+  "catalog_variants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    catalogItemId: uuid("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    sku: varchar("sku", { length: 96 }),
+    title: text("title").notNull(),
+    optionCoordinates: jsonb("option_coordinates")
+      .notNull()
+      .$type<Record<string, string>>()
+      .default({}),
+    status: catalogStatusEnum("status").notNull().default("active"),
+    barcode: varchar("barcode", { length: 96 }),
+    weightGrams: integer("weight_grams"),
+    stripeProductId: varchar("stripe_product_id", { length: 128 }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("catalog_variant_item_sku_unique")
+      .on(table.catalogItemId, table.sku)
+      .where(sql`${table.sku} IS NOT NULL`),
+    index("catalog_variant_org_item_idx").on(
+      table.organizationId,
+      table.catalogItemId,
+    ),
+    index("catalog_variant_options_gin_idx").using(
+      "gin",
+      table.optionCoordinates,
+    ),
+    check(
+      "catalog_variant_weight_nonnegative",
+      sql`${table.weightGrams} IS NULL OR ${table.weightGrams} >= 0`,
+    ),
+  ],
+);
+
+export const catalogPrices = pgTable(
+  "catalog_prices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    catalogItemId: uuid("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    catalogVariantId: uuid("catalog_variant_id").references(
+      () => catalogVariants.id,
+      { onDelete: "cascade" },
+    ),
+    audience: catalogAudienceEnum("audience").notNull().default("everyone"),
+    paymentKind: catalogPaymentKindEnum("payment_kind").notNull(),
+    amountMinor: bigint("amount_minor", { mode: "number" }),
+    currency: varchar("currency", { length: 3 }),
+    creditAmount: integer("credit_amount"),
+    recurringInterval: varchar("recurring_interval", { length: 16 }),
+    recurringIntervalCount: integer("recurring_interval_count"),
+    stripePriceId: varchar("stripe_price_id", { length: 128 }).unique(),
+    taxBehavior: varchar("tax_behavior", { length: 16 })
+      .notNull()
+      .default("exclusive"),
+    active: boolean("active").notNull().default(true),
+    startsAt: timestamp("starts_at", { withTimezone: true, mode: "date" }),
+    endsAt: timestamp("ends_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("catalog_price_org_item_idx").on(
+      table.organizationId,
+      table.catalogItemId,
+      table.active,
+    ),
+    check(
+      "catalog_price_value_valid",
+      sql`(${table.paymentKind} = 'credit' AND ${table.creditAmount} > 0 AND ${table.amountMinor} IS NULL AND ${table.currency} IS NULL) OR (${table.paymentKind} IN ('card', 'cash') AND ${table.amountMinor} >= 0 AND ${table.currency} IS NOT NULL AND ${table.creditAmount} IS NULL)`,
+    ),
+    check(
+      "catalog_price_currency_uppercase",
+      sql`${table.currency} IS NULL OR ${table.currency} = upper(${table.currency})`,
+    ),
+    check(
+      "catalog_price_recurring_valid",
+      sql`(${table.recurringInterval} IS NULL AND ${table.recurringIntervalCount} IS NULL) OR (${table.recurringInterval} IN ('week', 'month', 'year') AND ${table.recurringIntervalCount} > 0)`,
+    ),
+    check(
+      "catalog_price_window_valid",
+      sql`${table.startsAt} IS NULL OR ${table.endsAt} IS NULL OR ${table.endsAt} > ${table.startsAt}`,
+    ),
+  ],
+);
+
+export const catalogMedia = pgTable(
+  "catalog_media",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    catalogItemId: uuid("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    catalogVariantId: uuid("catalog_variant_id").references(
+      () => catalogVariants.id,
+      { onDelete: "cascade" },
+    ),
+    kind: varchar("kind", { length: 16 }).notNull(),
+    url: text("url").notNull(),
+    posterUrl: text("poster_url"),
+    alt: text("alt"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt,
+  },
+  (table) => [
+    index("catalog_media_org_item_idx").on(
+      table.organizationId,
+      table.catalogItemId,
+    ),
+    check("catalog_media_kind_valid", sql`${table.kind} IN ('image', 'video')`),
+  ],
+);
+
+export const catalogEntitlements = pgTable(
+  "catalog_entitlements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    planCatalogItemId: uuid("plan_catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    targetCatalogItemId: uuid("target_catalog_item_id").references(
+      () => catalogItems.id,
+      { onDelete: "cascade" },
+    ),
+    quantity: integer("quantity"),
+    configuration: jsonb("configuration")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    createdAt,
+  },
+  (table) => [
+    index("catalog_entitlement_org_plan_idx").on(
+      table.organizationId,
+      table.planCatalogItemId,
+    ),
+    check(
+      "catalog_entitlement_kind_valid",
+      sql`${table.kind} IN ('membership-access', 'credit-grant', 'discount', 'priority-booking', 'included-item')`,
+    ),
+    check(
+      "catalog_entitlement_quantity_positive",
+      sql`${table.quantity} IS NULL OR ${table.quantity} > 0`,
+    ),
+  ],
+);
+
 export const divisions = pgTable("divisions", {
   id: uuid("id").primaryKey().defaultRandom(),
   sessionId: uuid("session_id")
@@ -896,6 +1304,451 @@ export const divisions = pgTable("divisions", {
   createdAt,
   updatedAt,
 });
+
+export const catalogSessionLinks = pgTable(
+  "catalog_session_links",
+  {
+    catalogItemId: uuid("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    divisionId: uuid("division_id").references(() => divisions.id, {
+      onDelete: "cascade",
+    }),
+    relationship: varchar("relationship", { length: 24 })
+      .notNull()
+      .default("primary"),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.catalogItemId, table.sessionId] }),
+    index("catalog_session_link_session_idx").on(table.sessionId),
+    check(
+      "catalog_session_link_relationship_valid",
+      sql`${table.relationship} IN ('primary', 'entry', 'ticket', 'upsell')`,
+    ),
+  ],
+);
+
+export const inventoryLocations = pgTable(
+  "inventory_locations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id").references(() => venues.id, {
+      onDelete: "set null",
+    }),
+    name: text("name").notNull(),
+    kind: varchar("kind", { length: 24 }).notNull().default("venue"),
+    active: boolean("active").notNull().default(true),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("inventory_location_org_name_unique").on(
+      table.organizationId,
+      table.name,
+    ),
+    index("inventory_location_org_active_idx").on(
+      table.organizationId,
+      table.active,
+    ),
+    check(
+      "inventory_location_kind_valid",
+      sql`${table.kind} IN ('venue', 'warehouse', 'vehicle', 'coach-kit', 'virtual')`,
+    ),
+  ],
+);
+
+export const inventoryStockItems = pgTable(
+  "inventory_stock_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    catalogVariantId: uuid("catalog_variant_id")
+      .notNull()
+      .references(() => catalogVariants.id, { onDelete: "cascade" }),
+    inventoryLocationId: uuid("inventory_location_id")
+      .notNull()
+      .references(() => inventoryLocations.id, { onDelete: "cascade" }),
+    purpose: inventoryPurposeEnum("purpose").notNull(),
+    trackingMode: varchar("tracking_mode", { length: 16 })
+      .notNull()
+      .default("quantity"),
+    quantityOnHand: integer("quantity_on_hand").notNull().default(0),
+    quantityReserved: integer("quantity_reserved").notNull().default(0),
+    reorderPoint: integer("reorder_point").notNull().default(0),
+    serialNumber: varchar("serial_number", { length: 128 }),
+    assetTag: varchar("asset_tag", { length: 96 }),
+    condition: varchar("condition", { length: 24 }).notNull().default("good"),
+    unitCostMinor: bigint("unit_cost_minor", { mode: "number" }),
+    currency: varchar("currency", { length: 3 }),
+    acquiredAt: date("acquired_at", { mode: "string" }),
+    vendorName: text("vendor_name"),
+    vendorReference: text("vendor_reference"),
+    receiptUrl: text("receipt_url"),
+    placedInServiceAt: date("placed_in_service_at", { mode: "string" }),
+    depreciationMethod: varchar("depreciation_method", { length: 32 }),
+    usefulLifeMonths: integer("useful_life_months"),
+    salvageValueMinor: bigint("salvage_value_minor", { mode: "number" }),
+    taxAssetClass: varchar("tax_asset_class", { length: 64 }),
+    retiredAt: date("retired_at", { mode: "string" }),
+    notes: text("notes"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("inventory_stock_org_location_idx").on(
+      table.organizationId,
+      table.inventoryLocationId,
+      table.purpose,
+    ),
+    index("inventory_stock_org_variant_idx").on(
+      table.organizationId,
+      table.catalogVariantId,
+    ),
+    uniqueIndex("inventory_stock_org_serial_unique")
+      .on(table.organizationId, table.serialNumber)
+      .where(sql`${table.serialNumber} IS NOT NULL`),
+    uniqueIndex("inventory_stock_org_asset_tag_unique")
+      .on(table.organizationId, table.assetTag)
+      .where(sql`${table.assetTag} IS NOT NULL`),
+    check(
+      "inventory_stock_quantities_valid",
+      sql`${table.quantityOnHand} >= 0 AND ${table.quantityReserved} >= 0 AND ${table.quantityReserved} <= ${table.quantityOnHand} AND ${table.reorderPoint} >= 0`,
+    ),
+    check(
+      "inventory_stock_tracking_mode_valid",
+      sql`${table.trackingMode} IN ('quantity', 'serialized')`,
+    ),
+    check(
+      "inventory_stock_serialized_quantity",
+      sql`${table.trackingMode} <> 'serialized' OR (${table.quantityOnHand} <= 1 AND ${table.serialNumber} IS NOT NULL)`,
+    ),
+    check(
+      "inventory_stock_acquisition_amounts",
+      sql`${table.unitCostMinor} IS NULL OR (${table.unitCostMinor} >= 0 AND ${table.currency} IS NOT NULL)`,
+    ),
+    check(
+      "inventory_stock_depreciation_valid",
+      sql`${table.depreciationMethod} IS NULL OR ${table.depreciationMethod} IN ('straight-line', 'declining-balance', 'section-179', 'bonus', 'none')`,
+    ),
+    check(
+      "inventory_stock_useful_life_positive",
+      sql`${table.usefulLifeMonths} IS NULL OR ${table.usefulLifeMonths} > 0`,
+    ),
+  ],
+);
+
+export const inventoryMovements = pgTable(
+  "inventory_movements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    inventoryStockItemId: uuid("inventory_stock_item_id")
+      .notNull()
+      .references(() => inventoryStockItems.id),
+    kind: inventoryMovementKindEnum("kind").notNull(),
+    quantityDelta: integer("quantity_delta").notNull(),
+    unitCostMinor: bigint("unit_cost_minor", { mode: "number" }),
+    currency: varchar("currency", { length: 3 }),
+    sourceType: varchar("source_type", { length: 32 }),
+    sourceId: text("source_id"),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+    actorPersonId: uuid("actor_person_id").references(() => people.id),
+    reason: text("reason").notNull(),
+    occurredAt: timestamp("occurred_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("inventory_movement_org_idempotency_unique").on(
+      table.organizationId,
+      table.idempotencyKey,
+    ),
+    index("inventory_movement_org_stock_time_idx").on(
+      table.organizationId,
+      table.inventoryStockItemId,
+      table.occurredAt,
+    ),
+    check("inventory_movement_nonzero", sql`${table.quantityDelta} <> 0`),
+  ],
+);
+
+export const inventoryReservations = pgTable(
+  "inventory_reservations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    inventoryStockItemId: uuid("inventory_stock_item_id")
+      .notNull()
+      .references(() => inventoryStockItems.id),
+    quantity: integer("quantity").notNull(),
+    startsAt: timestamp("starts_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    endsAt: timestamp("ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    sourceType: varchar("source_type", { length: 32 }).notNull(),
+    sourceId: text("source_id").notNull(),
+    status: reservationStatusEnum("status").notNull().default("held"),
+    heldUntil: timestamp("held_until", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("inventory_reservation_org_stock_time_idx").on(
+      table.organizationId,
+      table.inventoryStockItemId,
+      table.startsAt,
+    ),
+    check(
+      "inventory_reservation_quantity_positive",
+      sql`${table.quantity} > 0`,
+    ),
+    check(
+      "inventory_reservation_time_valid",
+      sql`${table.endsAt} > ${table.startsAt}`,
+    ),
+  ],
+);
+
+export const resourceReservations = pgTable(
+  "resource_reservations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    resourceType: varchar("resource_type", { length: 24 }).notNull(),
+    resourceId: uuid("resource_id").notNull(),
+    startsAt: timestamp("starts_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    endsAt: timestamp("ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    exclusive: boolean("exclusive").notNull().default(true),
+    sourceType: varchar("source_type", { length: 32 }).notNull(),
+    sourceId: text("source_id").notNull(),
+    status: reservationStatusEnum("status").notNull().default("held"),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+    heldUntil: timestamp("held_until", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("resource_reservation_org_idempotency_unique").on(
+      table.organizationId,
+      table.idempotencyKey,
+    ),
+    index("resource_reservation_org_resource_time_idx").on(
+      table.organizationId,
+      table.resourceType,
+      table.resourceId,
+      table.startsAt,
+    ),
+    check(
+      "resource_reservation_type_valid",
+      sql`${table.resourceType} IN ('court', 'coach', 'equipment')`,
+    ),
+    check(
+      "resource_reservation_time_valid",
+      sql`${table.endsAt} > ${table.startsAt}`,
+    ),
+    check("resource_reservation_quantity_positive", sql`${table.quantity} > 0`),
+  ],
+);
+
+export const calendarConnections = pgTable(
+  "calendar_connections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    provider: calendarProviderEnum("provider").notNull(),
+    externalAccountId: text("external_account_id").notNull(),
+    credentialReference: text("credential_reference").notNull(),
+    selectedCalendarIds: jsonb("selected_calendar_ids")
+      .notNull()
+      .$type<readonly string[]>()
+      .default([]),
+    syncDirection: varchar("sync_direction", { length: 16 })
+      .notNull()
+      .default("two-way"),
+    status: varchar("status", { length: 24 }).notNull().default("pending"),
+    syncToken: text("sync_token"),
+    lastSyncedAt: timestamp("last_synced_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    lastError: text("last_error"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("calendar_connection_org_person_provider_unique").on(
+      table.organizationId,
+      table.personId,
+      table.provider,
+      table.externalAccountId,
+    ),
+    index("calendar_connection_org_status_idx").on(
+      table.organizationId,
+      table.status,
+    ),
+    check(
+      "calendar_connection_direction_valid",
+      sql`${table.syncDirection} IN ('busy-only', 'duna-to-external', 'two-way')`,
+    ),
+    check(
+      "calendar_connection_status_valid",
+      sql`${table.status} IN ('pending', 'active', 'reauthorization-required', 'paused', 'revoked')`,
+    ),
+  ],
+);
+
+export const calendarBusyBlocks = pgTable(
+  "calendar_busy_blocks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    calendarConnectionId: uuid("calendar_connection_id")
+      .notNull()
+      .references(() => calendarConnections.id, { onDelete: "cascade" }),
+    externalEventId: text("external_event_id").notNull(),
+    startsAt: timestamp("starts_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    endsAt: timestamp("ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    transparency: varchar("transparency", { length: 16 })
+      .notNull()
+      .default("busy"),
+    sourceUpdatedAt: timestamp("source_updated_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("calendar_busy_connection_event_unique").on(
+      table.calendarConnectionId,
+      table.externalEventId,
+    ),
+    index("calendar_busy_org_time_idx").on(
+      table.organizationId,
+      table.startsAt,
+      table.endsAt,
+    ),
+    check("calendar_busy_time_valid", sql`${table.endsAt} > ${table.startsAt}`),
+    check(
+      "calendar_busy_transparency_valid",
+      sql`${table.transparency} IN ('busy', 'free')`,
+    ),
+  ],
+);
+
+export const calendarChangeProposals = pgTable(
+  "calendar_change_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    originalStartsAt: timestamp("original_starts_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    originalEndsAt: timestamp("original_ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    proposedStartsAt: timestamp("proposed_starts_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    proposedEndsAt: timestamp("proposed_ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    proposedCourtId: uuid("proposed_court_id").references(() => courts.id),
+    proposedCoachPersonId: uuid("proposed_coach_person_id").references(
+      () => people.id,
+    ),
+    conflictSummary: jsonb("conflict_summary").notNull().$type<{
+      conflicts: readonly string[];
+      notifications: number;
+      reservations: number;
+    }>(),
+    status: varchar("status", { length: 24 }).notNull().default("proposed"),
+    createdByPersonId: uuid("created_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    confirmedAt: timestamp("confirmed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("calendar_change_org_status_idx").on(
+      table.organizationId,
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "calendar_change_time_valid",
+      sql`${table.originalEndsAt} > ${table.originalStartsAt} AND ${table.proposedEndsAt} > ${table.proposedStartsAt}`,
+    ),
+    check(
+      "calendar_change_status_valid",
+      sql`${table.status} IN ('proposed', 'confirmed', 'rejected', 'expired')`,
+    ),
+  ],
+);
 
 export const registrations = pgTable(
   "registrations",
@@ -2206,6 +3059,526 @@ export const walletLedger = pgTable(
   (table) => [
     index("wallet_ledger_balance_idx").on(table.walletAccountId, table.status),
     check("wallet_ledger_positive", sql`${table.amountMinor} > 0`),
+  ],
+);
+
+// Balanced organization subledger. Cash remains in Stripe; closed-loop credits
+// are organization-scoped units and never masquerade as transferable cash.
+export const ledgerAccounts = pgTable(
+  "ledger_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    ownerPersonId: uuid("owner_person_id").references(() => people.id, {
+      onDelete: "restrict",
+    }),
+    code: varchar("code", { length: 96 }).notNull(),
+    name: text("name").notNull(),
+    accountType: ledgerAccountTypeEnum("account_type").notNull(),
+    normalSide: ledgerEntrySideEnum("normal_side").notNull(),
+    unitKind: ledgerUnitKindEnum("unit_kind").notNull(),
+    unit: varchar("unit", { length: 96 }).notNull(),
+    currency: varchar("currency", { length: 3 }),
+    systemManaged: boolean("system_managed").notNull().default(true),
+    active: boolean("active").notNull().default(true),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("ledger_account_org_code_owner_unique").on(
+      table.organizationId,
+      table.code,
+      table.ownerPersonId,
+    ),
+    uniqueIndex("ledger_account_org_system_code_unique")
+      .on(table.organizationId, table.code)
+      .where(sql`${table.ownerPersonId} IS NULL`),
+    index("ledger_account_org_owner_idx").on(
+      table.organizationId,
+      table.ownerPersonId,
+      table.active,
+    ),
+    check(
+      "ledger_account_unit_currency_valid",
+      sql`(${table.unitKind} = 'money' AND ${table.currency} IS NOT NULL AND ${table.unit} = ${table.currency}) OR (${table.unitKind} = 'organization-credit' AND ${table.currency} IS NULL)`,
+    ),
+    check(
+      "ledger_account_currency_uppercase",
+      sql`${table.currency} IS NULL OR ${table.currency} = upper(${table.currency})`,
+    ),
+  ],
+);
+
+export const ledgerJournals = pgTable(
+  "ledger_journals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+    sourceType: varchar("source_type", { length: 48 }).notNull(),
+    sourceId: text("source_id").notNull(),
+    description: text("description").notNull(),
+    status: journalStatusEnum("status").notNull().default("draft"),
+    reversalOfJournalId: uuid("reversal_of_journal_id"),
+    actorPersonId: uuid("actor_person_id").references(() => people.id),
+    occurredAt: timestamp("occurred_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    postedAt: timestamp("posted_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    metadata: jsonb("metadata")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("ledger_journal_org_idempotency_unique").on(
+      table.organizationId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex("ledger_journal_reversal_unique")
+      .on(table.reversalOfJournalId)
+      .where(sql`${table.reversalOfJournalId} IS NOT NULL`),
+    index("ledger_journal_org_source_idx").on(
+      table.organizationId,
+      table.sourceType,
+      table.sourceId,
+    ),
+    index("ledger_journal_org_occurred_idx").on(
+      table.organizationId,
+      table.occurredAt,
+    ),
+    check(
+      "ledger_journal_posted_state_valid",
+      sql`(${table.status} = 'draft' AND ${table.postedAt} IS NULL) OR (${table.status} = 'posted' AND ${table.postedAt} IS NOT NULL)`,
+    ),
+    check(
+      "ledger_journal_not_self_reversal",
+      sql`${table.reversalOfJournalId} IS NULL OR ${table.reversalOfJournalId} <> ${table.id}`,
+    ),
+  ],
+);
+
+export const ledgerEntries = pgTable(
+  "ledger_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    journalId: uuid("journal_id")
+      .notNull()
+      .references(() => ledgerJournals.id, { onDelete: "restrict" }),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => ledgerAccounts.id, { onDelete: "restrict" }),
+    sequence: integer("sequence").notNull(),
+    side: ledgerEntrySideEnum("side").notNull(),
+    amount: bigint("amount", { mode: "number" }).notNull(),
+    unitKind: ledgerUnitKindEnum("unit_kind").notNull(),
+    unit: varchar("unit", { length: 96 }).notNull(),
+    currency: varchar("currency", { length: 3 }),
+    memo: text("memo"),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("ledger_entry_journal_sequence_unique").on(
+      table.journalId,
+      table.sequence,
+    ),
+    index("ledger_entry_org_account_idx").on(
+      table.organizationId,
+      table.accountId,
+      table.createdAt,
+    ),
+    index("ledger_entry_org_journal_idx").on(
+      table.organizationId,
+      table.journalId,
+    ),
+    check("ledger_entry_amount_positive", sql`${table.amount} > 0`),
+    check("ledger_entry_sequence_nonnegative", sql`${table.sequence} >= 0`),
+    check(
+      "ledger_entry_unit_currency_valid",
+      sql`(${table.unitKind} = 'money' AND ${table.currency} IS NOT NULL AND ${table.unit} = ${table.currency}) OR (${table.unitKind} = 'organization-credit' AND ${table.currency} IS NULL)`,
+    ),
+  ],
+);
+
+export const organizationWallets = pgTable(
+  "organization_wallets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    creditLedgerAccountId: uuid("credit_ledger_account_id")
+      .notNull()
+      .references(() => ledgerAccounts.id, { onDelete: "restrict" }),
+    unit: varchar("unit", { length: 96 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("active"),
+    cachedAvailableCredits: integer("cached_available_credits")
+      .notNull()
+      .default(0),
+    cachedAt: timestamp("cached_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("organization_wallet_person_unique").on(
+      table.organizationId,
+      table.personId,
+    ),
+    uniqueIndex("organization_wallet_account_unique").on(
+      table.creditLedgerAccountId,
+    ),
+    index("organization_wallet_org_status_idx").on(
+      table.organizationId,
+      table.status,
+    ),
+    check(
+      "organization_wallet_status_valid",
+      sql`${table.status} IN ('active', 'frozen', 'closed')`,
+    ),
+    check(
+      "organization_wallet_cached_nonnegative",
+      sql`${table.cachedAvailableCredits} >= 0`,
+    ),
+  ],
+);
+
+export const organizationCreditGrants = pgTable(
+  "organization_credit_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    organizationWalletId: uuid("organization_wallet_id")
+      .notNull()
+      .references(() => organizationWallets.id, { onDelete: "restrict" }),
+    sourceJournalId: uuid("source_journal_id")
+      .notNull()
+      .references(() => ledgerJournals.id, { onDelete: "restrict" }),
+    catalogItemId: uuid("catalog_item_id").references(() => catalogItems.id),
+    sourceOrderId: uuid("source_order_id").references(() => orders.id, {
+      onDelete: "restrict",
+    }),
+    initialCredits: integer("initial_credits").notNull(),
+    remainingCredits: integer("remaining_credits").notNull(),
+    initialValueMinor: bigint("initial_value_minor", { mode: "number" })
+      .notNull()
+      .default(0),
+    remainingValueMinor: bigint("remaining_value_minor", { mode: "number" })
+      .notNull()
+      .default(0),
+    currency: varchar("currency", { length: 3 }),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    status: varchar("status", { length: 24 }).notNull().default("active"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("organization_credit_grant_wallet_expiry_idx").on(
+      table.organizationId,
+      table.organizationWalletId,
+      table.expiresAt,
+    ),
+    index("organization_credit_grant_source_order_idx").on(
+      table.organizationId,
+      table.sourceOrderId,
+    ),
+    check(
+      "organization_credit_grant_amounts_valid",
+      sql`${table.initialCredits} > 0 AND ${table.remainingCredits} >= 0 AND ${table.remainingCredits} <= ${table.initialCredits}`,
+    ),
+    check(
+      "organization_credit_grant_value_valid",
+      sql`${table.initialValueMinor} >= 0 AND ${table.remainingValueMinor} >= 0 AND ${table.remainingValueMinor} <= ${table.initialValueMinor} AND ((${table.initialValueMinor} = 0 AND ${table.currency} IS NULL) OR (${table.initialValueMinor} > 0 AND ${table.currency} IS NOT NULL AND ${table.currency} = upper(${table.currency})))`,
+    ),
+    check(
+      "organization_credit_grant_status_valid",
+      sql`${table.status} IN ('active', 'exhausted', 'expired', 'reversed')`,
+    ),
+  ],
+);
+
+export const organizationCreditApplications = pgTable(
+  "organization_credit_applications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    organizationWalletId: uuid("organization_wallet_id")
+      .notNull()
+      .references(() => organizationWallets.id, { onDelete: "restrict" }),
+    organizationCreditGrantId: uuid("organization_credit_grant_id")
+      .notNull()
+      .references(() => organizationCreditGrants.id, {
+        onDelete: "restrict",
+      }),
+    journalId: uuid("journal_id")
+      .notNull()
+      .references(() => ledgerJournals.id, { onDelete: "restrict" }),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    credits: integer("credits").notNull(),
+    valueMinor: bigint("value_minor", { mode: "number" }).notNull().default(0),
+    currency: varchar("currency", { length: 3 }),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("organization_credit_application_journal_grant_unique").on(
+      table.journalId,
+      table.organizationCreditGrantId,
+    ),
+    index("organization_credit_application_wallet_idx").on(
+      table.organizationId,
+      table.organizationWalletId,
+      table.createdAt,
+    ),
+    index("organization_credit_application_order_idx").on(table.orderId),
+    check(
+      "organization_credit_application_positive",
+      sql`${table.credits} > 0`,
+    ),
+    check(
+      "organization_credit_application_value_valid",
+      sql`${table.valueMinor} >= 0 AND ((${table.valueMinor} = 0 AND ${table.currency} IS NULL) OR (${table.valueMinor} > 0 AND ${table.currency} IS NOT NULL AND ${table.currency} = upper(${table.currency})))`,
+    ),
+  ],
+);
+
+export const catalogFulfillments = pgTable(
+  "catalog_fulfillments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    orderItemId: uuid("order_item_id")
+      .notNull()
+      .references(() => orderItems.id, { onDelete: "restrict" }),
+    catalogItemId: uuid("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "restrict" }),
+    catalogVariantId: uuid("catalog_variant_id")
+      .notNull()
+      .references(() => catalogVariants.id, { onDelete: "restrict" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("pending"),
+    details: jsonb("details")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    fulfilledAt: timestamp("fulfilled_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("catalog_fulfillment_order_item_unique").on(table.orderItemId),
+    index("catalog_fulfillment_person_status_idx").on(
+      table.organizationId,
+      table.personId,
+      table.status,
+    ),
+    check(
+      "catalog_fulfillment_kind_valid",
+      sql`${table.kind} IN ('registration', 'appointment', 'pickup', 'shipment', 'rental', 'membership', 'credit-grant')`,
+    ),
+    check(
+      "catalog_fulfillment_status_valid",
+      sql`${table.status} IN ('held', 'pending', 'ready', 'fulfilled', 'cancelled', 'refunded')`,
+    ),
+  ],
+);
+
+export const orderTaxContexts = pgTable(
+  "order_tax_contexts",
+  {
+    orderId: uuid("order_id")
+      .primaryKey()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    venueId: uuid("venue_id").references(() => venues.id),
+    source: varchar("source", { length: 24 }).notNull(),
+    addressSnapshot: jsonb("address_snapshot").notNull().$type<{
+      line1?: string;
+      line2?: string;
+      city?: string;
+      region?: string;
+      postalCode?: string;
+      country: string;
+    }>(),
+    itemTaxCodes: jsonb("item_tax_codes")
+      .notNull()
+      .$type<readonly { orderItemId: string; stripeTaxCode?: string }[]>()
+      .default([]),
+    stripeTaxCalculationId: varchar("stripe_tax_calculation_id", {
+      length: 128,
+    }),
+    stripeTaxTransactionId: varchar("stripe_tax_transaction_id", {
+      length: 128,
+    }),
+    taxAmountMinor: bigint("tax_amount_minor", { mode: "number" })
+      .notNull()
+      .default(0),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("estimated"),
+    committedAt: timestamp("committed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+  },
+  (table) => [
+    index("order_tax_org_status_idx").on(
+      table.organizationId,
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "order_tax_source_valid",
+      sql`${table.source} IN ('venue', 'organization', 'shipping', 'online')`,
+    ),
+    check(
+      "order_tax_status_valid",
+      sql`${table.status} IN ('estimated', 'committed', 'voided', 'failed')`,
+    ),
+    check("order_tax_amount_nonnegative", sql`${table.taxAmountMinor} >= 0`),
+  ],
+);
+
+export const refundRecords = pgTable(
+  "refund_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    paymentId: uuid("payment_id").references(() => payments.id),
+    disposition: varchar("disposition", { length: 24 }).notNull(),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    creditsIssued: integer("credits_issued"),
+    stripeRefundId: varchar("stripe_refund_id", { length: 128 }).unique(),
+    ledgerJournalId: uuid("ledger_journal_id").references(
+      () => ledgerJournals.id,
+      { onDelete: "restrict" },
+    ),
+    reason: text("reason").notNull(),
+    status: varchar("status", { length: 24 }).notNull(),
+    initiatedByPersonId: uuid("initiated_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("refund_record_org_order_idx").on(
+      table.organizationId,
+      table.orderId,
+      table.createdAt,
+    ),
+    check(
+      "refund_record_disposition_valid",
+      sql`${table.disposition} IN ('original-payment', 'organization-credit')`,
+    ),
+    check("refund_record_amount_positive", sql`${table.amountMinor} > 0`),
+    check(
+      "refund_record_credit_pair",
+      sql`(${table.disposition} = 'organization-credit' AND ${table.creditsIssued} > 0) OR (${table.disposition} = 'original-payment' AND ${table.creditsIssued} IS NULL)`,
+    ),
+    check(
+      "refund_record_status_valid",
+      sql`${table.status} IN ('pending', 'succeeded', 'failed', 'reversed')`,
+    ),
+  ],
+);
+
+export const ledgerReconciliations = pgTable(
+  "ledger_reconciliations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    provider: varchar("provider", { length: 24 }).notNull(),
+    periodStartsAt: timestamp("period_starts_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    periodEndsAt: timestamp("period_ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    ledgerAmountMinor: bigint("ledger_amount_minor", {
+      mode: "number",
+    }).notNull(),
+    providerAmountMinor: bigint("provider_amount_minor", {
+      mode: "number",
+    }).notNull(),
+    driftMinor: bigint("drift_minor", { mode: "number" }).notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull(),
+    evidence: jsonb("evidence")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("ledger_reconciliation_org_period_unique").on(
+      table.organizationId,
+      table.provider,
+      table.periodStartsAt,
+      table.periodEndsAt,
+      table.currency,
+    ),
+    check(
+      "ledger_reconciliation_time_valid",
+      sql`${table.periodEndsAt} > ${table.periodStartsAt}`,
+    ),
+    check(
+      "ledger_reconciliation_status_valid",
+      sql`${table.status} IN ('matched', 'drift', 'investigating', 'resolved')`,
+    ),
   ],
 );
 
