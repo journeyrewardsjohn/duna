@@ -4,6 +4,8 @@ import Link from "next/link";
 
 export default function SignInPage() {
   if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
+    const playerAppUrl =
+      process.env.NEXT_PUBLIC_APP_URL ?? "https://duna-web.vercel.app";
     return (
       <main className="auth-page">
         <section className="auth-setup-card">
@@ -13,7 +15,7 @@ export default function SignInPage() {
             Add the Clerk publishable and secret keys in Vercel to activate
             organization sign-in.
           </p>
-          <Link href="/">Return to HQ</Link>
+          <Link href={playerAppUrl}>Open Duna</Link>
         </section>
       </main>
     );

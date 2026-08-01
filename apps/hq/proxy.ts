@@ -1,5 +1,5 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 function routeMatches(pathname: string, root: string): boolean {
   return pathname === root || pathname.startsWith(`${root}/`);
@@ -27,9 +27,16 @@ const authenticatedProxy = clerkMiddleware(async (auth, request) => {
   }
 });
 
+function authenticationSetupProxy(request: NextRequest) {
+  if (isPublicRoute(request.nextUrl.pathname)) return NextResponse.next();
+  return NextResponse.redirect(new URL("/sign-in", request.url));
+}
+
 export default process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
   ? authenticatedProxy
-  : () => NextResponse.next();
+  : process.env.NEXT_PUBLIC_DEMO_MODE === "false"
+    ? authenticationSetupProxy
+    : () => NextResponse.next();
 
 export const config = {
   matcher: [
