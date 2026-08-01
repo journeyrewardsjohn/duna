@@ -1,4 +1,10 @@
-import { createApiContextFromRequest, createCaller } from "@duna/api";
+import { auth } from "@clerk/nextjs/server";
+import {
+  createApiContextFromClerkSession,
+  createApiContextFromRequest,
+  createCaller,
+  resolveClerkCredentials,
+} from "@duna/api";
 import { headers } from "next/headers";
 import { cache } from "react";
 
@@ -19,10 +25,22 @@ export const getServerCaller = cache(async () => {
   const request = new Request(requestUrl(requestHeaders), {
     headers: requestHeaders,
   });
-  const context = await createApiContextFromRequest(request, {
+  const contextInput = {
     requestId: requestHeaders.get("x-request-id") ?? crypto.randomUUID(),
     ipAddress: forwardedFor?.split(",")[0]?.trim(),
     userAgent: requestHeaders.get("user-agent") ?? undefined,
-  });
+  };
+  const credentials = resolveClerkCredentials();
+  const clerkSession = credentials ? await auth() : undefined;
+  const context = credentials
+    ? await createApiContextFromClerkSession(
+        {
+          userId: clerkSession?.userId,
+          organizationId: clerkSession?.orgId,
+          organizationRole: clerkSession?.orgRole,
+        },
+        contextInput,
+      )
+    : await createApiContextFromRequest(request, contextInput);
   return createCaller(context);
 });

@@ -35,6 +35,13 @@ export interface ApiContext {
   readonly now: Date;
 }
 
+interface ApiContextInput {
+  readonly requestId?: string;
+  readonly ipAddress?: string;
+  readonly userAgent?: string;
+  readonly now?: Date;
+}
+
 const roleScopes: Readonly<Record<PersonRole, readonly string[]>> = {
   player: [
     "profile:read",
@@ -390,12 +397,7 @@ async function resolveClerkActor(input: {
 
 export async function createApiContextFromRequest(
   request: Request,
-  input?: {
-    readonly requestId?: string;
-    readonly ipAddress?: string;
-    readonly userAgent?: string;
-    readonly now?: Date;
-  },
+  input?: ApiContextInput,
 ): Promise<ApiContext> {
   const base = {
     requestId: input?.requestId,
@@ -428,4 +430,30 @@ export async function createApiContextFromRequest(
   } catch {
     return createApiContext({ ...base, useDemoActor: false });
   }
+}
+
+export async function createApiContextFromClerkSession(
+  session: {
+    readonly userId?: string | null;
+    readonly organizationId?: string | null;
+    readonly organizationRole?: string | null;
+  },
+  input?: ApiContextInput,
+): Promise<ApiContext> {
+  const base = {
+    requestId: input?.requestId,
+    ipAddress: input?.ipAddress,
+    userAgent: input?.userAgent,
+    now: input?.now,
+  };
+  if (!session.userId || !isClerkConfigured()) {
+    return createApiContext({ ...base, useDemoActor: false });
+  }
+  const actor = await resolveClerkActor({
+    client: getClerkClient(),
+    clerkUserId: session.userId,
+    clerkOrganizationId: session.organizationId,
+    clerkOrganizationRole: session.organizationRole,
+  });
+  return createApiContext({ ...base, actor, useDemoActor: false });
 }
