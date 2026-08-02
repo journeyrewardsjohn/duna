@@ -26,6 +26,7 @@ import {
 } from "./auth";
 import type { ApiContext } from "./context";
 import {
+  accountDeletionReadinessSchema,
   adminOverviewSchema,
   adminQueueSchema,
   agentDraftSchema,
@@ -243,6 +244,7 @@ import {
 import {
   buildPersonDataExport,
   cancelAccountDeletion,
+  getAccountDeletionReadiness,
   PrivacyError,
   requestAccountDeletion,
 } from "./privacy";
@@ -683,7 +685,9 @@ function throwDomainError(error: unknown): never {
         ? "NOT_FOUND"
         : error.code === "REQUEST_NOT_CANCELLABLE"
           ? "PRECONDITION_FAILED"
-          : "INTERNAL_SERVER_ERROR";
+          : error.code === "DATABASE_REQUIRED"
+            ? "INTERNAL_SERVER_ERROR"
+            : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
   if (error instanceof FamilyWalletError) {
@@ -1984,6 +1988,15 @@ const playerRouter = router({
       return throwDomainError(error);
     }
   }),
+  accountDeletionReadiness: protectedProcedure
+    .output(accountDeletionReadinessSchema)
+    .query(async ({ ctx }) => {
+      try {
+        return await getAccountDeletionReadiness(ctx.actor!.personId);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   requestAccountDeletion: protectedProcedure
     .use(
       rateLimitMiddleware({
@@ -1995,6 +2008,7 @@ const playerRouter = router({
     .input(
       z.object({
         reason: z.string().trim().max(1_000).optional(),
+        forfeitOrganizationCredits: z.boolean(),
         idempotencyKey: z.string().uuid(),
       }),
     )
@@ -2015,6 +2029,7 @@ const playerRouter = router({
             return await requestAccountDeletion({
               actor: ctx.actor!,
               reason: input.reason,
+              forfeitOrganizationCredits: input.forfeitOrganizationCredits,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,

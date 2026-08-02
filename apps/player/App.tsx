@@ -1823,7 +1823,11 @@ function ProfileScreen() {
         <Pressable
           disabled={mode === "preview"}
           onPress={() =>
-            void WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/onboarding`)
+            void WebBrowser.openBrowserAsync(
+              settings?.profile.onboardingStatus === "complete"
+                ? `${dunaWebUrl}/app/settings#playing-profile`
+                : `${dunaWebUrl}/app/onboarding`,
+            )
           }
           style={styles.primaryButton}
         >
@@ -1933,23 +1937,33 @@ function ProfileScreen() {
       )}
       <View style={styles.profileMenu}>
         {[
-          "Player details + identity",
-          "Household + guardians",
-          "Family wallets",
-          "Notifications",
-          "Privacy + safety",
-          "Language + units",
-          "Manage Duna+",
-        ].map((item) => (
+          ["Player details + identity", "#playing-profile"],
+          ["Household + guardians", "#household"],
+          ["Family wallets", "#family-wallets"],
+          ["Notifications", "#notifications"],
+          ["Privacy + safety", "#privacy"],
+          ["Language + units", "#profile"],
+          ["Manage Duna+", "#membership"],
+          ["Delete my account", "#privacy"],
+        ].map(([item, anchor]) => (
           <Pressable
             disabled={mode === "preview"}
             key={item}
             onPress={() =>
-              void WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/settings`)
+              void WebBrowser.openBrowserAsync(
+                `${dunaWebUrl}/app/settings${anchor}`,
+              )
             }
             style={styles.profileMenuRow}
           >
-            <Text style={styles.rowTitle}>{item}</Text>
+            <Text
+              style={[
+                styles.rowTitle,
+                item === "Delete my account" && { color: colors.danger },
+              ]}
+            >
+              {item}
+            </Text>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
         ))}

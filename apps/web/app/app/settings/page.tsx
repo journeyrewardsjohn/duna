@@ -1,4 +1,7 @@
-import { GUARDIAN_CONSENT_DISCLOSURE } from "@duna/api";
+import {
+  GUARDIAN_CONSENT_DISCLOSURE,
+  unavailableAccountDeletionReadiness,
+} from "@duna/api";
 import {
   Bell,
   CreditCard,
@@ -27,9 +30,12 @@ export default async function SettingsPage({
 }) {
   const query = await searchParams;
   const caller = await getServerCaller();
-  const [settings, familyWallets] = await Promise.all([
+  const [settings, familyWallets, deletionReadiness] = await Promise.all([
     caller.player.settings(),
     caller.player.familyWallets(),
+    caller.player
+      .accountDeletionReadiness()
+      .catch(() => unavailableAccountDeletionReadiness),
   ]);
   const membershipNotice =
     query.membership === "success"
@@ -92,7 +98,10 @@ export default async function SettingsPage({
           />
           <FamilyWalletSettings wallets={familyWallets} />
           <NotificationSettings consents={settings.consents} />
-          <PrivacySettings requests={settings.privacyRequests} />
+          <PrivacySettings
+            readiness={deletionReadiness}
+            requests={settings.privacyRequests}
+          />
         </div>
       </section>
     </main>

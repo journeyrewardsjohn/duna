@@ -4383,6 +4383,62 @@ export const consents = pgTable(
   ],
 );
 
+export const legalAcceptances = pgTable(
+  "legal_acceptances",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "restrict",
+    }),
+    documentKey: varchar("document_key", { length: 48 }).notNull(),
+    documentVersion: varchar("document_version", { length: 32 }).notNull(),
+    acceptanceMethod: varchar("acceptance_method", { length: 24 })
+      .notNull()
+      .default("clickwrap"),
+    evidence: jsonb("evidence")
+      .notNull()
+      .$type<{
+        termsUrl: string;
+        privacyUrl?: string;
+        selectedPlan?: string;
+        pricingSnapshot?: Record<string, unknown>;
+      }>()
+      .default({ termsUrl: "" }),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    userAgent: text("user_agent"),
+    acceptedAt: timestamp("accepted_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    createdAt,
+  },
+  (table) => [
+    index("legal_acceptance_person_document_idx").on(
+      table.personId,
+      table.documentKey,
+      table.acceptedAt,
+    ),
+    index("legal_acceptance_org_document_idx").on(
+      table.organizationId,
+      table.documentKey,
+      table.acceptedAt,
+    ),
+    check(
+      "legal_acceptance_document_valid",
+      sql`${table.documentKey} IN ('consumer-terms', 'privacy-policy', 'mobile-eula', 'hq-terms')`,
+    ),
+    check(
+      "legal_acceptance_method_valid",
+      sql`${table.acceptanceMethod} IN ('clickwrap', 'signed-order-form', 'admin-import')`,
+    ),
+  ],
+);
+
 export const privacyRequests = pgTable(
   "privacy_requests",
   {

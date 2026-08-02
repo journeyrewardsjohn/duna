@@ -30,6 +30,13 @@ export function SiteFooter() {
             <Link href="/safety">Safety</Link>
             <Link href="/methodology">Rating methodology</Link>
           </div>
+          <div>
+            <strong>Legal</strong>
+            <Link href="/legal/terms">Terms</Link>
+            <Link href="/legal/privacy">Privacy</Link>
+            <Link href="/legal/eula">Mobile EULA</Link>
+            <Link href="/legal/hq-terms">HQ terms</Link>
+          </div>
         </div>
       </div>
       <div className="site-footer__bottom">

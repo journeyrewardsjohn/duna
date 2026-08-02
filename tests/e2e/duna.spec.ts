@@ -242,6 +242,58 @@ test("player onboarding stays clear and editable on mobile", async ({
   await expectNoHorizontalOverflow(page);
 });
 
+test("account controls, profile editing, and legal documents stay reachable", async ({
+  page,
+}) => {
+  await page.goto("/app/profile");
+  await expect(
+    page.getByRole("link", { name: "Edit profile" }),
+  ).toHaveAttribute("href", "/app/settings#profile");
+
+  await page.goto("/app/settings");
+  await expect(page.getByRole("heading", { name: "Settings." })).toBeVisible();
+  const settingsNavigation = page.getByRole("navigation", {
+    name: "Settings sections",
+  });
+  await expect(
+    settingsNavigation.getByRole("link", { name: /Profile/ }),
+  ).toHaveAttribute("href", "#profile");
+  await expect(
+    settingsNavigation.getByRole("link", { name: /Player details/ }),
+  ).toHaveAttribute("href", "#playing-profile");
+  await expect(
+    page.getByRole("button", { name: /Delete your account/ }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await page.goto("/legal");
+  await expect(
+    page.getByRole("heading", {
+      name: "Clear rules for every side of Duna.",
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: /Duna HQ Terms/ })).toBeVisible();
+  await page.goto("/legal/terms");
+  await expect(
+    page.getByRole("heading", { name: "Duna Consumer Terms of Service" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "14. Suspension, termination, and account deletion",
+    }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await page.goto("http://127.0.0.1:3001/account");
+  await expect(
+    page.getByRole("heading", { name: "Your Duna identity." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Review deletion requirements/ }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
 test("HQ, admin, and AI changes preserve explicit control", async ({
   page,
 }) => {

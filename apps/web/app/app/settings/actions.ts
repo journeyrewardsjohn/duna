@@ -86,11 +86,15 @@ export async function changeDunaPlusAction(
   }
 }
 
-export async function requestAccountDeletionAction(reason?: string) {
+export async function requestAccountDeletionAction(input: {
+  readonly reason?: string;
+  readonly forfeitOrganizationCredits: boolean;
+}) {
   try {
     const caller = await getServerCaller();
     const result = await caller.player.requestAccountDeletion({
-      reason: reason?.trim() || undefined,
+      reason: input.reason?.trim() || undefined,
+      forfeitOrganizationCredits: input.forfeitOrganizationCredits,
       idempotencyKey: crypto.randomUUID(),
     });
     revalidatePath("/app/settings");

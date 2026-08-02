@@ -228,7 +228,7 @@ function safeHandle(input: {
   return `${base || "player"}-${suffix}`.slice(0, 48);
 }
 
-async function resolveWorkOSPerson(user: User) {
+export async function resolveWorkOSPerson(user: User) {
   const database = getDatabase();
   let person = await database.query.people.findFirst({
     where: eq(people.workosUserId, user.id),
@@ -291,7 +291,7 @@ async function resolveWorkOSPerson(user: User) {
   return person;
 }
 
-function organizationSlug(name: string, organizationId: string): string {
+export function organizationSlug(name: string, organizationId: string): string {
   const base = name
     .toLowerCase()
     .replaceAll(/[^a-z0-9]+/g, "-")

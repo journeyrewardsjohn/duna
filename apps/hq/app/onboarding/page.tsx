@@ -1,3 +1,9 @@
+import {
+  HQ_PLAN_OPTIONS,
+  HQ_TERMS_VERSION,
+  type HqPlan,
+  provisionWorkOSOrganization,
+} from "@duna/api";
 import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import { DunaMark } from "@duna/ui";
 import {
@@ -5,8 +11,18 @@ import {
   switchToOrganization,
   withAuth,
 } from "@workos-inc/authkit-nextjs";
-import { ArrowRight, Building2, Plus } from "lucide-react";
+import {
+  ArrowRight,
+  Building2,
+  Check,
+  Layers3,
+  Plus,
+  ShieldCheck,
+} from "lucide-react";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+
+const planIds = new Set(HQ_PLAN_OPTIONS.map((plan) => plan.id));
 
 async function createWorkspace(formData: FormData) {
   "use server";
@@ -17,9 +33,30 @@ async function createWorkspace(formData: FormData) {
     .trim()
     .slice(0, 100);
   if (name.length < 2) redirect("/onboarding?error=name");
+  const plan = String(formData.get("plan") ?? "coach") as HqPlan;
+  if (!planIds.has(plan)) redirect("/onboarding?error=plan");
+  const termsAccepted = formData.get("termsAccepted") === "on";
+  if (!termsAccepted) redirect("/onboarding?error=terms");
 
   const workos = getWorkOS();
   const organization = await workos.organizations.createOrganization({ name });
+  const requestHeaders = await headers();
+  const publicWebUrl =
+    process.env.NEXT_PUBLIC_WEB_URL?.replace(/\/$/, "") ??
+    process.env.NEXT_PUBLIC_DUNA_WEB_URL?.replace(/\/$/, "") ??
+    "https://duna.coach";
+  await provisionWorkOSOrganization({
+    user,
+    workosOrganizationId: organization.id,
+    organizationName: organization.name,
+    plan,
+    termsAccepted,
+    termsUrl: `${publicWebUrl}/legal/hq-terms`,
+    privacyUrl: `${publicWebUrl}/legal/privacy`,
+    ipAddress: requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim(),
+    userAgent: requestHeaders.get("user-agent") ?? undefined,
+    now: new Date(),
+  });
   await workos.userManagement.createOrganizationMembership({
     organizationId: organization.id,
     roleSlug: "admin",
@@ -45,7 +82,12 @@ async function chooseWorkspace(formData: FormData) {
   await switchToOrganization(organizationId, { returnTo: "/" });
 }
 
-export default async function OrganizationOnboardingPage() {
+export default async function OrganizationOnboardingPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<{ error?: string }>;
+}) {
+  const query = await searchParams;
   const configured = isWorkOSAuthKitConfigured();
   const auth = configured ? await withAuth() : undefined;
   const memberships =
@@ -61,6 +103,20 @@ export default async function OrganizationOnboardingPage() {
         ),
       )
     : [];
+  const publicWebUrl =
+    process.env.NEXT_PUBLIC_WEB_URL?.replace(/\/$/, "") ??
+    process.env.NEXT_PUBLIC_DUNA_WEB_URL?.replace(/\/$/, "") ??
+    "https://duna.coach";
+  const error =
+    query.error === "terms"
+      ? "Accept the Duna HQ Terms and Privacy Policy to create a workspace."
+      : query.error === "plan"
+        ? "Choose a valid Duna HQ plan."
+        : query.error === "name"
+          ? "Enter a business or club name with at least two characters."
+          : query.error === "workspace"
+            ? "That workspace is not available to this account."
+            : undefined;
 
   return (
     <main className="auth-page">
@@ -73,13 +129,19 @@ export default async function OrganizationOnboardingPage() {
           <span className="hq-eyebrow">Your operating workspace</span>
           <h1>Bring your business into Duna.</h1>
           <p>
-            Choose an existing club, coaching business, or facility—or create a
-            clean new workspace in seconds.
+            Choose an existing workspace or start a separate business with the
+            plan that fits today. One administrator can manage multiple
+            organizations without mixing members, money, or settings.
           </p>
         </div>
 
         {configured ? (
           <div className="workspace-onboarding-grid">
+            {error && (
+              <p className="workspace-onboarding-error" role="alert">
+                {error}
+              </p>
+            )}
             {organizations.length > 0 && (
               <div className="workspace-choice-list">
                 <span className="hq-eyebrow">Your workspaces</span>
@@ -102,9 +164,21 @@ export default async function OrganizationOnboardingPage() {
               </div>
             )}
             <form action={createWorkspace} className="workspace-create-form">
-              <span className="hq-eyebrow">Create a workspace</span>
-              <label htmlFor="workspace-name">Business or club name</label>
-              <div>
+              <div className="workspace-create-form__heading">
+                <span>
+                  <Layers3 aria-hidden size={20} />
+                </span>
+                <div>
+                  <span className="hq-eyebrow">Create a workspace</span>
+                  <h2>What are you building?</h2>
+                  <p>
+                    Every workspace has its own customers, payments, staff, and
+                    plan. You can add another organization later.
+                  </p>
+                </div>
+              </div>
+              <label htmlFor="workspace-name">
+                Business, club, or coaching brand
                 <input
                   autoComplete="organization"
                   id="workspace-name"
@@ -113,11 +187,86 @@ export default async function OrganizationOnboardingPage() {
                   placeholder="Beach Elite Volleyball"
                   required
                 />
-                <button className="hq-button hq-button--primary" type="submit">
-                  <Plus aria-hidden size={17} />
-                  Create workspace
-                </button>
+              </label>
+
+              <fieldset className="workspace-plan-picker">
+                <legend>
+                  <span className="hq-eyebrow">Plans + pricing</span>
+                  <strong>Choose how you want to start.</strong>
+                </legend>
+                <div>
+                  {HQ_PLAN_OPTIONS.map((plan, index) => (
+                    <label
+                      className="workspace-plan-card"
+                      key={plan.id}
+                      title={plan.description}
+                    >
+                      <input
+                        defaultChecked={index === 0}
+                        name="plan"
+                        type="radio"
+                        value={plan.id}
+                      />
+                      <span className="workspace-plan-card__check">
+                        <Check aria-hidden size={15} />
+                      </span>
+                      <span className="workspace-plan-card__name">
+                        <strong>{plan.name}</strong>
+                        <b>{plan.priceLabel}</b>
+                      </span>
+                      <small>{plan.recommendedFor}</small>
+                      <p>{plan.description}</p>
+                      <ul>
+                        {plan.features.map((feature) => (
+                          <li key={feature}>
+                            <Check aria-hidden size={13} /> {feature}
+                          </li>
+                        ))}
+                      </ul>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              <div className="workspace-pricing-note">
+                <ShieldCheck aria-hidden size={18} />
+                <span>
+                  <strong>Start with a clean workspace.</strong>
+                  <small>
+                    Your plan selection is recorded now. Paid billing setup
+                    follows in Money before paid capabilities are published.
+                    Processing and marketplace fees are shown separately before
+                    transactions.
+                  </small>
+                </span>
               </div>
+
+              <label className="workspace-terms">
+                <input name="termsAccepted" required type="checkbox" />
+                <span>
+                  I am authorized to bind this organization and agree to the{" "}
+                  <a
+                    href={`${publicWebUrl}/legal/hq-terms`}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Duna HQ Terms
+                  </a>{" "}
+                  (version {HQ_TERMS_VERSION}) and{" "}
+                  <a
+                    href={`${publicWebUrl}/legal/privacy`}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Privacy Policy
+                  </a>
+                  .
+                </span>
+              </label>
+              <button className="hq-button hq-button--primary" type="submit">
+                <Plus aria-hidden size={17} />
+                Create workspace
+              </button>
             </form>
           </div>
         ) : (

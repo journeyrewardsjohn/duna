@@ -360,6 +360,57 @@ export const playerWalletSchema = z.object({
   entries: z.array(walletEntrySchema).readonly(),
   taxFormStatus: z.enum(["not-required", "pending", "ready"]),
 });
+export const accountDeletionReadinessSchema = z.object({
+  canRequestDeletion: z.boolean(),
+  blockingReasons: z
+    .array(
+      z.enum([
+        "cash-balance",
+        "pending-cash",
+        "active-subscription",
+        "owned-organization",
+        "account-data-unavailable",
+      ]),
+    )
+    .readonly(),
+  cash: z.object({
+    availableMinor: z.number().int(),
+    pendingMinor: z.number().int(),
+    heldMinor: z.number().int(),
+    currency: z.string().length(3),
+  }),
+  organizationCredits: z
+    .array(
+      z.object({
+        organizationId: z.string().uuid(),
+        organizationName: z.string(),
+        organizationSlug: z.string(),
+        credits: z.number().int().nonnegative(),
+        unit: z.string(),
+      }),
+    )
+    .readonly(),
+  totalOrganizationCredits: z.number().int().nonnegative(),
+  activeSubscriptions: z
+    .array(
+      z.object({
+        membershipId: z.string().uuid(),
+        name: z.string(),
+        organizationName: z.string().optional(),
+        cancelAtPeriodEnd: z.boolean(),
+      }),
+    )
+    .readonly(),
+  ownedOrganizations: z
+    .array(
+      z.object({
+        organizationId: z.string().uuid(),
+        organizationName: z.string(),
+        organizationSlug: z.string(),
+      }),
+    )
+    .readonly(),
+});
 export const playerSettingsSchema = z.object({
   profile: z.object({
     person: personSummarySchema,

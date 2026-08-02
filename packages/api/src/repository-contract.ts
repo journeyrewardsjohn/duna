@@ -44,6 +44,57 @@ export interface PlayerWallet {
   readonly taxFormStatus: "not-required" | "pending" | "ready";
 }
 
+export interface AccountDeletionReadiness {
+  readonly canRequestDeletion: boolean;
+  readonly blockingReasons: readonly (
+    | "cash-balance"
+    | "pending-cash"
+    | "active-subscription"
+    | "owned-organization"
+    | "account-data-unavailable"
+  )[];
+  readonly cash: {
+    readonly availableMinor: number;
+    readonly pendingMinor: number;
+    readonly heldMinor: number;
+    readonly currency: string;
+  };
+  readonly organizationCredits: readonly {
+    readonly organizationId: string;
+    readonly organizationName: string;
+    readonly organizationSlug: string;
+    readonly credits: number;
+    readonly unit: string;
+  }[];
+  readonly totalOrganizationCredits: number;
+  readonly activeSubscriptions: readonly {
+    readonly membershipId: string;
+    readonly name: string;
+    readonly organizationName?: string;
+    readonly cancelAtPeriodEnd: boolean;
+  }[];
+  readonly ownedOrganizations: readonly {
+    readonly organizationId: string;
+    readonly organizationName: string;
+    readonly organizationSlug: string;
+  }[];
+}
+
+export const unavailableAccountDeletionReadiness: AccountDeletionReadiness = {
+  canRequestDeletion: false,
+  blockingReasons: ["account-data-unavailable"],
+  cash: {
+    availableMinor: 0,
+    pendingMinor: 0,
+    heldMinor: 0,
+    currency: "USD",
+  },
+  organizationCredits: [],
+  totalOrganizationCredits: 0,
+  activeSubscriptions: [],
+  ownedOrganizations: [],
+};
+
 export interface PlayerSettings {
   readonly profile: {
     readonly person: PersonSummary;

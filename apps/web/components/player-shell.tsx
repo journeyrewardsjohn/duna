@@ -18,6 +18,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { AskDuna } from "./ask-duna";
+import { PlayerAccountMenu } from "./player-account-menu";
 
 const navigation = [
   { label: "Home", href: "/app", icon: House },
@@ -28,9 +29,11 @@ const navigation = [
 ] as const;
 
 export function PlayerShell({
+  authConfigured,
   children,
   player,
 }: {
+  readonly authConfigured: boolean;
   readonly children: ReactNode;
   readonly player: PersonSummary;
 }) {
@@ -119,10 +122,15 @@ export function PlayerShell({
               <button aria-label="Messages">
                 <MessageCircle aria-hidden size={19} />
               </button>
-              <Link href="/app/profile">
-                <span className="avatar">{player.initials}</span>
-                <Numeric>{player.rating.display.toFixed(2)}</Numeric>
-              </Link>
+              <PlayerAccountMenu
+                configured={authConfigured}
+                trigger={
+                  <>
+                    <span className="avatar">{player.initials}</span>
+                    <Numeric>{player.rating.display.toFixed(2)}</Numeric>
+                  </>
+                }
+              />
             </div>
           </header>
         )}

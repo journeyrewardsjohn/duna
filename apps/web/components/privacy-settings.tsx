@@ -1,8 +1,14 @@
 "use client";
 
-import type { PlayerSettings } from "@duna/api";
+import type { AccountDeletionReadiness, PlayerSettings } from "@duna/api";
 import { Badge } from "@duna/ui";
-import { ChevronRight, Download, ShieldAlert } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronRight,
+  Download,
+  ShieldAlert,
+  WalletCards,
+} from "lucide-react";
 import { useState, useTransition } from "react";
 import {
   cancelAccountDeletionAction,
@@ -12,13 +18,18 @@ import {
 type Request = PlayerSettings["privacyRequests"][number];
 
 export function PrivacySettings({
+  readiness,
   requests,
 }: {
+  readonly readiness: AccountDeletionReadiness;
   readonly requests: readonly Request[];
 }) {
   const [isPending, startTransition] = useTransition();
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [forfeitOrganizationCredits, setForfeitOrganizationCredits] =
+    useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const active = requests.find((request) =>
@@ -27,8 +38,21 @@ export function PrivacySettings({
 
   const requestDeletion = () => {
     setError(undefined);
+    if (confirmation !== "DELETE") {
+      setError('Type "DELETE" to confirm this irreversible request.');
+      return;
+    }
+    if (readiness.totalOrganizationCredits > 0 && !forfeitOrganizationCredits) {
+      setError(
+        "Confirm that eligible organization credits may be forfeited before continuing.",
+      );
+      return;
+    }
     startTransition(async () => {
-      const response = await requestAccountDeletionAction(reason);
+      const response = await requestAccountDeletionAction({
+        reason,
+        forfeitOrganizationCredits,
+      });
       if (!response.ok) {
         setError(response.error);
         return;
@@ -103,12 +127,106 @@ export function PrivacySettings({
           )}
         </article>
       ) : confirming ? (
-        <article className="membership-confirm">
-          <strong>Request account deletion?</strong>
+        <article className="membership-confirm deletion-confirm">
+          <div className="deletion-confirm__heading">
+            <ShieldAlert aria-hidden size={21} />
+            <div>
+              <strong>Request permanent account deletion?</strong>
+              <p>
+                Duna rechecks balances and account obligations on the server
+                before accepting this request.
+              </p>
+            </div>
+          </div>
+
+          {readiness.blockingReasons.length > 0 && (
+            <div className="deletion-blockers" role="alert">
+              <strong>Resolve these items first</strong>
+              {readiness.blockingReasons.includes("cash-balance") && (
+                <p>
+                  Withdraw or resolve{" "}
+                  {new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: readiness.cash.currency,
+                  }).format(readiness.cash.availableMinor / 100)}{" "}
+                  in available cash. Duna does not silently forfeit withdrawable
+                  money.
+                </p>
+              )}
+              {readiness.blockingReasons.includes("pending-cash") && (
+                <p>
+                  Wait for pending or held wallet activity to settle before
+                  deleting the account.
+                </p>
+              )}
+              {readiness.blockingReasons.includes("active-subscription") && (
+                <p>
+                  Cancel active memberships or subscriptions first. Already paid
+                  access remains available through the stated end date.
+                </p>
+              )}
+              {readiness.blockingReasons.includes("owned-organization") && (
+                <p>
+                  Transfer ownership or close{" "}
+                  {readiness.ownedOrganizations
+                    .map((organization) => organization.organizationName)
+                    .join(", ")}{" "}
+                  before deleting the owner account.
+                </p>
+              )}
+              {readiness.blockingReasons.includes(
+                "account-data-unavailable",
+              ) && (
+                <p>
+                  Balance and ownership checks are temporarily unavailable.
+                  Reload or try again later; deletion stays disabled until those
+                  checks complete.
+                </p>
+              )}
+              <a href="/app/wallet">
+                <WalletCards aria-hidden size={16} /> Review wallet
+              </a>
+            </div>
+          )}
+
+          {readiness.organizationCredits.length > 0 && (
+            <div className="credit-forfeiture">
+              <strong>
+                {readiness.totalOrganizationCredits.toLocaleString()} unused
+                organization credits
+              </strong>
+              <ul>
+                {readiness.organizationCredits.map((wallet) => (
+                  <li key={wallet.organizationId}>
+                    {wallet.organizationName}: {wallet.credits.toLocaleString()}{" "}
+                    {wallet.unit}
+                  </li>
+                ))}
+              </ul>
+              <label className="settings-checkbox">
+                <input
+                  checked={forfeitOrganizationCredits}
+                  disabled={!readiness.canRequestDeletion}
+                  onChange={(event) =>
+                    setForfeitOrganizationCredits(event.target.checked)
+                  }
+                  type="checkbox"
+                />
+                <span>
+                  I understand that eligible, non-cash organization credits may
+                  be permanently forfeited when my deletion is completed,
+                  subject to the issuing plan terms and applicable law.
+                </span>
+              </label>
+            </div>
+          )}
+
           <p>
-            This queues a human-reviewed request; it does not immediately erase
-            financial, safety, or audit records that Duna may be required to
-            retain.
+            This starts a reviewed deletion process. Required financial, tax,
+            fraud-prevention, safety, dispute, and consent records may be
+            retained only for their applicable legal or operational period. See
+            the <a href="/legal/privacy">Privacy Policy</a> and{" "}
+            <a href="/legal/terms">Terms of Service</a>.
           </p>
           <label>
             Optional context
@@ -119,10 +237,25 @@ export function PrivacySettings({
               value={reason}
             />
           </label>
+          <label>
+            Type DELETE to confirm
+            <input
+              autoComplete="off"
+              onChange={(event) => setConfirmation(event.target.value)}
+              placeholder="DELETE"
+              value={confirmation}
+            />
+          </label>
           <div>
             <button
               className="primary-action"
-              disabled={isPending}
+              disabled={
+                isPending ||
+                !readiness.canRequestDeletion ||
+                confirmation !== "DELETE" ||
+                (readiness.totalOrganizationCredits > 0 &&
+                  !forfeitOrganizationCredits)
+              }
               onClick={requestDeletion}
               type="button"
             >
@@ -147,9 +280,15 @@ export function PrivacySettings({
           <span>
             <strong>Delete your account</strong>
             <small>
-              Begin an identity and retention review before irreversible action.
+              Check balances, subscriptions, organization ownership, and
+              retained records before irreversible action.
             </small>
           </span>
+          {readiness.blockingReasons.length > 0 ? (
+            <Badge tone="warning">
+              <AlertTriangle aria-hidden size={13} /> Action needed
+            </Badge>
+          ) : null}
           <ChevronRight size={17} />
         </button>
       )}

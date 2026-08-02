@@ -42,9 +42,14 @@ function ConfiguredAuthControls({
               {organizationId ? "Workspace" : "Choose workspace"}
             </Link>
           )}
-          <span className="hq-auth-avatar" title={user.email}>
+          <Link
+            aria-label="Personal account settings"
+            className="hq-auth-avatar"
+            href="/account"
+            title={`${user.email} · Account settings`}
+          >
             {initials}
-          </span>
+          </Link>
           <button
             aria-label="Sign out"
             className="hq-auth-signout"

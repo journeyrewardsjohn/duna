@@ -1,5 +1,5 @@
 import { Badge, Numeric } from "@duna/ui";
-import { ArrowRight, Check, MapPin, Share2 } from "lucide-react";
+import { ArrowRight, Check, MapPin, Settings, Share2 } from "lucide-react";
 import Link from "next/link";
 import { MatchCard } from "@/components/match-card";
 import { RatingOrbit } from "@/components/rating-orbit";
@@ -31,9 +31,14 @@ export default async function ProfilePage() {
             </p>
           </div>
         </div>
-        <button className="secondary-action">
-          <Share2 aria-hidden size={17} /> Share profile
-        </button>
+        <div className="profile-hero__actions">
+          <Link className="primary-action" href="/app/settings#profile">
+            <Settings aria-hidden size={17} /> Edit profile
+          </Link>
+          <button className="secondary-action">
+            <Share2 aria-hidden size={17} /> Share profile
+          </button>
+        </div>
         <div className="profile-hero__rating">
           <RatingOrbit
             confidence={player.rating.confidence}

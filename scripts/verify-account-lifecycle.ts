@@ -209,12 +209,14 @@ async function main() {
     const firstRequest = await requestAccountDeletion({
       actor,
       reason: "Connected lifecycle verification",
+      forfeitOrganizationCredits: false,
       requestId: crypto.randomUUID(),
       now,
     });
     const repeatedRequest = await requestAccountDeletion({
       actor,
       reason: "This should reuse the active request",
+      forfeitOrganizationCredits: false,
       requestId: crypto.randomUUID(),
       now,
     });

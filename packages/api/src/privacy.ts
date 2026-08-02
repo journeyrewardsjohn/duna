@@ -7,6 +7,9 @@ import {
   guardianships,
   memberships,
   membershipTiers,
+  organizationMemberships,
+  organizations,
+  organizationWallets,
   orderItems,
   orders,
   people,
@@ -17,13 +20,22 @@ import {
   walletAccounts,
   walletLedger,
 } from "@duna/db";
+import { foldWalletLedger } from "@duna/core";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import type { ApiActor } from "./context";
+import type { AccountDeletionReadiness } from "./repository-contract";
 
 export class PrivacyError extends Error {
   constructor(
     readonly code:
-      "DATABASE_REQUIRED" | "REQUEST_NOT_FOUND" | "REQUEST_NOT_CANCELLABLE",
+      | "DATABASE_REQUIRED"
+      | "REQUEST_NOT_FOUND"
+      | "REQUEST_NOT_CANCELLABLE"
+      | "CASH_BALANCE_REMAINS"
+      | "PENDING_CASH_REMAINS"
+      | "ACTIVE_SUBSCRIPTION_REMAINS"
+      | "ORGANIZATION_OWNERSHIP_REMAINS"
+      | "CREDIT_FORFEITURE_REQUIRED",
     message: string,
   ) {
     super(message);
@@ -38,6 +50,149 @@ function requireDatabase(): void {
       "Privacy workflows require the connected Duna database.",
     );
   }
+}
+
+export async function getAccountDeletionReadiness(
+  personId: string,
+): Promise<AccountDeletionReadiness> {
+  requireDatabase();
+  const database = getDatabase();
+  const [walletAccount, walletRows, membershipRows, creditRows, ownerRows] =
+    await Promise.all([
+      database.query.walletAccounts.findFirst({
+        where: eq(walletAccounts.personId, personId),
+      }),
+      database
+        .select({
+          id: walletLedger.id,
+          direction: walletLedger.direction,
+          amountMinor: walletLedger.amountMinor,
+          currency: walletLedger.currency,
+          status: walletLedger.status,
+          taxCharacter: walletLedger.taxCharacter,
+          reasonCode: walletLedger.reasonCode,
+          createdAt: walletLedger.createdAt,
+        })
+        .from(walletLedger)
+        .innerJoin(
+          walletAccounts,
+          eq(walletLedger.walletAccountId, walletAccounts.id),
+        )
+        .where(eq(walletAccounts.personId, personId))
+        .orderBy(desc(walletLedger.createdAt)),
+      database
+        .select({
+          membershipId: memberships.id,
+          status: memberships.status,
+          cancelAtPeriodEnd: memberships.cancelAtPeriodEnd,
+          tierName: membershipTiers.name,
+          organizationName: organizations.name,
+        })
+        .from(memberships)
+        .innerJoin(membershipTiers, eq(memberships.tierId, membershipTiers.id))
+        .leftJoin(
+          organizations,
+          eq(membershipTiers.organizationId, organizations.id),
+        )
+        .where(
+          and(
+            eq(memberships.personId, personId),
+            inArray(memberships.status, [
+              "active",
+              "trialing",
+              "past_due",
+              "incomplete",
+              "unpaid",
+            ]),
+          ),
+        ),
+      database
+        .select({
+          organizationId: organizations.id,
+          organizationName: organizations.name,
+          organizationSlug: organizations.slug,
+          credits: organizationWallets.cachedAvailableCredits,
+          unit: organizationWallets.unit,
+        })
+        .from(organizationWallets)
+        .innerJoin(
+          organizations,
+          eq(organizationWallets.organizationId, organizations.id),
+        )
+        .where(
+          and(
+            eq(organizationWallets.personId, personId),
+            inArray(organizationWallets.status, ["active", "frozen"]),
+          ),
+        ),
+      database
+        .select({
+          organizationId: organizations.id,
+          organizationName: organizations.name,
+          organizationSlug: organizations.slug,
+        })
+        .from(organizationMemberships)
+        .innerJoin(
+          organizations,
+          eq(organizationMemberships.organizationId, organizations.id),
+        )
+        .where(
+          and(
+            eq(organizationMemberships.personId, personId),
+            eq(organizationMemberships.role, "owner"),
+            eq(organizationMemberships.active, true),
+          ),
+        ),
+    ]);
+
+  const cash = foldWalletLedger(
+    walletRows.map((row) => ({
+      id: row.id,
+      direction: row.direction,
+      amountMinor: row.amountMinor,
+      currency: row.currency,
+      status: row.status,
+      taxCharacter: row.taxCharacter,
+      reasonCode: row.reasonCode,
+      occurredAt: row.createdAt.toISOString(),
+    })),
+  );
+  const organizationCredits = creditRows.filter((row) => row.credits > 0);
+  const blockingReasons: AccountDeletionReadiness["blockingReasons"][number][] =
+    [];
+  if (cash.availableMinor !== 0) blockingReasons.push("cash-balance");
+  if (cash.pendingMinor !== 0 || cash.heldMinor !== 0) {
+    blockingReasons.push("pending-cash");
+  }
+  if (membershipRows.length > 0) {
+    blockingReasons.push("active-subscription");
+  }
+  if (ownerRows.length > 0) {
+    blockingReasons.push("owned-organization");
+  }
+
+  return {
+    canRequestDeletion: blockingReasons.length === 0,
+    blockingReasons,
+    cash: {
+      availableMinor: cash.availableMinor,
+      pendingMinor: cash.pendingMinor,
+      heldMinor: cash.heldMinor,
+      currency: walletAccount?.currency ?? cash.currency,
+    },
+    organizationCredits,
+    totalOrganizationCredits: organizationCredits.reduce(
+      (total, row) => total + row.credits,
+      0,
+    ),
+    activeSubscriptions: membershipRows.map((membership) => ({
+      membershipId: membership.membershipId,
+      name: membership.tierName,
+      organizationName: membership.organizationName ?? undefined,
+      cancelAtPeriodEnd: membership.cancelAtPeriodEnd,
+    })),
+    ownedOrganizations: ownerRows,
+  };
 }
 
 export async function buildPersonDataExport(input: {
@@ -227,6 +382,7 @@ export async function buildPersonDataExport(input: {
 export async function requestAccountDeletion(input: {
   readonly actor: ApiActor;
   readonly reason?: string;
+  readonly forfeitOrganizationCredits: boolean;
   readonly requestId: string;
   readonly ipAddress?: string;
   readonly now: Date;
@@ -236,6 +392,40 @@ export async function requestAccountDeletion(input: {
 }> {
   requireDatabase();
   const database = getDatabase();
+  const readiness = await getAccountDeletionReadiness(input.actor.personId);
+  if (readiness.blockingReasons.includes("cash-balance")) {
+    throw new PrivacyError(
+      "CASH_BALANCE_REMAINS",
+      "Withdraw or resolve the cash balance before deleting this account.",
+    );
+  }
+  if (readiness.blockingReasons.includes("pending-cash")) {
+    throw new PrivacyError(
+      "PENDING_CASH_REMAINS",
+      "Pending or held money must settle before deleting this account.",
+    );
+  }
+  if (readiness.blockingReasons.includes("active-subscription")) {
+    throw new PrivacyError(
+      "ACTIVE_SUBSCRIPTION_REMAINS",
+      "Cancel active memberships and subscriptions before deleting this account.",
+    );
+  }
+  if (readiness.blockingReasons.includes("owned-organization")) {
+    throw new PrivacyError(
+      "ORGANIZATION_OWNERSHIP_REMAINS",
+      "Transfer or close each organization you own before deleting this account.",
+    );
+  }
+  if (
+    readiness.totalOrganizationCredits > 0 &&
+    !input.forfeitOrganizationCredits
+  ) {
+    throw new PrivacyError(
+      "CREDIT_FORFEITURE_REQUIRED",
+      "Explicit consent is required before unused organization credits can be forfeited.",
+    );
+  }
   const existing = await database.query.privacyRequests.findFirst({
     where: and(
       eq(privacyRequests.personId, input.actor.personId),
@@ -265,7 +455,14 @@ export async function requestAccountDeletion(input: {
       personId: input.actor.personId,
       kind: "account-deletion",
       status: "queued",
-      reason: input.reason,
+      reason: [
+        input.reason?.trim(),
+        readiness.totalOrganizationCredits > 0
+          ? `Account holder consented to forfeit ${readiness.totalOrganizationCredits} non-cash organization credits, subject to the issuing plan terms and applicable law.`
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
       createdAt: input.now,
       updatedAt: input.now,
     }),
@@ -276,7 +473,9 @@ export async function requestAccountDeletion(input: {
       entityType: "privacy-request",
       entityId: id,
       reason:
-        "Account deletion was requested for identity and retention review.",
+        readiness.totalOrganizationCredits > 0
+          ? `Account deletion was requested with explicit consent to forfeit ${readiness.totalOrganizationCredits} eligible non-cash organization credits. Cash, subscription, and organization-ownership blockers were rechecked server-side.`
+          : "Account deletion was requested after cash, subscription, and organization-ownership blockers were rechecked server-side.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,

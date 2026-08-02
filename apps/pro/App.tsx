@@ -1422,6 +1422,8 @@ function MoreScreen() {
         "Policies + waivers",
         "Integrations",
         "Billing + plan",
+        "Account + privacy",
+        "Delete my account",
       ],
     ],
   ] as const;
@@ -1440,6 +1442,8 @@ function MoreScreen() {
     "Policies + waivers": "members",
     Integrations: "settings",
     "Billing + plan": "settings",
+    "Account + privacy": "account",
+    "Delete my account": "account",
   };
   return (
     <ScrollView
