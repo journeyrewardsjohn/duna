@@ -53,7 +53,7 @@ import { enforceGuardianCopies } from "./messaging";
 import { createConnectOnboarding } from "./payments";
 import { isResendConfigured, sendTransactionalEmail } from "./resend";
 import { isSentConfigured, sendTemplateSms } from "./sent";
-import { loadWeatherForecast } from "./weather";
+import { loadWeatherForecast, resolveWeatherCoordinates } from "./weather";
 
 type CurrencyCode = OperatorWorkspace["organization"]["currency"];
 type EventKind = OperatorWorkspace["sessions"][number]["kind"];
@@ -863,25 +863,40 @@ export async function loadOperatorWorkspace(
       nextBookingAt,
     };
   };
-  const venueForecasts = new Map(
+  const venuePlanningWeather = new Map(
     (
       await Promise.all(
-        venueRows.flatMap((venue) =>
-          venue.latitude !== null && venue.longitude !== null
-            ? [
-                loadWeatherForecast({
-                  latitude: venue.latitude,
-                  longitude: venue.longitude,
-                  timezone: venue.timezone,
-                  startsAt: now,
-                  endsAt: new Date(now.getTime() + 8 * 24 * 60 * 60_000),
-                  now,
-                }).then((forecast) => [venue.id, forecast] as const),
-              ]
-            : [],
-        ),
+        venueRows.map(async (venue) => {
+          const coordinates = await resolveWeatherCoordinates({
+            latitude: venue.latitude ?? undefined,
+            longitude: venue.longitude ?? undefined,
+            googlePlaceId: venue.googlePlaceId ?? undefined,
+            query: [
+              venue.name,
+              venue.addressLine1,
+              venue.addressLine2,
+              venue.locality,
+              venue.administrativeArea,
+              venue.postalCode,
+              venue.countryCode,
+            ]
+              .filter(Boolean)
+              .join(", "),
+            now,
+          });
+          if (!coordinates) return undefined;
+          const forecast = await loadWeatherForecast({
+            latitude: coordinates.latitude,
+            longitude: coordinates.longitude,
+            timezone: venue.timezone,
+            startsAt: now,
+            endsAt: new Date(now.getTime() + 8 * 24 * 60 * 60_000),
+            now,
+          });
+          return [venue.id, { coordinates, forecast }] as const;
+        }),
       )
-    ).map((entry) => entry),
+    ).flatMap((entry) => (entry ? [entry] : [])),
   );
 
   return {
@@ -920,76 +935,86 @@ export async function loadOperatorWorkspace(
       nonMemberAmountMinor: row.nonMemberAmountMinor ?? undefined,
       rateUnitMinutes: row.rateUnitMinutes,
     })),
-    venues: venueRows.map((venue) => ({
-      id: venue.id,
-      name: venue.name,
-      description: venue.description ?? undefined,
-      slug: venue.slug,
-      status: venue.status,
-      temporary: venue.temporary,
-      capacity: venue.capacity,
-      heroImageUrl: venue.heroImageUrl ?? undefined,
-      heroImageTreatmentUrl: venue.heroImageTreatmentUrl ?? undefined,
-      amenities: venue.amenities,
-      addressLine1: venue.addressLine1 ?? undefined,
-      locality: venue.locality ?? undefined,
-      administrativeArea: venue.administrativeArea ?? undefined,
-      postalCode: venue.postalCode ?? undefined,
-      countryCode: venue.countryCode,
-      googlePlaceId: venue.googlePlaceId ?? undefined,
-      latitude: venue.latitude ?? undefined,
-      longitude: venue.longitude ?? undefined,
-      timezone: venue.timezone,
-      weather: venueForecasts.get(venue.id),
-      utilization: utilizationForVenue(venue.id),
-      courts: courtRows
-        .filter((row) => row.court.venueId === venue.id)
-        .map(({ court }) => ({
-          id: court.id,
-          venueId: court.venueId,
-          name: court.name,
-          surface: court.surface,
-          lit: court.lit,
-          capacity: court.capacity,
-          status: court.status,
-          bookingPolicy:
-            court.bookingPolicy === "members" ||
-            court.bookingPolicy === "tiers" ||
-            court.bookingPolicy === "staff" ||
-            court.bookingPolicy === "none"
-              ? court.bookingPolicy
-              : "public",
-          ratePlanId: court.ratePlanId ?? undefined,
-          minimumDurationMinutes: court.minimumDurationMinutes,
-          maximumDurationMinutes: court.maximumDurationMinutes,
-          durationOptionsMinutes: court.durationOptionsMinutes,
-          bookingIncrementMinutes: court.bookingIncrementMinutes,
-          bufferBeforeMinutes: court.bufferBeforeMinutes,
-          bufferAfterMinutes: court.bufferAfterMinutes,
-          minimumNoticeMinutes: court.minimumNoticeMinutes,
-          maximumAdvanceDays: court.maximumAdvanceDays,
-          cancellationPolicy: normalizeCourtCancellationPolicy(
-            court.cancellationPolicy,
-          ),
-          schedule: scheduleBlocksForCourt(court.id).map((block) => ({
-            id: block.id,
-            weekday: block.weekday,
-            startsAtMinute: block.startsAtMinute,
-            endsAtMinute: block.endsAtMinute,
-            mode: block.mode,
-            effectiveFrom: block.effectiveFrom ?? undefined,
-            effectiveTo: block.effectiveTo ?? undefined,
+    venues: venueRows.map((venue) => {
+      const planningWeather = venuePlanningWeather.get(venue.id);
+      return {
+        id: venue.id,
+        name: venue.name,
+        description: venue.description ?? undefined,
+        slug: venue.slug,
+        status: venue.status,
+        temporary: venue.temporary,
+        capacity: venue.capacity,
+        heroImageUrl: venue.heroImageUrl ?? undefined,
+        heroImageTreatmentUrl: venue.heroImageTreatmentUrl ?? undefined,
+        amenities: venue.amenities,
+        addressLine1: venue.addressLine1 ?? undefined,
+        locality: venue.locality ?? undefined,
+        administrativeArea: venue.administrativeArea ?? undefined,
+        postalCode: venue.postalCode ?? undefined,
+        countryCode: venue.countryCode,
+        googlePlaceId:
+          venue.googlePlaceId ??
+          planningWeather?.coordinates.googlePlaceId ??
+          undefined,
+        latitude:
+          venue.latitude ?? planningWeather?.coordinates.latitude ?? undefined,
+        longitude:
+          venue.longitude ??
+          planningWeather?.coordinates.longitude ??
+          undefined,
+        timezone: venue.timezone,
+        weather: planningWeather?.forecast,
+        utilization: utilizationForVenue(venue.id),
+        courts: courtRows
+          .filter((row) => row.court.venueId === venue.id)
+          .map(({ court }) => ({
+            id: court.id,
+            venueId: court.venueId,
+            name: court.name,
+            surface: court.surface,
+            lit: court.lit,
+            capacity: court.capacity,
+            status: court.status,
+            bookingPolicy:
+              court.bookingPolicy === "members" ||
+              court.bookingPolicy === "tiers" ||
+              court.bookingPolicy === "staff" ||
+              court.bookingPolicy === "none"
+                ? court.bookingPolicy
+                : "public",
+            ratePlanId: court.ratePlanId ?? undefined,
+            minimumDurationMinutes: court.minimumDurationMinutes,
+            maximumDurationMinutes: court.maximumDurationMinutes,
+            durationOptionsMinutes: court.durationOptionsMinutes,
+            bookingIncrementMinutes: court.bookingIncrementMinutes,
+            bufferBeforeMinutes: court.bufferBeforeMinutes,
+            bufferAfterMinutes: court.bufferAfterMinutes,
+            minimumNoticeMinutes: court.minimumNoticeMinutes,
+            maximumAdvanceDays: court.maximumAdvanceDays,
+            cancellationPolicy: normalizeCourtCancellationPolicy(
+              court.cancellationPolicy,
+            ),
+            schedule: scheduleBlocksForCourt(court.id).map((block) => ({
+              id: block.id,
+              weekday: block.weekday,
+              startsAtMinute: block.startsAtMinute,
+              endsAtMinute: block.endsAtMinute,
+              mode: block.mode,
+              effectiveFrom: block.effectiveFrom ?? undefined,
+              effectiveTo: block.effectiveTo ?? undefined,
+            })),
+            overrides: scheduleOverridesForCourt(court.id).map((override) => ({
+              id: override.id,
+              startsAt: override.startsAt.toISOString(),
+              endsAt: override.endsAt.toISOString(),
+              mode: override.mode,
+              reason: override.reason,
+            })),
+            utilization: utilizationForCourt(court.id),
           })),
-          overrides: scheduleOverridesForCourt(court.id).map((override) => ({
-            id: override.id,
-            startsAt: override.startsAt.toISOString(),
-            endsAt: override.endsAt.toISOString(),
-            mode: override.mode,
-            reason: override.reason,
-          })),
-          utilization: utilizationForCourt(court.id),
-        })),
-    })),
+      };
+    }),
     sessions: sessionRows.map((row) => ({
       id: row.id,
       programId: row.programId ?? undefined,

@@ -3,6 +3,7 @@ import {
   __resetWeatherCacheForTests,
   daylightStatus,
   loadWeatherForecast,
+  resolveWeatherCoordinates,
   weatherAt,
   weatherPresentation,
 } from "./weather";
@@ -140,5 +141,55 @@ describe("weather and daylight planning", () => {
       condition: "Rain",
       icon: "rain",
     });
+  });
+
+  it("resolves legacy venue text through Google Places and caches it", async () => {
+    vi.stubEnv("GOOGLE_PLACES_API_KEY", "places-test-key");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            suggestions: [
+              {
+                placePrediction: {
+                  placeId: "ChIJHermosaPierCourts",
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "ChIJHermosaPierCourts",
+            location: {
+              latitude: 33.8622,
+              longitude: -118.3995,
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = await resolveWeatherCoordinates({
+      query: "Hermosa Beach Pier Courts",
+      now: new Date("2026-08-02T12:00:00.000Z"),
+    });
+    const second = await resolveWeatherCoordinates({
+      query: "Hermosa   Beach Pier Courts",
+      now: new Date("2026-08-02T12:05:00.000Z"),
+    });
+
+    expect(first).toEqual({
+      latitude: 33.8622,
+      longitude: -118.3995,
+      googlePlaceId: "ChIJHermosaPierCourts",
+    });
+    expect(second).toEqual(first);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

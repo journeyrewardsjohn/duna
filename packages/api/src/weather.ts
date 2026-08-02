@@ -5,8 +5,13 @@ import type {
 } from "./contracts";
 
 const TOMORROW_TIMELINES_URL = "https://api.tomorrow.io/v4/timelines";
+const GOOGLE_PLACES_AUTOCOMPLETE_URL =
+  "https://places.googleapis.com/v1/places:autocomplete";
+const GOOGLE_PLACES_DETAILS_URL = "https://places.googleapis.com/v1/places";
 const FORECAST_CACHE_MS = 30 * 60_000;
 const TOMORROW_FORECAST_HORIZON_MS = 14 * 24 * 60 * 60_000;
+const LOCATION_CACHE_MS = 7 * 24 * 60 * 60_000;
+const LOCATION_MISS_CACHE_MS = 30 * 60_000;
 
 type CacheEntry = {
   readonly expiresAt: number;
@@ -14,6 +19,19 @@ type CacheEntry = {
 };
 
 const forecastCache = new Map<string, CacheEntry>();
+
+export type ResolvedWeatherCoordinates = {
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly googlePlaceId?: string;
+};
+
+type LocationCacheEntry = {
+  readonly expiresAt: number;
+  readonly value?: ResolvedWeatherCoordinates;
+};
+
+const locationCache = new Map<string, LocationCacheEntry>();
 
 type TimelineInterval = {
   readonly startTime?: unknown;
@@ -29,10 +47,153 @@ type TomorrowResponse = {
   };
 };
 
+type GoogleAutocompleteResponse = {
+  readonly suggestions?: readonly {
+    readonly placePrediction?: {
+      readonly placeId?: unknown;
+    };
+  }[];
+};
+
+type GooglePlaceDetails = {
+  readonly id?: unknown;
+  readonly location?: {
+    readonly latitude?: unknown;
+    readonly longitude?: unknown;
+  };
+};
+
 function finiteNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
+}
+
+function normalizedLocationQuery(value: string | undefined): string {
+  return value?.trim().replace(/\s+/g, " ").slice(0, 180) ?? "";
+}
+
+function validPlaceId(value: string | undefined): string | undefined {
+  const candidate = value?.trim();
+  return candidate && /^[A-Za-z0-9_-]{8,256}$/.test(candidate)
+    ? candidate
+    : undefined;
+}
+
+async function fetchGooglePlaceCoordinates(input: {
+  readonly apiKey: string;
+  readonly placeId: string;
+  readonly signal: AbortSignal;
+}): Promise<ResolvedWeatherCoordinates | undefined> {
+  const response = await fetch(
+    `${GOOGLE_PLACES_DETAILS_URL}/${encodeURIComponent(input.placeId)}`,
+    {
+      headers: {
+        "X-Goog-Api-Key": input.apiKey,
+        "X-Goog-FieldMask": "id,location",
+      },
+      signal: input.signal,
+    },
+  );
+  if (!response.ok) return undefined;
+  const place = (await response.json()) as GooglePlaceDetails;
+  const latitude = finiteNumber(place.location?.latitude);
+  const longitude = finiteNumber(place.location?.longitude);
+  if (latitude === undefined || longitude === undefined) return undefined;
+  return {
+    latitude,
+    longitude,
+    googlePlaceId: typeof place.id === "string" ? place.id : input.placeId,
+  };
+}
+
+/**
+ * Older Duna records can predate mandatory Places coordinates. Resolve them
+ * lazily so weather and daylight planning still work while new writes continue
+ * to store the Place ID and coordinates directly.
+ */
+export async function resolveWeatherCoordinates(input: {
+  readonly latitude?: number;
+  readonly longitude?: number;
+  readonly googlePlaceId?: string;
+  readonly query?: string;
+  readonly now?: Date;
+}): Promise<ResolvedWeatherCoordinates | undefined> {
+  if (
+    input.latitude !== undefined &&
+    input.longitude !== undefined &&
+    Number.isFinite(input.latitude) &&
+    Number.isFinite(input.longitude)
+  ) {
+    return {
+      latitude: input.latitude,
+      longitude: input.longitude,
+      googlePlaceId: validPlaceId(input.googlePlaceId),
+    };
+  }
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY?.trim();
+  if (!apiKey) return undefined;
+  const now = input.now ?? new Date();
+  const suppliedPlaceId = validPlaceId(input.googlePlaceId);
+  const query = normalizedLocationQuery(input.query);
+  const cacheKey = suppliedPlaceId
+    ? `place:${suppliedPlaceId}`
+    : query.length >= 3
+      ? `query:${query.toLocaleLowerCase("en-US")}`
+      : undefined;
+  if (!cacheKey) return undefined;
+  const cached = locationCache.get(cacheKey);
+  if (cached && cached.expiresAt > now.getTime()) return cached.value;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6_000);
+  let resolved: ResolvedWeatherCoordinates | undefined;
+  try {
+    let placeId = suppliedPlaceId;
+    if (!placeId) {
+      const response = await fetch(GOOGLE_PLACES_AUTOCOMPLETE_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": "suggestions.placePrediction.placeId",
+        },
+        body: JSON.stringify({
+          input: query,
+          includedRegionCodes: ["us", "ca", "au", "br"],
+        }),
+        signal: controller.signal,
+      });
+      if (response.ok) {
+        const payload = (await response.json()) as GoogleAutocompleteResponse;
+        const candidate = payload.suggestions?.[0]?.placePrediction?.placeId;
+        placeId =
+          typeof candidate === "string" ? validPlaceId(candidate) : undefined;
+      }
+    }
+    if (placeId) {
+      resolved = await fetchGooglePlaceCoordinates({
+        apiKey,
+        placeId,
+        signal: controller.signal,
+      });
+    }
+  } catch {
+    // A missing geocode must never prevent an event or calendar from loading.
+  } finally {
+    clearTimeout(timeout);
+  }
+  locationCache.set(cacheKey, {
+    value: resolved,
+    expiresAt:
+      now.getTime() + (resolved ? LOCATION_CACHE_MS : LOCATION_MISS_CACHE_MS),
+  });
+  if (locationCache.size > 250) {
+    for (const [key, entry] of locationCache) {
+      if (entry.expiresAt <= now.getTime()) locationCache.delete(key);
+    }
+  }
+  return resolved;
 }
 
 function isoString(value: unknown): string | undefined {
@@ -459,4 +620,5 @@ export function daylightStatus(
 
 export function __resetWeatherCacheForTests(): void {
   forecastCache.clear();
+  locationCache.clear();
 }

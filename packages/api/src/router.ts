@@ -257,7 +257,7 @@ import {
   proposeAgentAction,
   toolRiskRegistry,
 } from "./risk";
-import { loadWeatherForecast } from "./weather";
+import { loadWeatherForecast, resolveWeatherCoordinates } from "./weather";
 
 async function attachEventWeather(
   event: EventSummary,
@@ -265,17 +265,32 @@ async function attachEventWeather(
 ): Promise<EventSummary> {
   if (
     event.location?.mode === "online" ||
-    event.location?.latitude === undefined ||
-    event.location.longitude === undefined ||
     Date.parse(event.endsAt) < now.getTime() - 6 * 60 * 60_000
   ) {
     return event;
   }
+  const coordinates = await resolveWeatherCoordinates({
+    latitude: event.location?.latitude,
+    longitude: event.location?.longitude,
+    googlePlaceId: event.location?.googlePlaceId,
+    query: [event.location?.venueName, event.location?.address]
+      .filter(Boolean)
+      .join(", "),
+    now,
+  });
+  if (!coordinates) return event;
   return {
     ...event,
+    location: event.location
+      ? {
+          ...event.location,
+          ...coordinates,
+          confidence: event.location.confidence ?? "approximate",
+        }
+      : event.location,
     weather: await loadWeatherForecast({
-      latitude: event.location.latitude,
-      longitude: event.location.longitude,
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
       timezone: event.timezone,
       startsAt: new Date(
         Math.max(now.getTime(), Date.parse(event.startsAt) - 6 * 60 * 60_000),
