@@ -1,6 +1,7 @@
 "use client";
 
 import type { SandDataOverview } from "@duna/api";
+import type { PersonSummary } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   Activity,
@@ -12,6 +13,7 @@ import {
   LoaderCircle,
   Play,
   RefreshCw,
+  Search,
   ShieldCheck,
   TriangleAlert,
   UsersRound,
@@ -426,8 +428,10 @@ export function SandDataPanel({ data }: { readonly data: SandDataOverview }) {
 
 function MappingReview({
   mapping,
+  players,
 }: {
   readonly mapping: SandDataOverview["mappings"][number];
+  readonly players: readonly PersonSummary[];
 }) {
   const [state, action, pending] = useActionState(
     linkSandPlayerAction,
@@ -447,6 +451,9 @@ function MappingReview({
     typeof evidence.candidateDisplayName === "string"
       ? evidence.candidateDisplayName
       : undefined;
+  const suggestedIsInDirectory = players.some(
+    (player) => player.id === suggestedPersonId,
+  );
   return (
     <article className="mapping-review">
       <span className="mapping-review__avatar">
@@ -468,13 +475,21 @@ function MappingReview({
       <form action={action}>
         <input name="externalProfileId" type="hidden" value={mapping.id} />
         <label>
-          <span>Duna person ID</span>
-          <input
-            defaultValue={suggestedPersonId}
-            name="personId"
-            placeholder="Paste canonical person UUID"
-            required
-          />
+          <span>Canonical Duna player</span>
+          <select defaultValue={suggestedPersonId} name="personId" required>
+            <option value="">Choose a player</option>
+            {suggestedPersonId && !suggestedIsInDirectory && (
+              <option value={suggestedPersonId}>
+                {suggestedName ?? "Suggested player"} · suggested match
+              </option>
+            )}
+            {players.map((player) => (
+              <option key={player.id} value={player.id}>
+                {player.displayName} · @{player.handle} ·{" "}
+                {player.rating.display.toFixed(2)}
+              </option>
+            ))}
+          </select>
         </label>
         {suggestedName && (
           <small>
@@ -498,33 +513,99 @@ function MappingReview({
 
 export function PlayerMappingPanel({
   data,
+  players,
+  query,
 }: {
   readonly data: SandDataOverview;
+  readonly players: readonly PersonSummary[];
+  readonly query?: string;
 }) {
   return (
-    <section className="hq-card mapping-queue">
-      <header className="hq-card-heading">
-        <div>
-          <span className="hq-eyebrow">One player, one identity</span>
-          <h2>External player mapping</h2>
+    <div className="player-mapping-workspace">
+      <section className="hq-card player-directory-search">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">Canonical player directory</span>
+            <h2>Find the right Duna identity</h2>
+          </div>
+          <Badge>{players.length} results</Badge>
+        </header>
+        <form action="/admin/player-mapping" method="get">
+          <Search aria-hidden size={18} />
+          <input
+            aria-label="Search Duna players"
+            defaultValue={query}
+            name="q"
+            placeholder="Search name, handle, or email…"
+            type="search"
+          />
+          <button className="hq-button hq-button--primary" type="submit">
+            Search players
+          </button>
+        </form>
+        <div className="player-directory-results">
+          {players.map((player) => (
+            <article key={player.id}>
+              <span className="player-directory-results__avatar">
+                {player.avatarUrl ? (
+                  <img alt="" src={player.avatarUrl} />
+                ) : (
+                  player.initials
+                )}
+              </span>
+              <div>
+                <strong>{player.displayName}</strong>
+                <small>
+                  @{player.handle} · {player.homeMarket}
+                </small>
+              </div>
+              <span>
+                <strong>{player.rating.display.toFixed(2)}</strong>
+                <small>{player.rating.confidence}</small>
+              </span>
+              <Badge tone={player.isProfessional ? "positive" : "neutral"}>
+                {player.isProfessional
+                  ? "pro"
+                  : (player.profileClaimStatus ?? "player")}
+              </Badge>
+            </article>
+          ))}
+          {players.length === 0 && (
+            <p className="hq-empty">
+              No Duna players match “{query}”. Try a broader name or handle.
+            </p>
+          )}
         </div>
-        <Badge tone={data.mappings.length ? "warning" : "positive"}>
-          {data.mappings.length}
-        </Badge>
-      </header>
-      <p>
-        Exact source IDs link automatically. Name matches remain suggestions
-        until a human confirms them.
-      </p>
-      <div>
-        {data.mappings.map((mapping) => (
-          <MappingReview key={mapping.id} mapping={mapping} />
-        ))}
-      </div>
-      {data.mappings.length === 0 && (
-        <p className="hq-empty">Every discovered player is resolved.</p>
-      )}
-    </section>
+      </section>
+
+      <section className="hq-card mapping-queue">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">One player, one identity</span>
+            <h2>External player mapping</h2>
+          </div>
+          <Badge tone={data.mappings.length ? "warning" : "positive"}>
+            {data.mappings.length}
+          </Badge>
+        </header>
+        <p>
+          Search the player directory, compare source evidence, then select the
+          canonical identity. Exact source IDs still link automatically.
+        </p>
+        <div>
+          {data.mappings.map((mapping) => (
+            <MappingReview
+              key={mapping.id}
+              mapping={mapping}
+              players={players}
+            />
+          ))}
+        </div>
+        {data.mappings.length === 0 && (
+          <p className="hq-empty">Every discovered player is resolved.</p>
+        )}
+      </section>
+    </div>
   );
 }
 

@@ -1514,6 +1514,21 @@ export const adminOverviewSchema = z.object({
     )
     .readonly(),
 });
+export const adminOrganizationDetailSchema = z.object({
+  organization: organizationSummarySchema,
+  metrics: z.array(metricSchema).readonly(),
+  people: z.array(personSummarySchema).readonly(),
+  venues: z.array(venueSummarySchema).readonly(),
+  events: z.array(eventSummarySchema).readonly(),
+  audit: z.array(auditEventSchema).readonly(),
+  commerce: z.object({
+    paidOrders: z.number().int().nonnegative(),
+    pendingOrders: z.number().int().nonnegative(),
+    refundedOrders: z.number().int().nonnegative(),
+    grossVolumeMinor: z.number().int().nonnegative(),
+    currency: z.string().length(3),
+  }),
+});
 
 export const scoreStateSchema = z.object({
   status: z.enum(["not-started", "live", "complete", "forfeit"]),

@@ -1,10 +1,11 @@
 import type {
+  AdminOrganizationDetail,
   AdminOverview as AdminOverviewData,
   FeatureFlagCollection,
   GuardianReviewItem,
   SandDataOverview,
 } from "@duna/api";
-import type { OrganizationSummary } from "@duna/core";
+import type { OrganizationSummary, PersonSummary } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   Activity,
@@ -12,9 +13,13 @@ import {
   Building2,
   CalendarDays,
   Check,
+  ChevronLeft,
   CircleAlert,
+  ExternalLink,
   Flag,
   HeartPulse,
+  MapPinned,
+  ReceiptText,
   RefreshCw,
   ScrollText,
   ShieldCheck,
@@ -209,7 +214,11 @@ function OrganizationsList({
         <Badge>{organizations.length}</Badge>
       </header>
       {organizations.map((organization) => (
-        <article key={organization.id}>
+        <Link
+          className="admin-organization-row"
+          href={`/admin/organizations/${organization.id}`}
+          key={organization.id}
+        >
           <span>
             <Building2 size={17} />
           </span>
@@ -223,10 +232,308 @@ function OrganizationsList({
           <Badge tone={toneForStatus(organization.stripeStatus)}>
             {organization.stripeStatus}
           </Badge>
-        </article>
+          <ArrowRight aria-hidden size={16} />
+        </Link>
       ))}
       {organizations.length === 0 && <p>No organizations connected.</p>}
     </section>
+  );
+}
+
+export function AdminOrganizationDetailView({
+  detail,
+}: {
+  readonly detail: AdminOrganizationDetail;
+}) {
+  const { organization } = detail;
+  const consumerOrigin =
+    process.env.NEXT_PUBLIC_DUNA_WEB_URL?.replace(/\/$/, "") ??
+    process.env.NEXT_PUBLIC_WEB_URL?.replace(/\/$/, "") ??
+    "https://duna.coach";
+  const upcomingEvents = detail.events
+    .filter(
+      (event) =>
+        new Date(event.endsAt).getTime() >= Date.now() &&
+        event.lifecycleStatus !== "cancelled",
+    )
+    .slice(0, 8);
+  const staff = detail.people.filter((person) =>
+    person.roles.some((role) =>
+      ["owner", "manager", "coach", "front-desk", "accountant"].includes(role),
+    ),
+  );
+  const formatMoney = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: detail.commerce.currency,
+    maximumFractionDigits: 0,
+  });
+
+  return (
+    <main className="hq-page admin-page admin-organization-detail">
+      <Link className="admin-back-link" href="/admin/organizations">
+        <ChevronLeft aria-hidden size={16} />
+        All organizations
+      </Link>
+
+      <header className="admin-organization-hero">
+        <div className="admin-organization-hero__mark">
+          {organization.name
+            .split(/\s+/)
+            .map((part) => part[0])
+            .join("")
+            .slice(0, 2)}
+        </div>
+        <div>
+          <span className="hq-eyebrow">Tenant command center</span>
+          <h1>{organization.name}</h1>
+          <p>
+            {organization.legalName} · {organization.timezone}
+          </p>
+          <div>
+            <Badge>{organization.plan}</Badge>
+            <Badge tone={toneForStatus(organization.stripeStatus)}>
+              Payments {organization.stripeStatus}
+            </Badge>
+          </div>
+        </div>
+        <a
+          className="hq-button hq-button--secondary"
+          href={`${consumerOrigin}/clubs/${organization.slug}`}
+          rel="noreferrer"
+          target="_blank"
+        >
+          Open public page <ExternalLink aria-hidden size={15} />
+        </a>
+      </header>
+
+      <section className="admin-org-metric-grid">
+        {detail.metrics.map((metric, index) => {
+          const Icon = adminMetricIcons[index % adminMetricIcons.length]!;
+          return (
+            <article key={metric.label}>
+              <span>
+                <small>{metric.label}</small>
+                <Icon aria-hidden size={18} />
+              </span>
+              <Numeric>{metric.value}</Numeric>
+              <p>{metric.change ?? "Connected value"}</p>
+            </article>
+          );
+        })}
+      </section>
+
+      <section className="admin-org-command-grid">
+        <section className="hq-card admin-org-panel admin-org-readiness">
+          <header className="hq-card-heading">
+            <div>
+              <span className="hq-eyebrow">Operational readiness</span>
+              <h2>Account controls</h2>
+            </div>
+            <ShieldCheck aria-hidden size={20} />
+          </header>
+          <div>
+            <article>
+              <span>
+                <WalletCards aria-hidden size={17} />
+                <strong>Money movement</strong>
+              </span>
+              <Badge tone={toneForStatus(organization.stripeStatus)}>
+                {organization.stripeStatus}
+              </Badge>
+            </article>
+            <article>
+              <span>
+                <UsersRound aria-hidden size={17} />
+                <strong>Staff coverage</strong>
+              </span>
+              <Badge tone={staff.length > 0 ? "positive" : "warning"}>
+                {staff.length} team members
+              </Badge>
+            </article>
+            <article>
+              <span>
+                <MapPinned aria-hidden size={17} />
+                <strong>Bookable footprint</strong>
+              </span>
+              <Badge tone={detail.venues.length > 0 ? "positive" : "warning"}>
+                {detail.venues.length} venues
+              </Badge>
+            </article>
+          </div>
+        </section>
+
+        <section className="hq-card admin-org-panel admin-org-commerce">
+          <header className="hq-card-heading">
+            <div>
+              <span className="hq-eyebrow">Connected commerce</span>
+              <h2>Order health</h2>
+            </div>
+            <ReceiptText aria-hidden size={20} />
+          </header>
+          <strong>
+            {formatMoney.format(detail.commerce.grossVolumeMinor / 100)}
+          </strong>
+          <span>Gross paid volume</span>
+          <dl>
+            <div>
+              <dt>Paid</dt>
+              <dd>{detail.commerce.paidOrders}</dd>
+            </div>
+            <div>
+              <dt>Pending</dt>
+              <dd>{detail.commerce.pendingOrders}</dd>
+            </div>
+            <div>
+              <dt>Refunded</dt>
+              <dd>{detail.commerce.refundedOrders}</dd>
+            </div>
+          </dl>
+        </section>
+      </section>
+
+      <section className="admin-org-data-grid">
+        <section className="hq-card admin-org-panel">
+          <header className="hq-card-heading">
+            <div>
+              <span className="hq-eyebrow">People</span>
+              <h2>Members + operators</h2>
+            </div>
+            <Badge>{detail.people.length}</Badge>
+          </header>
+          <div className="admin-entity-list">
+            {detail.people.slice(0, 12).map((person) => (
+              <article key={person.id}>
+                <span className="admin-person-avatar">
+                  {person.avatarUrl ? (
+                    <img alt="" src={person.avatarUrl} />
+                  ) : (
+                    person.initials
+                  )}
+                </span>
+                <div>
+                  <strong>{person.displayName}</strong>
+                  <small>
+                    @{person.handle} · {person.roles.join(", ")}
+                  </small>
+                </div>
+                <span className="admin-rating-value">
+                  {person.rating.display.toFixed(2)}
+                </span>
+              </article>
+            ))}
+            {detail.people.length === 0 && (
+              <p className="hq-empty">No active organization members.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="hq-card admin-org-panel">
+          <header className="hq-card-heading">
+            <div>
+              <span className="hq-eyebrow">Facilities</span>
+              <h2>Venues + courts</h2>
+            </div>
+            <Badge>{detail.venues.length}</Badge>
+          </header>
+          <div className="admin-entity-list">
+            {detail.venues.map((venue) => (
+              <article key={venue.id}>
+                <span className="admin-entity-icon">
+                  <MapPinned aria-hidden size={17} />
+                </span>
+                <div>
+                  <strong>{venue.name}</strong>
+                  <small>
+                    {venue.city}, {venue.region} · {venue.timezone}
+                  </small>
+                </div>
+                <Badge tone={venue.openNow ? "positive" : "neutral"}>
+                  {venue.courtCount} courts
+                </Badge>
+              </article>
+            ))}
+            {detail.venues.length === 0 && (
+              <p className="hq-empty">No connected venues.</p>
+            )}
+          </div>
+        </section>
+      </section>
+
+      <section className="hq-card admin-org-panel admin-org-activity">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">Upcoming activity</span>
+            <h2>Events + sessions</h2>
+          </div>
+          <Badge>{upcomingEvents.length}</Badge>
+        </header>
+        <div className="admin-event-list">
+          {upcomingEvents.map((event) => (
+            <a
+              href={`${consumerOrigin}/events/${event.slug}`}
+              key={event.id}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <time dateTime={event.startsAt}>
+                {new Intl.DateTimeFormat("en-US", {
+                  month: "short",
+                  day: "numeric",
+                }).format(new Date(event.startsAt))}
+              </time>
+              <div>
+                <strong>{event.title}</strong>
+                <small>
+                  {event.venueName} · {event.spotsRemaining} spots remaining
+                </small>
+              </div>
+              <Badge tone={event.live ? "positive" : "neutral"}>
+                {event.live ? "live" : event.kind}
+              </Badge>
+              <ExternalLink aria-hidden size={15} />
+            </a>
+          ))}
+          {upcomingEvents.length === 0 && (
+            <p className="hq-empty">No upcoming connected activity.</p>
+          )}
+        </div>
+      </section>
+
+      <section className="hq-card admin-org-panel">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">Organization audit</span>
+            <h2>Recent control-plane activity</h2>
+          </div>
+          <Badge>{detail.audit.length}</Badge>
+        </header>
+        <div className="admin-audit-table">
+          {detail.audit.slice(0, 12).map((event) => (
+            <article key={event.id}>
+              <span
+                className={`admin-audit-dot admin-audit-dot--${event.severity}`}
+              />
+              <div>
+                <strong>{event.action}</strong>
+                <small>
+                  {event.actorName} · {event.entity}
+                </small>
+              </div>
+              <p>{event.reason}</p>
+              <time dateTime={event.occurredAt}>
+                {new Intl.DateTimeFormat("en-US", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }).format(new Date(event.occurredAt))}
+              </time>
+            </article>
+          ))}
+          {detail.audit.length === 0 && (
+            <p className="hq-empty">No organization-scoped audit events.</p>
+          )}
+        </div>
+      </section>
+    </main>
   );
 }
 
@@ -393,6 +700,8 @@ export function AdminPanel({
   guardianReviews,
   featureFlags,
   sandData,
+  playerDirectory,
+  playerSearchQuery,
 }: {
   readonly module: AdminModule;
   readonly overview: AdminOverviewData;
@@ -400,6 +709,8 @@ export function AdminPanel({
   readonly guardianReviews: readonly GuardianReviewItem[];
   readonly featureFlags: FeatureFlagCollection;
   readonly sandData?: SandDataOverview;
+  readonly playerDirectory: readonly PersonSummary[];
+  readonly playerSearchQuery?: string;
 }) {
   if (module === "overview") return null;
   const content = copy[module];
@@ -482,7 +793,11 @@ export function AdminPanel({
       ) : module === "sand-data" && sandData ? (
         <SandDataPanel data={sandData} />
       ) : module === "player-mapping" && sandData ? (
-        <PlayerMappingPanel data={sandData} />
+        <PlayerMappingPanel
+          data={sandData}
+          players={playerDirectory}
+          query={playerSearchQuery}
+        />
       ) : module === "ratings-lab" && sandData ? (
         <RatingsLabPanel data={sandData} />
       ) : module === "profile-merge" ? (

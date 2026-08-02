@@ -17,10 +17,13 @@ export async function generateMetadata({
 
 export default async function AdminModulePage({
   params,
+  searchParams,
 }: {
   readonly params: Promise<{ module: string }>;
+  readonly searchParams: Promise<{ q?: string }>;
 }) {
   const { module } = await params;
+  const { q } = await searchParams;
   const item = adminModules.find((entry) => entry.slug === module);
   if (!item || module === "overview") notFound();
   const caller = await getServerCaller();
@@ -38,14 +41,25 @@ export default async function AdminModulePage({
       ? caller.admin.featureFlags()
       : Promise.resolve({ flags: [], canManage: false }),
     needsSandData ? caller.admin.sandData() : Promise.resolve(undefined),
+    module === "player-mapping"
+      ? caller.admin.players({ query: q, limit: 40 })
+      : Promise.resolve([]),
   ])
     .then(
-      ([overview, organizations, guardianReviews, featureFlags, sandData]) => ({
+      ([
         overview,
         organizations,
         guardianReviews,
         featureFlags,
         sandData,
+        players,
+      ]) => ({
+        overview,
+        organizations,
+        guardianReviews,
+        featureFlags,
+        sandData,
+        players,
       }),
     )
     .catch((error: unknown) => {
@@ -67,6 +81,8 @@ export default async function AdminModulePage({
         guardianReviews={result.guardianReviews}
         featureFlags={result.featureFlags}
         sandData={result.sandData}
+        playerDirectory={result.players}
+        playerSearchQuery={q}
       />
     </AdminShell>
   );

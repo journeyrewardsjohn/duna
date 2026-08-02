@@ -76,8 +76,9 @@ import {
   type CurrencyCode,
   type PricedOrderItem,
 } from "@duna/pricing";
-import { and, asc, desc, eq, gte, inArray, ne, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, ne, or } from "drizzle-orm";
 import type {
+  AdminOrganizationDetail,
   AdminQueue,
   DunaRepository,
   OperatorScheduleItem,
@@ -1179,6 +1180,32 @@ async function loadOrganizations(
   });
 }
 
+async function searchAdminPlayers(
+  query: string | undefined,
+  limit: number,
+): Promise<PersonSummary[]> {
+  const database = getDatabase();
+  const normalizedQuery = query?.trim();
+  const personRows = await database
+    .select({ id: people.id })
+    .from(people)
+    .where(
+      normalizedQuery
+        ? and(
+            eq(people.status, "active"),
+            or(
+              ilike(people.displayName, `%${normalizedQuery}%`),
+              ilike(people.handle, `%${normalizedQuery}%`),
+              ilike(people.email, `%${normalizedQuery}%`),
+            ),
+          )
+        : eq(people.status, "active"),
+    )
+    .orderBy(asc(people.displayName))
+    .limit(limit);
+  return loadPeople(personRows.map((row) => row.id));
+}
+
 async function loadWallet(personId: string): Promise<PlayerWallet> {
   const database = getDatabase();
   const account = await database.query.walletAccounts.findFirst({
@@ -1634,7 +1661,7 @@ async function loadAdminQueues(): Promise<AdminQueue[]> {
   ];
 }
 
-async function loadAudit(): Promise<AuditEvent[]> {
+async function loadAudit(organizationId?: string): Promise<AuditEvent[]> {
   const database = getDatabase();
   const rows = await database
     .select({
@@ -1649,6 +1676,9 @@ async function loadAudit(): Promise<AuditEvent[]> {
     })
     .from(auditLog)
     .leftJoin(people, eq(auditLog.actorPersonId, people.id))
+    .where(
+      organizationId ? eq(auditLog.organizationId, organizationId) : undefined,
+    )
     .orderBy(desc(auditLog.createdAt))
     .limit(100);
   return rows.map((row) => ({
@@ -1665,6 +1695,103 @@ async function loadAudit(): Promise<AuditEvent[]> {
           ? "attention"
           : "info",
   }));
+}
+
+async function loadAdminOrganization(
+  organizationId: string,
+): Promise<AdminOrganizationDetail | undefined> {
+  const database = getDatabase();
+  const organization = (await loadOrganizations(organizationId))[0];
+  if (!organization) return undefined;
+
+  const [membershipRows, organizationVenues, scopedEvents, orderRows, audit] =
+    await Promise.all([
+      database
+        .select({ personId: organizationMemberships.personId })
+        .from(organizationMemberships)
+        .where(
+          and(
+            eq(organizationMemberships.organizationId, organizationId),
+            eq(organizationMemberships.active, true),
+          ),
+        ),
+      loadVenues(organizationId),
+      loadEvents({ includeUnlistedPickups: true }).then((rows) =>
+        rows
+          .filter((row) => row.organizationId === organizationId)
+          .map((row) => row.event),
+      ),
+      database
+        .select({
+          status: orders.status,
+          totalMinor: orders.totalMinor,
+          currency: orders.currency,
+        })
+        .from(orders)
+        .where(eq(orders.organizationId, organizationId)),
+      loadAudit(organizationId),
+    ]);
+
+  const peopleForOrganization = await loadPeople([
+    ...new Set(membershipRows.map((row) => row.personId)),
+  ]);
+  const paidOrders = orderRows.filter((row) =>
+    ["paid", "partially-refunded"].includes(row.status),
+  );
+  const grossVolumeMinor = paidOrders.reduce(
+    (total, order) => total + order.totalMinor,
+    0,
+  );
+  const currencyCode =
+    orderRows.find((order) => order.currency)?.currency ?? "USD";
+  const upcomingEvents = scopedEvents.filter(
+    (event) =>
+      new Date(event.endsAt).getTime() >= Date.now() &&
+      event.lifecycleStatus !== "cancelled",
+  ).length;
+  const activeCourts = organizationVenues.reduce(
+    (total, venue) => total + venue.courtCount,
+    0,
+  );
+
+  return {
+    organization,
+    metrics: [
+      {
+        label: "Gross volume",
+        value: formatUsd(grossVolumeMinor),
+        change: `${paidOrders.length} paid orders`,
+      },
+      {
+        label: "People",
+        value: String(organization.memberCount),
+        change: `${organization.staffCount} staff`,
+      },
+      {
+        label: "Venues + courts",
+        value: `${organization.venueCount} / ${activeCourts}`,
+        change: "Connected inventory",
+      },
+      {
+        label: "Upcoming activity",
+        value: String(upcomingEvents),
+        change: `${scopedEvents.length} total events`,
+      },
+    ],
+    people: peopleForOrganization,
+    venues: organizationVenues,
+    events: scopedEvents,
+    audit,
+    commerce: {
+      paidOrders: paidOrders.length,
+      pendingOrders: orderRows.filter((row) => row.status === "pending").length,
+      refundedOrders: orderRows.filter((row) =>
+        ["partially-refunded", "refunded"].includes(row.status),
+      ).length,
+      grossVolumeMinor,
+      currency: currencyCode,
+    },
+  };
 }
 
 function scheduleFromEvents(
@@ -2365,6 +2492,8 @@ export const databaseRepository = {
       };
     },
     organizations: () => loadOrganizations(),
+    organization: loadAdminOrganization,
+    players: searchAdminPlayers,
     queues: loadAdminQueues,
     audit: loadAudit,
   },

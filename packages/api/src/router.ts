@@ -28,6 +28,7 @@ import {
 import type { ApiContext } from "./context";
 import {
   accountDeletionReadinessSchema,
+  adminOrganizationDetailSchema,
   adminOverviewSchema,
   adminQueueSchema,
   agentDraftSchema,
@@ -5188,6 +5189,25 @@ const adminRouter = router({
         return throwDomainError(error);
       }
     }),
+  organization: adminProcedure
+    .input(z.object({ organizationId: z.string().uuid() }))
+    .output(adminOrganizationDetailSchema.nullable())
+    .query(
+      async ({ input }) =>
+        (await getRepository().admin.organization(input.organizationId)) ??
+        null,
+    ),
+  players: adminProcedure
+    .input(
+      z.object({
+        query: z.string().trim().max(120).optional(),
+        limit: z.number().int().min(1).max(100).default(30),
+      }),
+    )
+    .output(z.array(personSummarySchema).readonly())
+    .query(({ input }) =>
+      getRepository().admin.players(input.query, input.limit),
+    ),
   organizations: adminProcedure
     .output(z.array(organizationSummarySchema).readonly())
     .query(() => getRepository().admin.organizations()),

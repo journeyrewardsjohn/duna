@@ -54,14 +54,19 @@ export function AdminShell({
       </aside>
       <div className="hq-workspace">
         <header className="hq-topbar">
-          <label className="hq-search">
+          <form
+            action="/admin/player-mapping"
+            className="hq-search"
+            method="get"
+          >
             <Search aria-hidden size={17} />
             <input
               aria-label="Search Duna Admin"
-              placeholder="Search network entities…"
+              name="q"
+              placeholder="Search players across Duna…"
             />
-            <kbd>⌘ K</kbd>
-          </label>
+            <kbd>↵</kbd>
+          </form>
           <div>
             <ThemeToggle />
             <Badge tone="positive">All systems operational</Badge>

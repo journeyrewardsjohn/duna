@@ -200,6 +200,59 @@ export const demoRepository = {
       ],
     }),
     organizations: () => [demoOrganization],
+    organization: (organizationId: string) =>
+      organizationId === demoOrganization.id
+        ? {
+            organization: demoOrganization,
+            metrics: [
+              {
+                label: "Gross volume",
+                value: "$0",
+                change: "Demo data source",
+              },
+              {
+                label: "People",
+                value: String(demoPeople.length),
+                change: `${demoOrganization.staffCount} staff`,
+              },
+              {
+                label: "Venues + courts",
+                value: `${demoVenues.length} / ${demoVenues.reduce(
+                  (total, venue) => total + venue.courtCount,
+                  0,
+                )}`,
+                change: "Connected inventory",
+              },
+              {
+                label: "Upcoming activity",
+                value: String(mutableEvents.length),
+                change: "Demo schedule",
+              },
+            ],
+            people: demoPeople,
+            venues: demoVenues,
+            events: mutableEvents,
+            audit: demoAuditEvents,
+            commerce: {
+              paidOrders: 0,
+              pendingOrders: 0,
+              refundedOrders: 0,
+              grossVolumeMinor: 0,
+              currency: "USD",
+            },
+          }
+        : undefined,
+    players: (query: string | undefined, limit: number) => {
+      const normalized = query?.trim().toLowerCase();
+      return demoPeople
+        .filter(
+          (person) =>
+            !normalized ||
+            person.displayName.toLowerCase().includes(normalized) ||
+            person.handle.toLowerCase().includes(normalized),
+        )
+        .slice(0, limit);
+    },
     queues: () => demoAdminQueues,
     audit: () => demoAuditEvents,
   },

@@ -88,6 +88,32 @@ describe("tRPC contract surface", () => {
     });
   });
 
+  it("gives super admins organization drill-down and player search", async () => {
+    const caller = createCaller(
+      createApiContext({ actor: createDemoActor(["super-admin"]) }),
+    );
+    const organizations = await caller.admin.organizations();
+    const organization = organizations[0];
+    expect(organization).toBeDefined();
+
+    const [detail, players] = await Promise.all([
+      caller.admin.organization({ organizationId: organization!.id }),
+      caller.admin.players({ query: "s", limit: 20 }),
+    ]);
+
+    expect(detail).toMatchObject({
+      organization: { id: organization!.id },
+      commerce: { currency: "USD" },
+    });
+    expect(detail?.metrics).toHaveLength(4);
+    expect(players.length).toBeGreaterThan(0);
+    expect(players[0]).toMatchObject({
+      id: expect.any(String),
+      displayName: expect.any(String),
+      handle: expect.any(String),
+    });
+  });
+
   it("limits event media upload authorization to event-writing staff", async () => {
     const coach = createCaller(
       createApiContext({ actor: createDemoActor(["coach"]) }),

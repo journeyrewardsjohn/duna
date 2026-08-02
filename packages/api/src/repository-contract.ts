@@ -300,6 +300,22 @@ export interface AdminOverview {
   readonly system: readonly SystemHealth[];
 }
 
+export interface AdminOrganizationDetail {
+  readonly organization: OrganizationSummary;
+  readonly metrics: readonly Metric[];
+  readonly people: readonly PersonSummary[];
+  readonly venues: readonly VenueSummary[];
+  readonly events: readonly EventSummary[];
+  readonly audit: readonly AuditEvent[];
+  readonly commerce: {
+    readonly paidOrders: number;
+    readonly pendingOrders: number;
+    readonly refundedOrders: number;
+    readonly grossVolumeMinor: number;
+    readonly currency: string;
+  };
+}
+
 export interface DunaRepository {
   readonly public: {
     events(): Awaitable<readonly EventSummary[]>;
@@ -334,6 +350,13 @@ export interface DunaRepository {
   readonly admin: {
     overview(): Awaitable<AdminOverview>;
     organizations(): Awaitable<readonly OrganizationSummary[]>;
+    organization(
+      organizationId: string,
+    ): Awaitable<AdminOrganizationDetail | undefined>;
+    players(
+      query: string | undefined,
+      limit: number,
+    ): Awaitable<readonly PersonSummary[]>;
     queues(): Awaitable<readonly AdminQueue[]>;
     audit(): Awaitable<readonly AuditEvent[]>;
   };
