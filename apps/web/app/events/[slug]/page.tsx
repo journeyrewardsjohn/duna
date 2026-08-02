@@ -23,6 +23,8 @@ import { notFound } from "next/navigation";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { ProEventDetail } from "@/components/pro-event-detail";
+import { MarkdownContent } from "@/components/markdown-content";
+import { PickupEventActions } from "@/components/pickup-event-actions";
 import { getServerCaller } from "@/lib/api";
 
 function words(value: string | undefined, fallback = "Configured") {
@@ -74,13 +76,18 @@ export default async function EventPage({
 }) {
   const { slug } = await params;
   const caller = await getServerCaller();
-  const [event, proEvent, people] = await Promise.all([
+  const [event, proEvent] = await Promise.all([
     caller.public.eventBySlug({ slug }).catch(() => undefined),
     caller.public.proEvent({ slug }).catch(() => undefined),
-    caller.public.players({ limit: 8 }),
   ]);
   if (!event && proEvent) return <ProEventDetail event={proEvent} />;
   if (!event) notFound();
+  const pickupManagement =
+    event.kind === "pickup"
+      ? await caller.player
+          .pickupManagement({ pickupSessionId: event.id })
+          .catch(() => undefined)
+      : undefined;
 
   const cover = event.media?.[0];
   const capacityUsed = Math.max(0, event.capacity - event.spotsRemaining);
@@ -208,10 +215,17 @@ export default async function EventPage({
                   ? "Built for the full day of play."
                   : "Arrive ready. Duna handles the rest."}
             </h2>
-            <p>
-              {event.description ??
-                "Eligibility, payment, arrival, scoring, and results stay connected from the moment you join."}
-            </p>
+            {!event.description && (
+              <p>
+                Eligibility, payment, arrival, scoring, and results stay
+                connected from the moment you join.
+              </p>
+            )}
+            {event.description && (
+              <MarkdownContent className="markdown-content">
+                {event.description}
+              </MarkdownContent>
+            )}
           </article>
 
           {event.features && event.features.length > 0 && (
@@ -409,16 +423,40 @@ export default async function EventPage({
               <UsersRound aria-hidden size={23} />
             </header>
             <div className="event-player-strip">
-              {people.map((person) => (
+              {(event.attendees ?? []).map((person) => (
                 <Link href={`/players/${person.handle}`} key={person.id}>
-                  <span className="avatar">{person.initials}</span>
+                  <span className="avatar">
+                    {person.avatarUrl ? (
+                      <img alt="" src={person.avatarUrl} />
+                    ) : (
+                      person.initials
+                    )}
+                  </span>
                   <span>
                     <strong>{person.displayName}</strong>
-                    <small>{person.homeMarket.split(",")[0]}</small>
+                    <small>
+                      {person.id === event.host?.id
+                        ? "Host"
+                        : (person.homeMarket?.split(",")[0] ?? "Player")}
+                    </small>
                   </span>
-                  <Numeric>{person.rating.display.toFixed(2)}</Numeric>
+                  <Numeric>
+                    {person.ratingDisplay?.toFixed(2) ?? "Joined"}
+                  </Numeric>
                 </Link>
               ))}
+              {(event.attendees?.length ?? 0) === 0 && (
+                <article className="event-player-strip__empty">
+                  <UsersRound aria-hidden size={22} />
+                  <span>
+                    <strong>Be the first player in.</strong>
+                    <small>
+                      Confirmed players who share a public profile will appear
+                      here.
+                    </small>
+                  </span>
+                </article>
+              )}
             </div>
             <p className="event-public__privacy-note">
               Player visibility follows each profile&apos;s privacy settings.
@@ -504,6 +542,52 @@ export default async function EventPage({
                 </a>
               )}
             </div>
+            {event.location?.mode !== "online" && (
+              <div className="event-location-map">
+                <iframe
+                  aria-label={`Map of ${event.location?.venueName ?? event.venueName}`}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  src={`https://www.google.com/maps?q=${encodeURIComponent(
+                    event.location?.latitude !== undefined &&
+                      event.location?.longitude !== undefined
+                      ? `${event.location.latitude},${event.location.longitude}`
+                      : (event.location?.address ??
+                          event.location?.venueName ??
+                          event.venueName),
+                  )}&output=embed`}
+                  title={`Map of ${event.location?.venueName ?? event.venueName}`}
+                />
+                <span>
+                  <Badge
+                    tone={
+                      event.location?.confidence === "confirmed"
+                        ? "positive"
+                        : "neutral"
+                    }
+                  >
+                    {event.location?.confidence === "confirmed"
+                      ? "Confirmed location"
+                      : "Approximate location"}
+                  </Badge>
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                      event.location?.address ??
+                        event.location?.venueName ??
+                        event.venueName,
+                    )}${
+                      event.location?.googlePlaceId
+                        ? `&query_place_id=${encodeURIComponent(event.location.googlePlaceId)}`
+                        : ""
+                    }`}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Open directions <ExternalLink aria-hidden size={14} />
+                  </a>
+                </span>
+              </div>
+            )}
           </section>
 
           {event.policies && event.policies.length > 0 && (
@@ -533,7 +617,9 @@ export default async function EventPage({
                         {policy.kind}
                       </Badge>
                     </summary>
-                    <p>{policy.markdown}</p>
+                    <MarkdownContent className="markdown-content">
+                      {policy.markdown}
+                    </MarkdownContent>
                     {policy.requireFullScroll && (
                       <small>
                         This waiver must be read in full and accepted during
@@ -581,9 +667,18 @@ export default async function EventPage({
               team is complete
             </li>
           </ul>
-          <Link href={`/app/checkout/${event.slug}`}>
-            Join this event <ArrowRight aria-hidden size={17} />
-          </Link>
+          {event.kind === "pickup" ? (
+            <PickupEventActions
+              approvalRequired={event.approvalRequired ?? false}
+              management={pickupManagement}
+              pickupSessionId={event.id}
+              slug={event.slug}
+            />
+          ) : (
+            <Link href={`/app/checkout/${event.slug}`}>
+              Join this event <ArrowRight aria-hidden size={17} />
+            </Link>
+          )}
           {event.tickets && event.tickets.length > 0 && (
             <Link className="secondary" href="#tickets">
               Browse tickets

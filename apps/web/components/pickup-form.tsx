@@ -13,11 +13,13 @@ import {
   Plus,
   Sparkles,
   Trophy,
+  UserCheck,
   Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { createPickupAction } from "@/app/app/pickup/new/actions";
+import { PlaceSearch, type PlaceDetails } from "./place-search";
 
 type PickupFormat = "2s" | "3s" | "4s" | "6s" | "king-queen";
 type MatchType = "competitive" | "casual";
@@ -68,6 +70,10 @@ export function PickupForm() {
   const [ratingMinimum, setRatingMinimum] = useState(4);
   const [ratingMaximum, setRatingMaximum] = useState(5);
   const [venueName, setVenueName] = useState("Hermosa Beach — Pier Courts");
+  const [address, setAddress] = useState<string>();
+  const [googlePlaceId, setGooglePlaceId] = useState<string>();
+  const [latitude, setLatitude] = useState<number>();
+  const [longitude, setLongitude] = useState<number>();
   const [date, setDate] = useState(() =>
     new Date(Date.now() + 24 * 60 * 60_000).toISOString().slice(0, 10),
   );
@@ -80,6 +86,12 @@ export function PickupForm() {
     "Good energy, competitive games, easy rotation. Bring your own water.",
   );
   const [recordMatches, setRecordMatches] = useState(true);
+  const [approvalRequired, setApprovalRequired] = useState(false);
+  const [waitlistEnabled, setWaitlistEnabled] = useState(true);
+  const [allowLateCancellation, setAllowLateCancellation] = useState(false);
+  const [minimumNoticeMinutes, setMinimumNoticeMinutes] = useState(60);
+  const [autoCancelLowAttendance, setAutoCancelLowAttendance] = useState(false);
+  const [minimumAttendance, setMinimumAttendance] = useState(4);
   const [error, setError] = useState<string>();
   const [isPending, startTransition] = useTransition();
   const startsAt = useMemo(() => {
@@ -322,14 +334,32 @@ export function PickupForm() {
 
           {step === 2 && (
             <>
-              <div className="field-group field-group--icon">
+              <div className="field-group">
                 <label htmlFor="pickup-venue">Where</label>
-                <MapPin aria-hidden size={18} />
-                <input
+                <PlaceSearch
                   id="pickup-venue"
-                  onChange={(event) => setVenueName(event.target.value)}
+                  onPlace={(details: PlaceDetails) => {
+                    setGooglePlaceId(details.placeId);
+                    setAddress(details.address);
+                    setLatitude(details.latitude);
+                    setLongitude(details.longitude);
+                    if (details.name) setVenueName(details.name);
+                  }}
+                  onValue={(value) => {
+                    setVenueName(value);
+                    if (value !== address) {
+                      setGooglePlaceId(undefined);
+                      setLatitude(undefined);
+                      setLongitude(undefined);
+                    }
+                  }}
                   value={venueName}
                 />
+                <small>
+                  {googlePlaceId
+                    ? "Confirmed with Google Places."
+                    : "Custom locations are shown as approximate until confirmed."}
+                </small>
               </div>
               <div className="form-grid form-grid--2">
                 <div className="field-group">
@@ -482,6 +512,109 @@ export function PickupForm() {
                   type="checkbox"
                 />
               </label>
+              <label className="toggle-row">
+                <span>
+                  <strong>Require approval to join</strong>
+                  <small>
+                    Players request a spot first. Nobody is charged until you
+                    approve them.
+                  </small>
+                </span>
+                <input
+                  checked={approvalRequired}
+                  onChange={(event) =>
+                    setApprovalRequired(event.target.checked)
+                  }
+                  type="checkbox"
+                />
+              </label>
+              <section className="pickup-smart-rules">
+                <header>
+                  <span>
+                    <UserCheck aria-hidden size={19} />
+                    <strong>Smart rules</strong>
+                  </span>
+                  <small>Simple controls. Duna handles the edge cases.</small>
+                </header>
+                <label>
+                  <span>
+                    <strong>Enable waitlist</strong>
+                    <small>Keep demand when the match fills.</small>
+                  </span>
+                  <input
+                    checked={waitlistEnabled}
+                    onChange={(event) =>
+                      setWaitlistEnabled(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                </label>
+                <label>
+                  <span>
+                    <strong>Allow late cancellations</strong>
+                    <small>
+                      Players can still leave inside the notice window.
+                    </small>
+                  </span>
+                  <input
+                    checked={allowLateCancellation}
+                    onChange={(event) =>
+                      setAllowLateCancellation(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                </label>
+                <label>
+                  <span>
+                    <strong>Cancellation notice</strong>
+                    <small>Minimum notice before the start.</small>
+                  </span>
+                  <select
+                    onChange={(event) =>
+                      setMinimumNoticeMinutes(Number(event.target.value))
+                    }
+                    value={minimumNoticeMinutes}
+                  >
+                    <option value={0}>Any time</option>
+                    <option value={60}>1 hour</option>
+                    <option value={360}>6 hours</option>
+                    <option value={720}>12 hours</option>
+                    <option value={1440}>24 hours</option>
+                  </select>
+                </label>
+                <label>
+                  <span>
+                    <strong>Auto-cancel if underbooked</strong>
+                    <small>Protect everyone from an unplayable run.</small>
+                  </span>
+                  <input
+                    checked={autoCancelLowAttendance}
+                    onChange={(event) =>
+                      setAutoCancelLowAttendance(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                </label>
+                {autoCancelLowAttendance && (
+                  <label>
+                    <span>
+                      <strong>Minimum players</strong>
+                      <small>
+                        Duna checks before the notice window closes.
+                      </small>
+                    </span>
+                    <input
+                      max={capacity}
+                      min={2}
+                      onChange={(event) =>
+                        setMinimumAttendance(Number(event.target.value))
+                      }
+                      type="number"
+                      value={minimumAttendance}
+                    />
+                  </label>
+                )}
+              </section>
               {error && <p role="alert">{error}</p>}
             </>
           )}
@@ -543,12 +676,30 @@ export function PickupForm() {
                       startsAt,
                       endsAt,
                       venueName,
+                      address,
+                      googlePlaceId,
+                      latitude,
+                      longitude,
+                      locationConfidence: googlePlaceId
+                        ? "confirmed"
+                        : "approximate",
                       capacity,
                       format,
                       matchType,
                       genderPreference,
                       note: note.trim() || undefined,
                       visibility,
+                      approvalRequired,
+                      smartRules: {
+                        waitlistEnabled,
+                        allowLateCancellation,
+                        minimumNoticeMinutes,
+                        autoCancelLowAttendance,
+                        minimumAttendance: Math.min(
+                          capacity,
+                          Math.max(2, minimumAttendance),
+                        ),
+                      },
                       costMinor,
                       currency: "USD",
                       recordMatches,

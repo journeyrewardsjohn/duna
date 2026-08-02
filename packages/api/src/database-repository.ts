@@ -520,6 +520,8 @@ async function loadEvents(input?: {
     divisionRows,
     registrationRows,
     pickupParticipantRows,
+    registrationAttendeeRows,
+    pickupAttendeeRows,
     blueprintRows,
     ticketTypeRows,
     issuedTicketRows,
@@ -553,7 +555,10 @@ async function loadEvents(input?: {
       .select({
         id: pickupSessions.id,
         title: pickupSessions.title,
+        hostPersonId: people.id,
         hostName: people.displayName,
+        hostHandle: people.handle,
+        hostAvatarUrl: people.avatarUrl,
         startsAt: pickupSessions.startsAt,
         endsAt: pickupSessions.endsAt,
         venueLabel: pickupSessions.venueLabel,
@@ -561,6 +566,13 @@ async function loadEvents(input?: {
         format: pickupSessions.format,
         recordMatches: pickupSessions.recordMatches,
         visibility: pickupSessions.visibility,
+        lifecycleStatus: pickupSessions.status,
+        approvalRequired: pickupSessions.approvalRequired,
+        directAddress: pickupSessions.address,
+        directGooglePlaceId: pickupSessions.googlePlaceId,
+        directLatitude: pickupSessions.latitude,
+        directLongitude: pickupSessions.longitude,
+        locationConfidence: pickupSessions.locationConfidence,
         venueTimezone: venues.timezone,
         directOrganizationId: pickupSessions.organizationId,
         venueOrganizationId: venues.organizationId,
@@ -569,14 +581,26 @@ async function loadEvents(input?: {
         ratingMaximum: pickupSessions.ratingMaximum,
         currency: pickupSessions.currency,
         costMinor: pickupSessions.costMinor,
+        venueAddressLine1: venues.addressLine1,
+        venueAddressLine2: venues.addressLine2,
+        venueLocality: venues.locality,
+        venueAdministrativeArea: venues.administrativeArea,
+        venuePostalCode: venues.postalCode,
+        venueCountryCode: venues.countryCode,
+        venueGooglePlaceId: venues.googlePlaceId,
+        venueLatitude: venues.latitude,
+        venueLongitude: venues.longitude,
       })
       .from(pickupSessions)
       .innerJoin(people, eq(pickupSessions.hostPersonId, people.id))
       .leftJoin(venues, eq(pickupSessions.venueId, venues.id))
       .where(
-        input?.includeUnlistedPickups
-          ? inArray(pickupSessions.visibility, ["public", "unlisted"])
-          : eq(pickupSessions.visibility, "public"),
+        and(
+          input?.includeUnlistedPickups
+            ? inArray(pickupSessions.visibility, ["public", "unlisted"])
+            : eq(pickupSessions.visibility, "public"),
+          eq(pickupSessions.status, "active"),
+        ),
       )
       .orderBy(asc(pickupSessions.startsAt)),
     database
@@ -624,6 +648,36 @@ async function loadEvents(input?: {
       ),
     database
       .select({
+        sessionId: registrations.sessionId,
+        personId: registrations.personId,
+      })
+      .from(registrations)
+      .innerJoin(people, eq(registrations.personId, people.id))
+      .where(
+        and(
+          inArray(registrations.status, ["confirmed", "checked-in"]),
+          eq(people.status, "active"),
+          eq(people.profileVisibility, "public"),
+          eq(people.isMinor, false),
+        ),
+      ),
+    database
+      .select({
+        pickupSessionId: pickupParticipants.pickupSessionId,
+        personId: pickupParticipants.personId,
+      })
+      .from(pickupParticipants)
+      .innerJoin(people, eq(pickupParticipants.personId, people.id))
+      .where(
+        and(
+          inArray(pickupParticipants.status, ["confirmed", "checked-in"]),
+          eq(people.status, "active"),
+          eq(people.profileVisibility, "public"),
+          eq(people.isMinor, false),
+        ),
+      ),
+    database
+      .select({
         sessionId: eventBlueprints.sessionId,
         shortSummary: eventBlueprints.shortSummary,
         description: eventBlueprints.description,
@@ -659,6 +713,31 @@ async function loadEvents(input?: {
         inArray(tickets.status, ["held", "issued", "transferred", "scanned"]),
       ),
   ]);
+  const attendeeIds = [
+    ...new Set(
+      [...registrationAttendeeRows, ...pickupAttendeeRows].map(
+        (row) => row.personId,
+      ),
+    ),
+  ];
+  const attendeePeople = await loadPeople(attendeeIds);
+  const attendeeById = new Map(
+    attendeePeople.map((person) => [person.id, person] as const),
+  );
+  const publicAttendee = (personId: string) => {
+    const person = attendeeById.get(personId);
+    return person
+      ? {
+          id: person.id,
+          displayName: person.displayName,
+          handle: person.handle,
+          initials: person.initials,
+          avatarUrl: person.avatarUrl,
+          homeMarket: person.homeMarket,
+          ratingDisplay: person.rating.display,
+        }
+      : undefined;
+  };
   const organizationIds = new Set<string>();
   for (const row of sessionRows) {
     const id =
@@ -839,8 +918,16 @@ async function loadEvents(input?: {
           blueprint && blueprint.media.length > 0
             ? (blueprint.media as unknown as readonly EventMedia[])
             : undefined,
-        location: blueprint
-          ? (blueprint.location as unknown as EventLocation)
+        location: blueprintLocation
+          ? {
+              ...blueprintLocation,
+              confidence:
+                blueprintLocation.googlePlaceId &&
+                blueprintLocation.latitude !== undefined &&
+                blueprintLocation.longitude !== undefined
+                  ? "confirmed"
+                  : "approximate",
+            }
           : undefined,
         features:
           blueprint && blueprint.features.length > 0
@@ -853,6 +940,10 @@ async function loadEvents(input?: {
         recurrence: blueprint?.recurrence
           ? (blueprint.recurrence as unknown as LeagueRecurrence)
           : undefined,
+        attendees: registrationAttendeeRows
+          .filter((attendee) => attendee.sessionId === row.id)
+          .map((attendee) => publicAttendee(attendee.personId))
+          .filter((attendee) => attendee !== undefined),
         live: row.status === "live",
         tags: [titleCase(kind), titleCase(row.status)],
       },
@@ -889,6 +980,49 @@ async function loadEvents(input?: {
           row.ratingMinimum !== null && row.ratingMaximum !== null
             ? [row.ratingMinimum, row.ratingMaximum]
             : undefined,
+        location: {
+          mode: "venue",
+          venueName: row.venueLabel,
+          address:
+            row.directAddress ??
+            ([
+              row.venueAddressLine1,
+              row.venueAddressLine2,
+              row.venueLocality,
+              row.venueAdministrativeArea,
+              row.venuePostalCode,
+              row.venueCountryCode,
+            ]
+              .filter(Boolean)
+              .join(", ") ||
+              undefined),
+          googlePlaceId:
+            row.directGooglePlaceId ?? row.venueGooglePlaceId ?? undefined,
+          latitude: row.directLatitude ?? row.venueLatitude ?? undefined,
+          longitude: row.directLongitude ?? row.venueLongitude ?? undefined,
+          confidence:
+            row.locationConfidence === "confirmed"
+              ? "confirmed"
+              : "approximate",
+        },
+        attendees: pickupAttendeeRows
+          .filter((attendee) => attendee.pickupSessionId === row.id)
+          .map((attendee) => publicAttendee(attendee.personId))
+          .filter((attendee) => attendee !== undefined),
+        host: {
+          id: row.hostPersonId,
+          displayName: row.hostName,
+          handle: row.hostHandle,
+          initials: initials(row.hostName),
+          avatarUrl: row.hostAvatarUrl ?? undefined,
+        },
+        approvalRequired: row.approvalRequired,
+        lifecycleStatus:
+          row.lifecycleStatus === "cancelled"
+            ? "cancelled"
+            : row.lifecycleStatus === "completed"
+              ? "completed"
+              : "active",
         tags: [
           "Pickup",
           row.format === "king-queen" ? "King / Queen" : row.format,
@@ -1749,6 +1883,26 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
       venueId: matchingVenue?.id,
       courtBookingId: linkedCourtBooking?.id,
       venueLabel: matchingVenue?.name ?? input.venueName,
+      address:
+        input.address ??
+        ([
+          matchingVenue?.addressLine1,
+          matchingVenue?.addressLine2,
+          matchingVenue?.locality,
+          matchingVenue?.administrativeArea,
+          matchingVenue?.postalCode,
+          matchingVenue?.countryCode,
+        ]
+          .filter(Boolean)
+          .join(", ") ||
+          undefined),
+      googlePlaceId: input.googlePlaceId ?? matchingVenue?.googlePlaceId,
+      latitude: input.latitude ?? matchingVenue?.latitude,
+      longitude: input.longitude ?? matchingVenue?.longitude,
+      locationConfidence:
+        input.googlePlaceId || matchingVenue?.googlePlaceId
+          ? "confirmed"
+          : (input.locationConfidence ?? "approximate"),
       title: input.title,
       matchType: input.matchType,
       genderPreference: input.genderPreference,
@@ -1761,6 +1915,8 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
       ratingMinimum: input.ratingMinimum,
       ratingMaximum: input.ratingMaximum,
       visibility: input.visibility,
+      approvalRequired: input.approvalRequired,
+      smartRules: input.smartRules,
       costMinor: input.costMinor,
       currency: input.currency,
     }),

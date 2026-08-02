@@ -1,5 +1,6 @@
 import {
   auditLog,
+  catalogEntitlements,
   catalogFulfillments,
   catalogPrices,
   courtBookingParticipants,
@@ -12,6 +13,7 @@ import {
   orderTaxContexts,
   organizations,
   payments,
+  people,
   pickupParticipants,
   registrations,
   tickets,
@@ -23,6 +25,7 @@ import {
   fulfillPaidCatalogOrder,
   releaseCatalogOrderInventory,
 } from "./catalog-checkout";
+import { issueOrganizationCredits } from "./catalog-service";
 import { synchronizeIdentityVerification } from "./identity-verification";
 import {
   processPlayerSourceConnection,
@@ -251,6 +254,80 @@ async function markMembershipPaymentFailed(input: {
   ]);
 }
 
+async function applyMembershipCycleBenefits(input: {
+  readonly object: Readonly<Record<string, unknown>>;
+  readonly occurredAt: Date;
+  readonly traceId: string;
+}): Promise<void> {
+  const subscriptionField = input.object.subscription;
+  const parent = input.object.parent as
+    | {
+        readonly subscription_details?: Readonly<Record<string, unknown>>;
+      }
+    | undefined;
+  const subscriptionId =
+    typeof subscriptionField === "string"
+      ? subscriptionField
+      : typeof parent?.subscription_details?.subscription === "string"
+        ? parent.subscription_details.subscription
+        : undefined;
+  if (!subscriptionId) {
+    throw new Error("Paid membership invoice is missing its subscription");
+  }
+  const database = getDatabase();
+  const membership = await database.query.memberships.findFirst({
+    where: eq(memberships.stripeSubscriptionId, subscriptionId),
+  });
+  if (!membership) {
+    // Stripe does not guarantee event ordering. Retrying allows the
+    // subscription projection to land before cycle benefits are granted.
+    throw new Error(
+      "Membership is not synchronized yet; retrying cycle benefits",
+    );
+  }
+  const tier = await database.query.membershipTiers.findFirst({
+    where: eq(membershipTiers.id, membership.tierId),
+  });
+  if (!tier?.organizationId || !tier.stripePriceId) {
+    return;
+  }
+  const catalogPrice = await database.query.catalogPrices.findFirst({
+    where: eq(catalogPrices.stripePriceId, tier.stripePriceId),
+  });
+  if (!catalogPrice) return;
+  const entitlement = await database.query.catalogEntitlements.findFirst({
+    where: and(
+      eq(catalogEntitlements.planCatalogItemId, catalogPrice.catalogItemId),
+      eq(catalogEntitlements.kind, "credit-grant"),
+    ),
+  });
+  if (!entitlement?.quantity) return;
+  const person = await database.query.people.findFirst({
+    where: eq(people.id, membership.personId),
+  });
+  const invoiceId = optionalString(input.object, "id") ?? input.traceId;
+  await issueOrganizationCredits({
+    actor: {
+      personId: membership.personId,
+      displayName: person?.displayName ?? "Duna member",
+      roles: ["player"],
+      organizationId: tier.organizationId,
+      scopes: ["wallet:write"],
+      ageBand: "adult",
+      isDemo: false,
+    },
+    personId: membership.personId,
+    credits: entitlement.quantity,
+    expiresAt: membership.currentPeriodEndsAt ?? undefined,
+    valueMinor: 0,
+    currency: tier.currency,
+    valueSource: "membership-benefit",
+    reason: `Membership cycle credits issued for invoice ${invoiceId}.`,
+    requestId: `membership-invoice:${invoiceId}:credits`,
+    now: input.occurredAt,
+  });
+}
+
 async function synchronizeConnectAccount(input: {
   readonly object: Readonly<Record<string, unknown>>;
   readonly occurredAt: Date;
@@ -356,6 +433,12 @@ async function processStripeWorkflow(
 
   if (action === "membership.synchronized") {
     await synchronizeMembership({
+      object,
+      occurredAt,
+      traceId: eventPayload.id ?? webhook.providerEventId,
+    });
+  } else if (action === "membership.payment_succeeded") {
+    await applyMembershipCycleBenefits({
       object,
       occurredAt,
       traceId: eventPayload.id ?? webhook.providerEventId,

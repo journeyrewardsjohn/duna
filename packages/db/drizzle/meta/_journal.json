@@ -260,6 +260,13 @@
       "when": 1785646734072,
       "tag": "0036_minor_iron_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1785654713185,
+      "tag": "0037_oval_mac_gargan",
+      "breakpoints": true
     }
   ]
 }

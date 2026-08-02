@@ -7864,6 +7864,29 @@ html {
   width: 38px;
 }
 
+.event-player-strip .avatar img {
+  border-radius: inherit;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.event-player-strip__empty {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px dashed var(--color-line);
+  border-radius: 15px;
+  display: flex;
+  gap: 0.75rem;
+  grid-column: 1 / -1;
+  padding: 1rem;
+}
+
+.event-player-strip__empty > span {
+  display: flex;
+  flex-direction: column;
+}
+
 .event-player-strip a > span:nth-child(2) {
   display: flex;
   flex-direction: column;
@@ -7978,6 +8001,205 @@ html {
 .event-public__location > div > a {
   color: var(--color-aqua);
   font-weight: 800;
+}
+
+.event-public__location > .event-location-map {
+  display: grid;
+  gap: 0;
+  margin-top: 0.75rem;
+  overflow: hidden;
+  padding: 0;
+}
+
+.event-location-map iframe {
+  border: 0;
+  filter: saturate(0.78) contrast(0.96);
+  height: 300px;
+  width: 100%;
+}
+
+.event-location-map > span {
+  align-items: center;
+  background: var(--color-surface);
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 0.9rem;
+}
+
+.event-location-map > span a {
+  align-items: center;
+  color: var(--color-aqua);
+  display: flex;
+  font-size: 0.62rem;
+  font-weight: 800;
+  gap: 0.35rem;
+}
+
+.pickup-actions {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.8rem;
+}
+
+.pickup-actions > header,
+.pickup-actions--approved,
+.pickup-actions--waiting,
+.pickup-actions--signed-out {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.pickup-actions > header {
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.pickup-actions > article {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  padding: 0.55rem;
+}
+
+.pickup-actions > article > span:nth-child(2),
+.pickup-actions--approved > span,
+.pickup-actions--waiting > span,
+.pickup-actions--signed-out > span,
+.pickup-actions--request > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.pickup-actions .avatar {
+  align-items: center;
+  background: var(--color-aqua-deep);
+  border-radius: 50%;
+  color: var(--color-white);
+  display: flex;
+  font-size: 0.55rem;
+  font-weight: 850;
+  height: 36px;
+  justify-content: center;
+  overflow: hidden;
+  width: 36px;
+}
+
+.pickup-actions .avatar img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.pickup-actions button,
+.pickup-actions a {
+  align-items: center;
+  background: var(--color-aqua-deep);
+  border: 1px solid var(--color-aqua-deep);
+  border-radius: 999px;
+  color: var(--color-white);
+  display: inline-flex;
+  font-size: 0.58rem;
+  font-weight: 850;
+  gap: 0.3rem;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0.5rem 0.75rem;
+}
+
+.pickup-actions button.secondary {
+  background: transparent;
+  color: var(--color-aqua-deep);
+  min-width: 36px;
+  padding-inline: 0.55rem;
+}
+
+.pickup-actions textarea {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 11px;
+  color: var(--color-bone);
+  padding: 0.65rem;
+  resize: vertical;
+  width: 100%;
+}
+
+.pickup-actions > p {
+  color: var(--color-aqua-deep);
+  font-size: 0.58rem;
+  margin: 0;
+}
+
+.pickup-actions__danger {
+  background: transparent !important;
+  border-color: rgb(190 63 63 / 30%) !important;
+  color: #be3f3f !important;
+}
+
+.pickup-actions__guard,
+.pickup-actions small {
+  color: var(--color-bone-muted);
+  font-size: 0.54rem;
+  line-height: 1.4;
+}
+
+.pickup-actions--approved,
+.pickup-actions--waiting,
+.pickup-actions--signed-out {
+  gap: 0.6rem;
+}
+
+.pickup-actions--approved > a,
+.pickup-actions--signed-out > a {
+  margin-left: auto;
+}
+
+.markdown-content {
+  color: var(--color-bone-muted);
+  font-size: 0.7rem;
+  line-height: 1.7;
+}
+
+.markdown-content > :first-child {
+  margin-top: 0;
+}
+
+.markdown-content > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content h2,
+.markdown-content h3 {
+  color: var(--color-ink);
+  font-family: var(--font-display);
+}
+
+.markdown-content ul {
+  display: grid;
+  gap: 0.35rem;
+  padding-left: 1.15rem;
+}
+
+.markdown-content a {
+  color: var(--color-aqua);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.markdown-content code {
+  background: var(--color-sand-light);
+  border-radius: 5px;
+  color: var(--color-ink);
+  padding: 0.08rem 0.28rem;
 }
 
 .event-policy-list {
@@ -9982,6 +10204,7 @@ a {
 }
 
 .site-header__brand {
+  color: var(--color-bone);
   justify-self: start;
 }
 
@@ -15286,6 +15509,147 @@ button.selected > .choice-radio {
   gap: 0.35rem;
 }
 
+.consumer-place-search {
+  position: relative;
+}
+
+.consumer-place-search__input {
+  align-items: center;
+  background: var(--color-canvas-soft);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  display: flex;
+  gap: 0.55rem;
+  padding: 0 0.85rem;
+}
+
+.consumer-place-search__input svg {
+  color: var(--color-aqua);
+  flex: 0 0 auto;
+}
+
+.consumer-place-search__input input {
+  background: transparent;
+  border: 0;
+  min-height: 52px;
+  outline: 0;
+  padding-inline: 0;
+  width: 100%;
+}
+
+.consumer-place-search__results {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgb(13 36 55 / 14%);
+  display: grid;
+  left: 0;
+  overflow: hidden;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 20;
+}
+
+.consumer-place-search__results > button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-ink);
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.consumer-place-search__results > button:hover {
+  background: var(--color-canvas-soft);
+}
+
+.consumer-place-search__results > button > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.consumer-place-search__results small {
+  color: var(--color-bone-muted);
+  font-size: 0.58rem;
+}
+
+.consumer-place-search__results > small {
+  padding: 0.45rem 0.75rem;
+  text-align: right;
+}
+
+.pickup-smart-rules {
+  background: var(--color-canvas-soft);
+  border: 1px solid var(--color-line);
+  border-radius: 18px;
+  margin-top: 1rem;
+  overflow: hidden;
+}
+
+.pickup-smart-rules > header {
+  align-items: center;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-line);
+  display: flex;
+  justify-content: space-between;
+  padding: 0.9rem 1rem;
+}
+
+.pickup-smart-rules > header > span {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.pickup-smart-rules > header svg {
+  color: var(--color-aqua);
+}
+
+.pickup-smart-rules > header small,
+.pickup-smart-rules label small {
+  color: var(--color-bone-muted);
+  font-size: 0.58rem;
+}
+
+.pickup-smart-rules > label {
+  align-items: center;
+  border-bottom: 1px solid var(--color-line);
+  display: flex;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+}
+
+.pickup-smart-rules > label:last-child {
+  border-bottom: 0;
+}
+
+.pickup-smart-rules label > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.pickup-smart-rules input[type="checkbox"] {
+  accent-color: var(--color-aqua);
+  height: 20px;
+  width: 36px;
+}
+
+.pickup-smart-rules select,
+.pickup-smart-rules input[type="number"] {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  color: var(--color-ink);
+  max-width: 125px;
+  min-height: 38px;
+  padding: 0 0.6rem;
+}
+
 @media (max-width: 1120px) {
   .play-planner {
     grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
@@ -15485,5 +15849,855 @@ button.selected > .choice-radio {
 
   .pickup-builder__main {
     padding: 1rem;
+  }
+}
+
+/* Membership checkout and Run Your Club */
+.catalog-membership-inclusions {
+  border-top: 1px solid #e8ebef;
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+}
+
+.catalog-membership-inclusions > div {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.catalog-membership-inclusions article {
+  align-items: flex-start;
+  background: #f5f7f3;
+  border: 1px solid #e1e7dd;
+  border-radius: 15px;
+  color: #2f6b4e;
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.85rem;
+}
+
+.catalog-membership-inclusions article > span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.catalog-membership-inclusions article strong {
+  color: #101828;
+  font-size: 0.76rem;
+}
+
+.catalog-membership-inclusions article small {
+  color: #687568;
+  font-size: 0.65rem;
+  line-height: 1.4;
+}
+
+.catalog-membership-benefit {
+  align-items: flex-start;
+  background: #edf7f0;
+  border: 1px solid #d7e8dc;
+  border-radius: 14px;
+  color: #2f7551;
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.85rem;
+}
+
+.catalog-membership-benefit > span {
+  display: grid;
+  gap: 0.14rem;
+}
+
+.catalog-membership-benefit strong {
+  color: #204f39;
+  font-size: 0.76rem;
+}
+
+.catalog-membership-benefit small {
+  font-size: 0.65rem;
+  line-height: 1.4;
+}
+
+.catalog-billing-options {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.catalog-billing-options > span {
+  color: #536174;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.catalog-billing-options > div {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.catalog-billing-options button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #dfe4ea;
+  border-radius: 13px;
+  color: #101828;
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.catalog-billing-options button > span {
+  display: grid;
+  gap: 0.14rem;
+}
+
+.catalog-billing-options button small {
+  color: #677386;
+  font-size: 0.64rem;
+}
+
+.catalog-billing-options button i {
+  border: 1.5px solid #c8d0db;
+  border-radius: 50%;
+  height: 16px;
+  width: 16px;
+}
+
+.catalog-billing-options button.active {
+  background: #eef4fb;
+  border-color: #2b67a4;
+}
+
+.catalog-billing-options button.active i {
+  border: 4px solid #2b67a4;
+}
+
+.club-marketing-page {
+  --club-green: #072f2f;
+  --club-mint: #8ce4cf;
+  --club-mint-soft: #dff7ef;
+  --club-sand: #f1eadf;
+  --club-ink: #101c22;
+  background: #f7f7f4;
+  color: var(--club-ink);
+}
+
+.club-marketing-hero,
+.club-marketing-audience,
+.club-marketing-feature-grid,
+.club-marketing-capabilities,
+.club-marketing-theme-story,
+.club-marketing-cta {
+  margin-inline: auto;
+  max-width: 1400px;
+}
+
+.club-marketing-hero {
+  align-items: center;
+  display: grid;
+  gap: clamp(2rem, 6vw, 6rem);
+  grid-template-columns: minmax(0, 0.8fr) minmax(520px, 1.2fr);
+  min-height: min(880px, calc(100vh - 72px));
+  padding: clamp(4rem, 8vw, 8rem) clamp(1.25rem, 5vw, 5rem);
+}
+
+.club-marketing-hero__copy {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.club-marketing-hero__copy h1 {
+  font-size: clamp(4rem, 8.5vw, 8.5rem);
+  letter-spacing: -0.075em;
+  line-height: 0.84;
+  margin: 0;
+}
+
+.club-marketing-hero__copy > p {
+  color: #59646a;
+  font-size: clamp(1rem, 1.7vw, 1.35rem);
+  line-height: 1.55;
+  margin: 0;
+  max-width: 610px;
+}
+
+.club-marketing-hero__copy > div,
+.club-marketing-cta > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.club-marketing-hero__copy > small {
+  color: #758087;
+  font-size: 0.72rem;
+}
+
+.club-marketing-primary,
+.club-marketing-secondary {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 800;
+  gap: 0.45rem;
+  justify-content: center;
+  min-height: 50px;
+  padding: 0.8rem 1.15rem;
+  text-decoration: none;
+}
+
+.club-marketing-primary {
+  background: var(--club-green);
+  color: white;
+}
+
+.club-marketing-secondary {
+  background: white;
+  border: 1px solid #dce1dd;
+  color: var(--club-ink);
+}
+
+.club-marketing-hero__product {
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 92%), rgb(238 246 242 / 95%)),
+    var(--club-mint-soft);
+  border: 1px solid #dbe8e2;
+  border-radius: 32px;
+  box-shadow: 0 32px 100px rgb(7 47 47 / 13%);
+  min-height: 590px;
+  overflow: hidden;
+  transform: rotate(1deg);
+}
+
+.club-marketing-product-bar {
+  align-items: center;
+  border-bottom: 1px solid #dfe9e4;
+  display: flex;
+  justify-content: space-between;
+  padding: 1rem 1.2rem;
+}
+
+.club-marketing-product-bar > span {
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.club-marketing-product-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 0.42fr);
+  padding: 1rem;
+}
+
+.club-marketing-product-grid > section,
+.club-marketing-product-grid > aside {
+  background: rgb(255 255 255 / 90%);
+  border: 1px solid #dfe8e4;
+  border-radius: 22px;
+  padding: 1.1rem;
+}
+
+.club-marketing-product-grid > section > span,
+.club-marketing-product-grid > aside > small {
+  color: #728078;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.club-marketing-product-grid h2 {
+  font-size: clamp(1.7rem, 3vw, 3rem);
+  letter-spacing: -0.055em;
+  line-height: 1;
+  margin: 0.45rem 0 1.5rem;
+}
+
+.club-marketing-product-grid > aside {
+  align-self: start;
+  background: var(--club-green);
+  color: white;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.club-marketing-product-grid > aside > svg {
+  color: var(--club-mint);
+}
+
+.club-marketing-product-grid > aside h3,
+.club-marketing-product-grid > aside p {
+  margin: 0;
+}
+
+.club-marketing-product-grid > aside h3 {
+  font-size: 1.35rem;
+  letter-spacing: -0.045em;
+  line-height: 1.1;
+}
+
+.club-marketing-product-grid > aside p {
+  color: rgb(255 255 255 / 68%);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.club-marketing-product-grid > aside button {
+  background: var(--club-mint);
+  border: 0;
+  border-radius: 999px;
+  color: var(--club-green);
+  font-size: 0.68rem;
+  font-weight: 850;
+  padding: 0.7rem;
+}
+
+.club-marketing-calendar {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.club-marketing-calendar > div {
+  border-left: 1px solid #e2e8e4;
+  display: grid;
+  gap: 0.7rem;
+  min-height: 315px;
+  padding-left: 0.55rem;
+}
+
+.club-marketing-calendar > div > span {
+  color: #728078;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.club-marketing-calendar article {
+  align-self: start;
+  background: var(--club-mint-soft);
+  border-radius: 11px;
+  display: grid;
+  gap: 0.25rem;
+  min-height: 85px;
+  padding: 0.65rem;
+}
+
+.club-marketing-calendar article small {
+  color: #4d6d64;
+  font-size: 0.55rem;
+}
+
+.club-marketing-calendar article strong {
+  font-size: 0.7rem;
+  line-height: 1.25;
+}
+
+.club-marketing-audience {
+  background: var(--club-green);
+  border-radius: 34px;
+  color: white;
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+  margin-bottom: 1rem;
+  padding: clamp(2rem, 5vw, 5rem);
+}
+
+.club-marketing-audience h2,
+.club-marketing-capabilities h2,
+.club-marketing-theme-story h2,
+.club-marketing-cta h2 {
+  font-size: clamp(2.5rem, 5vw, 5.5rem);
+  letter-spacing: -0.065em;
+  line-height: 0.95;
+  margin: 0.5rem 0;
+}
+
+.club-marketing-audience > div:last-child {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.club-marketing-audience article {
+  background: rgb(255 255 255 / 7%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 22px;
+  padding: 1.2rem;
+}
+
+.club-marketing-audience article > span {
+  align-items: center;
+  background: var(--club-mint);
+  border-radius: 12px;
+  color: var(--club-green);
+  display: flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.club-marketing-audience article h3 {
+  font-size: 1.2rem;
+  margin: 1.2rem 0 0.5rem;
+}
+
+.club-marketing-audience article p,
+.club-marketing-audience > div > p {
+  color: rgb(255 255 255 / 68%);
+  line-height: 1.55;
+}
+
+.club-marketing-feature-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 1rem 0;
+}
+
+.club-marketing-feature {
+  background: #eeefeb;
+  border: 1px solid #e2e4df;
+  border-radius: 32px;
+  display: flex;
+  flex-direction: column;
+  min-height: 720px;
+  overflow: hidden;
+  padding: clamp(1.4rem, 4vw, 3rem);
+}
+
+.club-marketing-feature__visual,
+.club-marketing-plan-cards,
+.club-marketing-payment-state,
+.club-marketing-risk-card {
+  margin-bottom: auto;
+  min-height: 320px;
+}
+
+.club-marketing-feature > h2 {
+  font-size: clamp(2rem, 3.7vw, 4rem);
+  letter-spacing: -0.06em;
+  line-height: 0.98;
+  margin: 0.55rem 0 0.8rem;
+}
+
+.club-marketing-feature > p {
+  color: #5d6669;
+  font-size: clamp(0.95rem, 1.4vw, 1.15rem);
+  line-height: 1.55;
+  margin: 0;
+  max-width: 650px;
+}
+
+.club-marketing-feature__visual {
+  align-items: center;
+  display: grid;
+}
+
+.club-marketing-smart-rules {
+  background: white;
+  border: 1px solid #e0e5e1;
+  border-radius: 19px;
+  box-shadow: 0 18px 50px rgb(7 47 47 / 8%);
+  margin: auto;
+  max-width: 440px;
+  padding: 0.4rem 1rem;
+  width: 100%;
+}
+
+.club-marketing-smart-rules > div {
+  align-items: center;
+  border-bottom: 1px solid #ebeeeb;
+  display: flex;
+  font-size: 0.78rem;
+  justify-content: space-between;
+  min-height: 58px;
+}
+
+.club-marketing-smart-rules > div:last-child {
+  border-bottom: 0;
+}
+
+.club-marketing-smart-rules i {
+  background: #dfe4e1;
+  border-radius: 999px;
+  height: 25px;
+  position: relative;
+  width: 44px;
+}
+
+.club-marketing-smart-rules i::after {
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+  content: "";
+  height: 21px;
+  left: 2px;
+  position: absolute;
+  top: 2px;
+  transition: transform 160ms ease;
+  width: 21px;
+}
+
+.club-marketing-smart-rules i.active {
+  background: #35a889;
+}
+
+.club-marketing-smart-rules i.active::after {
+  transform: translateX(19px);
+}
+
+.club-marketing-feature .club-marketing-calendar {
+  background: white;
+  border-radius: 18px;
+  min-height: 285px;
+  padding: 1rem;
+}
+
+.club-marketing-feature .club-marketing-calendar > div {
+  min-height: 250px;
+}
+
+.club-marketing-plan-cards {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  perspective: 900px;
+  position: relative;
+}
+
+.club-marketing-plan-cards span {
+  align-items: flex-end;
+  background: var(--club-green);
+  border-radius: 22px;
+  color: white;
+  display: flex;
+  font-size: clamp(1.6rem, 3vw, 3rem);
+  font-weight: 800;
+  height: 185px;
+  letter-spacing: -0.06em;
+  padding: 1.1rem;
+  position: absolute;
+  width: min(58%, 330px);
+}
+
+.club-marketing-plan-cards span:first-child {
+  background: #2ca685;
+  transform: translate(-28%, 8%) rotate(-7deg);
+}
+
+.club-marketing-plan-cards span:nth-child(2) {
+  background: white;
+  color: #21a184;
+  transform: translate(0, -8%);
+}
+
+.club-marketing-plan-cards span:last-child {
+  background: var(--club-mint);
+  color: var(--club-green);
+  transform: translate(29%, 11%) rotate(6deg);
+}
+
+.club-marketing-payment-state,
+.club-marketing-risk-card {
+  align-items: center;
+  align-self: center;
+  background: white;
+  border: 1px solid #e0e5e1;
+  border-radius: 19px;
+  box-shadow: 0 18px 50px rgb(7 47 47 / 8%);
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: auto 1fr auto;
+  margin-top: 5rem;
+  min-height: 0;
+  padding: 1rem;
+  width: min(100%, 520px);
+}
+
+.club-marketing-payment-state > span,
+.club-marketing-risk-card > span:nth-child(2) {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.club-marketing-payment-state small,
+.club-marketing-risk-card small {
+  color: #6d7775;
+  font-size: 0.66rem;
+}
+
+.club-marketing-flow {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+}
+
+.club-marketing-flow article {
+  background: white;
+  border: 1px solid #dfe5e1;
+  border-radius: 16px;
+  display: grid;
+  gap: 0.25rem;
+  min-height: 100px;
+  padding: 0.8rem;
+}
+
+.club-marketing-flow article small {
+  color: #678076;
+  font-size: 0.58rem;
+  text-transform: uppercase;
+}
+
+.club-marketing-flow article strong {
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.club-marketing-flow > span {
+  background: #37a88a;
+  height: 2px;
+  width: 25px;
+}
+
+.club-marketing-risk-card .avatar {
+  align-items: center;
+  background: var(--club-mint-soft);
+  border-radius: 50%;
+  display: flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.club-marketing-capabilities {
+  align-items: start;
+  display: grid;
+  gap: clamp(2rem, 7vw, 7rem);
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  padding: clamp(5rem, 10vw, 10rem) clamp(1.25rem, 5vw, 5rem);
+}
+
+.club-marketing-capabilities > div > p,
+.club-marketing-theme-story > div > p,
+.club-marketing-cta > p {
+  color: #657074;
+  font-size: 1rem;
+  line-height: 1.6;
+  max-width: 620px;
+}
+
+.club-marketing-capabilities ul {
+  background: white;
+  border: 1px solid #e2e5e1;
+  border-radius: 26px;
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem;
+}
+
+.club-marketing-capabilities li {
+  align-items: center;
+  border-bottom: 1px solid #ebeeea;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: auto 1fr auto;
+  padding: 1rem;
+}
+
+.club-marketing-capabilities li:last-child {
+  border-bottom: 0;
+}
+
+.club-marketing-capabilities li > svg:first-child {
+  color: #2d9e83;
+}
+
+.club-marketing-capabilities li > svg:last-child {
+  color: #83918b;
+}
+
+.club-marketing-capabilities li span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.club-marketing-capabilities li small {
+  color: #6c7874;
+}
+
+.club-marketing-theme-story {
+  align-items: center;
+  background: linear-gradient(135deg, #dcefeb, #efe7dc);
+  border-radius: 34px;
+  display: grid;
+  gap: 3rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: clamp(2rem, 6vw, 6rem);
+}
+
+.club-marketing-theme-preview {
+  background: rgb(255 255 255 / 48%);
+  border: 1px solid rgb(255 255 255 / 65%);
+  border-radius: 26px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.club-marketing-theme-chip {
+  backdrop-filter: blur(12px);
+  background: rgb(255 255 255 / 74%);
+  border: 1px solid rgb(255 255 255 / 86%);
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 800;
+  padding: 0.55rem 0.75rem;
+}
+
+.club-marketing-theme-preview article {
+  background: linear-gradient(145deg, #bf8579, #275e5f);
+  border-radius: 20px;
+  color: white;
+  flex: 1 0 100%;
+  min-height: 320px;
+  padding: 1.2rem;
+}
+
+.club-marketing-theme-preview article h3 {
+  font-size: clamp(2rem, 4vw, 4rem);
+  letter-spacing: -0.06em;
+  line-height: 0.95;
+  margin: 4.5rem 0 1rem;
+}
+
+.club-marketing-theme-preview article button {
+  background: white;
+  border: 0;
+  border-radius: 999px;
+  color: var(--club-green);
+  font-weight: 800;
+  padding: 0.7rem 1rem;
+}
+
+.club-marketing-cta {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(6rem, 12vw, 12rem) 1.25rem;
+  text-align: center;
+}
+
+.club-marketing-cta > p {
+  margin-inline: auto;
+}
+
+.club-marketing-cta > div {
+  justify-content: center;
+}
+
+@media (max-width: 1100px) {
+  .club-marketing-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .club-marketing-hero__copy {
+    max-width: 760px;
+  }
+
+  .club-marketing-audience,
+  .club-marketing-capabilities,
+  .club-marketing-theme-story {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 820px) {
+  .club-marketing-hero {
+    padding-top: 3rem;
+  }
+
+  .club-marketing-hero__copy h1 {
+    font-size: clamp(3.6rem, 18vw, 6rem);
+  }
+
+  .club-marketing-hero__product {
+    min-height: 0;
+    transform: none;
+  }
+
+  .club-marketing-product-grid,
+  .club-marketing-feature-grid,
+  .club-marketing-audience > div:last-child {
+    grid-template-columns: 1fr;
+  }
+
+  .club-marketing-feature {
+    min-height: 620px;
+  }
+
+  .club-marketing-feature-grid {
+    padding-inline: 0.75rem;
+  }
+
+  .club-marketing-audience,
+  .club-marketing-theme-story {
+    border-radius: 24px;
+    margin-inline: 0.75rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .catalog-membership-inclusions > div,
+  .catalog-billing-options > div {
+    grid-template-columns: 1fr;
+  }
+
+  .club-marketing-product-grid {
+    padding: 0.65rem;
+  }
+
+  .club-marketing-calendar {
+    grid-template-columns: repeat(4, 92px);
+    overflow-x: auto;
+  }
+
+  .club-marketing-flow {
+    grid-template-columns: 1fr;
+  }
+
+  .club-marketing-flow > span {
+    height: 18px;
+    justify-self: center;
+    width: 2px;
+  }
+
+  .club-marketing-payment-state,
+  .club-marketing-risk-card {
+    align-items: start;
+    grid-template-columns: auto 1fr;
+  }
+
+  .club-marketing-payment-state .duna-badge,
+  .club-marketing-risk-card .duna-badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .club-marketing-plan-cards span {
+    width: 70%;
+  }
+
+  .club-marketing-hero__copy > div,
+  .club-marketing-cta > div {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
   }
 }

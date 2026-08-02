@@ -17,7 +17,7 @@ export function SiteHeader() {
           <Link href="/app/play">Play</Link>
           <Link href="/create">Create an event</Link>
           <Link href="/pro">Pro tour</Link>
-          <Link href="/clubs/south-bay-volleyball">For clubs</Link>
+          <Link href="/run-your-club">For clubs + coaches</Link>
           <Link href="/app/profile">Sand Rating</Link>
         </nav>
         <div className="site-header__actions">

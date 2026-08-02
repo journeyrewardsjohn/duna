@@ -26,7 +26,6 @@ import {
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import type { OperatorModule } from "./navigation";
-import { OperatorControls } from "./operator-controls";
 import { ScheduleCalendar } from "./schedule-calendar";
 import { TicketApprovalQueue } from "./ticket-approval-queue";
 
@@ -51,10 +50,16 @@ const moduleCopy: Record<
       "Capacity, court utilization, bookable time, cancellation rules, and player-facing venue stories.",
   },
   members: {
-    eyebrow: "People + permissions",
+    eyebrow: "Community + relationships",
     title: "People",
     description:
-      "Connected staff and member identities scoped to this organization.",
+      "Members, players, parents, purchases, credits, and participation signals scoped to this organization.",
+  },
+  team: {
+    eyebrow: "Coaches + operators",
+    title: "Team",
+    description:
+      "Roles, availability, sessions, compensation setup, personal goals, and organization-controlled worker classifications.",
   },
   products: {
     eyebrow: "What your organization offers",
@@ -81,10 +86,10 @@ const moduleCopy: Record<
       "Connected paid-order totals and payment-account readiness without inferred economics.",
   },
   messages: {
-    eyebrow: "Consent-aware communication",
-    title: "Messages",
+    eyebrow: "Audience + lifecycle communication",
+    title: "Marketing",
     description:
-      "Transactional and optional marketing communication with guardian-safe routing.",
+      "Campaigns and simple Segment, Trigger, Action flows with consent and guardian-safe routing.",
   },
   reports: {
     eyebrow: "Operating truth",
@@ -220,8 +225,116 @@ function ProductCatalogPanel({
       .filter(Boolean)
       .join(" or ");
   };
+  const totalPurchases = workspace.productPerformance.reduce(
+    (total, item) => total + item.paidPurchases,
+    0,
+  );
+  const grossBookedMinor = workspace.productPerformance.reduce(
+    (total, item) => total + item.grossBookedMinor,
+    0,
+  );
+  const uniqueCustomers = new Set(
+    workspace.productPerformance
+      .filter((item) => item.uniqueCustomers > 0)
+      .map((item) => item.catalogItemId),
+  ).size;
+  const topOffers = workspace.productPerformance
+    .filter((item) => item.paidPurchases > 0)
+    .toSorted((left, right) => right.grossBookedMinor - left.grossBookedMinor)
+    .slice(0, 4);
   return (
     <div className="product-catalog">
+      <section className="hq-card product-performance-overview">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">Connected product performance</span>
+            <h2>Everything in view.</h2>
+            <p>
+              Paid purchases and booked value come from connected Duna orders.
+              Duna does not invent conversion rates when impression data is not
+              available.
+            </p>
+          </div>
+          <Badge>{workspace.catalog.length} offers</Badge>
+        </header>
+        <div className="product-performance-metrics">
+          <article>
+            <small>Gross booked</small>
+            <Numeric>
+              {formatMoney(grossBookedMinor, workspace.organization.currency)}
+            </Numeric>
+            <span>Before connected refunds</span>
+          </article>
+          <article>
+            <small>Paid purchases</small>
+            <Numeric>{totalPurchases}</Numeric>
+            <span>Across all catalog types</span>
+          </article>
+          <article>
+            <small>Offers with customers</small>
+            <Numeric>{uniqueCustomers}</Numeric>
+            <span>
+              {
+                workspace.catalog.filter((item) => item.status === "active")
+                  .length
+              }{" "}
+              currently live
+            </span>
+          </article>
+        </div>
+        {topOffers.length > 0 ? (
+          <div className="product-performance-bars">
+            {topOffers.map((performance) => {
+              const item = workspace.catalog.find(
+                (candidate) => candidate.id === performance.catalogItemId,
+              );
+              const maximum = topOffers[0]?.grossBookedMinor || 1;
+              return (
+                <article key={performance.catalogItemId}>
+                  <span>
+                    <strong>{item?.title ?? "Catalog offer"}</strong>
+                    <small>
+                      {performance.paidPurchases} purchase
+                      {performance.paidPurchases === 1 ? "" : "s"} ·{" "}
+                      {performance.uniqueCustomers} customer
+                      {performance.uniqueCustomers === 1 ? "" : "s"}
+                    </small>
+                  </span>
+                  <i
+                    aria-label={`${Math.round(
+                      (performance.grossBookedMinor / maximum) * 100,
+                    )}% of the leading booked value`}
+                    style={
+                      {
+                        "--product-performance-width": `${Math.max(
+                          4,
+                          Math.round(
+                            (performance.grossBookedMinor / maximum) * 100,
+                          ),
+                        )}%`,
+                      } as CSSProperties
+                    }
+                  />
+                  <Numeric>
+                    {formatMoney(
+                      performance.grossBookedMinor,
+                      workspace.organization.currency,
+                    )}
+                  </Numeric>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="hq-empty">
+            <strong>Performance begins with the first paid order.</strong>
+            <span>
+              Create a draft, publish it when payments are ready, and Duna will
+              report only connected activity.
+            </span>
+          </div>
+        )}
+      </section>
       <section className="product-kind-grid">
         {groups.map((group) => {
           const items = workspace.catalog.filter(
@@ -238,7 +351,7 @@ function ProductCatalogPanel({
               </header>
               <h2>{group.label}</h2>
               <p>{group.detail}</p>
-              <Link href={`#create-${group.type}`}>
+              <Link href={`/products/create?type=${group.type}`}>
                 Add {group.label.toLowerCase()} <ArrowRight size={15} />
               </Link>
             </article>
@@ -564,6 +677,24 @@ function MembersPanel({
                 <Numeric>{person.upcomingCount}</Numeric>
                 <small>upcoming</small>
               </span>
+              <span>
+                <Badge
+                  tone={
+                    person.churnRisk.level === "high"
+                      ? "warning"
+                      : person.churnRisk.level === "low"
+                        ? "positive"
+                        : "neutral"
+                  }
+                >
+                  {person.churnRisk.level === "high"
+                    ? "at risk"
+                    : person.churnRisk.level}
+                </Badge>
+                <small title={person.churnRisk.reasons.join(" · ")}>
+                  Duna signal · {person.churnRisk.score}/100
+                </small>
+              </span>
             </article>
           ))}
           {workspace.people.length === 0 && (
@@ -634,6 +765,149 @@ function MembersPanel({
   );
 }
 
+function TeamPanel({ workspace }: { readonly workspace: OperatorWorkspace }) {
+  return (
+    <div className="people-workspace">
+      <section className="people-summary-strip">
+        {[
+          {
+            label: "Active team",
+            count: workspace.staff.filter((person) => person.active).length,
+          },
+          {
+            label: "Coaches",
+            count: workspace.staff.filter((person) => person.role === "coach")
+              .length,
+          },
+          {
+            label: "Upcoming sessions",
+            count: workspace.staff.reduce(
+              (sum, person) => sum + person.upcomingSessions,
+              0,
+            ),
+          },
+          {
+            label: "Pending invites",
+            count: workspace.staffInvitations.filter(
+              (invitation) => invitation.status === "pending",
+            ).length,
+          },
+        ].map((group) => (
+          <article className="hq-card" key={group.label}>
+            <span className="hq-eyebrow">{group.label}</span>
+            <Numeric>{group.count}</Numeric>
+            <small>connected organization record</small>
+          </article>
+        ))}
+      </section>
+      <section className="hq-card connected-table">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">Team performance</span>
+            <h2>{workspace.staff.length} team members</h2>
+            <p>
+              Availability and personal details stay with each person. Role,
+              worker classification, and compensation policy stay controlled by
+              the organization.
+            </p>
+          </div>
+        </header>
+        <div className="team-member-grid">
+          {workspace.staff.map((person) => (
+            <article key={person.id}>
+              <header>
+                <span className="avatar">
+                  {person.avatarUrl ? (
+                    <img alt="" src={person.avatarUrl} />
+                  ) : (
+                    person.displayName
+                      .split(/\s+/)
+                      .slice(0, 2)
+                      .map((part) => part[0])
+                      .join("")
+                      .toUpperCase()
+                  )}
+                </span>
+                <span>
+                  <strong>{person.displayName}</strong>
+                  <small>
+                    {person.role.replaceAll("-", " ")} ·{" "}
+                    {person.workerClassification.replaceAll("-", " ")}
+                  </small>
+                </span>
+                <Badge tone={person.active ? "positive" : "neutral"}>
+                  {person.active ? "active" : "inactive"}
+                </Badge>
+              </header>
+              <dl>
+                <div>
+                  <dt>Sessions · 30d</dt>
+                  <dd>{person.sessionsRun30d}</dd>
+                </div>
+                <div>
+                  <dt>Upcoming</dt>
+                  <dd>{person.upcomingSessions}</dd>
+                </div>
+                <div>
+                  <dt>Compensation</dt>
+                  <dd>
+                    {person.compensationModel === "not-set"
+                      ? "Not set"
+                      : person.compensationModel.replaceAll("-", " ")}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Goal</dt>
+                  <dd>
+                    {person.incomeGoalMinor !== undefined
+                      ? `${formatMoney(
+                          person.incomeGoalMinor,
+                          person.currency,
+                        )} / ${person.incomeGoalPeriod ?? "period"}`
+                      : "Not set"}
+                  </dd>
+                </div>
+              </dl>
+              <footer>
+                <Badge tone={person.addressComplete ? "positive" : "warning"}>
+                  {person.addressComplete
+                    ? "profile complete"
+                    : "address needed"}
+                </Badge>
+                <small>
+                  Payroll is coming soon. Compensation tracking begins with
+                  posted, reviewable organization records.
+                </small>
+                <Link
+                  className="hq-button hq-button--secondary"
+                  href={`/team/${person.personId}`}
+                >
+                  Manage profile <ArrowRight aria-hidden size={15} />
+                </Link>
+              </footer>
+            </article>
+          ))}
+          {workspace.staff.length === 0 && (
+            <div className="hq-empty">
+              <strong>Build your first team.</strong>
+              <span>
+                Invite a coach or operator. They will complete their own
+                address, availability, and goals after accepting.
+              </span>
+              <Link
+                className="hq-button hq-button--primary"
+                href="/team/invite"
+              >
+                Invite the first team member
+              </Link>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function PaymentsPanel({
   dashboard,
   workspace,
@@ -670,23 +944,177 @@ function PaymentsPanel({
           the connected-account feed is active.
         </p>
       </section>
+      <section className="hq-card connected-table module-grid-span">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">Recurring payment recovery</span>
+            <h2>
+              {workspace.billingRecovery.length
+                ? `${workspace.billingRecovery.length} memberships need attention`
+                : "No recurring-payment issues"}
+            </h2>
+            <p>
+              Subscription retries follow the processor billing schedule. Duna
+              surfaces the member and next action without creating a second
+              renewal loop.
+            </p>
+          </div>
+          <Badge
+            tone={workspace.billingRecovery.length ? "warning" : "positive"}
+          >
+            {workspace.billingRecovery.length ? "recovery active" : "healthy"}
+          </Badge>
+        </header>
+        <div className="operator-compact-list">
+          {workspace.billingRecovery.map((item) => (
+            <article key={`${item.personId}-${item.membershipName}`}>
+              <span>
+                <strong>{item.displayName}</strong>
+                <small>
+                  {item.membershipName} ·{" "}
+                  {item.membershipStatus.replaceAll("_", " ")}
+                </small>
+              </span>
+              <span>
+                <Badge
+                  tone={
+                    item.retryState === "processor-managed"
+                      ? "neutral"
+                      : "warning"
+                  }
+                >
+                  {item.retryState.replaceAll("-", " ")}
+                </Badge>
+                <small>{item.detail}</small>
+              </span>
+            </article>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
 
-function MessagesPanel() {
+function MessagesPanel({
+  workspace,
+}: {
+  readonly workspace: OperatorWorkspace;
+}) {
+  const totals = workspace.marketingCampaigns.reduce(
+    (summary, campaign) => ({
+      recipients: summary.recipients + campaign.stats.recipients,
+      delivered: summary.delivered + campaign.stats.delivered,
+      opened: summary.opened + campaign.stats.opened,
+      failed: summary.failed + campaign.stats.failed,
+    }),
+    { recipients: 0, delivered: 0, opened: 0, failed: 0 },
+  );
   return (
-    <section className="hq-card module-feature-card">
-      <MessageSquareText size={24} />
-      <span className="hq-eyebrow">Provider activation</span>
-      <h2>No delivery provider connected.</h2>
-      <p>
-        Drafting, risk classification, consent records, and guardian-copy rules
-        are available in the platform layer. Sending remains disabled until an
-        approved email/SMS provider and sender identity are connected.
-      </p>
-      <Badge tone="warning">Delivery disabled</Badge>
-    </section>
+    <div className="people-workspace">
+      <section className="people-summary-strip">
+        {[
+          { label: "Flows", count: workspace.marketingFlows.length },
+          { label: "Campaigns", count: workspace.marketingCampaigns.length },
+          { label: "Delivered", count: totals.delivered },
+          {
+            label: "Open rate",
+            count: totals.delivered
+              ? Math.round((totals.opened / totals.delivered) * 100)
+              : 0,
+            suffix: "%",
+          },
+        ].map((item) => (
+          <article className="hq-card" key={item.label}>
+            <span className="hq-eyebrow">{item.label}</span>
+            <Numeric>
+              {item.count}
+              {item.suffix}
+            </Numeric>
+            <small>connected delivery data</small>
+          </article>
+        ))}
+      </section>
+      <section className="hq-card connected-table">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">Segment → Trigger → Action</span>
+            <h2>Simple member journeys</h2>
+            <p>
+              Every flow remains organization-scoped, consent-aware, and
+              guardian-safe. Activating a draft is always a separate review.
+            </p>
+          </div>
+          <div className="provider-badges">
+            <Badge
+              tone={workspace.deliveryProviders.email ? "live" : "warning"}
+            >
+              Email {workspace.deliveryProviders.email ? "ready" : "draft only"}
+            </Badge>
+            <Badge tone={workspace.deliveryProviders.sms ? "live" : "warning"}>
+              SMS {workspace.deliveryProviders.sms ? "ready" : "draft only"}
+            </Badge>
+            <Badge tone={workspace.deliveryProviders.push ? "live" : "warning"}>
+              Push {workspace.deliveryProviders.push ? "ready" : "draft only"}
+            </Badge>
+          </div>
+        </header>
+        <div className="marketing-flow-list">
+          {workspace.marketingFlows.map((flow) => (
+            <article key={flow.id}>
+              <header>
+                <span>
+                  <strong>{flow.name}</strong>
+                  <small>{flow.description ?? "No internal description"}</small>
+                </span>
+                <Badge tone={flow.status === "active" ? "positive" : "neutral"}>
+                  {flow.status}
+                </Badge>
+              </header>
+              <div>
+                <span>
+                  <small>Segment</small>
+                  <strong>
+                    {String(flow.segment.kind ?? "custom").replaceAll("-", " ")}
+                  </strong>
+                </span>
+                <b aria-hidden>→</b>
+                <span>
+                  <small>Trigger</small>
+                  <strong>
+                    {String(flow.trigger.kind ?? "manual").replaceAll("-", " ")}
+                  </strong>
+                </span>
+                <b aria-hidden>→</b>
+                <span>
+                  <small>Action</small>
+                  <strong>
+                    {String(flow.action.channel ?? "message").replaceAll(
+                      "-",
+                      " ",
+                    )}
+                  </strong>
+                </span>
+              </div>
+            </article>
+          ))}
+          {workspace.marketingFlows.length === 0 && (
+            <div className="hq-empty">
+              <strong>Create your first member journey.</strong>
+              <span>
+                Start with an audience, choose one trigger, and write one useful
+                message.
+              </span>
+              <Link
+                className="hq-button hq-button--primary"
+                href="/messages/create"
+              >
+                Create the first flow
+              </Link>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -856,22 +1284,38 @@ export function ModulePanel({
         ? MapPinned
         : module === "members"
           ? UsersRound
-          : module === "products"
-            ? ShoppingBag
-            : module === "payments"
-              ? CreditCard
-              : module === "messages"
-                ? MessageSquareText
-                : module === "ai"
-                  ? Bot
-                  : Trophy;
+          : module === "team"
+            ? UsersRound
+            : module === "products"
+              ? ShoppingBag
+              : module === "payments"
+                ? CreditCard
+                : module === "messages"
+                  ? MessageSquareText
+                  : module === "ai"
+                    ? Bot
+                    : Trophy;
   const Icon = icon;
-  const createHref =
+  const createAction =
     module === "events"
-      ? "/events/create?type=tournament"
+      ? { href: "/events/create?type=tournament", label: "Create event" }
       : module === "leagues"
-        ? "/events/create?type=league"
-        : "#operator-create";
+        ? { href: "/events/create?type=league", label: "Create league" }
+        : module === "products"
+          ? { href: "/products/create", label: "Create product" }
+          : module === "locations"
+            ? { href: "/locations/create", label: "Add venue" }
+            : module === "members"
+              ? { href: "/members/invite", label: "Invite person" }
+              : module === "team"
+                ? { href: "/team/invite", label: "Invite team member" }
+                : module === "messages"
+                  ? { href: "/messages/create", label: "Create campaign" }
+                  : module === "payments"
+                    ? { href: "/payments/setup", label: "Configure money" }
+                    : module === "calendar"
+                      ? { href: "/events/create", label: "Add to calendar" }
+                      : undefined;
 
   return (
     <main className="hq-page module-page">
@@ -881,9 +1325,14 @@ export function ModulePanel({
           <h1>{copy.title}</h1>
           <p>{copy.description}</p>
         </div>
-        <Link className="hq-button hq-button--primary" href={createHref}>
-          <Plus size={17} /> Create
-        </Link>
+        {createAction && (
+          <Link
+            className="hq-button hq-button--primary"
+            href={createAction.href}
+          >
+            <Plus size={17} /> {createAction.label}
+          </Link>
+        )}
       </header>
 
       <section className="module-context-strip">
@@ -911,6 +1360,8 @@ export function ModulePanel({
         <VenuePortfolioPanel workspace={workspace} />
       ) : module === "members" ? (
         <MembersPanel workspace={workspace} />
+      ) : module === "team" ? (
+        <TeamPanel workspace={workspace} />
       ) : module === "products" ? (
         <ProductCatalogPanel workspace={workspace} />
       ) : module === "events" ? (
@@ -920,7 +1371,7 @@ export function ModulePanel({
       ) : module === "payments" ? (
         <PaymentsPanel dashboard={dashboard} workspace={workspace} />
       ) : module === "messages" ? (
-        <MessagesPanel />
+        <MessagesPanel workspace={workspace} />
       ) : module === "reports" ? (
         <ReportsPanel dashboard={dashboard} />
       ) : module === "ai" ? (
@@ -928,10 +1379,6 @@ export function ModulePanel({
       ) : (
         <SettingsPanel dashboard={dashboard} workspace={workspace} />
       )}
-
-      <section className="operator-control-surface" id="operator-create">
-        <OperatorControls module={module} workspace={workspace} />
-      </section>
     </main>
   );
 }

@@ -21,6 +21,7 @@ export * from "./risk";
 export * from "./sand-data/service";
 export * from "./sand-data/types";
 export * from "./payments";
+export * from "./pickup-service";
 export * from "./rate-limit";
 export * from "./repository-contract";
 export * from "./router";

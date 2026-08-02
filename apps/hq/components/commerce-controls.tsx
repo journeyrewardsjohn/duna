@@ -17,7 +17,13 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
-import { useActionState, useMemo, useState, type ReactNode } from "react";
+import {
+  useActionState,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import {
   createCatalogItemAction,
   createInventoryStockAction,
@@ -77,10 +83,18 @@ function MoneyField({
   label,
   name,
   placeholder,
+  value,
+  onChange,
+  helper,
+  required,
 }: {
   readonly label: string;
   readonly name: string;
   readonly placeholder?: string;
+  readonly value?: string;
+  readonly onChange?: (value: string) => void;
+  readonly helper?: string;
+  readonly required?: boolean;
 }) {
   return (
     <label>
@@ -91,11 +105,17 @@ function MoneyField({
           inputMode="decimal"
           min="0"
           name={name}
+          onChange={
+            onChange ? (event) => onChange(event.target.value) : undefined
+          }
           placeholder={placeholder}
+          required={required}
           step="0.01"
           type="number"
+          value={value}
         />
       </span>
+      {helper && <small className="operator-field-helper">{helper}</small>}
     </label>
   );
 }
@@ -167,7 +187,22 @@ function ProductComposer({
   const [allowCash, setAllowCash] = useState(false);
   const [allowCredits, setAllowCredits] = useState(false);
   const [memberPricing, setMemberPricing] = useState(false);
+  const [basePrice, setBasePrice] = useState("");
+  const [memberPrice, setMemberPrice] = useState("");
+  const [nonMemberPrice, setNonMemberPrice] = useState("");
   const [creditsGranted, setCreditsGranted] = useState(10);
+  const [membershipBillingMode, setMembershipBillingMode] = useState<
+    "monthly" | "annual" | "monthly-and-annual"
+  >("monthly");
+  const [annualDiscountPercent, setAnnualDiscountPercent] = useState(10);
+  const [membershipCredits, setMembershipCredits] = useState(0);
+  const [membershipBookingLimit, setMembershipBookingLimit] = useState(0);
+  const [membershipBenefits, setMembershipBenefits] = useState("");
+  const [includedCatalogItemIds, setIncludedCatalogItemIds] = useState<
+    readonly string[]
+  >([]);
+  const [allowInstallments, setAllowInstallments] = useState(false);
+  const [installmentCount, setInstallmentCount] = useState(3);
   const [deliveryMode, setDeliveryMode] = useState<"venue" | "online">("venue");
   const [venueId, setVenueId] = useState(workspace.venues[0]?.id ?? "");
   const [options, setOptions] = useState<
@@ -205,11 +240,40 @@ function ProductComposer({
         .filter(Boolean),
     }))
     .filter((option) => option.name && option.values.length > 0);
+  const memberPriceDifference = useMemo(() => {
+    const member = Number(memberPrice);
+    const nonMember = Number(nonMemberPrice);
+    if (
+      !Number.isFinite(member) ||
+      !Number.isFinite(nonMember) ||
+      nonMember <= 0
+    ) {
+      return undefined;
+    }
+    const percent = Math.round(((member - nonMember) / nonMember) * 100);
+    if (percent === 0) return "Same as the public price.";
+    return `${Math.abs(percent)}% ${percent < 0 ? "lower" : "higher"} than the non-member price.`;
+  }, [memberPrice, nonMemberPrice]);
+  const parsedMembershipBenefits = membershipBenefits
+    .split("\n")
+    .map((benefit) => benefit.trim())
+    .filter(Boolean);
+  const isMembership = type === "plan" && selectedSubtype === "membership";
+  const annualPrice = (monthlyValue: string) => {
+    const monthly = Number(monthlyValue);
+    if (!Number.isFinite(monthly) || monthly < 0) return undefined;
+    return (
+      Math.round(monthly * 12 * (1 - annualDiscountPercent / 100) * 100) / 100
+    );
+  };
+  const annualMemberPrice = annualPrice(memberPrice);
+  const annualNonMemberPrice = annualPrice(nonMemberPrice);
 
   const chooseType = (next: typeof type) => {
     setType(next);
     setSubtype(subtypes[next][0][0]);
     if (next === "plan") setAllowCredits(false);
+    if (next !== "plan") setMembershipBillingMode("monthly");
   };
 
   return (
@@ -264,6 +328,35 @@ function ProductComposer({
             variantCount,
             ...(type === "plan" && selectedSubtype === "credit-pack"
               ? { creditsGranted }
+              : {}),
+            ...(isMembership
+              ? {
+                  membership: {
+                    billingMode: membershipBillingMode,
+                    annualDiscountPercent:
+                      membershipBillingMode === "monthly"
+                        ? 0
+                        : annualDiscountPercent,
+                    includedCreditsPerCycle: membershipCredits,
+                    bookingLimitPerCycle:
+                      membershipBookingLimit > 0
+                        ? membershipBookingLimit
+                        : undefined,
+                    includedCatalogItemIds,
+                  },
+                  benefits: parsedMembershipBenefits,
+                }
+              : {}),
+            ...(!isMembership && allowInstallments
+              ? {
+                  paymentPlan: {
+                    enabled: true,
+                    installmentCount,
+                    interval: "month",
+                    customerAcknowledgementRequired: true,
+                    collectionMethod: "automatic",
+                  },
+                }
               : {}),
             ...((type === "event" || type === "service") && {
               deliveryMode,
@@ -321,12 +414,18 @@ function ProductComposer({
             />
           </label>
           <label className="operator-field--wide">
-            <span>Description</span>
+            <span>Description · Markdown supported</span>
             <textarea
               name="description"
-              placeholder="What is included, who it is for, and what to expect."
+              placeholder={
+                "What is included, who it is for, and what to expect.\n\n**Tip:** Use headings, lists, and links to make this easy to scan."
+              }
               rows={4}
             />
+            <small className="operator-field-helper">
+              Headings, bold text, lists, and links are formatted on the public
+              page.
+            </small>
           </label>
           {(type === "event" || type === "service") && (
             <>
@@ -431,19 +530,44 @@ function ProductComposer({
           </label>
           <div className="operator-form-grid operator-form-grid--three">
             {!memberPricing ? (
-              <MoneyField label="Price" name="price" placeholder="80.00" />
+              <MoneyField
+                label={
+                  isMembership
+                    ? membershipBillingMode === "annual"
+                      ? "Annual price"
+                      : "Monthly price"
+                    : "Price"
+                }
+                name="price"
+                onChange={setBasePrice}
+                placeholder="80.00"
+                required={allowCard || allowCash}
+                value={basePrice}
+              />
             ) : (
               <>
                 <MoneyField
                   label="Member price"
                   name="memberPrice"
+                  onChange={setMemberPrice}
                   placeholder="60.00"
+                  required={allowCard || allowCash}
+                  value={memberPrice}
                 />
                 <MoneyField
                   label="Non-member price"
                   name="nonMemberPrice"
+                  onChange={setNonMemberPrice}
                   placeholder="80.00"
+                  required={allowCard || allowCash}
+                  value={nonMemberPrice}
                 />
+                {memberPriceDifference && (
+                  <p className="member-price-comparison">
+                    <Sparkles aria-hidden size={15} />
+                    {memberPriceDifference}
+                  </p>
+                )}
               </>
             )}
             {allowCredits && (
@@ -452,25 +576,33 @@ function ProductComposer({
                 <input min="1" name="creditCost" required type="number" />
               </label>
             )}
-            {type === "plan" && selectedSubtype === "membership" && (
+            {isMembership && (
+              <input
+                name="recurringInterval"
+                type="hidden"
+                value={membershipBillingMode === "annual" ? "year" : "month"}
+              />
+            )}
+            {isMembership && (
+              <input name="recurringIntervalCount" type="hidden" value="1" />
+            )}
+            {isMembership && membershipBillingMode === "monthly-and-annual" && (
               <>
-                <label>
-                  <span>Billing period</span>
-                  <select defaultValue="month" name="recurringInterval">
-                    <option value="month">Month</option>
-                    <option value="year">Year</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Every</span>
-                  <input
-                    defaultValue="1"
-                    min="1"
-                    name="recurringIntervalCount"
-                    required
-                    type="number"
-                  />
-                </label>
+                <input
+                  name="annualPrice"
+                  type="hidden"
+                  value={memberPricing ? "" : (annualPrice(basePrice) ?? "")}
+                />
+                <input
+                  name="annualMemberPrice"
+                  type="hidden"
+                  value={annualMemberPrice ?? ""}
+                />
+                <input
+                  name="annualNonMemberPrice"
+                  type="hidden"
+                  value={annualNonMemberPrice ?? ""}
+                />
               </>
             )}
             {type === "plan" && selectedSubtype === "credit-pack" && (
@@ -489,6 +621,231 @@ function ProductComposer({
             )}
           </div>
         </fieldset>
+
+        {isMembership && (
+          <fieldset className="membership-plan-builder">
+            <legend>Membership structure</legend>
+            <p>
+              Membership is always optional for the business. Create one or more
+              tiers only when it adds clear value for your community.
+            </p>
+            <div className="membership-billing-selector">
+              {[
+                {
+                  value: "monthly" as const,
+                  label: "Monthly",
+                  detail: "One recurring monthly option.",
+                },
+                {
+                  value: "annual" as const,
+                  label: "Annual",
+                  detail: "One recurring annual option.",
+                },
+                {
+                  value: "monthly-and-annual" as const,
+                  label: "Monthly + annual",
+                  detail: "Let members choose at checkout.",
+                },
+              ].map((option) => (
+                <button
+                  className={
+                    membershipBillingMode === option.value ? "active" : ""
+                  }
+                  key={option.value}
+                  onClick={() => setMembershipBillingMode(option.value)}
+                  type="button"
+                >
+                  <span>
+                    <strong>{option.label}</strong>
+                    <small>{option.detail}</small>
+                  </span>
+                  <i aria-hidden />
+                </button>
+              ))}
+            </div>
+            {membershipBillingMode === "monthly-and-annual" && (
+              <div className="membership-annual-preview">
+                <label>
+                  <span>Annual discount</span>
+                  <span className="operator-suffixed-input">
+                    <input
+                      max="50"
+                      min="0"
+                      onChange={(event) =>
+                        setAnnualDiscountPercent(
+                          Math.min(50, Math.max(0, Number(event.target.value))),
+                        )
+                      }
+                      type="number"
+                      value={annualDiscountPercent}
+                    />
+                    <small>%</small>
+                  </span>
+                </label>
+                <div>
+                  <span>Annual checkout preview</span>
+                  <strong>
+                    {memberPricing
+                      ? annualMemberPrice !== undefined &&
+                        annualNonMemberPrice !== undefined
+                        ? `$${annualMemberPrice.toFixed(2)} members · $${annualNonMemberPrice.toFixed(2)} public`
+                        : "Add both monthly prices above"
+                      : annualPrice(basePrice) !== undefined
+                        ? `$${annualPrice(basePrice)?.toFixed(2)} per year`
+                        : "Add the monthly price above"}
+                  </strong>
+                  <small>
+                    The annual amount is stored as its own recurring checkout
+                    option.
+                  </small>
+                </div>
+              </div>
+            )}
+            <div className="operator-form-grid operator-form-grid--two">
+              <label>
+                <span>Credits included each billing cycle</span>
+                <input
+                  min="0"
+                  onChange={(event) =>
+                    setMembershipCredits(
+                      Math.max(0, Number(event.target.value)),
+                    )
+                  }
+                  type="number"
+                  value={membershipCredits}
+                />
+                <small className="operator-field-helper">
+                  Credits are organization-specific and refresh with a
+                  successful membership payment.
+                </small>
+              </label>
+              <label>
+                <span>Included booking limit · optional</span>
+                <input
+                  min="0"
+                  onChange={(event) =>
+                    setMembershipBookingLimit(
+                      Math.max(0, Number(event.target.value)),
+                    )
+                  }
+                  placeholder="Unlimited"
+                  type="number"
+                  value={membershipBookingLimit || ""}
+                />
+                <small className="operator-field-helper">
+                  Leave blank for unlimited access to the selected offers.
+                </small>
+              </label>
+              <label className="operator-field--wide">
+                <span>Benefits · one per line</span>
+                <textarea
+                  onChange={(event) =>
+                    setMembershipBenefits(event.target.value)
+                  }
+                  placeholder={
+                    "Priority booking\n10% member pricing\nMonthly community meetup"
+                  }
+                  rows={4}
+                  value={membershipBenefits}
+                />
+              </label>
+            </div>
+            <div className="membership-inclusion-picker">
+              <span>Included events and services</span>
+              <small>
+                Select only the offers this tier includes. Price-specific member
+                discounts can still be configured above.
+              </small>
+              <div>
+                {workspace.catalog
+                  .filter(
+                    (item) => item.type === "event" || item.type === "service",
+                  )
+                  .map((item) => {
+                    const checked = includedCatalogItemIds.includes(item.id);
+                    return (
+                      <label className={checked ? "active" : ""} key={item.id}>
+                        <input
+                          checked={checked}
+                          onChange={(event) =>
+                            setIncludedCatalogItemIds((current) =>
+                              event.target.checked
+                                ? [...current, item.id]
+                                : current.filter((id) => id !== item.id),
+                            )
+                          }
+                          type="checkbox"
+                        />
+                        <span>
+                          <strong>{item.title}</strong>
+                          <small>{item.subtype.replaceAll("-", " ")}</small>
+                        </span>
+                        <Check aria-hidden size={15} />
+                      </label>
+                    );
+                  })}
+                {workspace.catalog.every(
+                  (item) => item.type !== "event" && item.type !== "service",
+                ) && (
+                  <p className="hq-empty">
+                    Create an event or service first, then include it in this
+                    membership tier.
+                  </p>
+                )}
+              </div>
+            </div>
+          </fieldset>
+        )}
+
+        {!isMembership &&
+          allowCard &&
+          (type === "service" || type === "event" || type === "plan") && (
+            <fieldset className="flexible-payment-builder">
+              <legend>Flexible ways to pay</legend>
+              <label className="operator-switch">
+                <input
+                  checked={allowInstallments}
+                  onChange={(event) =>
+                    setAllowInstallments(event.target.checked)
+                  }
+                  type="checkbox"
+                />
+                <span>
+                  <strong>Offer an installment plan</strong>
+                  Let the customer pay over a fixed number of monthly
+                  installments.
+                </span>
+              </label>
+              {allowInstallments && (
+                <div className="flexible-payment-detail">
+                  <label>
+                    <span>Number of monthly payments</span>
+                    <select
+                      onChange={(event) =>
+                        setInstallmentCount(Number(event.target.value))
+                      }
+                      value={installmentCount}
+                    >
+                      {[2, 3, 4, 6].map((count) => (
+                        <option key={count} value={count}>
+                          {count} payments
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div>
+                    <CircleAlert aria-hidden size={17} />
+                    <span>
+                      <strong>Future payments can still fail.</strong>
+                      Duna uses automatic retries and reminders, but does not
+                      guarantee collection of a customer’s future installments.
+                      The buyer must acknowledge this before checkout.
+                    </span>
+                  </div>
+                </div>
+              )}
+            </fieldset>
+          )}
 
         {type === "good" && (
           <fieldset className="product-option-builder">
@@ -1139,8 +1496,43 @@ function ThemeKitEditor({
     updateThemeAction,
     initialState,
   );
+  const [logoUrl, setLogoUrl] = useState(workspace.theme.logoUrl ?? "");
+  const [heroMediaType, setHeroMediaType] = useState<"image" | "video">(
+    workspace.theme.heroMediaType ?? "image",
+  );
+  const [heroMediaUrl, setHeroMediaUrl] = useState(
+    workspace.theme.heroMediaUrl ?? "",
+  );
+  const [tagline, setTagline] = useState(workspace.theme.tagline ?? "");
+  const [profileSummary, setProfileSummary] = useState(
+    workspace.theme.profileSummary ?? "",
+  );
+  const [palette, setPalette] = useState(workspace.theme.palette);
+  const [headingFont, setHeadingFont] = useState(
+    workspace.theme.typography.heading,
+  );
+  const [bodyFont, setBodyFont] = useState(workspace.theme.typography.body);
+  const [cardStyle, setCardStyle] = useState(workspace.theme.cardStyle);
+  const [profileLayout, setProfileLayout] = useState(
+    workspace.theme.profileLayout === "immersive" ||
+      workspace.theme.profileLayout === "compact"
+      ? workspace.theme.profileLayout
+      : "editorial",
+  );
+  const previewStyle = {
+    "--theme-preview-primary": palette.primary,
+    "--theme-preview-accent": palette.accent,
+    "--theme-preview-sand": palette.sand,
+    "--theme-preview-ink": palette.ink,
+    "--theme-preview-canvas": palette.canvas,
+    "--theme-preview-heading": `"${headingFont}", sans-serif`,
+    "--theme-preview-body": `"${bodyFont}", sans-serif`,
+  } as CSSProperties;
   return (
-    <section className="hq-card operator-control-card" id="theme-kit">
+    <section
+      className="hq-card operator-control-card theme-kit-editor"
+      id="theme-kit"
+    >
       <header className="hq-card-heading">
         <div>
           <span className="hq-eyebrow">Player-facing profile</span>
@@ -1153,64 +1545,193 @@ function ThemeKitEditor({
         <Sparkles aria-hidden size={24} />
       </header>
       <form action={action} className="operator-form">
-        <div className="operator-form-grid operator-form-grid--two">
-          <label>
-            <span>Logo URL</span>
-            <input
-              defaultValue={workspace.theme.logoUrl}
-              name="logoUrl"
-              type="url"
-            />
-          </label>
-          <label>
-            <span>Hero media</span>
-            <select
-              defaultValue={workspace.theme.heroMediaType ?? "image"}
-              name="heroMediaType"
+        <div className="theme-kit-workspace">
+          <div className="theme-kit-settings">
+            <div className="operator-form-grid operator-form-grid--two">
+              <label>
+                <span>Logo URL</span>
+                <input
+                  name="logoUrl"
+                  onChange={(event) => setLogoUrl(event.target.value)}
+                  type="url"
+                  value={logoUrl}
+                />
+              </label>
+              <label>
+                <span>Hero media</span>
+                <select
+                  name="heroMediaType"
+                  onChange={(event) =>
+                    setHeroMediaType(
+                      event.target.value === "video" ? "video" : "image",
+                    )
+                  }
+                  value={heroMediaType}
+                >
+                  <option value="image">Image</option>
+                  <option value="video">Video</option>
+                </select>
+              </label>
+              <label className="operator-field--wide">
+                <span>Hero image or video URL</span>
+                <input
+                  name="heroMediaUrl"
+                  onChange={(event) => setHeroMediaUrl(event.target.value)}
+                  type="url"
+                  value={heroMediaUrl}
+                />
+              </label>
+              <label className="operator-field--wide">
+                <span>Tagline</span>
+                <input
+                  name="tagline"
+                  onChange={(event) => setTagline(event.target.value)}
+                  placeholder="Where the next point begins."
+                  value={tagline}
+                />
+              </label>
+              <label className="operator-field--wide">
+                <span>Profile summary</span>
+                <textarea
+                  name="profileSummary"
+                  onChange={(event) => setProfileSummary(event.target.value)}
+                  rows={4}
+                  value={profileSummary}
+                />
+              </label>
+              {Object.entries(palette).map(([name, value]) => (
+                <label className="theme-color-field" key={name}>
+                  <span>{name}</span>
+                  <input
+                    name={name}
+                    onChange={(event) =>
+                      setPalette((current) => ({
+                        ...current,
+                        [name]: event.target.value,
+                      }))
+                    }
+                    type="color"
+                    value={value}
+                  />
+                  <code>{value}</code>
+                </label>
+              ))}
+              <label>
+                <span>Heading font</span>
+                <select
+                  name="headingFont"
+                  onChange={(event) => setHeadingFont(event.target.value)}
+                  value={headingFont}
+                >
+                  {[
+                    "Instrument Sans",
+                    "DM Sans",
+                    "Space Grotesk",
+                    "Playfair Display",
+                  ].map((font) => (
+                    <option key={font}>{font}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Body font</span>
+                <select
+                  name="bodyFont"
+                  onChange={(event) => setBodyFont(event.target.value)}
+                  value={bodyFont}
+                >
+                  {["Archivo", "Inter", "DM Sans", "Source Sans 3"].map(
+                    (font) => (
+                      <option key={font}>{font}</option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label>
+                <span>Card style</span>
+                <select
+                  name="cardStyle"
+                  onChange={(event) =>
+                    setCardStyle(
+                      event.target.value === "crisp" ||
+                        event.target.value === "borderless"
+                        ? event.target.value
+                        : "soft",
+                    )
+                  }
+                  value={cardStyle}
+                >
+                  <option value="soft">Soft</option>
+                  <option value="crisp">Crisp</option>
+                  <option value="borderless">Borderless</option>
+                </select>
+              </label>
+              <label>
+                <span>Profile layout</span>
+                <select
+                  name="profileLayout"
+                  onChange={(event) =>
+                    setProfileLayout(
+                      event.target.value === "immersive" ||
+                        event.target.value === "compact"
+                        ? event.target.value
+                        : "editorial",
+                    )
+                  }
+                  value={profileLayout}
+                >
+                  <option value="editorial">Editorial</option>
+                  <option value="immersive">Immersive hero</option>
+                  <option value="compact">Compact utility</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <aside
+            className={`theme-kit-preview theme-kit-preview--${profileLayout} theme-kit-preview--${cardStyle}`}
+            style={previewStyle}
+          >
+            <span className="hq-eyebrow">Live player preview</span>
+            <div
+              className="theme-kit-preview__hero"
+              style={
+                heroMediaType === "image" && heroMediaUrl
+                  ? { backgroundImage: `url("${heroMediaUrl}")` }
+                  : undefined
+              }
             >
-              <option value="image">Image</option>
-              <option value="video">Video</option>
-            </select>
-          </label>
-          <label className="operator-field--wide">
-            <span>Hero image or video URL</span>
-            <input
-              defaultValue={workspace.theme.heroMediaUrl}
-              name="heroMediaUrl"
-              type="url"
-            />
-          </label>
-          <label className="operator-field--wide">
-            <span>Tagline</span>
-            <input
-              defaultValue={workspace.theme.tagline}
-              name="tagline"
-              placeholder="Where the next point begins."
-            />
-          </label>
-          <label className="operator-field--wide">
-            <span>Profile summary</span>
-            <textarea
-              defaultValue={workspace.theme.profileSummary}
-              name="profileSummary"
-              rows={4}
-            />
-          </label>
-          {Object.entries(workspace.theme.palette).map(([name, value]) => (
-            <label className="theme-color-field" key={name}>
-              <span>{name}</span>
-              <input defaultValue={value} name={name} type="color" />
-              <code>{value}</code>
-            </label>
-          ))}
-          <label>
-            <span>Card style</span>
-            <select defaultValue={workspace.theme.cardStyle} name="cardStyle">
-              <option value="soft">Soft</option>
-              <option value="crisp">Crisp</option>
-              <option value="borderless">Borderless</option>
-            </select>
-          </label>
+              {logoUrl ? (
+                <span
+                  aria-label={`${workspace.organization.name} logo`}
+                  className="theme-kit-preview__logo"
+                  role="img"
+                  style={{ backgroundImage: `url("${logoUrl}")` }}
+                />
+              ) : (
+                <span>{workspace.organization.name.slice(0, 2)}</span>
+              )}
+            </div>
+            <div className="theme-kit-preview__copy">
+              <small>{workspace.organization.name}</small>
+              <h3>{tagline || "Make every session count."}</h3>
+              <p>
+                {profileSummary ||
+                  "A clear, welcoming home for your community, schedule, and offers."}
+              </p>
+            </div>
+            <div className="theme-kit-preview__cards">
+              <article>
+                <small>Next up</small>
+                <strong>Community open play</strong>
+                <span>8 spots · 6:00 PM</span>
+              </article>
+              <article>
+                <small>For members</small>
+                <strong>Book with one tap</strong>
+                <span>Credits and access apply automatically</span>
+              </article>
+            </div>
+          </aside>
         </div>
         <label className="operator-switch">
           <input name="publish" type="checkbox" value="true" />

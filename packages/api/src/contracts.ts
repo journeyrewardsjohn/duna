@@ -152,6 +152,7 @@ export const eventLocationSchema = z.object({
   googlePlaceId: z.string().optional(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
+  confidence: z.enum(["confirmed", "approximate"]).optional(),
   onlineUrl: z.string().optional(),
   courtNames: z.array(z.string()).readonly().optional(),
 });
@@ -221,6 +222,31 @@ export const eventSummarySchema = z.object({
   features: z.array(eventFeatureSchema).readonly().optional(),
   policies: z.array(eventPolicySchema).readonly().optional(),
   recurrence: leagueRecurrenceSchema.optional(),
+  attendees: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        displayName: z.string(),
+        handle: z.string(),
+        initials: z.string(),
+        avatarUrl: z.string().optional(),
+        homeMarket: z.string().optional(),
+        ratingDisplay: z.number().optional(),
+      }),
+    )
+    .readonly()
+    .optional(),
+  host: z
+    .object({
+      id: z.string().uuid(),
+      displayName: z.string(),
+      handle: z.string(),
+      initials: z.string(),
+      avatarUrl: z.string().optional(),
+    })
+    .optional(),
+  approvalRequired: z.boolean().optional(),
+  lifecycleStatus: z.enum(["active", "cancelled", "completed"]).optional(),
   live: z.boolean().optional(),
   imageUrl: z.string().optional(),
   tags: z.array(z.string()).readonly(),
@@ -900,7 +926,112 @@ export const operatorPersonRelationshipSchema = z.object({
     )
     .readonly(),
   upcomingCount: z.number().int().nonnegative(),
+  churnRisk: z.object({
+    score: z.number().int().min(0).max(100),
+    level: z.enum(["low", "watch", "high"]),
+    reasons: z.array(z.string()).readonly(),
+    lastActivityAt: z.iso.datetime().optional(),
+    daysSinceActivity: z.number().int().nonnegative().optional(),
+    model: z.literal("activity-v1"),
+  }),
   joinedAt: z.iso.datetime(),
+});
+
+export const operatorStaffProfileSchema = z.object({
+  id: z.string().uuid(),
+  personId: z.string().uuid(),
+  displayName: z.string(),
+  avatarUrl: z.string().optional(),
+  email: z.string().email().optional(),
+  phoneE164: z.string().optional(),
+  role: z.enum(["coach", "manager", "front-desk", "accountant"]),
+  workerClassification: z.enum(["1099-contractor", "w2-employee"]),
+  compensationModel: z.enum([
+    "not-set",
+    "hourly",
+    "profit-share",
+    "hourly-plus-profit-share",
+  ]),
+  hourlyRateMinor: z.number().int().nonnegative().optional(),
+  profitShareBps: z.number().int().min(0).max(10_000).optional(),
+  currency: currencySchema,
+  addressComplete: z.boolean(),
+  addressLine1: z.string().optional(),
+  addressLine2: z.string().optional(),
+  locality: z.string().optional(),
+  administrativeArea: z.string().optional(),
+  postalCode: z.string().optional(),
+  countryCode: z.string(),
+  googlePlaceId: z.string().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  availability: z.array(z.record(z.string(), z.unknown())).readonly(),
+  incomeGoalMinor: z.number().int().nonnegative().optional(),
+  incomeGoalPeriod: z.enum(["week", "month", "quarter", "year"]).optional(),
+  sessionsRun30d: z.number().int().nonnegative(),
+  upcomingSessions: z.number().int().nonnegative(),
+  active: z.boolean(),
+});
+
+export const operatorStaffInvitationSchema = z.object({
+  id: z.string().uuid(),
+  invitedName: z.string(),
+  invitedEmail: z.string().email().optional(),
+  invitedPhoneE164: z.string().optional(),
+  role: z.enum(["coach", "manager", "front-desk", "accountant"]),
+  workerClassification: z.enum(["1099-contractor", "w2-employee"]),
+  status: z.enum(["pending", "claimed", "expired", "cancelled"]),
+  deliveryChannel: z.enum(["email", "sms"]).optional(),
+  deliveryStatus: z.enum(["not-configured", "queued", "sent", "failed"]),
+  expiresAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+});
+
+export const operatorMarketingFlowSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  description: z.string().optional(),
+  segment: z.record(z.string(), z.unknown()),
+  trigger: z.record(z.string(), z.unknown()),
+  action: z.record(z.string(), z.unknown()),
+  status: z.enum(["draft", "active", "paused", "archived"]),
+  createdAt: z.iso.datetime(),
+});
+
+export const operatorMarketingCampaignSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  segment: z.record(z.string(), z.unknown()),
+  channel: z.enum(["email", "sms", "push", "in-app"]),
+  subject: z.string().optional(),
+  body: z.string(),
+  status: z.enum([
+    "draft",
+    "scheduled",
+    "sending",
+    "sent",
+    "paused",
+    "cancelled",
+  ]),
+  scheduledAt: z.iso.datetime().optional(),
+  sentAt: z.iso.datetime().optional(),
+  stats: z.object({
+    recipients: z.number().int().nonnegative(),
+    delivered: z.number().int().nonnegative(),
+    opened: z.number().int().nonnegative(),
+    clicked: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+  }),
+  createdAt: z.iso.datetime(),
+});
+
+export const operatorBillingRecoverySchema = z.object({
+  personId: z.string().uuid(),
+  displayName: z.string(),
+  membershipName: z.string(),
+  membershipStatus: z.string(),
+  retryState: z.enum(["processor-managed", "action-required"]),
+  detail: z.string(),
 });
 
 export const operatorCalendarEntrySchema = z.object({
@@ -1018,7 +1149,21 @@ export const operatorWorkspaceSchema = z.object({
   participants: z.array(operatorParticipantSchema).readonly(),
   people: z.array(operatorPersonRelationshipSchema).readonly(),
   invitations: z.array(operatorInvitationSchema).readonly(),
+  staff: z.array(operatorStaffProfileSchema).readonly(),
+  staffInvitations: z.array(operatorStaffInvitationSchema).readonly(),
   catalog: z.array(operatorCatalogItemSchema).readonly(),
+  productPerformance: z
+    .array(
+      z.object({
+        catalogItemId: z.string().uuid(),
+        paidPurchases: z.number().int().nonnegative(),
+        grossBookedMinor: z.number().int().nonnegative(),
+        uniqueCustomers: z.number().int().nonnegative(),
+        refundedOrders: z.number().int().nonnegative(),
+        lastPurchaseAt: z.iso.datetime().optional(),
+      }),
+    )
+    .readonly(),
   inventory: z.array(operatorInventoryItemSchema).readonly(),
   inventoryLocations: z.array(operatorInventoryLocationSchema).readonly(),
   calendar: z.object({
@@ -1054,6 +1199,9 @@ export const operatorWorkspaceSchema = z.object({
     .readonly(),
   messageRecipients: z.array(operatorMessageRecipientSchema).readonly(),
   messageDrafts: z.array(operatorMessageDraftSchema).readonly(),
+  marketingFlows: z.array(operatorMarketingFlowSchema).readonly(),
+  marketingCampaigns: z.array(operatorMarketingCampaignSchema).readonly(),
+  billingRecovery: z.array(operatorBillingRecoverySchema).readonly(),
   deliveryProviders: z.object({
     email: z.boolean(),
     sms: z.boolean(),
@@ -1099,6 +1247,10 @@ export const operatorMutationResultSchema = z.object({
     "schedule",
     "schedule-override",
     "player-invitation",
+    "staff-invitation",
+    "staff-profile",
+    "marketing-flow",
+    "marketing-campaign",
     "catalog-item",
     "inventory-item",
     "organization-theme",
@@ -1599,13 +1751,19 @@ export const courtCheckoutStatusSchema = z.object({
 });
 
 export const catalogCheckoutResultSchema = z.object({
-  mode: z.enum(["stripe", "organization-credit", "free", "unavailable"]),
+  mode: z.enum([
+    "stripe",
+    "organization-credit",
+    "cash-reservation",
+    "free",
+    "unavailable",
+  ]),
   orderId: z.string().uuid(),
   orderStatus: z.enum(["pending", "paid"]),
   checkoutSessionId: z.string().optional(),
   checkoutUrl: z.url().optional(),
   expiresAt: z.iso.datetime().optional(),
-  paymentMethod: z.enum(["card", "credit"]),
+  paymentMethod: z.enum(["card", "credit", "cash"]),
   quantity: z.number().int().positive(),
   amountMinor: z.number().int().nonnegative(),
   creditsApplied: z.number().int().nonnegative(),
@@ -1628,6 +1786,12 @@ export const catalogCheckoutStatusSchema = z.object({
     .enum(["held", "pending", "ready", "fulfilled", "cancelled", "refunded"])
     .optional(),
   complete: z.boolean(),
+});
+
+export const catalogOfferEligibilitySchema = z.object({
+  isMember: z.boolean(),
+  included: z.boolean(),
+  remainingBookings: z.number().int().nonnegative().optional(),
 });
 
 export const availabilityAlertResultSchema = z.object({

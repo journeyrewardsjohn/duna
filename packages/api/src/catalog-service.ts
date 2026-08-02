@@ -201,6 +201,7 @@ function calculateBookValue(input: {
 export function loadDemoCommerceWorkspace(): Pick<
   OperatorWorkspace,
   | "catalog"
+  | "productPerformance"
   | "inventory"
   | "inventoryLocations"
   | "people"
@@ -211,6 +212,7 @@ export function loadDemoCommerceWorkspace(): Pick<
 > {
   return {
     catalog: [],
+    productPerformance: [],
     inventory: [],
     inventoryLocations: [],
     people: [],
@@ -247,6 +249,7 @@ export async function loadOperatorCommerceWorkspace(
   Pick<
     OperatorWorkspace,
     | "catalog"
+    | "productPerformance"
     | "inventory"
     | "inventoryLocations"
     | "people"
@@ -282,6 +285,7 @@ export async function loadOperatorCommerceWorkspace(
     journalRows,
     reconciliationRow,
     proposalRows,
+    productOrderRows,
   ] = await Promise.all([
     database
       .select()
@@ -473,6 +477,20 @@ export async function loadOperatorCommerceWorkspace(
         ),
       )
       .limit(500),
+    database
+      .select({
+        catalogItemId: catalogFulfillments.catalogItemId,
+        orderId: orders.id,
+        personId: orders.buyerPersonId,
+        orderStatus: orders.status,
+        totalMinor: orders.totalMinor,
+        purchasedAt: orders.createdAt,
+      })
+      .from(catalogFulfillments)
+      .innerJoin(orders, eq(catalogFulfillments.orderId, orders.id))
+      .where(eq(catalogFulfillments.organizationId, organizationId))
+      .orderBy(desc(orders.createdAt))
+      .limit(100_000),
   ]);
 
   const variantsByItem = new Map<string, typeof variantRows>();
@@ -567,6 +585,30 @@ export async function loadOperatorCommerceWorkspace(
       updatedAt: item.updatedAt.toISOString(),
     };
   });
+  const productPerformance: OperatorWorkspace["productPerformance"] =
+    itemRows.map((item) => {
+      const connectedOrders = productOrderRows.filter(
+        (row) => row.catalogItemId === item.id,
+      );
+      const paidOrders = connectedOrders.filter((row) =>
+        ["paid", "partially-refunded", "refunded"].includes(row.orderStatus),
+      );
+      return {
+        catalogItemId: item.id,
+        paidPurchases: new Set(paidOrders.map((row) => row.orderId)).size,
+        grossBookedMinor: paidOrders.reduce(
+          (total, row) => total + Math.max(0, row.totalMinor),
+          0,
+        ),
+        uniqueCustomers: new Set(paidOrders.map((row) => row.personId)).size,
+        refundedOrders: new Set(
+          paidOrders
+            .filter((row) => row.orderStatus === "refunded")
+            .map((row) => row.orderId),
+        ).size,
+        lastPurchaseAt: paidOrders[0]?.purchasedAt.toISOString(),
+      };
+    });
 
   const inventory: OperatorWorkspace["inventory"] = stockRows.map((row) => ({
     id: row.stock.id,
@@ -640,9 +682,15 @@ export async function loadOperatorCommerceWorkspace(
     basePeople.set(row.person.id, current);
   }
   const personIds = [...basePeople.keys()];
-  const [membershipRows, walletRows, orderRows, registrationRows] =
+  const [
+    membershipRows,
+    walletRows,
+    orderRows,
+    registrationRows,
+    activityRows,
+  ] =
     personIds.length === 0
-      ? [[], [], [], []]
+      ? [[], [], [], [], []]
       : await Promise.all([
           database
             .select({
@@ -717,6 +765,22 @@ export async function loadOperatorCommerceWorkspace(
               ),
             )
             .limit(100_000),
+          database
+            .select({
+              personId: registrations.personId,
+              startsAt: sessions.startsAt,
+              status: registrations.status,
+            })
+            .from(registrations)
+            .innerJoin(sessions, eq(registrations.sessionId, sessions.id))
+            .where(
+              and(
+                inArray(registrations.personId, personIds),
+                lt(sessions.startsAt, now),
+              ),
+            )
+            .orderBy(desc(sessions.startsAt))
+            .limit(100_000),
         ]);
   const membershipByPerson = new Map<string, (typeof membershipRows)[number]>();
   for (const row of membershipRows) {
@@ -774,6 +838,24 @@ export async function loadOperatorCommerceWorkspace(
       (upcomingByPerson.get(registration.personId) ?? 0) + 1,
     );
   }
+  const activityByPerson = new Map<
+    string,
+    { lastActivityAt?: Date; cancellations: number }
+  >();
+  for (const registration of activityRows) {
+    const current = activityByPerson.get(registration.personId) ?? {
+      cancellations: 0,
+    };
+    if (["cancelled", "refunded"].includes(registration.status)) {
+      current.cancellations += 1;
+    } else if (
+      !current.lastActivityAt ||
+      registration.startsAt > current.lastActivityAt
+    ) {
+      current.lastActivityAt = registration.startsAt;
+    }
+    activityByPerson.set(registration.personId, current);
+  }
   const organizationPeople: OperatorWorkspace["people"] = [...basePeople].map(
     ([personId, value]) => {
       const membership = membershipByPerson.get(personId);
@@ -782,6 +864,70 @@ export async function loadOperatorCommerceWorkspace(
         count: 0,
         recent: [],
       };
+      const activity = activityByPerson.get(personId);
+      const lastPurchaseAt = purchases.recent[0]?.purchasedAt
+        ? new Date(purchases.recent[0].purchasedAt)
+        : undefined;
+      const lastActivityAt =
+        activity?.lastActivityAt &&
+        (!lastPurchaseAt || activity.lastActivityAt > lastPurchaseAt)
+          ? activity.lastActivityAt
+          : lastPurchaseAt;
+      const daysSinceActivity = lastActivityAt
+        ? Math.max(
+            0,
+            Math.floor(
+              (now.getTime() - lastActivityAt.getTime()) /
+                (24 * 60 * 60 * 1_000),
+            ),
+          )
+        : Math.max(
+            0,
+            Math.floor(
+              (now.getTime() - value.joinedAt.getTime()) /
+                (24 * 60 * 60 * 1_000),
+            ),
+          );
+      const upcomingCount = upcomingByPerson.get(personId) ?? 0;
+      const reasons: string[] = [];
+      let churnScore = 12;
+      if (upcomingCount > 0) {
+        churnScore = 4;
+        reasons.push(
+          `${upcomingCount} upcoming booking${upcomingCount === 1 ? "" : "s"}`,
+        );
+      } else {
+        if (daysSinceActivity >= 60) {
+          churnScore += 65;
+          reasons.push(`No connected activity for ${daysSinceActivity} days`);
+        } else if (daysSinceActivity >= 30) {
+          churnScore += 38;
+          reasons.push(
+            `Last connected activity was ${daysSinceActivity} days ago`,
+          );
+        } else if (daysSinceActivity >= 14) {
+          churnScore += 16;
+          reasons.push(`No upcoming booking after ${daysSinceActivity} days`);
+        } else {
+          reasons.push("Recent connected activity");
+        }
+        if (
+          membership?.status === "active" ||
+          membership?.status === "trialing"
+        ) {
+          churnScore += daysSinceActivity >= 30 ? 12 : -5;
+          reasons.push(
+            daysSinceActivity >= 30
+              ? "Active membership without recent participation"
+              : "Active membership",
+          );
+        }
+        if ((activity?.cancellations ?? 0) >= 3) {
+          churnScore += 8;
+          reasons.push("Three or more recorded cancellations");
+        }
+      }
+      churnScore = Math.max(0, Math.min(100, Math.round(churnScore)));
       return {
         personId,
         displayName: value.person.displayName,
@@ -797,7 +943,15 @@ export async function loadOperatorCommerceWorkspace(
         lifetimeSpendMinor: purchases.total,
         purchaseCount: purchases.count,
         recentPurchases: purchases.recent,
-        upcomingCount: upcomingByPerson.get(personId) ?? 0,
+        upcomingCount,
+        churnRisk: {
+          score: churnScore,
+          level: churnScore >= 70 ? "high" : churnScore >= 40 ? "watch" : "low",
+          reasons,
+          lastActivityAt: lastActivityAt?.toISOString(),
+          daysSinceActivity,
+          model: "activity-v1" as const,
+        },
         joinedAt: value.joinedAt.toISOString(),
       };
     },
@@ -988,6 +1142,7 @@ export async function loadOperatorCommerceWorkspace(
 
   return {
     catalog,
+    productPerformance,
     inventory,
     inventoryLocations: locationRows.map((location) => ({
       id: location.id,
@@ -1407,6 +1562,9 @@ export interface CreateCatalogItemInput {
   readonly priceMinor?: number;
   readonly memberPriceMinor?: number;
   readonly nonMemberPriceMinor?: number;
+  readonly annualPriceMinor?: number;
+  readonly annualMemberPriceMinor?: number;
+  readonly annualNonMemberPriceMinor?: number;
   readonly creditCost?: number;
   readonly recurringInterval?: "week" | "month" | "year";
   readonly recurringIntervalCount?: number;
@@ -1460,6 +1618,35 @@ export async function createCatalogItem(
   ) {
     throw new Error("Membership card billing must recur monthly or annually.");
   }
+  const hasAnnualCheckoutOption =
+    input.annualPriceMinor !== undefined ||
+    input.annualMemberPriceMinor !== undefined ||
+    input.annualNonMemberPriceMinor !== undefined;
+  if (
+    hasAnnualCheckoutOption &&
+    (input.type !== "plan" ||
+      input.subtype !== "membership" ||
+      input.recurringInterval !== "month")
+  ) {
+    throw new Error(
+      "An additional annual checkout option is only available on monthly memberships.",
+    );
+  }
+  if (
+    (input.annualMemberPriceMinor === undefined) !==
+    (input.annualNonMemberPriceMinor === undefined)
+  ) {
+    throw new Error(
+      "Add both the member and non-member annual price, or use one annual price for everyone.",
+    );
+  }
+  if (
+    hasAnnualCheckoutOption &&
+    input.annualPriceMinor === undefined &&
+    input.annualMemberPriceMinor === undefined
+  ) {
+    throw new Error("Add a valid annual membership price.");
+  }
   if (
     (input.type === "event" || input.type === "service") &&
     input.configuration.deliveryMode === "venue"
@@ -1493,6 +1680,58 @@ export async function createCatalogItem(
   ) {
     throw new Error("A credit pack must grant a positive number of credits.");
   }
+  const membershipConfiguration =
+    input.type === "plan" &&
+    input.subtype === "membership" &&
+    input.configuration.membership &&
+    typeof input.configuration.membership === "object" &&
+    !Array.isArray(input.configuration.membership)
+      ? (input.configuration.membership as Readonly<Record<string, unknown>>)
+      : undefined;
+  const membershipCredits = Number(
+    membershipConfiguration?.includedCreditsPerCycle ?? 0,
+  );
+  const membershipBookingLimit = Number(
+    membershipConfiguration?.bookingLimitPerCycle ?? 0,
+  );
+  const configuredIncludedItemIds = Array.isArray(
+    membershipConfiguration?.includedCatalogItemIds,
+  )
+    ? membershipConfiguration.includedCatalogItemIds.filter(
+        (value): value is string => typeof value === "string",
+      )
+    : [];
+  if (
+    membershipConfiguration &&
+    (!Number.isSafeInteger(membershipCredits) ||
+      membershipCredits < 0 ||
+      !Number.isSafeInteger(membershipBookingLimit) ||
+      membershipBookingLimit < 0)
+  ) {
+    throw new Error(
+      "Membership credits and booking limits must be whole non-negative numbers.",
+    );
+  }
+  if (configuredIncludedItemIds.length > 100) {
+    throw new Error("A membership can include up to 100 offers.");
+  }
+  if (configuredIncludedItemIds.length > 0) {
+    const includedItems = await database
+      .select({ id: catalogItems.id })
+      .from(catalogItems)
+      .where(
+        and(
+          eq(catalogItems.organizationId, organizationId),
+          inArray(catalogItems.id, configuredIncludedItemIds),
+          inArray(catalogItems.type, ["event", "service"]),
+        ),
+      );
+    if (includedItems.length !== new Set(configuredIncludedItemIds).size) {
+      throw new Error(
+        "Every included membership offer must be an event or service from this organization.",
+      );
+    }
+  }
   const coordinates = variantMatrix(input.options);
   const itemId = crypto.randomUUID();
   const slug = await uniqueCatalogSlug(organizationId, input.title);
@@ -1521,55 +1760,85 @@ export async function createCatalogItem(
     recurringInterval?: "week" | "month" | "year";
     recurringIntervalCount?: number;
   }[] = [];
-  for (const variant of variantValues) {
-    for (const paymentKind of (
-      [
-        input.allowCard ? "card" : undefined,
-        input.allowCash ? "cash" : undefined,
-      ] as const
-    ).filter((value): value is "card" | "cash" => Boolean(value))) {
+  const monetaryPaymentKinds = (
+    [
+      input.allowCard ? "card" : undefined,
+      input.allowCash ? "cash" : undefined,
+    ] as const
+  ).filter((value): value is "card" | "cash" => Boolean(value));
+  const addMonetaryPrices = (inputPrice: {
+    readonly variantId: string;
+    readonly priceMinor?: number;
+    readonly memberPriceMinor?: number;
+    readonly nonMemberPriceMinor?: number;
+    readonly recurringInterval?: "week" | "month" | "year";
+    readonly recurringIntervalCount?: number;
+  }) => {
+    for (const paymentKind of monetaryPaymentKinds) {
       if (
-        input.memberPriceMinor !== undefined ||
-        input.nonMemberPriceMinor !== undefined
+        inputPrice.memberPriceMinor !== undefined ||
+        inputPrice.nonMemberPriceMinor !== undefined
       ) {
         prices.push({
           id: crypto.randomUUID(),
           organizationId,
           catalogItemId: itemId,
-          catalogVariantId: variant.id,
+          catalogVariantId: inputPrice.variantId,
           audience: "member",
           paymentKind,
-          amountMinor: input.memberPriceMinor ?? input.priceMinor ?? 0,
+          amountMinor:
+            inputPrice.memberPriceMinor ?? inputPrice.priceMinor ?? 0,
           currency: organization.currency,
-          recurringInterval: input.recurringInterval,
-          recurringIntervalCount: input.recurringIntervalCount,
+          recurringInterval: inputPrice.recurringInterval,
+          recurringIntervalCount: inputPrice.recurringIntervalCount,
         });
         prices.push({
           id: crypto.randomUUID(),
           organizationId,
           catalogItemId: itemId,
-          catalogVariantId: variant.id,
+          catalogVariantId: inputPrice.variantId,
           audience: "non-member",
           paymentKind,
-          amountMinor: input.nonMemberPriceMinor ?? input.priceMinor ?? 0,
+          amountMinor:
+            inputPrice.nonMemberPriceMinor ?? inputPrice.priceMinor ?? 0,
           currency: organization.currency,
-          recurringInterval: input.recurringInterval,
-          recurringIntervalCount: input.recurringIntervalCount,
+          recurringInterval: inputPrice.recurringInterval,
+          recurringIntervalCount: inputPrice.recurringIntervalCount,
         });
       } else {
         prices.push({
           id: crypto.randomUUID(),
           organizationId,
           catalogItemId: itemId,
-          catalogVariantId: variant.id,
+          catalogVariantId: inputPrice.variantId,
           audience: "everyone",
           paymentKind,
-          amountMinor: input.priceMinor ?? 0,
+          amountMinor: inputPrice.priceMinor ?? 0,
           currency: organization.currency,
-          recurringInterval: input.recurringInterval,
-          recurringIntervalCount: input.recurringIntervalCount,
+          recurringInterval: inputPrice.recurringInterval,
+          recurringIntervalCount: inputPrice.recurringIntervalCount,
         });
       }
+    }
+  };
+  for (const variant of variantValues) {
+    addMonetaryPrices({
+      variantId: variant.id,
+      priceMinor: input.priceMinor,
+      memberPriceMinor: input.memberPriceMinor,
+      nonMemberPriceMinor: input.nonMemberPriceMinor,
+      recurringInterval: input.recurringInterval,
+      recurringIntervalCount: input.recurringIntervalCount,
+    });
+    if (hasAnnualCheckoutOption) {
+      addMonetaryPrices({
+        variantId: variant.id,
+        priceMinor: input.annualPriceMinor,
+        memberPriceMinor: input.annualMemberPriceMinor,
+        nonMemberPriceMinor: input.annualNonMemberPriceMinor,
+        recurringInterval: "year",
+        recurringIntervalCount: 1,
+      });
     }
     if (input.allowCredits && input.creditCost) {
       prices.push({
@@ -1594,6 +1863,51 @@ export async function createCatalogItem(
     ],
     sortOrder,
   }));
+  const membershipEntitlementValues =
+    input.type === "plan" && input.subtype === "membership"
+      ? [
+          ...(membershipCredits > 0
+            ? [
+                {
+                  id: crypto.randomUUID(),
+                  organizationId,
+                  planCatalogItemId: itemId,
+                  kind: "credit-grant",
+                  quantity: membershipCredits,
+                  configuration: {
+                    cadence: "membership-billing-cycle",
+                    unitKind: "organization-credit",
+                  },
+                },
+              ]
+            : []),
+          ...(membershipBookingLimit > 0
+            ? [
+                {
+                  id: crypto.randomUUID(),
+                  organizationId,
+                  planCatalogItemId: itemId,
+                  kind: "membership-access",
+                  quantity: membershipBookingLimit,
+                  configuration: {
+                    cadence: "membership-billing-cycle",
+                    scope: "included-items",
+                  },
+                },
+              ]
+            : []),
+          ...configuredIncludedItemIds.map((targetCatalogItemId) => ({
+            id: crypto.randomUUID(),
+            organizationId,
+            planCatalogItemId: itemId,
+            kind: "included-item",
+            targetCatalogItemId,
+            configuration: {
+              cadence: "membership-billing-cycle",
+            },
+          })),
+        ]
+      : [];
   const values = {
     type: input.type,
     subtype: input.subtype,
@@ -1639,6 +1953,12 @@ export async function createCatalogItem(
             organizationId,
           },
         })
+      : database
+          .update(catalogItems)
+          .set({ updatedAt: input.now })
+          .where(sql`false`),
+    membershipEntitlementValues.length > 0
+      ? database.insert(catalogEntitlements).values(membershipEntitlementValues)
       : database
           .update(catalogItems)
           .set({ updatedAt: input.now })
@@ -1767,7 +2087,11 @@ async function ensureCatalogStripeResources(input: {
         input.item.subtype === "membership" &&
         recurring
       ) {
-        const tierCode = `${input.item.slug}-${price.audience}`.slice(0, 64);
+        const tierCode =
+          `${input.item.slug}-${price.audience}-${recurring.interval}`.slice(
+            0,
+            64,
+          );
         const benefits = Array.isArray(input.item.configuration.benefits)
           ? input.item.configuration.benefits.filter(
               (benefit): benefit is string => typeof benefit === "string",
@@ -2236,7 +2560,9 @@ export async function updateOrganizationTheme(input: {
   readonly tagline?: string;
   readonly profileSummary?: string;
   readonly palette: OperatorWorkspace["theme"]["palette"];
+  readonly typography: OperatorWorkspace["theme"]["typography"];
   readonly cardStyle: "soft" | "crisp" | "borderless";
+  readonly profileLayout: "editorial" | "immersive" | "compact";
   readonly publish: boolean;
   readonly requestId: string;
   readonly ipAddress?: string;
@@ -2256,9 +2582,9 @@ export async function updateOrganizationTheme(input: {
     tagline: input.tagline?.trim() || undefined,
     profileSummary: input.profileSummary?.trim() || undefined,
     palette: input.palette,
-    typography: DEFAULT_THEME.typography,
+    typography: input.typography,
     cardStyle: input.cardStyle,
-    profileLayout: "editorial",
+    profileLayout: input.profileLayout,
     publishedAt: input.publish ? input.now : current?.publishedAt,
     updatedAt: input.now,
   };
@@ -2344,7 +2670,8 @@ export async function issueOrganizationCredits(input: {
   readonly expiresAt?: Date;
   readonly valueMinor?: number;
   readonly currency?: string;
-  readonly valueSource?: "paid-credit-pack" | "refund-credit";
+  readonly valueSource?:
+    "paid-credit-pack" | "refund-credit" | "membership-benefit";
   readonly sourceOrderId?: string;
   readonly reason: string;
   readonly requestId: string;

@@ -174,8 +174,21 @@ export interface PickupInput {
   readonly genderPreference: "open" | "mens" | "womens" | "mixed";
   readonly venueId?: string;
   readonly courtBookingId?: string;
+  readonly address?: string;
+  readonly googlePlaceId?: string;
+  readonly latitude?: number;
+  readonly longitude?: number;
+  readonly locationConfidence?: "confirmed" | "approximate";
   readonly note?: string;
   readonly visibility: "public" | "unlisted";
+  readonly approvalRequired: boolean;
+  readonly smartRules: {
+    readonly waitlistEnabled: boolean;
+    readonly allowLateCancellation: boolean;
+    readonly minimumNoticeMinutes: number;
+    readonly autoCancelLowAttendance: boolean;
+    readonly minimumAttendance: number;
+  };
   readonly costMinor: number;
   readonly currency: "USD";
   readonly recordMatches: boolean;

@@ -17,7 +17,8 @@ export async function startCatalogCheckoutAction(input: {
   readonly productSlug: string;
   readonly catalogItemId: string;
   readonly catalogVariantId: string;
-  readonly paymentMethod: "card" | "credit";
+  readonly catalogPriceId?: string;
+  readonly paymentMethod: "card" | "credit" | "cash";
   readonly quantity: number;
   readonly idempotencyKey: string;
 }) {
@@ -31,6 +32,7 @@ export async function startCatalogCheckoutAction(input: {
     const result = await caller.player.startCatalogCheckout({
       catalogItemId: input.catalogItemId,
       catalogVariantId: input.catalogVariantId,
+      catalogPriceId: input.catalogPriceId,
       paymentMethod: input.paymentMethod,
       quantity: input.quantity,
       successUrl: `${origin}${productPath}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,

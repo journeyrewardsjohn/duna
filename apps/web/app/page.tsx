@@ -58,12 +58,9 @@ export default async function HomePage() {
             <Link className="hero__primary" href="/app">
               Find a game <ArrowRight aria-hidden size={18} />
             </Link>
-            <a
-              className="hero__secondary"
-              href={process.env.NEXT_PUBLIC_HQ_URL ?? "http://localhost:3001"}
-            >
+            <Link className="hero__secondary" href="/run-your-club">
               Run your club
-            </a>
+            </Link>
           </div>
           <div className="hero__proof">
             <div>

@@ -8,10 +8,16 @@ import {
   eventTypes,
   getDatabase,
   guardianships,
+  marketingCampaigns,
+  marketingFlows,
+  memberships,
+  membershipTiers,
   messages,
   organizationInvitations,
   organizationMemberships,
   organizationParticipants,
+  organizationStaffInvitations,
+  organizationStaffProfiles,
   organizations,
   people,
   programs,
@@ -45,6 +51,7 @@ import {
 } from "./court-checkout";
 import { enforceGuardianCopies } from "./messaging";
 import { createConnectOnboarding } from "./payments";
+import { isResendConfigured, sendTransactionalEmail } from "./resend";
 import { isSentConfigured, sendTemplateSms } from "./sent";
 
 type CurrencyCode = OperatorWorkspace["organization"]["currency"];
@@ -145,6 +152,16 @@ export interface CreateEventDraftInput {
     readonly required: boolean;
     readonly requireFullScroll: boolean;
   }[];
+  readonly smartRules: {
+    readonly waitlistEnabled: boolean;
+    readonly allowLateCancellation: boolean;
+    readonly freeCancellationHours: number;
+    readonly bookingOpensDays: number;
+    readonly bookingClosesMinutes: number;
+    readonly autoCancelLowAttendance: boolean;
+    readonly minimumAttendance: number;
+    readonly approvalRequired: boolean;
+  };
   readonly recurrence?: {
     readonly interval: "weekly" | "biweekly";
     readonly days: readonly {
@@ -334,6 +351,14 @@ function playerInvitationUrl(inviteToken: string): string {
   return `${origin.replace(/\/$/, "")}/join/organization/${encodeURIComponent(inviteToken)}`;
 }
 
+function staffInvitationUrl(inviteToken: string): string {
+  const origin =
+    process.env.NEXT_PUBLIC_WEB_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    "https://duna.coach";
+  return `${origin.replace(/\/$/, "")}/join/team/${encodeURIComponent(inviteToken)}`;
+}
+
 async function organizationRow(organizationId: string) {
   const organization = await getDatabase().query.organizations.findFirst({
     where: eq(organizations.id, organizationId),
@@ -349,7 +374,7 @@ async function organizationRow(organizationId: string) {
 
 function providerReadiness() {
   return {
-    email: Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL),
+    email: isResendConfigured(),
     sms:
       isSentConfigured() ||
       Boolean(
@@ -387,8 +412,13 @@ export function loadDemoOperatorWorkspace(
     sessions: [],
     participants: [],
     invitations: [],
+    staff: [],
+    staffInvitations: [],
     messageRecipients: [],
     messageDrafts: [],
+    marketingFlows: [],
+    marketingCampaigns: [],
+    billingRecovery: [],
     deliveryProviders: {
       email: false,
       sms: false,
@@ -421,6 +451,11 @@ export async function loadOperatorWorkspace(
     participantRows,
     invitationRows,
     draftRows,
+    staffProfileRows,
+    staffInvitationRows,
+    marketingFlowRows,
+    marketingCampaignRows,
+    billingRecoveryRows,
   ] = await Promise.all([
     database
       .select()
@@ -499,6 +534,7 @@ export async function loadOperatorWorkspace(
         capacity: sessions.capacity,
         venueId: sessions.venueId,
         courtId: sessions.courtId,
+        coachPersonId: sessions.coachPersonId,
         kindFromProgram: programs.kind,
         kindFromEventType: eventTypes.kind,
         priceMinor: eventTypes.priceMinor,
@@ -600,6 +636,53 @@ export async function loadOperatorWorkspace(
       )
       .orderBy(desc(messages.createdAt))
       .limit(20),
+    database
+      .select({
+        profile: organizationStaffProfiles,
+        displayName: people.displayName,
+        avatarUrl: people.avatarUrl,
+        email: people.email,
+        phoneE164: people.phoneE164,
+      })
+      .from(organizationStaffProfiles)
+      .innerJoin(people, eq(organizationStaffProfiles.personId, people.id))
+      .where(eq(organizationStaffProfiles.organizationId, organizationId))
+      .orderBy(asc(people.displayName)),
+    database
+      .select()
+      .from(organizationStaffInvitations)
+      .where(eq(organizationStaffInvitations.organizationId, organizationId))
+      .orderBy(desc(organizationStaffInvitations.createdAt))
+      .limit(50),
+    database
+      .select()
+      .from(marketingFlows)
+      .where(eq(marketingFlows.organizationId, organizationId))
+      .orderBy(desc(marketingFlows.createdAt))
+      .limit(100),
+    database
+      .select()
+      .from(marketingCampaigns)
+      .where(eq(marketingCampaigns.organizationId, organizationId))
+      .orderBy(desc(marketingCampaigns.createdAt))
+      .limit(100),
+    database
+      .select({
+        personId: memberships.personId,
+        displayName: people.displayName,
+        membershipName: membershipTiers.name,
+        membershipStatus: memberships.status,
+      })
+      .from(memberships)
+      .innerJoin(people, eq(memberships.personId, people.id))
+      .innerJoin(membershipTiers, eq(memberships.tierId, membershipTiers.id))
+      .where(
+        and(
+          eq(membershipTiers.organizationId, organizationId),
+          inArray(memberships.status, ["past_due", "incomplete", "unpaid"]),
+        ),
+      )
+      .orderBy(desc(memberships.updatedAt)),
   ]);
 
   const recipientMap = new Map(
@@ -929,6 +1012,112 @@ export async function loadOperatorWorkspace(
       expiresAt: row.expiresAt.toISOString(),
       createdAt: row.createdAt.toISOString(),
     })),
+    staff: staffProfileRows.map((row) => {
+      const person = commerce.people.find(
+        (candidate) => candidate.personId === row.profile.personId,
+      );
+      const role =
+        person?.roles.find((candidate) =>
+          ["coach", "manager", "front-desk", "accountant"].includes(candidate),
+        ) ?? "coach";
+      return {
+        id: row.profile.id,
+        personId: row.profile.personId,
+        displayName: row.displayName,
+        avatarUrl: row.avatarUrl ?? undefined,
+        email: row.email ?? undefined,
+        phoneE164: row.phoneE164 ?? undefined,
+        role: role as OperatorWorkspace["staff"][number]["role"],
+        workerClassification:
+          row.profile.workerClassification === "w2-employee"
+            ? "w2-employee"
+            : "1099-contractor",
+        compensationModel:
+          row.profile.compensationModel === "hourly" ||
+          row.profile.compensationModel === "profit-share" ||
+          row.profile.compensationModel === "hourly-plus-profit-share"
+            ? row.profile.compensationModel
+            : "not-set",
+        hourlyRateMinor: row.profile.hourlyRateMinor ?? undefined,
+        profitShareBps: row.profile.profitShareBps ?? undefined,
+        currency: currency(row.profile.currency),
+        addressComplete: Boolean(
+          row.profile.addressLine1 &&
+          row.profile.locality &&
+          row.profile.administrativeArea &&
+          row.profile.postalCode &&
+          row.profile.countryCode,
+        ),
+        addressLine1: row.profile.addressLine1 ?? undefined,
+        addressLine2: row.profile.addressLine2 ?? undefined,
+        locality: row.profile.locality ?? undefined,
+        administrativeArea: row.profile.administrativeArea ?? undefined,
+        postalCode: row.profile.postalCode ?? undefined,
+        countryCode: row.profile.countryCode,
+        googlePlaceId: row.profile.googlePlaceId ?? undefined,
+        latitude: row.profile.latitude ?? undefined,
+        longitude: row.profile.longitude ?? undefined,
+        availability: row.profile.availability,
+        incomeGoalMinor: row.profile.incomeGoalMinor ?? undefined,
+        incomeGoalPeriod:
+          row.profile.incomeGoalPeriod === "week" ||
+          row.profile.incomeGoalPeriod === "month" ||
+          row.profile.incomeGoalPeriod === "quarter" ||
+          row.profile.incomeGoalPeriod === "year"
+            ? row.profile.incomeGoalPeriod
+            : undefined,
+        sessionsRun30d: sessionRows.filter(
+          (session) =>
+            session.coachPersonId === row.profile.personId &&
+            session.startsAt >= thirtyDaysAgo &&
+            session.startsAt < now &&
+            !["cancelled", "draft"].includes(session.status),
+        ).length,
+        upcomingSessions: sessionRows.filter(
+          (session) =>
+            session.coachPersonId === row.profile.personId &&
+            session.startsAt >= now &&
+            !["cancelled", "completed"].includes(session.status),
+        ).length,
+        active: row.profile.active,
+      };
+    }),
+    staffInvitations: staffInvitationRows.map((row) => ({
+      id: row.id,
+      invitedName: row.invitedName,
+      invitedEmail: row.invitedEmail ?? undefined,
+      invitedPhoneE164: row.invitedPhoneE164 ?? undefined,
+      role:
+        row.role === "manager" ||
+        row.role === "front-desk" ||
+        row.role === "accountant"
+          ? row.role
+          : "coach",
+      workerClassification:
+        row.workerClassification === "w2-employee"
+          ? "w2-employee"
+          : "1099-contractor",
+      status:
+        row.status === "claimed" ||
+        row.status === "expired" ||
+        row.status === "cancelled"
+          ? row.status
+          : row.expiresAt <= now
+            ? "expired"
+            : "pending",
+      deliveryChannel:
+        row.deliveryChannel === "email" || row.deliveryChannel === "sms"
+          ? row.deliveryChannel
+          : undefined,
+      deliveryStatus:
+        row.deliveryStatus === "queued" ||
+        row.deliveryStatus === "sent" ||
+        row.deliveryStatus === "failed"
+          ? row.deliveryStatus
+          : "not-configured",
+      expiresAt: row.expiresAt.toISOString(),
+      createdAt: row.createdAt.toISOString(),
+    })),
     messageRecipients: [...recipientMap.values()]
       .sort((left, right) => left.displayName.localeCompare(right.displayName))
       .map((recipient) => ({
@@ -951,6 +1140,55 @@ export async function loadOperatorWorkspace(
       consentRecorded: Boolean(row.consentId),
       status: "draft",
       createdAt: row.createdAt.toISOString(),
+    })),
+    marketingFlows: marketingFlowRows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description ?? undefined,
+      segment: row.segment,
+      trigger: row.trigger,
+      action: row.action,
+      status:
+        row.status === "active" ||
+        row.status === "paused" ||
+        row.status === "archived"
+          ? row.status
+          : "draft",
+      createdAt: row.createdAt.toISOString(),
+    })),
+    marketingCampaigns: marketingCampaignRows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      segment: row.segment,
+      channel: row.channel,
+      subject: row.subject ?? undefined,
+      body: row.body,
+      status:
+        row.status === "scheduled" ||
+        row.status === "sending" ||
+        row.status === "sent" ||
+        row.status === "paused" ||
+        row.status === "cancelled"
+          ? row.status
+          : "draft",
+      scheduledAt: row.scheduledAt?.toISOString(),
+      sentAt: row.sentAt?.toISOString(),
+      stats: row.stats,
+      createdAt: row.createdAt.toISOString(),
+    })),
+    billingRecovery: billingRecoveryRows.map((row) => ({
+      personId: row.personId,
+      displayName: row.displayName,
+      membershipName: row.membershipName,
+      membershipStatus: row.membershipStatus,
+      retryState:
+        row.membershipStatus === "past_due"
+          ? "processor-managed"
+          : "action-required",
+      detail:
+        row.membershipStatus === "past_due"
+          ? "Automatic retries and customer notifications are managed through the subscription billing schedule."
+          : "The member needs to update their payment method before access can resume.",
     })),
     deliveryProviders: providerReadiness(),
     ...commerce,
@@ -1102,6 +1340,564 @@ export async function createPlayerInvitation(input: {
       deliveryChannel === "sms" && isSentConfigured()
         ? "sent"
         : "invite-created",
+  };
+}
+
+export async function createStaffInvitation(input: {
+  readonly actor: ApiActor;
+  readonly invitedName: string;
+  readonly invitedEmail?: string;
+  readonly invitedPhoneE164?: string;
+  readonly role: "coach" | "manager" | "front-desk" | "accountant";
+  readonly workerClassification: "1099-contractor" | "w2-employee";
+  readonly preferredChannel?: "email" | "sms";
+  readonly confirmed: boolean;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  if (!input.confirmed) {
+    throw new OperatorServiceError(
+      "PUBLISH_CONFIRMATION_REQUIRED",
+      "Confirm the team member, role, and worker classification.",
+    );
+  }
+  const organizationId = requireOrganization(input.actor);
+  const organization = await organizationRow(organizationId);
+  const invitedName = input.invitedName.trim();
+  const invitedEmail = input.invitedEmail?.trim().toLowerCase() || undefined;
+  const invitedPhoneE164 = input.invitedPhoneE164?.trim() || undefined;
+  if (!invitedName) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Enter the team member's name.",
+    );
+  }
+  if (!invitedEmail && !invitedPhoneE164) {
+    throw new OperatorServiceError(
+      "DELIVERY_DESTINATION_MISSING",
+      "Enter an email address or mobile number for the team member.",
+    );
+  }
+  const deliveryChannel =
+    input.preferredChannel === "sms" && invitedPhoneE164
+      ? "sms"
+      : invitedEmail
+        ? "email"
+        : "sms";
+  const id = crypto.randomUUID();
+  const inviteToken = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll(
+    "-",
+    "",
+  );
+  const expiresAt = new Date(input.now.getTime() + 7 * 24 * 60 * 60_000);
+  const database = getDatabase();
+  await database.batch([
+    database.insert(organizationStaffInvitations).values({
+      id,
+      organizationId,
+      invitedByPersonId: input.actor.personId,
+      inviteToken,
+      invitedName,
+      invitedEmail,
+      invitedPhoneE164,
+      role: input.role,
+      workerClassification: input.workerClassification,
+      deliveryChannel,
+      expiresAt,
+    }),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "staff-invitation.created",
+      entityType: "staff-invitation",
+      entityId: id,
+      afterHash: stableHash({
+        invitedName,
+        invitedEmail,
+        invitedPhoneE164,
+        role: input.role,
+        workerClassification: input.workerClassification,
+        expiresAt: expiresAt.toISOString(),
+      }),
+      reason:
+        "Operator invited a team member and set the organization-controlled worker classification.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+
+  const inviteUrl = staffInvitationUrl(inviteToken);
+  const delivery =
+    deliveryChannel === "email" && invitedEmail
+      ? await sendTransactionalEmail({
+          to: invitedEmail,
+          subject: `Join ${organization.name} on Duna`,
+          text: [
+            `${input.actor.displayName} invited you to join ${organization.name} as ${input.role.replaceAll("-", " ")}.`,
+            "",
+            `Your worker classification is set by the organization as ${input.workerClassification === "w2-employee" ? "W-2 employee" : "1099 contractor"}. You can complete your own contact, address, availability, and goals after accepting.`,
+            "",
+            `Accept your invitation: ${inviteUrl}`,
+            "",
+            "This invitation expires in 7 days.",
+          ].join("\n"),
+          idempotencyKey: `staff-invite:${id}`,
+        }).catch((error: unknown) => ({
+          configured: true,
+          sent: false,
+          messageId: undefined,
+          reason:
+            error instanceof Error
+              ? error.message
+              : "Email delivery did not complete.",
+        }))
+      : invitedPhoneE164
+        ? await sendTemplateSms({
+            to: invitedPhoneE164,
+            templateName:
+              process.env.SENT_DM_STAFF_INVITE_TEMPLATE_NAME ??
+              "duna_staff_invitation",
+            parameters: {
+              organization_name: organization.name,
+              invited_name: invitedName,
+              inviter_name: input.actor.displayName,
+              role: input.role.replaceAll("-", " "),
+              invite_url: inviteUrl,
+            },
+            idempotencyKey: `staff-invite:${id}`,
+          }).catch((error: unknown) => ({
+            configured: true,
+            sent: false,
+            messageId: undefined,
+            reason:
+              error instanceof Error
+                ? error.message
+                : "SMS delivery did not complete.",
+          }))
+        : {
+            configured: false,
+            sent: false,
+            messageId: undefined,
+            reason: "No delivery destination was available.",
+          };
+  await database
+    .update(organizationStaffInvitations)
+    .set({
+      deliveryStatus: delivery.configured
+        ? delivery.sent
+          ? "sent"
+          : "failed"
+        : "not-configured",
+      deliveryMessageId: delivery.messageId,
+      updatedAt: input.now,
+    })
+    .where(eq(organizationStaffInvitations.id, id));
+
+  return {
+    id,
+    entity: "staff-invitation",
+    status: delivery.sent ? "sent" : "invite-created",
+  };
+}
+
+export async function loadStaffInvitation(
+  inviteToken: string,
+  now = new Date(),
+): Promise<{
+  readonly id: string;
+  readonly organizationName: string;
+  readonly invitedName: string;
+  readonly role: "coach" | "manager" | "front-desk" | "accountant";
+  readonly workerClassification: "1099-contractor" | "w2-employee";
+  readonly status: "pending" | "claimed" | "expired" | "cancelled";
+  readonly expiresAt: string;
+}> {
+  requireDatabase();
+  const row = await getDatabase()
+    .select({
+      id: organizationStaffInvitations.id,
+      invitedName: organizationStaffInvitations.invitedName,
+      role: organizationStaffInvitations.role,
+      workerClassification: organizationStaffInvitations.workerClassification,
+      status: organizationStaffInvitations.status,
+      expiresAt: organizationStaffInvitations.expiresAt,
+      organizationName: organizations.name,
+    })
+    .from(organizationStaffInvitations)
+    .innerJoin(
+      organizations,
+      eq(organizationStaffInvitations.organizationId, organizations.id),
+    )
+    .where(eq(organizationStaffInvitations.inviteToken, inviteToken))
+    .limit(1)
+    .then((rows) => rows[0]);
+  if (!row) {
+    throw new OperatorServiceError(
+      "INVITATION_NOT_FOUND",
+      "This team invitation could not be found.",
+    );
+  }
+  const status =
+    row.status === "claimed" ||
+    row.status === "cancelled" ||
+    row.status === "expired"
+      ? row.status
+      : row.expiresAt <= now
+        ? "expired"
+        : "pending";
+  const role =
+    row.role === "manager" ||
+    row.role === "front-desk" ||
+    row.role === "accountant"
+      ? row.role
+      : "coach";
+  return {
+    id: row.id,
+    organizationName: row.organizationName,
+    invitedName: row.invitedName,
+    role,
+    workerClassification:
+      row.workerClassification === "w2-employee"
+        ? "w2-employee"
+        : "1099-contractor",
+    status,
+    expiresAt: row.expiresAt.toISOString(),
+  };
+}
+
+export async function claimStaffInvitation(input: {
+  readonly actor: ApiActor;
+  readonly inviteToken: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const database = getDatabase();
+  let invitationId = "";
+  await database.transaction(async (transaction) => {
+    const claimed = await transaction
+      .update(organizationStaffInvitations)
+      .set({
+        status: "claimed",
+        claimedByPersonId: input.actor.personId,
+        claimedAt: input.now,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(organizationStaffInvitations.inviteToken, input.inviteToken),
+          eq(organizationStaffInvitations.status, "pending"),
+          gt(organizationStaffInvitations.expiresAt, input.now),
+        ),
+      )
+      .returning();
+    const invitation = claimed[0];
+    if (!invitation) {
+      const existing =
+        await transaction.query.organizationStaffInvitations.findFirst({
+          where: eq(
+            organizationStaffInvitations.inviteToken,
+            input.inviteToken,
+          ),
+        });
+      if (!existing) {
+        throw new OperatorServiceError(
+          "INVITATION_NOT_FOUND",
+          "This team invitation could not be found.",
+        );
+      }
+      throw new OperatorServiceError(
+        existing.status === "claimed"
+          ? "INVITATION_ALREADY_CLAIMED"
+          : "INVITATION_EXPIRED",
+        existing.status === "claimed"
+          ? "This team invitation has already been claimed."
+          : "This team invitation is no longer active.",
+      );
+    }
+    invitationId = invitation.id;
+    const role =
+      invitation.role === "manager" ||
+      invitation.role === "front-desk" ||
+      invitation.role === "accountant"
+        ? invitation.role
+        : "coach";
+    await transaction
+      .insert(organizationMemberships)
+      .values({
+        organizationId: invitation.organizationId,
+        personId: input.actor.personId,
+        role,
+        scopes:
+          role === "coach"
+            ? ["sessions:read", "sessions:write", "members:read"]
+            : role === "accountant"
+              ? ["reports:read", "payments:read"]
+              : [
+                  "sessions:read",
+                  "sessions:write",
+                  "members:read",
+                  "members:write",
+                  "reports:read",
+                ],
+        active: true,
+      })
+      .onConflictDoUpdate({
+        target: [
+          organizationMemberships.organizationId,
+          organizationMemberships.personId,
+          organizationMemberships.role,
+        ],
+        set: { active: true, updatedAt: input.now },
+      });
+    await transaction
+      .insert(organizationStaffProfiles)
+      .values({
+        organizationId: invitation.organizationId,
+        personId: input.actor.personId,
+        workerClassification:
+          invitation.workerClassification === "w2-employee"
+            ? "w2-employee"
+            : "1099-contractor",
+      })
+      .onConflictDoUpdate({
+        target: [
+          organizationStaffProfiles.organizationId,
+          organizationStaffProfiles.personId,
+        ],
+        set: {
+          workerClassification:
+            invitation.workerClassification === "w2-employee"
+              ? "w2-employee"
+              : "1099-contractor",
+          active: true,
+          updatedAt: input.now,
+        },
+      });
+    await transaction.insert(auditLog).values({
+      organizationId: invitation.organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "staff-invitation.claimed",
+      entityType: "staff-invitation",
+      entityId: invitation.id,
+      afterHash: stableHash({
+        personId: input.actor.personId,
+        role,
+        workerClassification: invitation.workerClassification,
+      }),
+      reason:
+        "Team member accepted the organization-assigned role and worker classification.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return {
+    id: invitationId,
+    entity: "staff-invitation",
+    status: "claimed",
+  };
+}
+
+export async function updateStaffProfile(input: {
+  readonly actor: ApiActor;
+  readonly personId: string;
+  readonly role: "coach" | "manager" | "front-desk" | "accountant";
+  readonly workerClassification: "1099-contractor" | "w2-employee";
+  readonly compensationModel:
+    "not-set" | "hourly" | "profit-share" | "hourly-plus-profit-share";
+  readonly hourlyRateMinor?: number;
+  readonly profitShareBps?: number;
+  readonly addressLine1?: string;
+  readonly addressLine2?: string;
+  readonly locality?: string;
+  readonly administrativeArea?: string;
+  readonly postalCode?: string;
+  readonly countryCode: string;
+  readonly googlePlaceId?: string;
+  readonly latitude?: number;
+  readonly longitude?: number;
+  readonly availability: readonly {
+    readonly weekday: number;
+    readonly startsAt: string;
+    readonly endsAt: string;
+  }[];
+  readonly incomeGoalMinor?: number;
+  readonly incomeGoalPeriod?: "week" | "month" | "quarter" | "year";
+  readonly active: boolean;
+  readonly confirmed: boolean;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  if (!input.confirmed) {
+    throw new OperatorServiceError(
+      "PUBLISH_CONFIRMATION_REQUIRED",
+      "Review and confirm this team member update.",
+    );
+  }
+  const organizationId = requireOrganization(input.actor);
+  if (
+    (input.compensationModel === "hourly" ||
+      input.compensationModel === "hourly-plus-profit-share") &&
+    input.hourlyRateMinor === undefined
+  ) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Add the hourly rate for this compensation model.",
+    );
+  }
+  if (
+    (input.compensationModel === "profit-share" ||
+      input.compensationModel === "hourly-plus-profit-share") &&
+    input.profitShareBps === undefined
+  ) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Add the profit-share percentage for this compensation model.",
+    );
+  }
+  if (
+    input.profitShareBps !== undefined &&
+    (input.profitShareBps < 0 || input.profitShareBps > 10_000)
+  ) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Profit share must be between 0% and 100%.",
+    );
+  }
+  if (
+    input.availability.some(
+      (block) =>
+        block.weekday < 0 ||
+        block.weekday > 6 ||
+        !/^\d{2}:\d{2}$/.test(block.startsAt) ||
+        !/^\d{2}:\d{2}$/.test(block.endsAt) ||
+        block.startsAt >= block.endsAt,
+    )
+  ) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Every availability window needs a valid day, start, and end time.",
+    );
+  }
+  const database = getDatabase();
+  const current = await database.query.organizationStaffProfiles.findFirst({
+    where: and(
+      eq(organizationStaffProfiles.organizationId, organizationId),
+      eq(organizationStaffProfiles.personId, input.personId),
+    ),
+  });
+  if (!current) {
+    throw new OperatorServiceError(
+      "RESOURCE_NOT_FOUND",
+      "This team member is not connected to the organization.",
+    );
+  }
+  const scopes =
+    input.role === "coach"
+      ? ["sessions:read", "sessions:write", "members:read"]
+      : input.role === "accountant"
+        ? ["reports:read", "payments:read"]
+        : [
+            "sessions:read",
+            "sessions:write",
+            "members:read",
+            "members:write",
+            "reports:read",
+          ];
+  const values = {
+    workerClassification: input.workerClassification,
+    compensationModel: input.compensationModel,
+    hourlyRateMinor:
+      input.compensationModel === "hourly" ||
+      input.compensationModel === "hourly-plus-profit-share"
+        ? input.hourlyRateMinor
+        : null,
+    profitShareBps:
+      input.compensationModel === "profit-share" ||
+      input.compensationModel === "hourly-plus-profit-share"
+        ? input.profitShareBps
+        : null,
+    addressLine1: input.addressLine1?.trim() || null,
+    addressLine2: input.addressLine2?.trim() || null,
+    locality: input.locality?.trim() || null,
+    administrativeArea: input.administrativeArea?.trim() || null,
+    postalCode: input.postalCode?.trim() || null,
+    countryCode: input.countryCode.toUpperCase(),
+    googlePlaceId: input.googlePlaceId?.trim() || null,
+    latitude: input.latitude,
+    longitude: input.longitude,
+    availability: input.availability,
+    incomeGoalMinor: input.incomeGoalMinor,
+    incomeGoalPeriod: input.incomeGoalPeriod,
+    active: input.active,
+    updatedAt: input.now,
+  };
+  await database.transaction(async (transaction) => {
+    await transaction
+      .update(organizationMemberships)
+      .set({ active: false, updatedAt: input.now })
+      .where(
+        and(
+          eq(organizationMemberships.organizationId, organizationId),
+          eq(organizationMemberships.personId, input.personId),
+          inArray(organizationMemberships.role, [
+            "coach",
+            "manager",
+            "front-desk",
+            "accountant",
+          ]),
+        ),
+      );
+    await transaction
+      .insert(organizationMemberships)
+      .values({
+        organizationId,
+        personId: input.personId,
+        role: input.role,
+        scopes,
+        active: input.active,
+      })
+      .onConflictDoUpdate({
+        target: [
+          organizationMemberships.organizationId,
+          organizationMemberships.personId,
+          organizationMemberships.role,
+        ],
+        set: { scopes, active: input.active, updatedAt: input.now },
+      });
+    await transaction
+      .update(organizationStaffProfiles)
+      .set(values)
+      .where(eq(organizationStaffProfiles.id, current.id));
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "staff-profile.updated",
+      entityType: "staff-profile",
+      entityId: current.id,
+      beforeHash: stableHash(current),
+      afterHash: stableHash({ ...values, role: input.role, scopes }),
+      reason:
+        "Organization administrator updated role, classification, compensation, availability, goals, or payroll-readiness details.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return {
+    id: current.id,
+    entity: "staff-profile",
+    status: input.active ? "active" : "inactive",
   };
 }
 
@@ -2720,6 +3516,7 @@ export async function createEventDraft(
         allowEmailInvite: true,
         allowSmsInvite: true,
         paymentResponsibility: ["self", "entire-team"],
+        smartRules: input.smartRules,
       },
     }),
     ...input.divisions.map((division) =>
@@ -3093,6 +3890,167 @@ export async function saveMessageDraft(input: {
     }),
   ]);
   return { id, entity: "message-draft", status: "draft" };
+}
+
+export async function createMarketingFlow(input: {
+  readonly actor: ApiActor;
+  readonly name: string;
+  readonly description?: string;
+  readonly segment:
+    | "all-active"
+    | "active-members"
+    | "inactive-30-days"
+    | "high-churn-risk"
+    | "upcoming-participants";
+  readonly trigger:
+    | "manual"
+    | "no-booking"
+    | "payment-failed"
+    | "event-published"
+    | "membership-renewal";
+  readonly triggerDays?: number;
+  readonly channel: "email" | "sms" | "push";
+  readonly subject?: string;
+  readonly body: string;
+  readonly confirmed: boolean;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  if (!input.confirmed) {
+    throw new OperatorServiceError(
+      "PUBLISH_CONFIRMATION_REQUIRED",
+      "Review the segment, trigger, and action before saving this flow.",
+    );
+  }
+  const organizationId = requireOrganization(input.actor);
+  const id = crypto.randomUUID();
+  const segment = {
+    kind: input.segment,
+    consentRequired: true,
+    organizationScoped: true,
+  };
+  const trigger = {
+    kind: input.trigger,
+    ...(input.trigger === "no-booking"
+      ? { days: input.triggerDays ?? 30 }
+      : {}),
+  };
+  const action = {
+    kind: "send-message",
+    channel: input.channel,
+    subject: input.subject?.trim() || undefined,
+    body: input.body.trim(),
+    guardianRouting: "enforced",
+    dispatchMode: "review-required",
+  };
+  const database = getDatabase();
+  await database.batch([
+    database.insert(marketingFlows).values({
+      id,
+      organizationId,
+      name: input.name.trim(),
+      description: input.description?.trim() || undefined,
+      segment,
+      trigger,
+      action,
+      status: "draft",
+      createdByPersonId: input.actor.personId,
+    }),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "marketing-flow.draft_created",
+      entityType: "marketing-flow",
+      entityId: id,
+      afterHash: stableHash({
+        name: input.name.trim(),
+        description: input.description?.trim(),
+        segment,
+        trigger,
+        action: {
+          ...action,
+          body: stableHash({ body: action.body }),
+        },
+      }),
+      reason:
+        "Operator saved a consent-aware Segment, Trigger, Action flow as a private draft.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return { id, entity: "marketing-flow", status: "draft" };
+}
+
+export async function createMarketingCampaignDraft(input: {
+  readonly actor: ApiActor;
+  readonly name: string;
+  readonly segment:
+    | "all-active"
+    | "active-members"
+    | "inactive-30-days"
+    | "high-churn-risk"
+    | "upcoming-participants";
+  readonly channel: "email" | "sms" | "push";
+  readonly subject?: string;
+  readonly body: string;
+  readonly confirmed: boolean;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  if (!input.confirmed) {
+    throw new OperatorServiceError(
+      "PUBLISH_CONFIRMATION_REQUIRED",
+      "Review the audience and content before saving this campaign.",
+    );
+  }
+  const organizationId = requireOrganization(input.actor);
+  const id = crypto.randomUUID();
+  const segment = {
+    kind: input.segment,
+    consentRequired: true,
+    organizationScoped: true,
+  };
+  const database = getDatabase();
+  await database.batch([
+    database.insert(marketingCampaigns).values({
+      id,
+      organizationId,
+      name: input.name.trim(),
+      segment,
+      channel: input.channel,
+      subject: input.subject?.trim() || undefined,
+      body: input.body.trim(),
+      status: "draft",
+      createdByPersonId: input.actor.personId,
+    }),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "marketing-campaign.draft_created",
+      entityType: "marketing-campaign",
+      entityId: id,
+      afterHash: stableHash({
+        name: input.name.trim(),
+        segment,
+        channel: input.channel,
+        subject: input.subject?.trim(),
+        contentHash: stableHash({ body: input.body.trim() }),
+      }),
+      reason:
+        "Operator saved an organization-scoped campaign draft; no messages were sent.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return { id, entity: "marketing-campaign", status: "draft" };
 }
 
 function validateCallbackUrl(value: string): string {

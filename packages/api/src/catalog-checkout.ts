@@ -59,13 +59,18 @@ export class CatalogCheckoutError extends Error {
 }
 
 export interface CatalogCheckoutResult {
-  readonly mode: "stripe" | "organization-credit" | "free" | "unavailable";
+  readonly mode:
+    | "stripe"
+    | "organization-credit"
+    | "cash-reservation"
+    | "free"
+    | "unavailable";
   readonly orderId: string;
   readonly orderStatus: "pending" | "paid";
   readonly checkoutSessionId?: string;
   readonly checkoutUrl?: string;
   readonly expiresAt?: string;
-  readonly paymentMethod: "card" | "credit";
+  readonly paymentMethod: "card" | "credit" | "cash";
   readonly quantity: number;
   readonly amountMinor: number;
   readonly creditsApplied: number;
@@ -151,6 +156,149 @@ async function hasOrganizationMembership(
   return Boolean(subscription[0] || relationship);
 }
 
+async function membershipIncludedOffer(input: {
+  readonly personId: string;
+  readonly organizationId: string;
+  readonly targetCatalogItemId: string;
+  readonly now: Date;
+}): Promise<
+  | {
+      readonly planCatalogItemId: string;
+      readonly membershipId: string;
+      readonly remainingBookings?: number;
+    }
+  | undefined
+> {
+  const database = getDatabase();
+  const activeMembership = await database
+    .select({
+      membership: memberships,
+      tier: membershipTiers,
+      planCatalogItemId: catalogPrices.catalogItemId,
+    })
+    .from(memberships)
+    .innerJoin(membershipTiers, eq(memberships.tierId, membershipTiers.id))
+    .innerJoin(
+      catalogPrices,
+      eq(membershipTiers.stripePriceId, catalogPrices.stripePriceId),
+    )
+    .where(
+      and(
+        eq(memberships.personId, input.personId),
+        eq(membershipTiers.organizationId, input.organizationId),
+        inArray(memberships.status, ["active", "trialing"]),
+      ),
+    )
+    .limit(1)
+    .then((rows) => rows[0]);
+  if (!activeMembership) return undefined;
+  if (
+    activeMembership.membership.currentPeriodEndsAt &&
+    activeMembership.membership.currentPeriodEndsAt <= input.now
+  ) {
+    return undefined;
+  }
+  const includedItems = await database
+    .select({
+      targetCatalogItemId: catalogEntitlements.targetCatalogItemId,
+    })
+    .from(catalogEntitlements)
+    .where(
+      and(
+        eq(
+          catalogEntitlements.planCatalogItemId,
+          activeMembership.planCatalogItemId,
+        ),
+        eq(catalogEntitlements.kind, "included-item"),
+      ),
+    );
+  const includedItemIds = includedItems
+    .map((entry) => entry.targetCatalogItemId)
+    .filter((id): id is string => Boolean(id));
+  if (!includedItemIds.includes(input.targetCatalogItemId)) return undefined;
+  const accessLimit = await database.query.catalogEntitlements.findFirst({
+    where: and(
+      eq(
+        catalogEntitlements.planCatalogItemId,
+        activeMembership.planCatalogItemId,
+      ),
+      eq(catalogEntitlements.kind, "membership-access"),
+    ),
+  });
+  if (!accessLimit?.quantity) {
+    return {
+      planCatalogItemId: activeMembership.planCatalogItemId,
+      membershipId: activeMembership.membership.id,
+    };
+  }
+  const cycleStart =
+    activeMembership.membership.currentPeriodStartsAt ??
+    activeMembership.membership.createdAt;
+  const countResult = await database
+    .select({ count: sql<number>`count(*)::integer` })
+    .from(catalogFulfillments)
+    .where(
+      and(
+        eq(catalogFulfillments.organizationId, input.organizationId),
+        eq(catalogFulfillments.personId, input.personId),
+        inArray(catalogFulfillments.catalogItemId, includedItemIds),
+        inArray(catalogFulfillments.status, [
+          "held",
+          "pending",
+          "ready",
+          "fulfilled",
+        ]),
+        sql`${catalogFulfillments.createdAt} >= ${cycleStart}`,
+      ),
+    );
+  const remainingBookings = accessLimit.quantity - (countResult[0]?.count ?? 0);
+  if (remainingBookings <= 0) return undefined;
+  return {
+    planCatalogItemId: activeMembership.planCatalogItemId,
+    membershipId: activeMembership.membership.id,
+    remainingBookings,
+  };
+}
+
+export async function getCatalogOfferEligibility(input: {
+  readonly actor: ApiActor;
+  readonly catalogItemId: string;
+  readonly now: Date;
+}): Promise<{
+  readonly isMember: boolean;
+  readonly included: boolean;
+  readonly remainingBookings?: number;
+}> {
+  if (!process.env.DATABASE_URL) {
+    return { isMember: false, included: false };
+  }
+  const item = await getDatabase().query.catalogItems.findFirst({
+    where: eq(catalogItems.id, input.catalogItemId),
+  });
+  if (!item) {
+    throw new CatalogCheckoutError(
+      "CATALOG_ITEM_NOT_FOUND",
+      "This product was not found.",
+    );
+  }
+  const isMember = await hasOrganizationMembership(
+    input.actor.personId,
+    item.organizationId,
+  );
+  if (!isMember) return { isMember: false, included: false };
+  const inclusion = await membershipIncludedOffer({
+    personId: input.actor.personId,
+    organizationId: item.organizationId,
+    targetCatalogItemId: item.id,
+    now: input.now,
+  });
+  return {
+    isMember: true,
+    included: Boolean(inclusion),
+    remainingBookings: inclusion?.remainingBookings,
+  };
+}
+
 async function holdSaleInventory(input: {
   readonly organizationId: string;
   readonly catalogVariantId: string;
@@ -224,7 +372,8 @@ export async function startCatalogCheckout(input: {
   readonly actor: ApiActor;
   readonly catalogItemId: string;
   readonly catalogVariantId: string;
-  readonly paymentMethod: "card" | "credit";
+  readonly catalogPriceId?: string;
+  readonly paymentMethod: "card" | "credit" | "cash";
   readonly quantity: number;
   readonly successUrl: string;
   readonly cancelUrl: string;
@@ -296,6 +445,14 @@ export async function startCatalogCheckout(input: {
     input.actor.personId,
     row.organization.id,
   );
+  const membershipInclusion = isMember
+    ? await membershipIncludedOffer({
+        personId: input.actor.personId,
+        organizationId: row.organization.id,
+        targetCatalogItemId: row.item.id,
+        now: input.now,
+      })
+    : undefined;
   if (
     (row.item.membershipRequired || row.item.visibility === "members") &&
     !isMember
@@ -311,6 +468,9 @@ export async function startCatalogCheckout(input: {
     .where(
       and(
         eq(catalogPrices.catalogVariantId, row.variant.id),
+        input.catalogPriceId
+          ? eq(catalogPrices.id, input.catalogPriceId)
+          : undefined,
         eq(catalogPrices.paymentKind, input.paymentMethod),
         eq(catalogPrices.active, true),
         inArray(catalogPrices.audience, [
@@ -327,12 +487,22 @@ export async function startCatalogCheckout(input: {
   if (!price) {
     throw new CatalogCheckoutError(
       "PRICE_UNAVAILABLE",
-      `This product does not accept ${input.paymentMethod === "credit" ? "organization credits" : "card payment"}.`,
+      `This product does not accept ${
+        input.paymentMethod === "credit"
+          ? "organization credits"
+          : input.paymentMethod === "cash"
+            ? "pay-in-person reservations"
+            : "card payment"
+      }.`,
     );
   }
   const orderCurrency = currency(row.organization.currency);
-  const amountMinor = (price.amountMinor ?? 0) * input.quantity;
-  const creditsApplied = (price.creditAmount ?? 0) * input.quantity;
+  const amountMinor = membershipInclusion
+    ? 0
+    : (price.amountMinor ?? 0) * input.quantity;
+  const creditsApplied = membershipInclusion
+    ? 0
+    : (price.creditAmount ?? 0) * input.quantity;
   if (
     input.paymentMethod === "card" &&
     (!row.item.allowCard || !price.stripePriceId)
@@ -346,6 +516,12 @@ export async function startCatalogCheckout(input: {
     throw new CatalogCheckoutError(
       "PRICE_UNAVAILABLE",
       "This product does not accept organization credits.",
+    );
+  }
+  if (input.paymentMethod === "cash" && !row.item.allowCash) {
+    throw new CatalogCheckoutError(
+      "PRICE_UNAVAILABLE",
+      "This product does not accept pay-in-person reservations.",
     );
   }
   const configuredVenueId =
@@ -383,6 +559,13 @@ export async function startCatalogCheckout(input: {
   const orderItemId = crypto.randomUUID();
   const fulfillmentId = crypto.randomUUID();
   const checkoutExpiresAt = new Date(input.now.getTime() + 30 * 60_000);
+  const cashReservationExpiresAt = new Date(
+    input.now.getTime() + 24 * 60 * 60_000,
+  );
+  const reservationExpiresAt =
+    input.paymentMethod === "cash"
+      ? cashReservationExpiresAt
+      : checkoutExpiresAt;
   await database.batch([
     database
       .insert(organizationParticipants)
@@ -403,7 +586,10 @@ export async function startCatalogCheckout(input: {
       subtotalMinor: amountMinor,
       totalMinor: amountMinor,
       idempotencyKey: input.idempotencyKey,
-      expiresAt: input.paymentMethod === "card" ? checkoutExpiresAt : undefined,
+      expiresAt:
+        input.paymentMethod === "card" || input.paymentMethod === "cash"
+          ? reservationExpiresAt
+          : undefined,
     }),
     database.insert(orderItems).values({
       id: orderItemId,
@@ -430,6 +616,9 @@ export async function startCatalogCheckout(input: {
         creditsApplied,
         quantity: input.quantity,
         applicationFeeMinor: operatorFee?.amountMinor ?? 0,
+        membershipIncluded: Boolean(membershipInclusion),
+        membershipId: membershipInclusion?.membershipId,
+        membershipPlanCatalogItemId: membershipInclusion?.planCatalogItemId,
       },
     }),
     database.insert(orderTaxContexts).values({
@@ -468,7 +657,7 @@ export async function startCatalogCheckout(input: {
         purpose: row.item.subtype === "rental" ? "rental" : "sale",
         quantity: input.quantity,
         now: input.now,
-        expiresAt: checkoutExpiresAt,
+        expiresAt: reservationExpiresAt,
       });
     } catch (error) {
       await database
@@ -479,7 +668,7 @@ export async function startCatalogCheckout(input: {
     }
   }
 
-  if (input.paymentMethod === "credit") {
+  if (input.paymentMethod === "credit" && !membershipInclusion) {
     const wallet = await database.query.organizationWallets.findFirst({
       where: and(
         eq(organizationWallets.organizationId, row.organization.id),
@@ -635,6 +824,20 @@ export async function startCatalogCheckout(input: {
     };
   }
 
+  if (input.paymentMethod === "cash" && amountMinor > 0) {
+    return {
+      mode: "cash-reservation",
+      orderId,
+      orderStatus: "pending",
+      expiresAt: cashReservationExpiresAt.toISOString(),
+      paymentMethod: "cash",
+      quantity: input.quantity,
+      amountMinor,
+      creditsApplied: 0,
+      currency: orderCurrency,
+    };
+  }
+
   if (amountMinor === 0) {
     await database
       .update(orders)
@@ -645,7 +848,7 @@ export async function startCatalogCheckout(input: {
       mode: "free",
       orderId,
       orderStatus: "paid",
-      paymentMethod: "card",
+      paymentMethod: input.paymentMethod,
       quantity: input.quantity,
       amountMinor: 0,
       creditsApplied: 0,

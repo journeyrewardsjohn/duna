@@ -34,6 +34,7 @@ import {
   bracketSchema,
   catalogCheckoutResultSchema,
   catalogCheckoutStatusSchema,
+  catalogOfferEligibilitySchema,
   consentRecordResultSchema,
   courtScheduleProposalSchema,
   availabilityAlertResultSchema,
@@ -79,6 +80,7 @@ import {
   venueSummarySchema,
 } from "./contracts";
 import {
+  getCatalogOfferEligibility,
   getCatalogCheckoutStatus,
   startCatalogCheckout,
 } from "./catalog-checkout";
@@ -107,6 +109,14 @@ import {
   registerForSession,
   scanTicketConnected,
 } from "./commerce";
+import {
+  cancelPickup,
+  leavePickup,
+  loadPickupManagement,
+  requestPickupJoin,
+  reviewPickupJoinRequest,
+  updatePickup,
+} from "./pickup-service";
 import {
   confirmCalendarChange,
   createCatalogItem,
@@ -162,9 +172,13 @@ import {
   activateCourt,
   blockCourtTime,
   claimPlayerInvitation,
+  claimStaffInvitation,
   createCourt,
   createEventDraft,
+  createMarketingCampaignDraft,
+  createMarketingFlow,
   createPlayerInvitation,
+  createStaffInvitation,
   createProgramSession,
   createRatePlan,
   createVenue,
@@ -172,6 +186,7 @@ import {
   loadDemoOperatorWorkspace,
   loadOperatorWorkspace,
   loadPlayerInvitation,
+  loadStaffInvitation,
   OperatorServiceError,
   publishSession,
   publishVenue,
@@ -179,6 +194,7 @@ import {
   startStripeOnboarding,
   replaceCourtSchedule,
   updateCourtBookingConfiguration,
+  updateStaffProfile,
   updateVenueProfile,
 } from "./operator-service";
 import {
@@ -444,6 +460,40 @@ const leagueRecurrenceInputSchema = z.object({
   teamAssignment: z.enum(["signup", "rating-balanced", "manual"]),
 });
 
+const pickupRequestStatusSchema = z.enum([
+  "requested",
+  "approved",
+  "rejected",
+  "cancelled",
+  "expired",
+]);
+
+const pickupManagementSchema = z.object({
+  pickupSessionId: z.string().uuid(),
+  status: z.enum(["active", "cancelled", "completed"]),
+  approvalRequired: z.boolean(),
+  isHost: z.boolean(),
+  isParticipant: z.boolean(),
+  canEdit: z.boolean(),
+  canCancel: z.boolean(),
+  canLeave: z.boolean(),
+  confirmedParticipantCount: z.number().int().nonnegative(),
+  ownRequestStatus: pickupRequestStatusSchema.optional(),
+  requests: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        personId: z.string().uuid(),
+        displayName: z.string(),
+        avatarUrl: z.string().optional(),
+        note: z.string().optional(),
+        status: pickupRequestStatusSchema,
+        createdAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
+});
+
 const createEventDraftInputSchema = z
   .object({
     title: z.string().trim().min(3).max(140),
@@ -480,6 +530,16 @@ const createEventDraftInputSchema = z
     tickets: z.array(eventDraftTicketSchema).max(64),
     features: z.array(eventDraftFeatureSchema).max(64),
     policies: z.array(eventDraftPolicySchema).max(32),
+    smartRules: z.object({
+      waitlistEnabled: z.boolean(),
+      allowLateCancellation: z.boolean(),
+      freeCancellationHours: z.number().int().min(0).max(8_760),
+      bookingOpensDays: z.number().int().min(0).max(730),
+      bookingClosesMinutes: z.number().int().min(0).max(43_200),
+      autoCancelLowAttendance: z.boolean(),
+      minimumAttendance: z.number().int().min(1).max(10_000),
+      approvalRequired: z.boolean(),
+    }),
     recurrence: leagueRecurrenceInputSchema.optional(),
     confirmedPrice: z.literal(true),
     idempotencyKey: z.string().uuid(),
@@ -870,6 +930,26 @@ const publicRouter = router({
         return throwDomainError(error);
       }
     }),
+  staffInvitation: publicProcedure
+    .input(z.object({ inviteToken: z.string().min(32).max(128) }))
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        organizationName: z.string(),
+        invitedName: z.string(),
+        role: z.enum(["coach", "manager", "front-desk", "accountant"]),
+        workerClassification: z.enum(["1099-contractor", "w2-employee"]),
+        status: z.enum(["pending", "claimed", "expired", "cancelled"]),
+        expiresAt: z.iso.datetime(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadStaffInvitation(input.inviteToken, ctx.now);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   players: publicProcedure
     .input(
       z
@@ -939,6 +1019,16 @@ const playerRouter = router({
   dashboard: protectedProcedure
     .output(playerDashboardSchema)
     .query(({ ctx }) => getRepository().player.dashboard(ctx.actor!.personId)),
+  catalogOfferEligibility: protectedProcedure
+    .input(z.object({ catalogItemId: z.string().uuid() }))
+    .output(catalogOfferEligibilitySchema)
+    .query(({ input, ctx }) =>
+      getCatalogOfferEligibility({
+        actor: ctx.actor!,
+        catalogItemId: input.catalogItemId,
+        now: ctx.now,
+      }),
+    ),
   startCatalogCheckout: protectedProcedure
     .use(
       rateLimitMiddleware({
@@ -951,7 +1041,8 @@ const playerRouter = router({
       z.object({
         catalogItemId: z.string().uuid(),
         catalogVariantId: z.string().uuid(),
-        paymentMethod: z.enum(["card", "credit"]),
+        catalogPriceId: z.string().uuid().optional(),
+        paymentMethod: z.enum(["card", "credit", "cash"]),
         quantity: z.number().int().min(1).max(50),
         successUrl: z.url(),
         cancelUrl: z.url(),
@@ -1084,6 +1175,42 @@ const playerRouter = router({
         execute: async () => {
           try {
             return await claimPlayerInvitation({
+              actor: ctx.actor!,
+              inviteToken: input.inviteToken,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  claimStaffInvitation: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "staff-invitation-claim",
+        capacity: 8,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        inviteToken: z.string().min(32).max(128),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.claimStaffInvitation",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await claimStaffInvitation({
               actor: ctx.actor!,
               inviteToken: input.inviteToken,
               requestId: ctx.requestId,
@@ -1965,6 +2092,13 @@ const playerRouter = router({
           venueName: z.string().min(2),
           venueId: z.string().uuid().optional(),
           courtBookingId: z.string().uuid().optional(),
+          address: z.string().trim().max(500).optional(),
+          googlePlaceId: z.string().trim().max(256).optional(),
+          latitude: z.number().min(-90).max(90).optional(),
+          longitude: z.number().min(-180).max(180).optional(),
+          locationConfidence: z
+            .enum(["confirmed", "approximate"])
+            .default("approximate"),
           capacity: z.number().int().min(2).max(48),
           format: z.enum(["2s", "3s", "4s", "6s", "king-queen"]),
           matchType: z.enum(["competitive", "casual"]).default("competitive"),
@@ -1973,6 +2107,22 @@ const playerRouter = router({
             .default("open"),
           note: z.string().trim().max(1_000).optional(),
           visibility: z.enum(["public", "unlisted"]),
+          approvalRequired: z.boolean().default(false),
+          smartRules: z
+            .object({
+              waitlistEnabled: z.boolean(),
+              allowLateCancellation: z.boolean(),
+              minimumNoticeMinutes: z.number().int().min(0).max(43_200),
+              autoCancelLowAttendance: z.boolean(),
+              minimumAttendance: z.number().int().min(2).max(48),
+            })
+            .default({
+              waitlistEnabled: true,
+              allowLateCancellation: false,
+              minimumNoticeMinutes: 60,
+              autoCancelLowAttendance: false,
+              minimumAttendance: 2,
+            }),
           costMinor: z.number().int().min(0).max(100_000),
           currency: z.literal("USD"),
           recordMatches: z.boolean(),
@@ -2000,12 +2150,19 @@ const playerRouter = router({
             venueName: input.venueName,
             venueId: input.venueId,
             courtBookingId: input.courtBookingId,
+            address: input.address,
+            googlePlaceId: input.googlePlaceId,
+            latitude: input.latitude,
+            longitude: input.longitude,
+            locationConfidence: input.locationConfidence,
             capacity: input.capacity,
             format: input.format,
             matchType: input.matchType,
             genderPreference: input.genderPreference,
             note: input.note,
             visibility: input.visibility,
+            approvalRequired: input.approvalRequired,
+            smartRules: input.smartRules,
             costMinor: input.costMinor,
             currency: input.currency,
             recordMatches: input.recordMatches,
@@ -2016,6 +2173,215 @@ const playerRouter = router({
             requestId: ctx.requestId,
             ipAddress: ctx.ipAddress,
           }),
+      }),
+    ),
+  pickupManagement: protectedProcedure
+    .input(z.object({ pickupSessionId: z.string().uuid() }))
+    .output(pickupManagementSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadPickupManagement({
+          actor: ctx.actor!,
+          pickupSessionId: input.pickupSessionId,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  requestPickupJoin: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "pickup-join-request",
+        capacity: 12,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        pickupSessionId: z.string().uuid(),
+        note: z.string().trim().max(500).optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        status: z.literal("requested"),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.requestPickupJoin",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await requestPickupJoin({
+              actor: ctx.actor!,
+              pickupSessionId: input.pickupSessionId,
+              note: input.note,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  reviewPickupJoinRequest: protectedProcedure
+    .input(
+      z.object({
+        requestId: z.string().uuid(),
+        decision: z.enum(["approved", "rejected"]),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        status: z.enum(["approved", "rejected"]),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.reviewPickupJoinRequest",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await reviewPickupJoinRequest({
+              actor: ctx.actor!,
+              requestId: input.requestId,
+              decision: input.decision,
+              traceId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  updatePickup: protectedProcedure
+    .input(
+      z.object({
+        pickupSessionId: z.string().uuid(),
+        title: z.string().trim().min(2).max(140),
+        startsAt: z.iso.datetime(),
+        endsAt: z.iso.datetime(),
+        venueName: z.string().trim().min(2).max(180),
+        address: z.string().trim().max(500).optional(),
+        googlePlaceId: z.string().trim().max(256).optional(),
+        latitude: z.number().min(-90).max(90).optional(),
+        longitude: z.number().min(-180).max(180).optional(),
+        locationConfidence: z.enum(["confirmed", "approximate"]).optional(),
+        capacity: z.number().int().min(2).max(100),
+        note: z.string().trim().max(2_000).optional(),
+        approvalRequired: z.boolean(),
+        visibility: z.enum(["public", "unlisted"]),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        status: z.literal("active"),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.updatePickup",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updatePickup({
+              actor: ctx.actor!,
+              ...input,
+              startsAt: new Date(input.startsAt),
+              endsAt: new Date(input.endsAt),
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  cancelPickup: protectedProcedure
+    .input(
+      z.object({
+        pickupSessionId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        status: z.literal("cancelled"),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.cancelPickup",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await cancelPickup({
+              actor: ctx.actor!,
+              pickupSessionId: input.pickupSessionId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  leavePickup: protectedProcedure
+    .input(
+      z.object({
+        pickupSessionId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        status: z.literal("cancelled"),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.leavePickup",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await leavePickup({
+              actor: ctx.actor!,
+              pickupSessionId: input.pickupSessionId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
       }),
     ),
   registerForSession: protectedProcedure
@@ -2699,6 +3065,19 @@ const operatorRouter = router({
           .min(0)
           .max(100_000_000)
           .optional(),
+        annualPriceMinor: z.number().int().min(0).max(100_000_000).optional(),
+        annualMemberPriceMinor: z
+          .number()
+          .int()
+          .min(0)
+          .max(100_000_000)
+          .optional(),
+        annualNonMemberPriceMinor: z
+          .number()
+          .int()
+          .min(0)
+          .max(100_000_000)
+          .optional(),
         creditCost: z.number().int().positive().max(100_000).optional(),
         recurringInterval: z.enum(["week", "month", "year"]).optional(),
         recurringIntervalCount: z.number().int().min(1).max(52).optional(),
@@ -2886,7 +3265,17 @@ const operatorRouter = router({
           ink: z.string().regex(/^#[0-9a-f]{6}$/i),
           canvas: z.string().regex(/^#[0-9a-f]{6}$/i),
         }),
+        typography: z.object({
+          heading: z.enum([
+            "Instrument Sans",
+            "DM Sans",
+            "Space Grotesk",
+            "Playfair Display",
+          ]),
+          body: z.enum(["Archivo", "Inter", "DM Sans", "Source Sans 3"]),
+        }),
         cardStyle: z.enum(["soft", "crisp", "borderless"]),
+        profileLayout: z.enum(["editorial", "immersive", "compact"]),
         publish: z.boolean(),
         confirmed: z.literal(true),
         idempotencyKey: z.string().uuid(),
@@ -3121,6 +3510,128 @@ const operatorRouter = router({
               guardianEmail: input.guardianEmail,
               guardianPhoneE164: input.guardianPhoneE164,
               confirmed: input.confirmed,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createStaffInvitation: organizationProcedure("members:write")
+    .use(
+      rateLimitMiddleware({
+        id: "operator-staff-invitation",
+        capacity: 20,
+        refillPerMinute: 10,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z
+        .object({
+          invitedName: z.string().trim().min(2).max(120),
+          invitedEmail: z.email().optional(),
+          invitedPhoneE164: z
+            .string()
+            .regex(/^\+[1-9]\d{7,14}$/)
+            .optional(),
+          role: z.enum(["coach", "manager", "front-desk", "accountant"]),
+          workerClassification: z.enum(["1099-contractor", "w2-employee"]),
+          preferredChannel: z.enum(["email", "sms"]).optional(),
+          confirmed: z.literal(true),
+          idempotencyKey: z.string().uuid(),
+        })
+        .refine(
+          (value) => Boolean(value.invitedEmail || value.invitedPhoneE164),
+          "Provide an email address or mobile number.",
+        ),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createStaffInvitation",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createStaffInvitation({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  updateStaffProfile: organizationProcedure("members:write")
+    .use(
+      rateLimitMiddleware({
+        id: "operator-staff-profile-update",
+        capacity: 40,
+        refillPerMinute: 20,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z.object({
+        personId: z.string().uuid(),
+        role: z.enum(["coach", "manager", "front-desk", "accountant"]),
+        workerClassification: z.enum(["1099-contractor", "w2-employee"]),
+        compensationModel: z.enum([
+          "not-set",
+          "hourly",
+          "profit-share",
+          "hourly-plus-profit-share",
+        ]),
+        hourlyRateMinor: z.number().int().nonnegative().optional(),
+        profitShareBps: z.number().int().min(0).max(10_000).optional(),
+        addressLine1: z.string().trim().max(240).optional(),
+        addressLine2: z.string().trim().max(240).optional(),
+        locality: z.string().trim().max(120).optional(),
+        administrativeArea: z.string().trim().max(120).optional(),
+        postalCode: z.string().trim().max(24).optional(),
+        countryCode: z.string().trim().length(2),
+        googlePlaceId: z.string().trim().max(255).optional(),
+        latitude: z.number().min(-90).max(90).optional(),
+        longitude: z.number().min(-180).max(180).optional(),
+        availability: z
+          .array(
+            z.object({
+              weekday: z.number().int().min(0).max(6),
+              startsAt: z.string().regex(/^\d{2}:\d{2}$/),
+              endsAt: z.string().regex(/^\d{2}:\d{2}$/),
+            }),
+          )
+          .max(28),
+        incomeGoalMinor: z.number().int().nonnegative().optional(),
+        incomeGoalPeriod: z
+          .enum(["week", "month", "quarter", "year"])
+          .optional(),
+        active: z.boolean(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.updateStaffProfile",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateStaffProfile({
+              actor: ctx.actor!,
+              ...input,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,
@@ -3790,6 +4301,95 @@ const operatorRouter = router({
         execute: async () => {
           try {
             return await saveMessageDraft({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createMarketingFlow: organizationProcedure("messages:propose")
+    .input(
+      z.object({
+        name: z.string().trim().min(2).max(140),
+        description: z.string().trim().max(1_000).optional(),
+        segment: z.enum([
+          "all-active",
+          "active-members",
+          "inactive-30-days",
+          "high-churn-risk",
+          "upcoming-participants",
+        ]),
+        trigger: z.enum([
+          "manual",
+          "no-booking",
+          "payment-failed",
+          "event-published",
+          "membership-renewal",
+        ]),
+        triggerDays: z.number().int().min(1).max(365).optional(),
+        channel: z.enum(["email", "sms", "push"]),
+        subject: z.string().trim().max(180).optional(),
+        body: z.string().trim().min(1).max(8_000),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createMarketingFlow",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createMarketingFlow({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createMarketingCampaignDraft: organizationProcedure("messages:propose")
+    .input(
+      z.object({
+        name: z.string().trim().min(2).max(140),
+        segment: z.enum([
+          "all-active",
+          "active-members",
+          "inactive-30-days",
+          "high-churn-risk",
+          "upcoming-participants",
+        ]),
+        channel: z.enum(["email", "sms", "push"]),
+        subject: z.string().trim().max(180).optional(),
+        body: z.string().trim().min(1).max(8_000),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createMarketingCampaignDraft",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createMarketingCampaignDraft({
               actor: ctx.actor!,
               ...input,
               requestId: ctx.requestId,

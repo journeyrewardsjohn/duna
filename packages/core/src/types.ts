@@ -122,8 +122,27 @@ export interface EventLocation {
   readonly googlePlaceId?: string;
   readonly latitude?: number;
   readonly longitude?: number;
+  readonly confidence?: "confirmed" | "approximate";
   readonly onlineUrl?: string;
   readonly courtNames?: readonly string[];
+}
+
+export interface EventAttendeeSummary {
+  readonly id: string;
+  readonly displayName: string;
+  readonly handle: string;
+  readonly initials: string;
+  readonly avatarUrl?: string;
+  readonly homeMarket?: string;
+  readonly ratingDisplay?: number;
+}
+
+export interface EventHostSummary {
+  readonly id: string;
+  readonly displayName: string;
+  readonly handle: string;
+  readonly initials: string;
+  readonly avatarUrl?: string;
 }
 
 export interface EventFeature {
@@ -235,6 +254,10 @@ export interface EventSummary {
   readonly features?: readonly EventFeature[];
   readonly policies?: readonly EventPolicy[];
   readonly recurrence?: LeagueRecurrence;
+  readonly attendees?: readonly EventAttendeeSummary[];
+  readonly host?: EventHostSummary;
+  readonly approvalRequired?: boolean;
+  readonly lifecycleStatus?: "active" | "cancelled" | "completed";
   readonly live?: boolean;
   readonly imageUrl?: string;
   readonly tags: readonly string[];

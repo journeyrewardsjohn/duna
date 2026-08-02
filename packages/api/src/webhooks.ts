@@ -13,6 +13,7 @@ export type StripeDomainAction =
   | "order.payment_succeeded"
   | "order.payment_failed"
   | "membership.synchronized"
+  | "membership.payment_succeeded"
   | "membership.payment_failed"
   | "connect.synchronized"
   | "payout.synchronized"
@@ -32,6 +33,9 @@ function actionForStripeEvent(type: string): StripeDomainAction {
     type === "customer.subscription.deleted"
   ) {
     return "membership.synchronized";
+  }
+  if (type === "invoice.payment_succeeded") {
+    return "membership.payment_succeeded";
   }
   if (type === "invoice.payment_failed") return "membership.payment_failed";
   if (type === "account.updated") return "connect.synchronized";

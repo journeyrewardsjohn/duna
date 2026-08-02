@@ -266,11 +266,14 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
 
   await page.goto("http://127.0.0.1:3001/leagues");
   await expect(page.getByRole("heading", { name: "Leagues" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Create league/ })).toBeVisible();
+  await expect(page.getByText(/1 connected/)).toBeVisible();
+  await page.getByRole("link", { name: /Create league/ }).click();
   await expect(
-    page.getByRole("link", { name: /Open guided flow/ }),
+    page.getByRole("heading", { name: "Create something players remember." }),
   ).toBeVisible();
   await expect(
-    page.getByText(/Build a league without fighting a wall of settings/),
+    page.getByRole("heading", { name: "League", exact: true }),
   ).toBeVisible();
 
   await page.goto("http://127.0.0.1:3001/ai");

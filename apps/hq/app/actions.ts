@@ -105,6 +105,7 @@ function revalidateOperator() {
   revalidatePath("/leagues");
   revalidatePath("/payments");
   revalidatePath("/messages");
+  revalidatePath("/team");
   revalidatePath("/members");
   revalidatePath("/settings");
   revalidatePath("/locations");
@@ -160,6 +161,12 @@ export async function createCatalogItemAction(
       priceMinor: optionalMoneyMinor(formData, "price"),
       memberPriceMinor: optionalMoneyMinor(formData, "memberPrice"),
       nonMemberPriceMinor: optionalMoneyMinor(formData, "nonMemberPrice"),
+      annualPriceMinor: optionalMoneyMinor(formData, "annualPrice"),
+      annualMemberPriceMinor: optionalMoneyMinor(formData, "annualMemberPrice"),
+      annualNonMemberPriceMinor: optionalMoneyMinor(
+        formData,
+        "annualNonMemberPrice",
+      ),
       creditCost: optionalField(formData, "creditCost")
         ? numberField(formData, "creditCost")
         : undefined,
@@ -339,6 +346,29 @@ export async function updateThemeAction(
     ) {
       throw new Error("Choose a valid card style.");
     }
+    const headingFont = field(formData, "headingFont");
+    const bodyFont = field(formData, "bodyFont");
+    const validHeadingFonts = [
+      "Instrument Sans",
+      "DM Sans",
+      "Space Grotesk",
+      "Playfair Display",
+    ];
+    const validBodyFonts = ["Archivo", "Inter", "DM Sans", "Source Sans 3"];
+    if (!validHeadingFonts.includes(headingFont)) {
+      throw new Error("Choose a valid heading font.");
+    }
+    if (!validBodyFonts.includes(bodyFont)) {
+      throw new Error("Choose a valid body font.");
+    }
+    const profileLayout = field(formData, "profileLayout");
+    if (
+      profileLayout !== "editorial" &&
+      profileLayout !== "immersive" &&
+      profileLayout !== "compact"
+    ) {
+      throw new Error("Choose a valid profile layout.");
+    }
     const caller = await getServerCaller();
     await caller.operator.updateTheme({
       logoUrl: optionalField(formData, "logoUrl"),
@@ -354,7 +384,13 @@ export async function updateThemeAction(
         ink: field(formData, "ink"),
         canvas: field(formData, "canvas"),
       },
+      typography: {
+        heading: headingFont as
+          "Instrument Sans" | "DM Sans" | "Space Grotesk" | "Playfair Display",
+        body: bodyFont as "Archivo" | "Inter" | "DM Sans" | "Source Sans 3",
+      },
       cardStyle,
+      profileLayout,
       publish: field(formData, "publish") === "true",
       confirmed: confirmed(formData),
       idempotencyKey: crypto.randomUUID(),
@@ -519,6 +555,138 @@ export async function createPlayerInvitationAction(
       undefined,
       created.id,
     );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function createStaffInvitationAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const role = field(formData, "role");
+    if (
+      role !== "coach" &&
+      role !== "manager" &&
+      role !== "front-desk" &&
+      role !== "accountant"
+    ) {
+      throw new Error("Choose a valid team role.");
+    }
+    const workerClassification = field(formData, "workerClassification");
+    if (
+      workerClassification !== "1099-contractor" &&
+      workerClassification !== "w2-employee"
+    ) {
+      throw new Error("Choose 1099 contractor or W-2 employee.");
+    }
+    const preferredChannel = field(formData, "preferredChannel");
+    if (preferredChannel !== "email" && preferredChannel !== "sms") {
+      throw new Error("Choose email or SMS.");
+    }
+    const caller = await getServerCaller();
+    const created = await caller.operator.createStaffInvitation({
+      invitedName: field(formData, "invitedName"),
+      invitedEmail: optionalField(formData, "invitedEmail"),
+      invitedPhoneE164: optionalField(formData, "invitedPhoneE164"),
+      role,
+      workerClassification,
+      preferredChannel,
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      created.status === "sent"
+        ? "Team invitation sent."
+        : "Team invitation created. Delivery will resume when the selected provider is ready.",
+      undefined,
+      created.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function updateStaffProfileAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const role = field(formData, "role");
+    if (
+      role !== "coach" &&
+      role !== "manager" &&
+      role !== "front-desk" &&
+      role !== "accountant"
+    ) {
+      throw new Error("Choose a valid team role.");
+    }
+    const workerClassification = field(formData, "workerClassification");
+    if (
+      workerClassification !== "1099-contractor" &&
+      workerClassification !== "w2-employee"
+    ) {
+      throw new Error("Choose 1099 contractor or W-2 employee.");
+    }
+    const compensationModel = field(formData, "compensationModel");
+    if (
+      compensationModel !== "not-set" &&
+      compensationModel !== "hourly" &&
+      compensationModel !== "profit-share" &&
+      compensationModel !== "hourly-plus-profit-share"
+    ) {
+      throw new Error("Choose a valid compensation model.");
+    }
+    const incomeGoalPeriodValue = optionalField(formData, "incomeGoalPeriod");
+    const incomeGoalPeriod =
+      incomeGoalPeriodValue === "week" ||
+      incomeGoalPeriodValue === "month" ||
+      incomeGoalPeriodValue === "quarter" ||
+      incomeGoalPeriodValue === "year"
+        ? incomeGoalPeriodValue
+        : undefined;
+    const availabilityValue = field(formData, "availability");
+    const availability = availabilityValue
+      ? (JSON.parse(availabilityValue) as {
+          weekday: number;
+          startsAt: string;
+          endsAt: string;
+        }[])
+      : [];
+    const caller = await getServerCaller();
+    const updated = await caller.operator.updateStaffProfile({
+      personId: field(formData, "personId"),
+      role,
+      workerClassification,
+      compensationModel,
+      hourlyRateMinor: optionalMoneyMinor(formData, "hourlyRate"),
+      profitShareBps:
+        optionalNumberField(formData, "profitSharePercent") === undefined
+          ? undefined
+          : Math.round(
+              optionalNumberField(formData, "profitSharePercent")! * 100,
+            ),
+      addressLine1: optionalField(formData, "addressLine1"),
+      addressLine2: optionalField(formData, "addressLine2"),
+      locality: optionalField(formData, "locality"),
+      administrativeArea: optionalField(formData, "administrativeArea"),
+      postalCode: optionalField(formData, "postalCode"),
+      countryCode: field(formData, "countryCode") || "US",
+      googlePlaceId: optionalField(formData, "googlePlaceId"),
+      latitude: optionalNumberField(formData, "latitude"),
+      longitude: optionalNumberField(formData, "longitude"),
+      availability,
+      incomeGoalMinor: optionalMoneyMinor(formData, "incomeGoal"),
+      incomeGoalPeriod,
+      active: field(formData, "active") === "true",
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result("success", "Team profile updated.", undefined, updated.id);
   } catch (error) {
     return errorState(error);
   }
@@ -939,6 +1107,104 @@ export async function saveMessageDraftAction(
     });
     revalidateOperator();
     return result("success", "Consent-safe draft saved. Nothing was sent.");
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function createMarketingFlowAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const segment = field(formData, "segment");
+    if (
+      segment !== "all-active" &&
+      segment !== "active-members" &&
+      segment !== "inactive-30-days" &&
+      segment !== "high-churn-risk" &&
+      segment !== "upcoming-participants"
+    ) {
+      throw new Error("Choose a valid audience.");
+    }
+    const trigger = field(formData, "trigger");
+    if (
+      trigger !== "manual" &&
+      trigger !== "no-booking" &&
+      trigger !== "payment-failed" &&
+      trigger !== "event-published" &&
+      trigger !== "membership-renewal"
+    ) {
+      throw new Error("Choose a valid trigger.");
+    }
+    const channel = field(formData, "channel");
+    if (channel !== "email" && channel !== "sms" && channel !== "push") {
+      throw new Error("Choose email, SMS, or push.");
+    }
+    const caller = await getServerCaller();
+    const created = await caller.operator.createMarketingFlow({
+      name: field(formData, "name"),
+      description: optionalField(formData, "description"),
+      segment,
+      trigger,
+      triggerDays:
+        trigger === "no-booking"
+          ? numberField(formData, "triggerDays")
+          : undefined,
+      channel,
+      subject: optionalField(formData, "subject"),
+      body: field(formData, "body"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Marketing flow saved as a private draft. Nothing was sent.",
+      undefined,
+      created.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function createMarketingCampaignAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const segment = field(formData, "segment");
+    if (
+      segment !== "all-active" &&
+      segment !== "active-members" &&
+      segment !== "inactive-30-days" &&
+      segment !== "high-churn-risk" &&
+      segment !== "upcoming-participants"
+    ) {
+      throw new Error("Choose a valid audience.");
+    }
+    const channel = field(formData, "channel");
+    if (channel !== "email" && channel !== "sms" && channel !== "push") {
+      throw new Error("Choose email, SMS, or push.");
+    }
+    const caller = await getServerCaller();
+    const created = await caller.operator.createMarketingCampaignDraft({
+      name: field(formData, "name"),
+      segment,
+      channel,
+      subject: optionalField(formData, "subject"),
+      body: field(formData, "body"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Campaign saved as a consent-aware draft. Nothing was sent.",
+      undefined,
+      created.id,
+    );
   } catch (error) {
     return errorState(error);
   }

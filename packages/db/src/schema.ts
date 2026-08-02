@@ -756,6 +756,10 @@ export const organizationThemes = pgTable(
       "organization_theme_card_style_valid",
       sql`${table.cardStyle} IN ('soft', 'crisp', 'borderless')`,
     ),
+    check(
+      "organization_theme_profile_layout_valid",
+      sql`${table.profileLayout} IN ('editorial', 'immersive', 'compact')`,
+    ),
   ],
 );
 
@@ -788,6 +792,142 @@ export const organizationMemberships = pgTable(
       table.role,
     ),
     index("org_membership_person_idx").on(table.personId),
+  ],
+);
+
+export const organizationStaffProfiles = pgTable(
+  "organization_staff_profiles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    workerClassification: varchar("worker_classification", {
+      length: 24,
+    }).notNull(),
+    compensationModel: varchar("compensation_model", { length: 24 })
+      .notNull()
+      .default("not-set"),
+    hourlyRateMinor: integer("hourly_rate_minor"),
+    profitShareBps: integer("profit_share_bps"),
+    currency: varchar("currency", { length: 3 }).notNull().default("USD"),
+    addressLine1: text("address_line_1"),
+    addressLine2: text("address_line_2"),
+    locality: text("locality"),
+    administrativeArea: text("administrative_area"),
+    postalCode: varchar("postal_code", { length: 24 }),
+    countryCode: varchar("country_code", { length: 2 }).notNull().default("US"),
+    googlePlaceId: text("google_place_id"),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    availability: jsonb("availability")
+      .notNull()
+      .$type<readonly Record<string, unknown>[]>()
+      .default([]),
+    incomeGoalMinor: integer("income_goal_minor"),
+    incomeGoalPeriod: varchar("income_goal_period", { length: 16 }),
+    startedAt: date("started_at", { mode: "string" }),
+    active: boolean("active").notNull().default(true),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("organization_staff_profile_unique").on(
+      table.organizationId,
+      table.personId,
+    ),
+    index("organization_staff_profile_org_active_idx").on(
+      table.organizationId,
+      table.active,
+    ),
+    check(
+      "organization_staff_classification_valid",
+      sql`${table.workerClassification} IN ('1099-contractor', 'w2-employee')`,
+    ),
+    check(
+      "organization_staff_compensation_valid",
+      sql`${table.compensationModel} IN ('not-set', 'hourly', 'profit-share', 'hourly-plus-profit-share')`,
+    ),
+    check(
+      "organization_staff_hourly_rate_valid",
+      sql`${table.hourlyRateMinor} IS NULL OR ${table.hourlyRateMinor} >= 0`,
+    ),
+    check(
+      "organization_staff_profit_share_valid",
+      sql`${table.profitShareBps} IS NULL OR ${table.profitShareBps} BETWEEN 0 AND 10000`,
+    ),
+    check(
+      "organization_staff_income_goal_valid",
+      sql`${table.incomeGoalMinor} IS NULL OR ${table.incomeGoalMinor} >= 0`,
+    ),
+    check(
+      "organization_staff_goal_period_valid",
+      sql`${table.incomeGoalPeriod} IS NULL OR ${table.incomeGoalPeriod} IN ('week', 'month', 'quarter', 'year')`,
+    ),
+  ],
+);
+
+export const organizationStaffInvitations = pgTable(
+  "organization_staff_invitations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    invitedByPersonId: uuid("invited_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    inviteToken: varchar("invite_token", { length: 96 }).notNull().unique(),
+    invitedName: text("invited_name").notNull(),
+    invitedEmail: text("invited_email"),
+    invitedPhoneE164: varchar("invited_phone_e164", { length: 24 }),
+    role: varchar("role", { length: 24 }).notNull(),
+    workerClassification: varchar("worker_classification", {
+      length: 24,
+    }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("pending"),
+    deliveryChannel: varchar("delivery_channel", { length: 16 }),
+    deliveryStatus: varchar("delivery_status", { length: 24 })
+      .notNull()
+      .default("not-configured"),
+    deliveryMessageId: varchar("delivery_message_id", { length: 160 }),
+    claimedByPersonId: uuid("claimed_by_person_id").references(() => people.id),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    claimedAt: timestamp("claimed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("organization_staff_invitation_org_status_idx").on(
+      table.organizationId,
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "organization_staff_invitation_role_valid",
+      sql`${table.role} IN ('coach', 'manager', 'front-desk', 'accountant')`,
+    ),
+    check(
+      "organization_staff_invitation_classification_valid",
+      sql`${table.workerClassification} IN ('1099-contractor', 'w2-employee')`,
+    ),
+    check(
+      "organization_staff_invitation_status_valid",
+      sql`${table.status} IN ('pending', 'claimed', 'expired', 'cancelled')`,
+    ),
+    check(
+      "organization_staff_invitation_destination_present",
+      sql`${table.invitedEmail} IS NOT NULL OR ${table.invitedPhoneE164} IS NOT NULL`,
+    ),
   ],
 );
 
@@ -4308,6 +4448,107 @@ export const messages = pgTable("messages", {
   updatedAt,
 });
 
+export const marketingFlows = pgTable(
+  "marketing_flows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    segment: jsonb("segment")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    trigger: jsonb("trigger")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    action: jsonb("action")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    status: varchar("status", { length: 24 }).notNull().default("draft"),
+    createdByPersonId: uuid("created_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    activatedAt: timestamp("activated_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("marketing_flow_org_status_idx").on(
+      table.organizationId,
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "marketing_flow_status_valid",
+      sql`${table.status} IN ('draft', 'active', 'paused', 'archived')`,
+    ),
+  ],
+);
+
+export const marketingCampaigns = pgTable(
+  "marketing_campaigns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    segment: jsonb("segment")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    channel: messageChannelEnum("channel").notNull(),
+    subject: text("subject"),
+    body: text("body").notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("draft"),
+    scheduledAt: timestamp("scheduled_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    stats: jsonb("stats")
+      .notNull()
+      .$type<{
+        recipients: number;
+        delivered: number;
+        opened: number;
+        clicked: number;
+        failed: number;
+      }>()
+      .default({
+        recipients: 0,
+        delivered: 0,
+        opened: 0,
+        clicked: 0,
+        failed: 0,
+      }),
+    createdByPersonId: uuid("created_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    sentAt: timestamp("sent_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("marketing_campaign_org_status_idx").on(
+      table.organizationId,
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "marketing_campaign_status_valid",
+      sql`${table.status} IN ('draft', 'scheduled', 'sending', 'sent', 'paused', 'cancelled')`,
+    ),
+  ],
+);
+
 export const follows = pgTable(
   "follows",
   {
@@ -4366,6 +4607,29 @@ export const pickupSessions = pgTable(
     visibility: varchar("visibility", { length: 24 })
       .notNull()
       .default("public"),
+    status: varchar("status", { length: 24 }).notNull().default("active"),
+    approvalRequired: boolean("approval_required").notNull().default(false),
+    address: text("address"),
+    googlePlaceId: text("google_place_id"),
+    locationConfidence: varchar("location_confidence", { length: 16 })
+      .notNull()
+      .default("approximate"),
+    smartRules: jsonb("smart_rules")
+      .notNull()
+      .$type<{
+        waitlistEnabled: boolean;
+        allowLateCancellation: boolean;
+        minimumNoticeMinutes: number;
+        autoCancelLowAttendance: boolean;
+        minimumAttendance: number;
+      }>()
+      .default({
+        waitlistEnabled: true,
+        allowLateCancellation: false,
+        minimumNoticeMinutes: 60,
+        autoCancelLowAttendance: false,
+        minimumAttendance: 2,
+      }),
     costMinor: integer("cost_minor").notNull().default(0),
     currency: varchar("currency", { length: 3 }).notNull().default("USD"),
     createdAt,
@@ -4389,6 +4653,14 @@ export const pickupSessions = pgTable(
       sql`${table.visibility} IN ('public', 'unlisted', 'private')`,
     ),
     check(
+      "pickup_session_status_valid",
+      sql`${table.status} IN ('active', 'cancelled', 'completed')`,
+    ),
+    check(
+      "pickup_session_location_confidence_valid",
+      sql`${table.locationConfidence} IN ('confirmed', 'approximate')`,
+    ),
+    check(
       "pickup_session_format_valid",
       sql`${table.format} IN ('2s', '3s', '4s', '6s', 'king-queen')`,
     ),
@@ -4399,6 +4671,49 @@ export const pickupSessions = pgTable(
     check(
       "pickup_session_gender_valid",
       sql`${table.genderPreference} IN ('open', 'mens', 'womens', 'mixed')`,
+    ),
+  ],
+);
+
+export const pickupJoinRequests = pgTable(
+  "pickup_join_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pickupSessionId: uuid("pickup_session_id")
+      .notNull()
+      .references(() => pickupSessions.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    status: varchar("status", { length: 24 }).notNull().default("requested"),
+    note: text("note"),
+    reviewedByPersonId: uuid("reviewed_by_person_id").references(
+      () => people.id,
+    ),
+    reviewedAt: timestamp("reviewed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("pickup_join_request_session_person_unique").on(
+      table.pickupSessionId,
+      table.personId,
+    ),
+    index("pickup_join_request_host_queue_idx").on(
+      table.pickupSessionId,
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "pickup_join_request_status_valid",
+      sql`${table.status} IN ('requested', 'approved', 'rejected', 'cancelled', 'expired')`,
     ),
   ],
 );

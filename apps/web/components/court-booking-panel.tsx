@@ -139,7 +139,7 @@ export function CourtBookingPanel({
   );
   const dates = useMemo(
     () =>
-      Array.from({ length: 10 }, (_, index) => addDays(selectedDate, index)),
+      Array.from({ length: 9 }, (_, index) => addDays(selectedDate, index - 4)),
     [selectedDate],
   );
   const uniqueStarts = useMemo(

@@ -31,7 +31,10 @@ import {
   activateCourtAction,
   blockCourtTimeAction,
   createCourtAction,
+  createMarketingCampaignAction,
+  createMarketingFlowAction,
   createPlayerInvitationAction,
+  createStaffInvitationAction,
   createProgramSessionAction,
   createRatePlanAction,
   createVenueAction,
@@ -277,6 +280,152 @@ function PlayerInvitationComposer({
             <div className="hq-empty">
               <strong>No invitations yet.</strong>
               <span>The first player invitation will appear here.</span>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function TeamMemberComposer({
+  workspace,
+}: {
+  readonly workspace: OperatorWorkspace;
+}) {
+  const [state, action, pending] = useActionState(
+    createStaffInvitationAction,
+    initialOperatorActionState,
+  );
+  return (
+    <div className="operator-controls-grid operator-people-controls">
+      <section className="hq-card operator-control-card">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">Team · invite</span>
+            <h2>Invite a coach or operator.</h2>
+            <p>
+              Set the role and worker classification once. They claim their own
+              identity and complete their address, availability, and goals.
+            </p>
+          </div>
+          <UserPlus aria-hidden size={24} />
+        </header>
+        <form action={action} className="operator-form">
+          <div className="operator-form-grid operator-form-grid--two">
+            <label>
+              <span>Full name</span>
+              <input name="invitedName" required />
+            </label>
+            <label>
+              <span>Role</span>
+              <select name="role" defaultValue="coach">
+                <option value="coach">Coach</option>
+                <option value="manager">Manager</option>
+                <option value="front-desk">Front desk</option>
+                <option value="accountant">Accountant</option>
+              </select>
+            </label>
+            <label>
+              <span>Email</span>
+              <input name="invitedEmail" type="email" />
+            </label>
+            <label>
+              <span>Mobile · E.164</span>
+              <input
+                name="invitedPhoneE164"
+                inputMode="tel"
+                placeholder="+17045550123"
+              />
+            </label>
+            <label>
+              <span>Worker classification</span>
+              <select
+                name="workerClassification"
+                defaultValue="1099-contractor"
+              >
+                <option value="1099-contractor">1099 contractor</option>
+                <option value="w2-employee">W-2 employee</option>
+              </select>
+            </label>
+            <label>
+              <span>Send by</span>
+              <select name="preferredChannel" defaultValue="email">
+                <option value="email">Email · Resend</option>
+                <option value="sms">SMS · Sent.dm</option>
+              </select>
+            </label>
+          </div>
+          <div className="operator-legal-boundary">
+            <ShieldCheck aria-hidden size={18} />
+            <p>
+              Classification is organization-controlled and cannot be changed by
+              the invited team member. Duna records the selection but does not
+              determine employment status.
+            </p>
+          </div>
+          <label className="operator-confirmation">
+            <input name="confirmed" required type="checkbox" value="true" />
+            <span>
+              <strong>I reviewed the role and classification.</strong>
+              The recipient will see both before accepting.
+            </span>
+          </label>
+          <div className="operator-form-footer">
+            <ActionNotice state={state} />
+            <SubmitButton pending={pending}>Send team invitation</SubmitButton>
+          </div>
+        </form>
+      </section>
+      <section className="hq-card operator-control-card operator-invite-status">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">Pending team access</span>
+            <h2>{workspace.staffInvitations.length} recent invitations</h2>
+            <p>Email uses Resend. SMS uses Sent.dm approved templates.</p>
+          </div>
+          <Badge
+            tone={
+              workspace.deliveryProviders.email ||
+              workspace.deliveryProviders.sms
+                ? "live"
+                : "warning"
+            }
+          >
+            {workspace.deliveryProviders.email ||
+            workspace.deliveryProviders.sms
+              ? "delivery ready"
+              : "link only"}
+          </Badge>
+        </header>
+        <div className="operator-compact-list">
+          {workspace.staffInvitations.map((invitation) => (
+            <article key={invitation.id}>
+              <span>
+                <strong>{invitation.invitedName}</strong>
+                <small>
+                  {invitation.role.replaceAll("-", " ")} ·{" "}
+                  {invitation.workerClassification.replaceAll("-", " ")} ·{" "}
+                  {invitation.deliveryStatus}
+                </small>
+              </span>
+              <Badge
+                tone={
+                  invitation.status === "claimed"
+                    ? "live"
+                    : invitation.status === "pending"
+                      ? "warning"
+                      : "neutral"
+                }
+              >
+                {invitation.status}
+              </Badge>
+            </article>
+          ))}
+          {workspace.staffInvitations.length === 0 && (
+            <div className="hq-empty">
+              <strong>No team invitations yet.</strong>
+              <span>Invite the first coach or operator here.</span>
             </div>
           )}
         </div>
@@ -1702,6 +1851,191 @@ function MessageComposer({
   );
 }
 
+function MarketingFlowComposer() {
+  const [trigger, setTrigger] = useState("no-booking");
+  const [state, action, pending] = useActionState(
+    createMarketingFlowAction,
+    initialOperatorActionState,
+  );
+  return (
+    <section className="hq-card operator-control-card marketing-flow-builder">
+      <header className="hq-card-heading">
+        <div>
+          <span className="hq-eyebrow">Automations · simple by design</span>
+          <h2>Segment → Trigger → Action</h2>
+          <p>
+            Duna resolves membership, activity, consent, and guardian routing
+            behind these three choices.
+          </p>
+        </div>
+        <Sparkles aria-hidden size={24} />
+      </header>
+      <form action={action} className="operator-form">
+        <div className="marketing-flow-path" aria-label="Marketing flow">
+          <label>
+            <small>1 · Segment</small>
+            <strong>Who?</strong>
+            <select name="segment" defaultValue="inactive-30-days">
+              <option value="all-active">All active people</option>
+              <option value="active-members">Active members</option>
+              <option value="inactive-30-days">Inactive 30+ days</option>
+              <option value="high-churn-risk">High churn signal</option>
+              <option value="upcoming-participants">
+                Upcoming participants
+              </option>
+            </select>
+          </label>
+          <span aria-hidden>→</span>
+          <label>
+            <small>2 · Trigger</small>
+            <strong>When?</strong>
+            <select
+              name="trigger"
+              value={trigger}
+              onChange={(event) => setTrigger(event.target.value)}
+            >
+              <option value="manual">After manual review</option>
+              <option value="no-booking">No recent booking</option>
+              <option value="payment-failed">Payment failed</option>
+              <option value="event-published">Event published</option>
+              <option value="membership-renewal">Membership renewal</option>
+            </select>
+          </label>
+          <span aria-hidden>→</span>
+          <label>
+            <small>3 · Action</small>
+            <strong>What?</strong>
+            <select name="channel" defaultValue="email">
+              <option value="email">Send email</option>
+              <option value="sms">Send SMS / RCS</option>
+              <option value="push">Send push</option>
+            </select>
+          </label>
+        </div>
+        <div className="operator-form-grid operator-form-grid--two">
+          <label>
+            <span>Flow name</span>
+            <input name="name" placeholder="Bring regulars back" required />
+          </label>
+          {trigger === "no-booking" && (
+            <label>
+              <span>Days without a booking</span>
+              <input
+                defaultValue="30"
+                max="365"
+                min="1"
+                name="triggerDays"
+                type="number"
+              />
+            </label>
+          )}
+          <label className="operator-field--wide">
+            <span>Internal description</span>
+            <input
+              name="description"
+              placeholder="Reconnect members before they drift away."
+            />
+          </label>
+          <label className="operator-field--wide">
+            <span>Subject · email only</span>
+            <input name="subject" placeholder="Ready for your next run?" />
+          </label>
+          <label className="operator-field--wide">
+            <span>Message</span>
+            <textarea
+              name="body"
+              placeholder="Hi {{first_name}}, we saved a few upcoming sessions you may like…"
+              required
+              rows={6}
+            />
+          </label>
+        </div>
+        <label className="operator-confirmation">
+          <input name="confirmed" required type="checkbox" value="true" />
+          <span>
+            <strong>Save as a private draft.</strong>
+            Activation and every outbound audience remain a separate review
+            step.
+          </span>
+        </label>
+        <div className="operator-form-footer">
+          <ActionNotice state={state} />
+          <SubmitButton pending={pending}>Save flow draft</SubmitButton>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function MarketingCampaignComposer() {
+  const [state, action, pending] = useActionState(
+    createMarketingCampaignAction,
+    initialOperatorActionState,
+  );
+  return (
+    <section className="hq-card operator-control-card">
+      <header className="hq-card-heading">
+        <div>
+          <span className="hq-eyebrow">One-time campaign</span>
+          <h2>Start with the audience.</h2>
+          <p>
+            Build a reviewable campaign draft. Recipient resolution and consent
+            checks happen before scheduling.
+          </p>
+        </div>
+        <MessageSquareText aria-hidden size={24} />
+      </header>
+      <form action={action} className="operator-form">
+        <div className="operator-form-grid operator-form-grid--two">
+          <label>
+            <span>Campaign name</span>
+            <input name="name" placeholder="August clinics" required />
+          </label>
+          <label>
+            <span>Audience</span>
+            <select name="segment" defaultValue="all-active">
+              <option value="all-active">All active people</option>
+              <option value="active-members">Active members</option>
+              <option value="inactive-30-days">Inactive 30+ days</option>
+              <option value="high-churn-risk">High churn signal</option>
+              <option value="upcoming-participants">
+                Upcoming participants
+              </option>
+            </select>
+          </label>
+          <label>
+            <span>Channel</span>
+            <select name="channel" defaultValue="email">
+              <option value="email">Email · Resend</option>
+              <option value="sms">SMS / RCS · Sent.dm</option>
+              <option value="push">Push notification</option>
+            </select>
+          </label>
+          <label>
+            <span>Subject · email only</span>
+            <input name="subject" placeholder="Play more this month" />
+          </label>
+          <label className="operator-field--wide">
+            <span>Message</span>
+            <textarea name="body" required rows={7} />
+          </label>
+        </div>
+        <label className="operator-confirmation">
+          <input name="confirmed" required type="checkbox" value="true" />
+          <span>
+            <strong>Save as a private draft.</strong>
+            This does not schedule or send the campaign.
+          </span>
+        </label>
+        <div className="operator-form-footer">
+          <ActionNotice state={state} />
+          <SubmitButton pending={pending}>Save campaign draft</SubmitButton>
+        </div>
+      </form>
+    </section>
+  );
+}
+
 function FacilitiesControls({
   workspace,
 }: {
@@ -1727,7 +2061,16 @@ export function OperatorControls({
   readonly workspace: OperatorWorkspace;
 }) {
   if (module === "messages") {
-    return <MessageComposer workspace={workspace} />;
+    return (
+      <div className="commerce-controls">
+        <MarketingFlowComposer />
+        <MarketingCampaignComposer />
+        <MessageComposer workspace={workspace} />
+      </div>
+    );
+  }
+  if (module === "team") {
+    return <TeamMemberComposer workspace={workspace} />;
   }
   if (module === "members") {
     return (

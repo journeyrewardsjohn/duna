@@ -11,6 +11,7 @@ import {
   membershipTiers,
   organizationMemberships,
   people,
+  pickupJoinRequests,
   pickupSessions,
   ratings,
   sessions,
@@ -40,6 +41,7 @@ export type CommerceErrorCode =
   | "PICKUP_NOT_FOUND"
   | "PICKUP_NOT_JOINABLE"
   | "PICKUP_HAS_ENDED"
+  | "PICKUP_APPROVAL_REQUIRED"
   | "COURT_NOT_FOUND"
   | "COURT_NOT_BOOKABLE"
   | "INVALID_BOOKING_TIME"
@@ -410,6 +412,7 @@ export async function evaluatePickupParticipant(input: {
   readonly pickupSessionId: string;
   readonly subjectPersonId: string;
   readonly now: Date;
+  readonly requireApproval?: boolean;
 }): Promise<{
   readonly pickup: typeof pickupSessions.$inferSelect;
   readonly decision: EligibilityResult;
@@ -438,6 +441,26 @@ export async function evaluatePickupParticipant(input: {
       "PICKUP_HAS_ENDED",
       "This pickup has already ended.",
     );
+  }
+  if (
+    pickup.approvalRequired &&
+    input.requireApproval !== false &&
+    pickup.hostPersonId !== authority.person.id
+  ) {
+    const request = await getDatabase().query.pickupJoinRequests.findFirst({
+      where: and(
+        eq(pickupJoinRequests.pickupSessionId, pickup.id),
+        eq(pickupJoinRequests.personId, authority.person.id),
+        eq(pickupJoinRequests.status, "approved"),
+        gt(pickupJoinRequests.expiresAt, input.now),
+      ),
+    });
+    if (!request) {
+      throw new CommerceError(
+        "PICKUP_APPROVAL_REQUIRED",
+        "The host must approve your request before checkout.",
+      );
+    }
   }
   const rating = await getDatabase().query.ratings.findFirst({
     where: and(

@@ -17,6 +17,7 @@ import {
   MapPin,
   Plus,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Ticket,
   Trash2,
@@ -129,6 +130,7 @@ const stepDefinitions = [
   { key: "divisions", label: "Divisions", icon: UsersRound },
   { key: "tickets", label: "Tickets", icon: Ticket },
   { key: "experience", label: "Experience", icon: Sparkles },
+  { key: "rules", label: "Smart rules", icon: SlidersHorizontal },
   { key: "policies", label: "Policies", icon: ShieldCheck },
   { key: "review", label: "Review", icon: ListChecks },
 ] as const;
@@ -608,6 +610,14 @@ export function EventBuilder({
   const [tickets, setTickets] = useState<readonly TicketDraft[]>([]);
   const [features, setFeatures] = useState<readonly FeatureDraft[]>([]);
   const [policies, setPolicies] = useState<readonly PolicyDraft[]>([]);
+  const [waitlistEnabled, setWaitlistEnabled] = useState(true);
+  const [allowLateCancellation, setAllowLateCancellation] = useState(false);
+  const [freeCancellationHours, setFreeCancellationHours] = useState(24);
+  const [bookingOpensDays, setBookingOpensDays] = useState(90);
+  const [bookingClosesMinutes, setBookingClosesMinutes] = useState(60);
+  const [autoCancelLowAttendance, setAutoCancelLowAttendance] = useState(false);
+  const [minimumAttendance, setMinimumAttendance] = useState(4);
+  const [approvalRequired, setApprovalRequired] = useState(false);
   const [recurrenceInterval, setRecurrenceInterval] = useState<
     "weekly" | "biweekly"
   >("weekly");
@@ -804,6 +814,16 @@ export function EventBuilder({
         requireFullScroll:
           policy.kind === "waiver" ? true : policy.requireFullScroll,
       })),
+      smartRules: {
+        waitlistEnabled,
+        allowLateCancellation,
+        freeCancellationHours,
+        bookingOpensDays,
+        bookingClosesMinutes,
+        autoCancelLowAttendance,
+        minimumAttendance,
+        approvalRequired,
+      },
       recurrence:
         kind === "league"
           ? {
@@ -818,16 +838,23 @@ export function EventBuilder({
     [
       address,
       addressPlace,
+      allowLateCancellation,
+      approvalRequired,
+      autoCancelLowAttendance,
+      bookingClosesMinutes,
+      bookingOpensDays,
       courtIds,
       customCourts,
       description,
       divisions,
       endsAt,
+      freeCancellationHours,
       features,
       kind,
       locationMode,
       mediaKind,
       mediaUrl,
+      minimumAttendance,
       onlineUrl,
       policies,
       recurrenceInterval,
@@ -843,6 +870,7 @@ export function EventBuilder({
       title,
       venueId,
       venueName,
+      waitlistEnabled,
       workspace.messageRecipients,
     ],
   );
@@ -866,6 +894,7 @@ export function EventBuilder({
       )) ||
     current.key === "tickets" ||
     current.key === "experience" ||
+    current.key === "rules" ||
     (current.key === "policies" &&
       policies.every(
         (policy) => policy.title.trim() && policy.markdown.trim(),
@@ -1784,6 +1813,153 @@ export function EventBuilder({
             </section>
           )}
 
+          {current.key === "rules" && (
+            <section className="event-builder-panel event-builder-panel--flush">
+              <header>
+                <span>
+                  <SlidersHorizontal aria-hidden size={20} />
+                </span>
+                <div>
+                  <h3>Set the guardrails once.</h3>
+                  <p>
+                    Duna applies these rules consistently at discovery,
+                    checkout, cancellation, and event operations.
+                  </p>
+                </div>
+                <Badge tone="positive">Recommended defaults</Badge>
+              </header>
+
+              <div className="smart-rule-grid">
+                <article className={waitlistEnabled ? "enabled" : undefined}>
+                  <Toggle
+                    checked={waitlistEnabled}
+                    detail="Keep demand when entries or tickets sell out."
+                    label="Automatic waitlist"
+                    onChange={setWaitlistEnabled}
+                  />
+                </article>
+                <article className={approvalRequired ? "enabled" : undefined}>
+                  <Toggle
+                    checked={approvalRequired}
+                    detail="Review requests before a player is admitted and charged."
+                    label="Require approval"
+                    onChange={setApprovalRequired}
+                  />
+                </article>
+                <article
+                  className={allowLateCancellation ? "enabled" : undefined}
+                >
+                  <Toggle
+                    checked={allowLateCancellation}
+                    detail="Let players cancel after the free-cancellation window."
+                    label="Allow late cancellations"
+                    onChange={setAllowLateCancellation}
+                  />
+                  <label>
+                    <span>Free cancellation until</span>
+                    <div>
+                      <input
+                        disabled={!allowLateCancellation}
+                        min={0}
+                        onChange={(event) =>
+                          setFreeCancellationHours(
+                            Math.max(0, Number(event.target.value)),
+                          )
+                        }
+                        type="number"
+                        value={freeCancellationHours}
+                      />
+                      <small>hours before start</small>
+                    </div>
+                  </label>
+                </article>
+                <article>
+                  <div className="smart-rule-copy">
+                    <strong>Booking window</strong>
+                    <small>
+                      Open early enough to plan, then close before operations
+                      begin.
+                    </small>
+                  </div>
+                  <div className="smart-rule-inputs">
+                    <label>
+                      <span>Opens</span>
+                      <div>
+                        <input
+                          min={0}
+                          onChange={(event) =>
+                            setBookingOpensDays(
+                              Math.max(0, Number(event.target.value)),
+                            )
+                          }
+                          type="number"
+                          value={bookingOpensDays}
+                        />
+                        <small>days ahead</small>
+                      </div>
+                    </label>
+                    <label>
+                      <span>Closes</span>
+                      <div>
+                        <input
+                          min={0}
+                          onChange={(event) =>
+                            setBookingClosesMinutes(
+                              Math.max(0, Number(event.target.value)),
+                            )
+                          }
+                          type="number"
+                          value={bookingClosesMinutes}
+                        />
+                        <small>minutes before</small>
+                      </div>
+                    </label>
+                  </div>
+                </article>
+                <article
+                  className={autoCancelLowAttendance ? "enabled" : undefined}
+                >
+                  <Toggle
+                    checked={autoCancelLowAttendance}
+                    detail="Protect staff and venue time when demand is too low."
+                    label="Auto-cancel low attendance"
+                    onChange={setAutoCancelLowAttendance}
+                  />
+                  <label>
+                    <span>Minimum attendance</span>
+                    <div>
+                      <input
+                        disabled={!autoCancelLowAttendance}
+                        min={1}
+                        onChange={(event) =>
+                          setMinimumAttendance(
+                            Math.max(1, Number(event.target.value)),
+                          )
+                        }
+                        type="number"
+                        value={minimumAttendance}
+                      />
+                      <small>confirmed players</small>
+                    </div>
+                  </label>
+                </article>
+              </div>
+
+              <aside className="smart-rule-summary">
+                <ShieldCheck aria-hidden size={21} />
+                <span>
+                  <strong>
+                    Players see the important parts before booking.
+                  </strong>
+                  <small>
+                    Booking, cancellation, approval, and waitlist terms stay
+                    attached to this event version for a clear audit trail.
+                  </small>
+                </span>
+              </aside>
+            </section>
+          )}
+
           {current.key === "policies" && (
             <section className="event-builder-panel event-builder-panel--flush">
               <header>
@@ -1981,6 +2157,26 @@ export function EventBuilder({
                     <small>
                       {policies.filter((policy) => policy.required).length}{" "}
                       required at checkout
+                    </small>
+                  </span>
+                </article>
+                <article>
+                  <SlidersHorizontal aria-hidden size={20} />
+                  <span>
+                    <strong>
+                      {
+                        [
+                          waitlistEnabled,
+                          approvalRequired,
+                          allowLateCancellation,
+                          autoCancelLowAttendance,
+                        ].filter(Boolean).length
+                      }{" "}
+                      active smart rules
+                    </strong>
+                    <small>
+                      Booking opens {bookingOpensDays} days ahead and closes{" "}
+                      {bookingClosesMinutes} minutes before start
                     </small>
                   </span>
                 </article>

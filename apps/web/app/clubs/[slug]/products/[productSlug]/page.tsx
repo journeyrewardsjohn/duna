@@ -11,6 +11,7 @@ import {
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CatalogCheckoutPanel } from "@/components/catalog-checkout-panel";
+import { MarkdownContent } from "@/components/markdown-content";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
@@ -38,6 +39,13 @@ export default async function CatalogProductPage({
     (candidate) => candidate.slug === productSlug,
   );
   if (!storefront || !item) notFound();
+  const offerEligibility = await caller.player
+    .catalogOfferEligibility({ catalogItemId: item.id })
+    .catch(() => ({
+      isMember: false,
+      included: false,
+      remainingBookings: undefined,
+    }));
   const organizationBenefits = wallets.find(
     (wallet) => wallet.organizationId === storefront.organizationId,
   );
@@ -46,6 +54,17 @@ export default async function CatalogProductPage({
     organizationBenefits?.membershipStatus === "active" ||
     organizationBenefits?.membershipStatus === "trialing";
   const media = item.media[0];
+  const benefits = Array.isArray(item.configuration.benefits)
+    ? item.configuration.benefits.filter(
+        (benefit): benefit is string => typeof benefit === "string",
+      )
+    : [];
+  const membershipConfiguration =
+    item.configuration.membership &&
+    typeof item.configuration.membership === "object" &&
+    !Array.isArray(item.configuration.membership)
+      ? (item.configuration.membership as Readonly<Record<string, unknown>>)
+      : undefined;
 
   return (
     <main className="public-detail catalog-product-page">
@@ -76,8 +95,39 @@ export default async function CatalogProductPage({
               </p>
               {item.description && (
                 <div className="catalog-product-description">
-                  {item.description}
+                  <MarkdownContent>{item.description}</MarkdownContent>
                 </div>
+              )}
+              {(benefits.length > 0 || membershipConfiguration) && (
+                <section className="catalog-membership-inclusions">
+                  <span className="section__eyebrow">What is included</span>
+                  <div>
+                    {Number(
+                      membershipConfiguration?.includedCreditsPerCycle ?? 0,
+                    ) > 0 && (
+                      <article>
+                        <WalletCards size={18} />
+                        <span>
+                          <strong>
+                            {
+                              membershipConfiguration?.includedCreditsPerCycle as number
+                            }{" "}
+                            credits each billing cycle
+                          </strong>
+                          <small>Valid only with this organization.</small>
+                        </span>
+                      </article>
+                    )}
+                    {benefits.map((benefit) => (
+                      <article key={benefit}>
+                        <Check size={18} />
+                        <span>
+                          <strong>{benefit}</strong>
+                        </span>
+                      </article>
+                    ))}
+                  </div>
+                </section>
               )}
               <div className="catalog-product-benefits">
                 <article>
@@ -152,6 +202,8 @@ export default async function CatalogProductPage({
               paymentsReady: storefront.paymentsReady,
             }}
             isMember={isMember}
+            membershipIncluded={offerEligibility.included}
+            membershipRemainingBookings={offerEligibility.remainingBookings}
             walletCredits={walletCredits}
           />
         </section>

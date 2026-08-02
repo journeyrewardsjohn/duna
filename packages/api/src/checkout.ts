@@ -537,6 +537,7 @@ async function loadCheckoutEvent(
         venueOrganizationId: venues.organizationId,
         priceMinor: pickupSessions.costMinor,
         currency: pickupSessions.currency,
+        approvalRequired: pickupSessions.approvalRequired,
       })
       .from(pickupSessions)
       .leftJoin(venues, eq(pickupSessions.venueId, venues.id))
@@ -560,6 +561,7 @@ async function loadCheckoutEvent(
     kind: "pickup",
     priceMinor: pickup.priceMinor,
     currency: currency(pickup.currency),
+    approvalRequired: pickup.approvalRequired,
     organization,
   };
 }
