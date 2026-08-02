@@ -60,41 +60,34 @@ describe("weather and daylight planning", () => {
     ).toBe("after-dark");
   });
 
-  it("normalizes Tomorrow.io timelines and caches identical forecasts", async () => {
+  it("normalizes Tomorrow.io forecasts and caches identical forecasts", async () => {
     vi.stubEnv("TOMORROW_IO_API_KEY", "test-key");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          data: {
-            timelines: [
+          timelines: {
+            hourly: [
               {
-                timestep: "1h",
-                intervals: [
-                  {
-                    startTime: "2026-08-03T15:00:00.000Z",
-                    values: {
-                      temperature: 24,
-                      weatherCode: 1101,
-                      precipitationProbability: 12,
-                    },
-                  },
-                ],
+                time: "2026-08-03T15:00:00.000Z",
+                values: {
+                  temperature: 24,
+                  weatherCode: 1101,
+                  precipitationProbability: 12,
+                  windSpeed: 5,
+                },
               },
+            ],
+            daily: [
               {
-                timestep: "1d",
-                intervals: [
-                  {
-                    startTime: "2026-08-03T07:00:00.000Z",
-                    values: {
-                      temperatureMax: 27,
-                      temperatureMin: 18,
-                      weatherCodeMax: 1101,
-                      precipitationProbabilityMax: 12,
-                      sunriseTime: "2026-08-03T13:05:00.000Z",
-                      sunsetTime: "2026-08-04T02:52:00.000Z",
-                    },
-                  },
-                ],
+                time: "2026-08-03T07:00:00.000Z",
+                values: {
+                  temperatureMax: 27,
+                  temperatureMin: 18,
+                  weatherCodeMax: 1101,
+                  precipitationProbabilityMax: 12,
+                  sunriseTime: "2026-08-03T13:05:00.000Z",
+                  sunsetTime: "2026-08-04T02:52:00.000Z",
+                },
               },
             ],
           },
@@ -116,14 +109,12 @@ describe("weather and daylight planning", () => {
     const second = await loadWeatherForecast(input);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(
-      JSON.parse(
-        String((fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.body),
-      ),
-    ).toMatchObject({
-      location: [33.8847, -118.4109],
-      timesteps: ["1h", "1d"],
-    });
+    const requestUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    expect(requestUrl.origin + requestUrl.pathname).toBe(
+      "https://api.tomorrow.io/v4/weather/forecast",
+    );
+    expect(requestUrl.searchParams.get("location")).toBe("33.8847,-118.4109");
+    expect(requestUrl.searchParams.get("units")).toBe("metric");
     expect(second).toEqual(first);
     expect(first.source).toBe("tomorrow.io");
     expect(first.days[0]).toMatchObject({
@@ -137,7 +128,76 @@ describe("weather and daylight planning", () => {
     ).toMatchObject({
       temperatureC: 24,
       precipitationProbability: 12,
+      windSpeedKph: 18,
     });
+  });
+
+  it("falls back to advanced timelines when the forecast endpoint is unavailable", async () => {
+    vi.stubEnv("TOMORROW_IO_API_KEY", "test-key");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 403 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              timelines: [
+                {
+                  timestep: "1h",
+                  intervals: [
+                    {
+                      startTime: "2026-08-03T15:00:00.000Z",
+                      values: {
+                        temperature: 24,
+                        weatherCode: 1101,
+                        precipitationProbability: 12,
+                      },
+                    },
+                  ],
+                },
+                {
+                  timestep: "1d",
+                  intervals: [
+                    {
+                      startTime: "2026-08-03T07:00:00.000Z",
+                      values: {
+                        temperatureMax: 27,
+                        temperatureMin: 18,
+                        weatherCodeMax: 1101,
+                        precipitationProbabilityMax: 12,
+                        sunriseTime: "2026-08-03T13:05:00.000Z",
+                        sunsetTime: "2026-08-04T02:52:00.000Z",
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const forecast = await loadWeatherForecast({
+      latitude: 33.8847,
+      longitude: -118.4109,
+      timezone: "America/Los_Angeles",
+      startsAt: new Date("2026-08-03T07:00:00.000Z"),
+      endsAt: new Date("2026-08-04T06:59:59.000Z"),
+      now: new Date("2026-08-02T12:00:00.000Z"),
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(
+      JSON.parse(
+        String((fetchMock.mock.calls[1]?.[1] as RequestInit | undefined)?.body),
+      ),
+    ).toMatchObject({
+      location: [33.8847, -118.4109],
+      timesteps: ["1h", "1d"],
+    });
+    expect(forecast.source).toBe("tomorrow.io");
+    expect(forecast.hourly).toHaveLength(1);
   });
 
   it("maps severe weather to planning-friendly presentation", () => {
