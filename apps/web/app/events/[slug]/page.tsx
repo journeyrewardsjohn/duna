@@ -25,6 +25,7 @@ import { SiteHeader } from "@/components/site-header";
 import { ProEventDetail } from "@/components/pro-event-detail";
 import { MarkdownContent } from "@/components/markdown-content";
 import { PickupEventActions } from "@/components/pickup-event-actions";
+import { WeatherForecastCard } from "@/components/weather-forecast";
 import { getServerCaller } from "@/lib/api";
 
 function words(value: string | undefined, fallback = "Configured") {
@@ -202,6 +203,14 @@ export default async function EventPage({
             </small>
           </article>
         </div>
+      </section>
+
+      <section className="event-public__weather">
+        <WeatherForecastCard
+          forecast={event.weather}
+          instant={event.startsAt}
+          title="Forecast at first serve"
+        />
       </section>
 
       <section className="event-public__layout">

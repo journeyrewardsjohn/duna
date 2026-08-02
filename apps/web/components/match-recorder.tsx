@@ -81,10 +81,15 @@ function PlayerAvatar({
 
 export function MatchRecorder({
   currentPlayer,
+  initialWatchScores = [],
   players,
   venues,
 }: {
   readonly currentPlayer: PersonSummary;
+  readonly initialWatchScores?: readonly {
+    readonly a: number;
+    readonly b: number;
+  }[];
   readonly players: readonly PersonSummary[];
   readonly venues: readonly VenueSummary[];
 }) {
@@ -96,14 +101,21 @@ export function MatchRecorder({
   const [venueId, setVenueId] = useState("");
   const [playedAt, setPlayedAt] = useState(localDateTime);
   const [matchLength, setMatchLength] = useState<"single" | "best-of-3">(
-    "best-of-3",
+    initialWatchScores.length === 1 ? "single" : "best-of-3",
   );
-  const [thirdSet, setThirdSet] = useState(false);
-  const [setScores, setSetScores] = useState([
-    { a: "", b: "" },
-    { a: "", b: "" },
-    { a: "", b: "" },
-  ]);
+  const [thirdSet, setThirdSet] = useState(initialWatchScores.length >= 3);
+  const [setScores, setSetScores] = useState(() =>
+    Array.from({ length: 3 }, (_, index) => ({
+      a:
+        initialWatchScores[index] === undefined
+          ? ""
+          : String(initialWatchScores[index]!.a),
+      b:
+        initialWatchScores[index] === undefined
+          ? ""
+          : String(initialWatchScores[index]!.b),
+    })),
+  );
   const [scoringSystem, setScoringSystem] = useState<"rally" | "sideout">(
     "rally",
   );
@@ -434,6 +446,22 @@ export function MatchRecorder({
           it, but it never gets in the way.
         </p>
       </section>
+
+      {initialWatchScores.length > 0 && (
+        <aside className="match-recorder__watch-draft">
+          <span aria-hidden>⌚</span>
+          <div>
+            <strong>Score captured on Apple Watch</strong>
+            <small>
+              The sets are filled in. Add the players and confirm consent before
+              this result is submitted from your signed-in account.
+            </small>
+          </div>
+          <b>
+            {initialWatchScores.map((set) => `${set.a}–${set.b}`).join("  ")}
+          </b>
+        </aside>
+      )}
 
       <section className="match-recorder__mode" aria-label="Recording mode">
         <button

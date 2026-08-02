@@ -1,0 +1,3 @@
+ALTER TABLE "rally_events" ADD COLUMN "reported_by_person_id" uuid;--> statement-breakpoint
+ALTER TABLE "rally_events" ADD CONSTRAINT "rally_events_reported_by_person_id_people_id_fk" FOREIGN KEY ("reported_by_person_id") REFERENCES "public"."people"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "rally_event_match_reporter_idx" ON "rally_events" USING btree ("match_id","reported_by_person_id");

@@ -229,6 +229,60 @@ export interface EventTicketSummary {
   readonly availableInPerson: boolean;
 }
 
+export type WeatherIcon =
+  | "clear"
+  | "mostly-clear"
+  | "partly-cloudy"
+  | "cloudy"
+  | "fog"
+  | "drizzle"
+  | "rain"
+  | "snow"
+  | "storm"
+  | "wind"
+  | "unknown";
+
+export interface WeatherForecastPoint {
+  readonly startsAt: string;
+  readonly temperatureC?: number;
+  readonly apparentTemperatureC?: number;
+  readonly precipitationProbability?: number;
+  readonly precipitationIntensity?: number;
+  readonly windSpeedKph?: number;
+  readonly windGustKph?: number;
+  readonly humidity?: number;
+  readonly weatherCode?: number;
+  readonly condition: string;
+  readonly icon: WeatherIcon;
+}
+
+export interface WeatherForecastDay {
+  readonly date: string;
+  readonly temperatureHighC?: number;
+  readonly temperatureLowC?: number;
+  readonly precipitationProbability?: number;
+  readonly windGustKph?: number;
+  readonly weatherCode?: number;
+  readonly condition: string;
+  readonly icon: WeatherIcon;
+  readonly sunriseAt?: string;
+  readonly sunsetAt?: string;
+  readonly daylightSource: "tomorrow.io" | "calculated";
+}
+
+export interface WeatherForecast {
+  readonly provider: "Tomorrow.io";
+  readonly source: "tomorrow.io" | "calculated-daylight";
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly timezone: string;
+  readonly fetchedAt: string;
+  readonly updatedAt: string;
+  readonly expiresAt: string;
+  readonly hourly: readonly WeatherForecastPoint[];
+  readonly days: readonly WeatherForecastDay[];
+}
+
 export interface EventSummary {
   readonly id: string;
   readonly slug: string;
@@ -260,6 +314,7 @@ export interface EventSummary {
   readonly lifecycleStatus?: "active" | "cancelled" | "completed";
   readonly live?: boolean;
   readonly imageUrl?: string;
+  readonly weather?: WeatherForecast;
   readonly tags: readonly string[];
 }
 

@@ -31,11 +31,16 @@ function initials(people: MatchScoringState["teamA"]["people"]): string[] {
 export function LiveScoreboard({
   currentPlayer,
   initialMatch,
+  initialWatchScores = [],
   players,
   venues,
 }: {
   readonly currentPlayer: PersonSummary;
   readonly initialMatch?: MatchScoringState;
+  readonly initialWatchScores?: readonly {
+    readonly a: number;
+    readonly b: number;
+  }[];
   readonly players: readonly PersonSummary[];
   readonly venues: readonly VenueSummary[];
 }) {
@@ -192,6 +197,7 @@ export function LiveScoreboard({
     return (
       <MatchRecorder
         currentPlayer={currentPlayer}
+        initialWatchScores={initialWatchScores}
         players={players}
         venues={venues}
       />

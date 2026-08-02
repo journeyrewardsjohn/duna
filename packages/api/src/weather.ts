@@ -1,0 +1,462 @@
+import type {
+  WeatherForecast,
+  WeatherForecastDay,
+  WeatherForecastPoint,
+} from "./contracts";
+
+const TOMORROW_TIMELINES_URL = "https://api.tomorrow.io/v4/timelines";
+const FORECAST_CACHE_MS = 30 * 60_000;
+const TOMORROW_FORECAST_HORIZON_MS = 14 * 24 * 60 * 60_000;
+
+type CacheEntry = {
+  readonly expiresAt: number;
+  readonly value: WeatherForecast;
+};
+
+const forecastCache = new Map<string, CacheEntry>();
+
+type TimelineInterval = {
+  readonly startTime?: unknown;
+  readonly values?: Readonly<Record<string, unknown>>;
+};
+
+type TomorrowResponse = {
+  readonly data?: {
+    readonly timelines?: readonly {
+      readonly timestep?: unknown;
+      readonly intervals?: readonly TimelineInterval[];
+    }[];
+  };
+};
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function isoString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp)
+    ? new Date(timestamp).toISOString()
+    : undefined;
+}
+
+function normalizeDegrees(value: number): number {
+  return ((value % 360) + 360) % 360;
+}
+
+function dayOfYear(date: string): number {
+  const start = Date.UTC(Number(date.slice(0, 4)), 0, 0);
+  const current = Date.UTC(
+    Number(date.slice(0, 4)),
+    Number(date.slice(5, 7)) - 1,
+    Number(date.slice(8, 10)),
+  );
+  return Math.floor((current - start) / 86_400_000);
+}
+
+/**
+ * NOAA's compact sunrise/sunset approximation. Tomorrow.io remains the
+ * authoritative source inside its forecast horizon; this keeps a 90-day court
+ * booking window safe when the weather provider cannot forecast that far out.
+ */
+function calculatedSunTime(input: {
+  readonly date: string;
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly timezone: string;
+  readonly sunrise: boolean;
+}): string | undefined {
+  const radians = Math.PI / 180;
+  const degrees = 180 / Math.PI;
+  const longitudeHour = input.longitude / 15;
+  const approximate =
+    dayOfYear(input.date) + ((input.sunrise ? 6 : 18) - longitudeHour) / 24;
+  const meanAnomaly = 0.9856 * approximate - 3.289;
+  const trueLongitude = normalizeDegrees(
+    meanAnomaly +
+      1.916 * Math.sin(meanAnomaly * radians) +
+      0.02 * Math.sin(2 * meanAnomaly * radians) +
+      282.634,
+  );
+  let rightAscension =
+    normalizeDegrees(
+      Math.atan(0.91764 * Math.tan(trueLongitude * radians)) * degrees,
+    ) / 15;
+  const longitudeQuadrant = Math.floor(trueLongitude / 90) * 90;
+  const rightAscensionQuadrant = Math.floor((rightAscension * 15) / 90) * 90;
+  rightAscension += (longitudeQuadrant - rightAscensionQuadrant) / 15;
+  const sinDeclination = 0.39782 * Math.sin(trueLongitude * radians);
+  const cosDeclination = Math.cos(Math.asin(sinDeclination));
+  const cosHour =
+    (Math.cos(90.833 * radians) -
+      sinDeclination * Math.sin(input.latitude * radians)) /
+    (cosDeclination * Math.cos(input.latitude * radians));
+  if (cosHour > 1 || cosHour < -1) return undefined;
+  const hourAngle =
+    (input.sunrise
+      ? 360 - Math.acos(cosHour) * degrees
+      : Math.acos(cosHour) * degrees) / 15;
+  const localMeanTime =
+    hourAngle + rightAscension - 0.06571 * approximate - 6.622;
+  const utcHour = (((localMeanTime - longitudeHour) % 24) + 24) % 24;
+  const midnight = Date.parse(`${input.date}T00:00:00.000Z`);
+  const candidate = midnight + utcHour * 60 * 60_000;
+  const matchingLocalDay = [-1, 0, 1]
+    .map((dayOffset) => new Date(candidate + dayOffset * 86_400_000))
+    .find((instant) => localDate(instant, input.timezone) === input.date);
+  return matchingLocalDay?.toISOString();
+}
+
+function localDate(instant: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(instant);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+function datesBetween(
+  startsAt: Date,
+  endsAt: Date,
+  timezone: string,
+): readonly string[] {
+  const first = localDate(startsAt, timezone);
+  const last = localDate(endsAt, timezone);
+  const dates: string[] = [];
+  let cursor = new Date(`${first}T12:00:00.000Z`);
+  const limit = new Date(`${last}T12:00:00.000Z`);
+  while (cursor <= limit && dates.length < 32) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor = new Date(cursor.getTime() + 86_400_000);
+  }
+  return dates;
+}
+
+export function weatherPresentation(code: number | undefined): {
+  readonly condition: string;
+  readonly icon: WeatherForecastPoint["icon"];
+} {
+  switch (code) {
+    case 1000:
+      return { condition: "Clear", icon: "clear" };
+    case 1100:
+      return { condition: "Mostly clear", icon: "mostly-clear" };
+    case 1101:
+      return { condition: "Partly cloudy", icon: "partly-cloudy" };
+    case 1102:
+      return { condition: "Mostly cloudy", icon: "partly-cloudy" };
+    case 1001:
+      return { condition: "Cloudy", icon: "cloudy" };
+    case 2000:
+    case 2100:
+      return { condition: "Fog", icon: "fog" };
+    case 4000:
+    case 6000:
+      return { condition: "Drizzle", icon: "drizzle" };
+    case 4001:
+    case 4200:
+    case 4201:
+    case 6001:
+    case 6200:
+    case 6201:
+      return { condition: "Rain", icon: "rain" };
+    case 5000:
+    case 5001:
+    case 5100:
+    case 5101:
+    case 7000:
+    case 7101:
+    case 7102:
+      return { condition: "Snow or ice", icon: "snow" };
+    case 8000:
+      return { condition: "Thunderstorms", icon: "storm" };
+    default:
+      return { condition: "Forecast pending", icon: "unknown" };
+  }
+}
+
+function fallbackDays(input: {
+  readonly startsAt: Date;
+  readonly endsAt: Date;
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly timezone: string;
+}): WeatherForecastDay[] {
+  return datesBetween(input.startsAt, input.endsAt, input.timezone).map(
+    (date) => ({
+      date,
+      condition: "Forecast pending",
+      icon: "unknown",
+      sunriseAt: calculatedSunTime({
+        date,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        timezone: input.timezone,
+        sunrise: true,
+      }),
+      sunsetAt: calculatedSunTime({
+        date,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        timezone: input.timezone,
+        sunrise: false,
+      }),
+      daylightSource: "calculated",
+    }),
+  );
+}
+
+function hourlyPoint(
+  interval: TimelineInterval,
+): WeatherForecastPoint | undefined {
+  const startsAt = isoString(interval.startTime);
+  if (!startsAt) return undefined;
+  const values = interval.values ?? {};
+  const weatherCode = finiteNumber(values.weatherCode);
+  return {
+    startsAt,
+    temperatureC: finiteNumber(values.temperature),
+    apparentTemperatureC: finiteNumber(values.temperatureApparent),
+    precipitationProbability: finiteNumber(values.precipitationProbability),
+    precipitationIntensity: finiteNumber(values.precipitationIntensity),
+    windSpeedKph: finiteNumber(values.windSpeed),
+    windGustKph: finiteNumber(values.windGust),
+    humidity: finiteNumber(values.humidity),
+    weatherCode,
+    ...weatherPresentation(weatherCode),
+  };
+}
+
+function dailyPoint(
+  interval: TimelineInterval,
+  timezone: string,
+): WeatherForecastDay | undefined {
+  const startsAt = isoString(interval.startTime);
+  if (!startsAt) return undefined;
+  const values = interval.values ?? {};
+  const weatherCode =
+    finiteNumber(values.weatherCodeMax) ?? finiteNumber(values.weatherCode);
+  return {
+    date: localDate(new Date(startsAt), timezone),
+    temperatureHighC:
+      finiteNumber(values.temperatureMax) ?? finiteNumber(values.temperature),
+    temperatureLowC: finiteNumber(values.temperatureMin),
+    precipitationProbability:
+      finiteNumber(values.precipitationProbabilityMax) ??
+      finiteNumber(values.precipitationProbability),
+    windGustKph:
+      finiteNumber(values.windGustMax) ?? finiteNumber(values.windGust),
+    weatherCode,
+    ...weatherPresentation(weatherCode),
+    sunriseAt: isoString(values.sunriseTime),
+    sunsetAt: isoString(values.sunsetTime),
+    daylightSource:
+      isoString(values.sunriseTime) || isoString(values.sunsetTime)
+        ? "tomorrow.io"
+        : "calculated",
+  };
+}
+
+function mergeDays(
+  fallback: readonly WeatherForecastDay[],
+  provider: readonly WeatherForecastDay[],
+): readonly WeatherForecastDay[] {
+  const providerByDate = new Map(provider.map((day) => [day.date, day]));
+  return fallback.map((day) => {
+    const forecast = providerByDate.get(day.date);
+    if (!forecast) return day;
+    return {
+      ...day,
+      ...forecast,
+      sunriseAt: forecast.sunriseAt ?? day.sunriseAt,
+      sunsetAt: forecast.sunsetAt ?? day.sunsetAt,
+      daylightSource:
+        forecast.sunriseAt && forecast.sunsetAt
+          ? "tomorrow.io"
+          : day.daylightSource,
+    };
+  });
+}
+
+function forecastKey(input: {
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly timezone: string;
+  readonly startsAt: Date;
+  readonly endsAt: Date;
+}): string {
+  return [
+    input.latitude.toFixed(4),
+    input.longitude.toFixed(4),
+    input.timezone,
+    localDate(input.startsAt, input.timezone),
+    localDate(input.endsAt, input.timezone),
+  ].join(":");
+}
+
+export async function loadWeatherForecast(input: {
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly timezone: string;
+  readonly startsAt: Date;
+  readonly endsAt: Date;
+  readonly now?: Date;
+}): Promise<WeatherForecast> {
+  const now = input.now ?? new Date();
+  const key = forecastKey(input);
+  const cached = forecastCache.get(key);
+  if (cached && cached.expiresAt > now.getTime()) return cached.value;
+  const fetchedAt = now.toISOString();
+  const fallback = fallbackDays(input);
+  let hourly: readonly WeatherForecastPoint[] = [];
+  let providerDays: readonly WeatherForecastDay[] = [];
+  let source: WeatherForecast["source"] = "calculated-daylight";
+  const apiKey = process.env.TOMORROW_IO_API_KEY?.trim();
+  const requestInsideForecastHorizon =
+    input.endsAt.getTime() <= now.getTime() + TOMORROW_FORECAST_HORIZON_MS &&
+    input.endsAt.getTime() >= now.getTime() - 24 * 60 * 60_000;
+  if (apiKey && requestInsideForecastHorizon) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8_000);
+    try {
+      const response = await fetch(
+        `${TOMORROW_TIMELINES_URL}?apikey=${encodeURIComponent(apiKey)}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            location: `${input.latitude},${input.longitude}`,
+            fields: [
+              "temperature",
+              "temperatureApparent",
+              "temperatureMax",
+              "temperatureMin",
+              "weatherCode",
+              "weatherCodeMax",
+              "precipitationProbability",
+              "precipitationProbabilityMax",
+              "precipitationIntensity",
+              "windSpeed",
+              "windGust",
+              "windGustMax",
+              "humidity",
+              "sunriseTime",
+              "sunsetTime",
+            ],
+            units: "metric",
+            timesteps: ["1h", "1d"],
+            startTime: input.startsAt.toISOString(),
+            endTime: input.endsAt.toISOString(),
+            timezone: input.timezone,
+          }),
+          signal: controller.signal,
+        },
+      );
+      if (response.ok) {
+        const payload = (await response.json()) as TomorrowResponse;
+        const timelines = payload.data?.timelines ?? [];
+        hourly =
+          timelines
+            .find((timeline) => timeline.timestep === "1h")
+            ?.intervals?.flatMap((interval) => {
+              const point = hourlyPoint(interval);
+              return point ? [point] : [];
+            }) ?? [];
+        providerDays =
+          timelines
+            .find((timeline) => timeline.timestep === "1d")
+            ?.intervals?.flatMap((interval) => {
+              const point = dailyPoint(interval, input.timezone);
+              return point ? [point] : [];
+            }) ?? [];
+        if (hourly.length > 0 || providerDays.length > 0) {
+          source = "tomorrow.io";
+        }
+      }
+    } catch {
+      // Daylight calculations keep booking safe while provider errors remain
+      // non-blocking. Surfaces clearly label the calculated-only state.
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  const value: WeatherForecast = {
+    provider: "Tomorrow.io",
+    source,
+    latitude: input.latitude,
+    longitude: input.longitude,
+    timezone: input.timezone,
+    fetchedAt,
+    updatedAt: fetchedAt,
+    expiresAt: new Date(now.getTime() + FORECAST_CACHE_MS).toISOString(),
+    hourly,
+    days: mergeDays(fallback, providerDays),
+  };
+  forecastCache.set(key, {
+    value,
+    expiresAt: now.getTime() + FORECAST_CACHE_MS,
+  });
+  if (forecastCache.size > 250) {
+    for (const [cacheKey, entry] of forecastCache) {
+      if (entry.expiresAt <= now.getTime()) forecastCache.delete(cacheKey);
+    }
+  }
+  return value;
+}
+
+export function weatherAt(
+  forecast: WeatherForecast | undefined,
+  instant: Date,
+): WeatherForecastPoint | undefined {
+  if (!forecast || forecast.hourly.length === 0) return undefined;
+  return [...forecast.hourly].sort(
+    (left, right) =>
+      Math.abs(Date.parse(left.startsAt) - instant.getTime()) -
+      Math.abs(Date.parse(right.startsAt) - instant.getTime()),
+  )[0];
+}
+
+export function weatherDay(
+  forecast: WeatherForecast | undefined,
+  date: string,
+): WeatherForecastDay | undefined {
+  return forecast?.days.find((day) => day.date === date);
+}
+
+export type DaylightStatus =
+  | "daylight"
+  | "before-sunrise"
+  | "crosses-sunrise"
+  | "crosses-sunset"
+  | "after-dark"
+  | "unknown";
+
+export function daylightStatus(
+  startsAt: Date,
+  endsAt: Date,
+  day: WeatherForecastDay | undefined,
+): DaylightStatus {
+  if (!day?.sunriseAt || !day.sunsetAt) return "unknown";
+  const sunrise = Date.parse(day.sunriseAt);
+  const sunset = Date.parse(day.sunsetAt);
+  if (endsAt.getTime() <= sunrise) return "before-sunrise";
+  if (startsAt.getTime() < sunrise && endsAt.getTime() > sunrise) {
+    return "crosses-sunrise";
+  }
+  if (startsAt.getTime() >= sunset) return "after-dark";
+  if (startsAt.getTime() < sunset && endsAt.getTime() > sunset) {
+    return "crosses-sunset";
+  }
+  return "daylight";
+}
+
+export function __resetWeatherCacheForTests(): void {
+  forecastCache.clear();
+}

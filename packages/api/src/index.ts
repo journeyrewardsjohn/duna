@@ -27,4 +27,5 @@ export * from "./rate-limit";
 export * from "./repository-contract";
 export * from "./router";
 export * from "./webhooks";
+export * from "./weather";
 export * from "./workflows";

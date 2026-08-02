@@ -111,6 +111,20 @@ const moduleCopy: Record<
   },
 };
 
+function venueWeatherSymbol(icon: string | undefined): string {
+  if (icon === "clear" || icon === "mostly-clear") return "☀";
+  if (icon === "partly-cloudy") return "🌤";
+  if (icon === "rain" || icon === "drizzle") return "🌦";
+  if (icon === "storm") return "⛈";
+  if (icon === "snow") return "❄";
+  if (icon === "fog") return "≋";
+  return "☁";
+}
+
+function venueWeatherTemperature(celsius: number | undefined): string {
+  return celsius === undefined ? "" : `${Math.round((celsius * 9) / 5 + 32)}°`;
+}
+
 function EventInventory({
   dashboard,
   kinds,
@@ -513,7 +527,23 @@ function VenuePortfolioPanel({
                 {venue.locality ?? "City missing"} · {venue.timezone}
               </small>
             </span>
-            <MapPinned aria-hidden size={22} />
+            {venue.weather ? (
+              <span className="venue-weather-now">
+                <strong>
+                  {venueWeatherSymbol(venue.weather.hourly[0]?.icon)}
+                  {venueWeatherTemperature(
+                    venue.weather.hourly[0]?.temperatureC ??
+                      venue.weather.days[0]?.temperatureHighC,
+                  )}
+                </strong>
+                <small>
+                  {venue.weather.hourly[0]?.condition ??
+                    venue.weather.days[0]?.condition}
+                </small>
+              </span>
+            ) : (
+              <MapPinned aria-hidden size={22} />
+            )}
           </header>
           <div>
             <span className="hq-eyebrow">Venue operating view</span>
@@ -575,6 +605,13 @@ function VenuePortfolioPanel({
                           )} / ${ratePlan.rateUnitMinutes} min`
                         : "Rate needed before paid booking"}
                     </small>
+                    <small>
+                      {court.lit
+                        ? "Lit after dark"
+                        : "Daylight-only after sunset"}{" "}
+                      · {court.schedule.length} weekly windows ·{" "}
+                      {court.overrides.length} date blocks
+                    </small>
                   </span>
                   <span>
                     <strong>{court.utilization.percent.toFixed(1)}%</strong>
@@ -596,6 +633,26 @@ function VenuePortfolioPanel({
           >
             Manage courts and rates <ArrowRight aria-hidden size={15} />
           </Link>
+          {venue.weather && (
+            <small className="venue-weather-updated">
+              Sunrise{" "}
+              {venue.weather.days[0]?.sunriseAt
+                ? formatVenueTime(
+                    venue.weather.days[0].sunriseAt,
+                    venue.timezone,
+                  )
+                : "—"}{" "}
+              · sunset{" "}
+              {venue.weather.days[0]?.sunsetAt
+                ? formatVenueTime(
+                    venue.weather.days[0].sunsetAt,
+                    venue.timezone,
+                  )
+                : "—"}{" "}
+              · updated{" "}
+              {formatVenueTime(venue.weather.updatedAt, venue.timezone)}
+            </small>
+          )}
         </article>
       ))}
     </div>

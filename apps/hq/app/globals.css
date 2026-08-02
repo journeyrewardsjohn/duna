@@ -5583,6 +5583,29 @@ button {
   gap: 0.6rem;
 }
 
+.venue-portfolio-card > header .venue-weather-now {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+}
+
+.venue-weather-now strong {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: -0.04em;
+}
+
+.venue-weather-now small,
+.venue-weather-updated {
+  color: var(--color-bone-muted);
+  font-size: 0.52rem;
+}
+
+.venue-weather-updated {
+  letter-spacing: 0.01em;
+}
+
 .venue-portfolio-card > header small,
 .venue-portfolio-card > div > p,
 .venue-court-utilization small {
@@ -9934,6 +9957,17 @@ button {
   font-size: 1.15rem;
 }
 
+.schedule-day-weather {
+  align-items: center;
+  color: var(--color-bone-muted);
+  display: flex;
+  font-size: 0.5rem;
+  gap: 0.15rem;
+  justify-content: center;
+  margin-top: 0.12rem;
+  white-space: nowrap;
+}
+
 .schedule-resource-row {
   display: contents;
 }
@@ -10006,6 +10040,11 @@ button {
   font-size: 0.52rem;
 }
 
+.schedule-event .schedule-event__weather {
+  color: color-mix(in srgb, var(--event-color), var(--color-ink) 42%);
+  margin-top: 0.16rem;
+}
+
 .schedule-month-grid {
   border-left: 1px solid var(--color-line);
   border-top: 1px solid var(--color-line);
@@ -10043,6 +10082,12 @@ button {
 .schedule-month-day > small {
   color: var(--color-bone-muted);
   font-size: 0.52rem;
+}
+
+.schedule-month-day > span:first-child .schedule-month-weather {
+  font-size: 0.72rem;
+  margin-left: auto;
+  margin-right: 0.25rem;
 }
 
 .schedule-calendar__footer {

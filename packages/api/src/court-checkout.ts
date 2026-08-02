@@ -40,6 +40,12 @@ import type { ApiActor } from "./context";
 import { hasActiveDunaPlusMembership } from "./membership";
 import { createCourtCheckoutSession, isStripeConfigured } from "./payments";
 import { sendTemplateSms } from "./sent";
+import {
+  daylightStatus,
+  loadWeatherForecast,
+  weatherAt,
+  weatherDay,
+} from "./weather";
 
 export class CourtCheckoutError extends Error {
   constructor(
@@ -269,6 +275,8 @@ export async function loadCourtBookingInventory(
         heroImageUrl: venues.heroImageUrl,
         heroImageTreatmentUrl: venues.heroImageTreatmentUrl,
         amenities: venues.amenities,
+        latitude: venues.latitude,
+        longitude: venues.longitude,
         organizationName: organizations.name,
         paymentsReady: organizations.stripeChargesEnabled,
       })
@@ -324,6 +332,8 @@ export async function loadCourtBookingInventory(
       heroImageUrl: venue.heroImageUrl ?? undefined,
       heroImageTreatmentUrl: venue.heroImageTreatmentUrl ?? undefined,
       amenities: venue.amenities,
+      latitude: venue.latitude ?? undefined,
+      longitude: venue.longitude ?? undefined,
     },
     courts: courtRows.flatMap((court) => {
       if (court.status !== "active" || court.bookingPolicy === "none")
@@ -457,6 +467,19 @@ export async function loadCourtAvailability(input: {
         ),
       ),
   ]);
+  const forecast =
+    inventory.venue.latitude !== undefined &&
+    inventory.venue.longitude !== undefined
+      ? await loadWeatherForecast({
+          latitude: inventory.venue.latitude,
+          longitude: inventory.venue.longitude,
+          timezone: inventory.venue.timezone,
+          startsAt: dayStart,
+          endsAt: dayEnd,
+          now,
+        })
+      : undefined;
+  const forecastDay = weatherDay(forecast, input.date);
   const scheduleById = new Map(
     scheduleRows.map((schedule) => [schedule.id, schedule]),
   );
@@ -467,6 +490,7 @@ export async function loadCourtAvailability(input: {
     schedulesByCourt.set(schedule.resourceId, existing);
   }
   const weekday = new Date(`${input.date}T12:00:00Z`).getUTCDay();
+  let excludedAfterDarkCount = 0;
   const slots = candidates.flatMap((court) => {
     const courtScheduleIds = schedulesByCourt.get(court.id) ?? [];
     const recurringBlocks = blockRows.filter(
@@ -599,22 +623,29 @@ export async function loadCourtAvailability(input: {
             currency: rate.currency,
           }
         : undefined;
-    return solved.map((slot) => ({
-      courtId: court.id,
-      courtName: court.name,
-      startsAt: slot.startsAt,
-      endsAt: slot.endsAt,
-      localStartsAt: localDateTime(
-        new Date(slot.startsAt),
-        inventory.venue.timezone,
-      ),
-      localEndsAt: localDateTime(
-        new Date(slot.endsAt),
-        inventory.venue.timezone,
-      ),
-      durationMinutes: input.durationMinutes,
-      price,
-    }));
+    return solved.flatMap((slot) => {
+      const startsAt = new Date(slot.startsAt);
+      const endsAt = new Date(slot.endsAt);
+      const slotDaylightStatus = daylightStatus(startsAt, endsAt, forecastDay);
+      if (!court.lit && slotDaylightStatus !== "daylight") {
+        excludedAfterDarkCount += 1;
+        return [];
+      }
+      return [
+        {
+          courtId: court.id,
+          courtName: court.name,
+          startsAt: slot.startsAt,
+          endsAt: slot.endsAt,
+          localStartsAt: localDateTime(startsAt, inventory.venue.timezone),
+          localEndsAt: localDateTime(endsAt, inventory.venue.timezone),
+          durationMinutes: input.durationMinutes,
+          price,
+          daylightStatus: slotDaylightStatus,
+          weather: weatherAt(forecast, startsAt),
+        },
+      ];
+    });
   });
   return {
     venueId: input.venueId,
@@ -622,6 +653,8 @@ export async function loadCourtAvailability(input: {
     durationMinutes: input.durationMinutes,
     timezone: inventory.venue.timezone,
     generatedAt: now.toISOString(),
+    forecast,
+    excludedAfterDarkCount,
     slots: slots.sort(
       (left, right) =>
         Date.parse(left.startsAt) - Date.parse(right.startsAt) ||

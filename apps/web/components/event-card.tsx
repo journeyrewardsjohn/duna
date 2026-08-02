@@ -3,6 +3,7 @@ import { formatMoney, formatVenueTime } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import { ArrowUpRight, MapPin } from "lucide-react";
 import Link from "next/link";
+import { WeatherInline } from "@/components/weather-forecast";
 
 export function EventCard({
   event,
@@ -40,6 +41,7 @@ export function EventCard({
           <MapPin aria-hidden size={15} />
           {event.venueName}
         </p>
+        <WeatherInline forecast={event.weather} instant={event.startsAt} />
         <div className="event-card__meta">
           <span>
             <Numeric>

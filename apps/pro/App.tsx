@@ -1,4 +1,4 @@
-import { formatMoney } from "@duna/core";
+import { formatMoney, formatVenueTime } from "@duna/core";
 import { demoOrganization, demoPeople } from "@duna/core/demo";
 import {
   createUndoEvent,
@@ -9,11 +9,21 @@ import {
 } from "@duna/league-engine";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
+import * as Haptics from "expo-haptics";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
 import * as WebBrowser from "expo-web-browser";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  Animated,
+  Easing,
   Platform,
   Pressable,
   ScrollView,
@@ -112,7 +122,10 @@ function ThemeButton() {
   return (
     <Pressable
       accessibilityLabel={`Use ${theme === "light" ? "dark" : "light"} mode`}
-      onPress={toggle}
+      onPress={() => {
+        selectionHaptic();
+        toggle();
+      }}
       style={styles.themeButton}
     >
       <Text style={styles.themeButtonText}>
@@ -136,6 +149,41 @@ function displayError(reason: unknown): string {
   return reason instanceof Error
     ? reason.message
     : "Duna Pro could not complete that request.";
+}
+
+function selectionHaptic() {
+  if (Platform.OS !== "web")
+    void Haptics.selectionAsync().catch(() => undefined);
+}
+
+function impactHaptic() {
+  if (Platform.OS !== "web") {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
+      () => undefined,
+    );
+  }
+}
+
+function successHaptic() {
+  if (Platform.OS !== "web") {
+    void Haptics.notificationAsync(
+      Haptics.NotificationFeedbackType.Success,
+    ).catch(() => undefined);
+  }
+}
+
+function weatherSymbol(icon: string | undefined): string {
+  if (icon === "clear" || icon === "mostly-clear") return "☀";
+  if (icon === "partly-cloudy") return "🌤";
+  if (icon === "rain" || icon === "drizzle") return "🌦";
+  if (icon === "storm") return "⛈";
+  if (icon === "snow") return "❄";
+  if (icon === "fog") return "≋";
+  return "☁";
+}
+
+function fahrenheit(celsius: number | undefined): string {
+  return celsius === undefined ? "" : `${Math.round((celsius * 9) / 5 + 32)}°`;
 }
 
 async function loadDeviceId(): Promise<string> {
@@ -312,7 +360,7 @@ const schedule = [
 ] as const;
 
 function TodayScreen({ onScore }: { readonly onScore: () => void }) {
-  const { dashboard, mode } = useProRuntime();
+  const { dashboard, mode, workspace } = useProRuntime();
   const organization = dashboard?.organization ?? demoOrganization;
   const metrics = dashboard?.metrics.slice(0, 4) ?? [
     { label: "Today’s sales", value: "$8,420", change: "↗ 18.4%" },
@@ -360,6 +408,8 @@ function TodayScreen({ onScore }: { readonly onScore: () => void }) {
     .format(new Date())
     .replace(", ", " · ")
     .toUpperCase();
+  const primaryVenue = workspace?.venues.find((venue) => venue.weather);
+  const todayForecast = primaryVenue?.weather?.days[0];
   return (
     <ScrollView
       contentContainerStyle={styles.content}
@@ -381,6 +431,48 @@ function TodayScreen({ onScore }: { readonly onScore: () => void }) {
         </Text>{" "}
         and {scheduleItems.length} scheduled items in this workspace.
       </Text>
+      {primaryVenue?.weather && todayForecast && (
+        <View style={styles.weatherOperationsCard}>
+          <Text style={styles.weatherOperationsIcon}>
+            {weatherSymbol(todayForecast.icon)}
+          </Text>
+          <View style={styles.flex}>
+            <Text style={styles.rowTitle}>
+              {todayForecast.condition} ·{" "}
+              {fahrenheit(todayForecast.temperatureHighC)} high
+            </Text>
+            <Text style={styles.metaText}>
+              {primaryVenue.name} · sunrise{" "}
+              {todayForecast.sunriseAt
+                ? formatVenueTime(
+                    todayForecast.sunriseAt,
+                    primaryVenue.timezone,
+                    "en-US",
+                    { hour: "numeric", minute: "2-digit" },
+                  )
+                : "pending"}{" "}
+              · sunset{" "}
+              {todayForecast.sunsetAt
+                ? formatVenueTime(
+                    todayForecast.sunsetAt,
+                    primaryVenue.timezone,
+                    "en-US",
+                    { hour: "numeric", minute: "2-digit" },
+                  )
+                : "pending"}
+            </Text>
+          </View>
+          <Text style={styles.weatherOperationsUpdated}>
+            Updated{" "}
+            {formatVenueTime(
+              primaryVenue.weather.updatedAt,
+              primaryVenue.timezone,
+              "en-US",
+              { hour: "numeric", minute: "2-digit" },
+            )}
+          </Text>
+        </View>
+      )}
       <View style={styles.createEventCard}>
         <View style={styles.createEventHeader}>
           <View style={styles.createEventMark}>
@@ -442,36 +534,67 @@ function TodayScreen({ onScore }: { readonly onScore: () => void }) {
         action="Calendar"
       />
       <View style={styles.scheduleCard}>
-        {scheduleItems.map((item, index) => (
-          <Pressable
-            key={`${item.time}-${item.title}`}
-            onPress={onScore}
-            style={styles.scheduleRow}
-          >
-            <View style={styles.timeBlock}>
-              <Text style={styles.timeMain}>{item.time}</Text>
-            </View>
-            <View
-              style={[
-                styles.statusLine,
-                { backgroundColor: index === 0 ? colors.flare : colors.aqua },
-              ]}
-            />
-            <View style={styles.flex}>
-              <Text style={styles.rowTitle}>{item.title}</Text>
-              <Text style={styles.metaText}>{item.court}</Text>
-            </View>
-            <View style={styles.rosterCount}>
-              <Text style={styles.rowTitle}>{item.detail}</Text>
-            </View>
-            <Pill
-              tone={item.state.toLowerCase() === "live" ? "live" : "neutral"}
+        {scheduleItems.map((item, index) => {
+          const calendarEntry = workspace?.calendar.entries.find(
+            (entry) => entry.title === item.title,
+          );
+          const venue = workspace?.venues.find(
+            (candidate) => candidate.name === calendarEntry?.venueName,
+          );
+          const point = calendarEntry
+            ? venue?.weather?.hourly
+                .slice()
+                .sort(
+                  (left, right) =>
+                    Math.abs(
+                      Date.parse(left.startsAt) -
+                        Date.parse(calendarEntry.startsAt),
+                    ) -
+                    Math.abs(
+                      Date.parse(right.startsAt) -
+                        Date.parse(calendarEntry.startsAt),
+                    ),
+                )[0]
+            : undefined;
+          return (
+            <Pressable
+              key={`${item.time}-${item.title}`}
+              onPress={() => {
+                selectionHaptic();
+                onScore();
+              }}
+              style={styles.scheduleRow}
             >
-              {item.state}
-            </Pill>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-        ))}
+              <View style={styles.timeBlock}>
+                <Text style={styles.timeMain}>{item.time}</Text>
+                {point && (
+                  <Text style={styles.scheduleWeather}>
+                    {weatherSymbol(point.icon)} {fahrenheit(point.temperatureC)}
+                  </Text>
+                )}
+              </View>
+              <View
+                style={[
+                  styles.statusLine,
+                  { backgroundColor: index === 0 ? colors.flare : colors.aqua },
+                ]}
+              />
+              <View style={styles.flex}>
+                <Text style={styles.rowTitle}>{item.title}</Text>
+                <Text style={styles.metaText}>{item.court}</Text>
+              </View>
+              <View style={styles.rosterCount}>
+                <Text style={styles.rowTitle}>{item.detail}</Text>
+              </View>
+              <Pill
+                tone={item.state.toLowerCase() === "live" ? "live" : "neutral"}
+              >
+                {item.state}
+              </Pill>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          );
+        })}
       </View>
       <SectionTitle
         eyebrow="ACTION QUEUE"
@@ -831,6 +954,10 @@ function ScorerScreen() {
   const teamB = serverState?.teamB;
 
   useEffect(() => {
+    if (scoreComplete) successHaptic();
+  }, [scoreComplete]);
+
+  useEffect(() => {
     loadDeviceId()
       .then(setDeviceId)
       .catch((reason) => {
@@ -969,6 +1096,7 @@ function ScorerScreen() {
   }
 
   function point(winner: "A" | "B") {
+    impactHaptic();
     void submitEvent({
       id: Crypto.randomUUID(),
       type: "rally-won",
@@ -978,6 +1106,7 @@ function ScorerScreen() {
   }
 
   function undo() {
+    selectionHaptic();
     const event = createUndoEvent(events, {
       id: Crypto.randomUUID(),
       occurredAt: new Date().toISOString(),
@@ -1224,6 +1353,15 @@ function ScorerScreen() {
                   ? `${pending.length} events pending upload`
                   : `${Math.max(0, events.length - 1)} score events synced`}
             </Text>
+            {mode !== "preview" && serverState?.reporting.lastReporter ? (
+              <Text style={styles.metaText}>
+                Last reported by{" "}
+                {serverState.reporting.lastReporter.displayName}
+                {serverState.reporting.reporters.length > 1
+                  ? ` · ${serverState.reporting.reporters.length} scorers`
+                  : ""}
+              </Text>
+            ) : null}
           </View>
         </View>
         <View style={styles.sets}>
@@ -1519,7 +1657,10 @@ function TabBar({
           accessibilityRole="tab"
           accessibilityState={{ selected: active === tab.key }}
           key={tab.key}
-          onPress={() => onChange(tab.key)}
+          onPress={() => {
+            selectionHaptic();
+            onChange(tab.key);
+          }}
           style={[styles.tabItem, tab.key === "score" && styles.scoreTab]}
         >
           <Text
@@ -1552,12 +1693,23 @@ function TabBar({
 function ProApp() {
   const [tab, setTab] = useState<Tab>("today");
   const [theme, setTheme] = useState<ThemeName>("light");
+  const screenTransition = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     void AsyncStorage.getItem("duna-theme").then((stored) => {
       if (stored === "dark") setTheme("dark");
     });
   }, []);
+
+  useEffect(() => {
+    screenTransition.setValue(0);
+    Animated.timing(screenTransition, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [screenTransition, tab]);
 
   activePalette = theme === "dark" ? darkColors : lightColors;
   activeStyles = theme === "dark" ? darkStyles : lightStyles;
@@ -1577,11 +1729,28 @@ function ProApp() {
         <StatusBar style={theme === "dark" ? "light" : "dark"} />
         <View style={styles.app}>
           {tab !== "score" && <PreviewBanner />}
-          {tab === "today" && <TodayScreen onScore={() => setTab("score")} />}
-          {tab === "people" && <PeopleScreen />}
-          {tab === "score" && <ScorerScreen />}
-          {tab === "money" && <MoneyScreen />}
-          {tab === "more" && <MoreScreen />}
+          <Animated.View
+            style={[
+              styles.animatedScreen,
+              {
+                opacity: screenTransition,
+                transform: [
+                  {
+                    translateY: screenTransition.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [8, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            {tab === "today" && <TodayScreen onScore={() => setTab("score")} />}
+            {tab === "people" && <PeopleScreen />}
+            {tab === "score" && <ScorerScreen />}
+            {tab === "money" && <MoneyScreen />}
+            {tab === "more" && <MoreScreen />}
+          </Animated.View>
           {tab !== "score" && <TabBar active={tab} onChange={setTab} />}
           {tab === "score" && (
             <Pressable onPress={() => setTab("today")} style={styles.exitScore}>
@@ -1609,6 +1778,7 @@ function createStyles(palette: Palette) {
   return StyleSheet.create({
     safe: { backgroundColor: colors.canvas, flex: 1 },
     app: { backgroundColor: colors.canvas, flex: 1 },
+    animatedScreen: { flex: 1 },
     buttonDisabled: { opacity: 0.45 },
     emptyState: {
       backgroundColor: colors.depth,
@@ -1824,6 +1994,23 @@ function createStyles(palette: Palette) {
     },
     subhead: { color: colors.muted, fontSize: 10, marginTop: 8 },
     subheadStrong: { color: colors.bone, fontWeight: "700" },
+    weatherOperationsCard: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderColor: rgba(colors.accentRgb, 0.16),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 16,
+      padding: 13,
+    },
+    weatherOperationsIcon: { fontSize: 26 },
+    weatherOperationsUpdated: {
+      color: colors.muted,
+      fontSize: 6,
+      textAlign: "right",
+    },
     createEventCard: {
       backgroundColor: colors.navy,
       borderColor: rgba(colors.accentRgb, 0.16),
@@ -1965,6 +2152,12 @@ function createStyles(palette: Palette) {
     timeBlock: { width: 32 },
     timeMain: { color: colors.bone, fontSize: 9, fontWeight: "700" },
     timeSuffix: { color: colors.muted, fontSize: 6 },
+    scheduleWeather: {
+      color: colors.aqua,
+      fontSize: 6,
+      fontWeight: "800",
+      marginTop: 4,
+    },
     statusLine: { borderRadius: 2, height: 35, width: 3 },
     rowTitle: { color: colors.bone, fontSize: 9.5, fontWeight: "700" },
     rosterCount: { alignItems: "flex-end" },

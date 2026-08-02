@@ -53,6 +53,7 @@ import { enforceGuardianCopies } from "./messaging";
 import { createConnectOnboarding } from "./payments";
 import { isResendConfigured, sendTransactionalEmail } from "./resend";
 import { isSentConfigured, sendTemplateSms } from "./sent";
+import { loadWeatherForecast } from "./weather";
 
 type CurrencyCode = OperatorWorkspace["organization"]["currency"];
 type EventKind = OperatorWorkspace["sessions"][number]["kind"];
@@ -444,6 +445,7 @@ export async function loadOperatorWorkspace(
     courtRows,
     scheduleRows,
     scheduleBlockRows,
+    scheduleOverrideRows,
     bookingRows,
     sessionRows,
     memberRows,
@@ -503,6 +505,22 @@ export async function loadOperatorWorkspace(
         asc(scheduleBlocks.weekday),
         asc(scheduleBlocks.startsAtMinute),
       ),
+    database
+      .select({
+        override: scheduleOverrides,
+        resourceId: schedules.resourceId,
+      })
+      .from(scheduleOverrides)
+      .innerJoin(schedules, eq(scheduleOverrides.scheduleId, schedules.id))
+      .where(
+        and(
+          eq(schedules.organizationId, organizationId),
+          eq(schedules.resourceType, "court"),
+          gt(scheduleOverrides.endsAt, thirtyDaysAgo),
+          lt(scheduleOverrides.startsAt, thirtyDaysAhead),
+        ),
+      )
+      .orderBy(asc(schedules.resourceId), asc(scheduleOverrides.startsAt)),
     database
       .select({
         id: courtBookings.id,
@@ -759,6 +777,10 @@ export async function loadOperatorWorkspace(
     scheduleBlockRows
       .filter((row) => row.resourceId === courtId)
       .map((row) => row.block);
+  const scheduleOverridesForCourt = (courtId: string) =>
+    scheduleOverrideRows
+      .filter((row) => row.resourceId === courtId)
+      .map((row) => row.override);
   const utilizationForCourt = (courtId: string) => {
     const configured = scheduleRows.some(
       (schedule) => schedule.resourceId === courtId,
@@ -841,6 +863,26 @@ export async function loadOperatorWorkspace(
       nextBookingAt,
     };
   };
+  const venueForecasts = new Map(
+    (
+      await Promise.all(
+        venueRows.flatMap((venue) =>
+          venue.latitude !== null && venue.longitude !== null
+            ? [
+                loadWeatherForecast({
+                  latitude: venue.latitude,
+                  longitude: venue.longitude,
+                  timezone: venue.timezone,
+                  startsAt: now,
+                  endsAt: new Date(now.getTime() + 8 * 24 * 60 * 60_000),
+                  now,
+                }).then((forecast) => [venue.id, forecast] as const),
+              ]
+            : [],
+        ),
+      )
+    ).map((entry) => entry),
+  );
 
   return {
     organization: {
@@ -898,6 +940,7 @@ export async function loadOperatorWorkspace(
       latitude: venue.latitude ?? undefined,
       longitude: venue.longitude ?? undefined,
       timezone: venue.timezone,
+      weather: venueForecasts.get(venue.id),
       utilization: utilizationForVenue(venue.id),
       courts: courtRows
         .filter((row) => row.court.venueId === venue.id)
@@ -936,6 +979,13 @@ export async function loadOperatorWorkspace(
             mode: block.mode,
             effectiveFrom: block.effectiveFrom ?? undefined,
             effectiveTo: block.effectiveTo ?? undefined,
+          })),
+          overrides: scheduleOverridesForCourt(court.id).map((override) => ({
+            id: override.id,
+            startsAt: override.startsAt.toISOString(),
+            endsAt: override.endsAt.toISOString(),
+            mode: override.mode,
+            reason: override.reason,
           })),
           utilization: utilizationForCourt(court.id),
         })),

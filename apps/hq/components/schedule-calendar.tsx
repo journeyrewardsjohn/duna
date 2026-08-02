@@ -106,6 +106,20 @@ function formatRange(anchor: Date, view: CalendarView): string {
   });
 }
 
+function weatherSymbol(icon: string | undefined): string {
+  if (icon === "clear" || icon === "mostly-clear") return "☀";
+  if (icon === "partly-cloudy") return "🌤";
+  if (icon === "rain" || icon === "drizzle") return "🌦";
+  if (icon === "storm") return "⛈";
+  if (icon === "snow") return "❄";
+  if (icon === "fog") return "≋";
+  return "☁";
+}
+
+function fahrenheit(celsius: number): number {
+  return Math.round((celsius * 9) / 5 + 32);
+}
+
 function moveEntryToDay(entry: CalendarEntry, day: Date) {
   const startsAt = new Date(entry.startsAt);
   const endsAt = new Date(entry.endsAt);
@@ -187,28 +201,52 @@ export function ScheduleCalendar({
     startTransition(() => proposeAction(formData));
   };
 
-  const renderEntry = (entry: CalendarEntry) => (
-    <article
-      className={`schedule-event schedule-event--${entry.sourceType}`}
-      draggable={entry.draggable}
-      key={entry.id}
-      onDragStart={() => setDraggedId(entry.id)}
-      style={{ "--event-color": entry.color } as CSSProperties}
-      title={entry.draggable ? "Drag to preview a new day" : undefined}
-    >
-      {entry.draggable && <GripVertical aria-hidden size={13} />}
-      <span>
-        <strong>{entry.title}</strong>
-        <small>
-          {formatTime(entry.startsAt, workspace.organization.timezone)} ·{" "}
-          {resourceView === "court"
-            ? (entry.courtName ?? "No court")
-            : (entry.coachName ?? "No coach")}
-        </small>
-      </span>
-      <Badge>{entry.participantCount}</Badge>
-    </article>
-  );
+  const renderEntry = (entry: CalendarEntry) =>
+    (() => {
+      const venue = workspace.venues.find(
+        (candidate) => candidate.name === entry.venueName,
+      );
+      const point = venue?.weather?.hourly
+        .slice()
+        .sort(
+          (left, right) =>
+            Math.abs(Date.parse(left.startsAt) - Date.parse(entry.startsAt)) -
+            Math.abs(Date.parse(right.startsAt) - Date.parse(entry.startsAt)),
+        )[0];
+      return (
+        <article
+          className={`schedule-event schedule-event--${entry.sourceType}`}
+          draggable={entry.draggable}
+          key={entry.id}
+          onDragStart={() => setDraggedId(entry.id)}
+          style={{ "--event-color": entry.color } as CSSProperties}
+          title={entry.draggable ? "Drag to preview a new day" : undefined}
+        >
+          {entry.draggable && <GripVertical aria-hidden size={13} />}
+          <span>
+            <strong>{entry.title}</strong>
+            <small>
+              {formatTime(entry.startsAt, workspace.organization.timezone)} ·{" "}
+              {resourceView === "court"
+                ? (entry.courtName ?? "No court")
+                : (entry.coachName ?? "No coach")}
+            </small>
+            {point && (
+              <small className="schedule-event__weather">
+                {weatherSymbol(point.icon)}{" "}
+                {point.temperatureC !== undefined
+                  ? `${fahrenheit(point.temperatureC)}°`
+                  : point.condition}
+                {point.precipitationProbability !== undefined
+                  ? ` · ${Math.round(point.precipitationProbability)}% rain`
+                  : ""}
+              </small>
+            )}
+          </span>
+          <Badge>{entry.participantCount}</Badge>
+        </article>
+      );
+    })();
 
   return (
     <section className="hq-card schedule-calendar">
@@ -282,14 +320,33 @@ export function ScheduleCalendar({
           style={{ "--calendar-days": days.length } as CSSProperties}
         >
           <div className="schedule-resource-grid__corner">{resourceView}</div>
-          {days.map((day) => (
-            <header key={dateKey(day)}>
-              <small>
-                {day.toLocaleDateString("en-US", { weekday: "short" })}
-              </small>
-              <strong>{day.getDate()}</strong>
-            </header>
-          ))}
+          {days.map((day) => {
+            const forecastDay = workspace.venues
+              .flatMap((venue) => venue.weather?.days ?? [])
+              .find((candidate) => candidate.date === dateKey(day));
+            return (
+              <header key={dateKey(day)}>
+                <small>
+                  {day.toLocaleDateString("en-US", { weekday: "short" })}
+                </small>
+                <strong>{day.getDate()}</strong>
+                {forecastDay && (
+                  <span className="schedule-day-weather">
+                    {weatherSymbol(forecastDay.icon)}
+                    {forecastDay.temperatureHighC !== undefined
+                      ? ` ${fahrenheit(forecastDay.temperatureHighC)}°`
+                      : ""}
+                    {forecastDay.sunsetAt
+                      ? ` · ◐ ${formatTime(
+                          forecastDay.sunsetAt,
+                          workspace.organization.timezone,
+                        )}`
+                      : ""}
+                  </span>
+                )}
+              </header>
+            );
+          })}
           {lanes.map((lane) => (
             <div className="schedule-resource-row" key={lane.id}>
               <div className="schedule-resource-row__label">
@@ -347,6 +404,18 @@ export function ScheduleCalendar({
                       : ""}
                   </small>
                   <strong>{day.getDate()}</strong>
+                  {workspace.venues
+                    .flatMap((venue) => venue.weather?.days ?? [])
+                    .find((candidate) => candidate.date === dateKey(day)) && (
+                    <small className="schedule-month-weather">
+                      {weatherSymbol(
+                        workspace.venues
+                          .flatMap((venue) => venue.weather?.days ?? [])
+                          .find((candidate) => candidate.date === dateKey(day))
+                          ?.icon,
+                      )}
+                    </small>
+                  )}
                 </span>
                 {entries.slice(0, view === "quarter" ? 2 : 4).map(renderEntry)}
                 {entries.length > (view === "quarter" ? 2 : 4) && (
@@ -369,6 +438,20 @@ export function ScheduleCalendar({
           <Clock3 aria-hidden size={17} />
           Times shown in {workspace.organization.timezone}
         </span>
+        {workspace.venues.find((venue) => venue.weather)?.weather && (
+          <span>
+            {workspace.venues.find((venue) => venue.weather)?.weather
+              ?.source === "tomorrow.io"
+              ? "Tomorrow.io forecast"
+              : "Calculated daylight"}
+            {" · "}updated{" "}
+            {formatTime(
+              workspace.venues.find((venue) => venue.weather)!.weather!
+                .updatedAt,
+              workspace.organization.timezone,
+            )}
+          </span>
+        )}
         <span>Drag a scheduled session to preview a move.</span>
       </footer>
 

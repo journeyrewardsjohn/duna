@@ -10,10 +10,13 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Contacts from "expo-contacts";
 import * as Crypto from "expo-crypto";
+import * as Haptics from "expo-haptics";
 import { StatusBar } from "expo-status-bar";
 import * as WebBrowser from "expo-web-browser";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import {
+  Animated,
+  Easing,
   Modal,
   Platform,
   Pressable,
@@ -26,8 +29,19 @@ import {
   type ViewStyle,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import {
+  startDunaLiveActivity,
+  updateDunaLiveActivity,
+  type LiveActivityPushToken,
+} from "./live-activities";
 import { dunaWebUrl, type DunaApiClient } from "./mobile-api";
 import { PlayerRuntimeProvider, usePlayerRuntime } from "./runtime";
+import {
+  clearPendingWatchScoreDraft,
+  getPendingWatchScoreDraft,
+  subscribeToWatchScoreDraft,
+  type WatchScoreDraft,
+} from "./watch-scoring";
 
 const lightColors = {
   canvas: "#f8f7f3",
@@ -108,7 +122,10 @@ function ThemeButton() {
   return (
     <Pressable
       accessibilityLabel={`Use ${theme === "light" ? "dark" : "light"} mode`}
-      onPress={toggle}
+      onPress={() => {
+        selectionHaptic();
+        toggle();
+      }}
       style={styles.themeButton}
     >
       <Text style={styles.themeButtonText}>
@@ -125,6 +142,9 @@ type CourtInventory = Awaited<
 >;
 type CourtAvailability = Awaited<
   ReturnType<DunaApiClient["public"]["courtAvailability"]["query"]>
+>;
+type ProEventDetail = Awaited<
+  ReturnType<DunaApiClient["public"]["proEvent"]["query"]>
 >;
 type BookingParticipant = {
   readonly personId?: string;
@@ -149,6 +169,53 @@ function displayError(reason: unknown): string {
   return reason instanceof Error
     ? reason.message
     : "Duna could not complete that request.";
+}
+
+function selectionHaptic() {
+  if (Platform.OS !== "web")
+    void Haptics.selectionAsync().catch(() => undefined);
+}
+
+function successHaptic() {
+  if (Platform.OS !== "web") {
+    void Haptics.notificationAsync(
+      Haptics.NotificationFeedbackType.Success,
+    ).catch(() => undefined);
+  }
+}
+
+async function rememberLiveActivityToken(token: LiveActivityPushToken) {
+  await AsyncStorage.setItem(
+    `duna.live-activity.${token.kind}.${token.subjectId}`,
+    JSON.stringify({ ...token, recordedAt: new Date().toISOString() }),
+  );
+}
+
+function weatherSymbol(icon: string | undefined): string {
+  if (icon === "clear" || icon === "mostly-clear") return "☀";
+  if (icon === "partly-cloudy") return "🌤";
+  if (icon === "rain" || icon === "drizzle") return "🌦";
+  if (icon === "storm") return "⛈";
+  if (icon === "snow") return "❄";
+  if (icon === "fog") return "≋";
+  return "☁";
+}
+
+function fahrenheit(celsius: number | undefined): string {
+  return celsius === undefined ? "" : `${Math.round((celsius * 9) / 5 + 32)}°`;
+}
+
+function closestWeather<
+  Point extends { readonly startsAt: string; readonly temperatureC?: number },
+>(points: readonly Point[] | undefined, startsAt: string): Point | undefined {
+  const timestamp = Date.parse(startsAt);
+  return points
+    ?.slice()
+    .sort(
+      (left, right) =>
+        Math.abs(Date.parse(left.startsAt) - timestamp) -
+        Math.abs(Date.parse(right.startsAt) - timestamp),
+    )[0];
 }
 
 function PreviewBanner() {
@@ -288,6 +355,7 @@ function HomeScreen({
   const matches = dashboard?.recentMatches ?? demoMatches;
   const people = livePeople ?? demoPeople;
   const nextBooking = bookings[0];
+  const [liveActivityNotice, setLiveActivityNotice] = useState<string>();
   const metrics = dashboard?.metrics.slice(0, 4) ?? [
     { label: "Win rate", value: "61%" },
     { label: "Last 10", value: "8–2" },
@@ -391,6 +459,44 @@ function HomeScreen({
           <Pressable style={styles.cardLink}>
             <Text style={styles.cardLinkText}>Open game thread →</Text>
           </Pressable>
+          {Platform.OS === "ios" && nextBooking && (
+            <Pressable
+              onPress={() => {
+                selectionHaptic();
+                void startDunaLiveActivity(
+                  {
+                    subjectId: nextBooking.id,
+                    kind: "upcoming",
+                    title: nextBooking.title,
+                    subtitle: `${new Date(
+                      nextBooking.startsAt,
+                    ).toLocaleTimeString("en-US", {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })} · ${nextBooking.venueName}`,
+                    status: "Upcoming",
+                    startsAt: nextBooking.startsAt,
+                  },
+                  { onPushToken: rememberLiveActivityToken },
+                )
+                  .then(() => {
+                    successHaptic();
+                    setLiveActivityNotice("Added to your Lock Screen.");
+                  })
+                  .catch((reason) => {
+                    setLiveActivityNotice(displayError(reason));
+                  });
+              }}
+              style={styles.liveActivityButton}
+            >
+              <Text style={styles.liveActivityButtonText}>
+                ◉ Keep on Lock Screen
+              </Text>
+            </Pressable>
+          )}
+          {liveActivityNotice && (
+            <Text style={styles.liveActivityNotice}>{liveActivityNotice}</Text>
+          )}
         </View>
       </View>
       <View style={styles.metricStrip}>
@@ -514,8 +620,15 @@ function EventCard({
   const { dashboard } = usePlayerRuntime();
   const event = (dashboard?.events ?? demoEvents)[eventIndex]!;
   const accents = [colors.aquaDeep, "#745f3a", colors.navyLift, "#6b392f"];
+  const weather = closestWeather(event.weather?.hourly, event.startsAt);
   return (
-    <Pressable onPress={() => onPress(eventIndex)} style={styles.eventCard}>
+    <Pressable
+      onPress={() => {
+        selectionHaptic();
+        onPress(eventIndex);
+      }}
+      style={styles.eventCard}
+    >
       <View
         style={[
           styles.eventArt,
@@ -544,6 +657,14 @@ function EventCard({
         <Text numberOfLines={1} style={styles.eventMeta}>
           {event.venueName}
         </Text>
+        {weather && (
+          <Text style={styles.eventWeather}>
+            {weatherSymbol(weather.icon)} {fahrenheit(weather.temperatureC)}
+            {weather.precipitationProbability !== undefined
+              ? ` · ${Math.round(weather.precipitationProbability)}% rain`
+              : ""}
+          </Text>
+        )}
         <View style={styles.eventFooter}>
           <Text style={styles.eventPrice}>
             {event.price.amountMinor
@@ -608,9 +729,11 @@ function VenueBookingModal({
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
 
-  const dates = Array.from({ length: 8 }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() + index);
+  const selectedDateAnchor = new Date(`${selectedDate}T12:00:00`);
+  const todayValue = localDateValue(new Date());
+  const dates = Array.from({ length: 11 }, (_, index) => {
+    const date = new Date(selectedDateAnchor);
+    date.setDate(selectedDateAnchor.getDate() + index - 4);
     return date;
   });
   const durations = [
@@ -631,6 +754,9 @@ function VenueBookingModal({
     paymentMode === "split"
       ? Math.ceil(totalMinor / Math.max(1, participants.length + 1))
       : totalMinor;
+  const selectedForecastDay = availability?.forecast?.days.find(
+    (day) => day.date === selectedDate,
+  );
 
   useEffect(() => {
     if (!visible || !venueId || !client) return;
@@ -808,6 +934,7 @@ function VenueBookingModal({
         await WebBrowser.openBrowserAsync(result.checkoutUrl);
       }
       if (result.mode === "free" || result.checkoutUrl) {
+        successHaptic();
         await refresh();
         setNotice(
           paymentMode === "split"
@@ -871,13 +998,19 @@ function VenueBookingModal({
                   {dates.map((date) => {
                     const value = localDateValue(date);
                     const active = value === selectedDate;
+                    const unavailable = value < todayValue;
                     return (
                       <Pressable
+                        disabled={unavailable}
                         key={value}
-                        onPress={() => setSelectedDate(value)}
+                        onPress={() => {
+                          selectionHaptic();
+                          setSelectedDate(value);
+                        }}
                         style={[
                           styles.bookingDate,
                           active && styles.bookingDateActive,
+                          unavailable && styles.bookingDateUnavailable,
                         ]}
                       >
                         <Text
@@ -907,7 +1040,10 @@ function VenueBookingModal({
                 {durations.map((duration) => (
                   <Pressable
                     key={duration}
-                    onPress={() => setDurationMinutes(duration)}
+                    onPress={() => {
+                      selectionHaptic();
+                      setDurationMinutes(duration);
+                    }}
                     style={[
                       styles.bookingDuration,
                       duration === durationMinutes &&
@@ -926,6 +1062,49 @@ function VenueBookingModal({
                   </Pressable>
                 ))}
               </View>
+              {selectedForecastDay && (
+                <View style={styles.bookingWeather}>
+                  <Text style={styles.bookingWeatherIcon}>
+                    {weatherSymbol(selectedForecastDay.icon)}
+                  </Text>
+                  <View style={styles.flex}>
+                    <Text style={styles.rowTitle}>
+                      {selectedForecastDay.condition} ·{" "}
+                      {fahrenheit(selectedForecastDay.temperatureHighC)}
+                    </Text>
+                    <Text style={styles.rowMeta}>
+                      {selectedForecastDay.sunriseAt
+                        ? `Sunrise ${formatVenueTime(
+                            selectedForecastDay.sunriseAt,
+                            availability?.timezone ?? "UTC",
+                            "en-US",
+                            { hour: "numeric", minute: "2-digit" },
+                          )}`
+                        : "Sunrise pending"}
+                      {" · "}
+                      {selectedForecastDay.sunsetAt
+                        ? `Sunset ${formatVenueTime(
+                            selectedForecastDay.sunsetAt,
+                            availability?.timezone ?? "UTC",
+                            "en-US",
+                            { hour: "numeric", minute: "2-digit" },
+                          )}`
+                        : "Sunset pending"}
+                    </Text>
+                  </View>
+                  <Text style={styles.bookingWeatherUpdated}>
+                    Updated{" "}
+                    {availability?.forecast
+                      ? formatVenueTime(
+                          availability.forecast.updatedAt,
+                          availability.timezone,
+                          "en-US",
+                          { hour: "numeric", minute: "2-digit" },
+                        )
+                      : ""}
+                  </Text>
+                </View>
+              )}
               {loading ? (
                 <Text style={styles.bookingEmpty}>Finding open courts…</Text>
               ) : availability?.slots.length ? (
@@ -933,7 +1112,10 @@ function VenueBookingModal({
                   {availability.slots.map((slot) => (
                     <Pressable
                       key={`${slot.courtId}-${slot.startsAt}`}
-                      onPress={() => setSelectedSlot(slot)}
+                      onPress={() => {
+                        selectionHaptic();
+                        setSelectedSlot(slot);
+                      }}
                       style={styles.bookingSlot}
                     >
                       <Text style={styles.bookingSlotTime}>
@@ -942,6 +1124,12 @@ function VenueBookingModal({
                       <Text numberOfLines={1} style={styles.bookingSlotCourt}>
                         {slot.courtName}
                       </Text>
+                      {slot.weather && (
+                        <Text style={styles.bookingSlotWeather}>
+                          {weatherSymbol(slot.weather.icon)}{" "}
+                          {fahrenheit(slot.weather.temperatureC)}
+                        </Text>
+                      )}
                       <Text style={styles.bookingSlotPrice}>
                         {slot.price
                           ? formatMoney(
@@ -963,6 +1151,13 @@ function VenueBookingModal({
                     and newly released inventory.
                   </Text>
                 </View>
+              )}
+              {Boolean(availability?.excludedAfterDarkCount) && (
+                <Text style={styles.bookingDaylightNote}>
+                  ☾ {availability?.excludedAfterDarkCount} start
+                  {availability?.excludedAfterDarkCount === 1 ? "" : "s"} hidden
+                  because this court is not lit after dark.
+                </Text>
               )}
               <Pressable
                 disabled={busy || mode === "preview"}
@@ -1212,6 +1407,367 @@ function VenueBookingModal({
   );
 }
 
+function ProTourModal({
+  visible,
+  onClose,
+}: {
+  readonly visible: boolean;
+  readonly onClose: () => void;
+}) {
+  const { client, proCoverage } = usePlayerRuntime();
+  const [selectedSlug, setSelectedSlug] = useState<string>();
+  const [event, setEvent] = useState<ProEventDetail>();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>();
+  const [followedMatchId, setFollowedMatchId] = useState<string>();
+  const [followNotice, setFollowNotice] = useState<string>();
+  const events = proCoverage?.events ?? [];
+
+  useEffect(() => {
+    if (!visible || selectedSlug || events.length === 0) return;
+    setSelectedSlug(
+      events.find((candidate) => candidate.live)?.slug ?? events[0]?.slug,
+    );
+  }, [events, selectedSlug, visible]);
+
+  useEffect(() => {
+    if (!visible || !selectedSlug || !client) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(undefined);
+    void client.public.proEvent
+      .query({ slug: selectedSlug })
+      .then((nextEvent) => {
+        if (!cancelled) setEvent(nextEvent);
+      })
+      .catch((reason) => {
+        if (!cancelled) setError(displayError(reason));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, selectedSlug, visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    void AsyncStorage.getItem("duna.followed-pro-match").then((value) => {
+      setFollowedMatchId(value ?? undefined);
+    });
+  }, [visible]);
+
+  useEffect(() => {
+    if (!event || !followedMatchId) return;
+    const followed = event.matches.find(
+      (candidate) => candidate.id === followedMatchId,
+    );
+    if (!followed) return;
+    const latestSet = followed.sets.at(-1);
+    void updateDunaLiveActivity({
+      subjectId: followed.id,
+      kind: "match",
+      title: event.name,
+      subtitle: event.location ?? "Beach Pro Tour",
+      status:
+        followed.status === "live"
+          ? "Live"
+          : followed.status === "completed"
+            ? "Final"
+            : "Upcoming",
+      teamA: followed.teamA.label,
+      teamB: followed.teamB.label,
+      scoreA: latestSet?.a ?? 0,
+      scoreB: latestSet?.b ?? 0,
+      setLabel: `Set ${Math.max(followed.sets.length, 1)}`,
+    }).catch(() => undefined);
+  }, [event, followedMatchId]);
+
+  const followMatch = async (match: ProEventDetail["matches"][number]) => {
+    const latestSet = match.sets.at(-1);
+    await startDunaLiveActivity(
+      {
+        subjectId: match.id,
+        kind: "match",
+        title: event?.name ?? "Beach Pro Tour",
+        subtitle: event?.location ?? "Live on Duna",
+        status:
+          match.status === "live"
+            ? "Live"
+            : match.status === "completed"
+              ? "Final"
+              : "Upcoming",
+        teamA: match.teamA.label,
+        teamB: match.teamB.label,
+        scoreA: latestSet?.a ?? 0,
+        scoreB: latestSet?.b ?? 0,
+        setLabel: `Set ${Math.max(match.sets.length, 1)}`,
+      },
+      { onPushToken: rememberLiveActivityToken },
+    );
+    await AsyncStorage.setItem("duna.followed-pro-match", match.id);
+    setFollowedMatchId(match.id);
+    setFollowNotice(
+      match.status === "live"
+        ? "Live updates are on your Lock Screen."
+        : "You’ll have this match ready on your Lock Screen.",
+    );
+    successHaptic();
+  };
+
+  if (!visible) return null;
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="pageSheet"
+      visible={visible}
+    >
+      <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
+        <View style={styles.proTourHeader}>
+          <View>
+            <Text style={styles.eyebrow}>FIVB + BEACH PRO TOUR</Text>
+            <Text style={styles.proTourTitle}>Pro Tour</Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Close Pro Tour"
+            onPress={onClose}
+            style={styles.proTourClose}
+          >
+            <Text style={styles.closeText}>×</Text>
+          </Pressable>
+        </View>
+        <ScrollView
+          contentContainerStyle={styles.proTourContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.horizontalBleed}
+          >
+            <View style={styles.proEventPicker}>
+              {events.map((candidate) => (
+                <Pressable
+                  key={candidate.id}
+                  onPress={() => {
+                    selectionHaptic();
+                    setEvent(undefined);
+                    setSelectedSlug(candidate.slug);
+                  }}
+                  style={[
+                    styles.proEventPickerCard,
+                    candidate.slug === selectedSlug &&
+                      styles.proEventPickerCardActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.proEventPickerStatus,
+                      candidate.live && styles.proLiveText,
+                    ]}
+                  >
+                    {candidate.live ? "● LIVE" : candidate.status.toUpperCase()}
+                  </Text>
+                  <Text numberOfLines={2} style={styles.proEventPickerName}>
+                    {candidate.name}
+                  </Text>
+                  <Text style={styles.rowMeta}>
+                    {candidate.location ?? "Location pending"} ·{" "}
+                    {candidate.genderCategory}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
+          {loading && !event && (
+            <Text style={styles.bookingEmpty}>
+              Loading live tournament desk…
+            </Text>
+          )}
+          {error && <Text style={styles.formError}>{error}</Text>}
+          {event && (
+            <>
+              <View style={styles.proEventHero}>
+                <View style={styles.eventBadges}>
+                  <Pill tone={event.live ? "live" : "neutral"}>
+                    {event.live ? "Live now" : event.status}
+                  </Pill>
+                  <Pill>{event.category ?? "FIVB"}</Pill>
+                </View>
+                <Text style={styles.proEventHeroTitle}>{event.name}</Text>
+                <Text style={styles.proEventHeroMeta}>
+                  {event.location ?? "Location pending"} · {event.teamCount}{" "}
+                  teams · {event.matches.length}/{event.matchCount} matches
+                </Text>
+                <Text style={styles.proEventUpdated}>
+                  Updated{" "}
+                  {new Date(event.lastSyncedAt).toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </Text>
+                {followNotice && (
+                  <Text style={styles.liveActivityNotice}>{followNotice}</Text>
+                )}
+              </View>
+
+              <SectionHeader
+                eyebrow={`${event.bracket.length} ROUNDS`}
+                title="Championship bracket."
+              />
+              {event.bracket.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.horizontalBleed}
+                >
+                  <View style={styles.proBracket}>
+                    {event.bracket.map((round) => (
+                      <View key={round.key} style={styles.proBracketRound}>
+                        <Text style={styles.proBracketRoundTitle}>
+                          {round.label.toUpperCase()}
+                        </Text>
+                        <View style={styles.proBracketRoundMatches}>
+                          {round.matches.map((match) => (
+                            <View key={match.id} style={styles.proBracketMatch}>
+                              <View style={styles.proBracketTeam}>
+                                <Text
+                                  numberOfLines={1}
+                                  style={[
+                                    styles.proBracketTeamName,
+                                    match.winnerSide === "A" &&
+                                      styles.proBracketWinner,
+                                  ]}
+                                >
+                                  {match.teamA.label}
+                                </Text>
+                                <Text style={styles.proBracketScore}>
+                                  {match.sets.map((set) => set.a).join(" · ") ||
+                                    "—"}
+                                </Text>
+                              </View>
+                              <View style={styles.proBracketTeam}>
+                                <Text
+                                  numberOfLines={1}
+                                  style={[
+                                    styles.proBracketTeamName,
+                                    match.winnerSide === "B" &&
+                                      styles.proBracketWinner,
+                                  ]}
+                                >
+                                  {match.teamB.label}
+                                </Text>
+                                <Text style={styles.proBracketScore}>
+                                  {match.sets.map((set) => set.b).join(" · ") ||
+                                    "—"}
+                                </Text>
+                              </View>
+                              <Text style={styles.proBracketPrediction}>
+                                {match.status === "live"
+                                  ? "● LIVE"
+                                  : `${match.prediction.teamA.toFixed(0)}% · ${
+                                      match.prediction.basis
+                                    }`}
+                              </Text>
+                              {Platform.OS === "ios" &&
+                                match.status !== "completed" && (
+                                  <Pressable
+                                    onPress={() => {
+                                      selectionHaptic();
+                                      void followMatch(match).catch((reason) =>
+                                        setFollowNotice(displayError(reason)),
+                                      );
+                                    }}
+                                    style={[
+                                      styles.proFollowButton,
+                                      followedMatchId === match.id &&
+                                        styles.proFollowButtonActive,
+                                    ]}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.proFollowButtonText,
+                                        followedMatchId === match.id &&
+                                          styles.proFollowButtonTextActive,
+                                      ]}
+                                    >
+                                      {followedMatchId === match.id
+                                        ? "Following on Lock Screen"
+                                        : match.status === "live"
+                                          ? "Follow live"
+                                          : "Notify + follow"}
+                                    </Text>
+                                  </Pressable>
+                                )}
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+              ) : (
+                <View style={styles.bookingEmptyCard}>
+                  <Text style={styles.rowTitle}>
+                    Bracket seeds are still taking shape.
+                  </Text>
+                  <Text style={styles.bodyText}>
+                    Pool standings and completed matches update here as the
+                    official feed reports them.
+                  </Text>
+                </View>
+              )}
+
+              {event.pools.length > 0 && (
+                <>
+                  <SectionHeader
+                    eyebrow={`${event.pools.length} POOLS`}
+                    title="Pool standings."
+                  />
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.horizontalBleed}
+                  >
+                    <View style={styles.proPoolRow}>
+                      {event.pools.map((pool) => (
+                        <View key={pool.name} style={styles.proPoolCard}>
+                          <Text style={styles.proPoolTitle}>{pool.name}</Text>
+                          {pool.standings.slice(0, 5).map((standing, index) => (
+                            <View
+                              key={standing.team.key}
+                              style={styles.proPoolStanding}
+                            >
+                              <Text style={styles.proPoolPlace}>
+                                {index + 1}
+                              </Text>
+                              <Text
+                                numberOfLines={1}
+                                style={styles.proPoolTeam}
+                              >
+                                {standing.team.label}
+                              </Text>
+                              <Text style={styles.proPoolRecord}>
+                                {standing.wins}–{standing.losses}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </>
+              )}
+            </>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 function DiscoverScreen({
   onBook,
 }: {
@@ -1220,7 +1776,8 @@ function DiscoverScreen({
   const [filter, setFilter] = useState("For you");
   const [search, setSearch] = useState("");
   const [bookingVenueId, setBookingVenueId] = useState<string>();
-  const { dashboard, venues } = usePlayerRuntime();
+  const [showProTour, setShowProTour] = useState(false);
+  const { dashboard, proCoverage, venues } = usePlayerRuntime();
   const events = dashboard?.events ?? demoEvents;
   const filteredEvents = events.filter((event) => {
     const query = search.trim().toLowerCase();
@@ -1269,6 +1826,29 @@ function DiscoverScreen({
           }
         />
         <Text style={styles.displayTitle}>Find your game.</Text>
+        <Pressable
+          onPress={() => {
+            selectionHaptic();
+            setShowProTour(true);
+          }}
+          style={styles.proTourEntry}
+        >
+          <View style={styles.flex}>
+            <Text style={styles.proTourEntryEyebrow}>
+              {proCoverage?.events.some((event) => event.live)
+                ? "● LIVE PRO TOUR"
+                : "PRO TOUR"}
+            </Text>
+            <Text style={styles.proTourEntryTitle}>
+              Pools, real brackets, predictions.
+            </Text>
+            <Text style={styles.proTourEntryMeta}>
+              {proCoverage?.events[0]?.name ??
+                "Follow the world’s best beach volleyball."}
+            </Text>
+          </View>
+          <Text style={styles.proTourEntryArrow}>↗</Text>
+        </Pressable>
         <View style={styles.searchField}>
           <Text style={styles.searchIcon}>⌕</Text>
           <TextInput
@@ -1402,6 +1982,10 @@ function DiscoverScreen({
         onClose={() => setBookingVenueId(undefined)}
         venueId={bookingVenueId}
         visible={Boolean(bookingVenueId)}
+      />
+      <ProTourModal
+        onClose={() => setShowProTour(false)}
+        visible={showProTour}
       />
     </>
   );
@@ -2890,7 +3474,10 @@ function TabBar({
           accessibilityRole="tab"
           accessibilityState={{ selected: active === tab.key }}
           key={tab.key}
-          onPress={() => onChange(tab.key)}
+          onPress={() => {
+            selectionHaptic();
+            onChange(tab.key);
+          }}
           style={styles.tabItem}
         >
           <Text
@@ -2910,16 +3497,116 @@ function TabBar({
   );
 }
 
+function WatchScoreInbox() {
+  const [draft, setDraft] = useState<WatchScoreDraft | null>(null);
+
+  useEffect(() => {
+    setDraft(getPendingWatchScoreDraft());
+    return subscribeToWatchScoreDraft(setDraft);
+  }, []);
+
+  if (!draft) return null;
+
+  const review = async () => {
+    selectionHaptic();
+    const watchPayload = encodeURIComponent(
+      JSON.stringify({
+        source: draft.source,
+        draftId: draft.draftId,
+        sets: draft.sets,
+        capturedAt: draft.capturedAt,
+      }),
+    );
+    const query = draft.matchId
+      ? `match=${encodeURIComponent(draft.matchId)}&watch=${watchPayload}`
+      : `watch=${watchPayload}`;
+    await WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/score?${query}`);
+    clearPendingWatchScoreDraft();
+    setDraft(null);
+  };
+
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={() => setDraft(null)}
+      presentationStyle="pageSheet"
+      visible
+    >
+      <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
+        <ScrollView contentContainerStyle={styles.watchDraftContent}>
+          <View style={styles.watchDraftMark}>
+            <Text style={styles.watchDraftMarkText}>⌚</Text>
+          </View>
+          <Text style={styles.eyebrow}>CAPTURED ON APPLE WATCH</Text>
+          <Text style={styles.watchDraftTitle}>Your score is ready.</Text>
+          <Text style={styles.watchDraftBody}>
+            Add the players, confirm everyone agreed to record it, then submit
+            from your signed-in Duna account.
+          </Text>
+          <View style={styles.watchDraftScore}>
+            <View>
+              <Text style={styles.rowTitle}>{draft.teamA}</Text>
+              <Text style={styles.rowMeta}>Team A</Text>
+            </View>
+            <Text style={styles.watchDraftSets}>
+              {draft.sets.map((set) => `${set.a}–${set.b}`).join("  ")}
+            </Text>
+            <View>
+              <Text style={[styles.rowTitle, styles.watchDraftTeamB]}>
+                {draft.teamB}
+              </Text>
+              <Text style={[styles.rowMeta, styles.watchDraftTeamB]}>
+                Team B
+              </Text>
+            </View>
+          </View>
+          <View style={styles.watchDraftTrust}>
+            <Text style={styles.mobilePolicyIcon}>✓</Text>
+            <Text style={[styles.rowMeta, styles.flex]}>
+              Duna records who submits the result. Only event participants,
+              assigned scorers, match players, and organization staff can report
+              an existing event match.
+            </Text>
+          </View>
+          <Pressable onPress={() => void review()} style={styles.payButton}>
+            <Text style={styles.payButtonText}>Review and submit</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              clearPendingWatchScoreDraft();
+              setDraft(null);
+            }}
+            style={styles.watchDraftDiscard}
+          >
+            <Text style={styles.watchDraftDiscardText}>Discard draft</Text>
+          </Pressable>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 function DunaApp() {
   const [tab, setTab] = useState<Tab>("home");
   const [eventIndex, setEventIndex] = useState<number | null>(null);
   const [theme, setTheme] = useState<ThemeName>("light");
+  const screenTransition = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     void AsyncStorage.getItem("duna-theme").then((stored) => {
       if (stored === "dark") setTheme("dark");
     });
   }, []);
+
+  useEffect(() => {
+    screenTransition.setValue(0);
+    Animated.timing(screenTransition, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [screenTransition, tab]);
 
   activePalette = theme === "dark" ? darkColors : lightColors;
   activeStyles = theme === "dark" ? darkStyles : lightStyles;
@@ -2939,16 +3626,34 @@ function DunaApp() {
         <StatusBar style={theme === "dark" ? "light" : "dark"} />
         <View style={styles.app}>
           <PreviewBanner />
-          {tab === "home" && <HomeScreen onBook={setEventIndex} />}
-          {tab === "discover" && <DiscoverScreen onBook={setEventIndex} />}
-          {tab === "play" && <PlayScreen />}
-          {tab === "wallet" && <WalletScreen />}
-          {tab === "you" && <ProfileScreen />}
+          <Animated.View
+            style={[
+              styles.animatedScreen,
+              {
+                opacity: screenTransition,
+                transform: [
+                  {
+                    translateY: screenTransition.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [8, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            {tab === "home" && <HomeScreen onBook={setEventIndex} />}
+            {tab === "discover" && <DiscoverScreen onBook={setEventIndex} />}
+            {tab === "play" && <PlayScreen />}
+            {tab === "wallet" && <WalletScreen />}
+            {tab === "you" && <ProfileScreen />}
+          </Animated.View>
           <TabBar active={tab} onChange={setTab} />
           <BookingModal
             eventIndex={eventIndex}
             onClose={() => setEventIndex(null)}
           />
+          <WatchScoreInbox />
         </View>
       </SafeAreaView>
     </ThemeContext.Provider>
@@ -2970,6 +3675,7 @@ function createStyles(palette: Palette) {
   return StyleSheet.create({
     safe: { backgroundColor: colors.canvas, flex: 1 },
     app: { backgroundColor: colors.canvas, flex: 1 },
+    animatedScreen: { flex: 1 },
     buttonDisabled: { opacity: 0.45 },
     flex: { flex: 1, minWidth: 0 },
     formError: {
@@ -3062,6 +3768,7 @@ function createStyles(palette: Palette) {
       backgroundColor: colors.aquaDeep,
       borderColor: colors.aquaDeep,
     },
+    bookingDateUnavailable: { opacity: 0.32 },
     bookingDateDay: {
       color: colors.muted,
       fontSize: 6,
@@ -3099,6 +3806,23 @@ function createStyles(palette: Palette) {
       fontWeight: "800",
     },
     bookingDurationTextActive: { color: "#ffffff" },
+    bookingWeather: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderColor: rgba(colors.accentRgb, 0.16),
+      borderRadius: 15,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginBottom: 14,
+      padding: 12,
+    },
+    bookingWeatherIcon: { fontSize: 24 },
+    bookingWeatherUpdated: {
+      color: colors.muted,
+      fontSize: 6,
+      textAlign: "right",
+    },
     bookingSlotGrid: {
       flexDirection: "row",
       flexWrap: "wrap",
@@ -3123,6 +3847,11 @@ function createStyles(palette: Palette) {
       fontSize: 7,
       marginTop: 5,
     },
+    bookingSlotWeather: {
+      color: colors.muted,
+      fontSize: 7,
+      marginTop: 4,
+    },
     bookingSlotPrice: {
       color: colors.aqua,
       fontSize: 8,
@@ -3141,6 +3870,12 @@ function createStyles(palette: Palette) {
       borderRadius: 16,
       borderWidth: 1,
       padding: 16,
+    },
+    bookingDaylightNote: {
+      color: colors.muted,
+      fontSize: 8,
+      lineHeight: 13,
+      marginTop: 10,
     },
     bookingAlertButton: {
       alignItems: "center",
@@ -3613,6 +4348,25 @@ function createStyles(palette: Palette) {
       paddingTop: 12,
     },
     cardLinkText: { color: colors.aqua, fontSize: 10, fontWeight: "700" },
+    liveActivityButton: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      marginTop: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    liveActivityButtonText: {
+      color: colors.onAccent,
+      fontSize: 9,
+      fontWeight: "900",
+    },
+    liveActivityNotice: {
+      color: colors.positive,
+      fontSize: 8,
+      fontWeight: "700",
+      marginTop: 8,
+    },
     metricStrip: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.07),
@@ -3702,6 +4456,12 @@ function createStyles(palette: Palette) {
       minHeight: 39,
     },
     eventMeta: { color: colors.muted, fontSize: 8, marginTop: 5 },
+    eventWeather: {
+      color: colors.aqua,
+      fontSize: 8,
+      fontWeight: "700",
+      marginTop: 5,
+    },
     eventFooter: {
       alignItems: "center",
       borderTopColor: rgba(colors.overlayRgb, 0.06),
@@ -3713,6 +4473,226 @@ function createStyles(palette: Palette) {
     },
     eventPrice: { color: colors.bone, fontSize: 10, fontWeight: "800" },
     eventSpots: { color: colors.muted, fontSize: 8 },
+    proTourEntry: {
+      alignItems: "center",
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 20,
+      flexDirection: "row",
+      gap: 12,
+      marginBottom: 18,
+      marginTop: 12,
+      minHeight: 128,
+      overflow: "hidden",
+      padding: 18,
+    },
+    proTourEntryEyebrow: {
+      color: "#9de9ff",
+      fontSize: 7,
+      fontWeight: "900",
+      letterSpacing: 0.9,
+    },
+    proTourEntryTitle: {
+      color: "#ffffff",
+      fontSize: 22,
+      fontWeight: "900",
+      letterSpacing: -0.9,
+      lineHeight: 24,
+      marginTop: 9,
+    },
+    proTourEntryMeta: {
+      color: "rgba(255,255,255,.7)",
+      fontSize: 8,
+      marginTop: 7,
+    },
+    proTourEntryArrow: {
+      color: "#ffffff",
+      fontSize: 22,
+      marginLeft: 4,
+    },
+    proTourHeader: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.08),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      padding: 18,
+    },
+    proTourTitle: {
+      color: colors.bone,
+      fontSize: 38,
+      fontWeight: "900",
+      letterSpacing: -1.9,
+    },
+    proTourClose: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderRadius: 22,
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    proTourContent: { padding: 18, paddingBottom: 60 },
+    proEventPicker: {
+      flexDirection: "row",
+      gap: 9,
+      paddingHorizontal: 18,
+      paddingRight: 36,
+      paddingVertical: 6,
+    },
+    proEventPickerCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 16,
+      borderWidth: 1,
+      minHeight: 110,
+      padding: 13,
+      width: 210,
+    },
+    proEventPickerCardActive: {
+      borderColor: colors.aqua,
+      borderWidth: 2,
+    },
+    proEventPickerStatus: {
+      color: colors.muted,
+      fontSize: 7,
+      fontWeight: "900",
+      letterSpacing: 0.6,
+    },
+    proLiveText: { color: colors.danger },
+    proEventPickerName: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+      lineHeight: 18,
+      marginTop: 10,
+    },
+    proEventHero: {
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 22,
+      marginTop: 18,
+      padding: 18,
+    },
+    proEventHeroTitle: {
+      color: "#ffffff",
+      fontSize: 30,
+      fontWeight: "900",
+      letterSpacing: -1.3,
+      lineHeight: 32,
+      marginTop: 15,
+    },
+    proEventHeroMeta: {
+      color: "rgba(255,255,255,.74)",
+      fontSize: 9,
+      lineHeight: 14,
+      marginTop: 10,
+    },
+    proEventUpdated: {
+      color: "rgba(255,255,255,.56)",
+      fontSize: 7,
+      marginTop: 12,
+    },
+    proBracket: {
+      alignItems: "stretch",
+      flexDirection: "row",
+      gap: 14,
+      paddingHorizontal: 18,
+      paddingRight: 36,
+    },
+    proBracketRound: { minWidth: 240, width: 240 },
+    proBracketRoundTitle: {
+      color: colors.muted,
+      fontSize: 7,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+      marginBottom: 9,
+    },
+    proBracketRoundMatches: {
+      flex: 1,
+      justifyContent: "space-around",
+      gap: 10,
+    },
+    proBracketMatch: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 14,
+      borderWidth: 1,
+      overflow: "hidden",
+      padding: 10,
+    },
+    proBracketTeam: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.06),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "space-between",
+      minHeight: 30,
+    },
+    proBracketTeamName: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 9,
+      fontWeight: "700",
+    },
+    proBracketWinner: { color: colors.bone, fontWeight: "900" },
+    proBracketScore: {
+      color: colors.aqua,
+      fontSize: 8,
+      fontWeight: "900",
+    },
+    proBracketPrediction: {
+      color: colors.muted,
+      fontSize: 6,
+      marginTop: 7,
+      textTransform: "uppercase",
+    },
+    proFollowButton: {
+      alignItems: "center",
+      borderColor: colors.aqua,
+      borderRadius: 999,
+      borderWidth: 1,
+      marginTop: 9,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+    },
+    proFollowButtonActive: { backgroundColor: colors.aqua },
+    proFollowButtonText: {
+      color: colors.aqua,
+      fontSize: 7,
+      fontWeight: "900",
+    },
+    proFollowButtonTextActive: { color: colors.onAccent },
+    proPoolRow: {
+      flexDirection: "row",
+      gap: 10,
+      paddingHorizontal: 18,
+      paddingRight: 36,
+    },
+    proPoolCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 15,
+      borderWidth: 1,
+      padding: 12,
+      width: 250,
+    },
+    proPoolTitle: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
+      marginBottom: 8,
+    },
+    proPoolStanding: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.06),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 32,
+    },
+    proPoolPlace: { color: colors.aqua, fontSize: 8, width: 15 },
+    proPoolTeam: { color: colors.bone, flex: 1, fontSize: 8 },
+    proPoolRecord: { color: colors.muted, fontSize: 8 },
     listCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.07),
@@ -4236,6 +5216,77 @@ function createStyles(palette: Palette) {
     },
     modalSafe: { backgroundColor: colors.canvas, flex: 1 },
     modalContent: { padding: 18, paddingBottom: 45 },
+    watchDraftContent: {
+      alignItems: "center",
+      flexGrow: 1,
+      justifyContent: "center",
+      padding: 24,
+    },
+    watchDraftMark: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderColor: rgba(colors.accentRgb, 0.2),
+      borderRadius: 35,
+      borderWidth: 1,
+      height: 70,
+      justifyContent: "center",
+      marginBottom: 18,
+      width: 70,
+    },
+    watchDraftMarkText: { fontSize: 31 },
+    watchDraftTitle: {
+      color: colors.bone,
+      fontSize: 35,
+      fontWeight: "900",
+      letterSpacing: -1.4,
+      marginTop: 7,
+      textAlign: "center",
+    },
+    watchDraftBody: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 20,
+      marginTop: 9,
+      maxWidth: 360,
+      textAlign: "center",
+    },
+    watchDraftScore: {
+      alignItems: "center",
+      alignSelf: "stretch",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 24,
+      padding: 17,
+    },
+    watchDraftSets: {
+      color: colors.aqua,
+      fontSize: 19,
+      fontWeight: "900",
+      letterSpacing: -0.5,
+    },
+    watchDraftTeamB: { textAlign: "right" },
+    watchDraftTrust: {
+      alignItems: "flex-start",
+      alignSelf: "stretch",
+      backgroundColor: rgba(colors.positiveRgb, 0.08),
+      borderColor: rgba(colors.positiveRgb, 0.19),
+      borderRadius: 14,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 14,
+      padding: 13,
+    },
+    watchDraftDiscard: { marginTop: 15, padding: 10 },
+    watchDraftDiscardText: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: "700",
+    },
     modalHeader: {
       alignItems: "center",
       flexDirection: "row",

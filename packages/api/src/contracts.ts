@@ -69,6 +69,57 @@ export const venueSummarySchema = z.object({
   imageUrl: z.string().optional(),
   tags: z.array(z.string()).readonly(),
 });
+export const weatherIconSchema = z.enum([
+  "clear",
+  "mostly-clear",
+  "partly-cloudy",
+  "cloudy",
+  "fog",
+  "drizzle",
+  "rain",
+  "snow",
+  "storm",
+  "wind",
+  "unknown",
+]);
+export const weatherForecastPointSchema = z.object({
+  startsAt: z.iso.datetime(),
+  temperatureC: z.number().optional(),
+  apparentTemperatureC: z.number().optional(),
+  precipitationProbability: z.number().min(0).max(100).optional(),
+  precipitationIntensity: z.number().nonnegative().optional(),
+  windSpeedKph: z.number().nonnegative().optional(),
+  windGustKph: z.number().nonnegative().optional(),
+  humidity: z.number().min(0).max(100).optional(),
+  weatherCode: z.number().int().optional(),
+  condition: z.string(),
+  icon: weatherIconSchema,
+});
+export const weatherForecastDaySchema = z.object({
+  date: z.iso.date(),
+  temperatureHighC: z.number().optional(),
+  temperatureLowC: z.number().optional(),
+  precipitationProbability: z.number().min(0).max(100).optional(),
+  windGustKph: z.number().nonnegative().optional(),
+  weatherCode: z.number().int().optional(),
+  condition: z.string(),
+  icon: weatherIconSchema,
+  sunriseAt: z.iso.datetime().optional(),
+  sunsetAt: z.iso.datetime().optional(),
+  daylightSource: z.enum(["tomorrow.io", "calculated"]),
+});
+export const weatherForecastSchema = z.object({
+  provider: z.literal("Tomorrow.io"),
+  source: z.enum(["tomorrow.io", "calculated-daylight"]),
+  latitude: z.number(),
+  longitude: z.number(),
+  timezone: z.string(),
+  fetchedAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime(),
+  hourly: z.array(weatherForecastPointSchema).readonly(),
+  days: z.array(weatherForecastDaySchema).readonly(),
+});
 export const eventKindSchema = z.enum([
   "tournament",
   "league",
@@ -249,6 +300,7 @@ export const eventSummarySchema = z.object({
   lifecycleStatus: z.enum(["active", "cancelled", "completed"]).optional(),
   live: z.boolean().optional(),
   imageUrl: z.string().optional(),
+  weather: weatherForecastSchema.optional(),
   tags: z.array(z.string()).readonly(),
 });
 export const matchSummarySchema = z.object({
@@ -673,6 +725,23 @@ export const operatorAvailabilityBlockSchema = z.object({
   effectiveTo: z.iso.date().optional(),
 });
 
+export const operatorScheduleOverrideSchema = z.object({
+  id: z.string().uuid(),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
+  mode: z.enum([
+    "open",
+    "private-lessons-only",
+    "group-only",
+    "league-reserved",
+    "rentals-only",
+    "members-only",
+    "maintenance",
+    "blocked",
+  ]),
+  reason: z.string(),
+});
+
 export const operatorUtilizationSchema = z.object({
   percent: z.number().min(0).max(100),
   bookedMinutes30d: z.number().int().nonnegative(),
@@ -701,6 +770,7 @@ export const operatorCourtSchema = z.object({
   maximumAdvanceDays: z.number().int().positive(),
   cancellationPolicy: courtCancellationPolicySchema,
   schedule: z.array(operatorAvailabilityBlockSchema).readonly(),
+  overrides: z.array(operatorScheduleOverrideSchema).readonly(),
   utilization: operatorUtilizationSchema,
 });
 
@@ -724,6 +794,7 @@ export const operatorVenueSchema = z.object({
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   timezone: z.string(),
+  weather: weatherForecastSchema.optional(),
   utilization: operatorUtilizationSchema,
   courts: z.array(operatorCourtSchema).readonly(),
 });
@@ -1565,6 +1636,25 @@ export const matchScoringStateSchema = z.object({
     confirmedPersonIds: z.array(z.string().uuid()).readonly(),
     disputedPersonIds: z.array(z.string().uuid()).readonly(),
   }),
+  reporting: z.object({
+    reporters: z
+      .array(
+        z.object({
+          personId: z.string().uuid(),
+          displayName: z.string(),
+          eventCount: z.number().int().nonnegative(),
+          lastReportedAt: z.iso.datetime(),
+        }),
+      )
+      .readonly(),
+    lastReporter: z
+      .object({
+        personId: z.string().uuid(),
+        displayName: z.string(),
+        reportedAt: z.iso.datetime(),
+      })
+      .optional(),
+  }),
 });
 export const availableSlotSchema = z.object({
   startsAt: z.iso.datetime(),
@@ -1703,6 +1793,8 @@ export const courtBookingInventorySchema = z.object({
     heroImageUrl: z.string().optional(),
     heroImageTreatmentUrl: z.string().optional(),
     amenities: z.array(z.string()).readonly(),
+    latitude: z.number().optional(),
+    longitude: z.number().optional(),
   }),
   courts: z
     .array(
@@ -1747,6 +1839,15 @@ export const courtAvailabilitySlotSchema = z.object({
   localEndsAt: z.string(),
   durationMinutes: z.number().int().positive(),
   price: moneySchema.optional(),
+  daylightStatus: z.enum([
+    "daylight",
+    "before-sunrise",
+    "crosses-sunrise",
+    "crosses-sunset",
+    "after-dark",
+    "unknown",
+  ]),
+  weather: weatherForecastPointSchema.optional(),
 });
 
 export const courtAvailabilitySchema = z.object({
@@ -1755,6 +1856,8 @@ export const courtAvailabilitySchema = z.object({
   durationMinutes: z.number().int().positive(),
   timezone: z.string(),
   generatedAt: z.iso.datetime(),
+  forecast: weatherForecastSchema.optional(),
+  excludedAfterDarkCount: z.number().int().nonnegative(),
   slots: z.array(courtAvailabilitySlotSchema).readonly(),
 });
 
@@ -1908,6 +2011,9 @@ export const courtBookingInviteSummarySchema = z.object({
 
 export type CourtBookingInventory = z.infer<typeof courtBookingInventorySchema>;
 export type CourtAvailability = z.infer<typeof courtAvailabilitySchema>;
+export type WeatherForecast = z.infer<typeof weatherForecastSchema>;
+export type WeatherForecastDay = z.infer<typeof weatherForecastDaySchema>;
+export type WeatherForecastPoint = z.infer<typeof weatherForecastPointSchema>;
 export type CourtCheckoutResult = z.infer<typeof courtCheckoutResultSchema>;
 export type CourtCheckoutStatus = z.infer<typeof courtCheckoutStatusSchema>;
 export type CourtCancellationPolicy = z.infer<

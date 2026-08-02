@@ -35,6 +35,9 @@ type PublicPeople = Awaited<
 type PublicVenues = Awaited<
   ReturnType<DunaApiClient["public"]["venues"]["query"]>
 >;
+type PublicProCoverage = Awaited<
+  ReturnType<DunaApiClient["public"]["proCoverage"]["query"]>
+>;
 
 export interface PlayerRuntime {
   readonly mode: "preview" | "live";
@@ -44,6 +47,7 @@ export interface PlayerRuntime {
   readonly settings?: PlayerSettings;
   readonly people?: PublicPeople;
   readonly venues?: PublicVenues;
+  readonly proCoverage?: PublicProCoverage;
   readonly refresh: () => Promise<void>;
   readonly signOut?: () => Promise<void>;
 }
@@ -102,6 +106,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   const [settings, setSettings] = useState<PlayerSettings>();
   const [people, setPeople] = useState<PublicPeople>();
   const [venues, setVenues] = useState<PublicVenues>();
+  const [proCoverage, setProCoverage] = useState<PublicProCoverage>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
 
@@ -109,19 +114,27 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     setLoading(true);
     setError(undefined);
     try {
-      const [nextDashboard, nextWallet, nextSettings, nextPeople, nextVenues] =
-        await Promise.all([
-          client.player.dashboard.query(),
-          client.player.wallet.query(),
-          client.player.settings.query(),
-          client.public.players.query({ limit: 12 }),
-          client.public.venues.query(),
-        ]);
+      const [
+        nextDashboard,
+        nextWallet,
+        nextSettings,
+        nextPeople,
+        nextVenues,
+        nextProCoverage,
+      ] = await Promise.all([
+        client.player.dashboard.query(),
+        client.player.wallet.query(),
+        client.player.settings.query(),
+        client.public.players.query({ limit: 12 }),
+        client.public.venues.query(),
+        client.public.proCoverage.query().catch(() => undefined),
+      ]);
       setDashboard(nextDashboard);
       setWallet(nextWallet);
       setSettings(nextSettings);
       setPeople(nextPeople);
       setVenues(nextVenues);
+      setProCoverage(nextProCoverage);
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -189,6 +202,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         settings,
         people,
         venues,
+        proCoverage,
         refresh,
         signOut,
       }}

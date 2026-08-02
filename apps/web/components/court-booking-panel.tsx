@@ -81,6 +81,28 @@ function initials(name: string) {
     .join("");
 }
 
+function weatherSymbol(icon: string | undefined) {
+  if (icon === "clear" || icon === "mostly-clear") return "☀";
+  if (icon === "partly-cloudy") return "🌤";
+  if (icon === "rain" || icon === "drizzle") return "🌦";
+  if (icon === "storm") return "⛈";
+  if (icon === "snow") return "❄";
+  if (icon === "fog") return "≋";
+  return "☁";
+}
+
+function fahrenheit(celsius: number) {
+  return Math.round((celsius * 9) / 5 + 32);
+}
+
+function instantTime(instant: string, timezone: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(instant));
+}
+
 export function CourtBookingPanel({
   bookingSubjects,
   inventory,
@@ -160,6 +182,9 @@ export function CourtBookingPanel({
   );
   const selectedCourt = inventory.courts.find((court) => court.id === courtId);
   const selectedSlot = selectedSlots.find((slot) => slot.courtId === courtId);
+  const forecastDay = availability?.forecast?.days.find(
+    (day) => day.date === selectedDate,
+  );
   const selectedSubject =
     bookingSubjects.find((person) => person.id === subjectPersonId) ??
     bookingSubjects[0];
@@ -477,25 +502,94 @@ export function CourtBookingPanel({
           ))}
         </div>
 
+        {availability?.forecast && (
+          <div className="venue-weather-strip">
+            <span className="venue-weather-strip__condition">
+              <strong>
+                {weatherSymbol(
+                  availability.slots[0]?.weather?.icon ?? forecastDay?.icon,
+                )}{" "}
+                {availability.slots[0]?.weather?.temperatureC !== undefined
+                  ? `${fahrenheit(availability.slots[0].weather.temperatureC)}° · `
+                  : ""}
+                {availability.slots[0]?.weather?.condition ??
+                  forecastDay?.condition}
+              </strong>
+              <small>Expected conditions for open starts</small>
+            </span>
+            {forecastDay?.sunriseAt && (
+              <span>
+                <small>Sunrise</small>
+                <strong>
+                  {instantTime(forecastDay.sunriseAt, availability.timezone)}
+                </strong>
+              </span>
+            )}
+            {forecastDay?.sunsetAt && (
+              <span>
+                <small>Sunset</small>
+                <strong>
+                  {instantTime(forecastDay.sunsetAt, availability.timezone)}
+                </strong>
+              </span>
+            )}
+            <span>
+              <small>Forecast</small>
+              <strong>
+                Updated{" "}
+                {instantTime(
+                  availability.forecast.updatedAt,
+                  availability.timezone,
+                )}
+              </strong>
+            </span>
+          </div>
+        )}
+
         <div className="venue-time-grid" aria-busy={isLoadingSlots}>
           {isLoadingSlots &&
             Array.from({ length: 10 }, (_, index) => (
               <span className="venue-time-skeleton" key={index} />
             ))}
           {!isLoadingSlots &&
-            uniqueStarts.map((localStartsAt) => (
-              <button
-                type="button"
-                className={
-                  localStartsAt === selectedLocalStart ? "selected" : undefined
-                }
-                key={localStartsAt}
-                onClick={() => selectStart(localStartsAt)}
-              >
-                {displayTime(localStartsAt)}
-              </button>
-            ))}
+            uniqueStarts.map((localStartsAt) => {
+              const representative = availability?.slots.find(
+                (slot) => slot.localStartsAt === localStartsAt,
+              );
+              return (
+                <button
+                  type="button"
+                  className={
+                    localStartsAt === selectedLocalStart
+                      ? "selected"
+                      : undefined
+                  }
+                  key={localStartsAt}
+                  onClick={() => selectStart(localStartsAt)}
+                >
+                  <span>{displayTime(localStartsAt)}</span>
+                  {representative?.weather && (
+                    <small>
+                      {weatherSymbol(representative.weather.icon)}{" "}
+                      {representative.weather.temperatureC !== undefined
+                        ? `${fahrenheit(representative.weather.temperatureC)}°`
+                        : representative.weather.condition}
+                    </small>
+                  )}
+                </button>
+              );
+            })}
         </div>
+
+        {!isLoadingSlots && (availability?.excludedAfterDarkCount ?? 0) > 0 && (
+          <p className="venue-daylight-note">
+            ☀ {availability?.excludedAfterDarkCount} after-dark{" "}
+            {availability?.excludedAfterDarkCount === 1
+              ? "start is"
+              : "starts are"}{" "}
+            hidden because one or more available courts are not lit.
+          </p>
+        )}
 
         {!isLoadingSlots && uniqueStarts.length === 0 && (
           <div className="venue-no-slots">
@@ -545,6 +639,13 @@ export function CourtBookingPanel({
                   <small>
                     {court.surface} · {court.lit ? "Lit" : "Natural light"} · up
                     to {court.capacity}
+                  </small>
+                  <small>
+                    {slot.daylightStatus === "daylight"
+                      ? "☀ Plays fully in daylight"
+                      : court.lit
+                        ? "☾ Lighting required for this time"
+                        : "Daylight window required"}
                   </small>
                 </span>
                 <span>

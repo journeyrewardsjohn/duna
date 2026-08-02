@@ -2377,6 +2377,10 @@ export const rallyEvents = pgTable(
     matchId: uuid("match_id")
       .notNull()
       .references(() => matches.id, { onDelete: "cascade" }),
+    reportedByPersonId: uuid("reported_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
     sequence: integer("sequence").notNull(),
     deviceId: varchar("device_id", { length: 128 }).notNull(),
     monotonicCounter: integer("monotonic_counter").notNull(),
@@ -2404,6 +2408,10 @@ export const rallyEvents = pgTable(
       table.deviceId,
     ),
     index("rally_event_match_sequence_idx").on(table.matchId, table.sequence),
+    index("rally_event_match_reporter_idx").on(
+      table.matchId,
+      table.reportedByPersonId,
+    ),
   ],
 );
 

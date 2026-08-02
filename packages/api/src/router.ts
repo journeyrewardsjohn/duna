@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import type { EventSummary } from "@duna/core";
 import { priceConsumerOrder } from "@duna/pricing";
 import { scheduleTournament, solveAvailableSlots } from "@duna/scheduling";
 import {
@@ -256,6 +257,34 @@ import {
   proposeAgentAction,
   toolRiskRegistry,
 } from "./risk";
+import { loadWeatherForecast } from "./weather";
+
+async function attachEventWeather(
+  event: EventSummary,
+  now = new Date(),
+): Promise<EventSummary> {
+  if (
+    event.location?.mode === "online" ||
+    event.location?.latitude === undefined ||
+    event.location.longitude === undefined ||
+    Date.parse(event.endsAt) < now.getTime() - 6 * 60 * 60_000
+  ) {
+    return event;
+  }
+  return {
+    ...event,
+    weather: await loadWeatherForecast({
+      latitude: event.location.latitude,
+      longitude: event.location.longitude,
+      timezone: event.timezone,
+      startsAt: new Date(
+        Math.max(now.getTime(), Date.parse(event.startsAt) - 6 * 60 * 60_000),
+      ),
+      endsAt: new Date(Date.parse(event.endsAt) + 6 * 60 * 60_000),
+      now,
+    }),
+  };
+}
 
 const moneyItemSchema = z.object({
   id: z.string().min(1),
@@ -841,8 +870,8 @@ const publicRouter = router({
         .optional(),
     )
     .output(z.array(eventSummarySchema).readonly())
-    .query(async ({ input }) =>
-      (await getRepository().public.events()).filter((event) => {
+    .query(async ({ input }) => {
+      const events = (await getRepository().public.events()).filter((event) => {
         if (input?.kind && event.kind !== input.kind) return false;
         if (
           input?.rating !== undefined &&
@@ -853,15 +882,16 @@ const publicRouter = router({
           return false;
         }
         return true;
-      }),
-    ),
+      });
+      return Promise.all(events.map((event) => attachEventWeather(event)));
+    }),
   eventBySlug: publicProcedure
     .input(z.object({ slug: z.string().min(1) }))
     .output(eventSummarySchema)
     .query(async ({ input }) => {
       const event = await getRepository().public.eventBySlug(input.slug);
       if (!event) throw new TRPCError({ code: "NOT_FOUND" });
-      return event;
+      return attachEventWeather(event);
     }),
   venues: publicProcedure
     .output(z.array(venueSummarySchema).readonly())

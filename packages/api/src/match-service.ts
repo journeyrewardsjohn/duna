@@ -7,9 +7,12 @@ import {
   matchConfirmations,
   matchHistoryDisputes,
   matches,
+  organizationMemberships,
+  organizationParticipants,
   people,
   programs,
   rallyEvents,
+  registrations,
   ratingEvents,
   ratings,
   sessions,
@@ -96,6 +99,19 @@ export interface MatchScoringState {
   readonly confirmation: {
     readonly confirmedPersonIds: readonly string[];
     readonly disputedPersonIds: readonly string[];
+  };
+  readonly reporting: {
+    readonly reporters: readonly {
+      readonly personId: string;
+      readonly displayName: string;
+      readonly eventCount: number;
+      readonly lastReportedAt: string;
+    }[];
+    readonly lastReporter?: {
+      readonly personId: string;
+      readonly displayName: string;
+      readonly reportedAt: string;
+    };
   };
 }
 
@@ -221,6 +237,8 @@ async function matchParticipants(matchId: string): Promise<{
   readonly match: typeof matches.$inferSelect;
   readonly teamAIds: readonly string[];
   readonly teamBIds: readonly string[];
+  readonly sessionId?: string;
+  readonly organizationIds: readonly string[];
 }> {
   const database = getDatabase();
   const match = await database.query.matches.findFirst({
@@ -232,10 +250,47 @@ async function matchParticipants(matchId: string): Promise<{
       "Scorable match was not found.",
     );
   }
-  const memberRows = await database
-    .select()
-    .from(teamMembers)
-    .where(inArray(teamMembers.teamId, [match.teamAId, match.teamBId]));
+  const [memberRows, divisionContextRows] = await Promise.all([
+    database
+      .select()
+      .from(teamMembers)
+      .where(inArray(teamMembers.teamId, [match.teamAId, match.teamBId])),
+    match.divisionId
+      ? database
+          .select({
+            sessionId: divisions.sessionId,
+            programId: sessions.programId,
+            eventTypeId: sessions.eventTypeId,
+            sessionVenueId: sessions.venueId,
+          })
+          .from(divisions)
+          .leftJoin(sessions, eq(divisions.sessionId, sessions.id))
+          .where(eq(divisions.id, match.divisionId))
+          .limit(1)
+      : Promise.resolve([]),
+  ]);
+  const divisionContext = divisionContextRows[0];
+  const venueIds = [match.venueId, divisionContext?.sessionVenueId].filter(
+    (id): id is string => Boolean(id),
+  );
+  const [venueOrganizations, program, eventType] = await Promise.all([
+    venueIds.length > 0
+      ? database
+          .select({ organizationId: venues.organizationId })
+          .from(venues)
+          .where(inArray(venues.id, venueIds))
+      : Promise.resolve([]),
+    divisionContext?.programId
+      ? database.query.programs.findFirst({
+          where: eq(programs.id, divisionContext.programId),
+        })
+      : Promise.resolve(undefined),
+    divisionContext?.eventTypeId
+      ? database.query.eventTypes.findFirst({
+          where: eq(eventTypes.id, divisionContext.eventTypeId),
+        })
+      : Promise.resolve(undefined),
+  ]);
   return {
     match,
     teamAIds: memberRows
@@ -244,24 +299,74 @@ async function matchParticipants(matchId: string): Promise<{
     teamBIds: memberRows
       .filter((member) => member.teamId === match.teamBId)
       .map((member) => member.personId),
+    sessionId: divisionContext?.sessionId,
+    organizationIds: [
+      ...new Set(
+        [
+          ...venueOrganizations.map((row) => row.organizationId),
+          program?.organizationId,
+          eventType?.organizationId,
+        ].filter((id): id is string => Boolean(id)),
+      ),
+    ],
   };
 }
 
-function assertMatchAuthority(input: {
+async function assertMatchAuthority(input: {
   readonly actor: ApiActor;
+  readonly match: typeof matches.$inferSelect;
   readonly teamAIds: readonly string[];
   readonly teamBIds: readonly string[];
-}): void {
+  readonly sessionId?: string;
+  readonly organizationIds: readonly string[];
+}): Promise<void> {
   const isParticipant = [...input.teamAIds, ...input.teamBIds].includes(
     input.actor.personId,
   );
-  const isScorekeeper =
-    input.actor.scopes.includes("*") ||
-    input.actor.scopes.includes("matches:score");
-  if (!isParticipant && !isScorekeeper) {
+  const isNamedReporter =
+    input.match.createdByPersonId === input.actor.personId ||
+    input.match.assignedScorekeeperPersonId === input.actor.personId;
+  if (isParticipant || isNamedReporter) return;
+
+  const database = getDatabase();
+  const [registration, staffMembership, organizationParticipant] =
+    await Promise.all([
+      input.sessionId
+        ? database.query.registrations.findFirst({
+            where: and(
+              eq(registrations.sessionId, input.sessionId),
+              eq(registrations.personId, input.actor.personId),
+              inArray(registrations.status, ["confirmed", "checked-in"]),
+            ),
+          })
+        : Promise.resolve(undefined),
+      input.organizationIds.length > 0
+        ? database.query.organizationMemberships.findFirst({
+            where: and(
+              inArray(organizationMemberships.organizationId, [
+                ...input.organizationIds,
+              ]),
+              eq(organizationMemberships.personId, input.actor.personId),
+              eq(organizationMemberships.active, true),
+            ),
+          })
+        : Promise.resolve(undefined),
+      input.organizationIds.length > 0
+        ? database.query.organizationParticipants.findFirst({
+            where: and(
+              inArray(organizationParticipants.organizationId, [
+                ...input.organizationIds,
+              ]),
+              eq(organizationParticipants.personId, input.actor.personId),
+              eq(organizationParticipants.status, "active"),
+            ),
+          })
+        : Promise.resolve(undefined),
+    ]);
+  if (!registration && !staffMembership && !organizationParticipant) {
     throw new MatchServiceError(
       "PARTICIPANT_REQUIRED",
-      "Only a participant or assigned scoring operator can score this match.",
+      "Only a player, confirmed event participant, assigned scorer, match creator, or active organization member can report this score.",
     );
   }
 }
@@ -457,6 +562,7 @@ export async function startOperatorMatchScoring(input: {
     started AS (
       INSERT INTO ${rallyEvents} (
         "match_id",
+        "reported_by_person_id",
         "sequence",
         "device_id",
         "monotonic_counter",
@@ -467,6 +573,7 @@ export async function startOperatorMatchScoring(input: {
       )
       SELECT
         "id",
+        ${input.actor.personId}::uuid,
         1,
         ${input.deviceId},
         1,
@@ -696,6 +803,7 @@ export async function startSelfReportedMatch(input: {
     ),
     database.insert(rallyEvents).values({
       matchId,
+      reportedByPersonId: input.actor.personId,
       sequence: 1,
       deviceId: input.deviceId,
       monotonicCounter: 1,
@@ -917,6 +1025,7 @@ export async function recordCompletedMatch(input: {
     ...scoreEvents.map((event, index) =>
       database.insert(rallyEvents).values({
         matchId,
+        reportedByPersonId: input.actor.personId,
         sequence: index + 1,
         deviceId: input.deviceId,
         monotonicCounter: index + 1,
@@ -963,15 +1072,17 @@ export async function recordCompletedMatch(input: {
 export async function loadMatchScoringState(input: {
   readonly actor: ApiActor;
   readonly matchId: string;
+  readonly bypassAuthority?: boolean;
 }): Promise<MatchScoringState> {
   requireDatabase();
   const database = getDatabase();
   const participation = await matchParticipants(input.matchId);
-  assertMatchAuthority({
-    actor: input.actor,
-    teamAIds: participation.teamAIds,
-    teamBIds: participation.teamBIds,
-  });
+  if (!input.bypassAuthority) {
+    await assertMatchAuthority({
+      actor: input.actor,
+      ...participation,
+    });
+  }
   const [teamRows, scoringPeople, eventRows, confirmationRows, venue] =
     await Promise.all([
       database
@@ -1002,6 +1113,53 @@ export async function loadMatchScoringState(input: {
   const peopleById = new Map(
     scoringPeople.map((person) => [person.id, person] as const),
   );
+  const reporterIds = [
+    ...new Set(
+      eventRows.flatMap((row) =>
+        row.reportedByPersonId ? [row.reportedByPersonId] : [],
+      ),
+    ),
+  ];
+  const reporterRows =
+    reporterIds.length > 0
+      ? await database
+          .select({
+            id: people.id,
+            displayName: people.displayName,
+          })
+          .from(people)
+          .where(inArray(people.id, reporterIds))
+      : [];
+  const reporterNames = new Map(
+    reporterRows.map((person) => [person.id, person.displayName] as const),
+  );
+  const reportingByPerson = new Map<
+    string,
+    {
+      personId: string;
+      displayName: string;
+      eventCount: number;
+      lastReportedAt: string;
+    }
+  >();
+  for (const row of eventRows) {
+    if (!row.reportedByPersonId) continue;
+    const displayName = reporterNames.get(row.reportedByPersonId);
+    if (!displayName) continue;
+    const current = reportingByPerson.get(row.reportedByPersonId);
+    reportingByPerson.set(row.reportedByPersonId, {
+      personId: row.reportedByPersonId,
+      displayName,
+      eventCount: (current?.eventCount ?? 0) + 1,
+      lastReportedAt: row.receivedAt.toISOString(),
+    });
+  }
+  const lastReportedRow = [...eventRows]
+    .reverse()
+    .find(
+      (row) =>
+        row.reportedByPersonId && reporterNames.has(row.reportedByPersonId),
+    );
   const teamA = teamRows.find(
     (team) => team.id === participation.match.teamAId,
   );
@@ -1059,6 +1217,22 @@ export async function loadMatchScoringState(input: {
         .filter((row) => row.decision === "disputed")
         .map((row) => row.personId),
     },
+    reporting: {
+      reporters: [...reportingByPerson.values()].sort((a, b) =>
+        b.lastReportedAt.localeCompare(a.lastReportedAt),
+      ),
+      ...(lastReportedRow?.reportedByPersonId
+        ? {
+            lastReporter: {
+              personId: lastReportedRow.reportedByPersonId,
+              displayName:
+                reporterNames.get(lastReportedRow.reportedByPersonId) ??
+                "Duna scorer",
+              reportedAt: lastReportedRow.receivedAt.toISOString(),
+            },
+          }
+        : {}),
+    },
   };
 }
 
@@ -1090,6 +1264,7 @@ export async function loadPublicMatchScoringState(
   }
   return loadMatchScoringState({
     matchId,
+    bypassAuthority: true,
     actor: {
       personId: "00000000-0000-4000-8000-000000000000",
       displayName: "Duna live view",
@@ -1116,10 +1291,9 @@ export async function appendMatchEvents(input: {
   requireDatabase();
   const database = getDatabase();
   const participation = await matchParticipants(input.matchId);
-  assertMatchAuthority({
+  await assertMatchAuthority({
     actor: input.actor,
-    teamAIds: participation.teamAIds,
-    teamBIds: participation.teamBIds,
+    ...participation,
   });
   if (participation.match.status !== "live") {
     throw new MatchServiceError(
@@ -1180,6 +1354,7 @@ export async function appendMatchEvents(input: {
       .insert(rallyEvents)
       .values({
         matchId: input.matchId,
+        reportedByPersonId: input.actor.personId,
         sequence: envelope.sequence,
         deviceId: input.deviceId,
         monotonicCounter: envelope.monotonicCounter,

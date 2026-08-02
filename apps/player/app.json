@@ -3,7 +3,7 @@
     "name": "Duna",
     "slug": "duna-player",
     "scheme": "duna",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "platforms": ["ios", "android"],
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -11,8 +11,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.duna.player",
+      "appleTeamId": "4AMCKQA9GL",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
+        "NSSupportsLiveActivities": true,
+        "NSSupportsLiveActivitiesFrequentUpdates": true,
         "NSContactsUsageDescription": "Duna uses contacts you select to find frequent partners or send a one-time game invitation.",
         "NSLocationWhenInUseUsageDescription": "Duna uses your location to show nearby play and venues."
       }
@@ -30,7 +33,19 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/with-watch-platforms",
+      "@bacons/apple-targets",
       "expo-contacts",
+      [
+        "expo-widgets",
+        {
+          "bundleIdentifier": "com.duna.player.widgets",
+          "groupIdentifier": "group.com.duna.player",
+          "enablePushNotifications": true,
+          "frequentUpdates": true,
+          "widgets": []
+        }
+      ],
       [
         "expo-splash-screen",
         {
