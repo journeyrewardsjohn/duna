@@ -433,12 +433,30 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
       typeof match.format === "object" && match.format !== null
         ? match.format
         : {};
+    const matchType =
+      "matchType" in format &&
+      (format.matchType === "competitive" || format.matchType === "friendly")
+        ? format.matchType
+        : undefined;
+    const teamSize =
+      "teamSize" in format &&
+      typeof format.teamSize === "number" &&
+      Number.isInteger(format.teamSize)
+        ? format.teamSize
+        : teamAPlayers.length;
+    const recordingMode =
+      "recordingMode" in format &&
+      (format.recordingMode === "completed" || format.recordingMode === "live")
+        ? format.recordingMode
+        : undefined;
     const origin =
       "importedMatchId" in format || "source" in format
         ? "imported"
-        : match.verification === "self-reported"
-          ? "self-reported"
-          : "live-scored";
+        : recordingMode === "live"
+          ? "live-scored"
+          : match.verification === "self-reported"
+            ? "self-reported"
+            : "live-scored";
     const status =
       match.status === "pending-verification" ||
       match.status === "verified" ||
@@ -470,6 +488,13 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
         ratingDelta: deltaByMatch.get(match.id) ?? 0,
         origin,
         ratingEligibility: match.ratingEligible ? "eligible" : "held",
+        matchType,
+        teamSize,
+        recordingMode,
+        ratingImpact:
+          matchType === "friendly" || teamSize !== 2
+            ? "history-only"
+            : "sand-rating",
         dispute: dispute
           ? {
               status:

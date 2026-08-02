@@ -7,7 +7,6 @@ import {
   foldScore,
   standardBeachFormat,
   type ScoreEvent,
-  type ScoringSystem,
 } from "@duna/league-engine";
 import { Badge, Numeric } from "@duna/ui";
 import {
@@ -19,30 +18,11 @@ import {
   Wifi,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import {
-  FormEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useTransition,
-} from "react";
-import {
-  appendMatchEventsAction,
-  startMatchAction,
-} from "@/app/app/score/actions";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { appendMatchEventsAction } from "@/app/app/score/actions";
+import { MatchRecorder } from "@/components/match-recorder";
 
 const now = () => new Date().toISOString();
-
-function deviceId(): string {
-  const key = "duna-scoring-device-id";
-  const existing = window.localStorage.getItem(key);
-  if (existing) return existing;
-  const created = `duna-web-${crypto.randomUUID()}`;
-  window.localStorage.setItem(key, created);
-  return created;
-}
 
 function initials(people: MatchScoringState["teamA"]["people"]): string[] {
   return people.map((person) => person.initials);
@@ -59,37 +39,21 @@ export function LiveScoreboard({
   readonly players: readonly PersonSummary[];
   readonly venues: readonly VenueSummary[];
 }) {
-  const router = useRouter();
-  const candidates = players.filter((player) => player.id !== currentPlayer.id);
   const [match, setMatch] = useState(initialMatch);
   const [events, setEvents] = useState<readonly ScoreEvent[]>(
     initialMatch?.events ?? [],
   );
-  const [partnerId, setPartnerId] = useState(candidates[0]?.id ?? "");
-  const [opponentOneId, setOpponentOneId] = useState(candidates[1]?.id ?? "");
-  const [opponentTwoId, setOpponentTwoId] = useState(candidates[2]?.id ?? "");
-  const [venueId, setVenueId] = useState(venues[0]?.id ?? "");
-  const [scoringSystem, setScoringSystem] = useState<ScoringSystem>("rally");
-  const [initialServer, setInitialServer] = useState<"A" | "B">("A");
   const [offline, setOffline] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [error, setError] = useState<string>();
-  const [isStarting, startTransition] = useTransition();
   const pendingRef = useRef<ScoreEventEnvelope[]>([]);
   const sequenceRef = useRef(initialMatch?.nextSequence ?? 2);
   const counterRef = useRef(initialMatch?.nextMonotonicCounter ?? 2);
   const syncingRef = useRef(false);
   const flushRef = useRef<() => Promise<void>>(async () => undefined);
   const score = useMemo(
-    () =>
-      foldScore(
-        events,
-        match?.format ?? {
-          ...standardBeachFormat,
-          scoringSystem,
-        },
-      ),
-    [events, match?.format, scoringSystem],
+    () => foldScore(events, match?.format ?? standardBeachFormat),
+    [events, match?.format],
   );
   const current = score.sets[score.setIndex] ?? { a: 0, b: 0 };
   const storageKey = match ? `duna-score-pending:${match.matchId}` : undefined;
@@ -224,208 +188,22 @@ export function LiveScoreboard({
     void flushRef.current();
   };
 
-  const start = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(undefined);
-    const participantIds = [
-      currentPlayer.id,
-      partnerId,
-      opponentOneId,
-      opponentTwoId,
-    ];
-    if (
-      participantIds.some((id) => !id) ||
-      new Set(participantIds).size !== 4
-    ) {
-      setError("Choose four different players.");
-      return;
-    }
-    startTransition(async () => {
-      const response = await startMatchAction({
-        teamAIds: [currentPlayer.id, partnerId],
-        teamBIds: [opponentOneId, opponentTwoId],
-        venueId: venueId || undefined,
-        scoringSystem,
-        initialServer,
-        deviceId: deviceId(),
-      });
-      if (!response.ok) {
-        setError(response.error);
-        return;
-      }
-      setMatch(response.scoring);
-      setEvents(response.scoring.events);
-      sequenceRef.current = response.scoring.nextSequence;
-      counterRef.current = response.scoring.nextMonotonicCounter;
-      router.replace(`/app/score?match=${response.scoring.matchId}`);
-    });
-  };
-
   if (!match) {
     return (
-      <main className="score-setup">
-        <header>
-          <Link href="/app/matches">
-            <ChevronLeft aria-hidden size={20} /> Matches
-          </Link>
-          <Badge>Connected scoring</Badge>
-        </header>
-        <section>
-          <div>
-            <span className="page-eyebrow">Sand Rating match</span>
-            <h1>Set the court.</h1>
-            <p>
-              Four Duna profiles, event-sourced scoring, offline-safe replay,
-              and opponent confirmation before any rating moves.
-            </p>
-          </div>
-          {candidates.length >= 3 ? (
-            <form onSubmit={start}>
-              <div className="score-setup__team">
-                <span>Team A</span>
-                <label>
-                  You
-                  <input disabled value={currentPlayer.displayName} />
-                </label>
-                <label>
-                  Partner
-                  <select
-                    onChange={(eventValue) =>
-                      setPartnerId(eventValue.target.value)
-                    }
-                    value={partnerId}
-                  >
-                    {candidates.map((player) => (
-                      <option
-                        disabled={[opponentOneId, opponentTwoId].includes(
-                          player.id,
-                        )}
-                        key={player.id}
-                        value={player.id}
-                      >
-                        {player.displayName} ·{" "}
-                        {player.rating.display.toFixed(2)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div className="score-setup__team">
-                <span>Team B</span>
-                <label>
-                  Opponent
-                  <select
-                    onChange={(eventValue) =>
-                      setOpponentOneId(eventValue.target.value)
-                    }
-                    value={opponentOneId}
-                  >
-                    {candidates.map((player) => (
-                      <option
-                        disabled={[partnerId, opponentTwoId].includes(
-                          player.id,
-                        )}
-                        key={player.id}
-                        value={player.id}
-                      >
-                        {player.displayName} ·{" "}
-                        {player.rating.display.toFixed(2)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Opponent
-                  <select
-                    onChange={(eventValue) =>
-                      setOpponentTwoId(eventValue.target.value)
-                    }
-                    value={opponentTwoId}
-                  >
-                    {candidates.map((player) => (
-                      <option
-                        disabled={[partnerId, opponentOneId].includes(
-                          player.id,
-                        )}
-                        key={player.id}
-                        value={player.id}
-                      >
-                        {player.displayName} ·{" "}
-                        {player.rating.display.toFixed(2)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div className="form-grid form-grid--2">
-                <label>
-                  Venue
-                  <select
-                    onChange={(eventValue) =>
-                      setVenueId(eventValue.target.value)
-                    }
-                    value={venueId}
-                  >
-                    <option value="">Location not recorded</option>
-                    {venues.map((venue) => (
-                      <option key={venue.id} value={venue.id}>
-                        {venue.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Scoring
-                  <select
-                    onChange={(eventValue) =>
-                      setScoringSystem(eventValue.target.value as ScoringSystem)
-                    }
-                    value={scoringSystem}
-                  >
-                    <option value="rally">Rally scoring</option>
-                    <option value="sideout">Sideout scoring</option>
-                  </select>
-                </label>
-                <label>
-                  First serve
-                  <select
-                    onChange={(eventValue) =>
-                      setInitialServer(eventValue.target.value as "A" | "B")
-                    }
-                    value={initialServer}
-                  >
-                    <option value="A">Team A</option>
-                    <option value="B">Team B</option>
-                  </select>
-                </label>
-              </div>
-              {error && <p role="alert">{error}</p>}
-              <button
-                className="primary-action"
-                disabled={isStarting}
-                type="submit"
-              >
-                <Radio aria-hidden size={17} />
-                {isStarting ? "Opening court…" : "Start live scoring"}
-              </button>
-            </form>
-          ) : (
-            <article className="empty-state">
-              <h2>Three more public player profiles are needed.</h2>
-              <p>
-                Invite the other players to create or claim their Duna profile
-                before recording a rated doubles match.
-              </p>
-            </article>
-          )}
-        </section>
-      </main>
+      <MatchRecorder
+        currentPlayer={currentPlayer}
+        players={players}
+        venues={venues}
+      />
     );
   }
 
   const scoringOpen = match.status === "live" && score.status === "live";
   const teamAInitials = initials(match.teamA.people);
   const teamBInitials = initials(match.teamB.people);
+  const activeServer = [...match.teamA.people, ...match.teamB.people].find(
+    (person) => person.id === score.serverPersonId,
+  );
 
   return (
     <div className="scoreboard">
@@ -510,7 +288,11 @@ export function LiveScoreboard({
         >
           <div className="score-team__serve">
             {score.serving === "A" && <span />}
-            <small>{score.serving === "A" ? "Serving" : "Receiving"}</small>
+            <small>
+              {score.serving === "A"
+                ? `Serving${activeServer ? ` · ${activeServer.displayName.split(" ")[0]}` : ""}`
+                : "Receiving"}
+            </small>
           </div>
           <div className="score-team__people">
             {teamAInitials.map((value, index) => (
@@ -544,7 +326,11 @@ export function LiveScoreboard({
         >
           <div className="score-team__serve">
             {score.serving === "B" && <span />}
-            <small>{score.serving === "B" ? "Serving" : "Receiving"}</small>
+            <small>
+              {score.serving === "B"
+                ? `Serving${activeServer ? ` · ${activeServer.displayName.split(" ")[0]}` : ""}`
+                : "Receiving"}
+            </small>
           </div>
           <div className="score-team__people">
             {teamBInitials.map((value, index) => (

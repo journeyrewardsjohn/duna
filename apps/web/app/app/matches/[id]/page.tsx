@@ -38,9 +38,11 @@ export default async function MatchPage({
           >
             {match.status?.replace("-", " ") ?? match.verification}
           </Badge>
-          <Link href={`/live/${match.id}`}>
-            <Radio aria-hidden size={16} /> Live view
-          </Link>
+          {match.recordingMode === "live" && (
+            <Link href={`/live/${match.id}`}>
+              <Radio aria-hidden size={16} /> Live view
+            </Link>
+          )}
         </div>
       </header>
       <section className="match-detail__hero">
@@ -93,10 +95,15 @@ export default async function MatchPage({
           <TrendingUp aria-hidden size={21} />
           <span>
             <strong>
-              {match.ratingDelta > 0 ? "+" : ""}
-              {match.ratingDelta.toFixed(2)}
+              {match.ratingImpact === "history-only"
+                ? "History only"
+                : `${match.ratingDelta > 0 ? "+" : ""}${match.ratingDelta.toFixed(2)}`}
             </strong>
-            <small>Your Sand Rating movement</small>
+            <small>
+              {match.ratingImpact === "history-only"
+                ? "No Sand Rating movement"
+                : "Your Sand Rating movement"}
+            </small>
           </span>
         </article>
         <article>
@@ -110,6 +117,7 @@ export default async function MatchPage({
       <MatchConfirmation
         confirmationRequired={Boolean(match.confirmationRequired)}
         matchId={match.id}
+        ratingImpact={match.ratingImpact ?? "sand-rating"}
         status={match.status ?? "complete"}
       />
       <MatchHistoryControls match={match} />

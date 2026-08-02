@@ -277,6 +277,10 @@ export interface MatchSummary {
   readonly ratingDelta: number;
   readonly origin?: "imported" | "self-reported" | "live-scored";
   readonly ratingEligibility?: "eligible" | "held";
+  readonly matchType?: "competitive" | "friendly";
+  readonly teamSize?: number;
+  readonly recordingMode?: "completed" | "live";
+  readonly ratingImpact?: "sand-rating" | "history-only";
   readonly dispute?: {
     readonly status: "pending" | "upheld" | "rejected" | "withdrawn";
     readonly reasonCode: string;

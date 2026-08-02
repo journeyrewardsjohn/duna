@@ -481,6 +481,12 @@ function VenuePortfolioPanel({
           Venue identity, courts, pricing, availability, and player booking all
           begin in one guided setup below.
         </p>
+        <Link
+          className="hq-button hq-button--primary module-feature-card__action"
+          href="/locations/create#venue-details"
+        >
+          Set up your first venue <ArrowRight aria-hidden size={16} />
+        </Link>
       </section>
     );
   }
@@ -550,29 +556,46 @@ function VenuePortfolioPanel({
             </div>
           </dl>
           <div className="venue-court-utilization">
-            {venue.courts.map((court) => (
-              <article key={court.id}>
-                <span>
-                  <Waves aria-hidden size={15} />
-                  <strong>{court.name}</strong>
-                  <small>
-                    {court.durationOptionsMinutes.join(" / ")} min ·{" "}
-                    {court.bookingPolicy}
-                  </small>
-                </span>
-                <span>
-                  <strong>{court.utilization.percent.toFixed(1)}%</strong>
-                  <i>
-                    <b
-                      style={{
-                        width: `${Math.max(2, court.utilization.percent)}%`,
-                      }}
-                    />
-                  </i>
-                </span>
-              </article>
-            ))}
+            {venue.courts.map((court) => {
+              const ratePlan = workspace.ratePlans.find(
+                (rate) => rate.id === court.ratePlanId,
+              );
+              return (
+                <article key={court.id}>
+                  <span>
+                    <Waves aria-hidden size={15} />
+                    <strong>{court.name}</strong>
+                    <small>
+                      {court.durationOptionsMinutes.join(" / ")} min ·{" "}
+                      {ratePlan
+                        ? `${formatMoney(
+                            ratePlan.nonMemberAmountMinor ??
+                              ratePlan.baseAmountMinor,
+                            ratePlan.currency,
+                          )} / ${ratePlan.rateUnitMinutes} min`
+                        : "Rate needed before paid booking"}
+                    </small>
+                  </span>
+                  <span>
+                    <strong>{court.utilization.percent.toFixed(1)}%</strong>
+                    <i>
+                      <b
+                        style={{
+                          width: `${Math.max(2, court.utilization.percent)}%`,
+                        }}
+                      />
+                    </i>
+                  </span>
+                </article>
+              );
+            })}
           </div>
+          <Link
+            className="venue-portfolio-card__manage"
+            href="/locations/create#court-pricing"
+          >
+            Manage courts and rates <ArrowRight aria-hidden size={15} />
+          </Link>
         </article>
       ))}
     </div>

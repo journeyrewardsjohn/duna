@@ -268,6 +268,10 @@ export const matchSummarySchema = z.object({
   ratingDelta: z.number(),
   origin: z.enum(["imported", "self-reported", "live-scored"]).optional(),
   ratingEligibility: z.enum(["eligible", "held"]).optional(),
+  matchType: z.enum(["competitive", "friendly"]).optional(),
+  teamSize: z.number().int().min(1).max(6).optional(),
+  recordingMode: z.enum(["completed", "live"]).optional(),
+  ratingImpact: z.enum(["sand-rating", "history-only"]).optional(),
   dispute: z
     .object({
       status: z.enum(["pending", "upheld", "rejected", "withdrawn"]),
@@ -1454,6 +1458,7 @@ export const scoreStateSchema = z.object({
   setIndex: z.number().int().nonnegative(),
   setsWon: z.object({ A: z.number().int(), B: z.number().int() }),
   serving: z.enum(["A", "B"]),
+  serverPersonId: z.string().uuid().optional(),
   timeouts: z.object({ A: z.number().int(), B: z.number().int() }),
   sideSwitchDue: z.boolean(),
   technicalTimeoutDue: z.boolean(),
@@ -1465,6 +1470,20 @@ export const scoreEventSchema = z.discriminatedUnion("type", [
     id: z.string().uuid(),
     type: z.literal("match-started"),
     initialServer: z.enum(["A", "B"]),
+    initialServerPersonId: z.string().uuid().optional(),
+    occurredAt: z.iso.datetime(),
+  }),
+  z.object({
+    id: z.string().uuid(),
+    type: z.literal("match-recorded"),
+    occurredAt: z.iso.datetime(),
+  }),
+  z.object({
+    id: z.string().uuid(),
+    type: z.literal("set-score-recorded"),
+    setIndex: z.number().int().nonnegative(),
+    a: z.number().int().nonnegative(),
+    b: z.number().int().nonnegative(),
     occurredAt: z.iso.datetime(),
   }),
   z.object({
@@ -1509,6 +1528,18 @@ export const matchFormatSchema = z.object({
   timeoutsPerTeamPerSet: z.number().int().nonnegative(),
   technicalTimeoutAt: z.number().int().positive().optional(),
   lockedServeOrder: z.boolean(),
+  teamSize: z.number().int().min(1).max(6).optional(),
+  matchType: z.enum(["competitive", "friendly"]).optional(),
+  recordingMode: z.enum(["completed", "live"]).optional(),
+  allPlayersAgreedToRecord: z.boolean().optional(),
+  serviceOrder: z
+    .object({
+      A: z.array(z.string().uuid()).readonly(),
+      B: z.array(z.string().uuid()).readonly(),
+    })
+    .readonly()
+    .optional(),
+  playedAt: z.iso.datetime().optional(),
 });
 export const matchScoringStateSchema = z.object({
   matchId: z.string().uuid(),

@@ -46,6 +46,8 @@ export function MatchCard({ match }: { readonly match: MatchSummary }) {
           <Badge tone="warning">Confirm</Badge>
         ) : match.status === "disputed" ? (
           <Badge tone="warning">Held</Badge>
+        ) : match.ratingImpact === "history-only" ? (
+          <Badge tone="neutral">History</Badge>
         ) : (
           <Badge tone={match.ratingDelta > 0 ? "positive" : "neutral"}>
             {match.ratingDelta > 0 ? "+" : ""}

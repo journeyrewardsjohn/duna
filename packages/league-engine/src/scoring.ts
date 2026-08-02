@@ -12,6 +12,12 @@ export interface MatchFormat {
   readonly timeoutsPerTeamPerSet: number;
   readonly technicalTimeoutAt?: number;
   readonly lockedServeOrder: boolean;
+  readonly teamSize?: number;
+  readonly matchType?: "competitive" | "friendly";
+  readonly recordingMode?: "completed" | "live";
+  readonly allPlayersAgreedToRecord?: boolean;
+  readonly serviceOrder?: Readonly<Record<TeamSide, readonly string[]>>;
+  readonly playedAt?: string;
 }
 
 export const standardBeachFormat: MatchFormat = {
@@ -32,6 +38,20 @@ export type ScoreEvent =
       readonly id: string;
       readonly type: "match-started";
       readonly initialServer: TeamSide;
+      readonly initialServerPersonId?: string;
+      readonly occurredAt: string;
+    }
+  | {
+      readonly id: string;
+      readonly type: "match-recorded";
+      readonly occurredAt: string;
+    }
+  | {
+      readonly id: string;
+      readonly type: "set-score-recorded";
+      readonly setIndex: number;
+      readonly a: number;
+      readonly b: number;
       readonly occurredAt: string;
     }
   | {
@@ -77,6 +97,7 @@ export interface ScoreState {
   readonly setIndex: number;
   readonly setsWon: Readonly<Record<TeamSide, number>>;
   readonly serving: TeamSide;
+  readonly serverPersonId?: string;
   readonly timeouts: Readonly<Record<TeamSide, number>>;
   readonly sideSwitchDue: boolean;
   readonly technicalTimeoutDue: boolean;
@@ -128,9 +149,22 @@ export function foldScore(
   }
   const applied = activeEvents(events);
   const started = applied.find((event) => event.type === "match-started");
+  const recorded = applied.find((event) => event.type === "match-recorded");
   let serving: TeamSide =
     started?.type === "match-started" ? started.initialServer : "A";
-  let status: ScoreState["status"] = started ? "live" : "not-started";
+  let status: ScoreState["status"] =
+    started || recorded ? "live" : "not-started";
+  const serviceOrder = format.serviceOrder;
+  const serverIndexes: Record<TeamSide, number> = { A: 0, B: 0 };
+  const hasServed: Record<TeamSide, boolean> = { A: false, B: false };
+  if (started?.type === "match-started") {
+    const selectedIndex = serviceOrder?.[serving].findIndex(
+      (personId) => personId === started.initialServerPersonId,
+    );
+    serverIndexes[serving] =
+      selectedIndex !== undefined && selectedIndex >= 0 ? selectedIndex : 0;
+    hasServed[serving] = true;
+  }
   const sets: Array<{ a: number; b: number; winner?: TeamSide }> = [
     { a: 0, b: 0 },
   ];
@@ -141,7 +175,13 @@ export function foldScore(
   const completedTechnicalTimeouts = new Set<number>();
 
   for (const event of applied) {
-    if (event.type === "match-started" || winner) continue;
+    if (
+      event.type === "match-started" ||
+      event.type === "match-recorded" ||
+      winner
+    ) {
+      continue;
+    }
     if (event.type === "technical-timeout-completed") {
       completedTechnicalTimeouts.add(event.setIndex);
       continue;
@@ -158,10 +198,43 @@ export function foldScore(
       timeouts[event.team] += 1;
       continue;
     }
+    if (event.type === "set-score-recorded") {
+      if (
+        event.setIndex !== setIndex ||
+        event.a < 0 ||
+        event.b < 0 ||
+        event.a === event.b
+      ) {
+        continue;
+      }
+      const current = sets[setIndex];
+      if (!current) throw new Error("Missing current set");
+      current.a = event.a;
+      current.b = event.b;
+      const setWinner = setIsComplete(
+        current.a,
+        current.b,
+        format.pointTargets[setIndex] ?? Math.max(current.a, current.b),
+        format.winBy,
+        format.hardCaps[setIndex] ?? null,
+      );
+      if (!setWinner) continue;
+      current.winner = setWinner;
+      setsWon[setWinner] += 1;
+      if (setsWon[setWinner] >= format.setsToWin) {
+        winner = setWinner;
+        status = "complete";
+      } else if (setIndex + 1 < format.maximumSets) {
+        setIndex += 1;
+        sets.push({ a: 0, b: 0 });
+      }
+      continue;
+    }
     if (event.type !== "rally-won") continue;
     const current = sets[setIndex];
     if (!current) throw new Error("Missing current set");
 
+    const previousServing = serving;
     if (format.scoringSystem === "rally") {
       if (event.winner === "A") current.a += 1;
       else current.b += 1;
@@ -171,6 +244,13 @@ export function foldScore(
       else current.b += 1;
     } else {
       serving = opposite(serving);
+    }
+    if (serving !== previousServing) {
+      const order = serviceOrder?.[serving] ?? [];
+      if (hasServed[serving] && order.length > 0) {
+        serverIndexes[serving] = (serverIndexes[serving] + 1) % order.length;
+      }
+      hasServed[serving] = true;
     }
 
     const setWinner = setIsComplete(
@@ -192,6 +272,10 @@ export function foldScore(
         timeouts.A = 0;
         timeouts.B = 0;
         serving = opposite(serving);
+        serverIndexes.A = 0;
+        serverIndexes.B = 0;
+        hasServed.A = serving === "A";
+        hasServed.B = serving === "B";
       }
     }
   }
@@ -216,6 +300,7 @@ export function foldScore(
     setIndex,
     setsWon,
     serving,
+    serverPersonId: serviceOrder?.[serving]?.[serverIndexes[serving]],
     timeouts,
     sideSwitchDue,
     technicalTimeoutDue,

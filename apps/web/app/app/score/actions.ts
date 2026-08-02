@@ -5,11 +5,17 @@ import { revalidatePath } from "next/cache";
 import { getServerCaller } from "@/lib/api";
 
 export async function startMatchAction(input: {
-  readonly teamAIds: readonly [string, string];
-  readonly teamBIds: readonly [string, string];
+  readonly teamAIds: readonly string[];
+  readonly teamBIds: readonly string[];
   readonly venueId?: string;
   readonly scoringSystem: "rally" | "sideout";
-  readonly initialServer: "A" | "B";
+  readonly matchType: "competitive" | "friendly";
+  readonly allPlayersAgreedToRecord: true;
+  readonly serviceOrder: Readonly<{
+    readonly A: readonly string[];
+    readonly B: readonly string[];
+  }>;
+  readonly initialServerPersonId: string;
   readonly deviceId: string;
 }) {
   try {
@@ -18,6 +24,10 @@ export async function startMatchAction(input: {
       ...input,
       teamAIds: [...input.teamAIds],
       teamBIds: [...input.teamBIds],
+      serviceOrder: {
+        A: [...input.serviceOrder.A],
+        B: [...input.serviceOrder.B],
+      },
       idempotencyKey: crypto.randomUUID(),
     });
     return { ok: true as const, scoring };
@@ -26,6 +36,41 @@ export async function startMatchAction(input: {
       ok: false as const,
       error:
         error instanceof Error ? error.message : "The match could not start.",
+    };
+  }
+}
+
+export async function recordCompletedMatchAction(input: {
+  readonly teamAIds: readonly string[];
+  readonly teamBIds: readonly string[];
+  readonly venueId?: string;
+  readonly playedAt: string;
+  readonly setScores: readonly {
+    readonly a: number;
+    readonly b: number;
+  }[];
+  readonly matchType: "competitive" | "friendly";
+  readonly allPlayersAgreedToRecord: true;
+  readonly deviceId: string;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const scoring = await caller.player.recordCompletedMatch({
+      ...input,
+      teamAIds: [...input.teamAIds],
+      teamBIds: [...input.teamBIds],
+      setScores: [...input.setScores],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/app/matches");
+    return { ok: true as const, scoring };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The match result could not be recorded.",
     };
   }
 }

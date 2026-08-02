@@ -546,11 +546,17 @@ export async function appendOperatorMatchEvents(input: {
 
 export async function startSelfReportedMatch(input: {
   readonly actor: ApiActor;
-  readonly teamAIds: readonly [string, string];
-  readonly teamBIds: readonly [string, string];
+  readonly teamAIds: readonly string[];
+  readonly teamBIds: readonly string[];
   readonly venueId?: string;
   readonly scoringSystem: ScoringSystem;
-  readonly initialServer: "A" | "B";
+  readonly matchType: "competitive" | "friendly";
+  readonly allPlayersAgreedToRecord: true;
+  readonly serviceOrder: Readonly<{
+    readonly A: readonly string[];
+    readonly B: readonly string[];
+  }>;
+  readonly initialServerPersonId: string;
   readonly deviceId: string;
   readonly requestId: string;
   readonly ipAddress?: string;
@@ -558,11 +564,21 @@ export async function startSelfReportedMatch(input: {
 }): Promise<MatchScoringState> {
   requireDatabase();
   const database = getDatabase();
+  if (
+    input.teamAIds.length < 1 ||
+    input.teamAIds.length > 6 ||
+    input.teamAIds.length !== input.teamBIds.length
+  ) {
+    throw new MatchServiceError(
+      "PARTICIPANT_REQUIRED",
+      "Choose equally sized teams with one to six players per side.",
+    );
+  }
   const participantIds = [...input.teamAIds, ...input.teamBIds];
-  if (new Set(participantIds).size !== 4) {
+  if (new Set(participantIds).size !== participantIds.length) {
     throw new MatchServiceError(
       "PARTICIPANT_DUPLICATE",
-      "A player can appear only once in a doubles match.",
+      "A player can appear only once in a match.",
     );
   }
   if (!participantIds.includes(input.actor.personId)) {
@@ -576,12 +592,28 @@ export async function startSelfReportedMatch(input: {
     .from(people)
     .where(inArray(people.id, participantIds));
   if (
-    participantRows.length !== 4 ||
+    participantRows.length !== participantIds.length ||
     participantRows.some((person) => person.status !== "active")
   ) {
     throw new MatchServiceError(
       "PARTICIPANT_NOT_FOUND",
       "Every match participant must have an active Duna profile.",
+    );
+  }
+  const samePlayers = (left: readonly string[], right: readonly string[]) =>
+    left.length === right.length &&
+    left.every((personId) => right.includes(personId)) &&
+    new Set(left).size === left.length;
+  if (
+    !samePlayers(input.serviceOrder.A, input.teamAIds) ||
+    !samePlayers(input.serviceOrder.B, input.teamBIds) ||
+    ![input.serviceOrder.A[0], input.serviceOrder.B[0]].includes(
+      input.initialServerPersonId,
+    )
+  ) {
+    throw new MatchServiceError(
+      "PARTICIPANT_REQUIRED",
+      "Serving order must include every player once, and the match must start with the first server from either side.",
     );
   }
   const scoringPeople = await loadScoringPeople(participantIds);
@@ -598,15 +630,24 @@ export async function startSelfReportedMatch(input: {
   const matchId = crypto.randomUUID();
   const teamAId = crypto.randomUUID();
   const teamBId = crypto.randomUUID();
+  const initialServer = input.teamAIds.includes(input.initialServerPersonId)
+    ? "A"
+    : "B";
   const startEvent: ScoreEvent = {
     id: crypto.randomUUID(),
     type: "match-started",
-    initialServer: input.initialServer,
+    initialServer,
+    initialServerPersonId: input.initialServerPersonId,
     occurredAt: input.now.toISOString(),
   };
   const format: MatchFormat = {
     ...standardBeachFormat,
     scoringSystem: input.scoringSystem,
+    teamSize: input.teamAIds.length,
+    matchType: input.matchType,
+    recordingMode: "live",
+    allPlayersAgreedToRecord: input.allPlayersAgreedToRecord,
+    serviceOrder: input.serviceOrder,
   };
   await database.batch([
     database.insert(teams).values({
@@ -637,9 +678,17 @@ export async function startSelfReportedMatch(input: {
       createdAt: input.now,
       updatedAt: input.now,
     }),
-    ...participantIds.map((personId, index) =>
+    ...input.teamAIds.map((personId) =>
       database.insert(teamMembers).values({
-        teamId: index < 2 ? teamAId : teamBId,
+        teamId: teamAId,
+        personId,
+        role: "player",
+        joinedAt: input.now,
+      }),
+    ),
+    ...input.teamBIds.map((personId) =>
+      database.insert(teamMembers).values({
+        teamId: teamBId,
         personId,
         role: "player",
         joinedAt: input.now,
@@ -668,7 +717,238 @@ export async function startSelfReportedMatch(input: {
         format,
         deviceId: input.deviceId,
       }),
-      reason: "Participant started a self-reported doubles match.",
+      reason:
+        "Participant started optional live scoring after every player agreed to record the match.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return loadMatchScoringState({
+    actor: input.actor,
+    matchId,
+  });
+}
+
+export async function recordCompletedMatch(input: {
+  readonly actor: ApiActor;
+  readonly teamAIds: readonly string[];
+  readonly teamBIds: readonly string[];
+  readonly venueId?: string;
+  readonly playedAt: Date;
+  readonly setScores: readonly {
+    readonly a: number;
+    readonly b: number;
+  }[];
+  readonly matchType: "competitive" | "friendly";
+  readonly allPlayersAgreedToRecord: true;
+  readonly deviceId: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<MatchScoringState> {
+  requireDatabase();
+  const database = getDatabase();
+  if (
+    input.teamAIds.length < 1 ||
+    input.teamAIds.length > 6 ||
+    input.teamAIds.length !== input.teamBIds.length
+  ) {
+    throw new MatchServiceError(
+      "PARTICIPANT_REQUIRED",
+      "Choose equally sized teams with one to six players per side.",
+    );
+  }
+  const participantIds = [...input.teamAIds, ...input.teamBIds];
+  if (new Set(participantIds).size !== participantIds.length) {
+    throw new MatchServiceError(
+      "PARTICIPANT_DUPLICATE",
+      "A player can appear only once in a match.",
+    );
+  }
+  if (!participantIds.includes(input.actor.personId)) {
+    throw new MatchServiceError(
+      "PARTICIPANT_REQUIRED",
+      "The person recording a match must be one of its players.",
+    );
+  }
+  if (input.setScores.length < 1 || input.setScores.length > 3) {
+    throw new MatchServiceError(
+      "MATCH_NOT_READY",
+      "Record one set, a two-set sweep, or a full three-set result.",
+    );
+  }
+  if (
+    input.setScores.some(
+      (set) =>
+        !Number.isSafeInteger(set.a) ||
+        !Number.isSafeInteger(set.b) ||
+        set.a < 0 ||
+        set.b < 0 ||
+        set.a === set.b ||
+        Math.abs(set.a - set.b) < 2,
+    )
+  ) {
+    throw new MatchServiceError(
+      "MATCH_NOT_READY",
+      "Every recorded set needs a winner by at least two points.",
+    );
+  }
+  const teamAWins = input.setScores.filter((set) => set.a > set.b).length;
+  const teamBWins = input.setScores.filter((set) => set.b > set.a).length;
+  const setsToWin = input.setScores.length === 1 ? 1 : 2;
+  if (
+    Math.max(teamAWins, teamBWins) !== setsToWin ||
+    Math.min(teamAWins, teamBWins) !== input.setScores.length - setsToWin
+  ) {
+    throw new MatchServiceError(
+      "MATCH_NOT_READY",
+      "The set scores must describe a single set, a 2–0 sweep, or a 2–1 result.",
+    );
+  }
+  const participantRows = await database
+    .select({ id: people.id, status: people.status })
+    .from(people)
+    .where(inArray(people.id, participantIds));
+  if (
+    participantRows.length !== participantIds.length ||
+    participantRows.some((person) => person.status !== "active")
+  ) {
+    throw new MatchServiceError(
+      "PARTICIPANT_NOT_FOUND",
+      "Every match participant must have an active Duna profile.",
+    );
+  }
+  const scoringPeople = await loadScoringPeople(participantIds);
+  const personById = new Map(
+    scoringPeople.map((person) => [person.id, person] as const),
+  );
+  const teamName = (ids: readonly string[]) =>
+    ids
+      .map(
+        (id) =>
+          personById.get(id)?.displayName.split(/\s+/)[0] ?? "Duna player",
+      )
+      .join(" / ");
+  const matchId = crypto.randomUUID();
+  const teamAId = crypto.randomUUID();
+  const teamBId = crypto.randomUUID();
+  const winnerTeamId = teamAWins > teamBWins ? teamAId : teamBId;
+  const format: MatchFormat = {
+    ...standardBeachFormat,
+    setsToWin,
+    maximumSets: input.setScores.length,
+    pointTargets: input.setScores.map((set) => Math.max(set.a, set.b)),
+    hardCaps: input.setScores.map(() => null),
+    sideSwitchIntervals: input.setScores.map(() => 7),
+    teamSize: input.teamAIds.length,
+    matchType: input.matchType,
+    recordingMode: "completed",
+    allPlayersAgreedToRecord: input.allPlayersAgreedToRecord,
+    playedAt: input.playedAt.toISOString(),
+  };
+  const scoreEvents: readonly ScoreEvent[] = [
+    {
+      id: crypto.randomUUID(),
+      type: "match-recorded",
+      occurredAt: input.playedAt.toISOString(),
+    },
+    ...input.setScores.map((set, setIndex): ScoreEvent => ({
+      id: crypto.randomUUID(),
+      type: "set-score-recorded",
+      setIndex,
+      a: set.a,
+      b: set.b,
+      occurredAt: input.playedAt.toISOString(),
+    })),
+  ];
+  await database.batch([
+    database.insert(teams).values({
+      id: teamAId,
+      name: teamName(input.teamAIds),
+      status: "active",
+      createdAt: input.now,
+      updatedAt: input.now,
+    }),
+    database.insert(teams).values({
+      id: teamBId,
+      name: teamName(input.teamBIds),
+      status: "active",
+      createdAt: input.now,
+      updatedAt: input.now,
+    }),
+    ...input.teamAIds.map((personId) =>
+      database.insert(teamMembers).values({
+        teamId: teamAId,
+        personId,
+        role: "player",
+        joinedAt: input.now,
+      }),
+    ),
+    ...input.teamBIds.map((personId) =>
+      database.insert(teamMembers).values({
+        teamId: teamBId,
+        personId,
+        role: "player",
+        joinedAt: input.now,
+      }),
+    ),
+    database.insert(matches).values({
+      id: matchId,
+      teamAId,
+      teamBId,
+      venueId: input.venueId,
+      createdByPersonId: input.actor.personId,
+      status: "pending-verification",
+      startedAt: input.playedAt,
+      completedAt: input.playedAt,
+      format: format as unknown as Record<string, unknown>,
+      authoritativeDeviceId: input.deviceId,
+      verification: "self-reported",
+      verificationWeightBps:
+        input.matchType === "competitive" && input.teamAIds.length === 2
+          ? 2_500
+          : 0,
+      winnerTeamId,
+      ratingEligible: false,
+      createdAt: input.now,
+      updatedAt: input.now,
+    }),
+    ...scoreEvents.map((event, index) =>
+      database.insert(rallyEvents).values({
+        matchId,
+        sequence: index + 1,
+        deviceId: input.deviceId,
+        monotonicCounter: index + 1,
+        eventType: event.type,
+        payload: event,
+        wallClockAt: input.playedAt,
+        receivedAt: input.now,
+      }),
+    ),
+    database.insert(matchConfirmations).values({
+      matchId,
+      personId: input.actor.personId,
+      decision: "confirmed",
+      occurredAt: input.now,
+    }),
+    database.insert(auditLog).values({
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "match.result_submitted",
+      entityType: "match",
+      entityId: matchId,
+      afterHash: stableHash({
+        teamAIds: input.teamAIds,
+        teamBIds: input.teamBIds,
+        venueId: input.venueId,
+        setScores: input.setScores,
+        format,
+      }),
+      reason:
+        input.matchType === "competitive"
+          ? "Participant recorded a completed competitive match after every player agreed."
+          : "Participant recorded a completed friendly match for history only after every player agreed.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,
@@ -931,6 +1211,11 @@ export async function appendMatchEvents(input: {
     matchFormat(participation.match.format),
   );
   if (score.status === "complete" || score.status === "forfeit") {
+    const completedFormat = matchFormat(participation.match.format);
+    const ratingCapable =
+      completedFormat.matchType !== "friendly" &&
+      participation.teamAIds.length === 2 &&
+      participation.teamBIds.length === 2;
     const winnerTeamId =
       score.winner === "A"
         ? participation.match.teamAId
@@ -946,7 +1231,7 @@ export async function appendMatchEvents(input: {
           status: "pending-verification",
           completedAt: input.now,
           verification: "self-reported",
-          verificationWeightBps: 2_500,
+          verificationWeightBps: ratingCapable ? 2_500 : 0,
           winnerTeamId,
           ratingEligible: false,
           updatedAt: input.now,
@@ -1837,11 +2122,11 @@ export async function confirmMatchResult(input: {
       "Only a match participant can confirm or dispute this result.",
     );
   }
-  if (
-    participation.match.status === "verified" &&
-    participation.match.ratingAppliedAt
-  ) {
-    return { status: "verified", ratingApplied: true };
+  if (participation.match.status === "verified") {
+    return {
+      status: "verified",
+      ratingApplied: Boolean(participation.match.ratingAppliedAt),
+    };
   }
   if (
     participation.match.status !== "pending-verification" &&
@@ -1911,6 +2196,50 @@ export async function confirmMatchResult(input: {
       status: disputed ? "disputed" : "pending-verification",
       ratingApplied: false,
     };
+  }
+  const format = matchFormat(participation.match.format);
+  const ratingCapable =
+    format.matchType !== "friendly" &&
+    participation.teamAIds.length === 2 &&
+    participation.teamBIds.length === 2;
+  if (!ratingCapable) {
+    await database.batch([
+      database
+        .update(matches)
+        .set({
+          status: "verified",
+          verification: "both-confirmed",
+          verificationWeightBps: 0,
+          ratingEligible: false,
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            eq(matches.id, input.matchId),
+            eq(matches.status, "pending-verification"),
+          ),
+        ),
+      database.insert(auditLog).values({
+        actorPersonId: input.actor.personId,
+        actorType: "person",
+        action: "match.result_verified",
+        entityType: "match",
+        entityId: input.matchId,
+        afterHash: stableHash({
+          matchType: format.matchType ?? "competitive",
+          teamSize: format.teamSize ?? participation.teamAIds.length,
+          ratingApplied: false,
+        }),
+        reason:
+          format.matchType === "friendly"
+            ? "Both sides confirmed a friendly match; it remains in history without moving Sand Rating."
+            : "Both sides confirmed a non-doubles result; it remains in history while that format is not yet rated.",
+        traceId: input.requestId,
+        ipAddress: input.ipAddress,
+        createdAt: input.now,
+      }),
+    ]);
+    return { status: "verified", ratingApplied: false };
   }
   await applyVerifiedRatings({
     actor: input.actor,

@@ -208,6 +208,7 @@ import {
   loadMatchScoringState,
   loadPublicMatchScoringState,
   MatchServiceError,
+  recordCompletedMatch,
   removeSelfReportedMatch,
   reviewMatchHistoryDispute,
   startOperatorMatchScoring,
@@ -1265,15 +1266,26 @@ const playerRouter = router({
       }),
     )
     .input(
-      z.object({
-        teamAIds: z.tuple([z.string().uuid(), z.string().uuid()]),
-        teamBIds: z.tuple([z.string().uuid(), z.string().uuid()]),
-        venueId: z.string().uuid().optional(),
-        scoringSystem: z.enum(["rally", "sideout"]),
-        initialServer: z.enum(["A", "B"]),
-        deviceId: z.string().trim().min(8).max(128),
-        idempotencyKey: z.string().uuid(),
-      }),
+      z
+        .object({
+          teamAIds: z.array(z.string().uuid()).min(1).max(6),
+          teamBIds: z.array(z.string().uuid()).min(1).max(6),
+          venueId: z.string().uuid().optional(),
+          scoringSystem: z.enum(["rally", "sideout"]),
+          matchType: z.enum(["competitive", "friendly"]),
+          allPlayersAgreedToRecord: z.literal(true),
+          serviceOrder: z.object({
+            A: z.array(z.string().uuid()).min(1).max(6),
+            B: z.array(z.string().uuid()).min(1).max(6),
+          }),
+          initialServerPersonId: z.string().uuid(),
+          deviceId: z.string().trim().min(8).max(128),
+          idempotencyKey: z.string().uuid(),
+        })
+        .refine((value) => value.teamAIds.length === value.teamBIds.length, {
+          message: "Both teams must have the same number of players.",
+          path: ["teamBIds"],
+        }),
     )
     .output(matchScoringStateSchema)
     .mutation(({ input, ctx }) =>
@@ -1290,7 +1302,74 @@ const playerRouter = router({
               teamBIds: input.teamBIds,
               venueId: input.venueId,
               scoringSystem: input.scoringSystem,
-              initialServer: input.initialServer,
+              matchType: input.matchType,
+              allPlayersAgreedToRecord: input.allPlayersAgreedToRecord,
+              serviceOrder: input.serviceOrder,
+              initialServerPersonId: input.initialServerPersonId,
+              deviceId: input.deviceId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  recordCompletedMatch: protectedProcedure
+    .use(requireScope("matches:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "match-record",
+        capacity: 20,
+        refillPerMinute: 10,
+      }),
+    )
+    .input(
+      z
+        .object({
+          teamAIds: z.array(z.string().uuid()).min(1).max(6),
+          teamBIds: z.array(z.string().uuid()).min(1).max(6),
+          venueId: z.string().uuid().optional(),
+          playedAt: z.iso.datetime(),
+          setScores: z
+            .array(
+              z.object({
+                a: z.number().int().nonnegative().max(99),
+                b: z.number().int().nonnegative().max(99),
+              }),
+            )
+            .min(1)
+            .max(3),
+          matchType: z.enum(["competitive", "friendly"]),
+          allPlayersAgreedToRecord: z.literal(true),
+          deviceId: z.string().trim().min(8).max(128),
+          idempotencyKey: z.string().uuid(),
+        })
+        .refine((value) => value.teamAIds.length === value.teamBIds.length, {
+          message: "Both teams must have the same number of players.",
+          path: ["teamBIds"],
+        }),
+    )
+    .output(matchScoringStateSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.recordCompletedMatch",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await recordCompletedMatch({
+              actor: ctx.actor!,
+              teamAIds: input.teamAIds,
+              teamBIds: input.teamBIds,
+              venueId: input.venueId,
+              playedAt: new Date(input.playedAt),
+              setScores: input.setScores,
+              matchType: input.matchType,
+              allPlayersAgreedToRecord: input.allPlayersAgreedToRecord,
               deviceId: input.deviceId,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,

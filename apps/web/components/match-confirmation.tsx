@@ -9,10 +9,12 @@ import { confirmMatchAction } from "@/app/app/score/actions";
 export function MatchConfirmation({
   confirmationRequired,
   matchId,
+  ratingImpact,
   status,
 }: {
   readonly confirmationRequired: boolean;
   readonly matchId: string;
+  readonly ratingImpact: "sand-rating" | "history-only";
   readonly status:
     "pending-verification" | "verified" | "disputed" | "complete";
 }) {
@@ -38,7 +40,9 @@ export function MatchConfirmation({
       }
       setNotice(
         response.result.status === "verified"
-          ? "Both sides confirmed. The deterministic Sand Rating update is applied."
+          ? response.result.ratingApplied
+            ? "Both sides confirmed. The deterministic Sand Rating update is applied."
+            : "Both sides confirmed. The match is verified in history without moving Sand Rating."
           : response.result.status === "disputed"
             ? "The result is held for review. No rating changed."
             : "Your confirmation is recorded. Duna is waiting for the other side.",
@@ -54,7 +58,11 @@ export function MatchConfirmation({
         <CheckCircle2 aria-hidden size={22} />
         <span>
           <strong>Both sides confirmed</strong>
-          <small>The rating event is immutable and replayable.</small>
+          <small>
+            {ratingImpact === "sand-rating"
+              ? "The rating event is immutable and replayable."
+              : "The verified result stays in match history without moving ratings."}
+          </small>
         </span>
         <Badge tone="positive">Verified</Badge>
       </article>
@@ -82,7 +90,9 @@ export function MatchConfirmation({
             : "Waiting for the other side."}
         </h2>
         <p>
-          A result moves ratings only after one player from each side confirms.
+          {ratingImpact === "sand-rating"
+            ? "A result moves ratings only after one player from each side confirms."
+            : "One player from each side confirms this history-only result."}
         </p>
       </div>
       {(notice || error) && (

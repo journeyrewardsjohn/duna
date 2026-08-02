@@ -156,22 +156,39 @@ test("tournament pages and checkout expose divisions, tickets, teams, and waiver
   await expectNoHorizontalOverflow(page);
 });
 
-test("connected scorer requires an explicit four-player court setup", async ({
+test("match recorder starts with a completed result and offers live scoring", async ({
   page,
 }) => {
   await page.goto("/app/score");
   await expect(
-    page.getByRole("heading", { name: "Set the court." }),
+    page.getByRole("heading", { name: "How did you play?" }),
   ).toBeVisible();
-  await expect(page.getByLabel("You")).toHaveValue("Mara Lewis");
-  await expect(page.getByLabel("Partner")).toHaveValue(
-    "10000000-0000-4000-8000-000000000011",
-  );
+  await expect(
+    page.getByRole("button", { name: /Add a finished result/ }),
+  ).toHaveClass(/is-selected/);
+  await expect(
+    page.getByRole("button", { name: "Record this match" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /3v3/ }).click();
+  await expect(page.getByText("Your side · 3 players")).toBeVisible();
+  await page.getByRole("button", { name: /Score it live/ }).click();
   await expect(
     page.getByRole("button", { name: "Start live scoring" }),
   ).toBeVisible();
-  await page.getByLabel("Scoring").selectOption("sideout");
-  await expect(page.getByLabel("Scoring")).toHaveValue("sideout");
+  await page.getByRole("button", { name: "Sideout" }).click();
+  await expect(page.getByRole("button", { name: "Sideout" })).toHaveClass(
+    /is-selected/,
+  );
+  await page
+    .getByRole("button", { name: /Add player Search Duna players/ })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Add a player" }),
+  ).toBeVisible();
+  await expect(
+    page.getByPlaceholder("Search by name, handle, or home market"),
+  ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
 

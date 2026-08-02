@@ -16,6 +16,7 @@ import {
   appendMatchEvents,
   confirmMatchResult,
   loadPublicMatchScoringState,
+  recordCompletedMatch,
   scopesForRoles,
   startSelfReportedMatch,
   type ApiActor,
@@ -38,9 +39,10 @@ async function main() {
   const database = getDatabase();
   const now = new Date();
   const suffix = crypto.randomUUID();
-  const personIds = Array.from({ length: 4 }, () => crypto.randomUUID());
+  const personIds = Array.from({ length: 6 }, () => crypto.randomUUID());
   const deviceId = `verify-device-${suffix}`;
   let matchId: string | undefined;
+  let recordedMatchId: string | undefined;
   let teamIds: string[] = [];
   const actor = (personId: string, displayName: string): ApiActor => ({
     personId,
@@ -71,7 +73,13 @@ async function main() {
       teamAIds: [personIds[0]!, personIds[1]!],
       teamBIds: [personIds[2]!, personIds[3]!],
       scoringSystem: "rally",
-      initialServer: "A",
+      matchType: "competitive",
+      allPlayersAgreedToRecord: true,
+      serviceOrder: {
+        A: [personIds[0]!, personIds[1]!],
+        B: [personIds[2]!, personIds[3]!],
+      },
+      initialServerPersonId: personIds[0]!,
       deviceId,
       requestId: crypto.randomUUID(),
       now,
@@ -207,6 +215,66 @@ async function main() {
       "Public live state did not replay the connected event stream",
     );
 
+    const recorded = await recordCompletedMatch({
+      actor: actors[0]!,
+      teamAIds: [personIds[0]!, personIds[1]!, personIds[4]!],
+      teamBIds: [personIds[2]!, personIds[3]!, personIds[5]!],
+      playedAt: new Date(now.getTime() - 86_400_000),
+      setScores: [
+        { a: 21, b: 18 },
+        { a: 17, b: 21 },
+        { a: 15, b: 12 },
+      ],
+      matchType: "friendly",
+      allPlayersAgreedToRecord: true,
+      deviceId: `${deviceId}-recorded`,
+      requestId: crypto.randomUUID(),
+      now: new Date(now.getTime() + 48_000),
+    });
+    recordedMatchId = recorded.matchId;
+    teamIds.push(recorded.teamA.id, recorded.teamB.id);
+    assert(
+      recorded.status === "pending-verification" &&
+        recorded.score.status === "complete" &&
+        recorded.format.recordingMode === "completed" &&
+        recorded.format.teamSize === 3,
+      "Completed 3v3 result did not enter participant verification",
+    );
+    const recordedVerified = await confirmMatchResult({
+      actor: actors[2]!,
+      matchId: recorded.matchId,
+      decision: "confirmed",
+      requestId: crypto.randomUUID(),
+      now: new Date(now.getTime() + 49_000),
+    });
+    assert(
+      recordedVerified.status === "verified" && !recordedVerified.ratingApplied,
+      "Friendly 3v3 result did not verify as history-only",
+    );
+    const [recordedStored, recordedRatingEvents, recordedHistory] =
+      await Promise.all([
+        database.query.matches.findFirst({
+          where: eq(matches.id, recorded.matchId),
+        }),
+        database
+          .select()
+          .from(ratingEvents)
+          .where(eq(ratingEvents.matchId, recorded.matchId)),
+        databaseRepository.player.matchHistory(personIds[0]!),
+      ]);
+    assert(
+      recordedStored?.status === "verified" &&
+        recordedRatingEvents.length === 0 &&
+        recordedHistory.some(
+          (match) =>
+            match.id === recorded.matchId &&
+            match.status === "verified" &&
+            match.recordingMode === "completed" &&
+            match.ratingImpact === "history-only",
+        ),
+      "Completed match did not project to history without rating movement",
+    );
+
     console.log(
       JSON.stringify(
         {
@@ -217,31 +285,36 @@ async function main() {
           ratingEvents: eventRows.length,
           historyProjected: true,
           publicReplayProjected: true,
+          completedThreeVsThreeProjected: true,
+          completedThreeVsThreeRated: false,
         },
         null,
         2,
       ),
     );
   } finally {
-    if (matchId) {
+    const matchIds = [matchId, recordedMatchId].filter((id): id is string =>
+      Boolean(id),
+    );
+    if (matchIds.length > 0) {
       await database
         .delete(auditLog)
         .where(
           or(
-            eq(auditLog.entityId, matchId),
+            inArray(auditLog.entityId, matchIds),
             inArray(auditLog.actorPersonId, personIds),
           ),
         );
       await database
         .delete(ratingEvents)
-        .where(eq(ratingEvents.matchId, matchId));
+        .where(inArray(ratingEvents.matchId, matchIds));
       await database
         .delete(matchConfirmations)
-        .where(eq(matchConfirmations.matchId, matchId));
+        .where(inArray(matchConfirmations.matchId, matchIds));
       await database
         .delete(rallyEvents)
-        .where(eq(rallyEvents.matchId, matchId));
-      await database.delete(matches).where(eq(matches.id, matchId));
+        .where(inArray(rallyEvents.matchId, matchIds));
+      await database.delete(matches).where(inArray(matches.id, matchIds));
     }
     await database.delete(ratings).where(inArray(ratings.personId, personIds));
     if (teamIds.length > 0) {

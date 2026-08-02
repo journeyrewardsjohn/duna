@@ -212,7 +212,10 @@ export default async function WalletPage() {
             </article>
           ))}
           {wallet.entries.length === 0 && (
-            <article>
+            <article className="wallet-activity__empty">
+              <span className="wallet-activity__icon">
+                <ReceiptText aria-hidden size={20} />
+              </span>
               <span>
                 <strong>No wallet activity yet</strong>
                 <small>Completed money movement will appear here.</small>

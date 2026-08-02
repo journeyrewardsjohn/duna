@@ -444,14 +444,14 @@ function RatePlanComposer({
     initialOperatorActionState,
   );
   return (
-    <section className="hq-card operator-control-card">
+    <section className="hq-card operator-control-card" id="court-pricing">
       <header className="hq-card-heading">
         <div>
-          <span className="hq-eyebrow">Pricing controls</span>
-          <h2>Create a court rate plan</h2>
+          <span className="hq-eyebrow">Court pricing</span>
+          <h2>Set what a court costs</h2>
           <p>
-            Prices use {workspace.organization.currency} and remain inactive
-            until attached to a court.
+            Create a reusable {workspace.organization.currency} rate, then
+            attach it while adding or editing a court below.
           </p>
         </div>
         <Landmark aria-hidden size={24} />
@@ -531,7 +531,7 @@ function VenueComposer({
     initialOperatorActionState,
   );
   return (
-    <section className="hq-card operator-control-card">
+    <section className="hq-card operator-control-card" id="venue-details">
       <header className="hq-card-heading">
         <div>
           <span className="hq-eyebrow">Facility hierarchy</span>
@@ -614,7 +614,7 @@ function CourtComposer({
   );
   const hasVenues = workspace.venues.length > 0;
   return (
-    <section className="hq-card operator-control-card">
+    <section className="hq-card operator-control-card" id="courts">
       <header className="hq-card-heading">
         <div>
           <span className="hq-eyebrow">Bookable resources</span>
@@ -2047,6 +2047,9 @@ function FacilitiesControls({
       <ScheduleCopilot workspace={workspace} />
       <div className="operator-controls-grid">
         <VenueComposer workspace={workspace} />
+        <RatePlanComposer workspace={workspace} />
+      </div>
+      <div className="operator-controls-grid operator-controls-grid--venue-courts">
         <CourtComposer workspace={workspace} />
       </div>
     </>
@@ -2087,21 +2090,13 @@ export function OperatorControls({
     return <ProductCatalogControls workspace={workspace} />;
   }
   if (module === "payments") {
-    return (
-      <div className="operator-controls-grid">
-        <StripeOnboarding workspace={workspace} />
-        <RatePlanComposer workspace={workspace} />
-      </div>
-    );
+    return <StripeOnboarding workspace={workspace} />;
   }
   if (module === "settings") {
     return (
       <>
         <CommerceSettingsControls workspace={workspace} />
-        <div className="operator-controls-grid">
-          <StripeOnboarding workspace={workspace} />
-          <RatePlanComposer workspace={workspace} />
-        </div>
+        <StripeOnboarding workspace={workspace} />
       </>
     );
   }
@@ -2140,7 +2135,6 @@ export function OperatorControls({
       <>
         <SessionDrafts workspace={workspace} />
         <SessionComposer workspace={workspace} defaultKind="open-play" />
-        <FacilitiesControls workspace={workspace} />
       </>
     );
   }
@@ -2150,8 +2144,8 @@ export function OperatorControls({
       <span className="hq-eyebrow">Configuration ready</span>
       <h2>{workspace.organization.name}</h2>
       <p>
-        Use Calendar for facility and session operations, Money for rates and
-        Payments, and Messages for consent-safe communication.
+        Use Venues for facilities and court pricing, Calendar for sessions,
+        Money for payments, and Messages for consent-safe communication.
       </p>
     </section>
   );

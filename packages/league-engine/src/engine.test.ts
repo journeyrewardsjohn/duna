@@ -57,6 +57,77 @@ describe("score fold", () => {
     const state = foldScore(undo ? [...events, undo] : events);
     expect(state.sets[0]).toMatchObject({ a: 1, b: 0 });
   });
+
+  it("folds an after-the-fact result through the same score history", () => {
+    const events: ScoreEvent[] = [
+      { id: "recorded", type: "match-recorded", occurredAt: at },
+      {
+        id: "set-1",
+        type: "set-score-recorded",
+        setIndex: 0,
+        a: 21,
+        b: 18,
+        occurredAt: at,
+      },
+      {
+        id: "set-2",
+        type: "set-score-recorded",
+        setIndex: 1,
+        a: 18,
+        b: 21,
+        occurredAt: at,
+      },
+      {
+        id: "set-3",
+        type: "set-score-recorded",
+        setIndex: 2,
+        a: 15,
+        b: 13,
+        occurredAt: at,
+      },
+    ];
+    const state = foldScore(events, {
+      ...standardBeachFormat,
+      pointTargets: [21, 21, 15],
+      recordingMode: "completed",
+    });
+    expect(state.status).toBe("complete");
+    expect(state.winner).toBe("A");
+    expect(state.sets).toMatchObject([
+      { a: 21, b: 18, winner: "A" },
+      { a: 18, b: 21, winner: "B" },
+      { a: 15, b: 13, winner: "A" },
+    ]);
+  });
+
+  it("tracks a player-aware serving rotation for larger teams", () => {
+    const format = {
+      ...standardBeachFormat,
+      teamSize: 3,
+      serviceOrder: {
+        A: ["a-1", "a-2", "a-3"],
+        B: ["b-1", "b-2", "b-3"],
+      },
+    } as const;
+    const events: ScoreEvent[] = [
+      {
+        id: "start",
+        type: "match-started",
+        initialServer: "A",
+        initialServerPersonId: "a-1",
+        occurredAt: at,
+      },
+      { id: "1", type: "rally-won", winner: "B", occurredAt: at },
+      { id: "2", type: "rally-won", winner: "A", occurredAt: at },
+      { id: "3", type: "rally-won", winner: "B", occurredAt: at },
+      { id: "4", type: "rally-won", winner: "A", occurredAt: at },
+    ];
+    expect(foldScore(events.slice(0, 1), format).serverPersonId).toBe("a-1");
+    expect(foldScore(events.slice(0, 2), format).serverPersonId).toBe("b-1");
+    expect(foldScore(events.slice(0, 3), format).serverPersonId).toBe("a-2");
+    expect(foldScore(events.slice(0, 4), format).serverPersonId).toBe("b-2");
+    expect(foldScore(events, format).serverPersonId).toBe("a-3");
+  });
 });
 
 describe("bracket generators", () => {

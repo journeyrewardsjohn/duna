@@ -1237,6 +1237,11 @@ button {
   margin-top: 0.5rem;
 }
 
+.module-feature-card__action {
+  margin-top: auto;
+  width: fit-content;
+}
+
 .connected-table {
   padding: 1rem;
 }
@@ -4926,6 +4931,10 @@ button {
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
 }
 
+.operator-controls-grid--venue-courts {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .operator-control-card {
   min-width: 0;
   padding: 1.2rem;
@@ -5651,6 +5660,16 @@ button {
 
 .venue-court-utilization > article > span:first-child small {
   grid-column: 2;
+}
+
+.venue-portfolio-card__manage {
+  align-items: center;
+  color: var(--color-aqua);
+  display: inline-flex;
+  font-size: 0.66rem;
+  font-weight: 800;
+  gap: 0.35rem;
+  justify-self: start;
 }
 
 .venue-court-utilization > article > span:last-child {
