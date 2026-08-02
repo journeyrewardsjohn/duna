@@ -9856,6 +9856,8 @@ button {
 }
 
 .schedule-calendar {
+  --schedule-font-min: 0.625rem;
+  --schedule-font-meta: 0.6875rem;
   overflow: hidden;
 }
 
@@ -9904,7 +9906,7 @@ button {
   border-radius: 999px;
   color: var(--color-bone-muted);
   display: flex;
-  font-size: 0.62rem;
+  font-size: var(--schedule-font-meta, 0.6875rem);
   gap: 0.3rem;
   min-height: 31px;
   padding: 0.35rem 0.55rem;
@@ -9942,13 +9944,13 @@ button {
   align-items: flex-start;
   color: var(--color-bone-muted);
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: var(--schedule-font-min, 0.625rem);
   text-transform: uppercase;
 }
 
 .schedule-resource-grid > header small {
   color: var(--color-bone-muted);
-  font-size: 0.55rem;
+  font-size: var(--schedule-font-min, 0.625rem);
   text-transform: uppercase;
 }
 
@@ -9961,7 +9963,7 @@ button {
   align-items: center;
   color: var(--color-bone-muted);
   display: flex;
-  font-size: 0.5rem;
+  font-size: var(--schedule-font-meta, 0.6875rem);
   gap: 0.15rem;
   justify-content: center;
   margin-top: 0.12rem;
@@ -9991,7 +9993,7 @@ button {
 
 .schedule-resource-row__label small {
   color: var(--color-bone-muted);
-  font-size: 0.56rem;
+  font-size: var(--schedule-font-min, 0.625rem);
 }
 
 .schedule-dropzone {
@@ -10037,7 +10039,7 @@ button {
 
 .schedule-event small {
   color: var(--color-bone-muted);
-  font-size: 0.52rem;
+  font-size: var(--schedule-font-min, 0.625rem);
 }
 
 .schedule-event .schedule-event__weather {
@@ -10081,7 +10083,7 @@ button {
 .schedule-month-day > span:first-child small,
 .schedule-month-day > small {
   color: var(--color-bone-muted);
-  font-size: 0.52rem;
+  font-size: var(--schedule-font-min, 0.625rem);
 }
 
 .schedule-month-day > span:first-child .schedule-month-weather {
@@ -10103,7 +10105,7 @@ button {
   align-items: center;
   color: var(--color-bone-muted);
   display: flex;
-  font-size: 0.6rem;
+  font-size: var(--schedule-font-meta, 0.6875rem);
   gap: 0.35rem;
 }
 
@@ -10125,7 +10127,7 @@ button {
 
 .schedule-change-review small {
   color: var(--color-bone-muted);
-  font-size: 0.61rem;
+  font-size: var(--schedule-font-min, 0.625rem);
 }
 
 .schedule-change-review form {
@@ -10137,7 +10139,7 @@ button {
 .schedule-change-review label {
   align-items: center;
   display: flex;
-  font-size: 0.62rem;
+  font-size: var(--schedule-font-min, 0.625rem);
   gap: 0.4rem;
   max-width: 270px;
 }
