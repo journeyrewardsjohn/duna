@@ -6,6 +6,7 @@ import {
   importedMatches,
   importLinks,
   importSources,
+  matchHistoryDisputes,
   matches,
   people,
   playerSourceConnections,
@@ -26,7 +27,7 @@ import {
   evaluatePredictions,
   worldRankingSignal,
 } from "@duna/rating";
-import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, ne, sql } from "drizzle-orm";
 import { stableHash } from "../canonical";
 import { scopesForRoles, type ApiActor } from "../context";
 import { applyApprovedImportedMatchRating } from "../match-service";
@@ -44,6 +45,7 @@ import {
   importVolleyballLifePlayer,
   importWorldRankings,
   listFivbEvents,
+  type SourceImportProgress,
 } from "./sources";
 import {
   SandDataUpstreamError,
@@ -86,6 +88,60 @@ function requireDatabase(): void {
       "Sand data operations require the connected Duna database.",
     );
   }
+}
+
+function unknownRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function optionalSnapshotString(value: unknown): string | undefined {
+  const normalized =
+    typeof value === "string" || typeof value === "number"
+      ? String(value).trim()
+      : "";
+  return normalized || undefined;
+}
+
+function sourceProfileSnapshot(
+  profile: typeof externalPlayerProfiles.$inferSelect,
+) {
+  const raw = unknownRecord(profile.rawProfile);
+  const finishes = unknownRecord(raw.finishes);
+  const truVolley = unknownRecord(raw.truVolley);
+  const tournamentRows = Array.isArray(finishes.tournaments)
+    ? finishes.tournaments
+    : Array.isArray(raw.tournaments)
+      ? raw.tournaments
+      : [];
+  const memberships = Array.isArray(raw.memberships)
+    ? raw.memberships.flatMap((membership) => {
+        const value = optionalSnapshotString(membership);
+        return value ? [value] : [];
+      })
+    : [];
+  return {
+    displayName: profile.displayName,
+    profileUrl: profile.profileUrl,
+    avatarUrl: profile.avatarUrl,
+    hometown: profile.hometown,
+    birthDate: profile.birthDate,
+    isProfessional: profile.isProfessional,
+    externalRating: profile.externalRating,
+    externalRatingConfidence: profile.externalRatingConfidence,
+    externalMatchCount: profile.externalMatchCount,
+    height: optionalSnapshotString(raw.height),
+    collegeName:
+      optionalSnapshotString(raw.college) ??
+      optionalSnapshotString(raw.committedSchool),
+    clubName: optionalSnapshotString(raw.club),
+    highSchool: optionalSnapshotString(raw.highSchool),
+    memberships,
+    eventFinishes: tournamentRows.length,
+    truVolleyPeak:
+      typeof truVolley.peak === "number" ? truVolley.peak : undefined,
+  };
 }
 
 async function ensureSource(source: SandDataSource) {
@@ -696,6 +752,9 @@ export function importSandSource(input: {
   readonly externalId: string;
   readonly actor?: ApiActor;
   readonly now?: Date;
+  readonly onProgress?: (
+    progress: SourceImportProgress,
+  ) => void | Promise<void>;
 }) {
   const now = input.now ?? new Date();
   if (input.source === "bvbinfo") {
@@ -705,7 +764,7 @@ export function importSandSource(input: {
       requestedExternalId: input.externalId,
       actor: input.actor,
       now,
-      loader: () => importBvbInfoPlayer(input.externalId),
+      loader: () => importBvbInfoPlayer(input.externalId, input.onProgress),
     });
   }
   if (input.source === "volleyball-life") {
@@ -715,7 +774,8 @@ export function importSandSource(input: {
       requestedExternalId: input.externalId,
       actor: input.actor,
       now,
-      loader: () => importVolleyballLifePlayer(input.externalId),
+      loader: () =>
+        importVolleyballLifePlayer(input.externalId, input.onProgress),
     });
   }
   return executeImport({
@@ -840,6 +900,8 @@ export async function loadSandDataOverview() {
     rankingDates,
     configurations,
     evaluations,
+    truVolleyRows,
+    historyDisputeRows,
   ] = await Promise.all([
     database.select().from(importSources).orderBy(asc(importSources.name)),
     database
@@ -916,7 +978,113 @@ export async function loadSandDataOverview() {
       .from(ratingEvaluations)
       .orderBy(desc(ratingEvaluations.createdAt))
       .limit(20),
+    database
+      .select({
+        personId: externalPlayerProfiles.personId,
+        playerName: externalPlayerProfiles.displayName,
+        sandRating: ratings.display,
+        truVolleyRating: externalPlayerProfiles.externalRating,
+        truVolleyConfidence: externalPlayerProfiles.externalRatingConfidence,
+        truVolleyMatches: externalPlayerProfiles.externalMatchCount,
+      })
+      .from(externalPlayerProfiles)
+      .innerJoin(
+        importSources,
+        eq(importSources.id, externalPlayerProfiles.sourceId),
+      )
+      .innerJoin(
+        ratings,
+        and(
+          eq(ratings.personId, externalPlayerProfiles.personId),
+          eq(ratings.discipline, "beach-2s"),
+        ),
+      )
+      .where(
+        and(
+          eq(importSources.slug, "volleyball-life"),
+          sql`${externalPlayerProfiles.personId} IS NOT NULL`,
+          sql`${externalPlayerProfiles.externalRating} IS NOT NULL`,
+        ),
+      )
+      .limit(1_000),
+    database
+      .select({
+        id: matchHistoryDisputes.id,
+        matchId: matchHistoryDisputes.matchId,
+        personId: matchHistoryDisputes.personId,
+        reporterName: people.displayName,
+        reasonCode: matchHistoryDisputes.reasonCode,
+        details: matchHistoryDisputes.details,
+        status: matchHistoryDisputes.status,
+        excludesFromRating: matchHistoryDisputes.excludesFromRating,
+        createdAt: matchHistoryDisputes.createdAt,
+        matchStatus: matches.status,
+        title: importedMatches.title,
+        playedAt: importedMatches.playedAt,
+      })
+      .from(matchHistoryDisputes)
+      .innerJoin(people, eq(people.id, matchHistoryDisputes.personId))
+      .innerJoin(matches, eq(matches.id, matchHistoryDisputes.matchId))
+      .leftJoin(
+        importedMatches,
+        eq(importedMatches.canonicalMatchId, matches.id),
+      )
+      .where(eq(matchHistoryDisputes.status, "pending"))
+      .orderBy(asc(matchHistoryDisputes.createdAt))
+      .limit(100),
   ]);
+  const benchmarkPairs = truVolleyRows.flatMap((row) =>
+    row.truVolleyRating === null
+      ? []
+      : [
+          {
+            personId: row.personId!,
+            playerName: row.playerName,
+            sandRating: row.sandRating,
+            truVolleyRating: row.truVolleyRating,
+            confidence: row.truVolleyConfidence ?? undefined,
+            matches: row.truVolleyMatches ?? undefined,
+          },
+        ],
+  );
+  const sampleSize = benchmarkPairs.length;
+  const mean = (values: readonly number[]) =>
+    values.reduce((total, value) => total + value, 0) /
+    Math.max(1, values.length);
+  const sandMean = mean(benchmarkPairs.map((pair) => pair.sandRating));
+  const truVolleyMean = mean(
+    benchmarkPairs.map((pair) => pair.truVolleyRating),
+  );
+  const covariance = benchmarkPairs.reduce(
+    (total, pair) =>
+      total +
+      (pair.sandRating - sandMean) * (pair.truVolleyRating - truVolleyMean),
+    0,
+  );
+  const sandSpread = Math.sqrt(
+    benchmarkPairs.reduce(
+      (total, pair) => total + (pair.sandRating - sandMean) ** 2,
+      0,
+    ),
+  );
+  const truVolleySpread = Math.sqrt(
+    benchmarkPairs.reduce(
+      (total, pair) => total + (pair.truVolleyRating - truVolleyMean) ** 2,
+      0,
+    ),
+  );
+  const correlation =
+    sampleSize > 1 && sandSpread > 0 && truVolleySpread > 0
+      ? covariance / (sandSpread * truVolleySpread)
+      : undefined;
+  const meanAbsoluteDifference =
+    sampleSize > 0
+      ? mean(
+          benchmarkPairs.map((pair) =>
+            Math.abs(pair.sandRating - pair.truVolleyRating),
+          ),
+        )
+      : undefined;
   const sourceById = new Map(sources.map((source) => [source.id, source]));
   return {
     sources: sources.map((source) => ({
@@ -975,6 +1143,27 @@ export async function loadSandDataOverview() {
       ...evaluation,
       createdAt: evaluation.createdAt.toISOString(),
     })),
+    historyDisputes: historyDisputeRows.map((dispute) => ({
+      ...dispute,
+      details: dispute.details ?? undefined,
+      title: dispute.title ?? "Connected match",
+      playedAt: dispute.playedAt?.toISOString(),
+      createdAt: dispute.createdAt.toISOString(),
+    })),
+    truVolleyBenchmark: {
+      visibility: "super-admin-only" as const,
+      sampleSize,
+      correlation,
+      meanAbsoluteDifference,
+      comparedAt: new Date().toISOString(),
+      players: benchmarkPairs
+        .sort(
+          (a, b) =>
+            Math.abs(b.sandRating - b.truVolleyRating) -
+            Math.abs(a.sandRating - a.truVolleyRating),
+        )
+        .slice(0, 25),
+    },
   };
 }
 
@@ -2300,13 +2489,18 @@ export type PlayerSourceConnectionSource = "volleyball-life" | "bvbinfo";
 export function parsePlayerSourceProfile(
   source: PlayerSourceConnectionSource,
   value: string,
-): { readonly externalId: string; readonly profileUrl: string } {
+): {
+  readonly externalId: string;
+  readonly profileUrl: string;
+  readonly apiProfileUrl?: string;
+} {
   const trimmed = value.trim();
   if (/^\d{1,12}$/.test(trimmed) && Number.parseInt(trimmed, 10) > 0) {
     return source === "volleyball-life"
       ? {
           externalId: String(Number.parseInt(trimmed, 10)),
-          profileUrl: `https://volleyballlife.com/playerprofile/${Number.parseInt(trimmed, 10)}`,
+          profileUrl: `https://volleyballlife.com/player/${Number.parseInt(trimmed, 10)}`,
+          apiProfileUrl: `https://api-v8.volleyballlife.com/playerprofile/${Number.parseInt(trimmed, 10)}`,
         }
       : {
           externalId: String(Number.parseInt(trimmed, 10)),
@@ -2324,8 +2518,11 @@ export function parsePlayerSourceProfile(
   }
   const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
   if (source === "volleyball-life") {
-    const match = url.pathname.match(/\/playerprofile\/(\d+)/i);
-    if (hostname !== "volleyballlife.com" || !match?.[1]) {
+    const match = url.pathname.match(/\/(?:player|playerprofile)\/(\d+)/i);
+    if (
+      !["volleyballlife.com", "api-v8.volleyballlife.com"].includes(hostname) ||
+      !match?.[1]
+    ) {
       throw new SandDataServiceError(
         "INVALID_PROFILE_URL",
         "Use a VolleyballLife player profile URL.",
@@ -2333,7 +2530,8 @@ export function parsePlayerSourceProfile(
     }
     return {
       externalId: String(Number.parseInt(match[1], 10)),
-      profileUrl: `https://volleyballlife.com/playerprofile/${Number.parseInt(match[1], 10)}`,
+      profileUrl: `https://volleyballlife.com/player/${Number.parseInt(match[1], 10)}`,
+      apiProfileUrl: `https://api-v8.volleyballlife.com/playerprofile/${Number.parseInt(match[1], 10)}`,
     };
   }
   const externalId =
@@ -2419,6 +2617,30 @@ export async function queuePlayerSourceConnection(input: {
       "This source profile is already connected to another Duna player. Send it to profile review instead.",
     );
   }
+  if (occupied) {
+    const [activeJob] = await database
+      .select({ id: workflowJobs.id })
+      .from(workflowJobs)
+      .where(
+        and(
+          eq(workflowJobs.kind, "sand.profile-import"),
+          inArray(workflowJobs.status, ["queued", "running", "retry"]),
+          sql`${workflowJobs.payload} ->> 'connectionId' = ${occupied.id}`,
+        ),
+      )
+      .orderBy(asc(workflowJobs.createdAt))
+      .limit(1);
+    if (activeJob) {
+      return {
+        connectionId: occupied.id,
+        jobId: activeJob.id,
+        status: "queued" as const,
+        source: input.source,
+        profileUrl: parsed.profileUrl,
+        apiProfileUrl: parsed.apiProfileUrl,
+      };
+    }
+  }
   const connectionId = occupied?.id ?? crypto.randomUUID();
   await database
     .insert(playerSourceConnections)
@@ -2428,7 +2650,14 @@ export async function queuePlayerSourceConnection(input: {
       source: input.source,
       externalPersonId: parsed.externalId,
       profileUrl: parsed.profileUrl,
+      apiProfileUrl: parsed.apiProfileUrl,
+      verificationStatus: "pending",
       status: "queued",
+      progressPhase: "queued",
+      progressCurrent: 0,
+      progressTotal: 0,
+      matchesFound: 0,
+      profilesFound: 0,
       lastError: null,
       createdAt: input.now,
       updatedAt: input.now,
@@ -2441,7 +2670,15 @@ export async function queuePlayerSourceConnection(input: {
       set: {
         externalPersonId: parsed.externalId,
         profileUrl: parsed.profileUrl,
+        apiProfileUrl: parsed.apiProfileUrl,
+        verificationStatus: "pending",
+        verifiedAt: null,
         status: "queued",
+        progressPhase: "queued",
+        progressCurrent: 0,
+        progressTotal: 0,
+        matchesFound: 0,
+        profilesFound: 0,
         lastError: null,
         updatedAt: input.now,
       },
@@ -2453,6 +2690,30 @@ export async function queuePlayerSourceConnection(input: {
     ),
   });
   if (!connection) throw new Error("Source connection could not be created");
+  const [activeJob] = await database
+    .select({
+      id: workflowJobs.id,
+    })
+    .from(workflowJobs)
+    .where(
+      and(
+        eq(workflowJobs.kind, "sand.profile-import"),
+        inArray(workflowJobs.status, ["queued", "running", "retry"]),
+        sql`${workflowJobs.payload} ->> 'connectionId' = ${connection.id}`,
+      ),
+    )
+    .orderBy(asc(workflowJobs.createdAt))
+    .limit(1);
+  if (activeJob) {
+    return {
+      connectionId: connection.id,
+      jobId: activeJob.id,
+      status: "queued" as const,
+      source: input.source,
+      profileUrl: parsed.profileUrl,
+      apiProfileUrl: parsed.apiProfileUrl,
+    };
+  }
   const jobId = crypto.randomUUID();
   await database.batch([
     database.insert(workflowJobs).values({
@@ -2495,6 +2756,7 @@ export async function queuePlayerSourceConnection(input: {
     status: "queued" as const,
     source: input.source,
     profileUrl: parsed.profileUrl,
+    apiProfileUrl: parsed.apiProfileUrl,
   };
 }
 
@@ -2538,7 +2800,14 @@ export async function processPlayerSourceConnection(
   }
   await database
     .update(playerSourceConnections)
-    .set({ status: "syncing", lastError: null, updatedAt: new Date() })
+    .set({
+      status: "syncing",
+      progressPhase: "fetching-profile",
+      progressCurrent: 0,
+      progressTotal: 3,
+      lastError: null,
+      updatedAt: new Date(),
+    })
     .where(eq(playerSourceConnections.id, connection.id));
   const actor = await workflowActor(requestedByPersonId);
   const now = new Date();
@@ -2548,7 +2817,31 @@ export async function processPlayerSourceConnection(
       externalId,
       actor,
       now,
+      onProgress: async (progress) => {
+        await database
+          .update(playerSourceConnections)
+          .set({
+            progressPhase: progress.phase,
+            progressCurrent: progress.current,
+            progressTotal: progress.total,
+            matchesFound: progress.matchesFound,
+            profilesFound: progress.profilesFound,
+            updatedAt: new Date(),
+          })
+          .where(eq(playerSourceConnections.id, connection.id));
+      },
     });
+    await database
+      .update(playerSourceConnections)
+      .set({
+        progressPhase: "matching-history",
+        progressCurrent: 2,
+        progressTotal: 3,
+        matchesFound: imported.counters.matches,
+        profilesFound: imported.counters.players,
+        updatedAt: new Date(),
+      })
+      .where(eq(playerSourceConnections.id, connection.id));
     const sourceRow = await database.query.importSources.findFirst({
       where: eq(importSources.slug, source),
     });
@@ -2563,6 +2856,30 @@ export async function processPlayerSourceConnection(
     if (!sourceRow || !profile) {
       throw new Error("Imported source profile was not persisted");
     }
+    const profileSnapshot = sourceProfileSnapshot(profile);
+    if (connection.verificationStatus !== "confirmed") {
+      await database
+        .update(playerSourceConnections)
+        .set({
+          status: "review-required",
+          profileSnapshot,
+          lastProfileFetchedAt: now,
+          progressPhase: "confirm-profile",
+          progressCurrent: 3,
+          progressTotal: 3,
+          matchesFound: imported.counters.matches,
+          profilesFound: imported.counters.players,
+          lastIngestionRunId: imported.runId,
+          lastError: null,
+          updatedAt: now,
+        })
+        .where(eq(playerSourceConnections.id, connection.id));
+      return {
+        connectionId,
+        status: "review-required" as const,
+        queuedMatches: imported.counters.matches,
+      };
+    }
     if (profile.personId && profile.personId !== subjectPersonId) {
       const mappedPerson = await database.query.people.findFirst({
         where: eq(people.id, profile.personId),
@@ -2572,6 +2889,13 @@ export async function processPlayerSourceConnection(
           .update(playerSourceConnections)
           .set({
             status: "review-required",
+            profileSnapshot,
+            lastProfileFetchedAt: now,
+            progressPhase: "needs-review",
+            progressCurrent: 3,
+            progressTotal: 3,
+            matchesFound: imported.counters.matches,
+            profilesFound: imported.counters.players,
             lastIngestionRunId: imported.runId,
             lastError:
               "This profile is already linked to a claimed Duna identity.",
@@ -2622,26 +2946,27 @@ export async function processPlayerSourceConnection(
       ),
     );
     for (const match of relevant) {
-      await database
-        .insert(workflowJobs)
-        .values({
-          kind: "sand.auto-approve-match",
-          idempotencyKey: `sand-auto-approve:${match.id}`,
-          payload: {
-            importedMatchId: match.id,
-            requestedByPersonId,
-            requestId,
-          },
-          traceId: requestId,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoNothing();
+      await approveImportedMatch({
+        actor,
+        importedMatchId: match.id,
+        reason:
+          "Source-owned match auto-approved after the player claimed the exact source profile.",
+        requestId,
+        now,
+      });
     }
     await database
       .update(playerSourceConnections)
       .set({
         status: "linked",
+        profileSnapshot,
+        lastProfileFetchedAt: now,
+        nextRefreshAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1_000),
+        progressPhase: "complete",
+        progressCurrent: 3,
+        progressTotal: 3,
+        matchesFound: imported.counters.matches,
+        profilesFound: imported.counters.players,
         lastIngestionRunId: imported.runId,
         lastError: null,
         lastSyncedAt: now,
@@ -2658,6 +2983,7 @@ export async function processPlayerSourceConnection(
       .update(playerSourceConnections)
       .set({
         status: "failed",
+        progressPhase: "failed",
         lastError:
           error instanceof Error
             ? error.message.slice(0, 1_000)
@@ -2667,6 +2993,171 @@ export async function processPlayerSourceConnection(
       .where(eq(playerSourceConnections.id, connection.id));
     throw error;
   }
+}
+
+export async function reviewPlayerSourceConnection(input: {
+  readonly actor: ApiActor;
+  readonly connectionId: string;
+  readonly decision: "confirmed" | "rejected";
+  readonly idempotencyKey: string;
+  readonly requestId: string;
+  readonly now: Date;
+}) {
+  requireDatabase();
+  const database = getDatabase();
+  const connection = await database.query.playerSourceConnections.findFirst({
+    where: eq(playerSourceConnections.id, input.connectionId),
+  });
+  if (!connection) {
+    throw new SandDataServiceError(
+      "PLAYER_NOT_FOUND",
+      "The source profile connection was not found.",
+    );
+  }
+  await assertProfileSubjectAuthority({
+    actor: input.actor,
+    subjectPersonId: connection.personId,
+  });
+  if (input.decision === "rejected") {
+    await database.batch([
+      database
+        .update(playerSourceConnections)
+        .set({
+          verificationStatus: "rejected",
+          verifiedAt: null,
+          status: "disconnected",
+          progressPhase: "profile-rejected",
+          nextRefreshAt: null,
+          lastError: "The player said this source profile was not theirs.",
+          updatedAt: input.now,
+        })
+        .where(eq(playerSourceConnections.id, connection.id)),
+      database.insert(auditLog).values({
+        actorPersonId: input.actor.personId,
+        actorType: "person",
+        action: "sand-data.profile-connection.rejected",
+        entityType: "player-source-connection",
+        entityId: connection.id,
+        reason: "Player or connected guardian rejected the discovered profile.",
+        traceId: input.requestId,
+        createdAt: input.now,
+      }),
+    ]);
+    return {
+      connectionId: connection.id,
+      status: "disconnected" as const,
+      jobId: undefined,
+    };
+  }
+  const jobId = crypto.randomUUID();
+  await database.batch([
+    database
+      .update(playerSourceConnections)
+      .set({
+        verificationStatus: "confirmed",
+        verifiedAt: input.now,
+        status: "queued",
+        progressPhase: "confirmed-import",
+        progressCurrent: 0,
+        progressTotal: 3,
+        lastError: null,
+        updatedAt: input.now,
+      })
+      .where(eq(playerSourceConnections.id, connection.id)),
+    database.insert(workflowJobs).values({
+      id: jobId,
+      kind: "sand.profile-import",
+      idempotencyKey: `sand-profile-confirm:${connection.id}:${input.idempotencyKey}`,
+      personId: connection.personId,
+      payload: {
+        connectionId: connection.id,
+        requestedByPersonId: input.actor.personId,
+        subjectPersonId: connection.personId,
+        source: connection.source,
+        externalId: connection.externalPersonId,
+        requestId: input.requestId,
+      },
+      traceId: input.requestId,
+      createdAt: input.now,
+      updatedAt: input.now,
+    }),
+    database.insert(auditLog).values({
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "sand-data.profile-connection.confirmed",
+      entityType: "player-source-connection",
+      entityId: connection.id,
+      reason:
+        "Player or connected guardian confirmed the discovered source profile.",
+      traceId: input.requestId,
+      createdAt: input.now,
+    }),
+  ]);
+  return {
+    connectionId: connection.id,
+    status: "queued" as const,
+    jobId,
+  };
+}
+
+export async function queueDuePlayerSourceRefreshes(
+  input: {
+    readonly limit?: number;
+    readonly now?: Date;
+  } = {},
+) {
+  requireDatabase();
+  const database = getDatabase();
+  const now = input.now ?? new Date();
+  const due = await database
+    .select()
+    .from(playerSourceConnections)
+    .where(
+      and(
+        eq(playerSourceConnections.status, "linked"),
+        eq(playerSourceConnections.verificationStatus, "confirmed"),
+        lte(playerSourceConnections.nextRefreshAt, now),
+      ),
+    )
+    .orderBy(asc(playerSourceConnections.nextRefreshAt))
+    .limit(Math.min(100, Math.max(1, input.limit ?? 25)));
+  let queued = 0;
+  for (const connection of due) {
+    const dateKey = now.toISOString().slice(0, 10);
+    const inserted = await database
+      .insert(workflowJobs)
+      .values({
+        kind: "sand.profile-import",
+        idempotencyKey: `sand-profile-refresh:${connection.id}:${dateKey}`,
+        personId: connection.personId,
+        payload: {
+          connectionId: connection.id,
+          requestedByPersonId: connection.personId,
+          subjectPersonId: connection.personId,
+          source: connection.source,
+          externalId: connection.externalPersonId,
+          requestId: `scheduled-profile-refresh:${connection.id}:${dateKey}`,
+        },
+        traceId: `scheduled-profile-refresh:${connection.id}:${dateKey}`,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoNothing()
+      .returning({ id: workflowJobs.id });
+    if (inserted.length === 0) continue;
+    queued += 1;
+    await database
+      .update(playerSourceConnections)
+      .set({
+        status: "queued",
+        progressPhase: "scheduled-refresh",
+        progressCurrent: 0,
+        progressTotal: 3,
+        updatedAt: now,
+      })
+      .where(eq(playerSourceConnections.id, connection.id));
+  }
+  return { queued };
 }
 
 export async function processSandAutoApproveMatch(

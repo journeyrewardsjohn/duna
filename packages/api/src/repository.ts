@@ -83,6 +83,7 @@ export const demoRepository = {
           process.env.LIVEKIT_API_KEY &&
           process.env.LIVEKIT_API_SECRET,
         ),
+        aiConfigured: Boolean(process.env.OPENAI_API_KEY),
       },
       household: [],
       dunaPlusPlans: [
@@ -184,7 +185,7 @@ export const demoRepository = {
       audit: demoAuditEvents,
       system: [
         { service: "API", status: "healthy", detail: "p95 118ms" },
-        { service: "Stripe webhooks", status: "healthy", detail: "p95 4.2s" },
+        { service: "Payment webhooks", status: "healthy", detail: "p95 4.2s" },
         { service: "Rating replay", status: "healthy", detail: "0 drift" },
         {
           service: "Wallet reconciliation",

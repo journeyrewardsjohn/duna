@@ -156,7 +156,7 @@ export function PublicCreateStarter({ hqUrl }: { readonly hqUrl: string }) {
         </button>
         <small className="public-create__fineprint">
           Your event stays private until you explicitly publish it. Paid events
-          require Stripe setup in Duna HQ.
+          require payment setup in Duna HQ.
         </small>
       </section>
     </div>

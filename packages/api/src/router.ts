@@ -185,20 +185,23 @@ import {
   appendMatchEvents,
   appendOperatorMatchEvents,
   confirmMatchResult,
+  flagMatchHistoryInaccurate,
   loadOperatorMatchScoringState,
   loadOperatorScorableMatches,
   loadMatchScoringState,
   loadPublicMatchScoringState,
   MatchServiceError,
+  removeSelfReportedMatch,
+  reviewMatchHistoryDispute,
   startOperatorMatchScoring,
   startSelfReportedMatch,
 } from "./match-service";
 import {
   claimGuardianInvitation,
   createGuardianInvitation,
-  inferPlayingExperienceNarrative,
   loadGuardianInvitation,
   ProfileOnboardingError,
+  synthesizePlayingExperienceNarrative,
   updatePlayingProfile,
 } from "./profile-onboarding";
 import {
@@ -217,6 +220,7 @@ import {
   refreshFivbEventIndex,
   refreshWorldRankings,
   rejectImportedMatch,
+  reviewPlayerSourceConnection,
   SandDataServiceError,
   searchDunaPlayers,
 } from "./sand-data/service";
@@ -462,6 +466,9 @@ const createEventDraftInputSchema = z
       venueId: z.string().uuid().optional(),
       venueName: z.string().trim().min(1).max(160),
       address: z.string().trim().max(500).optional(),
+      googlePlaceId: z.string().trim().max(256).optional(),
+      latitude: z.number().min(-90).max(90).optional(),
+      longitude: z.number().min(-180).max(180).optional(),
       onlineUrl: z.string().url().max(2_000).optional(),
       courtIds: z.array(z.string().uuid()).max(64),
       courtNames: z.array(z.string().trim().min(1).max(80)).max(64),
@@ -1274,6 +1281,75 @@ const playerRouter = router({
         },
       }),
     ),
+  flagMatchHistory: protectedProcedure
+    .use(requireScope("matches:write"))
+    .input(
+      z.object({
+        matchId: z.string().uuid(),
+        reasonCode: z.enum([
+          "not-me",
+          "wrong-score",
+          "wrong-opponents",
+          "duplicate",
+          "other",
+        ]),
+        details: z.string().trim().max(1_000).optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        matchId: z.string().uuid(),
+        status: z.literal("pending"),
+        ratingEligibility: z.literal("held"),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.flagMatchHistory",
+        request: input,
+        ctx,
+        execute: () =>
+          flagMatchHistoryInaccurate({
+            actor: ctx.actor!,
+            ...input,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  removeSelfReportedMatch: protectedProcedure
+    .use(requireScope("matches:write"))
+    .input(
+      z.object({
+        matchId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        matchId: z.string().uuid(),
+        removed: z.literal(true),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.removeSelfReportedMatch",
+        request: input,
+        ctx,
+        execute: () =>
+          removeSelfReportedMatch({
+            actor: ctx.actor!,
+            matchId: input.matchId,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
   wallet: protectedProcedure
     .output(playerWalletSchema)
     .query(({ ctx }) => getRepository().player.wallet(ctx.actor!.personId)),
@@ -1294,12 +1370,16 @@ const playerRouter = router({
         playedIndoorPrior: z.boolean().optional(),
         yearsPlaying: z.number().int().min(0).max(100).optional(),
         heightMillimeters: z.number().int().min(600).max(2600).optional(),
+        collegeName: z.string().max(120).optional(),
         summary: z.string(),
         confidence: z.enum(["low", "medium", "high"]),
+        learnedFacts: z.array(z.string()).readonly(),
+        missingFields: z.array(z.string()).readonly(),
+        modelUsed: z.enum(["openai", "guided-fallback"]),
       }),
     )
     .mutation(({ input, ctx }) =>
-      inferPlayingExperienceNarrative(input.narrative, ctx.now),
+      synthesizePlayingExperienceNarrative(input.narrative, ctx.now),
     ),
   updatePlayingProfile: protectedProcedure
     .use(requireScope("profile:write"))
@@ -1331,6 +1411,7 @@ const playerRouter = router({
         ]),
         playedIndoorPrior: z.boolean(),
         yearsPlaying: z.number().int().min(0).max(100),
+        collegeName: z.string().trim().max(120).nullable().optional(),
         experienceSummary: z.string().trim().max(1_500).nullable().optional(),
         idempotencyKey: z.string().uuid(),
       }),
@@ -1523,6 +1604,7 @@ const playerRouter = router({
         status: z.literal("queued"),
         source: z.enum(["volleyball-life", "bvbinfo"]),
         profileUrl: z.url(),
+        apiProfileUrl: z.url().optional(),
       }),
     )
     .mutation(({ input, ctx }) =>
@@ -1538,6 +1620,49 @@ const playerRouter = router({
               ...input,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  reviewPlayerSource: protectedProcedure
+    .use(requireScope("profile:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "player-source-review",
+        capacity: 10,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        connectionId: z.string().uuid(),
+        decision: z.enum(["confirmed", "rejected"]),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        connectionId: z.string().uuid(),
+        status: z.enum(["queued", "disconnected"]),
+        jobId: z.string().uuid().optional(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.reviewPlayerSource",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await reviewPlayerSourceConnection({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
               now: ctx.now,
             });
           } catch (error) {
@@ -2715,6 +2840,9 @@ const operatorRouter = router({
         administrativeArea: z.string().trim().min(1).max(100),
         postalCode: z.string().trim().min(2).max(24),
         countryCode: z.string().trim().length(2),
+        googlePlaceId: z.string().trim().max(256).optional(),
+        latitude: z.number().min(-90).max(90).optional(),
+        longitude: z.number().min(-180).max(180).optional(),
         stripeTaxEnabled: z.boolean(),
         confirmed: z.literal(true),
         idempotencyKey: z.string().uuid(),
@@ -3184,6 +3312,9 @@ const operatorRouter = router({
         administrativeArea: z.string().trim().max(100).optional(),
         postalCode: z.string().trim().max(24).optional(),
         countryCode: z.string().trim().length(2),
+        googlePlaceId: z.string().trim().max(256).optional(),
+        latitude: z.number().min(-90).max(90).optional(),
+        longitude: z.number().min(-180).max(180).optional(),
         timezone: z.string().trim().min(3).max(64),
         temporary: z.boolean(),
         idempotencyKey: z.string().uuid(),
@@ -4033,6 +4164,29 @@ const adminRouter = router({
       return throwDomainError(error);
     }
   }),
+  reviewMatchHistoryDispute: adminProcedure
+    .input(
+      z.object({
+        disputeId: z.string().uuid(),
+        decision: z.enum(["upheld", "rejected"]),
+        resolutionNotes: z.string().trim().min(8).max(2_000),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await reviewMatchHistoryDispute({
+          actor: ctx.actor!,
+          disputeId: input.disputeId,
+          decision: input.decision,
+          resolutionNotes: input.resolutionNotes,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   sandPlayerSearch: adminProcedure
     .input(z.object({ query: z.string().trim().min(2).max(80) }))
     .query(async ({ input }) => {

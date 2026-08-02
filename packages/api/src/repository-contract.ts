@@ -64,6 +64,7 @@ export interface PlayerSettings {
       "not-set" | "amateur" | "high-school" | "collegiate" | "professional";
     readonly playedIndoorPrior?: boolean;
     readonly yearsPlaying?: number;
+    readonly collegeName?: string;
     readonly experienceSummary?: string;
     readonly onboardingStatus:
       "not-started" | "in-progress" | "guardian-required" | "complete";
@@ -87,6 +88,10 @@ export interface PlayerSettings {
     readonly id: string;
     readonly source: "volleyball-life" | "bvbinfo";
     readonly profileUrl: string;
+    readonly apiProfileUrl?: string;
+    readonly externalPersonId: string;
+    readonly profileSnapshot: Readonly<Record<string, unknown>>;
+    readonly verificationStatus: "pending" | "confirmed" | "rejected";
     readonly status:
       | "queued"
       | "syncing"
@@ -96,6 +101,14 @@ export interface PlayerSettings {
       | "disconnected";
     readonly lastSyncedAt?: string;
     readonly lastError?: string;
+    readonly progress: {
+      readonly phase: string;
+      readonly current: number;
+      readonly total: number;
+      readonly matchesFound: number;
+      readonly profilesFound: number;
+    };
+    readonly nextRefreshAt?: string;
   }[];
   readonly guardianInvitation?: {
     readonly id: string;
@@ -104,6 +117,7 @@ export interface PlayerSettings {
   };
   readonly voiceOnboarding: {
     readonly configured: boolean;
+    readonly aiConfigured: boolean;
   };
   readonly household: readonly {
     readonly person: PersonSummary;

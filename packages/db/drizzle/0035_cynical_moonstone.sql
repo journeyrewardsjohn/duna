@@ -1,0 +1,1 @@
+ALTER TABLE "matches" ADD COLUMN "rating_evidence" jsonb;

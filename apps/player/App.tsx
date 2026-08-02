@@ -1682,7 +1682,7 @@ function WalletScreen() {
           <Text style={styles.cardTitle}>
             {formatMoney(wallet?.pendingMinor ?? 0, wallet?.currency ?? "USD")}
           </Text>
-          <Text style={styles.bodyText}>Still processing in Stripe</Text>
+          <Text style={styles.bodyText}>Payment is still processing</Text>
         </View>
       </View>
       <SectionHeader
@@ -2068,7 +2068,7 @@ function BookingModal({
             : {
                 label: "Pending",
                 title: "Checkout is still processing.",
-                body: "Duna will confirm the booking after Stripe reports a successful payment.",
+                body: "Duna will confirm the booking after the payment succeeds.",
               },
         );
       } else {
@@ -2127,7 +2127,7 @@ function BookingModal({
                 <Text style={styles.closeText}>×</Text>
               </Pressable>
               <Text style={styles.modalHeaderTitle}>Secure checkout</Text>
-              <Text style={styles.rowMeta}>Stripe</Text>
+              <Text style={styles.rowMeta}>Secure payment</Text>
             </View>
             <View style={styles.checkoutArt}>
               <View style={styles.courtLine} />
@@ -2346,12 +2346,12 @@ function BookingModal({
                 <View style={styles.flex}>
                   <Text style={styles.rowTitle}>
                     {listedPrice.amountMinor
-                      ? "Stripe secure checkout"
+                      ? "Secure checkout"
                       : "Free registration"}
                   </Text>
                   <Text style={styles.rowMeta}>
                     {listedPrice.amountMinor
-                      ? "Card details go directly to Stripe. Duna never stores them."
+                      ? "Card details go directly to the payment processor. Duna never stores them."
                       : "No payment method is required."}
                   </Text>
                 </View>
@@ -2399,7 +2399,7 @@ function BookingModal({
                         ? "Choose tickets securely"
                         : "Complete team + agreements"
                       : listedPrice.amountMinor
-                        ? "Continue to Stripe"
+                        ? "Continue to payment"
                         : "Confirm free registration"}
               </Text>
             </Pressable>

@@ -25,7 +25,7 @@ export default async function WalletPage() {
     <main className="standard-page wallet-page">
       <section className="page-heading-row">
         <div>
-          <span className="page-eyebrow">Stripe-managed balance</span>
+          <span className="page-eyebrow">Securely managed balance</span>
           <h1>Money + club credits.</h1>
           <p>
             Keep cash, prize earnings, memberships, and each organization’s
@@ -61,7 +61,8 @@ export default async function WalletPage() {
             </button>
           </div>
           <small>
-            Funds are held and moved by Stripe. Duna never takes custody.
+            Funds are held and moved by the payment provider. Duna never takes
+            custody.
           </small>
         </article>
 
@@ -85,7 +86,7 @@ export default async function WalletPage() {
             </span>
             <div>
               <small>Wallet rail</small>
-              <strong>Stripe-connected account</strong>
+              <strong>Connected payout account</strong>
               <span>Bank details never live in Duna</span>
             </div>
             <ArrowUpRight aria-hidden size={17} />
@@ -226,9 +227,9 @@ export default async function WalletPage() {
         <div>
           <strong>Your money stays on regulated rails.</strong>
           <p>
-            Duna displays your ledger; Stripe holds the balance, verifies
-            identity, and moves funds. No peer-to-peer transfers and no hidden
-            custody.
+            Duna displays your ledger; the payment provider holds the balance,
+            verifies identity, and moves funds. No peer-to-peer transfers and no
+            hidden custody.
           </p>
         </div>
       </section>

@@ -11,6 +11,7 @@ import {
   guardianInvitations,
   guardianships,
   matchConfirmations,
+  matchHistoryDisputes,
   matches,
   memberships,
   membershipTiers,
@@ -317,6 +318,7 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
     deltaRows,
     venueRows,
     confirmationRows,
+    disputeRows,
   ] = await Promise.all([
     database
       .select()
@@ -355,6 +357,15 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
           inArray(matchConfirmations.matchId, matchIds),
         ),
       ),
+    database
+      .select()
+      .from(matchHistoryDisputes)
+      .where(
+        and(
+          eq(matchHistoryDisputes.personId, personId),
+          inArray(matchHistoryDisputes.matchId, matchIds),
+        ),
+      ),
   ]);
   const allPersonIds = [
     ...new Set(allMembershipRows.map((member) => member.personId)),
@@ -369,6 +380,9 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
   );
   const confirmationByMatch = new Map(
     confirmationRows.map((row) => [row.matchId, row] as const),
+  );
+  const disputeByMatch = new Map(
+    disputeRows.map((row) => [row.matchId, row] as const),
   );
   const deltaByMatch = new Map(
     deltaRows.map((event) => {
@@ -414,6 +428,17 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
           : score.winner;
     if (!winner) return [];
     const confirmation = confirmationByMatch.get(match.id);
+    const dispute = disputeByMatch.get(match.id);
+    const format =
+      typeof match.format === "object" && match.format !== null
+        ? match.format
+        : {};
+    const origin =
+      "importedMatchId" in format || "source" in format
+        ? "imported"
+        : match.verification === "self-reported"
+          ? "self-reported"
+          : "live-scored";
     const status =
       match.status === "pending-verification" ||
       match.status === "verified" ||
@@ -443,6 +468,24 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
           .map((set) => [set.a, set.b] as const),
         winner,
         ratingDelta: deltaByMatch.get(match.id) ?? 0,
+        origin,
+        ratingEligibility: match.ratingEligible ? "eligible" : "held",
+        dispute: dispute
+          ? {
+              status:
+                dispute.status === "upheld" ||
+                dispute.status === "rejected" ||
+                dispute.status === "withdrawn"
+                  ? dispute.status
+                  : "pending",
+              reasonCode: dispute.reasonCode,
+            }
+          : undefined,
+        canRemove:
+          origin === "self-reported" &&
+          match.createdByPersonId === personId &&
+          match.status === "pending-verification" &&
+          !match.ratingAppliedAt,
         verification: summaryVerification(match.verification),
       },
     ];
@@ -1270,6 +1313,7 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
       playingExperience: playingExperience(person.playingExperience),
       playedIndoorPrior: person.playedIndoorPrior ?? undefined,
       yearsPlaying: person.yearsPlaying ?? undefined,
+      collegeName: person.collegeName ?? undefined,
       experienceSummary: person.experienceSummary ?? undefined,
       onboardingStatus: profileOnboardingStatus(person.profileOnboardingStatus),
       onboardingCompletedAt: person.profileOnboardingCompletedAt?.toISOString(),
@@ -1299,10 +1343,26 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
           id: connection.id,
           source: connection.source,
           profileUrl: connection.profileUrl,
+          apiProfileUrl: connection.apiProfileUrl ?? undefined,
+          externalPersonId: connection.externalPersonId,
+          profileSnapshot: connection.profileSnapshot,
+          verificationStatus:
+            connection.verificationStatus === "confirmed" ||
+            connection.verificationStatus === "rejected"
+              ? connection.verificationStatus
+              : "pending",
           status:
             connection.status as PlayerSettings["sourceConnections"][number]["status"],
           lastSyncedAt: connection.lastSyncedAt?.toISOString(),
           lastError: connection.lastError ?? undefined,
+          progress: {
+            phase: connection.progressPhase,
+            current: connection.progressCurrent,
+            total: connection.progressTotal,
+            matchesFound: connection.matchesFound,
+            profilesFound: connection.profilesFound,
+          },
+          nextRefreshAt: connection.nextRefreshAt?.toISOString(),
         },
       ];
     }),
@@ -1319,6 +1379,7 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
         process.env.LIVEKIT_API_KEY &&
         process.env.LIVEKIT_API_SECRET,
       ),
+      aiConfigured: Boolean(process.env.OPENAI_API_KEY),
     },
     household,
     membership:
@@ -1677,7 +1738,7 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
     (!organization?.stripeAccountId || !organization.stripeChargesEnabled)
   ) {
     throw new Error(
-      "Paid pickup requires an organization with Stripe charges enabled so Duna never holds host funds.",
+      "Paid pickup requires an organization with payments enabled so Duna never holds host funds.",
     );
   }
   await database.batch([
@@ -1935,7 +1996,7 @@ export const databaseRepository = {
           },
           { label: "Active courts", value: String(courtCount) },
           {
-            label: "Stripe",
+            label: "Payments",
             value: titleCase(organization.stripeStatus),
             tone:
               organization.stripeStatus === "connected"
@@ -2093,7 +2154,7 @@ export const databaseRepository = {
             detail: "Connected and queryable",
           },
           {
-            service: "Stripe webhooks",
+            service: "Payment webhooks",
             status: process.env.STRIPE_WEBHOOK_SECRET
               ? "configured"
               : "attention",

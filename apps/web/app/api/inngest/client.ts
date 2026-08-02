@@ -1,4 +1,8 @@
-import { processWorkflowJobById, recoverReadyWorkflowJobs } from "@duna/api";
+import {
+  processWorkflowJobById,
+  queueDuePlayerSourceRefreshes,
+  recoverReadyWorkflowJobs,
+} from "@duna/api";
 import { Inngest } from "inngest";
 
 export const inngest = new Inngest({ id: "duna-platform" });
@@ -32,7 +36,28 @@ export const recoverWorkflowJobs = inngest.createFunction(
     ),
 );
 
+export const refreshPlayerSources = inngest.createFunction(
+  {
+    id: "refresh-player-sources",
+    name: "Refresh linked player source profiles",
+    triggers: [{ cron: "15 */6 * * *" }],
+    retries: 2,
+  },
+  async ({ step }) => {
+    const queued = await step.run("queue-due-player-sources", () =>
+      queueDuePlayerSourceRefreshes({ limit: 25 }),
+    );
+    if (queued.queued > 0) {
+      await step.run("process-player-source-refreshes", () =>
+        recoverReadyWorkflowJobs({ limit: queued.queued }),
+      );
+    }
+    return queued;
+  },
+);
+
 export const dunaInngestFunctions = [
   processWorkflowJob,
   recoverWorkflowJobs,
+  refreshPlayerSources,
 ] as const;

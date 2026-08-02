@@ -45,6 +45,7 @@ import {
   updateVenueProfileAction,
   type OperatorActionState,
 } from "@/app/actions";
+import { PlaceAddressFields } from "./place-address-fields";
 import { createVenueMediaPath, optimizeImageUpload } from "@/lib/media-storage";
 import type { OperatorModule } from "./navigation";
 import {
@@ -425,26 +426,7 @@ function VenueComposer({
               placeholder="Showers, parking, pro shop, covered courts"
             />
           </label>
-          <label className="operator-field--wide">
-            <span>Street or beach access</span>
-            <input name="addressLine1" placeholder="1200 Ocean Drive" />
-          </label>
-          <label>
-            <span>City</span>
-            <input name="locality" placeholder="Manhattan Beach" />
-          </label>
-          <label>
-            <span>State / region</span>
-            <input name="administrativeArea" placeholder="CA" />
-          </label>
-          <label>
-            <span>Postal code</span>
-            <input name="postalCode" placeholder="90266" />
-          </label>
-          <label>
-            <span>Country</span>
-            <input name="countryCode" defaultValue="US" maxLength={2} />
-          </label>
+          <PlaceAddressFields label="Venue or beach address" />
           <label className="operator-field--wide">
             <span>Venue timezone</span>
             <input
@@ -1470,7 +1452,7 @@ function SessionDrafts({
         <div>
           <span className="hq-eyebrow">Publication gate</span>
           <h2>{drafts.length} private drafts</h2>
-          <p>Paid sessions also require Stripe charges to be enabled.</p>
+          <p>Paid sessions also require online payments to be enabled.</p>
         </div>
         <ShieldCheck aria-hidden size={24} />
       </header>
@@ -1826,7 +1808,7 @@ export function OperatorControls({
       <h2>{workspace.organization.name}</h2>
       <p>
         Use Calendar for facility and session operations, Money for rates and
-        Stripe, and Messages for consent-safe communication.
+        Payments, and Messages for consent-safe communication.
       </p>
     </section>
   );

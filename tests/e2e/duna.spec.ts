@@ -46,7 +46,7 @@ test("light mode starts cleanly and the dark choice persists", async ({
   await expectNoHorizontalOverflow(page);
 });
 
-test("paid checkout exposes a real Stripe handoff and honest wallet state", async ({
+test("paid checkout exposes a secure payment handoff and honest wallet state", async ({
   page,
 }) => {
   await page.goto("/app/checkout/serve-receive-lab");
@@ -57,7 +57,7 @@ test("paid checkout exposes a real Stripe handoff and honest wallet state", asyn
     page.getByRole("checkbox", { name: /Use Duna Wallet/ }),
   ).toBeDisabled();
   await expect(
-    page.getByRole("button", { name: /Continue to Stripe/ }),
+    page.getByRole("button", { name: /Continue to payment/ }),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "View Duna+" })).toBeVisible();
   await expect(page.getByText("Card details never touch Duna.")).toBeVisible();
@@ -147,7 +147,7 @@ test("tournament pages and checkout expose divisions, tickets, teams, and waiver
   await expect(waiverCheckbox).toBeEnabled();
   await waiverCheckbox.check();
   await expect(
-    page.getByRole("button", { name: /Continue to Stripe/ }),
+    page.getByRole("button", { name: /Continue to payment/ }),
   ).toBeEnabled();
 
   await page.getByRole("tab", { name: /Attend/ }).click();
@@ -219,10 +219,25 @@ test("player onboarding stays clear and editable on mobile", async ({
     );
   await page.getByRole("button", { name: /Review answers/ }).click();
   await expect(
-    page.getByRole("heading", { name: "Private identity" }),
+    page.getByRole("heading", { name: "What is the player's legal name?" }),
   ).toBeVisible();
   await expect(page.getByLabel("Legal first name")).toBeEditable();
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "What is the highest level reached?" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /Collegiate/ }).click();
+  await expect(page.getByLabel("College or university")).toBeEditable();
+  await page.getByRole("button", { name: /Continue/ }).click();
   await expect(page.getByLabel("Years playing")).toBeEditable();
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await page.getByLabel("Height in feet").fill("6");
+  await page.getByLabel("Additional height in inches").fill("1");
+  await page.getByRole("button", { name: "cm" }).click();
+  await expect(page.getByLabel("Height in centimeters")).toHaveValue("185");
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await expect(page.getByLabel(/Playing story/)).toBeEditable();
+  await page.getByRole("button", { name: /Continue/ }).click();
   await expect(page.getByText("VolleyballLife profile")).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });

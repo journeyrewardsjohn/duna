@@ -31,7 +31,7 @@ import {
   type OperatorActionState,
 } from "@/app/actions";
 import { createEventMediaPath, optimizeImageUpload } from "@/lib/media-storage";
-import { PlaceSearch } from "./place-search";
+import { PlaceSearch, type PlaceDetails } from "./place-search";
 
 type EventKind = "tournament" | "league";
 type LocationMode = "venue" | "address" | "online";
@@ -591,6 +591,7 @@ export function EventBuilder({
     initialVenueName ?? initialVenue?.name ?? "Event venue",
   );
   const [address, setAddress] = useState("");
+  const [addressPlace, setAddressPlace] = useState<PlaceDetails>({});
   const [onlineUrl, setOnlineUrl] = useState("");
   const [courtIds, setCourtIds] = useState<readonly string[]>([]);
   const [customCourts, setCustomCourts] = useState("");
@@ -712,6 +713,14 @@ export function EventBuilder({
         venueId: locationMode === "venue" ? venueId || undefined : undefined,
         venueName,
         address: locationMode === "address" ? address || undefined : undefined,
+        googlePlaceId:
+          locationMode === "address"
+            ? addressPlace.placeId || undefined
+            : undefined,
+        latitude:
+          locationMode === "address" ? addressPlace.latitude : undefined,
+        longitude:
+          locationMode === "address" ? addressPlace.longitude : undefined,
         onlineUrl:
           locationMode === "online" ? onlineUrl || undefined : undefined,
         courtIds: locationMode === "venue" ? courtIds : [],
@@ -808,6 +817,7 @@ export function EventBuilder({
     }),
     [
       address,
+      addressPlace,
       courtIds,
       customCourts,
       description,
@@ -908,7 +918,7 @@ export function EventBuilder({
             <strong>Money</strong>
             <small>
               {workspace.organization.stripeChargesEnabled
-                ? "Stripe ready"
+                ? "Payments ready"
                 : "Setup required before launch"}
             </small>
           </span>
@@ -1216,7 +1226,11 @@ export function EventBuilder({
                         />
                       </label>
                       <PlaceSearch
-                        onAddress={setAddress}
+                        onAddress={(value) => {
+                          setAddress(value);
+                          setAddressPlace({});
+                        }}
+                        onPlace={setAddressPlace}
                         onVenueName={setVenueName}
                         value={address}
                       />
@@ -1994,8 +2008,8 @@ export function EventBuilder({
                   <h3>
                     {paid
                       ? workspace.organization.stripeChargesEnabled
-                        ? "Stripe is ready when you publish."
-                        : "Save the draft now. Connect Stripe before launch."
+                        ? "Payments are ready when you publish."
+                        : "Save the draft now. Finish payment setup before launch."
                       : "This event can launch without payments."}
                   </h3>
                   <p>

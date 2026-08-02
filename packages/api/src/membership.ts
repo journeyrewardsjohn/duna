@@ -85,7 +85,7 @@ async function connectedMembership(personId: string) {
   if (!stripeSubscriptionId) {
     throw new MembershipError(
       "MEMBERSHIP_NOT_MANAGEABLE",
-      "This membership is not linked to Stripe billing.",
+      "This membership is not linked to recurring billing.",
     );
   }
   return { ...row, stripeSubscriptionId };

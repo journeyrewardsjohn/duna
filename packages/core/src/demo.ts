@@ -589,7 +589,7 @@ export const demoAuditEvents: readonly AuditEvent[] = [
     occurredAt: "2026-07-30T16:42:00.000Z",
     actorName: "Duna Reconciliation",
     action: "payout.reconciled",
-    entity: "Stripe payout po_demo_42",
+    entity: "Payment payout po_demo_42",
     reason: "Internal ledger and processor report matched exactly.",
     severity: "info",
   },

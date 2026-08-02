@@ -312,24 +312,36 @@ function applyPlayerUpdate(input: {
   };
 }
 
-export function rateDoublesMatch(input: {
+export function rateDoublesPerformance(input: {
   readonly teamA: readonly [RatingPlayerInput, RatingPlayerInput];
   readonly teamB: readonly [RatingPlayerInput, RatingPlayerInput];
-  readonly setScores: readonly SetScore[];
+  readonly actualTeamA: number;
+  readonly pointShareTeamA: number;
+  readonly marginMultiplier: number;
   readonly verificationWeight: number;
   readonly previousPairMeetingsInWindow?: number;
+  readonly repeatOpponentWeight?: number;
   readonly config?: Partial<RatingConfig>;
 }): MatchRatingResult {
   if (input.verificationWeight < 0 || input.verificationWeight > 1) {
     throw new Error("verificationWeight must be between 0 and 1");
   }
+  if (
+    input.actualTeamA < 0 ||
+    input.actualTeamA > 1 ||
+    input.pointShareTeamA < 0 ||
+    input.pointShareTeamA > 1 ||
+    input.marginMultiplier <= 0
+  ) {
+    throw new Error("Match performance values are outside their valid range");
+  }
   const config = { ...defaultRatingConfig, ...input.config };
   const strengthA = teamStrength(input.teamA, config.weakLinkAlpha);
   const strengthB = teamStrength(input.teamB, config.weakLinkAlpha);
   const expectedA = expectedScore(strengthA.mu, strengthB.mu, strengthB.phi);
-  const result = deriveResult(input.setScores);
   const meetingNumber = (input.previousPairMeetingsInWindow ?? 0) + 1;
-  const repeatOpponentWeight = 1 / Math.sqrt(meetingNumber);
+  const repeatOpponentWeight =
+    input.repeatOpponentWeight ?? 1 / Math.sqrt(meetingNumber);
   const uncertaintyMultiplier = clamp(
     (strengthA.phi + strengthB.phi) / 300,
     0.55,
@@ -338,25 +350,25 @@ export function rateDoublesMatch(input: {
   const teamDeltaMu =
     config.baseK *
     uncertaintyMultiplier *
-    (result.actualA - expectedA) *
-    result.marginMultiplier *
+    (input.actualTeamA - expectedA) *
+    input.marginMultiplier *
     input.verificationWeight *
     repeatOpponentWeight;
 
   const commonA = {
     expectedWinProbability: expectedA,
-    actualResult: result.actualA,
-    pointShare: result.pointShareA,
-    marginMultiplier: result.marginMultiplier,
+    actualResult: input.actualTeamA,
+    pointShare: input.pointShareTeamA,
+    marginMultiplier: input.marginMultiplier,
     verificationWeight: input.verificationWeight,
     repeatOpponentWeight,
     config,
   };
   const commonB = {
     expectedWinProbability: 1 - expectedA,
-    actualResult: 1 - result.actualA,
-    pointShare: 1 - result.pointShareA,
-    marginMultiplier: result.marginMultiplier,
+    actualResult: 1 - input.actualTeamA,
+    pointShare: 1 - input.pointShareTeamA,
+    marginMultiplier: input.marginMultiplier,
     verificationWeight: input.verificationWeight,
     repeatOpponentWeight,
     config,
@@ -392,6 +404,27 @@ export function rateDoublesMatch(input: {
       }),
     ],
   };
+}
+
+export function rateDoublesMatch(input: {
+  readonly teamA: readonly [RatingPlayerInput, RatingPlayerInput];
+  readonly teamB: readonly [RatingPlayerInput, RatingPlayerInput];
+  readonly setScores: readonly SetScore[];
+  readonly verificationWeight: number;
+  readonly previousPairMeetingsInWindow?: number;
+  readonly config?: Partial<RatingConfig>;
+}): MatchRatingResult {
+  const result = deriveResult(input.setScores);
+  return rateDoublesPerformance({
+    teamA: input.teamA,
+    teamB: input.teamB,
+    actualTeamA: result.actualA,
+    pointShareTeamA: result.pointShareA,
+    marginMultiplier: result.marginMultiplier,
+    verificationWeight: input.verificationWeight,
+    previousPairMeetingsInWindow: input.previousPairMeetingsInWindow,
+    config: input.config,
+  });
 }
 
 export function resetWeeklyGain(state: RatingState): RatingState {

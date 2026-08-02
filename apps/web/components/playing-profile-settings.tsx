@@ -3,14 +3,18 @@
 import type { PlayerSettings } from "@duna/api";
 import { Badge } from "@duna/ui";
 import { ExternalLink, Link2, Save, ShieldCheck, Sparkles } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { FormEvent, useEffect, useState, useTransition } from "react";
 import {
   connectPlayerSourceAction,
   createGuardianInvitationAction,
+  reviewPlayerSourceAction,
   startIdentityVerificationAction,
   updatePlayingProfileAction,
 } from "@/app/app/settings/actions";
+import { HeightInput } from "@/components/height-input";
 
 function splitName(value: string) {
   const parts = value.trim().split(/\s+/);
@@ -23,6 +27,7 @@ export function PlayingProfileSettings({
   readonly settings: PlayerSettings;
 }) {
   const profile = settings.profile;
+  const router = useRouter();
   const fallbackName = splitName(profile.person.displayName);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string>();
@@ -32,15 +37,14 @@ export function PlayingProfileSettings({
     legalGivenName: profile.legalGivenName ?? fallbackName.given,
     legalMiddleName: profile.legalMiddleName ?? "",
     legalFamilyName: profile.legalFamilyName ?? fallbackName.family,
-    heightCentimeters: profile.heightMillimeters
-      ? Math.round(profile.heightMillimeters / 10).toString()
-      : "",
+    heightMillimeters: profile.heightMillimeters,
     playingExperience:
       profile.playingExperience === "not-set"
         ? ("amateur" as const)
         : profile.playingExperience,
     playedIndoorPrior: profile.playedIndoorPrior ?? false,
     yearsPlaying: profile.yearsPlaying ?? 0,
+    collegeName: profile.collegeName ?? "",
     experienceSummary: profile.experienceSummary ?? "",
     volleyballLifeUrl:
       settings.sourceConnections.find(
@@ -52,6 +56,18 @@ export function PlayingProfileSettings({
       )?.profileUrl ?? "",
   });
 
+  useEffect(() => {
+    if (
+      !settings.sourceConnections.some((connection) =>
+        ["queued", "syncing"].includes(connection.status),
+      )
+    ) {
+      return;
+    }
+    const interval = window.setInterval(() => router.refresh(), 3_000);
+    return () => window.clearInterval(interval);
+  }, [router, settings.sourceConnections]);
+
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(undefined);
@@ -61,12 +77,11 @@ export function PlayingProfileSettings({
         legalGivenName: form.legalGivenName,
         legalMiddleName: form.legalMiddleName,
         legalFamilyName: form.legalFamilyName,
-        heightMillimeters: form.heightCentimeters
-          ? Math.round(Number(form.heightCentimeters) * 10)
-          : undefined,
+        heightMillimeters: form.heightMillimeters,
         playingExperience: form.playingExperience,
         playedIndoorPrior: form.playedIndoorPrior,
         yearsPlaying: form.yearsPlaying,
+        collegeName: form.collegeName,
         experienceSummary: form.experienceSummary,
       });
       if (!response.ok) {
@@ -94,6 +109,7 @@ export function PlayingProfileSettings({
         }
       }
       setNotice("Private identity and playing history saved.");
+      router.refresh();
     });
   }
 
@@ -108,7 +124,7 @@ export function PlayingProfileSettings({
       if (response.result.url) {
         window.location.assign(response.result.url);
       } else {
-        setNotice("Stripe has already verified this identity.");
+        setNotice("This identity is already verified.");
       }
     });
   }
@@ -125,6 +141,29 @@ export function PlayingProfileSettings({
       }
       setGuardianInviteUrl(response.result.inviteUrl);
       setNotice("Guardian link created. Share it with a parent or guardian.");
+    });
+  }
+
+  function reviewSource(
+    connectionId: string,
+    decision: "confirmed" | "rejected",
+  ) {
+    setError(undefined);
+    startTransition(async () => {
+      const response = await reviewPlayerSourceAction({
+        connectionId,
+        decision,
+      });
+      if (!response.ok) {
+        setError(response.error);
+        return;
+      }
+      setNotice(
+        decision === "confirmed"
+          ? "Profile confirmed. Duna is now importing and rating the verified match history."
+          : "Profile rejected. It was disconnected and will not affect this player.",
+      );
+      router.refresh();
     });
   }
 
@@ -220,21 +259,13 @@ export function PlayingProfileSettings({
               value={form.legalFamilyName}
             />
           </label>
-          <label>
-            Height (cm) <small>Optional</small>
-            <input
-              max={260}
-              min={60}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  heightCentimeters: event.target.value,
-                }))
-              }
-              type="number"
-              value={form.heightCentimeters}
-            />
-          </label>
+          <HeightInput
+            initialUnit={profile.measurementSystem}
+            onChange={(heightMillimeters) =>
+              setForm((current) => ({ ...current, heightMillimeters }))
+            }
+            value={form.heightMillimeters}
+          />
           <label>
             Experience
             <select
@@ -269,6 +300,21 @@ export function PlayingProfileSettings({
               value={form.yearsPlaying}
             />
           </label>
+          {form.playingExperience === "collegiate" && (
+            <label>
+              College or university
+              <input
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    collegeName: event.target.value,
+                  }))
+                }
+                placeholder="School name"
+                value={form.collegeName}
+              />
+            </label>
+          )}
         </div>
         <label className="settings-switch-row">
           <span>
@@ -322,7 +368,7 @@ export function PlayingProfileSettings({
                   volleyballLifeUrl: event.target.value,
                 }))
               }
-              placeholder="volleyballlife.com/playerprofile/…"
+              placeholder="volleyballlife.com/player/5520"
               value={form.volleyballLifeUrl}
             />
           </label>
@@ -347,6 +393,99 @@ export function PlayingProfileSettings({
             </label>
           )}
         </div>
+        {settings.sourceConnections.map((connection) => {
+          const snapshot = connection.profileSnapshot;
+          const displayName =
+            typeof snapshot.displayName === "string"
+              ? snapshot.displayName
+              : undefined;
+          const avatarUrl =
+            typeof snapshot.avatarUrl === "string"
+              ? snapshot.avatarUrl
+              : undefined;
+          const profileFacts = [
+            typeof snapshot.hometown === "string"
+              ? snapshot.hometown
+              : undefined,
+            typeof snapshot.height === "string" ? snapshot.height : undefined,
+            typeof snapshot.eventFinishes === "number"
+              ? `${snapshot.eventFinishes} event finishes`
+              : undefined,
+            typeof snapshot.externalRating === "number"
+              ? `TruVolley ${snapshot.externalRating.toFixed(3)}`
+              : undefined,
+          ].filter((fact): fact is string => Boolean(fact));
+          return (
+            <article className="source-import-status" key={connection.id}>
+              {avatarUrl ? (
+                <Image
+                  alt=""
+                  height={44}
+                  src={avatarUrl}
+                  unoptimized
+                  width={44}
+                />
+              ) : (
+                <span className="avatar">
+                  {(displayName ?? connection.source).slice(0, 2).toUpperCase()}
+                </span>
+              )}
+              <div>
+                <strong>
+                  {displayName ??
+                    (connection.source === "volleyball-life"
+                      ? "VolleyballLife"
+                      : "BVBInfo")}
+                </strong>
+                <small>
+                  {connection.status === "syncing" ||
+                  connection.status === "queued"
+                    ? `Importing · ${connection.progress.phase.replaceAll("-", " ")}`
+                    : `${connection.progress.matchesFound} matches · ${connection.progress.profilesFound} connected players`}
+                </small>
+                {profileFacts.length > 0 && (
+                  <small>{profileFacts.join(" · ")}</small>
+                )}
+                {connection.progress.total > 0 && (
+                  <progress
+                    max={connection.progress.total}
+                    value={connection.progress.current}
+                  />
+                )}
+                {connection.status === "review-required" &&
+                  connection.verificationStatus === "pending" && (
+                    <span className="source-import-status__actions">
+                      <button
+                        disabled={isPending}
+                        onClick={() => reviewSource(connection.id, "confirmed")}
+                        type="button"
+                      >
+                        This is me
+                      </button>
+                      <button
+                        disabled={isPending}
+                        onClick={() => reviewSource(connection.id, "rejected")}
+                        type="button"
+                      >
+                        Not my profile
+                      </button>
+                    </span>
+                  )}
+              </div>
+              <Badge
+                tone={
+                  connection.status === "linked"
+                    ? "positive"
+                    : connection.status === "failed"
+                      ? "warning"
+                      : "neutral"
+                }
+              >
+                {connection.status.replaceAll("-", " ")}
+              </Badge>
+            </article>
+          );
+        })}
         <button className="primary-action" disabled={isPending} type="submit">
           <Save />
           {isPending ? "Saving…" : "Save player details"}
@@ -357,10 +496,10 @@ export function PlayingProfileSettings({
         <article className="settings-identity-card">
           <ShieldCheck />
           <span>
-            <strong>Stripe Identity for payouts</strong>
+            <strong>Identity verification for payouts</strong>
             <small>
-              Stripe hosts document and selfie verification. Duna stores only
-              status, timestamps, and provider references.
+              Document and selfie verification is securely hosted. Duna stores
+              only status, timestamps, and provider references.
             </small>
           </span>
           <Badge
@@ -381,7 +520,7 @@ export function PlayingProfileSettings({
             onClick={startIdentity}
             type="button"
           >
-            Verify with Stripe <ExternalLink />
+            Verify identity <ExternalLink />
           </button>
         </article>
       )}

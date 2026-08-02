@@ -1,6 +1,7 @@
 "use server";
 
 import type { ScoreEventEnvelope } from "@duna/api";
+import { revalidatePath } from "next/cache";
 import { getServerCaller } from "@/lib/api";
 
 export async function startMatchAction(input: {
@@ -73,6 +74,51 @@ export async function confirmMatchAction(input: {
         error instanceof Error
           ? error.message
           : "The match response could not be recorded.",
+    };
+  }
+}
+
+export async function flagMatchHistoryAction(input: {
+  readonly matchId: string;
+  readonly reasonCode:
+    "not-me" | "wrong-score" | "wrong-opponents" | "duplicate" | "other";
+  readonly details?: string;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.flagMatchHistory({
+      ...input,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/app/matches");
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The match could not be flagged for review.",
+    };
+  }
+}
+
+export async function removeSelfReportedMatchAction(matchId: string) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.removeSelfReportedMatch({
+      matchId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/app/matches");
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The self-reported match could not be removed.",
     };
   }
 }

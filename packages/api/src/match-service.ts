@@ -5,6 +5,7 @@ import {
   eventTypes,
   getDatabase,
   matchConfirmations,
+  matchHistoryDisputes,
   matches,
   people,
   programs,
@@ -26,10 +27,21 @@ import {
 } from "@duna/league-engine";
 import {
   createInitialRating,
+  rateDoublesPerformance,
   rateDoublesMatch,
   type RatingState,
 } from "@duna/rating";
-import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { stableHash } from "./canonical";
 import type { ApiActor } from "./context";
 
@@ -119,6 +131,18 @@ function requireDatabase(): void {
       "Match scoring requires the connected Duna database.",
     );
   }
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function matchFormat(value: unknown): MatchFormat {
@@ -1111,6 +1135,9 @@ async function applyVerifiedRatings(input: {
     setScores,
     verificationWeight: (input.verificationWeightBps ?? 10_000) / 10_000,
   });
+  const teamAPerformance = result.updates.find((update) =>
+    input.participation.teamAIds.includes(update.playerId),
+  )!.explanation;
   const nextSequence = (personId: string) =>
     (eventRows.find((event) => event.personId === personId)?.sequence ?? 0) + 1;
   try {
@@ -1122,6 +1149,13 @@ async function applyVerifiedRatings(input: {
           verification: input.verification ?? "both-confirmed",
           verificationWeightBps: input.verificationWeightBps ?? 10_000,
           ratingEligible: true,
+          ratingEvidence: {
+            setScores,
+            actualTeamA: teamAPerformance.actualResult,
+            pointShareTeamA: teamAPerformance.pointShare,
+            marginMultiplier: teamAPerformance.marginMultiplier,
+            repeatOpponentWeight: teamAPerformance.repeatOpponentWeight,
+          },
           ratingAppliedAt: input.now,
           updatedAt: input.now,
         })
@@ -1253,6 +1287,532 @@ export async function applyApprovedImportedMatchRating(input: {
     reason:
       "A platform administrator approved mapped external match evidence; deterministic rating updates were applied.",
   });
+}
+
+export async function rebuildSandRatingProjection(input: {
+  readonly actor: ApiActor;
+  readonly reason: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}) {
+  requireDatabase();
+  const database = getDatabase();
+  const historicalMatches = await database
+    .select({
+      id: matches.id,
+      teamAId: matches.teamAId,
+      teamBId: matches.teamBId,
+      ratingEligible: matches.ratingEligible,
+      ratingEvidence: matches.ratingEvidence,
+      verificationWeightBps: matches.verificationWeightBps,
+      ratingAppliedAt: matches.ratingAppliedAt,
+    })
+    .from(matches)
+    .where(isNotNull(matches.ratingAppliedAt))
+    .orderBy(asc(matches.ratingAppliedAt), asc(matches.id));
+  const matchIds = historicalMatches.map((match) => match.id);
+  const teamIds = [
+    ...new Set(
+      historicalMatches.flatMap((match) =>
+        [match.teamAId, match.teamBId].filter((teamId): teamId is string =>
+          Boolean(teamId),
+        ),
+      ),
+    ),
+  ];
+  const [memberRows, storedEvents] = await Promise.all([
+    teamIds.length
+      ? database
+          .select({
+            teamId: teamMembers.teamId,
+            personId: teamMembers.personId,
+          })
+          .from(teamMembers)
+          .where(inArray(teamMembers.teamId, teamIds))
+      : Promise.resolve([]),
+    matchIds.length
+      ? database
+          .select()
+          .from(ratingEvents)
+          .where(
+            and(
+              eq(ratingEvents.discipline, "beach-2s"),
+              inArray(ratingEvents.matchId, matchIds),
+            ),
+          )
+      : Promise.resolve([]),
+  ]);
+  const membersByTeam = new Map<string, string[]>();
+  for (const member of memberRows) {
+    const current = membersByTeam.get(member.teamId) ?? [];
+    current.push(member.personId);
+    membersByTeam.set(member.teamId, current);
+  }
+  const eventsByMatch = new Map<string, (typeof storedEvents)[number][]>();
+  for (const event of storedEvents) {
+    const current = eventsByMatch.get(event.matchId) ?? [];
+    current.push(event);
+    eventsByMatch.set(event.matchId, current);
+  }
+
+  type ProjectionState = {
+    state: RatingState;
+    windowStart: Date;
+    peak: number;
+    sequence: number;
+  };
+  const projection = new Map<string, ProjectionState>();
+  const replayedEvents: (typeof ratingEvents.$inferInsert)[] = [];
+  const evidenceBackfills: {
+    readonly matchId: string;
+    readonly evidence: Record<string, unknown>;
+  }[] = [];
+  let skipped = 0;
+
+  const stateAt = (personId: string, occurredAt: Date): ProjectionState => {
+    const existing = projection.get(personId);
+    if (!existing) {
+      const state = createInitialRating({ playerId: personId });
+      const initial = {
+        state,
+        windowStart: occurredAt,
+        peak: state.display,
+        sequence: 0,
+      };
+      projection.set(personId, initial);
+      return initial;
+    }
+    if (
+      occurredAt.getTime() - existing.windowStart.getTime() >=
+      7 * 24 * 60 * 60_000
+    ) {
+      const reset = {
+        ...existing,
+        state: {
+          ...existing.state,
+          weeklyPositiveDisplayGain: 0,
+        },
+        windowStart: occurredAt,
+      };
+      projection.set(personId, reset);
+      return reset;
+    }
+    return existing;
+  };
+
+  for (const match of historicalMatches) {
+    if (!match.teamAId || !match.teamBId || !match.ratingAppliedAt) {
+      continue;
+    }
+    const teamAIds = membersByTeam.get(match.teamAId) ?? [];
+    const teamBIds = membersByTeam.get(match.teamBId) ?? [];
+    if (teamAIds.length !== 2 || teamBIds.length !== 2) {
+      skipped += 1;
+      continue;
+    }
+    const storedEvidence = recordValue(match.ratingEvidence);
+    const priorTeamAEvent = (eventsByMatch.get(match.id) ?? []).find((event) =>
+      teamAIds.includes(event.personId),
+    );
+    const priorExplanation = recordValue(priorTeamAEvent?.explanation);
+    const actualTeamA =
+      finiteNumber(storedEvidence.actualTeamA) ??
+      finiteNumber(priorExplanation.actualResult);
+    const pointShareTeamA =
+      finiteNumber(storedEvidence.pointShareTeamA) ??
+      finiteNumber(priorExplanation.pointShare);
+    const marginMultiplier =
+      finiteNumber(storedEvidence.marginMultiplier) ??
+      finiteNumber(priorExplanation.marginMultiplier);
+    const repeatOpponentWeight =
+      finiteNumber(storedEvidence.repeatOpponentWeight) ??
+      finiteNumber(priorExplanation.repeatOpponentWeight);
+    const setScores = Array.isArray(storedEvidence.setScores)
+      ? storedEvidence.setScores.flatMap((score) => {
+          const row = recordValue(score);
+          const a = finiteNumber(row.a);
+          const b = finiteNumber(row.b);
+          return a !== undefined &&
+            b !== undefined &&
+            Number.isSafeInteger(a) &&
+            Number.isSafeInteger(b)
+            ? [{ a, b }]
+            : [];
+        })
+      : [];
+    if (
+      actualTeamA === undefined ||
+      pointShareTeamA === undefined ||
+      marginMultiplier === undefined
+    ) {
+      skipped += 1;
+      continue;
+    }
+    const evidence = {
+      ...storedEvidence,
+      actualTeamA,
+      pointShareTeamA,
+      marginMultiplier,
+      ...(repeatOpponentWeight === undefined ? {} : { repeatOpponentWeight }),
+    };
+    if (!match.ratingEvidence) {
+      evidenceBackfills.push({ matchId: match.id, evidence });
+    }
+    if (!match.ratingEligible) continue;
+    const teamAState = teamAIds.map((personId) =>
+      stateAt(personId, match.ratingAppliedAt!),
+    ) as [ProjectionState, ProjectionState];
+    const teamBState = teamBIds.map((personId) =>
+      stateAt(personId, match.ratingAppliedAt!),
+    ) as [ProjectionState, ProjectionState];
+    const teamA = [
+      { state: teamAState[0].state },
+      { state: teamAState[1].state },
+    ] as const;
+    const teamB = [
+      { state: teamBState[0].state },
+      { state: teamBState[1].state },
+    ] as const;
+    const verificationWeight =
+      (match.verificationWeightBps ??
+        priorTeamAEvent?.verificationWeightBps ??
+        10_000) / 10_000;
+    const result =
+      setScores.length > 0
+        ? rateDoublesMatch({
+            teamA,
+            teamB,
+            setScores,
+            verificationWeight,
+            previousPairMeetingsInWindow:
+              repeatOpponentWeight && repeatOpponentWeight > 0
+                ? Math.max(0, Math.round(1 / repeatOpponentWeight ** 2) - 1)
+                : undefined,
+          })
+        : rateDoublesPerformance({
+            teamA,
+            teamB,
+            actualTeamA,
+            pointShareTeamA,
+            marginMultiplier,
+            verificationWeight,
+            repeatOpponentWeight,
+          });
+    for (const update of result.updates) {
+      const current = projection.get(update.playerId)!;
+      const sequence = current.sequence + 1;
+      projection.set(update.playerId, {
+        ...current,
+        state: update.after,
+        peak: Math.max(current.peak, update.after.display),
+        sequence,
+      });
+      replayedEvents.push({
+        personId: update.playerId,
+        matchId: match.id,
+        discipline: "beach-2s",
+        sequence,
+        before: update.before as unknown as Record<string, number | string>,
+        after: update.after as unknown as Record<string, number | string>,
+        explanation: update.explanation as unknown as Record<
+          string,
+          number | string | boolean
+        >,
+        verificationWeightBps:
+          match.verificationWeightBps ??
+          priorTeamAEvent?.verificationWeightBps ??
+          10_000,
+        createdAt: match.ratingAppliedAt,
+      });
+    }
+  }
+
+  const projectedRatings = [...projection.values()].map((entry) => ({
+    personId: entry.state.playerId,
+    discipline: "beach-2s" as const,
+    mu: entry.state.mu,
+    phi: entry.state.phi,
+    sigma: entry.state.sigma,
+    display: entry.state.display,
+    confidence: entry.state.confidence,
+    current52WeekPeak: entry.peak,
+    ratedMatches: entry.state.ratedMatches,
+    weeklyPositiveDisplayGain: entry.state.weeklyPositiveDisplayGain,
+    weeklyGainWindowStart: entry.windowStart,
+    updatedAt: input.now,
+  }));
+  await database.batch([
+    database
+      .delete(ratingEvents)
+      .where(eq(ratingEvents.discipline, "beach-2s")),
+    database.delete(ratings).where(eq(ratings.discipline, "beach-2s")),
+    ...evidenceBackfills.map((backfill) =>
+      database
+        .update(matches)
+        .set({ ratingEvidence: backfill.evidence })
+        .where(eq(matches.id, backfill.matchId)),
+    ),
+    ...(projectedRatings.length
+      ? [database.insert(ratings).values(projectedRatings)]
+      : []),
+    ...(replayedEvents.length
+      ? [database.insert(ratingEvents).values(replayedEvents)]
+      : []),
+    database.insert(auditLog).values({
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "rating.projection.rebuilt",
+      entityType: "rating-projection",
+      entityId: "beach-2s",
+      afterHash: stableHash({
+        matches: historicalMatches.filter((match) => match.ratingEligible)
+          .length,
+        events: replayedEvents.length,
+        players: projectedRatings.length,
+        skipped,
+      }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return {
+    matches: new Set(replayedEvents.map((event) => event.matchId)).size,
+    players: projectedRatings.length,
+    events: replayedEvents.length,
+    skipped,
+  };
+}
+
+export async function flagMatchHistoryInaccurate(input: {
+  readonly actor: ApiActor;
+  readonly matchId: string;
+  readonly reasonCode:
+    "not-me" | "wrong-score" | "wrong-opponents" | "duplicate" | "other";
+  readonly details?: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}) {
+  requireDatabase();
+  const database = getDatabase();
+  const participation = await matchParticipants(input.matchId);
+  const participantIds = [...participation.teamAIds, ...participation.teamBIds];
+  if (!participantIds.includes(input.actor.personId)) {
+    throw new MatchServiceError(
+      "PARTICIPANT_REQUIRED",
+      "Only a match participant can flag this result.",
+    );
+  }
+  await database.batch([
+    database
+      .insert(matchHistoryDisputes)
+      .values({
+        matchId: input.matchId,
+        personId: input.actor.personId,
+        reasonCode: input.reasonCode,
+        details: input.details?.trim() || null,
+        status: "pending",
+        excludesFromRating: true,
+        createdAt: input.now,
+        updatedAt: input.now,
+      })
+      .onConflictDoUpdate({
+        target: [matchHistoryDisputes.personId, matchHistoryDisputes.matchId],
+        set: {
+          reasonCode: input.reasonCode,
+          details: input.details?.trim() || null,
+          status: "pending",
+          excludesFromRating: true,
+          reviewedByPersonId: null,
+          reviewedAt: null,
+          resolutionNotes: null,
+          updatedAt: input.now,
+        },
+      }),
+    database
+      .update(matches)
+      .set({
+        status: "disputed",
+        ratingEligible: false,
+        updatedAt: input.now,
+      })
+      .where(eq(matches.id, input.matchId)),
+    database.insert(auditLog).values({
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "match.history.flagged-inaccurate",
+      entityType: "match",
+      entityId: input.matchId,
+      afterHash: stableHash({
+        reasonCode: input.reasonCode,
+        excludesFromRating: true,
+      }),
+      reason:
+        "A participant flagged imported match evidence for administrator review.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  const replay = await rebuildSandRatingProjection({
+    actor: input.actor,
+    reason:
+      "A participant disputed match evidence, so the beach rating projection was rebuilt without held evidence.",
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+    now: input.now,
+  });
+  return {
+    matchId: input.matchId,
+    status: "pending" as const,
+    ratingEligibility: "held" as const,
+    replay,
+  };
+}
+
+export async function reviewMatchHistoryDispute(input: {
+  readonly actor: ApiActor;
+  readonly disputeId: string;
+  readonly decision: "upheld" | "rejected";
+  readonly resolutionNotes: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}) {
+  requireDatabase();
+  if (
+    !input.actor.roles.includes("admin") &&
+    !input.actor.roles.includes("super-admin")
+  ) {
+    throw new MatchServiceError(
+      "PARTICIPANT_REQUIRED",
+      "Only a platform administrator can resolve match-history evidence.",
+    );
+  }
+  const database = getDatabase();
+  const dispute = await database.query.matchHistoryDisputes.findFirst({
+    where: eq(matchHistoryDisputes.id, input.disputeId),
+  });
+  if (!dispute) {
+    throw new MatchServiceError(
+      "MATCH_NOT_FOUND",
+      "The match-history review was not found.",
+    );
+  }
+  const otherHeldDisputes = await database
+    .select({ status: matchHistoryDisputes.status })
+    .from(matchHistoryDisputes)
+    .where(
+      and(
+        eq(matchHistoryDisputes.matchId, dispute.matchId),
+        ne(matchHistoryDisputes.id, dispute.id),
+        inArray(matchHistoryDisputes.status, ["pending", "upheld"]),
+      ),
+    );
+  const remainsHeld =
+    input.decision === "upheld" || otherHeldDisputes.length > 0;
+  await database.batch([
+    database
+      .update(matchHistoryDisputes)
+      .set({
+        status: input.decision,
+        excludesFromRating: input.decision === "upheld",
+        reviewedByPersonId: input.actor.personId,
+        reviewedAt: input.now,
+        resolutionNotes: input.resolutionNotes.trim(),
+        updatedAt: input.now,
+      })
+      .where(eq(matchHistoryDisputes.id, dispute.id)),
+    database
+      .update(matches)
+      .set({
+        status: remainsHeld ? "disputed" : "verified",
+        ratingEligible: !remainsHeld,
+        updatedAt: input.now,
+      })
+      .where(eq(matches.id, dispute.matchId)),
+    database.insert(auditLog).values({
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: `match.history-review.${input.decision}`,
+      entityType: "match-history-dispute",
+      entityId: dispute.id,
+      beforeHash: stableHash({
+        status: dispute.status,
+        excludesFromRating: dispute.excludesFromRating,
+      }),
+      afterHash: stableHash({
+        status: input.decision,
+        excludesFromRating: remainsHeld,
+      }),
+      reason: input.resolutionNotes.trim(),
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  const replay = await rebuildSandRatingProjection({
+    actor: input.actor,
+    reason: `Match-history evidence review was ${input.decision}; rebuild preserves an auditable rating projection.`,
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+    now: input.now,
+  });
+  return {
+    disputeId: dispute.id,
+    matchId: dispute.matchId,
+    status: input.decision,
+    ratingEligibility: remainsHeld ? "held" : "eligible",
+    replay,
+  };
+}
+
+export async function removeSelfReportedMatch(input: {
+  readonly actor: ApiActor;
+  readonly matchId: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}) {
+  requireDatabase();
+  const database = getDatabase();
+  const participation = await matchParticipants(input.matchId);
+  if (
+    participation.match.createdByPersonId !== input.actor.personId ||
+    participation.match.verification !== "self-reported" ||
+    participation.match.status !== "pending-verification" ||
+    participation.match.ratingAppliedAt
+  ) {
+    throw new MatchServiceError(
+      "MATCH_NOT_CONFIRMABLE",
+      "Only an unrated self-reported match can be removed. Flag rated or imported history as inaccurate instead.",
+    );
+  }
+  await database.batch([
+    database
+      .update(matches)
+      .set({
+        status: "cancelled",
+        ratingEligible: false,
+        updatedAt: input.now,
+      })
+      .where(eq(matches.id, input.matchId)),
+    database.insert(auditLog).values({
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "match.self-reported.removed",
+      entityType: "match",
+      entityId: input.matchId,
+      reason: "Creator removed an unrated self-reported match.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return { matchId: input.matchId, removed: true as const };
 }
 
 export async function confirmMatchResult(input: {

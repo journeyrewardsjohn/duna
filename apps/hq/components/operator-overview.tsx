@@ -128,7 +128,7 @@ export function OperatorOverview({
                         )}
                       </div>
                     )}
-                    {metric.label === "Stripe" && (
+                    {metric.label === "Payments" && (
                       <Badge
                         tone={
                           dashboard.organization.stripeStatus === "connected"
@@ -333,7 +333,7 @@ export function OperatorOverview({
                 >
                   Money
                 </Badge>
-                <h3>Stripe is {dashboard.organization.stripeStatus}.</h3>
+                <h3>Payments are {dashboard.organization.stripeStatus}.</h3>
                 <p>
                   {dashboard.organization.stripeStatus === "connected"
                     ? "Payment processing is connected for this organization."

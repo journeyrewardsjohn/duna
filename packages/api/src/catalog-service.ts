@@ -968,7 +968,7 @@ export async function loadOperatorCommerceWorkspace(
       id: "tax-address",
       title: "Complete the legal business address",
       detail:
-        "Duna needs the organization address and each venue address to choose the right taxable location for Stripe Tax.",
+        "Duna needs the organization address and each venue address to choose the right taxable location for automatic tax.",
       action: "Complete address",
       href: "/settings#tax",
       tone: "attention",
@@ -1678,7 +1678,7 @@ async function ensureCatalogStripeResources(input: {
   if (cardPrices.length === 0) return;
   if (!isStripeConfigured()) {
     throw new Error(
-      "Stripe is not configured in this environment, so card pricing cannot be published.",
+      "Card payments are not configured in this environment, so card pricing cannot be published.",
     );
   }
   const database = getDatabase();
@@ -1870,7 +1870,7 @@ export async function setCatalogItemStatus(input: {
       (!organization.stripeAccountId || !organization.stripeChargesEnabled)
     ) {
       throw new Error(
-        "Finish Stripe onboarding before publishing a product that accepts cards.",
+        "Finish payment setup before publishing a product that accepts cards.",
       );
     }
     const configuredVenueId =
@@ -2153,6 +2153,9 @@ export async function updateOrganizationCommerceSettings(input: {
   readonly administrativeArea: string;
   readonly postalCode: string;
   readonly countryCode: string;
+  readonly googlePlaceId?: string;
+  readonly latitude?: number;
+  readonly longitude?: number;
   readonly stripeTaxEnabled: boolean;
   readonly requestId: string;
   readonly ipAddress?: string;
@@ -2167,7 +2170,7 @@ export async function updateOrganizationCommerceSettings(input: {
   if (!organization) throw new Error("Organization was not found.");
   if (input.stripeTaxEnabled && !organization.stripeChargesEnabled) {
     throw new Error(
-      "Finish Stripe payment onboarding before turning on automatic tax.",
+      "Finish payment onboarding before turning on automatic tax.",
     );
   }
   const values = {
@@ -2178,6 +2181,9 @@ export async function updateOrganizationCommerceSettings(input: {
     administrativeArea: input.administrativeArea.trim(),
     postalCode: input.postalCode.trim(),
     countryCode: input.countryCode.toUpperCase(),
+    googlePlaceId: input.googlePlaceId?.trim() || undefined,
+    latitude: input.latitude,
+    longitude: input.longitude,
     stripeTaxEnabled: input.stripeTaxEnabled,
     taxRegistrationStatus: input.stripeTaxEnabled
       ? ("pending" as const)
@@ -2208,7 +2214,7 @@ export async function updateOrganizationCommerceSettings(input: {
       }),
       afterHash: stableHash(values),
       reason:
-        "Operator confirmed the organization address and Stripe Tax preference.",
+        "Operator confirmed the organization address and automatic-tax preference.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,
@@ -3053,7 +3059,7 @@ async function postMoneyRefundJournal(input: {
     ensureLedgerAccount({
       organizationId: input.organizationId,
       code: "STRIPE_CLEARING",
-      name: "Stripe clearing",
+      name: "Payment processor clearing",
       accountType: "asset",
       normalSide: "debit",
       unitKind: "money",
@@ -3258,7 +3264,7 @@ export async function refundOrganizationOrder(input: {
     return { id: refundId, entity: "refund", status: "succeeded" };
   }
   if (!order.stripePaymentIntentId) {
-    throw new Error("This order has no Stripe payment to refund.");
+    throw new Error("This order has no original payment to refund.");
   }
   const organization = await database.query.organizations.findFirst({
     where: eq(organizations.id, organizationId),

@@ -28,6 +28,7 @@ import {
   updateThemeAction,
   type OperatorActionState,
 } from "@/app/actions";
+import { PlaceAddressFields } from "./place-address-fields";
 
 const initialState: OperatorActionState = { status: "idle", message: "" };
 
@@ -373,7 +374,7 @@ function ProductComposer({
               {
                 name: "allowCard",
                 label: "Card",
-                detail: "Online checkout through Stripe.",
+                detail: "Secure online checkout.",
                 checked: allowCard,
                 set: setAllowCard,
               },
@@ -580,7 +581,7 @@ function ProductComposer({
           </label>
         </div>
         <label>
-          <span>Stripe tax code · optional</span>
+          <span>Tax code · optional</span>
           <input name="stripeTaxCode" placeholder="txcd_99999999" />
         </label>
         <label className="operator-confirmation">
@@ -869,7 +870,7 @@ function CatalogStatusControls({
           <span className="hq-eyebrow">Publication</span>
           <h2>Review before it goes live.</h2>
           <p>
-            Duna checks pricing, Stripe readiness, recurring billing, credit
+            Duna checks pricing, payment readiness, recurring billing, credit
             grants, and tax location before publishing.
           </p>
         </div>
@@ -1037,8 +1038,9 @@ export function PeopleRefundControls({
           <span className="hq-eyebrow">Purchase care</span>
           <h2>Refund a purchase</h2>
           <p>
-            Return funds through Stripe or issue closed-loop organization
-            credits. Duna records the corresponding reversal journal.
+            Return funds through the original payment method or issue
+            closed-loop organization credits. Duna records the corresponding
+            reversal journal.
           </p>
         </div>
         <ReceiptText aria-hidden size={24} />
@@ -1264,55 +1266,21 @@ function TaxSettingsEditor({
               name="legalName"
             />
           </label>
-          <label className="operator-field--wide">
-            <span>Address</span>
-            <input
-              defaultValue={workspace.organization.addressLine1}
-              name="addressLine1"
-              required
-            />
-          </label>
-          <label className="operator-field--wide">
-            <span>Address line 2</span>
-            <input
-              defaultValue={workspace.organization.addressLine2}
-              name="addressLine2"
-            />
-          </label>
-          <label>
-            <span>City</span>
-            <input
-              defaultValue={workspace.organization.locality}
-              name="locality"
-              required
-            />
-          </label>
-          <label>
-            <span>State / region</span>
-            <input
-              defaultValue={workspace.organization.administrativeArea}
-              name="administrativeArea"
-              required
-            />
-          </label>
-          <label>
-            <span>Postal code</span>
-            <input
-              defaultValue={workspace.organization.postalCode}
-              name="postalCode"
-              required
-            />
-          </label>
-          <label>
-            <span>Country</span>
-            <input
-              defaultValue={workspace.organization.countryCode}
-              maxLength={2}
-              minLength={2}
-              name="countryCode"
-              required
-            />
-          </label>
+          <PlaceAddressFields
+            initial={{
+              googlePlaceId: workspace.organization.googlePlaceId,
+              addressLine1: workspace.organization.addressLine1,
+              addressLine2: workspace.organization.addressLine2,
+              locality: workspace.organization.locality,
+              administrativeArea: workspace.organization.administrativeArea,
+              postalCode: workspace.organization.postalCode,
+              countryCode: workspace.organization.countryCode,
+              latitude: workspace.organization.latitude,
+              longitude: workspace.organization.longitude,
+            }}
+            label="Business address"
+            required
+          />
         </div>
         <label className="operator-switch">
           <input
@@ -1322,8 +1290,8 @@ function TaxSettingsEditor({
             value="true"
           />
           <span>
-            <strong>Calculate eligible tax with Stripe Tax</strong>
-            Requires completed Stripe onboarding and appropriate tax
+            <strong>Calculate eligible tax automatically</strong>
+            Requires completed payment onboarding and appropriate tax
             registrations.
           </span>
         </label>

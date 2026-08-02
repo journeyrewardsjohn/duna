@@ -127,7 +127,7 @@ export function MembershipSettings({
                     "en-US",
                     { dateStyle: "long" },
                   ).format(new Date(membership.currentPeriodEndsAt))}`
-                : "Stripe billing period is synchronizing."}
+                : "Billing period is synchronizing."}
             </p>
             <div className="membership-card__savings">
               <span>
@@ -253,7 +253,7 @@ export function MembershipSettings({
                 type="button"
               >
                 {isPending
-                  ? "Opening Stripe…"
+                  ? "Opening secure checkout…"
                   : plan.configured
                     ? `Choose ${plan.interval === "year" ? "annual" : "monthly"}`
                     : "Checkout unavailable"}

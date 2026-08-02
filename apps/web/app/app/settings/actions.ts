@@ -1,7 +1,9 @@
 "use server";
 
+import { processWorkflowJobById } from "@duna/api";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
+import { after } from "next/server";
 import { getServerCaller } from "@/lib/api";
 
 function applicationOrigin(headersValue: Headers): string {
@@ -30,7 +32,7 @@ export async function startDunaPlusAction(interval: "month" | "year") {
       cancelUrl: `${baseUrl}/app/settings?membership=cancelled`,
       idempotencyKey: crypto.randomUUID(),
     });
-    if (!checkout.url) throw new Error("Stripe did not return a checkout URL.");
+    if (!checkout.url) throw new Error("Secure checkout did not return a URL.");
     return { ok: true as const, url: checkout.url };
   } catch (error) {
     return {
@@ -232,6 +234,7 @@ export async function updatePlayingProfileAction(input: {
   playingExperience: "amateur" | "high-school" | "collegiate" | "professional";
   playedIndoorPrior: boolean;
   yearsPlaying: number;
+  collegeName?: string;
   experienceSummary?: string;
 }) {
   try {
@@ -240,6 +243,7 @@ export async function updatePlayingProfileAction(input: {
       ...input,
       legalMiddleName: input.legalMiddleName?.trim() || null,
       heightMillimeters: input.heightMillimeters ?? null,
+      collegeName: input.collegeName?.trim() || null,
       experienceSummary: input.experienceSummary?.trim() || null,
       idempotencyKey: crypto.randomUUID(),
     });
@@ -296,7 +300,7 @@ export async function startIdentityVerificationAction() {
       error:
         error instanceof Error
           ? error.message
-          : "Stripe Identity verification could not be started.",
+          : "Identity verification could not be started.",
     };
   }
 }
@@ -312,6 +316,16 @@ export async function connectPlayerSourceAction(input: {
       ...input,
       idempotencyKey: crypto.randomUUID(),
     });
+    after(async () => {
+      try {
+        await processWorkflowJobById(result.jobId);
+      } catch (error) {
+        console.error("Player source import failed after queueing", {
+          jobId: result.jobId,
+          error,
+        });
+      }
+    });
     revalidatePath("/app/onboarding");
     revalidatePath("/app/settings");
     return { ok: true as const, result };
@@ -322,6 +336,43 @@ export async function connectPlayerSourceAction(input: {
         error instanceof Error
           ? error.message
           : "The match-history import could not be queued.",
+    };
+  }
+}
+
+export async function reviewPlayerSourceAction(input: {
+  connectionId: string;
+  decision: "confirmed" | "rejected";
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.reviewPlayerSource({
+      ...input,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    if (result.jobId) {
+      after(async () => {
+        try {
+          await processWorkflowJobById(result.jobId!);
+        } catch (error) {
+          console.error("Confirmed player source import failed", {
+            jobId: result.jobId,
+            error,
+          });
+        }
+      });
+    }
+    revalidatePath("/app", "layout");
+    revalidatePath("/app/onboarding");
+    revalidatePath("/app/settings");
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The source profile could not be reviewed.",
     };
   }
 }

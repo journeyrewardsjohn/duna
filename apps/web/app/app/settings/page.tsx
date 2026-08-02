@@ -18,6 +18,7 @@ import { ProfileSettings } from "@/components/profile-settings";
 import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Settings" };
+export const maxDuration = 300;
 
 export default async function SettingsPage({
   searchParams,
@@ -32,7 +33,7 @@ export default async function SettingsPage({
   ]);
   const membershipNotice =
     query.membership === "success"
-      ? "Stripe accepted the checkout. Duna+ will appear here as soon as the signed webhook synchronizes it."
+      ? "Payment was accepted. Duna+ will appear here as soon as the secure confirmation synchronizes."
       : query.membership === "cancelled"
         ? "Duna+ checkout was cancelled. No membership change was made."
         : undefined;

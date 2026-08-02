@@ -149,6 +149,9 @@ export const eventLocationSchema = z.object({
   mode: z.enum(["venue", "address", "online"]),
   venueName: z.string(),
   address: z.string().optional(),
+  googlePlaceId: z.string().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
   onlineUrl: z.string().optional(),
   courtNames: z.array(z.string()).readonly().optional(),
 });
@@ -237,6 +240,15 @@ export const matchSummarySchema = z.object({
     .readonly(),
   winner: z.enum(["A", "B"]),
   ratingDelta: z.number(),
+  origin: z.enum(["imported", "self-reported", "live-scored"]).optional(),
+  ratingEligibility: z.enum(["eligible", "held"]).optional(),
+  dispute: z
+    .object({
+      status: z.enum(["pending", "upheld", "rejected", "withdrawn"]),
+      reasonCode: z.string(),
+    })
+    .optional(),
+  canRemove: z.boolean().optional(),
   verification: z.enum([
     "live-scored",
     "desk",
@@ -347,6 +359,7 @@ export const playerSettingsSchema = z.object({
     ]),
     playedIndoorPrior: z.boolean().optional(),
     yearsPlaying: z.number().int().min(0).max(100).optional(),
+    collegeName: z.string().optional(),
     experienceSummary: z.string().optional(),
     onboardingStatus: z.enum([
       "not-started",
@@ -377,6 +390,10 @@ export const playerSettingsSchema = z.object({
         id: z.string().uuid(),
         source: z.enum(["volleyball-life", "bvbinfo"]),
         profileUrl: z.string().url(),
+        apiProfileUrl: z.string().url().optional(),
+        externalPersonId: z.string(),
+        profileSnapshot: z.record(z.string(), z.unknown()),
+        verificationStatus: z.enum(["pending", "confirmed", "rejected"]),
         status: z.enum([
           "queued",
           "syncing",
@@ -387,6 +404,14 @@ export const playerSettingsSchema = z.object({
         ]),
         lastSyncedAt: z.iso.datetime().optional(),
         lastError: z.string().optional(),
+        progress: z.object({
+          phase: z.string(),
+          current: z.number().int().nonnegative(),
+          total: z.number().int().nonnegative(),
+          matchesFound: z.number().int().nonnegative(),
+          profilesFound: z.number().int().nonnegative(),
+        }),
+        nextRefreshAt: z.iso.datetime().optional(),
       }),
     )
     .readonly(),
@@ -399,6 +424,7 @@ export const playerSettingsSchema = z.object({
     .optional(),
   voiceOnboarding: z.object({
     configured: z.boolean(),
+    aiConfigured: z.boolean(),
   }),
   household: z
     .array(
@@ -613,6 +639,9 @@ export const operatorVenueSchema = z.object({
   administrativeArea: z.string().optional(),
   postalCode: z.string().optional(),
   countryCode: z.string(),
+  googlePlaceId: z.string().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
   timezone: z.string(),
   utilization: operatorUtilizationSchema,
   courts: z.array(operatorCourtSchema).readonly(),
@@ -972,6 +1001,9 @@ export const operatorWorkspaceSchema = z.object({
     administrativeArea: z.string().optional(),
     postalCode: z.string().optional(),
     countryCode: z.string(),
+    googlePlaceId: z.string().optional(),
+    latitude: z.number().optional(),
+    longitude: z.number().optional(),
     stripeTaxEnabled: z.boolean(),
     taxRegistrationStatus: z.enum([
       "not-configured",

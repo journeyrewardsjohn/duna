@@ -10,14 +10,31 @@ interface PlaceSuggestion {
   readonly secondaryText: string;
 }
 
+export interface PlaceDetails {
+  readonly placeId?: string;
+  readonly name?: string;
+  readonly address?: string;
+  readonly addressLine1?: string;
+  readonly locality?: string;
+  readonly administrativeArea?: string;
+  readonly postalCode?: string;
+  readonly countryCode?: string;
+  readonly latitude?: number;
+  readonly longitude?: number;
+}
+
 export function PlaceSearch({
   value,
   onAddress,
   onVenueName,
+  onPlace,
+  label = "Address",
 }: {
   readonly value: string;
   readonly onAddress: (value: string) => void;
   readonly onVenueName: (value: string) => void;
+  readonly onPlace?: (details: PlaceDetails) => void;
+  readonly label?: string;
 }) {
   const [suggestions, setSuggestions] = useState<readonly PlaceSuggestion[]>(
     [],
@@ -60,17 +77,15 @@ export function PlaceSearch({
       `/api/places/details?placeId=${encodeURIComponent(suggestion.placeId)}`,
     );
     if (!response.ok) return;
-    const details = (await response.json()) as {
-      readonly name?: string;
-      readonly address?: string;
-    };
+    const details = (await response.json()) as PlaceDetails;
     if (details.address) onAddress(details.address);
     if (details.name) onVenueName(details.name);
+    onPlace?.(details);
   };
 
   return (
     <label className="event-field--full place-search">
-      <span>Address</span>
+      <span>{label}</span>
       <span className="place-search__input">
         <MapPin aria-hidden size={16} />
         <input

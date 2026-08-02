@@ -318,6 +318,7 @@ export const people = pgTable(
       .default("not-set"),
     playedIndoorPrior: boolean("played_indoor_prior"),
     yearsPlaying: integer("years_playing"),
+    collegeName: text("college_name"),
     experienceSummary: text("experience_summary"),
     profileOnboardingStatus: varchar("profile_onboarding_status", {
       length: 24,
@@ -571,7 +572,34 @@ export const playerSourceConnections = pgTable(
     source: varchar("source", { length: 32 }).notNull(),
     externalPersonId: text("external_person_id").notNull(),
     profileUrl: text("profile_url").notNull(),
+    apiProfileUrl: text("api_profile_url"),
+    profileSnapshot: jsonb("profile_snapshot")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    verificationStatus: varchar("verification_status", { length: 24 })
+      .notNull()
+      .default("pending"),
+    verifiedAt: timestamp("verified_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     status: varchar("status", { length: 24 }).notNull().default("queued"),
+    progressPhase: varchar("progress_phase", { length: 48 })
+      .notNull()
+      .default("queued"),
+    progressCurrent: integer("progress_current").notNull().default(0),
+    progressTotal: integer("progress_total").notNull().default(0),
+    matchesFound: integer("matches_found").notNull().default(0),
+    profilesFound: integer("profiles_found").notNull().default(0),
+    lastProfileFetchedAt: timestamp("last_profile_fetched_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    nextRefreshAt: timestamp("next_refresh_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     lastIngestionRunId: uuid("last_ingestion_run_id"),
     lastError: text("last_error"),
     lastSyncedAt: timestamp("last_synced_at", {
@@ -594,6 +622,11 @@ export const playerSourceConnections = pgTable(
       table.status,
       table.updatedAt,
     ),
+    index("player_source_connection_refresh_idx").on(
+      table.status,
+      table.verificationStatus,
+      table.nextRefreshAt,
+    ),
     check(
       "player_source_connection_source_valid",
       sql`${table.source} IN ('volleyball-life', 'bvbinfo')`,
@@ -601,6 +634,14 @@ export const playerSourceConnections = pgTable(
     check(
       "player_source_connection_status_valid",
       sql`${table.status} IN ('queued', 'syncing', 'linked', 'review-required', 'failed', 'disconnected')`,
+    ),
+    check(
+      "player_source_connection_verification_valid",
+      sql`${table.verificationStatus} IN ('pending', 'confirmed', 'rejected')`,
+    ),
+    check(
+      "player_source_connection_progress_valid",
+      sql`${table.progressCurrent} >= 0 AND ${table.progressTotal} >= 0 AND ${table.matchesFound} >= 0 AND ${table.profilesFound} >= 0`,
     ),
   ],
 );
@@ -629,6 +670,9 @@ export const organizations = pgTable(
     locality: text("locality"),
     administrativeArea: text("administrative_area"),
     postalCode: varchar("postal_code", { length: 24 }),
+    googlePlaceId: text("google_place_id"),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
     stripeTaxEnabled: boolean("stripe_tax_enabled").notNull().default(false),
     taxRegistrationStatus: varchar("tax_registration_status", { length: 24 })
       .notNull()
@@ -909,6 +953,7 @@ export const venues = pgTable(
     administrativeArea: text("administrative_area"),
     postalCode: varchar("postal_code", { length: 24 }),
     countryCode: varchar("country_code", { length: 2 }).notNull().default("US"),
+    googlePlaceId: text("google_place_id"),
     timezone: varchar("timezone", { length: 64 }).notNull(),
     latitude: doublePrecision("latitude"),
     longitude: doublePrecision("longitude"),
@@ -2122,6 +2167,7 @@ export const matches = pgTable(
     verificationWeightBps: integer("verification_weight_bps"),
     winnerTeamId: uuid("winner_team_id").references(() => teams.id),
     ratingEligible: boolean("rating_eligible").notNull().default(true),
+    ratingEvidence: jsonb("rating_evidence").$type<Record<string, unknown>>(),
     ratingAppliedAt: timestamp("rating_applied_at", {
       withTimezone: true,
       mode: "date",
@@ -2138,6 +2184,48 @@ export const matches = pgTable(
     check(
       "match_verification_weight",
       sql`${table.verificationWeightBps} IS NULL OR ${table.verificationWeightBps} BETWEEN 0 AND 10000`,
+    ),
+  ],
+);
+
+export const matchHistoryDisputes = pgTable(
+  "match_history_disputes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    reasonCode: varchar("reason_code", { length: 32 }).notNull(),
+    details: text("details"),
+    status: varchar("status", { length: 24 }).notNull().default("pending"),
+    excludesFromRating: boolean("excludes_from_rating").notNull().default(true),
+    reviewedByPersonId: uuid("reviewed_by_person_id").references(
+      () => people.id,
+    ),
+    reviewedAt: timestamp("reviewed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    resolutionNotes: text("resolution_notes"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("match_history_dispute_person_match_unique").on(
+      table.personId,
+      table.matchId,
+    ),
+    index("match_history_dispute_review_idx").on(table.status, table.createdAt),
+    check(
+      "match_history_dispute_reason_valid",
+      sql`${table.reasonCode} IN ('not-me', 'wrong-score', 'wrong-opponents', 'duplicate', 'other')`,
+    ),
+    check(
+      "match_history_dispute_status_valid",
+      sql`${table.status} IN ('pending', 'upheld', 'rejected', 'withdrawn')`,
     ),
   ],
 );

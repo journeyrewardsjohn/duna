@@ -8,6 +8,7 @@ import {
   people,
 } from "@duna/db";
 import { and, desc, eq, inArray } from "drizzle-orm";
+import { z } from "zod";
 import { stableHash } from "./canonical";
 import type { ApiActor } from "./context";
 import {
@@ -96,6 +97,7 @@ export async function updatePlayingProfile(input: {
   readonly playingExperience: PlayingExperience;
   readonly playedIndoorPrior: boolean;
   readonly yearsPlaying: number;
+  readonly collegeName?: string | null;
   readonly experienceSummary?: string | null;
   readonly requestId: string;
   readonly ipAddress?: string;
@@ -126,6 +128,7 @@ export async function updatePlayingProfile(input: {
     playingExperience: subject.playingExperience,
     playedIndoorPrior: subject.playedIndoorPrior,
     yearsPlaying: subject.yearsPlaying,
+    collegeName: subject.collegeName,
     experienceSummary: subject.experienceSummary,
     profileOnboardingStatus: subject.profileOnboardingStatus,
   };
@@ -137,6 +140,10 @@ export async function updatePlayingProfile(input: {
     playingExperience: input.playingExperience,
     playedIndoorPrior: input.playedIndoorPrior,
     yearsPlaying: input.yearsPlaying,
+    collegeName:
+      input.playingExperience === "collegiate"
+        ? input.collegeName?.trim() || null
+        : null,
     experienceSummary: input.experienceSummary?.trim() || null,
     profileOnboardingStatus,
   };
@@ -209,8 +216,12 @@ export function inferPlayingExperienceNarrative(
   readonly playedIndoorPrior?: boolean;
   readonly yearsPlaying?: number;
   readonly heightMillimeters?: number;
+  readonly collegeName?: string;
   readonly summary: string;
   readonly confidence: "low" | "medium" | "high";
+  readonly learnedFacts: readonly string[];
+  readonly missingFields: readonly string[];
+  readonly modelUsed: "guided-fallback";
 } {
   const summary = narrative.replaceAll(/\s+/g, " ").trim().slice(0, 1_500);
   const normalized = summary.toLowerCase();
@@ -268,20 +279,254 @@ export function inferPlayingExperienceNarrative(
             25.4,
         )
       : undefined;
+  const collegeName =
+    summary
+      .match(
+        /\b(?:played|studied|went)\s+(?:at|for|to)\s+([A-Z][A-Za-z0-9&.' -]{1,80}(?:University|College|State|Tech|Institute))/,
+      )?.[1]
+      ?.trim() ??
+    summary
+      .match(
+        /\b(?:college|collegiate)\s+(?:at|for)\s+([A-Z][A-Za-z0-9&.' -]{1,80})/,
+      )?.[1]
+      ?.trim() ??
+    (playingExperience === "collegiate"
+      ? summary
+          .match(
+            /\b(?:at|for|to)\s+([A-Z][A-Za-z0-9&.' -]{1,80}?(?:University|College|State|Tech|Institute))\b/,
+          )?.[1]
+          ?.trim()
+      : undefined);
   const inferred = [
     playingExperience,
     playedIndoorPrior,
     yearsPlaying,
     heightMillimeters,
+    collegeName,
   ].filter((value) => value !== undefined).length;
+  const learnedFacts = [
+    playingExperience
+      ? `Highest playing level: ${playingExperience.replace("-", " ")}`
+      : undefined,
+    playedIndoorPrior === undefined
+      ? undefined
+      : playedIndoorPrior
+        ? "Has played indoor volleyball"
+        : "Has not played indoor volleyball",
+    yearsPlaying === undefined ? undefined : `${yearsPlaying} years playing`,
+    heightMillimeters === undefined
+      ? undefined
+      : `Height: ${Math.round(heightMillimeters / 10)} cm`,
+    collegeName ? `College: ${collegeName}` : undefined,
+  ].filter((value): value is string => Boolean(value));
+  const missingFields = [
+    playingExperience ? undefined : "playingExperience",
+    playedIndoorPrior === undefined ? "playedIndoorPrior" : undefined,
+    yearsPlaying === undefined ? "yearsPlaying" : undefined,
+    heightMillimeters === undefined ? "heightMillimeters" : undefined,
+    playingExperience === "collegiate" && !collegeName
+      ? "collegeName"
+      : undefined,
+  ].filter((value): value is string => Boolean(value));
   return {
     playingExperience,
     playedIndoorPrior,
     yearsPlaying,
     heightMillimeters,
+    collegeName,
     summary,
     confidence: inferred >= 3 ? "high" : inferred >= 2 ? "medium" : "low",
+    learnedFacts,
+    missingFields,
+    modelUsed: "guided-fallback",
   };
+}
+
+const playingProfileSynthesisSchema = z.object({
+  playingExperience: z
+    .enum(["amateur", "high-school", "collegiate", "professional"])
+    .nullable(),
+  playedIndoorPrior: z.boolean().nullable(),
+  yearsPlaying: z.number().int().min(0).max(100).nullable(),
+  heightMillimeters: z.number().int().min(600).max(2600).nullable(),
+  collegeName: z.string().trim().min(1).max(120).nullable(),
+  summary: z.string().trim().min(1).max(1_500),
+  learnedFacts: z.array(z.string().trim().min(1).max(160)).max(12),
+  missingFields: z.array(
+    z.enum([
+      "playingExperience",
+      "playedIndoorPrior",
+      "yearsPlaying",
+      "heightMillimeters",
+      "collegeName",
+    ]),
+  ),
+  confidence: z.enum(["low", "medium", "high"]),
+});
+
+export async function synthesizePlayingExperienceNarrative(
+  narrative: string,
+  now = new Date(),
+) {
+  const fallback = inferPlayingExperienceNarrative(narrative, now);
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) return fallback;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_PROFILE_MODEL?.trim() || "gpt-5.6",
+        input: [
+          {
+            role: "system",
+            content: [
+              {
+                type: "input_text",
+                text: "Extract a draft volleyball player profile from the user's own words. Never invent facts. Use null for anything not explicitly stated or safely implied. Collegiate includes college club, junior college, NAIA, or NCAA. Professional requires explicit professional, federation, AVP, FIVB, world-tour, paid, or ranked-pro experience. Convert clearly stated height to millimeters. collegeName is only the named college or university. learnedFacts must be short, friendly statements shown to the user. missingFields lists facts that still need to be asked. The result is a draft and must never claim it was saved.",
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [{ type: "input_text", text: narrative }],
+          },
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "playing_profile_draft",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                playingExperience: {
+                  anyOf: [
+                    {
+                      type: "string",
+                      enum: [
+                        "amateur",
+                        "high-school",
+                        "collegiate",
+                        "professional",
+                      ],
+                    },
+                    { type: "null" },
+                  ],
+                },
+                playedIndoorPrior: {
+                  anyOf: [{ type: "boolean" }, { type: "null" }],
+                },
+                yearsPlaying: {
+                  anyOf: [
+                    { type: "integer", minimum: 0, maximum: 100 },
+                    { type: "null" },
+                  ],
+                },
+                heightMillimeters: {
+                  anyOf: [
+                    { type: "integer", minimum: 600, maximum: 2600 },
+                    { type: "null" },
+                  ],
+                },
+                collegeName: {
+                  anyOf: [
+                    { type: "string", minLength: 1, maxLength: 120 },
+                    { type: "null" },
+                  ],
+                },
+                summary: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 1500,
+                },
+                learnedFacts: {
+                  type: "array",
+                  maxItems: 12,
+                  items: { type: "string", minLength: 1, maxLength: 160 },
+                },
+                missingFields: {
+                  type: "array",
+                  items: {
+                    type: "string",
+                    enum: [
+                      "playingExperience",
+                      "playedIndoorPrior",
+                      "yearsPlaying",
+                      "heightMillimeters",
+                      "collegeName",
+                    ],
+                  },
+                },
+                confidence: {
+                  type: "string",
+                  enum: ["low", "medium", "high"],
+                },
+              },
+              required: [
+                "playingExperience",
+                "playedIndoorPrior",
+                "yearsPlaying",
+                "heightMillimeters",
+                "collegeName",
+                "summary",
+                "learnedFacts",
+                "missingFields",
+                "confidence",
+              ],
+            },
+          },
+        },
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) return fallback;
+    const payload = (await response.json()) as {
+      output_text?: string;
+      output?: readonly {
+        content?: readonly {
+          type?: string;
+          text?: string;
+        }[];
+      }[];
+    };
+    const outputText =
+      payload.output_text ??
+      payload.output
+        ?.flatMap((item) => item.content ?? [])
+        .find(
+          (item) =>
+            (item.type === "output_text" || item.type === "text") &&
+            typeof item.text === "string",
+        )?.text;
+    const parsed = playingProfileSynthesisSchema.safeParse(
+      JSON.parse(outputText ?? "{}"),
+    );
+    if (!parsed.success) return fallback;
+    return {
+      playingExperience: parsed.data.playingExperience ?? undefined,
+      playedIndoorPrior: parsed.data.playedIndoorPrior ?? undefined,
+      yearsPlaying: parsed.data.yearsPlaying ?? undefined,
+      heightMillimeters: parsed.data.heightMillimeters ?? undefined,
+      collegeName: parsed.data.collegeName ?? undefined,
+      summary: parsed.data.summary,
+      learnedFacts: parsed.data.learnedFacts,
+      missingFields: parsed.data.missingFields,
+      confidence: parsed.data.confidence,
+      modelUsed: "openai" as const,
+    };
+  } catch {
+    return fallback;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function invitationTokenHash(token: string): string {

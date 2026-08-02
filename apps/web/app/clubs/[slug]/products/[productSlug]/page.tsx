@@ -101,7 +101,7 @@ export default async function CatalogProductPage({
                       {item.allowCredits
                         ? "Pay by card or this organization’s credits."
                         : item.allowCard
-                          ? "Secure online payment through Stripe."
+                          ? "Secure online payment."
                           : "Pay directly with the organization in person."}
                     </small>
                   </span>

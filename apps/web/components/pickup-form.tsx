@@ -413,7 +413,7 @@ export function PickupForm() {
                   </div>
                   <small>
                     Paid pickup is available only through a connected club or
-                    facility Stripe account; Duna never holds host funds.
+                    facility payment account; Duna never holds host funds.
                   </small>
                 </div>
               )}

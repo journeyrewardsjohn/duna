@@ -397,7 +397,7 @@ export function CheckoutPanel({
     return (
       <section className="checkout-complete" aria-live="polite">
         <Badge tone="warning">Confirming payment</Badge>
-        <h1>Stripe sent you back safely.</h1>
+        <h1>Checkout sent you back safely.</h1>
         <p>
           Duna is verifying the signed payment event and converting your hold
           into a confirmed purchase.
@@ -419,7 +419,7 @@ export function CheckoutPanel({
           <h1>Join in a few clear steps.</h1>
           <p>
             Pick what you&apos;re buying, complete your people, review the
-            agreements, then pay securely with Stripe.
+            agreements, then pay through secure checkout.
           </p>
         </div>
 
@@ -979,7 +979,7 @@ export function CheckoutPanel({
               <input defaultChecked name="payment" type="radio" />
               <CreditCard aria-hidden size={21} />
               <span>
-                <strong>Stripe Checkout</strong>
+                <strong>Secure checkout</strong>
                 <small>Choose a saved card or another supported method</small>
               </span>
               <Numeric>
@@ -1183,14 +1183,14 @@ export function CheckoutPanel({
               : !policiesAccepted
                 ? "Review required agreements"
                 : pricing.totalMinor > 0
-                  ? `Continue to Stripe · ${formatMoney(pricing.totalMinor, price.currency)}`
+                  ? `Continue to payment · ${formatMoney(pricing.totalMinor, price.currency)}`
                   : purchaseKind === "ticket"
                     ? "Confirm free tickets"
                     : "Confirm free registration"}
         </button>
         <p className="checkout-summary__trust">
           <ShieldCheck aria-hidden size={16} />
-          Payments are processed by Stripe. Card details never touch Duna.
+          Payments are processed securely. Card details never touch Duna.
         </p>
       </aside>
     </div>

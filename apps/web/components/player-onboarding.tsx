@@ -25,6 +25,7 @@ import {
   startIdentityVerificationAction,
   updatePlayingProfileAction,
 } from "@/app/app/settings/actions";
+import { HeightInput } from "@/components/height-input";
 import { VoiceExperienceGuide } from "@/components/voice-experience-guide";
 
 type Experience = "amateur" | "high-school" | "collegiate" | "professional";
@@ -96,6 +97,7 @@ export function PlayerOnboarding({
   const ownName = splitDisplayName(settings.profile.person.displayName);
   const subjectName = splitDisplayName(subject.person.displayName);
   const [step, setStep] = useState(1);
+  const [reviewStep, setReviewStep] = useState(0);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [birthDate, setBirthDate] = useState(
@@ -125,10 +127,11 @@ export function PlayerOnboarding({
   const [yearsPlaying, setYearsPlaying] = useState(
     isSelf ? (settings.profile.yearsPlaying ?? 0) : 0,
   );
-  const [heightCentimeters, setHeightCentimeters] = useState(
-    isSelf && settings.profile.heightMillimeters
-      ? Math.round(settings.profile.heightMillimeters / 10).toString()
-      : "",
+  const [heightMillimeters, setHeightMillimeters] = useState<
+    number | undefined
+  >(isSelf ? settings.profile.heightMillimeters : undefined);
+  const [collegeName, setCollegeName] = useState(
+    isSelf ? (settings.profile.collegeName ?? "") : "",
   );
   const [experienceSummary, setExperienceSummary] = useState(
     isSelf ? (settings.profile.experienceSummary ?? "") : "",
@@ -148,6 +151,8 @@ export function PlayerOnboarding({
       : "",
   );
   const [guardianInviteUrl, setGuardianInviteUrl] = useState<string>();
+  const [learnedFacts, setLearnedFacts] = useState<readonly string[]>([]);
+  const [missingFields, setMissingFields] = useState<readonly string[]>([]);
 
   function selectSubject(nextSubjectId: string) {
     const next = subjects.find(
@@ -187,10 +192,15 @@ export function PlayerOnboarding({
         ? (settings.profile.yearsPlaying ?? 0)
         : 0,
     );
-    setHeightCentimeters(
+    setHeightMillimeters(
       nextSubjectId === settings.profile.person.id &&
         settings.profile.heightMillimeters
-        ? Math.round(settings.profile.heightMillimeters / 10).toString()
+        ? settings.profile.heightMillimeters
+        : undefined,
+    );
+    setCollegeName(
+      nextSubjectId === settings.profile.person.id
+        ? (settings.profile.collegeName ?? "")
         : "",
     );
     setExperienceSummary(
@@ -224,12 +234,18 @@ export function PlayerOnboarding({
         setYearsPlaying(response.result.yearsPlaying);
       }
       if (response.result.heightMillimeters !== undefined) {
-        setHeightCentimeters(
-          Math.round(response.result.heightMillimeters / 10).toString(),
-        );
+        setHeightMillimeters(response.result.heightMillimeters);
       }
+      if (response.result.collegeName) {
+        setCollegeName(response.result.collegeName);
+      }
+      setExperienceSummary(response.result.summary);
+      setLearnedFacts(response.result.learnedFacts);
+      setMissingFields(response.result.missingFields);
       setNotice(
-        "Duna structured the conversation. Review each answer before saving.",
+        response.result.modelUsed === "openai"
+          ? "Duna synthesized your story into a draft. Nothing changes until you review and save it."
+          : "Duna created a guided draft. Add any missing details before saving.",
       );
     });
   }
@@ -251,12 +267,11 @@ export function PlayerOnboarding({
         legalGivenName,
         legalMiddleName,
         legalFamilyName,
-        heightMillimeters: heightCentimeters
-          ? Math.round(Number(heightCentimeters) * 10)
-          : undefined,
+        heightMillimeters,
         playingExperience: experience,
         playedIndoorPrior,
         yearsPlaying,
+        collegeName,
         experienceSummary,
       });
       if (!profileResponse.ok) {
@@ -444,6 +459,7 @@ export function PlayerOnboarding({
             </span>
           </div>
           <VoiceExperienceGuide
+            aiConfigured={settings.voiceOnboarding.aiConfigured}
             configured={settings.voiceOnboarding.configured}
             initialNarrative={experienceSummary}
             onComplete={applyNarrative}
@@ -467,172 +483,282 @@ export function PlayerOnboarding({
 
       {step === 3 && (
         <form className="onboarding-profile-form" onSubmit={save}>
-          <section>
-            <div className="onboarding-section-title">
-              <span>01</span>
+          <div
+            className="onboarding-review-progress"
+            aria-label={`Profile question ${reviewStep + 1} of 6`}
+          >
+            {Array.from({ length: 6 }, (_, index) => (
+              <span
+                className={index <= reviewStep ? "is-active" : undefined}
+                key={index}
+              />
+            ))}
+          </div>
+
+          {learnedFacts.length > 0 && (
+            <aside className="onboarding-learned-card">
+              <span>
+                <Sparkles /> What Duna learned
+              </span>
               <div>
-                <h2>Private identity</h2>
-                <p>Legal details are never shown on the public profile.</p>
+                {learnedFacts.map((fact) => (
+                  <Badge key={fact} tone="neutral">
+                    {fact}
+                  </Badge>
+                ))}
               </div>
-            </div>
-            <div className="form-grid form-grid--3">
-              <label>
-                Legal first name
-                <input
-                  autoComplete="given-name"
-                  onChange={(event) => setLegalGivenName(event.target.value)}
-                  required
-                  value={legalGivenName}
-                />
-              </label>
-              <label>
-                Middle name <small>Optional</small>
-                <input
-                  autoComplete="additional-name"
-                  onChange={(event) => setLegalMiddleName(event.target.value)}
-                  value={legalMiddleName}
-                />
-              </label>
-              <label>
-                Legal last name
-                <input
-                  autoComplete="family-name"
-                  onChange={(event) => setLegalFamilyName(event.target.value)}
-                  required
-                  value={legalFamilyName}
-                />
-              </label>
-              {isSelf && !settings.profile.birthDate && (
+              <small>
+                This is an editable draft. Saving is the only action that
+                updates the profile.
+              </small>
+            </aside>
+          )}
+
+          {reviewStep === 0 && (
+            <section className="onboarding-question-screen">
+              <div className="onboarding-section-title">
+                <span>01</span>
+                <div>
+                  <h2>What is the player&apos;s legal name?</h2>
+                  <p>Legal details are never shown on the public profile.</p>
+                </div>
+              </div>
+              <div className="form-grid form-grid--3">
                 <label>
-                  Birthday
+                  Legal first name
                   <input
-                    max={new Date().toISOString().slice(0, 10)}
-                    onChange={(event) => setBirthDate(event.target.value)}
+                    autoComplete="given-name"
+                    onChange={(event) => setLegalGivenName(event.target.value)}
                     required
-                    type="date"
-                    value={birthDate}
+                    value={legalGivenName}
+                  />
+                </label>
+                <label>
+                  Middle name <small>Optional</small>
+                  <input
+                    autoComplete="additional-name"
+                    onChange={(event) => setLegalMiddleName(event.target.value)}
+                    value={legalMiddleName}
+                  />
+                </label>
+                <label>
+                  Legal last name
+                  <input
+                    autoComplete="family-name"
+                    onChange={(event) => setLegalFamilyName(event.target.value)}
+                    required
+                    value={legalFamilyName}
+                  />
+                </label>
+                {isSelf && !settings.profile.birthDate && (
+                  <label>
+                    Birthday
+                    <input
+                      max={new Date().toISOString().slice(0, 10)}
+                      onChange={(event) => setBirthDate(event.target.value)}
+                      required
+                      type="date"
+                      value={birthDate}
+                    />
+                  </label>
+                )}
+              </div>
+            </section>
+          )}
+
+          {reviewStep === 1 && (
+            <section className="onboarding-question-screen">
+              <div className="onboarding-section-title">
+                <span>02</span>
+                <div>
+                  <h2>What is the highest level reached?</h2>
+                  <p>Choose the highest meaningful level reached.</p>
+                </div>
+              </div>
+              <div className="experience-choice-grid">
+                {experienceOptions.map((option) => (
+                  <button
+                    className={experience === option.value ? "is-selected" : ""}
+                    key={option.value}
+                    onClick={() => setExperience(option.value)}
+                    type="button"
+                  >
+                    <span className="choice-radio" />
+                    <strong>{option.title}</strong>
+                    <small>{option.detail}</small>
+                  </button>
+                ))}
+              </div>
+              {experience === "collegiate" && (
+                <label>
+                  College or university
+                  <input
+                    onChange={(event) => setCollegeName(event.target.value)}
+                    placeholder="Where did they play?"
+                    value={collegeName}
                   />
                 </label>
               )}
-              <label>
-                Height (cm) <small>Optional</small>
-                <input
-                  max={260}
-                  min={60}
-                  onChange={(event) => setHeightCentimeters(event.target.value)}
-                  type="number"
-                  value={heightCentimeters}
-                />
-              </label>
-            </div>
-          </section>
+            </section>
+          )}
 
-          <section>
-            <div className="onboarding-section-title">
-              <span>02</span>
-              <div>
-                <h2>Playing experience</h2>
-                <p>Choose the highest meaningful level reached.</p>
+          {reviewStep === 2 && (
+            <section className="onboarding-question-screen">
+              <div className="onboarding-section-title">
+                <span>03</span>
+                <div>
+                  <h2>How long have they played?</h2>
+                  <p>Indoor history helps us interpret competitive context.</p>
+                </div>
               </div>
-            </div>
-            <div className="experience-choice-grid">
-              {experienceOptions.map((option) => (
-                <button
-                  className={experience === option.value ? "is-selected" : ""}
-                  key={option.value}
-                  onClick={() => setExperience(option.value)}
-                  type="button"
-                >
-                  <span className="choice-radio" />
-                  <strong>{option.title}</strong>
-                  <small>{option.detail}</small>
-                </button>
-              ))}
-            </div>
-            <div className="form-grid form-grid--2 onboarding-inline-fields">
-              <label>
-                Years playing
-                <input
-                  max={100}
-                  min={0}
-                  onChange={(event) =>
-                    setYearsPlaying(Number(event.target.value))
-                  }
-                  required
-                  type="number"
-                  value={yearsPlaying}
-                />
-              </label>
-              <label className="onboarding-toggle-row">
-                <span>
-                  <strong>Played indoor before</strong>
-                  <small>School, club, collegiate, or professional.</small>
-                </span>
-                <input
-                  checked={playedIndoorPrior}
-                  onChange={(event) =>
-                    setPlayedIndoorPrior(event.target.checked)
-                  }
-                  type="checkbox"
-                />
-              </label>
-            </div>
-            <label>
-              Playing story <small>Editable</small>
-              <textarea
-                maxLength={1_500}
-                onChange={(event) => setExperienceSummary(event.target.value)}
-                rows={4}
-                value={experienceSummary}
-              />
-            </label>
-          </section>
-
-          <section>
-            <div className="onboarding-section-title">
-              <span>03</span>
-              <div>
-                <h2>Bring the history</h2>
-                <p>Duna imports matches, opponents, and rating history.</p>
-              </div>
-            </div>
-            <div className="source-link-grid">
-              <label>
-                <span>
-                  <Link2 /> VolleyballLife profile
-                </span>
-                <input
-                  onChange={(event) => setVolleyballLifeUrl(event.target.value)}
-                  placeholder="volleyballlife.com/playerprofile/…"
-                  value={volleyballLifeUrl}
-                />
-              </label>
-              {experience === "professional" && (
+              <div className="form-grid form-grid--2 onboarding-inline-fields">
                 <label>
+                  Years playing
+                  <input
+                    max={100}
+                    min={0}
+                    onChange={(event) =>
+                      setYearsPlaying(Number(event.target.value))
+                    }
+                    required
+                    type="number"
+                    value={yearsPlaying}
+                  />
+                </label>
+                <label className="onboarding-toggle-row">
                   <span>
-                    <Link2 /> BVBInfo profile
+                    <strong>Played indoor before</strong>
+                    <small>School, club, collegiate, or professional.</small>
                   </span>
                   <input
-                    onChange={(event) => setBvbInfoUrl(event.target.value)}
-                    placeholder="bvbinfo.com/player.asp?ID=…"
-                    value={bvbInfoUrl}
+                    checked={playedIndoorPrior}
+                    onChange={(event) =>
+                      setPlayedIndoorPrior(event.target.checked)
+                    }
+                    type="checkbox"
                   />
                 </label>
+              </div>
+            </section>
+          )}
+
+          {reviewStep === 3 && (
+            <section className="onboarding-question-screen">
+              <div className="onboarding-section-title">
+                <span>04</span>
+                <div>
+                  <h2>How tall are they?</h2>
+                  <p>
+                    Optional. Switch units anytime; Duna converts both ways.
+                  </p>
+                </div>
+              </div>
+              <HeightInput
+                initialUnit={settings.profile.measurementSystem}
+                onChange={setHeightMillimeters}
+                value={heightMillimeters}
+              />
+            </section>
+          )}
+
+          {reviewStep === 4 && (
+            <section className="onboarding-question-screen">
+              <div className="onboarding-section-title">
+                <span>05</span>
+                <div>
+                  <h2>Does this playing story feel right?</h2>
+                  <p>Edit anything the conversation did not capture cleanly.</p>
+                </div>
+              </div>
+              <label>
+                Playing story <small>Editable</small>
+                <textarea
+                  maxLength={1_500}
+                  onChange={(event) => setExperienceSummary(event.target.value)}
+                  rows={4}
+                  value={experienceSummary}
+                />
+              </label>
+            </section>
+          )}
+
+          {reviewStep === 5 && (
+            <section className="onboarding-question-screen">
+              <div className="onboarding-section-title">
+                <span>06</span>
+                <div>
+                  <h2>Bring in their real match history.</h2>
+                  <p>
+                    Duna finds matches and opponents, then shows the matched
+                    profile for confirmation.
+                  </p>
+                </div>
+              </div>
+              {missingFields.length > 0 && (
+                <p className="onboarding-missing">
+                  Still optional to add:{" "}
+                  {missingFields
+                    .map((field) => field.replaceAll(/([A-Z])/g, " $1"))
+                    .join(", ")}
+                </p>
               )}
-            </div>
-          </section>
+              <div className="source-link-grid">
+                <label>
+                  <span>
+                    <Link2 /> VolleyballLife profile
+                  </span>
+                  <input
+                    onChange={(event) =>
+                      setVolleyballLifeUrl(event.target.value)
+                    }
+                    placeholder="volleyballlife.com/player/5520"
+                    value={volleyballLifeUrl}
+                  />
+                </label>
+                {experience === "professional" && (
+                  <label>
+                    <span>
+                      <Link2 /> BVBInfo profile
+                    </span>
+                    <input
+                      onChange={(event) => setBvbInfoUrl(event.target.value)}
+                      placeholder="bvbinfo.com/player.asp?ID=…"
+                      value={bvbInfoUrl}
+                    />
+                  </label>
+                )}
+              </div>
+            </section>
+          )}
 
           <div className="onboarding-step-actions">
-            <button onClick={() => setStep(2)} type="button">
+            <button
+              onClick={() =>
+                reviewStep === 0
+                  ? setStep(2)
+                  : setReviewStep((current) => current - 1)
+              }
+              type="button"
+            >
               Back
             </button>
-            <button
-              className="onboarding-primary"
-              disabled={isPending}
-              type="submit"
-            >
-              {isPending ? "Saving…" : "Save profile"} <ArrowRight />
-            </button>
+            {reviewStep < 5 ? (
+              <button
+                className="onboarding-primary"
+                onClick={() => setReviewStep((current) => current + 1)}
+                type="button"
+              >
+                Continue <ArrowRight />
+              </button>
+            ) : (
+              <button
+                className="onboarding-primary"
+                disabled={isPending}
+                type="submit"
+              >
+                {isPending ? "Saving…" : "Save profile"} <ArrowRight />
+              </button>
+            )}
           </div>
         </form>
       )}
@@ -691,8 +817,8 @@ export function PlayerOnboarding({
                 <span>
                   <strong>Identity for future payouts</strong>
                   <small>
-                    Stripe securely hosts document verification. Duna stores
-                    only the verification status.
+                    Document verification is securely hosted. Duna stores only
+                    the verification status.
                   </small>
                 </span>
               </div>
@@ -706,7 +832,7 @@ export function PlayerOnboarding({
               >
                 {settings.identityVerification.status === "verified"
                   ? "Verified"
-                  : "Verify with Stripe"}
+                  : "Verify identity"}
                 <ExternalLink />
               </button>
             </article>

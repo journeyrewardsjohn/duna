@@ -78,7 +78,7 @@ const moduleCopy: Record<
     eyebrow: "Orders + processor state",
     title: "Money",
     description:
-      "Connected paid-order totals and Stripe account readiness without inferred economics.",
+      "Connected paid-order totals and payment-account readiness without inferred economics.",
   },
   messages: {
     eyebrow: "Consent-aware communication",
@@ -663,7 +663,7 @@ function PaymentsPanel({
       </section>
       <section className="hq-card module-feature-card">
         <ShieldCheck size={24} />
-        <span className="hq-eyebrow">Stripe account</span>
+        <span className="hq-eyebrow">Payment account</span>
         <h2>{dashboard.organization.stripeStatus}</h2>
         <p>
           Payout timing, fees, and processor balances remain unavailable until
@@ -737,7 +737,7 @@ function AiPanel({ dashboard }: { readonly dashboard: OperatorDashboard }) {
             : `${atRisk.length} published events are near capacity.`}
         </li>
         <li>
-          Stripe account state is {dashboard.organization.stripeStatus}; no
+          Payment account state is {dashboard.organization.stripeStatus}; no
           unavailable processor economics are inferred.
         </li>
       </ul>
@@ -817,7 +817,7 @@ function SettingsPanel({
             : "Business address incomplete"}
         </h2>
         <p>
-          Stripe Tax is{" "}
+          Automatic tax is{" "}
           {workspace.organization.stripeTaxEnabled ? "enabled" : "off"} ·{" "}
           {workspace.organization.taxRegistrationStatus.replaceAll("-", " ")}.
           Venue addresses are used for in-person taxable transactions.

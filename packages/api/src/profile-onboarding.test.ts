@@ -29,6 +29,19 @@ describe("inferPlayingExperienceNarrative", () => {
     });
   });
 
+  it("extracts the college name for a collegiate player", () => {
+    expect(
+      inferPlayingExperienceNarrative(
+        "I played collegiate indoor at Duke University for four years.",
+      ),
+    ).toMatchObject({
+      playingExperience: "collegiate",
+      playedIndoorPrior: true,
+      yearsPlaying: 4,
+      collegeName: "Duke University",
+    });
+  });
+
   it("leaves unknown answers undefined for human review", () => {
     const inferred = inferPlayingExperienceNarrative(
       "I like playing on weekends with friends.",

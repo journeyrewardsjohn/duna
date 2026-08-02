@@ -304,9 +304,9 @@ export function CatalogCheckoutPanel({
       <div className="catalog-checkout-trust">
         <ShieldCheck size={17} />
         <span>
-          Card payments stay with Stripe. Cash is recorded by the organization.
-          Organization credits are closed-loop and valid only with{" "}
-          {organization.name}.
+          Card payments stay with the secure payment provider. Cash is recorded
+          by the organization. Organization credits are closed-loop and valid
+          only with {organization.name}.
         </span>
       </div>
       <Link

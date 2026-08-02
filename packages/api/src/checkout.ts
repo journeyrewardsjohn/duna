@@ -906,13 +906,13 @@ export async function startEventCheckout(input: {
   ) {
     throw new CheckoutError(
       "CHECKOUT_UNAVAILABLE",
-      "Paid registration is unavailable until the operator finishes Stripe Connect.",
+      "Paid registration is unavailable until the operator finishes payment setup.",
     );
   }
   if (!isStripeConfigured()) {
     throw new CheckoutError(
       "STRIPE_REQUIRED",
-      "Stripe checkout is not configured.",
+      "Secure checkout is not configured.",
     );
   }
 
@@ -1190,7 +1190,7 @@ export async function startEventCheckout(input: {
     if (!checkout.url) {
       throw new CheckoutError(
         "CHECKOUT_UNAVAILABLE",
-        "Stripe did not return a checkout URL.",
+        "The payment processor did not return a checkout URL.",
       );
     }
     await database

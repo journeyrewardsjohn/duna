@@ -119,6 +119,9 @@ export interface EventLocation {
   readonly mode: "venue" | "address" | "online";
   readonly venueName: string;
   readonly address?: string;
+  readonly googlePlaceId?: string;
+  readonly latitude?: number;
+  readonly longitude?: number;
   readonly onlineUrl?: string;
   readonly courtNames?: readonly string[];
 }
@@ -249,6 +252,13 @@ export interface MatchSummary {
   readonly score: readonly (readonly [number, number])[];
   readonly winner: "A" | "B";
   readonly ratingDelta: number;
+  readonly origin?: "imported" | "self-reported" | "live-scored";
+  readonly ratingEligibility?: "eligible" | "held";
+  readonly dispute?: {
+    readonly status: "pending" | "upheld" | "rejected" | "withdrawn";
+    readonly reasonCode: string;
+  };
+  readonly canRemove?: boolean;
   readonly verification:
     | "live-scored"
     | "desk"

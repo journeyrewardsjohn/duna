@@ -115,6 +115,9 @@ export interface CreateEventDraftInput {
     readonly venueId?: string;
     readonly venueName: string;
     readonly address?: string;
+    readonly googlePlaceId?: string;
+    readonly latitude?: number;
+    readonly longitude?: number;
     readonly onlineUrl?: string;
     readonly courtIds: readonly string[];
     readonly courtNames: readonly string[];
@@ -772,6 +775,9 @@ export async function loadOperatorWorkspace(
       locality: organization.locality ?? undefined,
       administrativeArea: organization.administrativeArea ?? undefined,
       postalCode: organization.postalCode ?? undefined,
+      googlePlaceId: organization.googlePlaceId ?? undefined,
+      latitude: organization.latitude ?? undefined,
+      longitude: organization.longitude ?? undefined,
       stripeTaxEnabled: organization.stripeTaxEnabled,
       taxRegistrationStatus:
         organization.taxRegistrationStatus === "pending" ||
@@ -805,6 +811,9 @@ export async function loadOperatorWorkspace(
       administrativeArea: venue.administrativeArea ?? undefined,
       postalCode: venue.postalCode ?? undefined,
       countryCode: venue.countryCode,
+      googlePlaceId: venue.googlePlaceId ?? undefined,
+      latitude: venue.latitude ?? undefined,
+      longitude: venue.longitude ?? undefined,
       timezone: venue.timezone,
       utilization: utilizationForVenue(venue.id),
       courts: courtRows
@@ -1474,6 +1483,9 @@ export async function createVenue(input: {
   readonly administrativeArea?: string;
   readonly postalCode?: string;
   readonly countryCode: string;
+  readonly googlePlaceId?: string;
+  readonly latitude?: number;
+  readonly longitude?: number;
   readonly timezone: string;
   readonly temporary: boolean;
   readonly requestId: string;
@@ -1500,6 +1512,9 @@ export async function createVenue(input: {
     administrativeArea: input.administrativeArea?.trim() || undefined,
     postalCode: input.postalCode?.trim() || undefined,
     countryCode: input.countryCode.toUpperCase(),
+    googlePlaceId: input.googlePlaceId?.trim() || undefined,
+    latitude: input.latitude,
+    longitude: input.longitude,
     timezone: timeZone(input.timezone),
   };
   const database = getDatabase();
@@ -2689,6 +2704,9 @@ export async function createEventDraft(
         mode: input.location.mode,
         venueName: input.location.venueName.trim(),
         address: input.location.address?.trim() || undefined,
+        googlePlaceId: input.location.googlePlaceId?.trim() || undefined,
+        latitude: input.location.latitude,
+        longitude: input.location.longitude,
         onlineUrl: input.location.onlineUrl?.trim() || undefined,
         courtNames: input.location.courtNames,
       },
@@ -2855,7 +2873,7 @@ export async function publishSession(input: {
   ) {
     throw new OperatorServiceError(
       "PAYMENTS_NOT_READY",
-      "Finish Stripe Connect before publishing a paid session.",
+      "Finish payment setup before publishing a paid session.",
     );
   }
   await database.batch([

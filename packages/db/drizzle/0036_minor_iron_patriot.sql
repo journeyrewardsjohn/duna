@@ -1,0 +1,1 @@
+CREATE INDEX "player_source_connection_refresh_idx" ON "player_source_connections" USING btree ("status","verification_status","next_refresh_at");

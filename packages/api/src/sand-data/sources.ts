@@ -9,11 +9,22 @@ import {
   type WorldRankingRecord,
 } from "./types";
 
-const volleyballLifeApi =
-  "https://volleyballlife-api-dot-net-8.azurewebsites.net";
+const volleyballLifeApi = "https://api-v8.volleyballlife.com";
 const fivbBase = "https://fivb.12ndr.at";
 const volleyballWorldApi =
   "https://en.volleyballworld.com/api/v1/worldranking/beachvolleyball";
+
+export interface SourceImportProgress {
+  readonly phase: string;
+  readonly current: number;
+  readonly total: number;
+  readonly matchesFound: number;
+  readonly profilesFound: number;
+}
+
+type SourceImportProgressHandler = (
+  progress: SourceImportProgress,
+) => void | Promise<void>;
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -59,6 +70,7 @@ function compactFederationCode(value: string): string | undefined {
 
 export async function importBvbInfoPlayer(
   playerId: string,
+  onProgress?: SourceImportProgressHandler,
 ): Promise<SourceImportResult> {
   const numericId = Number.parseInt(playerId, 10);
   if (!Number.isInteger(numericId) || numericId < 1) {
@@ -87,6 +99,13 @@ export async function importBvbInfoPlayer(
       { timeoutMs: 90_000 },
     );
     pages.set(page, pageResult.html);
+    await onProgress?.({
+      phase: "fetching-career-pages",
+      current: [...pages.entries()].filter(([, html]) => Boolean(html)).length,
+      total: pages.size,
+      matchesFound: 0,
+      profilesFound: 1,
+    });
   }
 
   const profileHtml = first.html;
@@ -131,6 +150,7 @@ export async function importBvbInfoPlayer(
     [player.externalPersonId, player],
   ]);
   const matches: ExternalMatchRecord[] = [];
+  let parsedPages = 0;
   for (const html of pages.values()) {
     if (!html) continue;
     const seasonStart = html.indexOf("Season Summaries");
@@ -257,6 +277,14 @@ export async function importBvbInfoPlayer(
         });
       }
     }
+    parsedPages += 1;
+    await onProgress?.({
+      phase: "reading-match-history",
+      current: parsedPages,
+      total: pages.size,
+      matchesFound: matches.length,
+      profilesFound: players.size,
+    });
   }
   return {
     source: "bvbinfo",
@@ -265,62 +293,6 @@ export async function importBvbInfoPlayer(
     matches,
     checkpoint: { pages: pages.size, engine: first.engine },
   };
-}
-
-function findVolleyballLifeDivision(
-  tournament: Record<string, unknown>,
-  divisionName: string,
-): string | undefined {
-  const target = normalizePersonName(divisionName);
-  return records(tournament.divisions)
-    .map((division) => {
-      const divisionInfo = record(division.division);
-      const genderInfo = record(division.gender);
-      const candidates = [
-        stringValue(division._Name),
-        `${stringValue(genderInfo.name)} ${stringValue(divisionInfo.name)}`,
-        stringValue(divisionInfo.name),
-      ].map(normalizePersonName);
-      return {
-        id: stringValue(division.id),
-        score: candidates.includes(target)
-          ? 2
-          : candidates.some(
-                (candidate) =>
-                  candidate.includes(target) || target.includes(candidate),
-              )
-            ? 1
-            : 0,
-      };
-    })
-    .sort((a, b) => b.score - a.score)
-    .find((candidate) => candidate.score > 0)?.id;
-}
-
-function collectVolleyballLifeMatches(
-  value: unknown,
-  output: Record<string, unknown>[],
-): void {
-  if (Array.isArray(value)) {
-    for (const item of value) collectVolleyballLifeMatches(item, output);
-    return;
-  }
-  const valueRecord = record(value);
-  if (Object.keys(valueRecord).length === 0 || output.includes(valueRecord)) {
-    return;
-  }
-  if (
-    valueRecord.homeTeam &&
-    valueRecord.awayTeam &&
-    Array.isArray(valueRecord.games)
-  ) {
-    output.push(valueRecord);
-  }
-  for (const child of Object.values(valueRecord)) {
-    if (child && typeof child === "object") {
-      collectVolleyballLifeMatches(child, output);
-    }
-  }
 }
 
 export function selectVolleyballLifeDivisionData(
@@ -334,8 +306,167 @@ export function selectVolleyballLifeDivisionData(
   return hydratedHasCompetitionData ? hydrated : tournamentDivision;
 }
 
+function volleyballLifeGender(
+  divisionName: string,
+): ExternalMatchRecord["genderCategory"] {
+  const normalized = divisionName.toLowerCase();
+  if (normalized.includes("coed") || normalized.includes("mixed")) {
+    return "coed";
+  }
+  if (normalized.includes("women") || normalized.includes("girls")) {
+    return "women";
+  }
+  if (normalized.includes("men") || normalized.includes("boys")) return "men";
+  return undefined;
+}
+
+function upsertVolleyballLifePlayer(
+  players: Map<string, ExternalPlayerRecord>,
+  value: unknown,
+): ExternalPlayerRecord | undefined {
+  const source = record(value);
+  const externalPersonId =
+    stringValue(source.playerProfileId) || stringValue(source.id);
+  const displayName = stringValue(source.name);
+  if (!externalPersonId || !displayName) return undefined;
+  const existing = players.get(externalPersonId);
+  const next: ExternalPlayerRecord = {
+    ...existing,
+    externalPersonId,
+    displayName: existing?.displayName ?? displayName,
+    profileUrl:
+      existing?.profileUrl ??
+      `https://volleyballlife.com/player/${externalPersonId}`,
+    raw: { ...source, ...(existing?.raw ?? {}) },
+  };
+  players.set(externalPersonId, next);
+  return next;
+}
+
+export function parseVolleyballLifeMatchFeed(
+  playerId: number,
+  feedValue: unknown,
+  seedPlayer: ExternalPlayerRecord,
+): {
+  readonly eventCount: number;
+  readonly players: readonly ExternalPlayerRecord[];
+  readonly matches: readonly ExternalMatchRecord[];
+} {
+  const targetId = String(playerId);
+  const players = new Map<string, ExternalPlayerRecord>([
+    [targetId, seedPlayer],
+  ]);
+  const matches = new Map<string, ExternalMatchRecord>();
+  const results = records(record(feedValue).results);
+
+  for (const result of results) {
+    const resultPlayerId = stringValue(result.playerId);
+    if (resultPlayerId && resultPlayerId !== targetId) continue;
+    const tournamentId = stringValue(result.tournamentId);
+    const divisionId = stringValue(result.tournamentDivisionId);
+    const divisionName = stringValue(result.division);
+    const title = stringValue(result.tournament) || "VolleyballLife tournament";
+    const target = upsertVolleyballLifePlayer(players, {
+      id: targetId,
+      name: stringValue(result.playerName) || seedPlayer.displayName,
+    });
+    if (!target || !tournamentId) continue;
+
+    for (const match of records(result.matches)) {
+      const partners = (
+        records(match.partners).length > 0
+          ? records(match.partners)
+          : records(result.partners)
+      ).flatMap((partner) => {
+        const player = upsertVolleyballLifePlayer(players, partner);
+        return player ? [player] : [];
+      });
+      const opponents = records(match.opponents).flatMap((opponent) => {
+        const player = upsertVolleyballLifePlayer(players, opponent);
+        return player ? [player] : [];
+      });
+      // Sand Rating's canonical competition surface is beach doubles.
+      // Multi-player formats remain represented by the finish record but are
+      // not emitted as 2v2 matches.
+      if (partners.length !== 1 || opponents.length !== 2) continue;
+      const sets = records(match.sets)
+        .map((set) => ({
+          a: numberValue(set.teamScore) ?? 0,
+          b: numberValue(set.opponentScore) ?? 0,
+        }))
+        .filter((set) => set.a > 0 || set.b > 0);
+      const matchId =
+        stringValue(match.matchId) ||
+        [
+          stringValue(match.type),
+          stringValue(match.roundNumber),
+          stringValue(match.matchNumber),
+          stringValue(match.date),
+        ]
+          .filter(Boolean)
+          .join(":");
+      if (!matchId) continue;
+      const externalMatchId = `${tournamentId}:${divisionId || "division"}:${matchId}`;
+      const winsA = sets.filter((set) => set.a > set.b).length;
+      const winsB = sets.filter((set) => set.b > set.a).length;
+      const didWin =
+        typeof match.didWin === "boolean"
+          ? match.didWin
+          : winsA === winsB
+            ? undefined
+            : winsA > winsB;
+      matches.set(externalMatchId, {
+        externalMatchId,
+        externalEventId: tournamentId,
+        sourceUrl: `https://volleyballlife.com/event/${tournamentId}`,
+        title,
+        roundLabel:
+          stringValue(match.roundName) ||
+          stringValue(match.phase) ||
+          stringValue(match.type),
+        genderCategory: volleyballLifeGender(divisionName),
+        playedAt: stringValue(match.date) || undefined,
+        participants: [
+          {
+            externalPersonId: target.externalPersonId,
+            name: target.displayName,
+            side: "A",
+          },
+          {
+            externalPersonId: partners[0]!.externalPersonId,
+            name: partners[0]!.displayName,
+            side: "A",
+          },
+          ...opponents.map((opponent) => ({
+            externalPersonId: opponent.externalPersonId,
+            name: opponent.displayName,
+            side: "B" as const,
+          })),
+        ],
+        sets,
+        winnerSide:
+          didWin === undefined ? undefined : didWin ? ("A" as const) : "B",
+        raw: {
+          tournamentId,
+          divisionId,
+          divisionName,
+          teamId: stringValue(result.teamId),
+          match,
+        },
+      });
+    }
+  }
+
+  return {
+    eventCount: results.length,
+    players: [...players.values()],
+    matches: [...matches.values()],
+  };
+}
+
 export async function importVolleyballLifePlayer(
   playerId: string,
+  onProgress?: SourceImportProgressHandler,
 ): Promise<SourceImportResult> {
   const numericId = Number.parseInt(playerId, 10);
   if (!Number.isInteger(numericId) || numericId < 1) {
@@ -345,18 +476,37 @@ export async function importVolleyballLifePlayer(
       "VolleyballLife player ID must be a positive integer.",
     );
   }
-  const requestedUrl = `${volleyballLifeApi}/playerprofile/${numericId}/finishes`;
-  const finishes = record(
-    await scrapeJson<unknown>("volleyball-life", requestedUrl),
-  );
+  const apiProfileUrl = `${volleyballLifeApi}/playerprofile/${numericId}`;
+  const requestedUrl = `${apiProfileUrl}/finishes`;
+  const [profileValue, finishesValue] = await Promise.all([
+    scrapeJson<unknown>("volleyball-life", apiProfileUrl),
+    scrapeJson<unknown>("volleyball-life", requestedUrl),
+  ]);
+  const profile = record(profileValue);
+  const finishes = record(finishesValue);
   const displayName =
-    stringValue(finishes.name) || `VolleyballLife player ${numericId}`;
+    [stringValue(profile.firstName), stringValue(profile.lastName)]
+      .filter(Boolean)
+      .join(" ") ||
+    stringValue(profile.name) ||
+    stringValue(finishes.name) ||
+    `VolleyballLife player ${numericId}`;
+  const hometown = [stringValue(profile.city), stringValue(profile.state)]
+    .filter(Boolean)
+    .join(", ");
   const players = new Map<string, ExternalPlayerRecord>();
   players.set(String(numericId), {
     externalPersonId: String(numericId),
     displayName,
-    profileUrl: `https://volleyballlife.com/playerprofile/${numericId}`,
-    raw: finishes,
+    profileUrl: `https://volleyballlife.com/player/${numericId}`,
+    hometown: hometown || undefined,
+    birthDate: parseDate(stringValue(profile.dob)),
+    avatarUrl: stringValue(profile.pic) || undefined,
+    raw: {
+      ...profile,
+      finishes,
+      apiProfileUrl,
+    },
   });
 
   let truVolley: Record<string, unknown> = {};
@@ -371,15 +521,19 @@ export async function importVolleyballLifePlayer(
     // TruVolley is an optional prior. Match history remains importable.
   }
   const truVolleyInner =
-    record(truVolley.truvolley).rating !== undefined
-      ? record(truVolley.truvolley)
-      : record(truVolley.profile).rating !== undefined
-        ? record(truVolley.profile)
-        : truVolley;
+    record(truVolley.truVolley).rating !== undefined
+      ? record(truVolley.truVolley)
+      : record(truVolley.truvolley).rating !== undefined
+        ? record(truVolley.truvolley)
+        : record(truVolley.profile).rating !== undefined
+          ? record(truVolley.profile)
+          : truVolley;
   const current = players.get(String(numericId))!;
   players.set(String(numericId), {
     ...current,
     externalRating:
+      numberValue(truVolleyInner.truVolley) ??
+      numberValue(truVolleyInner.truvolley) ??
       numberValue(truVolleyInner.rating) ??
       numberValue(truVolleyInner.score) ??
       numberValue(truVolleyInner.currentRating),
@@ -389,148 +543,58 @@ export async function importVolleyballLifePlayer(
     externalMatchCount:
       numberValue(truVolleyInner.matches) ??
       numberValue(truVolleyInner.matchesPlayed),
-    raw: { ...current.raw, truVolley },
+    raw: { ...current.raw, truVolley, apiProfileUrl },
   });
 
-  const matches: ExternalMatchRecord[] = [];
-  for (const finish of records(finishes.tournaments)) {
-    const tournamentId = stringValue(finish.id);
-    const divisionName = stringValue(finish.division);
-    const teamId = stringValue(finish.teamId);
-    if (!tournamentId || !divisionName || !teamId) continue;
-    const tournament = record(
-      await scrapeJson<unknown>(
-        "volleyball-life",
-        `${volleyballLifeApi}/tournament/${tournamentId}`,
-      ),
-    );
-    const divisionId = findVolleyballLifeDivision(tournament, divisionName);
-    if (!divisionId) continue;
-    const tournamentDivision = records(tournament.divisions).find(
-      (division) => stringValue(division.id) === divisionId,
-    );
-    if (
-      tournamentDivision &&
-      numberValue(tournamentDivision.numOfPlayers) !== undefined &&
-      numberValue(tournamentDivision.numOfPlayers) !== 2
-    ) {
-      continue;
-    }
-    const hydratedDivision = record(
-      await scrapeJson<unknown>(
-        "volleyball-life",
-        `${volleyballLifeApi}/division/${divisionId}/hydrate`,
-      ),
-    );
-    const division = selectVolleyballLifeDivisionData(
-      hydratedDivision,
-      tournamentDivision,
-    );
-    const teamById = new Map<
-      string,
-      { readonly name: string; readonly players: ExternalPlayerRecord[] }
-    >();
-    for (const team of records(division.teams)) {
-      const id = stringValue(team.id);
-      const teamPlayers = records(team.players).flatMap((entry) => {
-        const externalPersonId =
-          stringValue(entry.playerProfileId) || stringValue(entry.id);
-        const name = stringValue(entry.name);
-        if (!externalPersonId || !name) return [];
-        const playerRecord: ExternalPlayerRecord = {
-          externalPersonId,
-          displayName: name,
-          profileUrl: `https://volleyballlife.com/playerprofile/${externalPersonId}`,
-          raw: entry,
-        };
-        players.set(externalPersonId, playerRecord);
-        return [playerRecord];
-      });
-      if (id) {
-        teamById.set(id, {
-          name: stringValue(team.name),
-          players: teamPlayers,
-        });
-      }
-    }
-    const discovered: Record<string, unknown>[] = [];
-    collectVolleyballLifeMatches(division, discovered);
-    for (const discoveredMatch of discovered) {
-      const homeTeam = record(discoveredMatch.homeTeam);
-      const awayTeam = record(discoveredMatch.awayTeam);
-      const homeId = stringValue(homeTeam.teamId);
-      const awayId = stringValue(awayTeam.teamId);
-      if (homeId !== teamId && awayId !== teamId) continue;
-      const home = teamById.get(homeId);
-      const away = teamById.get(awayId);
-      if (
-        !home ||
-        !away ||
-        home.players.length < 2 ||
-        away.players.length < 2
-      ) {
-        continue;
-      }
-      const sets = records(discoveredMatch.games)
-        .map((game) => ({
-          a: numberValue(game.home) ?? 0,
-          b: numberValue(game.away) ?? 0,
-        }))
-        .filter((set) => set.a > 0 || set.b > 0);
-      if (sets.length === 0) continue;
-      const homeWins = sets.filter((set) => set.a > set.b).length;
-      const awayWins = sets.filter((set) => set.b > set.a).length;
-      const matchNumber =
-        stringValue(discoveredMatch.id) ||
-        stringValue(discoveredMatch.number) ||
-        hashValue(JSON.stringify(discoveredMatch)).slice(0, 20);
-      const eventDate =
-        parseDate(stringValue(finish.date)) ??
-        parseDate(stringValue(tournament.startDate));
-      matches.push({
-        externalMatchId: `${tournamentId}:${divisionId}:${matchNumber}`,
-        externalEventId: tournamentId,
-        sourceUrl: `https://volleyballlife.com/tournament/${tournamentId}`,
-        title:
-          stringValue(finish.tournament) ||
-          stringValue(tournament.name) ||
-          "VolleyballLife event",
-        roundLabel:
-          stringValue(discoveredMatch.roundName) ||
-          stringValue(discoveredMatch.round),
-        location:
-          stringValue(tournament.location) || stringValue(tournament.city),
-        playedAt: eventDate ? `${eventDate}T12:00:00.000Z` : undefined,
-        participants: [
-          ...home.players.slice(0, 2).map((participant) => ({
-            externalPersonId: participant.externalPersonId,
-            name: participant.displayName,
-            side: "A" as const,
-          })),
-          ...away.players.slice(0, 2).map((participant) => ({
-            externalPersonId: participant.externalPersonId,
-            name: participant.displayName,
-            side: "B" as const,
-          })),
-        ],
-        sets,
-        winnerSide: homeWins > awayWins ? "A" : "B",
-        raw: {
-          tournamentId,
-          divisionId,
-          finish: stringValue(finish.finish),
-          match: discoveredMatch,
-        },
-      });
-    }
-  }
+  const tournamentFinishes = records(finishes.tournaments);
+  await onProgress?.({
+    phase: "profile-found",
+    current: 0,
+    total: tournamentFinishes.length,
+    matchesFound: 0,
+    profilesFound: players.size,
+  });
+  await onProgress?.({
+    phase: "fetching-match-history",
+    current: 0,
+    total: tournamentFinishes.length,
+    matchesFound: 0,
+    profilesFound: players.size,
+  });
+  const feed = await scrapeJson<unknown>(
+    "volleyball-life",
+    `${volleyballLifeApi}/playerprofile/feed/matches`,
+    {
+      method: "POST",
+      body: {
+        playerIds: [numericId],
+        tournamentIds: tournamentFinishes.flatMap((finish) => {
+          const tournamentId = numberValue(finish.id);
+          return tournamentId === undefined ? [] : [tournamentId];
+        }),
+      },
+    },
+  );
+  const parsedFeed = parseVolleyballLifeMatchFeed(
+    numericId,
+    feed,
+    players.get(String(numericId))!,
+  );
+  await onProgress?.({
+    phase: "reading-match-history",
+    current: parsedFeed.eventCount,
+    total: tournamentFinishes.length,
+    matchesFound: parsedFeed.matches.length,
+    profilesFound: parsedFeed.players.length,
+  });
   return {
     source: "volleyball-life",
     requestedUrl,
-    players: [...players.values()],
-    matches,
+    players: parsedFeed.players,
+    matches: parsedFeed.matches,
     checkpoint: {
-      tournaments: records(finishes.tournaments).length,
+      tournaments: tournamentFinishes.length,
+      matchFeedEvents: parsedFeed.eventCount,
       truVolley: Object.keys(truVolley).length > 0,
     },
   };

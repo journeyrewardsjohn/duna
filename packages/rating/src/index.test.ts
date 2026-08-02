@@ -7,6 +7,7 @@ import {
   evaluatePredictions,
   muFromDisplay,
   professionalSeed,
+  rateDoublesPerformance,
   rateDoublesMatch,
   worldRankingSignal,
 } from "./index";
@@ -35,6 +36,36 @@ describe("Sand Rating engine", () => {
       verificationWeight: 0.85,
     };
     expect(rateDoublesMatch(input)).toEqual(rateDoublesMatch(input));
+  });
+
+  it("replays stored performance evidence to the identical projection", () => {
+    const input = {
+      teamA: [player("a1", 1680), player("a2", 1540)] as const,
+      teamB: [player("b1", 1660), player("b2", 1600)] as const,
+      setScores: [
+        { a: 21, b: 17 },
+        { a: 18, b: 21 },
+        { a: 15, b: 12 },
+      ],
+      verificationWeight: 0.85,
+    };
+    const rated = rateDoublesMatch(input);
+    const evidence = rated.updates[0]!.explanation;
+    const replayed = rateDoublesPerformance({
+      teamA: input.teamA,
+      teamB: input.teamB,
+      actualTeamA: evidence.actualResult,
+      pointShareTeamA: evidence.pointShare,
+      marginMultiplier: evidence.marginMultiplier,
+      repeatOpponentWeight: evidence.repeatOpponentWeight,
+      verificationWeight: input.verificationWeight,
+    });
+    expect(replayed.expectedTeamA).toBe(rated.expectedTeamA);
+    for (const [index, update] of replayed.updates.entries()) {
+      expect(update.after.display).toBe(rated.updates[index]!.after.display);
+      expect(update.after.phi).toBe(rated.updates[index]!.after.phi);
+      expect(update.after.mu).toBeCloseTo(rated.updates[index]!.after.mu, 3);
+    }
   });
 
   it("assigns the weaker partner more responsibility", () => {

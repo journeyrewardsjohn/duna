@@ -46,7 +46,7 @@ export default async function CheckoutPage({
         }
         initialNotice={
           query.checkout === "cancelled"
-            ? "Stripe Checkout was cancelled. Your temporary spot will be released automatically."
+            ? "Checkout was cancelled. Your temporary spot will be released automatically."
             : undefined
         }
         player={dashboard.player}

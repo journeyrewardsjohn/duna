@@ -32,7 +32,34 @@ describe("parsePlayerSourceProfile", () => {
       ),
     ).toEqual({
       externalId: "653",
-      profileUrl: "https://volleyballlife.com/playerprofile/653",
+      profileUrl: "https://volleyballlife.com/player/653",
+      apiProfileUrl: "https://api-v8.volleyballlife.com/playerprofile/653",
+    });
+  });
+
+  it("accepts the current public player URL used by VolleyballLife", () => {
+    expect(
+      parsePlayerSourceProfile(
+        "volleyball-life",
+        "https://volleyballlife.com/player/5520",
+      ),
+    ).toEqual({
+      externalId: "5520",
+      profileUrl: "https://volleyballlife.com/player/5520",
+      apiProfileUrl: "https://api-v8.volleyballlife.com/playerprofile/5520",
+    });
+  });
+
+  it("normalizes the private API endpoint back to its public profile", () => {
+    expect(
+      parsePlayerSourceProfile(
+        "volleyball-life",
+        "https://api-v8.volleyballlife.com/playerprofile/5520",
+      ),
+    ).toEqual({
+      externalId: "5520",
+      profileUrl: "https://volleyballlife.com/player/5520",
+      apiProfileUrl: "https://api-v8.volleyballlife.com/playerprofile/5520",
     });
   });
 

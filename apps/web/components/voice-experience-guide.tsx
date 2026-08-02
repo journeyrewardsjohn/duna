@@ -14,12 +14,14 @@ type GuideState = "ready" | "connecting" | "listening" | "complete";
 
 export function VoiceExperienceGuide({
   configured,
+  aiConfigured,
   subjectPersonId,
   subjectName,
   initialNarrative = "",
   onComplete,
 }: {
   readonly configured: boolean;
+  readonly aiConfigured: boolean;
   readonly subjectPersonId: string;
   readonly subjectName: string;
   readonly initialNarrative?: string;
@@ -184,7 +186,8 @@ export function VoiceExperienceGuide({
       {!configured && (
         <p className="voice-guide__notice">
           Voice is waiting for the LiveKit project keys. You can type the same
-          answer now and Duna will still structure it.
+          answer now and Duna will still structure it
+          {aiConfigured ? " with AI" : " with the guided extractor"}.
         </p>
       )}
 

@@ -1079,7 +1079,7 @@ export async function startCourtCheckout(input: {
   ) {
     throw new CourtCheckoutError(
       "PAYMENTS_NOT_READY",
-      "This operator must finish Stripe payout activation before accepting paid court bookings.",
+      "This operator must finish payment activation before accepting paid court bookings.",
     );
   }
   const hold = await createCourtHold({
@@ -1402,7 +1402,7 @@ export async function startCourtCheckout(input: {
     if (!checkout.url) {
       throw new CourtCheckoutError(
         "CHECKOUT_UNAVAILABLE",
-        "Stripe did not return a checkout URL.",
+        "The payment processor did not return a checkout URL.",
       );
     }
     await database.batch([
@@ -1740,7 +1740,7 @@ export async function startParticipantShareCheckout(input: {
     if (!checkout.url) {
       throw new CourtCheckoutError(
         "CHECKOUT_UNAVAILABLE",
-        "Stripe did not return a checkout URL.",
+        "The payment processor did not return a checkout URL.",
       );
     }
     await database.batch([

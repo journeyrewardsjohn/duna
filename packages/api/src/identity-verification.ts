@@ -39,7 +39,7 @@ function requireConfiguration(): void {
   if (!isStripeConfigured()) {
     throw new IdentityVerificationError(
       "STRIPE_REQUIRED",
-      "Stripe Identity is not configured yet.",
+      "Identity verification is not configured yet.",
     );
   }
 }

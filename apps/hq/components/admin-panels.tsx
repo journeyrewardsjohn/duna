@@ -95,8 +95,7 @@ const copy: Record<
   payments: {
     eyebrow: "Platform financial operations",
     title: "Payments",
-    description:
-      "Connected GMV, Stripe webhook readiness, and payment audit events.",
+    description: "Connected GMV, webhook readiness, and payment audit events.",
   },
   audit: {
     eyebrow: "Append-only governance",

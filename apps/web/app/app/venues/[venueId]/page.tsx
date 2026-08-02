@@ -45,7 +45,7 @@ export default async function VenueBookingPage({
         }
         initialNotice={
           query.checkout === "cancelled"
-            ? "Stripe Checkout was cancelled. The temporary court hold will release automatically."
+            ? "Checkout was cancelled. The temporary court hold will release automatically."
             : undefined
         }
         bookingSubjects={[

@@ -220,7 +220,7 @@ export function CourtBookingPanel({
         setReviewOpen(false);
         return;
       }
-      setNotice("Payment received by Stripe. Confirming your reservation…");
+      setNotice("Payment received. Confirming your reservation…");
       timer = setTimeout(check, 1_500);
     };
     void check();

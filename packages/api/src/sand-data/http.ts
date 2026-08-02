@@ -160,17 +160,25 @@ export async function scrapeHtml(
 export async function scrapeJson<T>(
   source: SandDataSource,
   url: string,
+  options: {
+    readonly method?: "GET" | "POST";
+    readonly body?: unknown;
+  } = {},
 ): Promise<T> {
   try {
     return await withRetry(source, async () => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 45_000);
       try {
+        const hasBody = options.body !== undefined;
         const response = await fetch(url, {
           headers: {
             Accept: "application/json",
+            ...(hasBody ? { "Content-Type": "application/json" } : {}),
             "User-Agent": "DunaSandData/1.0 (+https://duna.sport)",
           },
+          method: options.method ?? (hasBody ? "POST" : "GET"),
+          body: hasBody ? JSON.stringify(options.body) : undefined,
           signal: controller.signal,
         });
         if (!response.ok) {

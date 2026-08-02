@@ -10,6 +10,11 @@ interface GooglePlaceDetails {
   };
   readonly primaryType?: string;
   readonly googleMapsUri?: string;
+  readonly addressComponents?: readonly {
+    readonly longText?: string;
+    readonly shortText?: string;
+    readonly types?: readonly string[];
+  }[];
 }
 
 export async function GET(request: Request) {
@@ -31,7 +36,7 @@ export async function GET(request: Request) {
       headers: {
         "X-Goog-Api-Key": key,
         "X-Goog-FieldMask":
-          "id,displayName,formattedAddress,location,primaryType,googleMapsUri",
+          "id,displayName,formattedAddress,location,primaryType,googleMapsUri,addressComponents",
       },
       cache: "no-store",
     },
@@ -43,6 +48,18 @@ export async function GET(request: Request) {
     );
   }
   const place = (await response.json()) as GooglePlaceDetails;
+  const component = (type: string, short = false) => {
+    const value = place.addressComponents?.find((entry) =>
+      entry.types?.includes(type),
+    );
+    return short ? value?.shortText : value?.longText;
+  };
+  const street = [
+    component("street_number"),
+    component("route", true) ?? component("route"),
+  ]
+    .filter(Boolean)
+    .join(" ");
   return NextResponse.json({
     placeId: place.id,
     name: place.displayName?.text,
@@ -51,5 +68,13 @@ export async function GET(request: Request) {
     longitude: place.location?.longitude,
     primaryType: place.primaryType,
     googleMapsUri: place.googleMapsUri,
+    addressLine1: street || place.formattedAddress,
+    locality:
+      component("locality") ??
+      component("postal_town") ??
+      component("sublocality"),
+    administrativeArea: component("administrative_area_level_1", true),
+    postalCode: component("postal_code"),
+    countryCode: component("country", true),
   });
 }

@@ -178,6 +178,40 @@ export async function reviewSandMatchAction(
   }
 }
 
+export async function reviewMatchHistoryDisputeAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const disputeId = String(formData.get("disputeId") ?? "").trim();
+  const decision = String(formData.get("decision") ?? "");
+  const resolutionNotes = String(formData.get("resolutionNotes") ?? "").trim();
+  if (
+    !disputeId ||
+    !["upheld", "rejected"].includes(decision) ||
+    resolutionNotes.length < 8
+  ) {
+    return {
+      status: "error",
+      message: "Choose a decision and document the evidence reviewed.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.reviewMatchHistoryDispute({
+      disputeId,
+      decision: decision as "upheld" | "rejected",
+      resolutionNotes,
+    });
+    refreshSandAdmin();
+    return {
+      status: "success",
+      message: `Review ${result.status}. ${result.replay.players} player projections rebuilt.`,
+    };
+  } catch (error) {
+    return failure(error, "The evidence review could not be completed.");
+  }
+}
+
 export async function evaluateRatingAction(
   _previous: SandActionState,
 ): Promise<SandActionState> {

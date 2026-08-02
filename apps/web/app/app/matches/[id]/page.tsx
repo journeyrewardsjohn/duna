@@ -4,6 +4,7 @@ import { ArrowLeft, Radio, ShieldCheck, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MatchConfirmation } from "@/components/match-confirmation";
+import { MatchHistoryControls } from "@/components/match-history-controls";
 import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Match result" };
@@ -111,6 +112,7 @@ export default async function MatchPage({
         matchId={match.id}
         status={match.status ?? "complete"}
       />
+      <MatchHistoryControls match={match} />
     </main>
   );
 }

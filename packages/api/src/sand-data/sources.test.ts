@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseFivbEventIndexHtml,
   parseFivbPagePlayers,
+  parseVolleyballLifeMatchFeed,
   selectVolleyballLifeDivisionData,
 } from "./sources";
 
@@ -77,5 +78,123 @@ describe("VolleyballLife division hydration", () => {
         embedded,
       ),
     ).toBe(embedded);
+  });
+});
+
+describe("VolleyballLife match feed parsing", () => {
+  it("normalizes doubles scores and preserves the enriched player profile", () => {
+    const parsed = parseVolleyballLifeMatchFeed(
+      5520,
+      {
+        results: [
+          {
+            playerId: 5520,
+            playerName: "John Sutton",
+            tournamentId: 291,
+            tournamentDivisionId: 1531,
+            tournament: "Huntington Open",
+            division: "Mens Open",
+            teamId: 9148,
+            matches: [
+              {
+                matchId: 2238,
+                type: "Pool",
+                roundName: "Pools",
+                date: "2019-05-03T09:30:00Z",
+                didWin: false,
+                partners: [{ id: 5521, name: "Joe Keller" }],
+                opponents: [
+                  { id: 3008, name: "Jacob Landel" },
+                  { id: 4482, name: "Kylen Winterbotham" },
+                ],
+                sets: [
+                  {
+                    setNumber: 1,
+                    teamScore: 20,
+                    opponentScore: 28,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        externalPersonId: "5520",
+        displayName: "John Sutton",
+        profileUrl: "https://volleyballlife.com/player/5520",
+        hometown: "Charlotte, NC",
+        externalRating: 7.982,
+        externalRatingConfidence: 58,
+        raw: { height: "6' 1\"" },
+      },
+    );
+
+    expect(parsed.eventCount).toBe(1);
+    expect(parsed.players[0]).toMatchObject({
+      externalPersonId: "5520",
+      hometown: "Charlotte, NC",
+      externalRating: 7.982,
+      externalRatingConfidence: 58,
+    });
+    expect(parsed.matches).toMatchObject([
+      {
+        externalMatchId: "291:1531:2238",
+        genderCategory: "men",
+        winnerSide: "B",
+        sets: [{ a: 20, b: 28 }],
+        participants: [
+          { externalPersonId: "5520", side: "A" },
+          { externalPersonId: "5521", side: "A" },
+          { externalPersonId: "3008", side: "B" },
+          { externalPersonId: "4482", side: "B" },
+        ],
+      },
+    ]);
+  });
+
+  it("keeps scoreless doubles as staged history without rating evidence", () => {
+    const parsed = parseVolleyballLifeMatchFeed(
+      5520,
+      {
+        results: [
+          {
+            playerId: 5520,
+            playerName: "John Sutton",
+            tournamentId: 292,
+            tournamentDivisionId: 1532,
+            tournament: "Beach Open",
+            division: "Mens Open",
+            matches: [
+              {
+                matchId: 2239,
+                type: "Bracket",
+                didWin: true,
+                partners: [{ id: 5521, name: "Joe Keller" }],
+                opponents: [
+                  { id: 3008, name: "Jacob Landel" },
+                  { id: 4482, name: "Kylen Winterbotham" },
+                ],
+                sets: [],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        externalPersonId: "5520",
+        displayName: "John Sutton",
+        profileUrl: "https://volleyballlife.com/player/5520",
+        raw: {},
+      },
+    );
+
+    expect(parsed.matches).toMatchObject([
+      {
+        externalMatchId: "292:1532:2239",
+        winnerSide: "A",
+        sets: [],
+      },
+    ]);
   });
 });

@@ -1274,7 +1274,7 @@ function MoneyScreen() {
       <View style={styles.balanceCard}>
         <View style={styles.cardTop}>
           <Pill tone={stripeReady ? "positive" : "warning"}>
-            {stripeReady ? "Charges enabled" : "Stripe restricted"}
+            {stripeReady ? "Charges enabled" : "Payments restricted"}
           </Pill>
           <Text style={styles.brandSmall}>DUNA PRO</Text>
         </View>
@@ -1284,8 +1284,8 @@ function MoneyScreen() {
         </Text>
         <Text style={styles.metaText}>
           {stripeReady
-            ? "Connected charges are routed directly through the club’s Stripe account."
-            : "Finish Stripe onboarding in HQ before publishing paid products."}
+            ? "Connected charges are routed directly through the club’s payment account."
+            : "Finish payment setup in HQ before publishing paid products."}
         </Text>
         <View style={styles.balanceActions}>
           <Pressable
@@ -1371,7 +1371,7 @@ function MoneyScreen() {
           <Text style={styles.rowTitle}>
             {mode === "preview"
               ? "Preview reconciliation only."
-              : "Stripe status is connected; balances remain source-owned."}
+              : "The payment account is connected; balances remain source-owned."}
           </Text>
           <Text style={styles.metaText}>
             Funds remain in Stripe-managed accounts. Duna never custodies

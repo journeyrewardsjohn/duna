@@ -26,6 +26,7 @@ import {
   mergeSandProfilesAction,
   refreshFivbIndexAction,
   refreshWorldRankingsAction,
+  reviewMatchHistoryDisputeAction,
   reviewSandMatchAction,
   saveRatingConfigurationAction,
   type SandActionState,
@@ -201,6 +202,54 @@ function MatchReview({
   );
 }
 
+function HistoryDisputeReview({
+  dispute,
+}: {
+  readonly dispute: SandDataOverview["historyDisputes"][number];
+}) {
+  const [state, action, pending] = useActionState(
+    reviewMatchHistoryDisputeAction,
+    initialState,
+  );
+  return (
+    <article className="sand-history-dispute">
+      <header>
+        <span>
+          <Badge tone="warning">
+            {dispute.reasonCode.replaceAll("-", " ")}
+          </Badge>
+          <small>
+            Reported by {dispute.reporterName} ·{" "}
+            {new Intl.DateTimeFormat("en-US", {
+              dateStyle: "medium",
+              timeStyle: "short",
+            }).format(new Date(dispute.createdAt))}
+          </small>
+        </span>
+        <Badge>{dispute.matchStatus}</Badge>
+      </header>
+      <h3>{dispute.title}</h3>
+      <p>{dispute.details ?? "No additional player note was provided."}</p>
+      <form action={action}>
+        <input name="disputeId" type="hidden" value={dispute.id} />
+        <select defaultValue="upheld" name="decision">
+          <option value="upheld">Confirm inaccurate · keep excluded</option>
+          <option value="rejected">Evidence is accurate · restore</option>
+        </select>
+        <input
+          name="resolutionNotes"
+          placeholder="Evidence reviewed and why"
+          required
+        />
+        <button disabled={pending}>
+          <ShieldCheck size={15} /> Resolve + rebuild ratings
+        </button>
+      </form>
+      <ActionFeedback state={state} />
+    </article>
+  );
+}
+
 export function SandDataPanel({ data }: { readonly data: SandDataOverview }) {
   const ready = data.matches.filter((match) => match.importState === "ready");
   const mapping = data.matches.filter(
@@ -247,6 +296,11 @@ export function SandDataPanel({ data }: { readonly data: SandDataOverview }) {
           <small>Pro events</small>
           <Numeric>{data.events.length}</Numeric>
           <span>{data.events.filter((event) => event.live).length} live</span>
+        </article>
+        <article>
+          <small>History reviews</small>
+          <Numeric>{data.historyDisputes.length}</Numeric>
+          <span>held out of ratings</span>
         </article>
       </section>
 
@@ -340,6 +394,30 @@ export function SandDataPanel({ data }: { readonly data: SandDataOverview }) {
         </div>
         {data.matches.length === 0 && (
           <p className="hq-empty">The staged match queue is clear.</p>
+        )}
+      </section>
+
+      <section className="hq-card sand-match-queue">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">Player evidence appeals</span>
+            <h2>Match accuracy reviews</h2>
+          </div>
+          <Badge tone={data.historyDisputes.length ? "warning" : "positive"}>
+            {data.historyDisputes.length}
+          </Badge>
+        </header>
+        <p>
+          A flagged match remains public with an accuracy notice, but its
+          evidence is held out of Sand Rating until this review is resolved.
+        </p>
+        <div>
+          {data.historyDisputes.map((dispute) => (
+            <HistoryDisputeReview dispute={dispute} key={dispute.id} />
+          ))}
+        </div>
+        {data.historyDisputes.length === 0 && (
+          <p className="hq-empty">No player accuracy reviews are waiting.</p>
         )}
       </section>
     </div>
@@ -549,6 +627,63 @@ export function RatingsLabPanel({ data }: { readonly data: SandDataOverview }) {
           <Numeric>{latest?.sampleSize ?? 0}</Numeric>
           <span>replayable history</span>
         </article>
+        <article>
+          <small>TruVolley correlation</small>
+          <Numeric>
+            {data.truVolleyBenchmark.correlation === undefined
+              ? "—"
+              : data.truVolleyBenchmark.correlation.toFixed(3)}
+          </Numeric>
+          <span>{data.truVolleyBenchmark.sampleSize} private comparisons</span>
+        </article>
+        <article>
+          <small>Mean rating difference</small>
+          <Numeric>
+            {data.truVolleyBenchmark.meanAbsoluteDifference === undefined
+              ? "—"
+              : data.truVolleyBenchmark.meanAbsoluteDifference.toFixed(2)}
+          </Numeric>
+          <span>SandRating vs TruVolley</span>
+        </article>
+      </section>
+      <section className="hq-card ratings-evaluation-card">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">Private benchmark</span>
+            <h2>Where SandRating differs</h2>
+          </div>
+          <Badge>super-admin only</Badge>
+        </header>
+        <p>
+          TruVolley is an evaluation signal only. It is never shown to players
+          or used as a target label for a public rating.
+        </p>
+        <div className="sand-benchmark-table">
+          {data.truVolleyBenchmark.players.map((player) => (
+            <article key={player.personId}>
+              <span>
+                <strong>{player.playerName}</strong>
+                <small>{player.matches ?? 0} source matches</small>
+              </span>
+              <span>Sand {player.sandRating.toFixed(2)}</span>
+              <span>TruVolley {player.truVolleyRating.toFixed(2)}</span>
+              <Badge
+                tone={
+                  Math.abs(player.sandRating - player.truVolleyRating) >= 0.75
+                    ? "warning"
+                    : "neutral"
+                }
+              >
+                {(player.sandRating - player.truVolleyRating).toFixed(2)}
+              </Badge>
+            </article>
+          ))}
+          {data.truVolleyBenchmark.players.length === 0 && (
+            <p>
+              No linked VolleyballLife profiles have a comparable rating yet.
+            </p>
+          )}
+        </div>
       </section>
       <section className="hq-card ratings-evaluation-card">
         <header className="hq-card-heading">

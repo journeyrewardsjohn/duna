@@ -43,6 +43,17 @@ function numberField(formData: FormData, name: string): number {
   return value;
 }
 
+function optionalNumberField(
+  formData: FormData,
+  name: string,
+): number | undefined {
+  const value = field(formData, name);
+  if (!value) return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Error(`${name} must be a number.`);
+  return parsed;
+}
+
 function optionalMoneyMinor(
   formData: FormData,
   name: string,
@@ -290,6 +301,9 @@ export async function updateCommerceSettingsAction(
       administrativeArea: field(formData, "administrativeArea"),
       postalCode: field(formData, "postalCode"),
       countryCode: field(formData, "countryCode") || "US",
+      googlePlaceId: optionalField(formData, "googlePlaceId"),
+      latitude: optionalNumberField(formData, "latitude"),
+      longitude: optionalNumberField(formData, "longitude"),
       stripeTaxEnabled: field(formData, "stripeTaxEnabled") === "true",
       confirmed: confirmed(formData),
       idempotencyKey: crypto.randomUUID(),
@@ -415,7 +429,7 @@ export async function refundOrganizationOrderAction(
       "success",
       disposition === "organization-credit"
         ? "Refund recorded and organization credits issued."
-        : "Stripe refund submitted and the reversal journal posted.",
+        : "Refund submitted and the reversal journal posted.",
       undefined,
       created.id,
     );
@@ -606,6 +620,9 @@ export async function createVenueAction(
       administrativeArea: optionalField(formData, "administrativeArea"),
       postalCode: optionalField(formData, "postalCode"),
       countryCode: field(formData, "countryCode") || "US",
+      googlePlaceId: optionalField(formData, "googlePlaceId"),
+      latitude: optionalNumberField(formData, "latitude"),
+      longitude: optionalNumberField(formData, "longitude"),
       timezone: field(formData, "timezone"),
       temporary: field(formData, "temporary") === "true",
       idempotencyKey: crypto.randomUUID(),

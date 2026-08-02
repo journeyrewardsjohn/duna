@@ -688,7 +688,7 @@ export async function startCatalogCheckout(input: {
       idempotencyKey: input.idempotencyKey,
     });
     if (!checkout.url) {
-      throw new Error("Stripe did not return a checkout URL.");
+      throw new Error("The payment processor did not return a checkout URL.");
     }
     await database
       .update(orders)
@@ -773,7 +773,7 @@ async function postPaidCatalogOrderJournal(input: {
         ? ensureLedgerAccount({
             organizationId: input.order.organizationId,
             code: "STRIPE_CLEARING",
-            name: "Stripe clearing",
+            name: "Payment processor clearing",
             accountType: "asset",
             normalSide: "debit",
             unitKind: "money",
