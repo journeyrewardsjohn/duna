@@ -115,7 +115,7 @@ test("tournament pages and checkout expose divisions, tickets, teams, and waiver
   ).toBeVisible();
   await expect(page.getByText("Host approval required")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "The field is taking shape." }),
+    page.getByRole("heading", { name: /players confirmed\./ }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 

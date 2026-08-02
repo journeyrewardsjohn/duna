@@ -418,7 +418,11 @@ export default async function EventPage({
             <header>
               <div>
                 <span className="section__eyebrow">Who&apos;s playing</span>
-                <h2>The field is taking shape.</h2>
+                <h2>
+                  {capacityUsed === 0
+                    ? "No one has joined yet."
+                    : `${capacityUsed} ${capacityUsed === 1 ? "player" : "players"} confirmed.`}
+                </h2>
               </div>
               <UsersRound aria-hidden size={23} />
             </header>
@@ -449,10 +453,15 @@ export default async function EventPage({
                 <article className="event-player-strip__empty">
                   <UsersRound aria-hidden size={22} />
                   <span>
-                    <strong>Be the first player in.</strong>
+                    <strong>
+                      {capacityUsed === 0
+                        ? "Be the first player in."
+                        : `${capacityUsed} confirmed ${capacityUsed === 1 ? "player" : "players"}.`}
+                    </strong>
                     <small>
-                      Confirmed players who share a public profile will appear
-                      here.
+                      {capacityUsed === 0
+                        ? "Confirmed players who share a public profile will appear here."
+                        : "Their profile visibility keeps the player cards private."}
                     </small>
                   </span>
                 </article>
