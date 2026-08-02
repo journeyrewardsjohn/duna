@@ -755,6 +755,7 @@ export const operatorCourtSchema = z.object({
   venueId: z.string().uuid(),
   name: z.string(),
   surface: z.string(),
+  imageUrl: z.string().optional(),
   lit: z.boolean(),
   capacity: z.number().int().positive(),
   status: z.enum(["draft", "active", "maintenance", "seasonal", "closed"]),

@@ -325,6 +325,30 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
+  await page.goto("http://127.0.0.1:3001/locations/create");
+  await expect(
+    page.getByRole("heading", { name: "Bring a venue into Duna." }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Championship Court", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Community Court", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Add a court image").first()).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await page.goto("http://127.0.0.1:3001/calendar");
+  await expect(page.getByRole("heading", { name: "Calendar" })).toBeVisible();
+  await expect(
+    page.getByText("Championship Court", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Community Court", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("No courts yet")).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+
   await page.goto("http://127.0.0.1:3001/admin");
   await expect(
     page.getByRole("heading", {

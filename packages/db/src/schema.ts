@@ -1119,6 +1119,7 @@ export const courts = pgTable(
       .references(() => venues.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     surface: varchar("surface", { length: 32 }).notNull().default("sand"),
+    imageUrl: text("image_url"),
     lit: boolean("lit").notNull().default(false),
     capacity: integer("capacity").notNull().default(12),
     status: venueStatusEnum("status").notNull().default("active"),

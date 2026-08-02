@@ -4072,6 +4072,7 @@ const operatorRouter = router({
         venueId: z.string().uuid(),
         name: z.string().trim().min(1).max(100),
         surface: z.string().trim().min(2).max(32),
+        imageUrl: z.url().optional(),
         lit: z.boolean(),
         capacity: z.number().int().min(1).max(1_000).optional(),
         bookingPolicy: z.enum(["public", "members", "tiers", "staff", "none"]),
@@ -4164,6 +4165,7 @@ const operatorRouter = router({
     .input(
       z.object({
         courtId: z.string().uuid(),
+        imageUrl: z.url().optional(),
         ratePlanId: z.string().uuid().nullable(),
         capacity: z.number().int().min(1).max(1_000),
         durationOptionsMinutes: z
@@ -4197,6 +4199,7 @@ const operatorRouter = router({
             return await updateCourtBookingConfiguration({
               actor: ctx.actor!,
               courtId: input.courtId,
+              imageUrl: input.imageUrl,
               ratePlanId: input.ratePlanId,
               capacity: input.capacity,
               durationOptionsMinutes: input.durationOptionsMinutes,

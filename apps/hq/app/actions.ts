@@ -825,6 +825,7 @@ export async function createCourtAction(
       venueId: field(formData, "venueId"),
       name: field(formData, "name"),
       surface: field(formData, "surface"),
+      imageUrl: optionalField(formData, "imageUrl"),
       lit: field(formData, "lit") === "true",
       capacity: numberField(formData, "capacity"),
       bookingPolicy,
@@ -884,6 +885,7 @@ export async function updateCourtBookingConfigurationAction(
     const caller = await getServerCaller();
     await caller.operator.updateCourtBookingConfiguration({
       courtId: field(formData, "courtId"),
+      imageUrl: optionalField(formData, "imageUrl"),
       ratePlanId: optionalField(formData, "ratePlanId") ?? null,
       capacity: numberField(formData, "capacity"),
       durationOptionsMinutes: field(formData, "durationOptionsMinutes")

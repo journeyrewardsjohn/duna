@@ -103,6 +103,23 @@ export function createVenueMediaPath(
   return `venues/${organizationId}/${identifier}.${configuration.extension}`;
 }
 
+export function createCourtMediaPath(
+  organizationId: string,
+  contentType: string,
+  identifier = crypto.randomUUID(),
+): string {
+  const configuration = mediaType(contentType);
+  if (
+    !configuration ||
+    configuration.kind !== "image" ||
+    !uuidPattern.test(organizationId) ||
+    !uuidPattern.test(identifier)
+  ) {
+    throw new Error("Duna could not create a safe court image path.");
+  }
+  return `courts/${organizationId}/${identifier}.${configuration.extension}`;
+}
+
 export function assertEventMediaPath(
   pathname: string,
   organizationId: string,
@@ -136,6 +153,24 @@ export function assertVenueMediaPath(
     pathname !== `${prefix}${identifier}.${extension}`
   ) {
     throw new Error("The venue image destination is invalid.");
+  }
+}
+
+export function assertCourtMediaPath(
+  pathname: string,
+  organizationId: string,
+  extension: string,
+): void {
+  const prefix = `courts/${organizationId}/`;
+  const identifier = pathname.slice(prefix.length, -(extension.length + 1));
+  if (
+    !uuidPattern.test(organizationId) ||
+    !pathname.startsWith(prefix) ||
+    !pathname.endsWith(`.${extension}`) ||
+    !uuidPattern.test(identifier) ||
+    pathname !== `${prefix}${identifier}.${extension}`
+  ) {
+    throw new Error("The court image destination is invalid.");
   }
 }
 

@@ -23,10 +23,22 @@ import {
   proposeCalendarChangeAction,
   type OperatorActionState,
 } from "@/app/actions";
+import { courtAvailabilityLabel } from "./schedule-calendar-helpers";
 
 type CalendarEntry = OperatorWorkspace["calendar"]["entries"][number];
+type Court = OperatorWorkspace["venues"][number]["courts"][number];
 type CalendarView = "day" | "week" | "month" | "quarter";
 type ResourceView = "court" | "coach";
+
+interface CalendarLane {
+  readonly id: string;
+  readonly label: string;
+  readonly sublabel: string;
+  readonly imageUrl?: string;
+  readonly status?: string;
+  readonly schedule?: Court["schedule"];
+  readonly overrides?: Court["overrides"];
+}
 
 const initialActionState: OperatorActionState = {
   status: "idle",
@@ -159,21 +171,60 @@ export function ScheduleCalendar({
     return result;
   }, [workspace.calendar.entries]);
   const lanes = useMemo(() => {
-    const values = new Map<string, string>();
-    for (const entry of workspace.calendar.entries) {
-      const id =
-        resourceView === "court"
-          ? (entry.courtId ?? "unassigned-court")
-          : (entry.coachPersonId ?? "unassigned-coach");
-      const label =
-        resourceView === "court"
-          ? (entry.courtName ?? "No court")
-          : (entry.coachName ?? "No coach");
-      values.set(id, label);
+    const values: CalendarLane[] =
+      resourceView === "court"
+        ? workspace.venues.flatMap((venue) =>
+            venue.courts.map((court) => ({
+              id: court.id,
+              label: court.name,
+              sublabel: `${venue.name} · ${court.surface.replace("-", " ")}`,
+              imageUrl:
+                court.imageUrl ??
+                venue.heroImageTreatmentUrl ??
+                venue.heroImageUrl,
+              status: court.status,
+              schedule: court.schedule,
+              overrides: court.overrides,
+            })),
+          )
+        : workspace.staff.map((coach) => ({
+            id: coach.personId,
+            label: coach.displayName,
+            sublabel: `${coach.role.replace("-", " ")} · ${
+              coach.upcomingSessions
+            } upcoming`,
+            imageUrl: coach.avatarUrl,
+            status: coach.active ? "active" : "inactive",
+          }));
+    const needsUnassigned = workspace.calendar.entries.some((entry) =>
+      resourceView === "court" ? !entry.courtId : !entry.coachPersonId,
+    );
+    if (needsUnassigned) {
+      values.push({
+        id: resourceView === "court" ? "unassigned-court" : "unassigned-coach",
+        label: resourceView === "court" ? "No court" : "No coach",
+        sublabel: "Needs assignment",
+        status: "unassigned",
+      });
     }
-    if (values.size === 0) values.set("unassigned", "Unassigned");
-    return [...values.entries()].map(([id, label]) => ({ id, label }));
-  }, [resourceView, workspace.calendar.entries]);
+    if (values.length === 0) {
+      values.push({
+        id: "unassigned",
+        label: resourceView === "court" ? "No courts yet" : "No coaches yet",
+        sublabel:
+          resourceView === "court"
+            ? "Add courts in Facilities"
+            : "Invite coaches in Team",
+        status: "empty",
+      });
+    }
+    return values;
+  }, [
+    resourceView,
+    workspace.calendar.entries,
+    workspace.staff,
+    workspace.venues,
+  ]);
 
   const navigate = (direction: -1 | 1) => {
     const amount =
@@ -350,12 +401,34 @@ export function ScheduleCalendar({
           {lanes.map((lane) => (
             <div className="schedule-resource-row" key={lane.id}>
               <div className="schedule-resource-row__label">
-                <strong>{lane.label}</strong>
-                <small>
-                  {resourceView === "court"
-                    ? "Bookable resource"
-                    : "Coach time"}
-                </small>
+                <span
+                  className={`schedule-resource-avatar ${
+                    lane.imageUrl ? "schedule-resource-avatar--image" : ""
+                  }`}
+                  style={
+                    lane.imageUrl
+                      ? { backgroundImage: `url("${lane.imageUrl}")` }
+                      : undefined
+                  }
+                >
+                  {!lane.imageUrl &&
+                    (resourceView === "court" ? (
+                      <Rows3 aria-hidden size={17} />
+                    ) : (
+                      <UsersRound aria-hidden size={17} />
+                    ))}
+                </span>
+                <span>
+                  <strong>{lane.label}</strong>
+                  <small>{lane.sublabel}</small>
+                  {lane.status && (
+                    <em
+                      className={`schedule-resource-status schedule-resource-status--${lane.status}`}
+                    >
+                      {lane.status}
+                    </em>
+                  )}
+                </span>
               </div>
               {days.map((day) => {
                 const entries = (entriesByDay.get(dateKey(day)) ?? []).filter(
@@ -375,6 +448,28 @@ export function ScheduleCalendar({
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={() => proposeMove(day)}
                   >
+                    {resourceView === "court" && lane.schedule && (
+                      <span
+                        className={`schedule-cell-availability ${
+                          courtAvailabilityLabel(lane.schedule, day) ===
+                          "Closed"
+                            ? "schedule-cell-availability--closed"
+                            : ""
+                        }`}
+                      >
+                        <Clock3 aria-hidden size={12} />
+                        {courtAvailabilityLabel(lane.schedule, day)}
+                        {lane.overrides?.some((override) => {
+                          const starts = new Date(override.startsAt);
+                          const ends = new Date(override.endsAt);
+                          const dayStart = startOfDay(day);
+                          const dayEnd = addDays(dayStart, 1);
+                          return starts < dayEnd && ends > dayStart;
+                        })
+                          ? " · override"
+                          : ""}
+                      </span>
+                    )}
                     {entries.map(renderEntry)}
                   </div>
                 );

@@ -2,6 +2,7 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
 import { getServerCaller } from "@/lib/api";
 import {
+  assertCourtMediaPath,
   assertEventMediaPath,
   assertVenueMediaPath,
   validateEventMediaInput,
@@ -12,7 +13,7 @@ interface EventMediaClientPayload {
   readonly fileName: string;
   readonly contentType: string;
   readonly size: number;
-  readonly purpose?: "event" | "venue";
+  readonly purpose?: "court" | "event" | "venue";
 }
 
 function parseClientPayload(value: string | null): EventMediaClientPayload {
@@ -31,7 +32,12 @@ function parseClientPayload(value: string | null): EventMediaClientPayload {
     fileName: parsed.fileName,
     contentType: parsed.contentType,
     size: parsed.size,
-    purpose: parsed.purpose === "venue" ? "venue" : "event",
+    purpose:
+      parsed.purpose === "venue"
+        ? "venue"
+        : parsed.purpose === "court"
+          ? "court"
+          : "event",
   };
 }
 
@@ -49,15 +55,23 @@ export async function POST(request: Request) {
           throw new Error("Event media must stay inside your organization.");
         }
         const media = validateEventMediaInput(payload);
-        if (payload.purpose === "venue") {
+        if (payload.purpose === "venue" || payload.purpose === "court") {
           if (media.kind !== "image") {
-            throw new Error("Venue media must be an image.");
+            throw new Error("Facility media must be an image.");
           }
-          assertVenueMediaPath(
-            pathname,
-            context.organizationId,
-            media.extension,
-          );
+          if (payload.purpose === "court") {
+            assertCourtMediaPath(
+              pathname,
+              context.organizationId,
+              media.extension,
+            );
+          } else {
+            assertVenueMediaPath(
+              pathname,
+              context.organizationId,
+              media.extension,
+            );
+          }
         } else {
           assertEventMediaPath(
             pathname,

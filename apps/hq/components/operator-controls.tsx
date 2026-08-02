@@ -7,9 +7,12 @@ import { upload } from "@vercel/blob/client";
 import {
   ArrowRight,
   ArrowUpRight,
+  Banknote,
   Building2,
+  CalendarClock,
   CalendarOff,
   CalendarPlus,
+  Camera,
   Check,
   CircleAlert,
   CreditCard,
@@ -49,7 +52,11 @@ import {
   type OperatorActionState,
 } from "@/app/actions";
 import { PlaceAddressFields } from "./place-address-fields";
-import { createVenueMediaPath, optimizeImageUpload } from "@/lib/media-storage";
+import {
+  createCourtMediaPath,
+  createVenueMediaPath,
+  optimizeImageUpload,
+} from "@/lib/media-storage";
 import type { OperatorModule } from "./navigation";
 import {
   CommerceSettingsControls,
@@ -612,155 +619,323 @@ function CourtComposer({
     createCourtAction,
     initialOperatorActionState,
   );
+  const [courtImageUrl, setCourtImageUrl] = useState("");
+  const [courtName, setCourtName] = useState("");
+  const [selectedVenueId, setSelectedVenueId] = useState(
+    workspace.venues[0]?.id ?? "",
+  );
+  const [surface, setSurface] = useState("sand");
+  const [capacity, setCapacity] = useState("12");
+  const [uploadState, setUploadState] = useState<
+    "idle" | "uploading" | "ready" | "error"
+  >("idle");
+  const [uploadMessage, setUploadMessage] = useState("");
   const hasVenues = workspace.venues.length > 0;
+  const selectedVenue = workspace.venues.find(
+    (venue) => venue.id === selectedVenueId,
+  );
+  const uploadCourtImage = async (file?: File) => {
+    if (!file) return;
+    setUploadState("uploading");
+    setUploadMessage("Optimizing your court image…");
+    try {
+      const prepared = await optimizeImageUpload(file);
+      const stored = await upload(
+        createCourtMediaPath(workspace.organization.id, prepared.type),
+        prepared,
+        {
+          access: "public",
+          clientPayload: JSON.stringify({
+            organizationId: workspace.organization.id,
+            fileName: prepared.name,
+            contentType: prepared.type,
+            size: prepared.size,
+            purpose: "court",
+          }),
+          contentType: prepared.type,
+          handleUploadUrl: "/api/media/upload",
+          onUploadProgress: ({ percentage }) => {
+            setUploadMessage(`Uploading… ${Math.round(percentage)}%`);
+          },
+        },
+      );
+      if (!stored.url) {
+        throw new Error("Duna storage did not return a court image URL.");
+      }
+      setCourtImageUrl(stored.url);
+      setUploadState("ready");
+      setUploadMessage("Court image optimized and ready.");
+    } catch (error) {
+      setUploadState("error");
+      setUploadMessage(
+        error instanceof Error ? error.message : "Court image upload failed.",
+      );
+    }
+  };
   return (
-    <section className="hq-card operator-control-card" id="courts">
+    <section
+      className="hq-card operator-control-card court-composer"
+      id="court-builder"
+    >
       <header className="hq-card-heading">
         <div>
-          <span className="hq-eyebrow">Bookable resources</span>
-          <h2>Add a court</h2>
+          <span className="hq-eyebrow">Facility builder</span>
+          <h2>Place a court in your facility</h2>
           <p>
-            Duration, buffers, notice, audience, and pricing are enforced on the
-            server.
+            Give each court its own identity, operating rules, and visual place
+            inside the venue.
           </p>
         </div>
         <Waves aria-hidden size={24} />
       </header>
-      <form action={action} className="operator-form">
-        <div className="operator-form-grid operator-form-grid--two">
-          <label>
-            <span>Venue</span>
-            <select name="venueId" required disabled={!hasVenues}>
-              {workspace.venues.map((venue) => (
-                <option key={venue.id} value={venue.id}>
-                  {venue.name} · {venue.status}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Court name</span>
-            <input name="name" placeholder="Court 3" required />
-          </label>
-          <label>
-            <span>Comfortable capacity</span>
-            <input
-              type="number"
-              name="capacity"
-              min="1"
-              defaultValue="12"
-              required
-            />
-          </label>
-          <label>
-            <span>Surface</span>
-            <select name="surface" defaultValue="sand">
-              <option value="sand">Sand</option>
-              <option value="grass">Grass</option>
-              <option value="indoor-sand">Indoor sand</option>
-              <option value="hardcourt">Hardcourt</option>
-            </select>
-          </label>
-          <label>
-            <span>Booking audience</span>
-            <select name="bookingPolicy" defaultValue="public">
-              <option value="public">Public</option>
-              <option value="members">Members</option>
-              <option value="tiers">Selected tiers</option>
-              <option value="staff">Staff only</option>
-              <option value="none">Not independently bookable</option>
-            </select>
-          </label>
-          <label className="operator-field--wide">
-            <span>Rate plan</span>
-            <select name="ratePlanId" defaultValue="">
-              <option value="">Choose before activation</option>
-              {workspace.ratePlans.map((rate) => (
-                <option key={rate.id} value={rate.id}>
-                  {rate.name} ·{" "}
-                  {formatMoney(rate.baseAmountMinor, rate.currency)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Minimum duration</span>
-            <select name="minimumDurationMinutes" defaultValue="60">
-              <option value="30">30 min</option>
-              <option value="60">60 min</option>
-              <option value="90">90 min</option>
-            </select>
-          </label>
-          <label>
-            <span>Maximum duration</span>
-            <select name="maximumDurationMinutes" defaultValue="120">
-              <option value="60">60 min</option>
-              <option value="90">90 min</option>
-              <option value="120">2 hours</option>
-              <option value="180">3 hours</option>
-            </select>
-          </label>
-          <label>
-            <span>Bookable lengths</span>
-            <input
-              name="durationOptionsMinutes"
-              defaultValue="60,90,120"
-              placeholder="60,90,120"
-              required
-            />
-          </label>
-          <label>
-            <span>Start-time increment</span>
-            <select name="bookingIncrementMinutes" defaultValue="30">
-              <option value="15">Every 15 min</option>
-              <option value="30">Every 30 min</option>
-              <option value="60">Every hour</option>
-            </select>
-          </label>
-          <label>
-            <span>Setup buffer</span>
-            <select name="bufferBeforeMinutes" defaultValue="0">
-              <option value="0">None</option>
-              <option value="10">10 min</option>
-              <option value="15">15 min</option>
-              <option value="30">30 min</option>
-            </select>
-          </label>
-          <label>
-            <span>Reset buffer</span>
-            <select name="bufferAfterMinutes" defaultValue="0">
-              <option value="0">None</option>
-              <option value="10">10 min</option>
-              <option value="15">15 min</option>
-              <option value="30">30 min</option>
-            </select>
-          </label>
-          <label>
-            <span>Minimum notice</span>
-            <select name="minimumNoticeMinutes" defaultValue="60">
-              <option value="0">None</option>
-              <option value="60">1 hour</option>
-              <option value="240">4 hours</option>
-              <option value="1440">24 hours</option>
-            </select>
-          </label>
-          <label>
-            <span>Book ahead</span>
-            <select name="maximumAdvanceDays" defaultValue="90">
-              <option value="14">14 days</option>
-              <option value="30">30 days</option>
-              <option value="90">90 days</option>
-              <option value="365">1 year</option>
-            </select>
-          </label>
-        </div>
-        <label className="operator-switch">
-          <input type="checkbox" name="lit" value="true" />
-          <span>
-            <strong>Lit after dark</strong>
-            Player discovery may show evening availability.
+      <form action={action} className="operator-form court-builder">
+        <aside
+          className={`court-builder__preview ${
+            courtImageUrl ? "court-builder__preview--image" : ""
+          }`}
+          style={
+            courtImageUrl
+              ? {
+                  backgroundImage: `linear-gradient(180deg, rgba(6, 24, 38, .08), rgba(6, 24, 38, .88)), url("${courtImageUrl}")`,
+                }
+              : undefined
+          }
+        >
+          <header>
+            <Badge tone="warning">Draft court</Badge>
+            <Camera aria-hidden size={18} />
+          </header>
+          <span className="court-builder__mark">
+            <Waves aria-hidden size={28} />
           </span>
-        </label>
+          <footer>
+            <small>{selectedVenue?.name ?? "Choose a venue"}</small>
+            <strong>{courtName || "Your new court"}</strong>
+            <span>
+              {surface.replace("-", " ")} · up to {capacity || "—"} players
+            </span>
+          </footer>
+        </aside>
+
+        <div className="court-builder__steps">
+          <fieldset className="court-builder__step">
+            <legend>
+              <i>1</i>
+              <span>
+                <strong>Place it</strong>
+                Choose where this court lives.
+              </span>
+            </legend>
+            <div className="operator-form-grid operator-form-grid--two">
+              <label>
+                <span>Venue</span>
+                <select
+                  name="venueId"
+                  required
+                  disabled={!hasVenues}
+                  value={selectedVenueId}
+                  onChange={(event) => setSelectedVenueId(event.target.value)}
+                >
+                  {workspace.venues.map((venue) => (
+                    <option key={venue.id} value={venue.id}>
+                      {venue.name} · {venue.status}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Court name</span>
+                <input
+                  name="name"
+                  onChange={(event) => setCourtName(event.target.value)}
+                  placeholder="Court 3"
+                  required
+                  value={courtName}
+                />
+              </label>
+              <div className="operator-field--wide operator-venue-image">
+                <span>Court image</span>
+                <label className="operator-venue-image__upload">
+                  <UploadCloud aria-hidden size={18} />
+                  <span>
+                    <strong>
+                      {courtImageUrl
+                        ? "Replace court image"
+                        : "Add court image"}
+                    </strong>
+                    <small>
+                      A clear wide photo helps players find the right court.
+                    </small>
+                  </span>
+                  <input
+                    accept="image/avif,image/jpeg,image/png,image/webp"
+                    disabled={uploadState === "uploading"}
+                    onChange={(event) => {
+                      void uploadCourtImage(event.target.files?.[0]);
+                    }}
+                    type="file"
+                  />
+                </label>
+                {uploadMessage && (
+                  <p
+                    className={`operator-upload-status operator-upload-status--${uploadState}`}
+                    role={uploadState === "error" ? "alert" : "status"}
+                  >
+                    {uploadMessage}
+                  </p>
+                )}
+                <input name="imageUrl" type="hidden" value={courtImageUrl} />
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset className="court-builder__step">
+            <legend>
+              <i>2</i>
+              <span>
+                <strong>Describe the space</strong>
+                Set what players should expect.
+              </span>
+            </legend>
+            <div className="operator-form-grid operator-form-grid--two">
+              <label>
+                <span>Surface</span>
+                <select
+                  name="surface"
+                  value={surface}
+                  onChange={(event) => setSurface(event.target.value)}
+                >
+                  <option value="sand">Sand</option>
+                  <option value="grass">Grass</option>
+                  <option value="indoor-sand">Indoor sand</option>
+                  <option value="hardcourt">Hardcourt</option>
+                </select>
+              </label>
+              <label>
+                <span>Comfortable capacity</span>
+                <input
+                  type="number"
+                  name="capacity"
+                  min="1"
+                  onChange={(event) => setCapacity(event.target.value)}
+                  required
+                  value={capacity}
+                />
+              </label>
+              <label>
+                <span>Booking audience</span>
+                <select name="bookingPolicy" defaultValue="public">
+                  <option value="public">Public</option>
+                  <option value="members">Members</option>
+                  <option value="tiers">Selected tiers</option>
+                  <option value="staff">Staff only</option>
+                  <option value="none">Not independently bookable</option>
+                </select>
+              </label>
+              <label className="operator-switch court-builder__lighting">
+                <input type="checkbox" name="lit" value="true" />
+                <span>
+                  <strong>Lit after dark</strong>
+                  Keep evening slots available after sunset.
+                </span>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset className="court-builder__step">
+            <legend>
+              <i>3</i>
+              <span>
+                <strong>Make it bookable</strong>
+                Choose the prices, lengths, and guardrails.
+              </span>
+            </legend>
+            <div className="operator-form-grid operator-form-grid--two">
+              <label className="operator-field--wide">
+                <span>Rate plan</span>
+                <select name="ratePlanId" defaultValue="">
+                  <option value="">Choose before activation</option>
+                  {workspace.ratePlans.map((rate) => (
+                    <option key={rate.id} value={rate.id}>
+                      {rate.name} ·{" "}
+                      {formatMoney(rate.baseAmountMinor, rate.currency)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Minimum duration</span>
+                <select name="minimumDurationMinutes" defaultValue="60">
+                  <option value="30">30 min</option>
+                  <option value="60">60 min</option>
+                  <option value="90">90 min</option>
+                </select>
+              </label>
+              <label>
+                <span>Maximum duration</span>
+                <select name="maximumDurationMinutes" defaultValue="120">
+                  <option value="60">60 min</option>
+                  <option value="90">90 min</option>
+                  <option value="120">2 hours</option>
+                  <option value="180">3 hours</option>
+                </select>
+              </label>
+              <label>
+                <span>Bookable lengths</span>
+                <input
+                  name="durationOptionsMinutes"
+                  defaultValue="60,90,120"
+                  placeholder="60,90,120"
+                  required
+                />
+              </label>
+              <label>
+                <span>Start-time increment</span>
+                <select name="bookingIncrementMinutes" defaultValue="30">
+                  <option value="15">Every 15 min</option>
+                  <option value="30">Every 30 min</option>
+                  <option value="60">Every hour</option>
+                </select>
+              </label>
+              <label>
+                <span>Setup buffer</span>
+                <select name="bufferBeforeMinutes" defaultValue="0">
+                  <option value="0">None</option>
+                  <option value="10">10 min</option>
+                  <option value="15">15 min</option>
+                  <option value="30">30 min</option>
+                </select>
+              </label>
+              <label>
+                <span>Reset buffer</span>
+                <select name="bufferAfterMinutes" defaultValue="0">
+                  <option value="0">None</option>
+                  <option value="10">10 min</option>
+                  <option value="15">15 min</option>
+                  <option value="30">30 min</option>
+                </select>
+              </label>
+              <label>
+                <span>Minimum notice</span>
+                <select name="minimumNoticeMinutes" defaultValue="60">
+                  <option value="0">None</option>
+                  <option value="60">1 hour</option>
+                  <option value="240">4 hours</option>
+                  <option value="1440">24 hours</option>
+                </select>
+              </label>
+              <label>
+                <span>Book ahead</span>
+                <select name="maximumAdvanceDays" defaultValue="90">
+                  <option value="14">14 days</option>
+                  <option value="30">30 days</option>
+                  <option value="90">90 days</option>
+                  <option value="365">1 year</option>
+                </select>
+              </label>
+            </div>
+          </fieldset>
+        </div>
         {!hasVenues && (
           <p className="operator-inline-warning">
             <CircleAlert aria-hidden size={15} /> Create a venue first.
@@ -768,8 +943,11 @@ function CourtComposer({
         )}
         <div className="operator-form-footer">
           <ActionNotice state={state} />
-          <SubmitButton pending={pending} disabled={!hasVenues}>
-            <Plus aria-hidden size={16} /> Create court draft
+          <SubmitButton
+            pending={pending}
+            disabled={!hasVenues || uploadState === "uploading"}
+          >
+            <Plus aria-hidden size={16} /> Add court to facility
           </SubmitButton>
         </div>
       </form>
@@ -973,22 +1151,103 @@ function VenueProfileEditor({
 function CourtConfigurationEditor({
   court,
   ratePlans = [],
+  organizationId,
 }: {
   readonly court: OperatorWorkspace["venues"][number]["courts"][number];
   readonly ratePlans?: OperatorWorkspace["ratePlans"];
+  readonly organizationId: string;
 }) {
   const [state, action, pending] = useActionState(
     updateCourtBookingConfigurationAction,
     initialOperatorActionState,
   );
+  const [imageUrl, setImageUrl] = useState(court.imageUrl ?? "");
+  const [uploadState, setUploadState] = useState<
+    "idle" | "uploading" | "ready" | "error"
+  >("idle");
+  const [uploadMessage, setUploadMessage] = useState("");
+  const uploadCourtImage = async (file?: File) => {
+    if (!file) return;
+    setUploadState("uploading");
+    setUploadMessage("Optimizing your court image…");
+    try {
+      const prepared = await optimizeImageUpload(file);
+      const stored = await upload(
+        createCourtMediaPath(organizationId, prepared.type),
+        prepared,
+        {
+          access: "public",
+          clientPayload: JSON.stringify({
+            organizationId,
+            fileName: prepared.name,
+            contentType: prepared.type,
+            size: prepared.size,
+            purpose: "court",
+          }),
+          contentType: prepared.type,
+          handleUploadUrl: "/api/media/upload",
+          onUploadProgress: ({ percentage }) => {
+            setUploadMessage(`Uploading… ${Math.round(percentage)}%`);
+          },
+        },
+      );
+      if (!stored.url) {
+        throw new Error("Duna storage did not return a court image URL.");
+      }
+      setImageUrl(stored.url);
+      setUploadState("ready");
+      setUploadMessage("Court image optimized and ready to save.");
+    } catch (error) {
+      setUploadState("error");
+      setUploadMessage(
+        error instanceof Error ? error.message : "Court image upload failed.",
+      );
+    }
+  };
   return (
     <details className="operator-inline-editor">
       <summary>
-        <Gauge aria-hidden size={16} /> Booking rules
+        <Gauge aria-hidden size={16} /> Court details & booking rules
       </summary>
       <form action={action} className="operator-form">
         <input type="hidden" name="courtId" value={court.id} />
         <div className="operator-form-grid operator-form-grid--two">
+          <div className="operator-field--wide operator-venue-image">
+            <span>Court image</span>
+            {imageUrl && (
+              <div
+                aria-label={`Current image for ${court.name}`}
+                className="operator-venue-image__preview"
+                style={{ backgroundImage: `url("${imageUrl}")` }}
+              />
+            )}
+            <label className="operator-venue-image__upload">
+              <UploadCloud aria-hidden size={18} />
+              <span>
+                <strong>
+                  {imageUrl ? "Replace image" : "Add court image"}
+                </strong>
+                <small>JPEG, PNG, WebP, or AVIF · up to 15 MB</small>
+              </span>
+              <input
+                accept="image/avif,image/jpeg,image/png,image/webp"
+                disabled={uploadState === "uploading"}
+                onChange={(event) => {
+                  void uploadCourtImage(event.target.files?.[0]);
+                }}
+                type="file"
+              />
+            </label>
+            {uploadMessage && (
+              <p
+                className={`operator-upload-status operator-upload-status--${uploadState}`}
+                role={uploadState === "error" ? "alert" : "status"}
+              >
+                {uploadMessage}
+              </p>
+            )}
+            <input name="imageUrl" type="hidden" value={imageUrl} />
+          </div>
           <label>
             <span>Capacity</span>
             <input
@@ -1120,7 +1379,12 @@ function CourtConfigurationEditor({
         </label>
         <div className="operator-form-footer">
           <ActionNotice state={state} />
-          <SubmitButton pending={pending}>Apply booking rules</SubmitButton>
+          <SubmitButton
+            disabled={uploadState === "uploading"}
+            pending={pending}
+          >
+            Save court details
+          </SubmitButton>
         </div>
       </form>
     </details>
@@ -1137,6 +1401,25 @@ function scheduleTime(minute: number) {
     minute: "2-digit",
     timeZone: "UTC",
   }).format(new Date(Date.UTC(2020, 0, 1, hour, minutes)));
+}
+
+function courtScheduleSummary(
+  court: OperatorWorkspace["venues"][number]["courts"][number],
+) {
+  const bookable = court.schedule.filter(
+    (block) => block.mode !== "blocked" && block.mode !== "maintenance",
+  );
+  if (bookable.length === 0) return "No weekly availability";
+  const weekdays = [...new Set(bookable.map((block) => block.weekday))].sort();
+  const dayLabel =
+    weekdays.length === 7
+      ? "Every day"
+      : weekdays.join(",") === "1,2,3,4,5"
+        ? "Weekdays"
+        : weekdays.map((day) => scheduleDayNames[day]).join(", ");
+  const earliest = Math.min(...bookable.map((block) => block.startsAtMinute));
+  const latest = Math.max(...bookable.map((block) => block.endsAtMinute));
+  return `${dayLabel} · ${scheduleTime(earliest)}–${scheduleTime(latest)}`;
 }
 
 function ScheduleCopilot({
@@ -1311,28 +1594,32 @@ function FacilityInventory({
       </header>
       <div className="operator-facility-list">
         {workspace.venues.map((venue) => (
-          <article
-            className="operator-facility"
-            key={venue.id}
-            style={
-              venue.heroImageTreatmentUrl || venue.heroImageUrl
-                ? {
-                    backgroundImage: `linear-gradient(110deg, rgba(7, 24, 37, .96), rgba(7, 24, 37, .66)), url(${venue.heroImageTreatmentUrl ?? venue.heroImageUrl})`,
-                  }
-                : undefined
-            }
-          >
-            <header>
+          <article className="operator-facility" key={venue.id}>
+            <div
+              className={`operator-facility__hero ${
+                venue.heroImageTreatmentUrl || venue.heroImageUrl
+                  ? "operator-facility__hero--image"
+                  : ""
+              }`}
+              style={
+                venue.heroImageTreatmentUrl || venue.heroImageUrl
+                  ? {
+                      backgroundImage: `linear-gradient(90deg, rgba(6, 24, 38, .88), rgba(6, 24, 38, .24)), url("${venue.heroImageTreatmentUrl ?? venue.heroImageUrl}")`,
+                    }
+                  : undefined
+              }
+            >
               <span>
+                <small>Facility</small>
                 <strong>{venue.name}</strong>
-                <small>
-                  {venue.locality ?? "City missing"} · {venue.timezone}
-                </small>
+                <em>
+                  {venue.locality ?? "Location incomplete"} · {venue.timezone}
+                </em>
               </span>
               <Badge tone={venue.status === "active" ? "live" : "warning"}>
                 {venue.status}
               </Badge>
-            </header>
+            </div>
             <section className="operator-venue-metrics">
               <span>
                 <small>Utilization · 30d</small>
@@ -1353,51 +1640,124 @@ function FacilityInventory({
                 </Numeric>
               </span>
             </section>
-            <div>
+            <div className="operator-court-layout">
               {venue.courts.map((court) => {
                 const rate = workspace.ratePlans.find(
                   (item) => item.id === court.ratePlanId,
                 );
+                const imageUrl =
+                  court.imageUrl ??
+                  venue.heroImageTreatmentUrl ??
+                  venue.heroImageUrl;
                 return (
-                  <section key={court.id}>
-                    <span>
-                      <strong>{court.name}</strong>
-                      <small>
-                        {court.surface} · {court.bookingPolicy} ·{" "}
-                        {court.minimumDurationMinutes}–
-                        {court.maximumDurationMinutes} min
-                      </small>
-                    </span>
-                    <span>
-                      <Numeric>
-                        {rate
-                          ? formatMoney(
-                              rate.nonMemberAmountMinor ?? rate.baseAmountMinor,
-                              rate.currency,
-                            )
-                          : "No rate"}
-                      </Numeric>
+                  <section className="operator-court-card" key={court.id}>
+                    <div
+                      className={`operator-court-card__media ${
+                        imageUrl ? "operator-court-card__media--image" : ""
+                      }`}
+                      style={
+                        imageUrl
+                          ? {
+                              backgroundImage: `linear-gradient(180deg, rgba(6, 24, 38, .04), rgba(6, 24, 38, .72)), url("${imageUrl}")`,
+                            }
+                          : undefined
+                      }
+                    >
+                      {!imageUrl && (
+                        <span>
+                          <Waves aria-hidden size={26} />
+                          Add a court image
+                        </span>
+                      )}
                       <Badge
                         tone={court.status === "active" ? "live" : "warning"}
                       >
                         {court.status}
                       </Badge>
-                      <i className="operator-utilization-bar">
+                    </div>
+                    <div className="operator-court-card__body">
+                      <header>
+                        <span>
+                          <small>{court.surface.replace("-", " ")}</small>
+                          <strong>{court.name}</strong>
+                        </span>
+                        <span className="operator-court-card__capacity">
+                          {court.capacity}
+                          <small>players</small>
+                        </span>
+                      </header>
+                      <dl className="operator-court-card__facts">
+                        <div>
+                          <dt>
+                            <CalendarClock aria-hidden size={15} /> Availability
+                          </dt>
+                          <dd>{courtScheduleSummary(court)}</dd>
+                        </div>
+                        <div>
+                          <dt>
+                            <Banknote aria-hidden size={15} /> Booking
+                          </dt>
+                          <dd>
+                            {rate
+                              ? `${formatMoney(
+                                  rate.nonMemberAmountMinor ??
+                                    rate.baseAmountMinor,
+                                  rate.currency,
+                                )} / ${rate.rateUnitMinutes} min`
+                              : "Add a rate before publishing"}
+                          </dd>
+                        </div>
+                      </dl>
+                      <div className="operator-court-card__signals">
+                        <span>
+                          <strong>
+                            {court.utilization.percent.toFixed(0)}%
+                          </strong>
+                          <small>utilized</small>
+                        </span>
+                        <span>
+                          <strong>{court.utilization.bookingCount30d}</strong>
+                          <small>bookings · 30d</small>
+                        </span>
+                        <span>
+                          <strong>
+                            {court.durationOptionsMinutes.join(" / ")}
+                          </strong>
+                          <small>minutes</small>
+                        </span>
+                      </div>
+                      <i
+                        aria-label={`${court.utilization.percent.toFixed(0)}% utilized`}
+                        className="operator-utilization-bar"
+                      >
                         <b
                           style={{
                             width: `${Math.max(2, court.utilization.percent)}%`,
                           }}
                         />
                       </i>
-                    </span>
-                    <ConfirmCourt court={court} />
-                    <CourtConfigurationEditor
-                      court={court}
-                      ratePlans={workspace.ratePlans}
-                    />
+                      <div className="operator-court-card__actions">
+                        <ConfirmCourt court={court} />
+                        <CourtConfigurationEditor
+                          court={court}
+                          organizationId={workspace.organization.id}
+                          ratePlans={workspace.ratePlans}
+                        />
+                      </div>
+                    </div>
                   </section>
                 );
               })}
+              <a
+                className="operator-court-card operator-court-card--add"
+                href="#court-builder"
+              >
+                <span>
+                  <Plus aria-hidden size={22} />
+                </span>
+                <strong>Add another court</strong>
+                <small>Place a new bookable resource in {venue.name}.</small>
+              </a>
               {venue.courts.length === 0 && (
                 <p className="operator-inline-warning">
                   Add a court before this venue can be published.

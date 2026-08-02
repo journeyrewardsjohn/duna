@@ -396,6 +396,25 @@ export function loadDemoOperatorWorkspace(
       "Demo organization was not found.",
     );
   }
+  const commerce = loadDemoCommerceWorkspace();
+  const venueId = "10000000-0000-4000-8000-000000000101";
+  const ratePlanId = "10000000-0000-4000-8000-000000000102";
+  const courtOneId = "10000000-0000-4000-8000-000000000103";
+  const courtTwoId = "10000000-0000-4000-8000-000000000104";
+  const nextSession = new Date();
+  nextSession.setDate(nextSession.getDate() + 1);
+  nextSession.setHours(18, 0, 0, 0);
+  const nextSessionEnd = new Date(nextSession.getTime() + 90 * 60_000);
+  const schedule = (courtOffset: number) =>
+    Array.from({ length: 7 }, (_, weekday) => ({
+      id: `10000000-0000-4000-8000-${String(
+        200 + courtOffset * 10 + weekday,
+      ).padStart(12, "0")}`,
+      weekday,
+      startsAtMinute: weekday === 0 || weekday === 6 ? 480 : 420,
+      endsAtMinute: weekday === 0 || weekday === 6 ? 1_200 : 1_320,
+      mode: "open" as const,
+    }));
   return {
     organization: {
       id: demoOrganization.id,
@@ -408,8 +427,122 @@ export function loadDemoOperatorWorkspace(
       stripeTaxEnabled: false,
       taxRegistrationStatus: "not-configured",
     },
-    ratePlans: [],
-    venues: [],
+    ratePlans: [
+      {
+        id: ratePlanId,
+        name: "Standard court time",
+        currency: "USD",
+        baseAmountMinor: 6_000,
+        memberAmountMinor: 4_800,
+        nonMemberAmountMinor: 6_000,
+        rateUnitMinutes: 60,
+      },
+    ],
+    venues: [
+      {
+        id: venueId,
+        name: "Beach Elite Training Center",
+        description:
+          "Two purpose-built sand courts for training, rentals, and competition.",
+        slug: "beach-elite-training-center",
+        status: "active",
+        temporary: false,
+        capacity: 24,
+        amenities: [
+          "Outdoor showers",
+          "Equipment storage",
+          "Spectator seating",
+        ],
+        addressLine1: "1400 Ocean Front Walk",
+        locality: "Manhattan Beach",
+        administrativeArea: "CA",
+        postalCode: "90266",
+        countryCode: "US",
+        latitude: 33.8847,
+        longitude: -118.4109,
+        timezone: "America/Los_Angeles",
+        utilization: {
+          percent: 58,
+          bookedMinutes30d: 9_570,
+          availableMinutes30d: 16_500,
+          bookingCount30d: 84,
+          nextBookingAt: nextSession.toISOString(),
+        },
+        courts: [
+          {
+            id: courtOneId,
+            venueId,
+            name: "Championship Court",
+            surface: "sand",
+            lit: true,
+            capacity: 12,
+            status: "active",
+            bookingPolicy: "public",
+            ratePlanId,
+            minimumDurationMinutes: 60,
+            maximumDurationMinutes: 120,
+            durationOptionsMinutes: [60, 90, 120],
+            bookingIncrementMinutes: 30,
+            bufferBeforeMinutes: 0,
+            bufferAfterMinutes: 15,
+            minimumNoticeMinutes: 120,
+            maximumAdvanceDays: 30,
+            cancellationPolicy: {
+              title: "Court booking cancellation policy",
+              markdown:
+                "Cancel at least 24 hours before the reservation for a full refund.",
+              refundBeforeHours: 24,
+              lateCancellation: "Late cancellations are non-refundable.",
+              requireFullScroll: false,
+            },
+            schedule: schedule(1),
+            overrides: [],
+            utilization: {
+              percent: 72,
+              bookedMinutes30d: 5_940,
+              availableMinutes30d: 8_250,
+              bookingCount30d: 51,
+              nextBookingAt: nextSession.toISOString(),
+            },
+          },
+          {
+            id: courtTwoId,
+            venueId,
+            name: "Community Court",
+            surface: "sand",
+            lit: false,
+            capacity: 12,
+            status: "active",
+            bookingPolicy: "members",
+            ratePlanId,
+            minimumDurationMinutes: 60,
+            maximumDurationMinutes: 120,
+            durationOptionsMinutes: [60, 90, 120],
+            bookingIncrementMinutes: 30,
+            bufferBeforeMinutes: 0,
+            bufferAfterMinutes: 15,
+            minimumNoticeMinutes: 120,
+            maximumAdvanceDays: 30,
+            cancellationPolicy: {
+              title: "Court booking cancellation policy",
+              markdown:
+                "Cancel at least 24 hours before the reservation for a full refund.",
+              refundBeforeHours: 24,
+              lateCancellation: "Late cancellations are non-refundable.",
+              requireFullScroll: false,
+            },
+            schedule: schedule(2),
+            overrides: [],
+            utilization: {
+              percent: 44,
+              bookedMinutes30d: 3_630,
+              availableMinutes30d: 8_250,
+              bookingCount30d: 33,
+            },
+          },
+        ],
+      },
+    ],
     sessions: [],
     participants: [],
     invitations: [],
@@ -425,7 +558,28 @@ export function loadDemoOperatorWorkspace(
       sms: false,
       push: false,
     },
-    ...loadDemoCommerceWorkspace(),
+    ...commerce,
+    calendar: {
+      ...commerce.calendar,
+      entries: [
+        {
+          id: "demo-session-championship-court",
+          sourceType: "session",
+          title: "Sunset doubles training",
+          startsAt: nextSession.toISOString(),
+          endsAt: nextSessionEnd.toISOString(),
+          timezone: "America/Los_Angeles",
+          status: "registration-open",
+          venueName: "Beach Elite Training Center",
+          courtId: courtOneId,
+          courtName: "Championship Court",
+          participantCount: 6,
+          capacity: 8,
+          color: "#2867a5",
+          draggable: true,
+        },
+      ],
+    },
   };
 }
 
@@ -973,6 +1127,7 @@ export async function loadOperatorWorkspace(
             venueId: court.venueId,
             name: court.name,
             surface: court.surface,
+            imageUrl: court.imageUrl ?? undefined,
             lit: court.lit,
             capacity: court.capacity,
             status: court.status,
@@ -2417,6 +2572,7 @@ export async function createCourt(input: {
   readonly venueId: string;
   readonly name: string;
   readonly surface: string;
+  readonly imageUrl?: string;
   readonly lit: boolean;
   readonly capacity?: number;
   readonly bookingPolicy: "public" | "members" | "tiers" | "staff" | "none";
@@ -2533,6 +2689,7 @@ export async function createCourt(input: {
     venueId: input.venueId,
     name: input.name.trim(),
     surface: input.surface.trim().toLowerCase(),
+    imageUrl: input.imageUrl?.trim() || null,
     lit: input.lit,
     capacity: input.capacity ?? 12,
     status: "draft" as const,
@@ -2687,6 +2844,7 @@ export async function updateVenueProfile(input: {
 export async function updateCourtBookingConfiguration(input: {
   readonly actor: ApiActor;
   readonly courtId: string;
+  readonly imageUrl?: string;
   readonly ratePlanId: string | null;
   readonly capacity: number;
   readonly durationOptionsMinutes: readonly number[];
@@ -2745,6 +2903,10 @@ export async function updateCourtBookingConfiguration(input: {
     );
   }
   const values = {
+    imageUrl:
+      input.imageUrl === undefined
+        ? court.imageUrl
+        : input.imageUrl.trim() || null,
     ratePlanId: input.ratePlanId,
     capacity: input.capacity,
     durationOptionsMinutes,
@@ -2765,6 +2927,7 @@ export async function updateCourtBookingConfiguration(input: {
       entityType: "court",
       entityId: input.courtId,
       beforeHash: stableHash({
+        imageUrl: court.imageUrl,
         ratePlanId: court.ratePlanId,
         capacity: court.capacity,
         durationOptionsMinutes: court.durationOptionsMinutes,
