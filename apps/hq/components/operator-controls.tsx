@@ -5,9 +5,11 @@ import { formatMoney } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import { upload } from "@vercel/blob/client";
 import {
+  Activity,
   ArrowRight,
   ArrowUpRight,
   Banknote,
+  Bell,
   Building2,
   CalendarClock,
   CalendarOff,
@@ -15,16 +17,23 @@ import {
   Camera,
   Check,
   CircleAlert,
+  Clock3,
   CreditCard,
   Gauge,
   ImageIcon,
   Landmark,
+  Mail,
   MapPinned,
   MessageSquareText,
   Plus,
+  Send,
   ShieldCheck,
   Sparkles,
+  Smartphone,
+  UserRoundCheck,
+  UserRoundX,
   UserPlus,
+  Users,
   UploadCloud,
   Waves,
 } from "lucide-react";
@@ -108,6 +117,221 @@ function SubmitButton({
     >
       {pending ? "Saving…" : children}
     </button>
+  );
+}
+
+type MarketingSegment =
+  | "all-active"
+  | "active-members"
+  | "inactive-30-days"
+  | "high-churn-risk"
+  | "upcoming-participants";
+type MarketingTrigger =
+  | "manual"
+  | "no-booking"
+  | "payment-failed"
+  | "event-published"
+  | "membership-renewal";
+type MarketingChannel = "email" | "sms" | "push";
+type MarketingFlowStep = "segment" | "trigger" | "action";
+
+type MarketingFlowOption<T extends string> = {
+  readonly value: T;
+  readonly label: string;
+  readonly description: string;
+  readonly signal: string;
+};
+
+const marketingSegmentOptions: readonly MarketingFlowOption<MarketingSegment>[] =
+  [
+    {
+      value: "all-active",
+      label: "All active people",
+      description: "Everyone currently connected to this organization.",
+      signal: "Active relationship",
+    },
+    {
+      value: "active-members",
+      label: "Active members",
+      description: "People with a current, valid membership.",
+      signal: "Membership status",
+    },
+    {
+      value: "inactive-30-days",
+      label: "Drifting members",
+      description: "People who have not booked in the selected window.",
+      signal: "Booking recency",
+    },
+    {
+      value: "high-churn-risk",
+      label: "High churn signal",
+      description: "Members whose recent behavior suggests they may leave.",
+      signal: "Duna risk model",
+    },
+    {
+      value: "upcoming-participants",
+      label: "Upcoming participants",
+      description: "People registered for a future event or service.",
+      signal: "Future booking",
+    },
+  ];
+
+const marketingTriggerOptions: readonly MarketingFlowOption<MarketingTrigger>[] =
+  [
+    {
+      value: "manual",
+      label: "After manual review",
+      description: "Hold the audience until an operator starts the flow.",
+      signal: "Operator controlled",
+    },
+    {
+      value: "no-booking",
+      label: "No recent booking",
+      description: "Enter when someone reaches the inactivity window.",
+      signal: "Daily evaluation",
+    },
+    {
+      value: "payment-failed",
+      label: "Payment failed",
+      description: "Respond when a recurring payment needs attention.",
+      signal: "Billing event",
+    },
+    {
+      value: "event-published",
+      label: "Event published",
+      description: "React when a new event becomes available to book.",
+      signal: "Publishing event",
+    },
+    {
+      value: "membership-renewal",
+      label: "Membership renewal",
+      description: "Reach members around their upcoming renewal.",
+      signal: "Renewal window",
+    },
+  ];
+
+const marketingChannelOptions: readonly MarketingFlowOption<MarketingChannel>[] =
+  [
+    {
+      value: "email",
+      label: "Email",
+      description: "A rich message delivered through Resend.",
+      signal: "Subject + message",
+    },
+    {
+      value: "sms",
+      label: "SMS / RCS",
+      description: "A concise mobile message routed through Sent.dm.",
+      signal: "Mobile message",
+    },
+    {
+      value: "push",
+      label: "Push",
+      description: "A timely notification in the Duna apps.",
+      signal: "App notification",
+    },
+  ];
+
+function MarketingSegmentGlyph({
+  value,
+  size = 20,
+}: {
+  readonly value: MarketingSegment;
+  readonly size?: number;
+}) {
+  if (value === "active-members")
+    return <UserRoundCheck aria-hidden size={size} />;
+  if (value === "inactive-30-days")
+    return <UserRoundX aria-hidden size={size} />;
+  if (value === "high-churn-risk") return <Activity aria-hidden size={size} />;
+  if (value === "upcoming-participants")
+    return <CalendarClock aria-hidden size={size} />;
+  return <Users aria-hidden size={size} />;
+}
+
+function MarketingTriggerGlyph({
+  value,
+  size = 20,
+}: {
+  readonly value: MarketingTrigger;
+  readonly size?: number;
+}) {
+  if (value === "no-booking") return <Clock3 aria-hidden size={size} />;
+  if (value === "payment-failed") return <CreditCard aria-hidden size={size} />;
+  if (value === "event-published")
+    return <CalendarPlus aria-hidden size={size} />;
+  if (value === "membership-renewal") return <Gauge aria-hidden size={size} />;
+  return <ShieldCheck aria-hidden size={size} />;
+}
+
+function MarketingChannelGlyph({
+  value,
+  size = 20,
+}: {
+  readonly value: MarketingChannel;
+  readonly size?: number;
+}) {
+  if (value === "sms") return <Smartphone aria-hidden size={size} />;
+  if (value === "push") return <Bell aria-hidden size={size} />;
+  return <Mail aria-hidden size={size} />;
+}
+
+function MarketingCanvasNode({
+  step,
+  eyebrow,
+  title,
+  description,
+  status,
+  selected,
+  icon,
+  onSelect,
+}: {
+  readonly step: MarketingFlowStep;
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly description: string;
+  readonly status: string;
+  readonly selected: boolean;
+  readonly icon: ReactNode;
+  readonly onSelect: () => void;
+}) {
+  return (
+    <button
+      aria-label={`Edit ${eyebrow}: ${title}`}
+      aria-pressed={selected}
+      className={`marketing-canvas-node marketing-canvas-node--${step} ${
+        selected ? "is-selected" : ""
+      }`}
+      onClick={onSelect}
+      type="button"
+    >
+      <span className="marketing-canvas-node__topline">
+        <span>{eyebrow}</span>
+        <small>{status}</small>
+      </span>
+      <span className="marketing-canvas-node__body">
+        <span className="marketing-canvas-node__icon">{icon}</span>
+        <span>
+          <strong>{title}</strong>
+          <small>{description}</small>
+        </span>
+      </span>
+      <span className="marketing-canvas-node__edit">
+        Select to edit <ArrowRight aria-hidden size={14} />
+      </span>
+    </button>
+  );
+}
+
+function MarketingFlowConnector({ label }: { readonly label: string }) {
+  return (
+    <span className="marketing-flow-connector" aria-hidden>
+      <small>{label}</small>
+      <span>
+        <i />
+      </span>
+      <ArrowRight size={17} />
+    </span>
   );
 }
 
@@ -2211,116 +2435,404 @@ function MessageComposer({
   );
 }
 
-function MarketingFlowComposer() {
-  const [trigger, setTrigger] = useState("no-booking");
+function MarketingFlowComposer({
+  workspace,
+}: {
+  readonly workspace: OperatorWorkspace;
+}) {
+  const [selectedStep, setSelectedStep] =
+    useState<MarketingFlowStep>("segment");
+  const [segment, setSegment] = useState<MarketingSegment>("inactive-30-days");
+  const [trigger, setTrigger] = useState<MarketingTrigger>("no-booking");
+  const [channel, setChannel] = useState<MarketingChannel>("email");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [triggerDays, setTriggerDays] = useState("30");
   const [state, action, pending] = useActionState(
     createMarketingFlowAction,
     initialOperatorActionState,
   );
+  const segmentOption = marketingSegmentOptions.find(
+    (option) => option.value === segment,
+  )!;
+  const triggerOption = marketingTriggerOptions.find(
+    (option) => option.value === trigger,
+  )!;
+  const channelOption = marketingChannelOptions.find(
+    (option) => option.value === channel,
+  )!;
+  const providerReady = workspace.deliveryProviders[channel];
+  const flowHasMessage = body.trim().length > 0;
+  const nextStep: MarketingFlowStep =
+    selectedStep === "segment"
+      ? "trigger"
+      : selectedStep === "trigger"
+        ? "action"
+        : "segment";
+  const flowSummary =
+    trigger === "no-booking"
+      ? `${segmentOption.label} enter after ${triggerDays || "30"} days without a booking, then receive ${channelOption.label.toLowerCase()}.`
+      : `${segmentOption.label} enter when “${triggerOption.label.toLowerCase()}” occurs, then receive ${channelOption.label.toLowerCase()}.`;
+
+  function addPersonalization() {
+    setBody((current) => {
+      if (current.includes("{{first_name}}")) return current;
+      return current.length > 0
+        ? `Hi {{first_name}}, ${current}`
+        : "Hi {{first_name}}, ";
+    });
+  }
+
   return (
-    <section className="hq-card operator-control-card marketing-flow-builder">
+    <section className="hq-card operator-control-card marketing-flow-builder marketing-studio">
       <header className="hq-card-heading">
         <div>
-          <span className="hq-eyebrow">Automations · simple by design</span>
-          <h2>Segment → Trigger → Action</h2>
+          <span className="hq-eyebrow">
+            Automation studio · visual by design
+          </span>
+          <h2>Build the journey you can see.</h2>
           <p>
-            Duna resolves membership, activity, consent, and guardian routing
-            behind these three choices.
+            Choose each connected step on the canvas. Duna handles audience
+            qualification, consent, and guardian-safe delivery at review.
           </p>
         </div>
         <Sparkles aria-hidden size={24} />
       </header>
-      <form action={action} className="operator-form">
-        <div className="marketing-flow-path" aria-label="Marketing flow">
-          <label>
-            <small>1 · Segment</small>
-            <strong>Who?</strong>
-            <select name="segment" defaultValue="inactive-30-days">
-              <option value="all-active">All active people</option>
-              <option value="active-members">Active members</option>
-              <option value="inactive-30-days">Inactive 30+ days</option>
-              <option value="high-churn-risk">High churn signal</option>
-              <option value="upcoming-participants">
-                Upcoming participants
-              </option>
-            </select>
-          </label>
-          <span aria-hidden>→</span>
-          <label>
-            <small>2 · Trigger</small>
-            <strong>When?</strong>
-            <select
-              name="trigger"
-              value={trigger}
-              onChange={(event) => setTrigger(event.target.value)}
-            >
-              <option value="manual">After manual review</option>
-              <option value="no-booking">No recent booking</option>
-              <option value="payment-failed">Payment failed</option>
-              <option value="event-published">Event published</option>
-              <option value="membership-renewal">Membership renewal</option>
-            </select>
-          </label>
-          <span aria-hidden>→</span>
-          <label>
-            <small>3 · Action</small>
-            <strong>What?</strong>
-            <select name="channel" defaultValue="email">
-              <option value="email">Send email</option>
-              <option value="sms">Send SMS / RCS</option>
-              <option value="push">Send push</option>
-            </select>
-          </label>
+      <form action={action} className="operator-form marketing-studio__form">
+        <input name="segment" type="hidden" value={segment} />
+        <input name="trigger" type="hidden" value={trigger} />
+        <input name="channel" type="hidden" value={channel} />
+        <input name="triggerDays" type="hidden" value={triggerDays} />
+        <input name="subject" type="hidden" value={subject} />
+        <input name="body" type="hidden" value={body} />
+
+        <div className="marketing-studio__utility">
+          <span>
+            <i aria-hidden />
+            Private draft
+          </span>
+          <span>
+            {workspace.messageRecipients.length} connected{" "}
+            {workspace.messageRecipients.length === 1 ? "person" : "people"}
+          </span>
+          <span>
+            {providerReady ? "Delivery rail connected" : "Draft-only channel"}
+          </span>
         </div>
-        <div className="operator-form-grid operator-form-grid--two">
-          <label>
-            <span>Flow name</span>
-            <input name="name" placeholder="Bring regulars back" required />
-          </label>
-          {trigger === "no-booking" && (
-            <label>
-              <span>Days without a booking</span>
+
+        <div className="marketing-studio__workspace">
+          <section className="marketing-flow-canvas-shell">
+            <header className="marketing-flow-identity">
+              <span className="hq-eyebrow">Flow blueprint</span>
               <input
-                defaultValue="30"
-                max="365"
-                min="1"
-                name="triggerDays"
-                type="number"
+                aria-label="Flow name"
+                name="name"
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Name this automation"
+                required
+                value={name}
               />
-            </label>
-          )}
-          <label className="operator-field--wide">
-            <span>Internal description</span>
-            <input
-              name="description"
-              placeholder="Reconnect members before they drift away."
-            />
-          </label>
-          <label className="operator-field--wide">
-            <span>Subject · email only</span>
-            <input name="subject" placeholder="Ready for your next run?" />
-          </label>
-          <label className="operator-field--wide">
-            <span>Message</span>
-            <textarea
-              name="body"
-              placeholder="Hi {{first_name}}, we saved a few upcoming sessions you may like…"
-              required
-              rows={6}
-            />
-          </label>
+              <input
+                aria-label="Internal description"
+                name="description"
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Add a short note for your team"
+                value={description}
+              />
+            </header>
+
+            <div
+              className="marketing-flow-canvas"
+              aria-label="Marketing automation flow"
+              role="group"
+            >
+              <MarketingCanvasNode
+                description={segmentOption.signal}
+                eyebrow="1 · Segment"
+                icon={<MarketingSegmentGlyph value={segment} />}
+                onSelect={() => setSelectedStep("segment")}
+                selected={selectedStep === "segment"}
+                status="Configured"
+                step="segment"
+                title={segmentOption.label}
+              />
+              <MarketingFlowConnector label="qualifies" />
+              <MarketingCanvasNode
+                description={
+                  trigger === "no-booking"
+                    ? `${triggerDays || "30"} day window`
+                    : triggerOption.signal
+                }
+                eyebrow="2 · Trigger"
+                icon={<MarketingTriggerGlyph value={trigger} />}
+                onSelect={() => setSelectedStep("trigger")}
+                selected={selectedStep === "trigger"}
+                status="Configured"
+                step="trigger"
+                title={triggerOption.label}
+              />
+              <MarketingFlowConnector label="then" />
+              <MarketingCanvasNode
+                description={
+                  providerReady
+                    ? "Delivery rail connected"
+                    : "Safe to save as draft"
+                }
+                eyebrow="3 · Action"
+                icon={<Send aria-hidden size={20} />}
+                onSelect={() => setSelectedStep("action")}
+                selected={selectedStep === "action"}
+                status={flowHasMessage ? "Configured" : "Needs copy"}
+                step="action"
+                title={`Send ${channelOption.label}`}
+              />
+            </div>
+
+            <div className="marketing-flow-explanation" aria-live="polite">
+              <span className="marketing-flow-explanation__icon">
+                <Sparkles aria-hidden size={17} />
+              </span>
+              <span>
+                <small>What happens</small>
+                <strong>{flowSummary}</strong>
+              </span>
+            </div>
+
+            <footer className="marketing-flow-guardrail">
+              <ShieldCheck aria-hidden size={18} />
+              <span>
+                <strong>Review stays between this draft and delivery.</strong>
+                Duna re-checks consent, membership, and guardian routing before
+                anyone can receive a message.
+              </span>
+            </footer>
+          </section>
+
+          <aside
+            className={`marketing-flow-inspector marketing-flow-inspector--${selectedStep}`}
+            aria-label={`Edit ${selectedStep}`}
+          >
+            <header>
+              <span>
+                Step{" "}
+                {selectedStep === "segment"
+                  ? "1"
+                  : selectedStep === "trigger"
+                    ? "2"
+                    : "3"}{" "}
+                of 3
+              </span>
+              <strong>
+                {selectedStep === "segment"
+                  ? "Who enters?"
+                  : selectedStep === "trigger"
+                    ? "What starts it?"
+                    : "What should Duna do?"}
+              </strong>
+              <p>
+                {selectedStep === "segment"
+                  ? "Choose a live audience rule. The final people are resolved at review."
+                  : selectedStep === "trigger"
+                    ? "Choose the moment that moves a qualified person forward."
+                    : "Choose one consented channel, then make the message feel personal."}
+              </p>
+            </header>
+
+            {selectedStep === "segment" && (
+              <div className="marketing-option-list">
+                {marketingSegmentOptions.map((option) => (
+                  <button
+                    aria-pressed={segment === option.value}
+                    className={segment === option.value ? "is-selected" : ""}
+                    key={option.value}
+                    onClick={() => setSegment(option.value)}
+                    type="button"
+                  >
+                    <span className="marketing-option-list__icon">
+                      <MarketingSegmentGlyph value={option.value} />
+                    </span>
+                    <span>
+                      <strong>{option.label}</strong>
+                      <small>{option.description}</small>
+                      <em>{option.signal}</em>
+                    </span>
+                    <span className="marketing-option-list__check">
+                      {segment === option.value ? (
+                        <Check aria-hidden size={15} />
+                      ) : null}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {selectedStep === "trigger" && (
+              <>
+                <div className="marketing-option-list">
+                  {marketingTriggerOptions.map((option) => (
+                    <button
+                      aria-pressed={trigger === option.value}
+                      className={trigger === option.value ? "is-selected" : ""}
+                      key={option.value}
+                      onClick={() => setTrigger(option.value)}
+                      type="button"
+                    >
+                      <span className="marketing-option-list__icon">
+                        <MarketingTriggerGlyph value={option.value} />
+                      </span>
+                      <span>
+                        <strong>{option.label}</strong>
+                        <small>{option.description}</small>
+                        <em>{option.signal}</em>
+                      </span>
+                      <span className="marketing-option-list__check">
+                        {trigger === option.value ? (
+                          <Check aria-hidden size={15} />
+                        ) : null}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {trigger === "no-booking" && (
+                  <label className="marketing-trigger-window">
+                    <span>
+                      <strong>Inactivity window</strong>
+                      <small>
+                        Re-evaluated daily before anyone enters the flow.
+                      </small>
+                    </span>
+                    <span>
+                      <input
+                        aria-label="Days without a booking"
+                        max="365"
+                        min="1"
+                        onChange={(event) => setTriggerDays(event.target.value)}
+                        type="number"
+                        value={triggerDays}
+                      />
+                      days
+                    </span>
+                  </label>
+                )}
+              </>
+            )}
+
+            {selectedStep === "action" && (
+              <div className="marketing-action-editor">
+                <div
+                  className="marketing-channel-picker"
+                  aria-label="Delivery channel"
+                  role="group"
+                >
+                  {marketingChannelOptions.map((option) => (
+                    <button
+                      aria-label={`Send ${option.label}`}
+                      aria-pressed={channel === option.value}
+                      className={channel === option.value ? "is-selected" : ""}
+                      key={option.value}
+                      onClick={() => setChannel(option.value)}
+                      type="button"
+                    >
+                      <MarketingChannelGlyph value={option.value} />
+                      <span>
+                        <strong>{option.label}</strong>
+                        <small>
+                          {workspace.deliveryProviders[option.value]
+                            ? "Connected"
+                            : "Draft only"}
+                        </small>
+                      </span>
+                      {channel === option.value ? (
+                        <Check aria-hidden size={14} />
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="marketing-message-composer">
+                  {channel === "email" && (
+                    <label>
+                      <span>Subject</span>
+                      <input
+                        onChange={(event) => setSubject(event.target.value)}
+                        placeholder="Ready for your next run?"
+                        value={subject}
+                      />
+                    </label>
+                  )}
+                  <label>
+                    <span>
+                      <span>Message</span>
+                      <button onClick={addPersonalization} type="button">
+                        + First name
+                      </button>
+                    </span>
+                    <textarea
+                      onChange={(event) => setBody(event.target.value)}
+                      placeholder="We saved a few upcoming sessions you may like…"
+                      rows={7}
+                      value={body}
+                    />
+                  </label>
+                </div>
+
+                <article
+                  className={`marketing-message-preview marketing-message-preview--${channel}`}
+                >
+                  <header>
+                    <span>
+                      <MarketingChannelGlyph value={channel} size={17} />
+                    </span>
+                    <span>
+                      <strong>{channelOption.label} preview</strong>
+                      <small>Personalization shown at send time</small>
+                    </span>
+                  </header>
+                  {channel === "email" && (
+                    <strong>
+                      {subject || "Your subject will appear here"}
+                    </strong>
+                  )}
+                  <p>
+                    {body ||
+                      "Your message preview will appear here as you write."}
+                  </p>
+                  <footer>
+                    <ShieldCheck aria-hidden size={14} />
+                    Consent and guardian routing checked at review
+                  </footer>
+                </article>
+              </div>
+            )}
+
+            <footer className="marketing-flow-inspector__footer">
+              <span>
+                <Check aria-hidden size={14} />
+                Changes update the canvas live
+              </span>
+              <button onClick={() => setSelectedStep(nextStep)} type="button">
+                {selectedStep === "action" ? "Back to segment" : "Next step"}
+                <ArrowRight aria-hidden size={15} />
+              </button>
+            </footer>
+          </aside>
         </div>
+
         <label className="operator-confirmation">
           <input name="confirmed" required type="checkbox" value="true" />
           <span>
-            <strong>Save as a private draft.</strong>
-            Activation and every outbound audience remain a separate review
-            step.
+            <strong>I reviewed this blueprint.</strong>
+            Save it as a private draft. Activation, the resolved audience, and
+            every outbound delivery remain a separate review step.
           </span>
         </label>
         <div className="operator-form-footer">
           <ActionNotice state={state} />
-          <SubmitButton pending={pending}>Save flow draft</SubmitButton>
+          <SubmitButton pending={pending} disabled={!flowHasMessage}>
+            Save visual flow draft
+          </SubmitButton>
         </div>
       </form>
     </section>
@@ -2426,7 +2938,7 @@ export function OperatorControls({
   if (module === "messages") {
     return (
       <div className="commerce-controls">
-        <MarketingFlowComposer />
+        <MarketingFlowComposer workspace={workspace} />
         <MarketingCampaignComposer />
         <MessageComposer workspace={workspace} />
       </div>
