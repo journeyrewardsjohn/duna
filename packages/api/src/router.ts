@@ -126,6 +126,11 @@ import {
   submitFormResponse,
 } from "./forms-service";
 import {
+  FamilyWalletError,
+  loadFamilyWallets,
+  transferFamilyCredits,
+} from "./family-wallet";
+import {
   createFeatureFlag,
   FeatureFlagError,
   loadFeatureFlags,
@@ -144,6 +149,10 @@ import {
   reviewGuardianship,
   updateOwnProfile,
 } from "./identity";
+import {
+  IdentityVerificationError,
+  startStripeIdentityVerification,
+} from "./identity-verification";
 import {
   changeDunaPlusMembership,
   MembershipError,
@@ -185,6 +194,14 @@ import {
   startSelfReportedMatch,
 } from "./match-service";
 import {
+  claimGuardianInvitation,
+  createGuardianInvitation,
+  inferPlayingExperienceNarrative,
+  loadGuardianInvitation,
+  ProfileOnboardingError,
+  updatePlayingProfile,
+} from "./profile-onboarding";
+import {
   approveImportedMatch,
   createRatingConfiguration,
   evaluateCurrentRating,
@@ -196,6 +213,7 @@ import {
   loadPublicProCoverage,
   loadSandDataOverview,
   mergeUnclaimedProfile,
+  queuePlayerSourceConnection,
   refreshFivbEventIndex,
   refreshWorldRankings,
   rejectImportedMatch,
@@ -601,6 +619,39 @@ function throwDomainError(error: unknown): never {
           : "INTERNAL_SERVER_ERROR";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
+  if (error instanceof FamilyWalletError) {
+    const code =
+      error.code === "DEPENDENT_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "DATABASE_REQUIRED"
+          ? "INTERNAL_SERVER_ERROR"
+          : error.code === "TRANSFER_CONFLICT"
+            ? "CONFLICT"
+            : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof IdentityVerificationError) {
+    const code =
+      error.code === "VERIFICATION_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "DATABASE_REQUIRED" || error.code === "STRIPE_REQUIRED"
+          ? "INTERNAL_SERVER_ERROR"
+          : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof ProfileOnboardingError) {
+    const code =
+      error.code === "PERSON_NOT_FOUND" || error.code === "INVITATION_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "SUBJECT_NOT_ALLOWED"
+          ? "FORBIDDEN"
+          : error.code === "INVITATION_ALREADY_CLAIMED"
+            ? "CONFLICT"
+            : error.code === "DATABASE_REQUIRED"
+              ? "INTERNAL_SERVER_ERROR"
+              : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
   if (error instanceof IdentityError) {
     const code =
       error.code === "PERSON_NOT_FOUND" ||
@@ -782,6 +833,26 @@ const publicRouter = router({
         return throwDomainError(error);
       }
     }),
+  guardianInvitation: publicProcedure
+    .input(z.object({ token: z.string().min(32).max(96) }))
+    .output(
+      z
+        .object({
+          invitationId: z.string().uuid(),
+          childDisplayName: z.string(),
+          relationship: z.string(),
+          status: z.enum(["pending", "claimed", "expired", "cancelled"]),
+          expiresAt: z.iso.datetime(),
+        })
+        .optional(),
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadGuardianInvitation(input.token, ctx.now);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   playerInvitation: publicProcedure
     .input(z.object({ inviteToken: z.string().min(32).max(96) }))
     .output(playerInvitationSchema)
@@ -914,6 +985,73 @@ const playerRouter = router({
       ctx.actor!.isDemo && !process.env.DATABASE_URL
         ? []
         : loadPlayerOrganizationWallets(ctx.actor!.personId, ctx.now),
+    ),
+  familyWallets: protectedProcedure
+    .output(
+      z
+        .array(
+          z.object({
+            dependentPersonId: z.string().uuid(),
+            dependentName: z.string(),
+            organizationId: z.string().uuid(),
+            organizationName: z.string(),
+            organizationSlug: z.string(),
+            guardianCredits: z.number().int().nonnegative(),
+            dependentCredits: z.number().int().nonnegative(),
+            fundingEnabled: z.boolean(),
+            relationshipStatus: z.enum(["pending", "verified", "rejected"]),
+          }),
+        )
+        .readonly(),
+    )
+    .query(({ ctx }) =>
+      ctx.actor!.isDemo && !process.env.DATABASE_URL
+        ? []
+        : loadFamilyWallets(ctx.actor!),
+    ),
+  transferFamilyCredits: adultProcedure
+    .use(requireScope("wallet:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "family-credit-transfer",
+        capacity: 8,
+        refillPerMinute: 2,
+      }),
+    )
+    .input(
+      z.object({
+        dependentPersonId: z.string().uuid(),
+        organizationId: z.string().uuid(),
+        credits: z.number().int().min(1).max(100_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        transferId: z.string().uuid(),
+        journalId: z.string().uuid(),
+        status: z.literal("posted"),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.transferFamilyCredits",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await transferFamilyCredits({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
     ),
   claimOrganizationInvitation: protectedProcedure
     .use(
@@ -1142,6 +1280,272 @@ const playerRouter = router({
   settings: protectedProcedure
     .output(playerSettingsSchema)
     .query(({ ctx }) => getRepository().player.settings(ctx.actor!.personId)),
+  inferPlayingExperience: protectedProcedure
+    .input(
+      z.object({
+        narrative: z.string().trim().min(12).max(1_500),
+      }),
+    )
+    .output(
+      z.object({
+        playingExperience: z
+          .enum(["amateur", "high-school", "collegiate", "professional"])
+          .optional(),
+        playedIndoorPrior: z.boolean().optional(),
+        yearsPlaying: z.number().int().min(0).max(100).optional(),
+        heightMillimeters: z.number().int().min(600).max(2600).optional(),
+        summary: z.string(),
+        confidence: z.enum(["low", "medium", "high"]),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      inferPlayingExperienceNarrative(input.narrative, ctx.now),
+    ),
+  updatePlayingProfile: protectedProcedure
+    .use(requireScope("profile:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "playing-profile-update",
+        capacity: 12,
+        refillPerMinute: 6,
+      }),
+    )
+    .input(
+      z.object({
+        subjectPersonId: z.string().uuid().optional(),
+        legalGivenName: z.string().trim().min(1).max(80),
+        legalMiddleName: z.string().trim().max(80).nullable().optional(),
+        legalFamilyName: z.string().trim().min(1).max(80),
+        heightMillimeters: z
+          .number()
+          .int()
+          .min(600)
+          .max(2600)
+          .nullable()
+          .optional(),
+        playingExperience: z.enum([
+          "amateur",
+          "high-school",
+          "collegiate",
+          "professional",
+        ]),
+        playedIndoorPrior: z.boolean(),
+        yearsPlaying: z.number().int().min(0).max(100),
+        experienceSummary: z.string().trim().max(1_500).nullable().optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        personId: z.string().uuid(),
+        status: z.enum(["complete", "guardian-required"]),
+        guardianRequired: z.boolean(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.updatePlayingProfile",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updatePlayingProfile({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createGuardianInvitation: protectedProcedure
+    .use(requireScope("profile:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "guardian-invitation-create",
+        capacity: 6,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(
+      z.object({
+        subjectPersonId: z.string().uuid().optional(),
+        relationship: z.string().trim().min(2).max(48),
+        applicationOrigin: z.url(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        invitationId: z.string().uuid(),
+        minorId: z.string().uuid(),
+        inviteUrl: z.url(),
+        expiresAt: z.iso.datetime(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.createGuardianInvitation",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createGuardianInvitation({
+              actor: ctx.actor!,
+              subjectPersonId: input.subjectPersonId,
+              relationship: input.relationship,
+              applicationOrigin: input.applicationOrigin,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  claimGuardianInvitation: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "guardian-invitation-claim",
+        capacity: 6,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(
+      z.object({
+        token: z.string().min(32).max(96),
+        consentConfirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        guardianId: z.string().uuid(),
+        minorId: z.string().uuid(),
+        status: z.literal("pending-review"),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.claimGuardianInvitation",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await claimGuardianInvitation({
+              actor: ctx.actor!,
+              token: input.token,
+              consentConfirmed: input.consentConfirmed,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              userAgent: ctx.userAgent,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  startIdentityVerification: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "identity-verification-start",
+        capacity: 4,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(z.object({ idempotencyKey: z.string().uuid() }))
+    .output(
+      z.object({
+        verificationId: z.string().uuid(),
+        status: z.enum([
+          "requires-input",
+          "processing",
+          "verified",
+          "canceled",
+          "redacted",
+        ]),
+        url: z.url().optional(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.startIdentityVerification",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await startStripeIdentityVerification({
+              actor: ctx.actor!,
+              idempotencyKey: input.idempotencyKey,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  connectPlayerSource: protectedProcedure
+    .use(requireScope("profile:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "player-source-connect",
+        capacity: 6,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(
+      z.object({
+        subjectPersonId: z.string().uuid().optional(),
+        source: z.enum(["volleyball-life", "bvbinfo"]),
+        profileUrl: z.string().trim().min(1).max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        connectionId: z.string().uuid(),
+        jobId: z.string().uuid(),
+        status: z.literal("queued"),
+        source: z.enum(["volleyball-life", "bvbinfo"]),
+        profileUrl: z.url(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.connectPlayerSource",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await queuePlayerSourceConnection({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   updateProfile: protectedProcedure
     .use(requireScope("profile:write"))
     .use(
@@ -1543,6 +1947,7 @@ const playerRouter = router({
       z
         .object({
           courtId: z.string().uuid(),
+          subjectPersonId: z.string().uuid().optional(),
           startsAt: z.iso.datetime(),
           endsAt: z.iso.datetime(),
           idempotencyKey: z.string().uuid(),
@@ -1563,6 +1968,7 @@ const playerRouter = router({
           try {
             return await createCourtHold({
               actor: ctx.actor!,
+              subjectPersonId: input.subjectPersonId,
               courtId: input.courtId,
               startsAt: input.startsAt,
               endsAt: input.endsAt,
@@ -1588,6 +1994,7 @@ const playerRouter = router({
     .input(
       z.object({
         courtId: z.string().uuid(),
+        subjectPersonId: z.string().uuid().optional(),
         localStartsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
         durationMinutes: z.number().int().min(15).max(480),
         paymentMode: z.enum(["full", "split"]).default("full"),
@@ -1628,6 +2035,7 @@ const playerRouter = router({
           try {
             return await startCourtCheckout({
               actor: ctx.actor!,
+              subjectPersonId: input.subjectPersonId,
               courtId: input.courtId,
               localStartsAt: input.localStartsAt,
               durationMinutes: input.durationMinutes,

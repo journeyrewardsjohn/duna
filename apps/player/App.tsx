@@ -1782,6 +1782,58 @@ function ProfileScreen() {
         </View>
         <RatingOrbit compact />
       </View>
+      <View style={styles.profileSetupCard}>
+        <View style={styles.profileSetupTop}>
+          <View style={styles.profileSetupMark}>
+            <Text style={styles.profileSetupMarkText}>✦</Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.eyebrow}>PRIVATE PLAYER SETUP</Text>
+            <Text style={styles.cardTitle}>
+              {settings?.profile.onboardingStatus === "complete"
+                ? "Your playing profile is ready."
+                : "Tell Duna how you play."}
+            </Text>
+          </View>
+          <Pill
+            tone={
+              settings?.profile.onboardingStatus === "complete"
+                ? "positive"
+                : "warning"
+            }
+          >
+            {settings?.profile.onboardingStatus.replaceAll("-", " ") ??
+              "not started"}
+          </Pill>
+        </View>
+        <Text style={styles.bodyText}>
+          Use guided voice or the editable form for legal identity, playing
+          experience, height, and VolleyballLife or BVBInfo history.
+        </Text>
+        <View style={styles.profileSetupStatus}>
+          <Text style={styles.rowMeta}>
+            Stripe Identity:{" "}
+            {settings?.identityVerification.status.replaceAll("-", " ") ??
+              "not started"}
+          </Text>
+          <Text style={styles.rowMeta}>
+            Match sources: {settings?.sourceConnections.length ?? 0}
+          </Text>
+        </View>
+        <Pressable
+          disabled={mode === "preview"}
+          onPress={() =>
+            void WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/onboarding`)
+          }
+          style={styles.primaryButton}
+        >
+          <Text style={styles.primaryButtonText}>
+            {settings?.profile.onboardingStatus === "complete"
+              ? "Review player details"
+              : "Start guided setup"}
+          </Text>
+        </Pressable>
+      </View>
       <View style={styles.metricStrip}>
         {profileMetrics.map((metric) => (
           <View key={metric.label}>
@@ -1881,8 +1933,9 @@ function ProfileScreen() {
       )}
       <View style={styles.profileMenu}>
         {[
-          "Edit profile",
+          "Player details + identity",
           "Household + guardians",
+          "Family wallets",
           "Notifications",
           "Privacy + safety",
           "Language + units",
@@ -4027,6 +4080,37 @@ function createStyles(palette: Palette) {
       marginTop: 7,
     },
     profileHandle: { color: colors.muted, fontSize: 8, marginTop: 2 },
+    profileSetupCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.accentRgb, 0.14),
+      borderRadius: 18,
+      borderWidth: 1,
+      marginTop: 10,
+      padding: 14,
+    },
+    profileSetupTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+    },
+    profileSetupMark: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderRadius: 14,
+      height: 42,
+      justifyContent: "center",
+      width: 42,
+    },
+    profileSetupMarkText: {
+      color: colors.aqua,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    profileSetupStatus: {
+      flexDirection: "row",
+      gap: 14,
+      marginTop: 10,
+    },
     progressCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.07),

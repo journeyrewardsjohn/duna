@@ -15,6 +15,7 @@ function applicationOrigin(headersValue: Headers): string {
 export async function startCourtCheckoutAction(input: {
   readonly venueId: string;
   readonly courtId: string;
+  readonly subjectPersonId?: string;
   readonly localStartsAt: string;
   readonly durationMinutes: number;
   readonly paymentMode: "full" | "split";
@@ -36,6 +37,7 @@ export async function startCourtCheckoutAction(input: {
     const caller = await getServerCaller();
     const result = await caller.player.startCourtCheckout({
       courtId: input.courtId,
+      subjectPersonId: input.subjectPersonId,
       localStartsAt: input.localStartsAt,
       durationMinutes: input.durationMinutes,
       paymentMode: input.paymentMode,

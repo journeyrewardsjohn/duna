@@ -82,6 +82,7 @@ function initials(name: string) {
 }
 
 export function CourtBookingPanel({
+  bookingSubjects,
   inventory,
   defaultLocalStartsAt,
   initialCheckoutSessionId,
@@ -89,6 +90,7 @@ export function CourtBookingPanel({
   isDunaPlus,
   suggestedPlayers,
 }: {
+  readonly bookingSubjects: readonly PersonSummary[];
   readonly inventory: CourtBookingInventory;
   readonly defaultLocalStartsAt: string;
   readonly initialCheckoutSessionId?: string;
@@ -109,6 +111,9 @@ export function CourtBookingPanel({
   const [availability, setAvailability] = useState<CourtAvailability>();
   const [selectedLocalStart, setSelectedLocalStart] = useState("");
   const [courtId, setCourtId] = useState("");
+  const [subjectPersonId, setSubjectPersonId] = useState(
+    bookingSubjects[0]?.id ?? "",
+  );
   const [paymentMode, setPaymentMode] = useState<"full" | "split">("full");
   const [players, setPlayers] = useState<readonly InvitedPlayer[]>([]);
   const [inviteValue, setInviteValue] = useState("");
@@ -155,6 +160,9 @@ export function CourtBookingPanel({
   );
   const selectedCourt = inventory.courts.find((court) => court.id === courtId);
   const selectedSlot = selectedSlots.find((slot) => slot.courtId === courtId);
+  const selectedSubject =
+    bookingSubjects.find((person) => person.id === subjectPersonId) ??
+    bookingSubjects[0];
   const policy = selectedCourt?.cancellationPolicy;
 
   useEffect(() => {
@@ -350,6 +358,7 @@ export function CourtBookingPanel({
       const response = await startCourtCheckoutAction({
         venueId: inventory.venue.id,
         courtId: selectedCourt.id,
+        subjectPersonId: selectedSubject?.id,
         localStartsAt: selectedSlot.localStartsAt,
         durationMinutes,
         paymentMode,
@@ -624,6 +633,58 @@ export function CourtBookingPanel({
               </div>
             </section>
 
+            {bookingSubjects.length > 1 && (
+              <section className="booking-subject-picker">
+                <span className="page-eyebrow">Who is playing?</span>
+                <div>
+                  {bookingSubjects.map((person) => (
+                    <button
+                      className={
+                        person.id === selectedSubject?.id
+                          ? "selected"
+                          : undefined
+                      }
+                      key={person.id}
+                      onClick={() => {
+                        setSubjectPersonId(person.id);
+                        setPlayers((current) =>
+                          current.filter(
+                            (player) => player.personId !== person.id,
+                          ),
+                        );
+                      }}
+                      type="button"
+                    >
+                      <span className="booking-player-avatar">
+                        {person.avatarUrl ? (
+                          <img alt="" src={person.avatarUrl} />
+                        ) : (
+                          person.initials
+                        )}
+                      </span>
+                      <span>
+                        <strong>
+                          {person.id === bookingSubjects[0]?.id
+                            ? "Me"
+                            : person.displayName}
+                        </strong>
+                        <small>
+                          {person.isMinor ? "Dependent profile" : "My profile"}
+                        </small>
+                      </span>
+                      <span className="booking-choice-radio" />
+                    </button>
+                  ))}
+                </div>
+                {selectedSubject?.isMinor && (
+                  <small>
+                    You are paying and accepting the venue policy as this
+                    child&apos;s verified guardian.
+                  </small>
+                )}
+              </section>
+            )}
+
             <section className="booking-payment-choice">
               <button
                 type="button"
@@ -634,7 +695,11 @@ export function CourtBookingPanel({
                 <CreditCard aria-hidden size={21} />
                 <span>
                   <strong>Pay everything</strong>
-                  <small>You cover the full court now.</small>
+                  <small>
+                    {selectedSubject?.isMinor
+                      ? `You cover ${selectedSubject.displayName}'s full court now.`
+                      : "You cover the full court now."}
+                  </small>
                 </span>
                 <Numeric>
                   {formatMoney(estimate.totalMinor, estimate.currency)}
@@ -649,7 +714,11 @@ export function CourtBookingPanel({
                 <Users aria-hidden size={21} />
                 <span>
                   <strong>Pay your part</strong>
-                  <small>Everyone gets a secure payment link.</small>
+                  <small>
+                    {selectedSubject?.isMinor
+                      ? `You cover ${selectedSubject.displayName}'s share; everyone else gets a secure link.`
+                      : "Everyone gets a secure payment link."}
+                  </small>
                 </span>
                 <Numeric>
                   {formatMoney(
@@ -671,7 +740,11 @@ export function CourtBookingPanel({
                   <Badge>{players.length + 1} paying</Badge>
                 </header>
                 <div className="booking-selected-players">
-                  <span className="booking-player-avatar organizer">You</span>
+                  <span className="booking-player-avatar organizer">
+                    {selectedSubject
+                      ? initials(selectedSubject.displayName)
+                      : "You"}
+                  </span>
                   {players.map((player) => (
                     <span className="booking-player-chip" key={player.key}>
                       <span className="booking-player-avatar">

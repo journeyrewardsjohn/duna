@@ -35,103 +35,133 @@ export function PlayerShell({
   readonly player: PersonSummary;
 }) {
   const pathname = usePathname();
-  return (
-    <div className="player-shell">
-      <aside className="player-sidebar">
-        <Link aria-label="Duna home" className="player-sidebar__brand" href="/">
-          <DunaMark />
-        </Link>
-        <nav aria-label="Duna player navigation">
-          {navigation.map(({ label, href, icon: Icon }) => {
-            const active =
-              href === "/app" ? pathname === href : pathname.startsWith(href);
-            return (
-              <Link
-                className={active ? "active" : undefined}
-                href={href}
-                key={href}
-              >
-                <Icon aria-hidden size={19} strokeWidth={active ? 2.3 : 1.8} />
-                <span>{label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-        <Link className="player-sidebar__record" href="/app/score">
-          <Plus aria-hidden size={18} />
-          Record a match
-        </Link>
-        <div className="player-sidebar__plus">
-          <div>
-            <span>DUNA+</span>
-            <small>No fees · deeper stats</small>
-          </div>
-          <Link href="/app/settings">View plan</Link>
-        </div>
-        <Link className="player-sidebar__profile" href="/app/profile">
-          <span className="avatar">{player.initials}</span>
-          <span>
-            <strong>{player.displayName}</strong>
-            <small>@{player.handle}</small>
-          </span>
-          <Numeric>{player.rating.display.toFixed(2)}</Numeric>
-        </Link>
-      </aside>
+  const focusedFlow = pathname === "/app/onboarding";
 
-      <div className="player-main">
-        <header className="player-topbar">
-          <button aria-label="Open navigation" className="player-topbar__menu">
-            <Menu aria-hidden size={21} />
-          </button>
+  return (
+    <div
+      className={
+        focusedFlow ? "player-shell player-shell--focused-flow" : "player-shell"
+      }
+    >
+      {!focusedFlow && (
+        <aside className="player-sidebar">
           <Link
             aria-label="Duna home"
-            className="player-topbar__brand"
-            href="/app"
+            className="player-sidebar__brand"
+            href="/"
           >
-            <DunaMark compact />
+            <DunaMark />
           </Link>
-          <div className="player-topbar__market">
-            <span>Playing in</span>
-            <strong>{player.homeMarket}</strong>
+          <nav aria-label="Duna player navigation">
+            {navigation.map(({ label, href, icon: Icon }) => {
+              const active =
+                href === "/app" ? pathname === href : pathname.startsWith(href);
+              return (
+                <Link
+                  className={active ? "active" : undefined}
+                  href={href}
+                  key={href}
+                >
+                  <Icon
+                    aria-hidden
+                    size={19}
+                    strokeWidth={active ? 2.3 : 1.8}
+                  />
+                  <span>{label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+          <Link className="player-sidebar__record" href="/app/score">
+            <Plus aria-hidden size={18} />
+            Record a match
+          </Link>
+          <div className="player-sidebar__plus">
+            <div>
+              <span>DUNA+</span>
+              <small>No fees · deeper stats</small>
+            </div>
+            <Link href="/app/settings">View plan</Link>
           </div>
-          <div className="player-topbar__actions">
-            <ThemeToggle />
-            <button aria-label="Messages">
-              <MessageCircle aria-hidden size={19} />
+          <Link className="player-sidebar__profile" href="/app/profile">
+            <span className="avatar">{player.initials}</span>
+            <span>
+              <strong>{player.displayName}</strong>
+              <small>@{player.handle}</small>
+            </span>
+            <Numeric>{player.rating.display.toFixed(2)}</Numeric>
+          </Link>
+        </aside>
+      )}
+
+      <div className="player-main">
+        {!focusedFlow && (
+          <header className="player-topbar">
+            <button
+              aria-label="Open navigation"
+              className="player-topbar__menu"
+            >
+              <Menu aria-hidden size={21} />
             </button>
-            <Link href="/app/profile">
-              <span className="avatar">{player.initials}</span>
-              <Numeric>{player.rating.display.toFixed(2)}</Numeric>
+            <Link
+              aria-label="Duna home"
+              className="player-topbar__brand"
+              href="/app"
+            >
+              <DunaMark compact />
             </Link>
-          </div>
-        </header>
+            <div className="player-topbar__market">
+              <span>Playing in</span>
+              <strong>{player.homeMarket}</strong>
+            </div>
+            <div className="player-topbar__actions">
+              <ThemeToggle />
+              <button aria-label="Messages">
+                <MessageCircle aria-hidden size={19} />
+              </button>
+              <Link href="/app/profile">
+                <span className="avatar">{player.initials}</span>
+                <Numeric>{player.rating.display.toFixed(2)}</Numeric>
+              </Link>
+            </div>
+          </header>
+        )}
         <div className="player-content">{children}</div>
       </div>
 
-      <nav aria-label="Mobile player navigation" className="player-bottom-nav">
-        {navigation.slice(0, 4).map(({ label, href, icon: Icon }) => {
-          const active =
-            href === "/app" ? pathname === href : pathname.startsWith(href);
-          return (
+      {!focusedFlow && (
+        <>
+          <nav
+            aria-label="Mobile player navigation"
+            className="player-bottom-nav"
+          >
+            {navigation.slice(0, 4).map(({ label, href, icon: Icon }) => {
+              const active =
+                href === "/app" ? pathname === href : pathname.startsWith(href);
+              return (
+                <Link
+                  className={active ? "active" : undefined}
+                  href={href}
+                  key={href}
+                >
+                  <Icon aria-hidden size={20} />
+                  <span>{label}</span>
+                </Link>
+              );
+            })}
             <Link
-              className={active ? "active" : undefined}
-              href={href}
-              key={href}
+              className={
+                pathname.startsWith("/app/profile") ? "active" : undefined
+              }
+              href="/app/profile"
             >
-              <Icon aria-hidden size={20} />
-              <span>{label}</span>
+              <UserRound aria-hidden size={20} />
+              <span>Profile</span>
             </Link>
-          );
-        })}
-        <Link
-          className={pathname.startsWith("/app/profile") ? "active" : undefined}
-          href="/app/profile"
-        >
-          <UserRound aria-hidden size={20} />
-          <span>Profile</span>
-        </Link>
-      </nav>
-      <AskDuna />
+          </nav>
+          <AskDuna />
+        </>
+      )}
     </div>
   );
 }

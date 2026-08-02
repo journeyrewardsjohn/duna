@@ -18,6 +18,7 @@ export type StripeDomainAction =
   | "payout.synchronized"
   | "dispute.synchronized"
   | "refund.synchronized"
+  | "identity.synchronized"
   | "checkout.completed"
   | "order.checkout_expired"
   | "ignored";
@@ -37,6 +38,9 @@ function actionForStripeEvent(type: string): StripeDomainAction {
   if (type.startsWith("payout.")) return "payout.synchronized";
   if (type.startsWith("charge.dispute.")) return "dispute.synchronized";
   if (type.startsWith("refund.")) return "refund.synchronized";
+  if (type.startsWith("identity.verification_session.")) {
+    return "identity.synchronized";
+  }
   if (type === "checkout.session.completed") return "checkout.completed";
   if (type === "checkout.session.expired") return "order.checkout_expired";
   return "ignored";

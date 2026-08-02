@@ -193,6 +193,40 @@ test("pickup host flow publishes a complete listing", async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 });
 
+test("player onboarding stays clear and editable on mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/app/onboarding");
+  await expect(
+    page.getByRole("heading", { name: "Who are we building this for?" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Mobile player navigation" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Ask Duna" })).toHaveCount(0);
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Tell us about Mara Lewis." }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Voice is waiting for the LiveKit/),
+  ).toBeVisible();
+  await page
+    .getByLabel("Your editable recap")
+    .fill(
+      "I played indoor in high school and have played beach for four years.",
+    );
+  await page.getByRole("button", { name: /Review answers/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Private identity" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Legal first name")).toBeEditable();
+  await expect(page.getByLabel("Years playing")).toBeEditable();
+  await expect(page.getByText("VolleyballLife profile")).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
 test("HQ, admin, and AI changes preserve explicit control", async ({
   page,
 }) => {

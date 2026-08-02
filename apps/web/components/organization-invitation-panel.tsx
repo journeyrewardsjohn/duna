@@ -94,7 +94,7 @@ export function OrganizationInvitationPanel({
         ) : (
           <Link
             className="duna-button duna-button--primary"
-            href={`/sign-in?redirect_url=${encodeURIComponent(returnPath)}`}
+            href={`/sign-in?returnTo=${encodeURIComponent(returnPath)}`}
           >
             Sign in to accept
           </Link>

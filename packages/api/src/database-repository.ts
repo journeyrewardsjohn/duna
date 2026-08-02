@@ -8,6 +8,7 @@ import {
   eventPolicyAcceptances,
   eventTypes,
   getDatabase,
+  guardianInvitations,
   guardianships,
   matchConfirmations,
   matches,
@@ -17,6 +18,7 @@ import {
   organizations,
   orders,
   people,
+  playerSourceConnections,
   pickupParticipants,
   pickupSessions,
   programs,
@@ -83,6 +85,7 @@ import type {
   PlayerWallet,
 } from "./repository-contract";
 import { loadGuardianReviewQueue } from "./identity";
+import { loadIdentityVerification } from "./identity-verification";
 
 const publicSessionStatuses = [
   "published",
@@ -1047,6 +1050,41 @@ function settingsCurrency(value: string): CurrencyCode {
     : "USD";
 }
 
+function playingExperience(
+  value: string,
+): PlayerSettings["profile"]["playingExperience"] {
+  return [
+    "not-set",
+    "amateur",
+    "high-school",
+    "collegiate",
+    "professional",
+  ].includes(value)
+    ? (value as PlayerSettings["profile"]["playingExperience"])
+    : "not-set";
+}
+
+function profileOnboardingStatus(
+  value?: string,
+): PlayerSettings["profile"]["onboardingStatus"] {
+  return [
+    "not-started",
+    "in-progress",
+    "guardian-required",
+    "complete",
+  ].includes(value ?? "")
+    ? (value as PlayerSettings["profile"]["onboardingStatus"])
+    : "not-started";
+}
+
+function guardianInvitationStatus(
+  value: string,
+): NonNullable<PlayerSettings["guardianInvitation"]>["status"] {
+  return ["pending", "claimed", "expired", "cancelled"].includes(value)
+    ? (value as NonNullable<PlayerSettings["guardianInvitation"]>["status"])
+    : "expired";
+}
+
 async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
   const database = getDatabase();
   const [
@@ -1057,6 +1095,9 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
     membershipRows,
     consentRows,
     privacyRequestRows,
+    sourceConnectionRows,
+    guardianInvitation,
+    identityVerification,
   ] = await Promise.all([
     database.query.people.findFirst({ where: eq(people.id, personId) }),
     loadPeople([personId]).then((rows) => rows[0]),
@@ -1106,6 +1147,16 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
       .from(privacyRequests)
       .where(eq(privacyRequests.personId, personId))
       .orderBy(desc(privacyRequests.createdAt)),
+    database
+      .select()
+      .from(playerSourceConnections)
+      .where(eq(playerSourceConnections.personId, personId))
+      .orderBy(desc(playerSourceConnections.updatedAt)),
+    database.query.guardianInvitations.findFirst({
+      where: eq(guardianInvitations.minorId, personId),
+      orderBy: desc(guardianInvitations.createdAt),
+    }),
+    loadIdentityVerification(personId),
   ]);
   if (!person || !summary) throw new Error("Player profile was not found");
 
@@ -1119,6 +1170,18 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
       entry,
     ]),
   );
+  const householdOnboarding = new Map(
+    (householdIds.length > 0
+      ? await database
+          .select({
+            id: people.id,
+            status: people.profileOnboardingStatus,
+          })
+          .from(people)
+          .where(inArray(people.id, [...new Set(householdIds)]))
+      : []
+    ).map((entry) => [entry.id, entry.status] as const),
+  );
   const household: PlayerSettings["household"] = [
     ...guardianRows.flatMap((row) => {
       const householdPerson = householdPeople.get(row.guardianId);
@@ -1131,6 +1194,9 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
               verified: row.verified,
               emergencyContact: row.emergencyContact,
               canApproveSpending: row.canApproveSpending,
+              onboardingStatus: profileOnboardingStatus(
+                householdOnboarding.get(row.guardianId),
+              ),
             },
           ]
         : [];
@@ -1146,6 +1212,9 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
               verified: row.verified,
               emergencyContact: row.emergencyContact,
               canApproveSpending: row.canApproveSpending,
+              onboardingStatus: profileOnboardingStatus(
+                householdOnboarding.get(row.minorId),
+              ),
             },
           ]
         : [];
@@ -1194,6 +1263,62 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
       ageVerified: person.ageVerifiedAt !== null,
       birthDate: person.birthDate ?? undefined,
       parentalConsentRecorded: person.parentalConsentAt !== null,
+      legalGivenName: person.legalGivenName ?? undefined,
+      legalMiddleName: person.legalMiddleName ?? undefined,
+      legalFamilyName: person.legalFamilyName ?? undefined,
+      heightMillimeters: person.heightMillimeters ?? undefined,
+      playingExperience: playingExperience(person.playingExperience),
+      playedIndoorPrior: person.playedIndoorPrior ?? undefined,
+      yearsPlaying: person.yearsPlaying ?? undefined,
+      experienceSummary: person.experienceSummary ?? undefined,
+      onboardingStatus: profileOnboardingStatus(person.profileOnboardingStatus),
+      onboardingCompletedAt: person.profileOnboardingCompletedAt?.toISOString(),
+    },
+    identityVerification,
+    sourceConnections: sourceConnectionRows.flatMap((connection) => {
+      if (
+        connection.source !== "volleyball-life" &&
+        connection.source !== "bvbinfo"
+      ) {
+        return [];
+      }
+      if (
+        ![
+          "queued",
+          "syncing",
+          "linked",
+          "review-required",
+          "failed",
+          "disconnected",
+        ].includes(connection.status)
+      ) {
+        return [];
+      }
+      return [
+        {
+          id: connection.id,
+          source: connection.source,
+          profileUrl: connection.profileUrl,
+          status:
+            connection.status as PlayerSettings["sourceConnections"][number]["status"],
+          lastSyncedAt: connection.lastSyncedAt?.toISOString(),
+          lastError: connection.lastError ?? undefined,
+        },
+      ];
+    }),
+    guardianInvitation: guardianInvitation
+      ? {
+          id: guardianInvitation.id,
+          status: guardianInvitationStatus(guardianInvitation.status),
+          expiresAt: guardianInvitation.expiresAt.toISOString(),
+        }
+      : undefined,
+    voiceOnboarding: {
+      configured: Boolean(
+        process.env.LIVEKIT_URL &&
+        process.env.LIVEKIT_API_KEY &&
+        process.env.LIVEKIT_API_SECRET,
+      ),
     },
     household,
     membership:

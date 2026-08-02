@@ -642,6 +642,7 @@ async function courtAlternatives(input: {
 
 async function courtPolicyAllows(input: {
   readonly actor: ApiActor;
+  readonly subjectPersonId: string;
   readonly organizationId: string;
   readonly bookingPolicy: string;
 }): Promise<boolean> {
@@ -662,7 +663,7 @@ async function courtPolicyAllows(input: {
       .innerJoin(membershipTiers, eq(memberships.tierId, membershipTiers.id))
       .where(
         and(
-          eq(memberships.personId, input.actor.personId),
+          eq(memberships.personId, input.subjectPersonId),
           eq(membershipTiers.organizationId, input.organizationId),
           inArray(memberships.status, ["active", "trialing"]),
         ),
@@ -685,6 +686,7 @@ async function courtPolicyAllows(input: {
 
 export async function createCourtHold(input: {
   readonly actor: ApiActor;
+  readonly subjectPersonId?: string;
   readonly courtId: string;
   readonly startsAt: string;
   readonly endsAt: string;
@@ -702,6 +704,11 @@ export async function createCourtHold(input: {
     );
   }
   const database = getDatabase();
+  const subjectPersonId = input.subjectPersonId ?? input.actor.personId;
+  await assertSubjectAuthority({
+    actor: input.actor,
+    subjectPersonId,
+  });
   const resource = (
     await database
       .select({
@@ -731,6 +738,7 @@ export async function createCourtHold(input: {
     resource.venueStatus !== "active" ||
     !(await courtPolicyAllows({
       actor: input.actor,
+      subjectPersonId,
       organizationId: resource.organizationId,
       bookingPolicy: resource.bookingPolicy,
     }))
@@ -788,7 +796,7 @@ export async function createCourtHold(input: {
         organizationId: resource.organizationId,
         venueId: resource.venueId,
         courtId: resource.courtId,
-        personId: input.actor.personId,
+        personId: subjectPersonId,
         startsAt,
         endsAt,
         bufferBeforeMinutes: resource.bufferBeforeMinutes,
@@ -804,7 +812,10 @@ export async function createCourtHold(input: {
         action: "court-booking.held",
         entityType: "court-booking",
         entityId: bookingId,
-        reason: "Player placed a time-limited court hold.",
+        reason:
+          subjectPersonId === input.actor.personId
+            ? "Player placed a time-limited court hold."
+            : "Verified guardian placed a time-limited court hold for a dependent.",
         traceId: input.requestId,
         ipAddress: input.ipAddress,
       }),

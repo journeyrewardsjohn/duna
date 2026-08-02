@@ -18,7 +18,10 @@ import { getServerCaller } from "@/lib/api";
 
 export default async function PlayerDashboard() {
   const caller = await getServerCaller();
-  const dashboard = await caller.player.dashboard();
+  const [dashboard, settings] = await Promise.all([
+    caller.player.dashboard(),
+    caller.player.settings(),
+  ]);
   const { player } = dashboard;
   const nextEvent = dashboard.events[0];
   const latestMatch = dashboard.recentMatches[0];
@@ -47,6 +50,24 @@ export default async function PlayerDashboard() {
           </Link>
         </div>
       </section>
+
+      {settings.profile.onboardingStatus !== "complete" && (
+        <Link className="dashboard-profile-prompt" href="/app/onboarding">
+          <span className="dashboard-profile-prompt__icon">
+            <Sparkles aria-hidden />
+          </span>
+          <span>
+            <small>Complete your player profile</small>
+            <strong>
+              Tell Duna how you play. We’ll make every field editable before it
+              is saved.
+            </strong>
+          </span>
+          <span>
+            Start guided setup <ArrowRight aria-hidden />
+          </span>
+        </Link>
+      )}
 
       <section className="player-hero-grid">
         <article className="rating-panel">

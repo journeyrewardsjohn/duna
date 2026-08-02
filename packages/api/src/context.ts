@@ -3,13 +3,14 @@ import { demoOrganization, demoPlayer } from "@duna/core/demo";
 import {
   adminRoles,
   getDatabase,
+  guardianships,
   isDatabaseConfigured,
   organizationMemberships,
   organizations,
   people,
 } from "@duna/db";
 import { WorkOS, type User } from "@workos-inc/node";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   createRemoteJWKSet,
   decodeJwt,
@@ -435,25 +436,36 @@ async function resolveWorkOSActor(input: {
       .onConflictDoNothing();
   }
 
-  const [membershipRows, platformRoleRows] = await Promise.all([
-    organization
-      ? database
-          .select()
-          .from(organizationMemberships)
-          .where(
-            and(
-              eq(organizationMemberships.organizationId, organization.id),
-              eq(organizationMemberships.personId, person.id),
-              eq(organizationMemberships.active, true),
-            ),
-          )
-      : Promise.resolve([]),
-    database
-      .select()
-      .from(adminRoles)
-      .where(eq(adminRoles.personId, person.id)),
-  ]);
+  const [membershipRows, platformRoleRows, guardianshipRows] =
+    await Promise.all([
+      organization
+        ? database
+            .select()
+            .from(organizationMemberships)
+            .where(
+              and(
+                eq(organizationMemberships.organizationId, organization.id),
+                eq(organizationMemberships.personId, person.id),
+                eq(organizationMemberships.active, true),
+              ),
+            )
+        : Promise.resolve([]),
+      database
+        .select()
+        .from(adminRoles)
+        .where(eq(adminRoles.personId, person.id)),
+      database
+        .select({ minorId: guardianships.minorId })
+        .from(guardianships)
+        .where(
+          and(
+            eq(guardianships.guardianId, person.id),
+            inArray(guardianships.reviewStatus, ["pending", "verified"]),
+          ),
+        ),
+    ]);
   const roles = new Set<PersonRole>(["player"]);
+  if (guardianshipRows.length > 0) roles.add("guardian");
   for (const membership of membershipRows) roles.add(membership.role);
   for (const platformRole of platformRoleRows) {
     if (platformRole.role === "admin" || platformRole.role === "super-admin") {

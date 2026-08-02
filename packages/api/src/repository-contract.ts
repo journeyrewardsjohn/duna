@@ -56,6 +56,54 @@ export interface PlayerSettings {
     readonly ageVerified: boolean;
     readonly birthDate?: string;
     readonly parentalConsentRecorded: boolean;
+    readonly legalGivenName?: string;
+    readonly legalMiddleName?: string;
+    readonly legalFamilyName?: string;
+    readonly heightMillimeters?: number;
+    readonly playingExperience:
+      "not-set" | "amateur" | "high-school" | "collegiate" | "professional";
+    readonly playedIndoorPrior?: boolean;
+    readonly yearsPlaying?: number;
+    readonly experienceSummary?: string;
+    readonly onboardingStatus:
+      "not-started" | "in-progress" | "guardian-required" | "complete";
+    readonly onboardingCompletedAt?: string;
+  };
+  readonly identityVerification: {
+    readonly configured: boolean;
+    readonly verificationId?: string;
+    readonly status:
+      | "not-started"
+      | "requires-input"
+      | "processing"
+      | "verified"
+      | "canceled"
+      | "redacted";
+    readonly livemode?: boolean;
+    readonly verifiedAt?: string;
+    readonly lastErrorCode?: string;
+  };
+  readonly sourceConnections: readonly {
+    readonly id: string;
+    readonly source: "volleyball-life" | "bvbinfo";
+    readonly profileUrl: string;
+    readonly status:
+      | "queued"
+      | "syncing"
+      | "linked"
+      | "review-required"
+      | "failed"
+      | "disconnected";
+    readonly lastSyncedAt?: string;
+    readonly lastError?: string;
+  }[];
+  readonly guardianInvitation?: {
+    readonly id: string;
+    readonly status: "pending" | "claimed" | "expired" | "cancelled";
+    readonly expiresAt: string;
+  };
+  readonly voiceOnboarding: {
+    readonly configured: boolean;
   };
   readonly household: readonly {
     readonly person: PersonSummary;
@@ -64,6 +112,8 @@ export interface PlayerSettings {
     readonly verified: boolean;
     readonly emergencyContact: boolean;
     readonly canApproveSpending: boolean;
+    readonly onboardingStatus:
+      "not-started" | "in-progress" | "guardian-required" | "complete";
   }[];
   readonly membership?: {
     readonly id: string;

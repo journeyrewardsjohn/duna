@@ -2,6 +2,7 @@ packages:
   - "apps/*"
   - "packages/*"
 allowBuilds:
+  "@livekit/local-inference": false
   browser-tabs-lock: false
   bufferutil: false
   core-js: false

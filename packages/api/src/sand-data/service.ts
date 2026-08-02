@@ -8,6 +8,7 @@ import {
   importSources,
   matches,
   people,
+  playerSourceConnections,
   professionalEvents,
   profileMergeRecords,
   ratingConfigurations,
@@ -18,6 +19,7 @@ import {
   teamMembers,
   teams,
   worldRankings,
+  workflowJobs,
 } from "@duna/db";
 import {
   defaultRatingConfig,
@@ -26,8 +28,9 @@ import {
 } from "@duna/rating";
 import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { stableHash } from "../canonical";
-import type { ApiActor } from "../context";
+import { scopesForRoles, type ApiActor } from "../context";
 import { applyApprovedImportedMatchRating } from "../match-service";
+import { assertProfileSubjectAuthority } from "../profile-onboarding";
 import {
   crossSourceMatchFingerprint,
   matchMappingConfidence,
@@ -66,6 +69,8 @@ export class SandDataServiceError extends Error {
       | "PLAYER_NOT_FOUND"
       | "MAPPING_CONFLICT"
       | "MERGE_CONFLICT"
+      | "INVALID_PROFILE_URL"
+      | "PROFESSIONAL_REQUIRED"
       | "SUPER_ADMIN_REQUIRED",
     message: string,
   ) {
@@ -2288,6 +2293,405 @@ export async function loadPublicPlayerPerformanceByHandle(handle: string) {
     ),
   });
   return person ? loadPublicPlayerPerformance(person.id) : undefined;
+}
+
+export type PlayerSourceConnectionSource = "volleyball-life" | "bvbinfo";
+
+export function parsePlayerSourceProfile(
+  source: PlayerSourceConnectionSource,
+  value: string,
+): { readonly externalId: string; readonly profileUrl: string } {
+  const trimmed = value.trim();
+  if (/^\d{1,12}$/.test(trimmed) && Number.parseInt(trimmed, 10) > 0) {
+    return source === "volleyball-life"
+      ? {
+          externalId: String(Number.parseInt(trimmed, 10)),
+          profileUrl: `https://volleyballlife.com/playerprofile/${Number.parseInt(trimmed, 10)}`,
+        }
+      : {
+          externalId: String(Number.parseInt(trimmed, 10)),
+          profileUrl: `http://www.bvbinfo.com/player.asp?ID=${Number.parseInt(trimmed, 10)}&Page=1`,
+        };
+  }
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw new SandDataServiceError(
+      "INVALID_PROFILE_URL",
+      "Paste a complete profile URL or the numeric player ID.",
+    );
+  }
+  const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+  if (source === "volleyball-life") {
+    const match = url.pathname.match(/\/playerprofile\/(\d+)/i);
+    if (hostname !== "volleyballlife.com" || !match?.[1]) {
+      throw new SandDataServiceError(
+        "INVALID_PROFILE_URL",
+        "Use a VolleyballLife player profile URL.",
+      );
+    }
+    return {
+      externalId: String(Number.parseInt(match[1], 10)),
+      profileUrl: `https://volleyballlife.com/playerprofile/${Number.parseInt(match[1], 10)}`,
+    };
+  }
+  const externalId =
+    url.searchParams.get("ID") ?? url.searchParams.get("id") ?? "";
+  if (
+    hostname !== "bvbinfo.com" ||
+    !/^\d{1,12}$/.test(externalId) ||
+    Number.parseInt(externalId, 10) < 1
+  ) {
+    throw new SandDataServiceError(
+      "INVALID_PROFILE_URL",
+      "Use a BVBInfo player profile URL.",
+    );
+  }
+  return {
+    externalId: String(Number.parseInt(externalId, 10)),
+    profileUrl: `http://www.bvbinfo.com/player.asp?ID=${Number.parseInt(externalId, 10)}&Page=1`,
+  };
+}
+
+async function workflowActor(personId: string): Promise<ApiActor> {
+  const person = await getDatabase().query.people.findFirst({
+    where: eq(people.id, personId),
+  });
+  if (!person) {
+    throw new SandDataServiceError(
+      "PLAYER_NOT_FOUND",
+      "The player requesting this import was not found.",
+    );
+  }
+  const roles = ["player"] as const;
+  return {
+    personId: person.id,
+    displayName: person.displayName,
+    roles,
+    scopes: scopesForRoles(roles),
+    ageBand:
+      person.ageBand === "under-13" ||
+      person.ageBand === "teen" ||
+      person.ageBand === "adult"
+        ? person.ageBand
+        : "unknown",
+    isDemo: false,
+  };
+}
+
+export async function queuePlayerSourceConnection(input: {
+  readonly actor: ApiActor;
+  readonly subjectPersonId?: string;
+  readonly source: PlayerSourceConnectionSource;
+  readonly profileUrl: string;
+  readonly idempotencyKey: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}) {
+  requireDatabase();
+  const database = getDatabase();
+  const subject = await assertProfileSubjectAuthority({
+    actor: input.actor,
+    subjectPersonId: input.subjectPersonId,
+  });
+  if (
+    input.source === "bvbinfo" &&
+    !subject.isProfessional &&
+    subject.playingExperience !== "professional"
+  ) {
+    throw new SandDataServiceError(
+      "PROFESSIONAL_REQUIRED",
+      "BVBInfo linking is available after the player is marked Professional.",
+    );
+  }
+  const parsed = parsePlayerSourceProfile(input.source, input.profileUrl);
+  const occupied = await database.query.playerSourceConnections.findFirst({
+    where: and(
+      eq(playerSourceConnections.source, input.source),
+      eq(playerSourceConnections.externalPersonId, parsed.externalId),
+    ),
+  });
+  if (occupied && occupied.personId !== subject.id) {
+    throw new SandDataServiceError(
+      "MAPPING_CONFLICT",
+      "This source profile is already connected to another Duna player. Send it to profile review instead.",
+    );
+  }
+  const connectionId = occupied?.id ?? crypto.randomUUID();
+  await database
+    .insert(playerSourceConnections)
+    .values({
+      id: connectionId,
+      personId: subject.id,
+      source: input.source,
+      externalPersonId: parsed.externalId,
+      profileUrl: parsed.profileUrl,
+      status: "queued",
+      lastError: null,
+      createdAt: input.now,
+      updatedAt: input.now,
+    })
+    .onConflictDoUpdate({
+      target: [
+        playerSourceConnections.personId,
+        playerSourceConnections.source,
+      ],
+      set: {
+        externalPersonId: parsed.externalId,
+        profileUrl: parsed.profileUrl,
+        status: "queued",
+        lastError: null,
+        updatedAt: input.now,
+      },
+    });
+  const connection = await database.query.playerSourceConnections.findFirst({
+    where: and(
+      eq(playerSourceConnections.personId, subject.id),
+      eq(playerSourceConnections.source, input.source),
+    ),
+  });
+  if (!connection) throw new Error("Source connection could not be created");
+  const jobId = crypto.randomUUID();
+  await database.batch([
+    database.insert(workflowJobs).values({
+      id: jobId,
+      kind: "sand.profile-import",
+      idempotencyKey: `sand-profile:${connection.id}:${input.idempotencyKey}`,
+      payload: {
+        connectionId: connection.id,
+        requestedByPersonId: input.actor.personId,
+        subjectPersonId: subject.id,
+        source: input.source,
+        externalId: parsed.externalId,
+        requestId: input.requestId,
+      },
+      traceId: input.requestId,
+      createdAt: input.now,
+      updatedAt: input.now,
+    }),
+    database.insert(auditLog).values({
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "sand-data.profile-import.queued",
+      entityType: "player-source-connection",
+      entityId: connection.id,
+      afterHash: stableHash({
+        personId: subject.id,
+        source: input.source,
+        externalId: parsed.externalId,
+      }),
+      reason:
+        "Player or connected guardian queued a source-owned match-history import.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return {
+    connectionId: connection.id,
+    jobId,
+    status: "queued" as const,
+    source: input.source,
+    profileUrl: parsed.profileUrl,
+  };
+}
+
+export async function processPlayerSourceConnection(
+  payload: Readonly<Record<string, unknown>>,
+) {
+  requireDatabase();
+  const connectionId =
+    typeof payload.connectionId === "string" ? payload.connectionId : "";
+  const requestedByPersonId =
+    typeof payload.requestedByPersonId === "string"
+      ? payload.requestedByPersonId
+      : "";
+  const subjectPersonId =
+    typeof payload.subjectPersonId === "string" ? payload.subjectPersonId : "";
+  const source =
+    payload.source === "volleyball-life" || payload.source === "bvbinfo"
+      ? payload.source
+      : undefined;
+  const externalId =
+    typeof payload.externalId === "string" ? payload.externalId : "";
+  const requestId =
+    typeof payload.requestId === "string"
+      ? payload.requestId
+      : crypto.randomUUID();
+  if (
+    !connectionId ||
+    !requestedByPersonId ||
+    !subjectPersonId ||
+    !source ||
+    !externalId
+  ) {
+    throw new Error("Sand profile-import workflow payload is incomplete");
+  }
+  const database = getDatabase();
+  const connection = await database.query.playerSourceConnections.findFirst({
+    where: eq(playerSourceConnections.id, connectionId),
+  });
+  if (!connection) {
+    throw new Error("Player source connection was not found");
+  }
+  await database
+    .update(playerSourceConnections)
+    .set({ status: "syncing", lastError: null, updatedAt: new Date() })
+    .where(eq(playerSourceConnections.id, connection.id));
+  const actor = await workflowActor(requestedByPersonId);
+  const now = new Date();
+  try {
+    const imported = await importSandSource({
+      source,
+      externalId,
+      actor,
+      now,
+    });
+    const sourceRow = await database.query.importSources.findFirst({
+      where: eq(importSources.slug, source),
+    });
+    const profile = sourceRow
+      ? await database.query.externalPlayerProfiles.findFirst({
+          where: and(
+            eq(externalPlayerProfiles.sourceId, sourceRow.id),
+            eq(externalPlayerProfiles.externalPersonId, externalId),
+          ),
+        })
+      : undefined;
+    if (!sourceRow || !profile) {
+      throw new Error("Imported source profile was not persisted");
+    }
+    if (profile.personId && profile.personId !== subjectPersonId) {
+      const mappedPerson = await database.query.people.findFirst({
+        where: eq(people.id, profile.personId),
+      });
+      if (mappedPerson?.profileClaimStatus === "claimed") {
+        await database
+          .update(playerSourceConnections)
+          .set({
+            status: "review-required",
+            lastIngestionRunId: imported.runId,
+            lastError:
+              "This profile is already linked to a claimed Duna identity.",
+            updatedAt: now,
+          })
+          .where(eq(playerSourceConnections.id, connection.id));
+        return {
+          connectionId,
+          status: "review-required" as const,
+          queuedMatches: 0,
+        };
+      }
+    }
+    await linkExternalPlayer({
+      actor,
+      externalProfileId: profile.id,
+      personId: subjectPersonId,
+      reason:
+        "Player supplied and claimed this exact source profile during onboarding.",
+      now,
+    });
+    if (source === "bvbinfo") {
+      await database
+        .update(people)
+        .set({
+          isProfessional: true,
+          professionalDefinition:
+            "Professional competition history linked from BVBInfo.",
+          updatedAt: now,
+        })
+        .where(eq(people.id, subjectPersonId));
+    }
+    const ready = await database
+      .select({
+        id: importedMatches.id,
+        participants: importedMatches.participants,
+      })
+      .from(importedMatches)
+      .where(
+        and(
+          eq(importedMatches.sourceId, sourceRow.id),
+          eq(importedMatches.importState, "ready"),
+        ),
+      );
+    const relevant = ready.filter((match) =>
+      match.participants.some(
+        (participant) => participant.personId === subjectPersonId,
+      ),
+    );
+    for (const match of relevant) {
+      await database
+        .insert(workflowJobs)
+        .values({
+          kind: "sand.auto-approve-match",
+          idempotencyKey: `sand-auto-approve:${match.id}`,
+          payload: {
+            importedMatchId: match.id,
+            requestedByPersonId,
+            requestId,
+          },
+          traceId: requestId,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing();
+    }
+    await database
+      .update(playerSourceConnections)
+      .set({
+        status: "linked",
+        lastIngestionRunId: imported.runId,
+        lastError: null,
+        lastSyncedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(playerSourceConnections.id, connection.id));
+    return {
+      connectionId,
+      status: "linked" as const,
+      queuedMatches: relevant.length,
+    };
+  } catch (error) {
+    await database
+      .update(playerSourceConnections)
+      .set({
+        status: "failed",
+        lastError:
+          error instanceof Error
+            ? error.message.slice(0, 1_000)
+            : "Profile import failed.",
+        updatedAt: now,
+      })
+      .where(eq(playerSourceConnections.id, connection.id));
+    throw error;
+  }
+}
+
+export async function processSandAutoApproveMatch(
+  payload: Readonly<Record<string, unknown>>,
+) {
+  const importedMatchId =
+    typeof payload.importedMatchId === "string" ? payload.importedMatchId : "";
+  const requestedByPersonId =
+    typeof payload.requestedByPersonId === "string"
+      ? payload.requestedByPersonId
+      : "";
+  const requestId =
+    typeof payload.requestId === "string"
+      ? payload.requestId
+      : crypto.randomUUID();
+  if (!importedMatchId || !requestedByPersonId) {
+    throw new Error("Sand match approval workflow payload is incomplete");
+  }
+  return approveImportedMatch({
+    actor: await workflowActor(requestedByPersonId),
+    importedMatchId,
+    reason:
+      "Source-owned match auto-approved after the player claimed the exact source profile.",
+    requestId,
+  });
 }
 
 export async function searchDunaPlayers(query: string) {

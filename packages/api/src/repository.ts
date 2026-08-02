@@ -69,6 +69,20 @@ export const demoRepository = {
         ageBand: "adult" as const,
         ageVerified: false,
         parentalConsentRecorded: false,
+        playingExperience: "amateur" as const,
+        onboardingStatus: "complete" as const,
+      },
+      identityVerification: {
+        configured: Boolean(process.env.STRIPE_SECRET_KEY),
+        status: "not-started" as const,
+      },
+      sourceConnections: [],
+      voiceOnboarding: {
+        configured: Boolean(
+          process.env.LIVEKIT_URL &&
+          process.env.LIVEKIT_API_KEY &&
+          process.env.LIVEKIT_API_SECRET,
+        ),
       },
       household: [],
       dunaPlusPlans: [

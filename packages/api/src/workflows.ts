@@ -23,6 +23,11 @@ import {
   fulfillPaidCatalogOrder,
   releaseCatalogOrderInventory,
 } from "./catalog-checkout";
+import { synchronizeIdentityVerification } from "./identity-verification";
+import {
+  processPlayerSourceConnection,
+  processSandAutoApproveMatch,
+} from "./sand-data/service";
 
 export type WorkflowStatus =
   "queued" | "running" | "retry" | "succeeded" | "failed";
@@ -367,6 +372,13 @@ async function processStripeWorkflow(
       occurredAt,
       traceId: eventPayload.id ?? webhook.providerEventId,
     });
+  } else if (action === "identity.synchronized") {
+    await synchronizeIdentityVerification({
+      object,
+      eventType: webhook.eventType,
+      occurredAt,
+      traceId: eventPayload.id ?? webhook.providerEventId,
+    });
   } else if (action === "order.payment_succeeded") {
     const metadata = object.metadata as
       Readonly<Record<string, unknown>> | undefined;
@@ -690,6 +702,10 @@ export async function processWorkflowJobById(
   try {
     if (claimed.kind.startsWith("stripe.")) {
       await processStripeWorkflow(claimed.payload);
+    } else if (claimed.kind === "sand.profile-import") {
+      await processPlayerSourceConnection(claimed.payload);
+    } else if (claimed.kind === "sand.auto-approve-match") {
+      await processSandAutoApproveMatch(claimed.payload);
     } else {
       throw new Error(`No workflow handler is registered for ${claimed.kind}`);
     }

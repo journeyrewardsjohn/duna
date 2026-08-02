@@ -207,6 +207,150 @@ export async function addDependentAction(input: {
   }
 }
 
+export async function inferPlayingExperienceAction(narrative: string) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.inferPlayingExperience({ narrative });
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Duna could not structure that playing history.",
+    };
+  }
+}
+
+export async function updatePlayingProfileAction(input: {
+  subjectPersonId?: string;
+  legalGivenName: string;
+  legalMiddleName?: string;
+  legalFamilyName: string;
+  heightMillimeters?: number;
+  playingExperience: "amateur" | "high-school" | "collegiate" | "professional";
+  playedIndoorPrior: boolean;
+  yearsPlaying: number;
+  experienceSummary?: string;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.updatePlayingProfile({
+      ...input,
+      legalMiddleName: input.legalMiddleName?.trim() || null,
+      heightMillimeters: input.heightMillimeters ?? null,
+      experienceSummary: input.experienceSummary?.trim() || null,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/app", "layout");
+    revalidatePath("/app/onboarding");
+    revalidatePath("/app/settings");
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The playing profile could not be saved.",
+    };
+  }
+}
+
+export async function createGuardianInvitationAction(input: {
+  subjectPersonId?: string;
+  relationship: string;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.createGuardianInvitation({
+      ...input,
+      applicationOrigin: await origin(),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/app", "layout");
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The guardian invitation could not be created.",
+    };
+  }
+}
+
+export async function startIdentityVerificationAction() {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.startIdentityVerification({
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/app/settings");
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Stripe Identity verification could not be started.",
+    };
+  }
+}
+
+export async function connectPlayerSourceAction(input: {
+  subjectPersonId?: string;
+  source: "volleyball-life" | "bvbinfo";
+  profileUrl: string;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.connectPlayerSource({
+      ...input,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/app/onboarding");
+    revalidatePath("/app/settings");
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The match-history import could not be queued.",
+    };
+  }
+}
+
+export async function transferFamilyCreditsAction(input: {
+  dependentPersonId: string;
+  organizationId: string;
+  credits: number;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.transferFamilyCredits({
+      ...input,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/app/wallet");
+    revalidatePath("/app/settings");
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The child wallet could not be funded.",
+    };
+  }
+}
+
 const consentDisclosures = {
   "marketing-email":
     "Duna may send optional email updates about nearby play, programs, product news, and offers. You can turn these emails off at any time.",

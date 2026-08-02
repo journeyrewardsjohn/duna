@@ -334,6 +334,71 @@ export const playerSettingsSchema = z.object({
     ageVerified: z.boolean(),
     birthDate: z.iso.date().optional(),
     parentalConsentRecorded: z.boolean(),
+    legalGivenName: z.string().optional(),
+    legalMiddleName: z.string().optional(),
+    legalFamilyName: z.string().optional(),
+    heightMillimeters: z.number().int().min(600).max(2600).optional(),
+    playingExperience: z.enum([
+      "not-set",
+      "amateur",
+      "high-school",
+      "collegiate",
+      "professional",
+    ]),
+    playedIndoorPrior: z.boolean().optional(),
+    yearsPlaying: z.number().int().min(0).max(100).optional(),
+    experienceSummary: z.string().optional(),
+    onboardingStatus: z.enum([
+      "not-started",
+      "in-progress",
+      "guardian-required",
+      "complete",
+    ]),
+    onboardingCompletedAt: z.iso.datetime().optional(),
+  }),
+  identityVerification: z.object({
+    configured: z.boolean(),
+    verificationId: z.string().uuid().optional(),
+    status: z.enum([
+      "not-started",
+      "requires-input",
+      "processing",
+      "verified",
+      "canceled",
+      "redacted",
+    ]),
+    livemode: z.boolean().optional(),
+    verifiedAt: z.iso.datetime().optional(),
+    lastErrorCode: z.string().optional(),
+  }),
+  sourceConnections: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        source: z.enum(["volleyball-life", "bvbinfo"]),
+        profileUrl: z.string().url(),
+        status: z.enum([
+          "queued",
+          "syncing",
+          "linked",
+          "review-required",
+          "failed",
+          "disconnected",
+        ]),
+        lastSyncedAt: z.iso.datetime().optional(),
+        lastError: z.string().optional(),
+      }),
+    )
+    .readonly(),
+  guardianInvitation: z
+    .object({
+      id: z.string().uuid(),
+      status: z.enum(["pending", "claimed", "expired", "cancelled"]),
+      expiresAt: z.iso.datetime(),
+    })
+    .optional(),
+  voiceOnboarding: z.object({
+    configured: z.boolean(),
   }),
   household: z
     .array(
@@ -344,6 +409,12 @@ export const playerSettingsSchema = z.object({
         verified: z.boolean(),
         emergencyContact: z.boolean(),
         canApproveSpending: z.boolean(),
+        onboardingStatus: z.enum([
+          "not-started",
+          "in-progress",
+          "guardian-required",
+          "complete",
+        ]),
       }),
     )
     .readonly(),

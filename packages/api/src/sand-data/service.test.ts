@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { professionalEventSlug } from "./service";
+import { parsePlayerSourceProfile, professionalEventSlug } from "./service";
 
 describe("professionalEventSlug", () => {
   it("creates one stable gender segment when the name already includes it", () => {
@@ -20,5 +20,35 @@ describe("professionalEventSlug", () => {
         startsOn: "2026-08-20",
       }),
     ).toBe("elite-16-montreal-womens-2026-08-20");
+  });
+});
+
+describe("parsePlayerSourceProfile", () => {
+  it("normalizes VolleyballLife player links to a stable source identity", () => {
+    expect(
+      parsePlayerSourceProfile(
+        "volleyball-life",
+        "https://www.volleyballlife.com/playerprofile/000653?tab=matches",
+      ),
+    ).toEqual({
+      externalId: "653",
+      profileUrl: "https://volleyballlife.com/playerprofile/653",
+    });
+  });
+
+  it("accepts a BVBInfo numeric player id", () => {
+    expect(parsePlayerSourceProfile("bvbinfo", "8737")).toEqual({
+      externalId: "8737",
+      profileUrl: "http://www.bvbinfo.com/player.asp?ID=8737&Page=1",
+    });
+  });
+
+  it("rejects lookalike source domains", () => {
+    expect(() =>
+      parsePlayerSourceProfile(
+        "volleyball-life",
+        "https://volleyballlife.example/playerprofile/653",
+      ),
+    ).toThrow("VolleyballLife");
   });
 });

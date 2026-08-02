@@ -915,6 +915,7 @@ async function sendBookingInviteSms(input: {
 
 export async function startCourtCheckout(input: {
   readonly actor: ApiActor;
+  readonly subjectPersonId?: string;
   readonly courtId: string;
   readonly localStartsAt: string;
   readonly durationMinutes: number;
@@ -936,6 +937,11 @@ export async function startCourtCheckout(input: {
     );
   }
   const database = getDatabase();
+  const subjectPersonId = input.subjectPersonId ?? input.actor.personId;
+  const subjectAuthority = await assertSubjectAuthority({
+    actor: input.actor,
+    subjectPersonId,
+  });
   const resource = await checkoutResource(input.courtId);
   if (!resource.durationOptionsMinutes.includes(input.durationMinutes)) {
     throw new CourtCheckoutError(
@@ -998,7 +1004,8 @@ export async function startCourtCheckout(input: {
           candidate.phoneE164?.trim();
         return candidateKey === key;
       }) === index &&
-      participant.personId !== input.actor.personId
+      participant.personId !== input.actor.personId &&
+      participant.personId !== subjectPersonId
     );
   });
   const personIds = invitedPeople.flatMap((participant) =>
@@ -1023,7 +1030,7 @@ export async function startCourtCheckout(input: {
     );
   }
   const organizationMember = await hasOrganizationMembership({
-    personId: input.actor.personId,
+    personId: subjectPersonId,
     organizationId: resource.organizationId,
   });
   const rateAmountMinor = organizationMember
@@ -1077,6 +1084,7 @@ export async function startCourtCheckout(input: {
   }
   const hold = await createCourtHold({
     actor: input.actor,
+    subjectPersonId,
     courtId: input.courtId,
     startsAt: startsAt.toISOString(),
     endsAt: endsAt.toISOString(),
@@ -1134,10 +1142,10 @@ export async function startCourtCheckout(input: {
     {
       id: crypto.randomUUID(),
       bookingId: hold.bookingId,
-      personId: input.actor.personId,
-      invitedName: buyer.displayName,
-      invitedEmail: buyer.email,
-      invitedPhoneE164: buyer.phoneE164,
+      personId: subjectPersonId,
+      invitedName: subjectAuthority.person.displayName,
+      invitedEmail: subjectAuthority.person.email,
+      invitedPhoneE164: subjectAuthority.person.phoneE164,
       inviteToken: crypto.randomUUID(),
       role: "organizer",
       status:
@@ -1191,11 +1199,11 @@ export async function startCourtCheckout(input: {
   const policyAcceptance = {
     acceptanceKey: stableHash({
       bookingId: hold.bookingId,
-      personId: input.actor.personId,
+      personId: subjectPersonId,
       policyHash,
     }),
     bookingId: hold.bookingId,
-    subjectPersonId: input.actor.personId,
+    subjectPersonId,
     acceptedByPersonId: input.actor.personId,
     policyTitle: policy.title,
     documentText: policy.markdown,

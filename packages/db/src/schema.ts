@@ -280,6 +280,9 @@ export const people = pgTable(
     email: text("email"),
     givenName: text("given_name"),
     familyName: text("family_name"),
+    legalGivenName: text("legal_given_name"),
+    legalMiddleName: text("legal_middle_name"),
+    legalFamilyName: text("legal_family_name"),
     displayName: text("display_name").notNull(),
     handle: varchar("handle", { length: 48 }).notNull().unique(),
     avatarUrl: text("avatar_url"),
@@ -309,6 +312,22 @@ export const people = pgTable(
     measurementSystem: varchar("measurement_system", { length: 12 })
       .notNull()
       .default("imperial"),
+    heightMillimeters: integer("height_millimeters"),
+    playingExperience: varchar("playing_experience", { length: 24 })
+      .notNull()
+      .default("not-set"),
+    playedIndoorPrior: boolean("played_indoor_prior"),
+    yearsPlaying: integer("years_playing"),
+    experienceSummary: text("experience_summary"),
+    profileOnboardingStatus: varchar("profile_onboarding_status", {
+      length: 24,
+    })
+      .notNull()
+      .default("not-started"),
+    profileOnboardingCompletedAt: timestamp("profile_onboarding_completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     status: personStatusEnum("status").notNull().default("active"),
     ...{ createdAt, updatedAt },
   },
@@ -329,6 +348,22 @@ export const people = pgTable(
     check(
       "people_profile_claim_status_check",
       sql`${table.profileClaimStatus} IN ('claimed', 'unclaimed', 'claim-pending', 'merged')`,
+    ),
+    check(
+      "people_height_valid",
+      sql`${table.heightMillimeters} IS NULL OR ${table.heightMillimeters} BETWEEN 600 AND 2600`,
+    ),
+    check(
+      "people_playing_experience_valid",
+      sql`${table.playingExperience} IN ('not-set', 'amateur', 'high-school', 'collegiate', 'professional')`,
+    ),
+    check(
+      "people_years_playing_valid",
+      sql`${table.yearsPlaying} IS NULL OR ${table.yearsPlaying} BETWEEN 0 AND 100`,
+    ),
+    check(
+      "people_profile_onboarding_status_valid",
+      sql`${table.profileOnboardingStatus} IN ('not-started', 'in-progress', 'guardian-required', 'complete')`,
     ),
   ],
 );
@@ -415,6 +450,157 @@ export const guardianConsents = pgTable(
     check(
       "guardian_consent_method_valid",
       sql`${table.method} IN ('signed-attestation', 'identity-provider', 'admin-review')`,
+    ),
+  ],
+);
+
+export const guardianInvitations = pgTable(
+  "guardian_invitations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    minorId: uuid("minor_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    createdByPersonId: uuid("created_by_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+    relationship: varchar("relationship", { length: 48 })
+      .notNull()
+      .default("Parent or legal guardian"),
+    status: varchar("status", { length: 16 }).notNull().default("pending"),
+    claimedByPersonId: uuid("claimed_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    claimedAt: timestamp("claimed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    cancelledAt: timestamp("cancelled_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("guardian_invitation_minor_status_idx").on(
+      table.minorId,
+      table.status,
+      table.expiresAt,
+    ),
+    check(
+      "guardian_invitation_status_valid",
+      sql`${table.status} IN ('pending', 'claimed', 'expired', 'cancelled')`,
+    ),
+    check(
+      "guardian_invitation_claim_state_valid",
+      sql`(${table.status} = 'claimed' AND ${table.claimedByPersonId} IS NOT NULL AND ${table.claimedAt} IS NOT NULL) OR (${table.status} <> 'claimed')`,
+    ),
+  ],
+);
+
+export const identityVerificationSessions = pgTable(
+  "identity_verification_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    requestedByPersonId: uuid("requested_by_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    provider: varchar("provider", { length: 24 }).notNull().default("stripe"),
+    providerSessionId: varchar("provider_session_id", { length: 128 })
+      .notNull()
+      .unique(),
+    purpose: varchar("purpose", { length: 24 }).notNull().default("payouts"),
+    status: varchar("status", { length: 24 })
+      .notNull()
+      .default("requires-input"),
+    livemode: boolean("livemode").notNull().default(false),
+    lastErrorCode: varchar("last_error_code", { length: 96 }),
+    verifiedAt: timestamp("verified_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    submittedAt: timestamp("submitted_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    redactedAt: timestamp("redacted_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("identity_verification_person_status_idx").on(
+      table.personId,
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "identity_verification_provider_valid",
+      sql`${table.provider} IN ('stripe')`,
+    ),
+    check(
+      "identity_verification_purpose_valid",
+      sql`${table.purpose} IN ('payouts')`,
+    ),
+    check(
+      "identity_verification_status_valid",
+      sql`${table.status} IN ('requires-input', 'processing', 'verified', 'canceled', 'redacted')`,
+    ),
+  ],
+);
+
+export const playerSourceConnections = pgTable(
+  "player_source_connections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    source: varchar("source", { length: 32 }).notNull(),
+    externalPersonId: text("external_person_id").notNull(),
+    profileUrl: text("profile_url").notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("queued"),
+    lastIngestionRunId: uuid("last_ingestion_run_id"),
+    lastError: text("last_error"),
+    lastSyncedAt: timestamp("last_synced_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("player_source_connection_person_source_unique").on(
+      table.personId,
+      table.source,
+    ),
+    uniqueIndex("player_source_connection_external_unique").on(
+      table.source,
+      table.externalPersonId,
+    ),
+    index("player_source_connection_status_idx").on(
+      table.status,
+      table.updatedAt,
+    ),
+    check(
+      "player_source_connection_source_valid",
+      sql`${table.source} IN ('volleyball-life', 'bvbinfo')`,
+    ),
+    check(
+      "player_source_connection_status_valid",
+      sql`${table.status} IN ('queued', 'syncing', 'linked', 'review-required', 'failed', 'disconnected')`,
     ),
   ],
 );
@@ -3316,6 +3502,56 @@ export const organizationCreditGrants = pgTable(
       "organization_credit_grant_status_valid",
       sql`${table.status} IN ('active', 'exhausted', 'expired', 'reversed')`,
     ),
+  ],
+);
+
+export const familyCreditTransfers = pgTable(
+  "family_credit_transfers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    guardianPersonId: uuid("guardian_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    dependentPersonId: uuid("dependent_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    fromWalletId: uuid("from_wallet_id")
+      .notNull()
+      .references(() => organizationWallets.id, { onDelete: "restrict" }),
+    toWalletId: uuid("to_wallet_id")
+      .notNull()
+      .references(() => organizationWallets.id, { onDelete: "restrict" }),
+    journalId: uuid("journal_id")
+      .notNull()
+      .references(() => ledgerJournals.id, { onDelete: "restrict" })
+      .unique(),
+    credits: integer("credits").notNull(),
+    idempotencyKey: varchar("idempotency_key", { length: 128 })
+      .notNull()
+      .unique(),
+    createdAt,
+  },
+  (table) => [
+    index("family_credit_transfer_guardian_idx").on(
+      table.guardianPersonId,
+      table.createdAt,
+    ),
+    index("family_credit_transfer_dependent_idx").on(
+      table.dependentPersonId,
+      table.createdAt,
+    ),
+    check(
+      "family_credit_transfer_people_distinct",
+      sql`${table.guardianPersonId} <> ${table.dependentPersonId}`,
+    ),
+    check(
+      "family_credit_transfer_wallets_distinct",
+      sql`${table.fromWalletId} <> ${table.toWalletId}`,
+    ),
+    check("family_credit_transfer_positive", sql`${table.credits} > 0`),
   ],
 );
 

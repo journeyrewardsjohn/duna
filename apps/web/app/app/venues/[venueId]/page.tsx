@@ -48,6 +48,12 @@ export default async function VenueBookingPage({
             ? "Stripe Checkout was cancelled. The temporary court hold will release automatically."
             : undefined
         }
+        bookingSubjects={[
+          settings.profile.person,
+          ...settings.household
+            .filter((member) => member.role === "dependent" && member.verified)
+            .map((member) => member.person),
+        ]}
         inventory={inventory}
         suggestedPlayers={suggestedPlayers}
         isDunaPlus={Boolean(

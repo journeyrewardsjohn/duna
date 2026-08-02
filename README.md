@@ -20,6 +20,7 @@ Duna is a two-sided beach-volleyball platform:
 | `apps/hq`                | Operator HQ, platform admin, super admin                     |
 | `apps/player`            | Duna Expo app                                                |
 | `apps/pro`               | Duna Pro Expo app                                            |
+| `apps/voice-agent`       | Private LiveKit player-onboarding voice guide                |
 | `packages/api`           | Typed procedures, authorization, audit, integration adapters |
 | `packages/db`            | Drizzle schema, migrations, Neon access                      |
 | `packages/rating`        | Pure Sand Rating engine                                      |
@@ -39,6 +40,26 @@ pnpm dev
 Copy `.env.example` to `.env.local` for connected services. Without connected
 credentials, the apps run in a seeded, clearly labeled demo environment so the
 entire product can still be explored and tested.
+
+## Guided player onboarding
+
+Player onboarding is available at `/app/onboarding` on the web and from the
+Profile tab in the Duna mobile app. The typed flow always works. Connecting
+`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and `OPENAI_API_KEY`
+adds the optional voice conversation:
+
+```bash
+pnpm --filter @duna/voice-agent dev
+```
+
+The browser receives a short-lived, room-scoped participant token. The agent
+asks only about playing history and returns a transcript for the player or
+parent to review. It does not collect identity documents, payment credentials,
+an exact birth date, or an address.
+
+Stripe Identity is a separate, Stripe-hosted flow for adults who need payout
+eligibility. Duna stores the provider session reference and status, never the
+document or selfie.
 
 ## Connected previews
 
