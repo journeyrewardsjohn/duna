@@ -184,11 +184,22 @@ function successHaptic() {
   }
 }
 
-async function rememberLiveActivityToken(token: LiveActivityPushToken) {
+async function rememberLiveActivityToken(
+  token: LiveActivityPushToken,
+  client?: DunaApiClient,
+) {
   await AsyncStorage.setItem(
     `duna.live-activity.${token.kind}.${token.subjectId}`,
     JSON.stringify({ ...token, recordedAt: new Date().toISOString() }),
   );
+  if (!client) return;
+  await client.player.registerLiveActivity.mutate({
+    kind: token.kind,
+    subjectId: token.subjectId,
+    activityId: token.activityId,
+    pushToken: token.pushToken,
+    environment: __DEV__ ? "sandbox" : "production",
+  });
 }
 
 function weatherSymbol(icon: string | undefined): string {
@@ -348,7 +359,7 @@ function HomeScreen({
 }) {
   const { width } = useWindowDimensions();
   const compact = width < 480;
-  const { dashboard, people: livePeople } = usePlayerRuntime();
+  const { client, dashboard, people: livePeople } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
   const bookings = dashboard?.bookings ?? demoBookings;
   const events = dashboard?.events ?? demoEvents;
@@ -477,7 +488,13 @@ function HomeScreen({
                     status: "Upcoming",
                     startsAt: nextBooking.startsAt,
                   },
-                  { onPushToken: rememberLiveActivityToken },
+                  {
+                    onPushToken: (token) => {
+                      void rememberLiveActivityToken(token, client).catch(
+                        () => undefined,
+                      );
+                    },
+                  },
                 )
                   .then(() => {
                     successHaptic();
@@ -1504,7 +1521,11 @@ function ProTourModal({
         scoreB: latestSet?.b ?? 0,
         setLabel: `Set ${Math.max(match.sets.length, 1)}`,
       },
-      { onPushToken: rememberLiveActivityToken },
+      {
+        onPushToken: (token) => {
+          void rememberLiveActivityToken(token, client).catch(() => undefined);
+        },
+      },
     );
     await AsyncStorage.setItem("duna.followed-pro-match", match.id);
     setFollowedMatchId(match.id);

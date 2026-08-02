@@ -281,6 +281,13 @@
       "when": 1785668168022,
       "tag": "0039_easy_alice",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1785676235059,
+      "tag": "0040_charming_red_shift",
+      "breakpoints": true
     }
   ]
 }

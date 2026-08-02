@@ -216,6 +216,11 @@ import {
   startSelfReportedMatch,
 } from "./match-service";
 import {
+  canRegisterLiveActivity,
+  registerLiveActivitySubscription,
+  revokeLiveActivitySubscription,
+} from "./live-activities";
+import {
   claimGuardianInvitation,
   createGuardianInvitation,
   loadGuardianInvitation,
@@ -1069,6 +1074,74 @@ const playerRouter = router({
   dashboard: protectedProcedure
     .output(playerDashboardSchema)
     .query(({ ctx }) => getRepository().player.dashboard(ctx.actor!.personId)),
+  registerLiveActivity: protectedProcedure
+    .use(requireScope("social:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "live-activity-register",
+        capacity: 30,
+        refillPerMinute: 20,
+      }),
+    )
+    .input(
+      z.object({
+        kind: z.enum(["upcoming", "match"]),
+        subjectId: z.string().uuid(),
+        activityId: z.string().trim().min(1).max(128),
+        pushToken: z
+          .string()
+          .trim()
+          .min(32)
+          .max(512)
+          .regex(/^[a-fA-F0-9]+$/, "Invalid APNs Live Activity token."),
+        environment: z.enum(["sandbox", "production"]),
+      }),
+    )
+    .output(
+      z.object({
+        registered: z.literal(true),
+        deliveryConfigured: z.boolean(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const allowed = await canRegisterLiveActivity({
+        personId: ctx.actor!.personId,
+        kind: input.kind,
+        subjectId: input.subjectId,
+      });
+      if (!allowed) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message:
+            "This Live Activity is available only to its participant or to signed-in followers of a public Pro Tour match.",
+        });
+      }
+      return registerLiveActivitySubscription({
+        personId: ctx.actor!.personId,
+        ...input,
+        now: ctx.now,
+      });
+    }),
+  unregisterLiveActivity: protectedProcedure
+    .use(requireScope("social:write"))
+    .input(
+      z.object({
+        pushToken: z
+          .string()
+          .trim()
+          .min(32)
+          .max(512)
+          .regex(/^[a-fA-F0-9]+$/, "Invalid APNs Live Activity token."),
+      }),
+    )
+    .output(z.object({ revoked: z.boolean() }))
+    .mutation(({ input, ctx }) =>
+      revokeLiveActivitySubscription({
+        personId: ctx.actor!.personId,
+        pushToken: input.pushToken,
+        now: ctx.now,
+      }),
+    ),
   catalogOfferEligibility: protectedProcedure
     .input(z.object({ catalogItemId: z.string().uuid() }))
     .output(catalogOfferEligibilitySchema)

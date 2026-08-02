@@ -4630,6 +4630,56 @@ export const follows = pgTable(
   ],
 );
 
+export const liveActivitySubscriptions = pgTable(
+  "live_activity_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    subjectType: varchar("subject_type", { length: 24 }).notNull(),
+    subjectId: uuid("subject_id").notNull(),
+    activityId: varchar("activity_id", { length: 128 }).notNull(),
+    pushToken: text("push_token").notNull(),
+    environment: varchar("environment", { length: 16 })
+      .notNull()
+      .default("production"),
+    status: varchar("status", { length: 16 }).notNull().default("active"),
+    lastDeliveredAt: timestamp("last_delivered_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    lastError: text("last_error"),
+    revokedAt: timestamp("revoked_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("live_activity_push_token_unique").on(table.pushToken),
+    index("live_activity_subject_status_idx").on(
+      table.subjectType,
+      table.subjectId,
+      table.status,
+    ),
+    index("live_activity_person_status_idx").on(table.personId, table.status),
+    check(
+      "live_activity_subject_type_valid",
+      sql`${table.subjectType} IN ('upcoming', 'match')`,
+    ),
+    check(
+      "live_activity_environment_valid",
+      sql`${table.environment} IN ('sandbox', 'production')`,
+    ),
+    check(
+      "live_activity_status_valid",
+      sql`${table.status} IN ('active', 'expired', 'revoked')`,
+    ),
+  ],
+);
+
 export const pickupSessions = pgTable(
   "pickup_sessions",
   {

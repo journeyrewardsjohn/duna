@@ -47,6 +47,7 @@ import {
 } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import type { ApiActor } from "./context";
+import { publishMatchLiveActivity } from "./live-activities";
 
 export class MatchServiceError extends Error {
   constructor(
@@ -1454,12 +1455,14 @@ export async function appendMatchEvents(input: {
       }),
     ]);
   }
+  const scoring = await loadMatchScoringState({
+    actor: input.actor,
+    matchId: input.matchId,
+  });
+  await publishMatchLiveActivity(scoring, input.now).catch(() => undefined);
   return {
     accepted,
-    scoring: await loadMatchScoringState({
-      actor: input.actor,
-      matchId: input.matchId,
-    }),
+    scoring,
   };
 }
 

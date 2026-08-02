@@ -30,6 +30,7 @@ import {
 import { and, asc, desc, eq, inArray, lte, ne, sql } from "drizzle-orm";
 import { stableHash } from "../canonical";
 import { scopesForRoles, type ApiActor } from "../context";
+import { publishImportedProfessionalActivities } from "../live-activities";
 import { applyApprovedImportedMatchRating } from "../match-service";
 import { assertProfileSubjectAuthority } from "../profile-onboarding";
 import {
@@ -725,6 +726,20 @@ async function executeImport(input: {
         createdAt: input.now,
       }),
     ]);
+    if (input.source === "fivb-12ndr") {
+      const externalEventIds = [
+        ...new Set(
+          result.matches.flatMap((match) =>
+            match.externalEventId ? [match.externalEventId] : [],
+          ),
+        ),
+      ];
+      await publishImportedProfessionalActivities({
+        sourceId: source.id,
+        externalEventIds,
+        now: input.now,
+      }).catch(() => undefined);
+    }
     return { runId: run.id, status: "succeeded" as const, counters };
   } catch (error) {
     const upstream = error instanceof SandDataUpstreamError ? error : undefined;
