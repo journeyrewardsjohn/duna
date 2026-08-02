@@ -116,6 +116,14 @@ describe("weather and daylight planning", () => {
     const second = await loadWeatherForecast(input);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      JSON.parse(
+        String((fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.body),
+      ),
+    ).toMatchObject({
+      location: [33.8847, -118.4109],
+      timesteps: ["1h", "1d"],
+    });
     expect(second).toEqual(first);
     expect(first.source).toBe("tomorrow.io");
     expect(first.days[0]).toMatchObject({

@@ -493,7 +493,7 @@ export async function loadWeatherForecast(input: {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            location: `${input.latitude},${input.longitude}`,
+            location: [input.latitude, input.longitude],
             fields: [
               "temperature",
               "temperatureApparent",
