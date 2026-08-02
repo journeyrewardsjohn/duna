@@ -1308,8 +1308,17 @@ button {
   align-items: flex-start !important;
   display: flex !important;
   flex-direction: column;
+  gap: 0.45rem;
   grid-template-columns: none !important;
   padding: 1.5rem 0.2rem !important;
+}
+
+.hq-empty > span {
+  line-height: 1.5;
+}
+
+.hq-empty > .hq-button {
+  margin-top: 0.3rem;
 }
 
 .module-signal-list {
