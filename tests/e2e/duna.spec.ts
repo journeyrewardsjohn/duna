@@ -15,9 +15,11 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(
-    page.getByRole("heading", { name: "Where your game comes together." }),
+    page.getByRole("heading", { name: /Play more.*Know your game/ }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Find a game" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Find your next game/ }),
+  ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Duna HQ" }).first(),
   ).toHaveAttribute("href", /.+/);

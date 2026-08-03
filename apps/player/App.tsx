@@ -17,6 +17,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
+  ImageBackground,
   Modal,
   Platform,
   Pressable,
@@ -42,6 +43,10 @@ import {
   subscribeToWatchScoreDraft,
   type WatchScoreDraft,
 } from "./watch-scoring";
+
+// Metro requires a static module reference so the campaign image ships in the native bundle.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const dunaCampaignRally = require("./assets/duna-campaign-rally.jpg");
 
 const lightColors = {
   canvas: "#f8f7f3",
@@ -387,24 +392,37 @@ function HomeScreen({
       showsVerticalScrollIndicator={false}
     >
       <AppHeader eyebrow={today.replace(", ", " · ")} />
-      <View
-        style={[styles.homeGreeting, compact && styles.homeGreetingCompact]}
+      <ImageBackground
+        imageStyle={styles.homeCampaignImage}
+        source={dunaCampaignRally}
+        style={[styles.homeCampaign, compact && styles.homeCampaignCompact]}
       >
-        <Text
-          style={[styles.displayTitle, compact && styles.displayTitleCompact]}
-        >
-          Good morning,{`\n`}
-          {player.displayName.split(" ")[0]}.
-        </Text>
-        <Pressable
-          onPress={() =>
-            void WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/score`)
-          }
-          style={styles.scoreAction}
-        >
-          <Text style={styles.scoreActionText}>＋ Score match</Text>
-        </Pressable>
-      </View>
+        <View style={styles.homeCampaignWash} />
+        <View style={styles.homeCampaignContent}>
+          <Text style={styles.homeCampaignEyebrow}>YOUR GAME · TODAY</Text>
+          <Text
+            style={[
+              styles.homeCampaignTitle,
+              compact && styles.homeCampaignTitleCompact,
+            ]}
+          >
+            Good morning,{`\n`}
+            {player.displayName.split(" ")[0]}.
+          </Text>
+          <Text style={styles.homeCampaignSubtitle}>
+            Your next game, latest movement, and everything happening around
+            you.
+          </Text>
+          <Pressable
+            onPress={() =>
+              void WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/score`)
+            }
+            style={styles.homeCampaignAction}
+          >
+            <Text style={styles.homeCampaignActionText}>＋ Record a match</Text>
+          </Pressable>
+        </View>
+      </ImageBackground>
       <View style={styles.heroGrid}>
         <View style={styles.ratingCard}>
           <View style={styles.cardTitleRow}>
@@ -4170,6 +4188,74 @@ function createStyles(palette: Palette) {
       right: 0,
       top: 0,
       width: 9,
+    },
+    homeCampaign: {
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 24,
+      justifyContent: "flex-end",
+      marginBottom: 14,
+      minHeight: 340,
+      overflow: "hidden",
+      position: "relative",
+    },
+    homeCampaignCompact: {
+      minHeight: 390,
+    },
+    homeCampaignImage: {
+      borderRadius: 24,
+      resizeMode: "cover",
+    },
+    homeCampaignWash: {
+      backgroundColor: "rgba(4,20,38,0.52)",
+      bottom: 0,
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
+    homeCampaignContent: {
+      backgroundColor: "rgba(4,20,38,0.22)",
+      gap: 10,
+      padding: 20,
+    },
+    homeCampaignEyebrow: {
+      color: "#e7c68f",
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 1.2,
+    },
+    homeCampaignTitle: {
+      color: "#ffffff",
+      fontSize: 42,
+      fontWeight: "900",
+      letterSpacing: -2.2,
+      lineHeight: 42,
+    },
+    homeCampaignTitleCompact: {
+      fontSize: 39,
+      letterSpacing: -2,
+      lineHeight: 40,
+    },
+    homeCampaignSubtitle: {
+      color: "rgba(255,255,255,0.72)",
+      fontSize: 12,
+      lineHeight: 18,
+      maxWidth: 310,
+    },
+    homeCampaignAction: {
+      alignItems: "center",
+      alignSelf: "flex-start",
+      backgroundColor: "#ffffff",
+      borderRadius: 999,
+      justifyContent: "center",
+      marginTop: 4,
+      minHeight: 44,
+      paddingHorizontal: 16,
+    },
+    homeCampaignActionText: {
+      color: "#0e1828",
+      fontSize: 11,
+      fontWeight: "900",
     },
     homeGreeting: {
       alignItems: "flex-end",

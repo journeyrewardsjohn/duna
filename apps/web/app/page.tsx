@@ -1,20 +1,30 @@
+import { formatMoney, formatVenueTime } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowRight,
-  Check,
-  CircleDollarSign,
+  Building2,
+  CalendarDays,
+  ChartNoAxesCombined,
   MapPin,
   Radio,
+  ShieldCheck,
   Sparkles,
   Trophy,
   Users,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
-import { EventCard } from "@/components/event-card";
 import { RatingOrbit } from "@/components/rating-orbit";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
+
+const campaignMedia = {
+  rally: "/media/duna-campaign-rally.webp",
+  rallyVideo: "/media/duna-campaign-rally.mp4",
+  serve: "/media/duna-campaign-serve.webp",
+  celebrate: "/media/duna-campaign-celebrate.webp",
+} as const;
 
 export default async function HomePage() {
   const caller = await getServerCaller();
@@ -23,343 +33,434 @@ export default async function HomePage() {
     caller.public.players({ limit: 50 }),
     caller.public.venues(),
   ]);
+
   const courtCount = venues.reduce(
     (total, venue) => total + venue.courtCount,
     0,
   );
   const featuredEvent = events[0];
   const featuredPlayer = people[0];
-  const marketLabel = venues[0]
-    ? `${venues[0].city}, ${venues[0].region}`
-    : "New markets opening";
-  const markets = [...new Set(venues.map((venue) => venue.city))].join(" · ");
+  const marketNames = [...new Set(venues.map((venue) => venue.city))]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <main className="marketing">
+    <main className="campaign-home">
       <SiteHeader />
 
-      <section className="hero">
-        <div className="hero__noise" />
-        <div className="hero__glow" />
-        <div className="hero__content">
-          <Badge tone="live">
-            <Radio aria-hidden size={12} /> {courtCount} connected{" "}
-            {courtCount === 1 ? "court" : "courts"}
-          </Badge>
-          <h1>
-            Where your game
-            <br />
-            <span>comes together.</span>
-          </h1>
-          <p>
-            Find people to play, book a court, enter an event, know your
-            rating—and give clubs one simple place to run it all.
-          </p>
-          <div className="hero__actions">
-            <Link className="hero__primary" href="/app">
-              Find a game <ArrowRight aria-hidden size={18} />
-            </Link>
-            <Link className="hero__secondary" href="/run-your-club">
-              Run your club
-            </Link>
+      <section className="campaign-hero">
+        <div className="campaign-hero__media" aria-hidden>
+          <Image alt="" fill priority sizes="100vw" src={campaignMedia.rally} />
+          <video
+            autoPlay
+            className="campaign-hero__video"
+            loop
+            muted
+            playsInline
+            poster={campaignMedia.rally}
+            preload="metadata"
+          >
+            <source src={campaignMedia.rallyVideo} type="video/mp4" />
+          </video>
+          <div className="campaign-hero__wash" />
+        </div>
+
+        <div className="campaign-shell campaign-hero__content">
+          <div className="campaign-hero__copy">
+            <span className="campaign-kicker">
+              <span />
+              The home of your game
+            </span>
+            <h1>
+              Play more.
+              <br />
+              <em>Know your game.</em>
+            </h1>
+            <p>
+              Find courts and people, book, compete, and carry every verified
+              result with you. Duna puts the whole beach in one place.
+            </p>
+            <div className="campaign-hero__actions">
+              <Link
+                className="campaign-button campaign-button--light"
+                href="/app"
+              >
+                Find your next game <ArrowRight aria-hidden size={18} />
+              </Link>
+              <Link
+                className="campaign-button campaign-button--glass"
+                href="/run-your-club"
+              >
+                Run your club
+              </Link>
+            </div>
           </div>
-          <div className="hero__proof">
+
+          <div className="campaign-hero__proof" aria-label="Duna network">
             <div>
               <Numeric>{people.length}</Numeric>
-              <span>public player profiles</span>
+              <span>player profiles</span>
             </div>
             <div>
               <Numeric>{events.length}</Numeric>
-              <span>published play options</span>
+              <span>ways to play</span>
             </div>
             <div>
               <Numeric>{courtCount}</Numeric>
-              <span>bookable court resources</span>
+              <span>connected courts</span>
+            </div>
+          </div>
+
+          <Link
+            className="campaign-now"
+            href={
+              featuredEvent ? `/events/${featuredEvent.slug}` : "/app/discover"
+            }
+          >
+            <span className="campaign-now__status">
+              <Radio aria-hidden size={15} />
+              {featuredEvent?.live ? "Live now" : "Up next"}
+            </span>
+            <span className="campaign-now__title">
+              <strong>
+                {featuredEvent?.title ?? "Discover play near you"}
+              </strong>
+              <small>
+                {featuredEvent
+                  ? `${featuredEvent.venueName} · ${featuredEvent.spotsRemaining} spots`
+                  : "Courts, clinics, pickups, leagues + tournaments"}
+              </small>
+            </span>
+            <span className="campaign-now__arrow">
+              <ArrowRight aria-hidden size={18} />
+            </span>
+          </Link>
+        </div>
+      </section>
+
+      <section className="campaign-trust">
+        <div className="campaign-shell campaign-trust__inner">
+          <p>Backed by beach volleyball&apos;s best.</p>
+          <div aria-label="Athlete backers">
+            <span>Phil Dalhausser</span>
+            <i />
+            <span>Taylor Crabb</span>
+            <i />
+            <span>Taylor Sander</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="campaign-shell campaign-intro">
+        <div className="campaign-intro__heading">
+          <span className="campaign-kicker campaign-kicker--blue">
+            One network. Every side of the sport.
+          </span>
+          <h2>The game finally has a home.</h2>
+          <p>
+            Duna connects what players do on the sand with everything that makes
+            it possible off the court.
+          </p>
+        </div>
+
+        <div className="campaign-paths">
+          <Link href="/app/discover">
+            <span className="campaign-paths__number">01</span>
+            <span className="campaign-paths__icon">
+              <CalendarDays aria-hidden />
+            </span>
+            <h3>Find what&apos;s next.</h3>
+            <p>
+              Courts, pickups, coaching, clinics, leagues, and tournaments—one
+              search, shaped around your city and level.
+            </p>
+            <span className="campaign-paths__link">
+              Explore play <ArrowRight aria-hidden size={16} />
+            </span>
+          </Link>
+          <Link href="/app/profile">
+            <span className="campaign-paths__number">02</span>
+            <span className="campaign-paths__icon">
+              <ChartNoAxesCombined aria-hidden />
+            </span>
+            <h3>Know how you&apos;re moving.</h3>
+            <p>
+              Your Sand Rating reads opponents, partners, scores, and
+              verification—not just who walked away with the win.
+            </p>
+            <span className="campaign-paths__link">
+              See your rating <ArrowRight aria-hidden size={16} />
+            </span>
+          </Link>
+          <Link href="/run-your-club">
+            <span className="campaign-paths__number">03</span>
+            <span className="campaign-paths__icon">
+              <Building2 aria-hidden />
+            </span>
+            <h3>Run the whole operation.</h3>
+            <p>
+              Scheduling, payments, memberships, events, people, courts, and
+              messaging—simple enough to run between sessions.
+            </p>
+            <span className="campaign-paths__link">
+              Meet Duna HQ <ArrowRight aria-hidden size={16} />
+            </span>
+          </Link>
+        </div>
+      </section>
+
+      <section className="campaign-live">
+        <div className="campaign-shell campaign-live__grid">
+          <div className="campaign-live__copy">
+            <span className="campaign-kicker campaign-kicker--sand">
+              Happening on Duna
+            </span>
+            <h2>Your next yes is closer than you think.</h2>
+            <p>
+              A live window into the real courts, people, and competition
+              already connected to Duna.
+            </p>
+
+            <div className="campaign-event-list">
+              {events.slice(0, 3).map((event) => (
+                <Link href={`/events/${event.slug}`} key={event.id}>
+                  <span className="campaign-event-list__date">
+                    <small>
+                      {formatVenueTime(
+                        event.startsAt,
+                        event.timezone,
+                        "en-US",
+                        {
+                          month: "short",
+                          day: undefined,
+                          hour: undefined,
+                          minute: undefined,
+                        },
+                      )}
+                    </small>
+                    <Numeric>
+                      {formatVenueTime(
+                        event.startsAt,
+                        event.timezone,
+                        "en-US",
+                        {
+                          month: undefined,
+                          day: "2-digit",
+                          hour: undefined,
+                          minute: undefined,
+                        },
+                      )}
+                    </Numeric>
+                  </span>
+                  <span className="campaign-event-list__body">
+                    <span>
+                      {event.live && <Badge tone="live">Live</Badge>}
+                      <small>
+                        {event.kind.replace("-", " ")} ·{" "}
+                        {formatVenueTime(
+                          event.startsAt,
+                          event.timezone,
+                          "en-US",
+                          { month: undefined, day: undefined },
+                        )}
+                      </small>
+                    </span>
+                    <strong>{event.title}</strong>
+                    <small>
+                      <MapPin aria-hidden size={13} />
+                      {event.venueName}
+                    </small>
+                  </span>
+                  <span className="campaign-event-list__meta">
+                    <Numeric>
+                      {event.price.amountMinor === 0
+                        ? "Free"
+                        : formatMoney(
+                            event.price.amountMinor,
+                            event.price.currency,
+                            "en-US",
+                          )}
+                    </Numeric>
+                    <small>{event.spotsRemaining} spots</small>
+                  </span>
+                  <span className="campaign-event-list__arrow">
+                    <ArrowRight aria-hidden size={17} />
+                  </span>
+                </Link>
+              ))}
+              {events.length === 0 && (
+                <div className="campaign-event-list__empty">
+                  Published play will appear here as clubs come online.
+                </div>
+              )}
+            </div>
+
+            <Link className="campaign-text-link" href="/app/discover">
+              Explore everything <ArrowRight aria-hidden size={16} />
+            </Link>
+          </div>
+
+          <div className="campaign-live__image">
+            <Image
+              alt="Elite beach volleyball players celebrating together after a point"
+              fill
+              sizes="(max-width: 900px) 100vw, 48vw"
+              src={campaignMedia.celebrate}
+            />
+            <div className="campaign-live__image-wash" />
+            <div className="campaign-live__caption">
+              <span>More than a booking.</span>
+              <strong>It&apos;s who you meet there.</strong>
             </div>
           </div>
         </div>
+      </section>
 
-        <div
-          className="hero__visual"
-          aria-label="Duna connected volleyball experience"
-        >
-          <div className="hero-product-bar">
-            <span>
-              <span className="hero-product-bar__mark" />
-              DUNA
-            </span>
-            <Badge tone="positive">{marketLabel}</Badge>
-          </div>
-          <div className="hero-court">
-            <div className="hero-court__horizon" />
-            <div className="hero-court__sun" />
-            <div className="hero-court__sand">
-              <div className="hero-court__line hero-court__line--left" />
-              <div className="hero-court__line hero-court__line--right" />
-              <div className="hero-court__line hero-court__line--back" />
-              <div className="hero-court__net" />
-              <span className="hero-court__player hero-court__player--one" />
-              <span className="hero-court__player hero-court__player--two" />
-              <span className="hero-court__player hero-court__player--three" />
-              <span className="hero-court__ball" />
-            </div>
-          </div>
-          <div className="hero-live-card">
-            <div>
-              <Badge tone={featuredEvent?.live ? "live" : "neutral"}>
-                {featuredEvent?.live ? "Live" : "Connected"}
-              </Badge>
-              <span>{featuredEvent?.venueName ?? "Duna scoring"}</span>
-            </div>
-            <div className="hero-live-card__score">
-              <span>{featuredEvent?.title ?? "No event published yet"}</span>
-              <Numeric>
-                {featuredEvent
-                  ? `${featuredEvent.spotsRemaining}/${featuredEvent.capacity}`
-                  : "—"}
-              </Numeric>
-            </div>
-            <small>
-              {featuredEvent
-                ? "Connected capacity, schedule, and venue"
-                : "Operators publish inventory into this surface"}
-            </small>
-          </div>
-          <div className="hero-rating-card">
+      <section className="campaign-shell campaign-rating">
+        <div className="campaign-rating__image">
+          <Image
+            alt="Elite beach volleyball player rising for a jump serve"
+            fill
+            sizes="(max-width: 900px) 100vw, 44vw"
+            src={campaignMedia.serve}
+          />
+          <div className="campaign-rating__card">
             <RatingOrbit
               compact
               confidence={featuredPlayer?.rating.confidence ?? "Provisional"}
               delta={featuredPlayer?.rating.delta}
               value={featuredPlayer?.rating.display ?? 1}
             />
-            <div>
-              <span>{featuredPlayer?.displayName ?? "Your Sand Rating"}</span>
-              <strong className="duna-numeric">
+            <span>
+              <small>Sand Rating</small>
+              <strong>
                 {featuredPlayer?.rating.display.toFixed(2) ?? "—"}
               </strong>
-              <small>
-                {featuredPlayer
-                  ? `${featuredPlayer.rating.confidence} confidence`
-                  : "Built from verified results"}
-              </small>
-            </div>
+              <em>
+                {featuredPlayer?.rating.confidence ?? "Provisional"} confidence
+              </em>
+            </span>
           </div>
         </div>
-      </section>
 
-      <section className="market-ribbon">
-        <div>
-          <MapPin aria-hidden size={16} />
-          <span>{marketLabel} is connected</span>
-        </div>
-        <p>
-          <Numeric>{people.length}</Numeric> public profiles ·{" "}
-          <Numeric>{events.length}</Numeric> published options ·{" "}
-          <Numeric>{courtCount}</Numeric> courts
-        </p>
-        <Link href="/app/discover">Explore the market</Link>
-      </section>
-
-      <section className="section section--events">
-        <div className="section__heading">
-          <div>
-            <span className="section__eyebrow">Happening on sand</span>
-            <h2>Your next game is closer than you think.</h2>
-          </div>
-          <Link href="/app/discover">
-            Explore everything <ArrowRight aria-hidden size={16} />
-          </Link>
-        </div>
-        <div className="event-grid">
-          {events.slice(0, 4).map((event, index) => (
-            <EventCard event={event} featured={index === 0} key={event.id} />
-          ))}
-          {events.length === 0 && (
-            <article className="empty-state">
-              <h3>No public sessions yet.</h3>
-              <p>Connected operator inventory will appear here.</p>
-            </article>
-          )}
-        </div>
-      </section>
-
-      <section className="section rating-story">
-        <div className="rating-story__copy">
-          <span className="section__eyebrow">
-            One number. A lifetime of play.
+        <div className="campaign-rating__copy">
+          <span className="campaign-kicker campaign-kicker--blue">
+            Your game, made visible
           </span>
-          <h2>
-            A rating that knows the difference between winning and playing well.
-          </h2>
+          <h2>A rating that moves when your game does.</h2>
           <p>
-            Duna reads the whole match—who you played, who stood beside you,
-            every point, and how the result was verified. Then it shows exactly
-            why you moved.
+            Duna reads the whole result: who you played, who stood beside you,
+            every score, and how the match was verified. Then it shows you why
+            you moved.
           </p>
-          <ul>
-            <li>
-              <Check aria-hidden size={17} />
-              Rally-aware, doubles-native math
-            </li>
-            <li>
-              <Check aria-hidden size={17} />
-              Built from verified results, never vanity inputs
-            </li>
-            <li>
-              <Check aria-hidden size={17} />
-              Your identity and history travel with you
-            </li>
-          </ul>
-          <Link href="/methodology">
-            How the Sand Rating works <ArrowRight aria-hidden size={16} />
+          <div className="campaign-rating__principles">
+            <div>
+              <ShieldCheck aria-hidden />
+              <span>
+                <strong>Verified, not self-declared.</strong>
+                Results build a portable history you can trust.
+              </span>
+            </div>
+            <div>
+              <Users aria-hidden />
+              <span>
+                <strong>Made for partners.</strong>
+                Opponent and teammate strength both matter.
+              </span>
+            </div>
+            <div>
+              <Trophy aria-hidden />
+              <span>
+                <strong>Performance over trophies.</strong>
+                Close matches against better competition count.
+              </span>
+            </div>
+          </div>
+          <Link className="campaign-text-link" href="/methodology">
+            How Sand Rating works <ArrowRight aria-hidden size={16} />
           </Link>
         </div>
-        <div className="rating-story__visual">
-          <div className="rating-story__orbit">
-            <RatingOrbit
-              confidence={featuredPlayer?.rating.confidence ?? "Provisional"}
-              delta={featuredPlayer?.rating.delta}
-              value={featuredPlayer?.rating.display ?? 1}
-            />
+      </section>
+
+      <section className="campaign-operator">
+        <div className="campaign-shell campaign-operator__grid">
+          <div className="campaign-operator__copy">
+            <Badge>For clubs, coaches + facilities</Badge>
+            <h2>Your business should feel as fluid as your game.</h2>
+            <p>
+              Duna HQ keeps the advanced work behind the scenes and gives
+              operators one clear place to schedule, sell, communicate, and
+              grow.
+            </p>
+            <div className="campaign-operator__actions">
+              <Link
+                className="campaign-button campaign-button--blue"
+                href="/run-your-club"
+              >
+                Run your club on Duna <ArrowRight aria-hidden size={17} />
+              </Link>
+              <Link className="campaign-text-link" href="/create">
+                Create an event
+              </Link>
+            </div>
           </div>
-          <div className="rating-story__ladder">
-            {people.slice(0, 4).map((person, index) => (
-              <div key={person.id}>
-                <Numeric>{String(index + 1).padStart(2, "0")}</Numeric>
-                <span className="avatar">{person.initials}</span>
-                <span>
-                  <strong>{person.displayName}</strong>
-                  <small>{person.homeMarket.split(",")[0]}</small>
-                </span>
-                <Numeric>{person.rating.display.toFixed(2)}</Numeric>
+
+          <div className="campaign-operator__product">
+            <div className="campaign-operator__bar">
+              <span>DUNA HQ</span>
+              <Badge tone="positive">Connected</Badge>
+            </div>
+            <div className="campaign-operator__metric campaign-operator__metric--hero">
+              <small>One connected business</small>
+              <strong>
+                <Numeric>{events.length}</Numeric> live offers
+              </strong>
+              <span>{marketNames || "Ready for your first market"}</span>
+            </div>
+            <div className="campaign-operator__metrics">
+              <div>
+                <CalendarDays aria-hidden />
+                <small>Published sessions</small>
+                <Numeric>{events.length}</Numeric>
               </div>
-            ))}
+              <div>
+                <Building2 aria-hidden />
+                <small>Courts</small>
+                <Numeric>{courtCount}</Numeric>
+              </div>
+              <div>
+                <Users aria-hidden />
+                <small>Public profiles</small>
+                <Numeric>{people.length}</Numeric>
+              </div>
+            </div>
+            <div className="campaign-operator__insight">
+              <span>
+                <Sparkles aria-hidden size={17} />
+              </span>
+              <p>
+                <small>Duna AI · Today</small>
+                <strong>
+                  {featuredEvent
+                    ? `${featuredEvent.title} has ${featuredEvent.spotsRemaining} spots left.`
+                    : "Your first event can be live in minutes."}
+                </strong>
+              </p>
+              <ArrowRight aria-hidden size={17} />
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="section moments">
-        <div className="section__heading">
-          <div>
-            <span className="section__eyebrow">The whole loop</span>
-            <h2>From “who’s playing?” to paid before you leave.</h2>
-          </div>
+      <section className="campaign-closing">
+        <div className="campaign-shell campaign-closing__inner">
+          <span className="campaign-kicker">The court is waiting</span>
+          <h2>There&apos;s always another game.</h2>
+          <p>Find yours. Bring the whole history with you.</p>
+          <Link className="campaign-button campaign-button--light" href="/app">
+            Enter Duna <ArrowRight aria-hidden size={18} />
+          </Link>
         </div>
-        <div className="moments__grid">
-          <article>
-            <span className="moments__icon">
-              <Users aria-hidden />
-            </span>
-            <p>01</p>
-            <h3>Find the right run</h3>
-            <span>
-              Pickup, coaching, open play, leagues, and tournaments—all filtered
-              to your level and your city.
-            </span>
-          </article>
-          <article>
-            <span className="moments__icon">
-              <Trophy aria-hidden />
-            </span>
-            <p>02</p>
-            <h3>Make every point count</h3>
-            <span>
-              Score live or record in seconds. Offline courts sync honestly when
-              service returns.
-            </span>
-          </article>
-          <article>
-            <span className="moments__icon">
-              <Sparkles aria-hidden />
-            </span>
-            <p>03</p>
-            <h3>Keep the moment</h3>
-            <span>
-              Rating movement, match story, and a recap card made to share
-              before the sand is out of your shoes.
-            </span>
-          </article>
-          <article>
-            <span className="moments__icon">
-              <CircleDollarSign aria-hidden />
-            </span>
-            <p>04</p>
-            <h3>Pay without the chase</h3>
-            <span>
-              Purchases, organization credits, refunds, and receipts stay
-              together in one honest history.
-            </span>
-          </article>
-        </div>
-      </section>
-
-      <section className="operator-callout">
-        <div className="operator-callout__visual">
-          <div className="operator-callout__topbar">
-            <span>DUNA HQ</span>
-            <Badge tone="positive">Connected snapshot</Badge>
-          </div>
-          <div className="operator-callout__metrics">
-            <div>
-              <small>Published sessions</small>
-              <Numeric>{events.length}</Numeric>
-              <span>Live repository</span>
-            </div>
-            <div>
-              <small>Connected courts</small>
-              <Numeric>{courtCount}</Numeric>
-              <span>{venues.length} venues</span>
-            </div>
-            <div>
-              <small>Public profiles</small>
-              <Numeric>{people.length}</Numeric>
-              <span>Privacy-filtered</span>
-            </div>
-          </div>
-          <div className="operator-callout__schedule">
-            <span>{featuredEvent ? "Next" : "Ready"}</span>
-            <strong>{featuredEvent?.title ?? "Publish from Duna HQ"}</strong>
-            <small>
-              {featuredEvent
-                ? `${featuredEvent.venueName} · ${featuredEvent.spotsRemaining} spots remaining`
-                : "Inventory, schedules, registration, and reporting"}
-            </small>
-            <Badge tone={featuredEvent?.live ? "live" : "neutral"}>
-              {featuredEvent?.live ? "Live" : "Connected"}
-            </Badge>
-          </div>
-        </div>
-        <div className="operator-callout__copy">
-          <Badge>For clubs, coaches + facilities</Badge>
-          <h2>Run the whole beach from one place.</h2>
-          <p>
-            Scheduling, memberships, payments, leagues, ticketing, staff,
-            messaging, reporting, and the player network that fills it all.
-          </p>
-          <p className="operator-callout__promise">
-            Coaches start free. Clubs pay simple software plus the processing
-            rate they already expect.
-          </p>
-          <div className="operator-callout__actions">
-            <Link href="/create">
-              Create an event <ArrowRight aria-hidden size={17} />
-            </Link>
-            <a href={process.env.NEXT_PUBLIC_HQ_URL ?? "http://localhost:3001"}>
-              Explore Duna HQ
-            </a>
-          </div>
-        </div>
-      </section>
-
-      <section className="final-cta">
-        <div className="final-cta__sun" />
-        <Badge tone={markets ? "live" : "neutral"}>
-          {markets || "New markets opening"}
-        </Badge>
-        <h2>There’s always another game.</h2>
-        <p>Find yours. Bring the whole history with you.</p>
-        <Link href="/app">
-          Enter Duna <ArrowRight aria-hidden size={18} />
-        </Link>
       </section>
 
       <SiteFooter />

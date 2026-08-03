@@ -10,6 +10,7 @@ import {
   Sparkles,
   Trophy,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { EventCard } from "@/components/event-card";
 import { MatchCard } from "@/components/match-card";
@@ -32,13 +33,22 @@ export default async function PlayerDashboard() {
   }).format(new Date());
   return (
     <main className="player-dashboard">
-      <section className="player-welcome">
-        <div>
+      <section className="player-welcome player-welcome--campaign">
+        <Image
+          alt=""
+          aria-hidden
+          fill
+          priority
+          sizes="(max-width: 900px) 100vw, 1200px"
+          src="/media/duna-campaign-rally.webp"
+        />
+        <div className="player-welcome__campaign-wash" />
+        <div className="player-welcome__campaign-copy">
           <span className="page-eyebrow">{dateLabel}</span>
           <h1>Welcome back, {player.displayName.split(" ")[0]}.</h1>
           <p>
-            Your rating, connected bookings, wallet, and available play are
-            current below.
+            Your next game, latest movement, and everything happening around
+            you—ready when you are.
           </p>
         </div>
         <div className="player-welcome__actions">
