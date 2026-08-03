@@ -351,6 +351,21 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(page.getByText("No courts yet")).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 
+  await page.goto("http://127.0.0.1:3001/events");
+  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "No drafts awaiting publication",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Every saved draft stays here until you explicitly review it and open registration.",
+    ),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: /Create event/ })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
   await page.goto("http://127.0.0.1:3001/admin");
   await expect(
     page.getByRole("heading", {

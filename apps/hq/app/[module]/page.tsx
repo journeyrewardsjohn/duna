@@ -16,10 +16,13 @@ export async function generateMetadata({
 
 export default async function OperatorModulePage({
   params,
+  searchParams,
 }: {
   readonly params: Promise<{ module: string }>;
+  readonly searchParams: Promise<{ draft?: string }>;
 }) {
   const { module } = await params;
+  const { draft } = await searchParams;
   const item = operatorModules.find((entry) => entry.slug === module);
   if (!item || module === "overview") notFound();
   const caller = await getServerCaller();
@@ -36,6 +39,7 @@ export default async function OperatorModulePage({
     >
       <ModulePanel
         dashboard={dashboard}
+        focusedDraftId={draft}
         module={module as OperatorModule}
         ticketApprovals={ticketApprovals}
         workspace={workspace}

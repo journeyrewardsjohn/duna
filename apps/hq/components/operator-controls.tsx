@@ -51,7 +51,6 @@ import {
   createRatePlanAction,
   createVenueAction,
   draftCourtScheduleAction,
-  publishSessionAction,
   publishVenueAction,
   replaceCourtScheduleAction,
   saveMessageDraftAction,
@@ -73,6 +72,7 @@ import {
   PeopleWalletControls,
   ProductCatalogControls,
 } from "./commerce-controls";
+import { SessionDraftManager } from "./session-draft-manager";
 
 const initialOperatorActionState: OperatorActionState = {
   status: "idle",
@@ -2151,71 +2151,6 @@ function SessionComposer({
   );
 }
 
-function PublishSession({
-  session,
-}: {
-  readonly session: OperatorWorkspace["sessions"][number];
-}) {
-  const [state, action, pending] = useActionState(
-    publishSessionAction,
-    initialOperatorActionState,
-  );
-  if (session.status !== "draft") return null;
-  return (
-    <form action={action} className="operator-inline-action">
-      <input type="hidden" name="sessionId" value={session.id} />
-      <input type="hidden" name="confirmed" value="true" />
-      <ActionNotice state={state} />
-      <SubmitButton pending={pending}>Confirm & open registration</SubmitButton>
-    </form>
-  );
-}
-
-function SessionDrafts({
-  workspace,
-}: {
-  readonly workspace: OperatorWorkspace;
-}) {
-  const drafts = workspace.sessions.filter(
-    (session) => session.status === "draft",
-  );
-  return (
-    <section className="hq-card operator-control-card">
-      <header className="hq-card-heading">
-        <div>
-          <span className="hq-eyebrow">Publication gate</span>
-          <h2>{drafts.length} private drafts</h2>
-          <p>Paid sessions also require online payments to be enabled.</p>
-        </div>
-        <ShieldCheck aria-hidden size={24} />
-      </header>
-      <div className="operator-compact-list">
-        {drafts.map((session) => (
-          <article key={session.id}>
-            <span>
-              <strong>{session.title}</strong>
-              <small>
-                {session.kind.replaceAll("-", " ")} ·{" "}
-                {new Date(session.startsAt).toLocaleString()}
-              </small>
-            </span>
-            <Numeric>
-              {formatMoney(session.priceMinor, session.currency)}
-            </Numeric>
-            <PublishSession session={session} />
-          </article>
-        ))}
-        {drafts.length === 0 && (
-          <div className="hq-empty">
-            <strong>No session drafts waiting.</strong>
-            <span>Create one below or manage published inventory above.</span>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
 function StripeOnboarding({
   workspace,
 }: {
@@ -2979,7 +2914,7 @@ export function OperatorControls({
     const kind = module === "leagues" ? "league" : "tournament";
     return (
       <>
-        <SessionDrafts workspace={workspace} />
+        <SessionDraftManager kinds={[kind]} workspace={workspace} />
         <section className="hq-card guided-create-card">
           <span className="guided-create-card__icon">
             <Sparkles aria-hidden size={24} />
@@ -3005,7 +2940,7 @@ export function OperatorControls({
   if (module === "calendar") {
     return (
       <>
-        <SessionDrafts workspace={workspace} />
+        <SessionDraftManager workspace={workspace} />
         <SessionComposer workspace={workspace} defaultKind="open-play" />
       </>
     );

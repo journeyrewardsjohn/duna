@@ -2251,8 +2251,12 @@ export function EventBuilder({
                     <small>{state.message}</small>
                   </span>
                   {state.status === "success" && (
-                    <Link href={kind === "league" ? "/leagues" : "/events"}>
-                      View inventory
+                    <Link
+                      href={`${kind === "league" ? "/leagues" : "/events"}${
+                        state.entityId ? `?draft=${state.entityId}` : ""
+                      }`}
+                    >
+                      Review & publish
                     </Link>
                   )}
                 </div>

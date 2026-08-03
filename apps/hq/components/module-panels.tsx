@@ -27,6 +27,7 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import type { OperatorModule } from "./navigation";
 import { ScheduleCalendar } from "./schedule-calendar";
+import { SessionDraftManager } from "./session-draft-manager";
 import { TicketApprovalQueue } from "./ticket-approval-queue";
 
 const moduleCopy: Record<
@@ -1347,11 +1348,13 @@ function SettingsPanel({
 export function ModulePanel({
   module,
   dashboard,
+  focusedDraftId,
   workspace,
   ticketApprovals,
 }: {
   readonly module: OperatorModule;
   readonly dashboard: OperatorDashboard;
+  readonly focusedDraftId?: string;
   readonly workspace: OperatorWorkspace;
   readonly ticketApprovals: readonly TicketApprovalSummary[];
 }) {
@@ -1445,9 +1448,23 @@ export function ModulePanel({
       ) : module === "products" ? (
         <ProductCatalogPanel workspace={workspace} />
       ) : module === "events" ? (
-        <EventInventory dashboard={dashboard} />
+        <>
+          <SessionDraftManager
+            focusedDraftId={focusedDraftId}
+            kinds={["tournament", "clinic", "open-play", "pickup"]}
+            workspace={workspace}
+          />
+          <EventInventory dashboard={dashboard} />
+        </>
       ) : module === "leagues" ? (
-        <EventInventory dashboard={dashboard} kinds={["league"]} />
+        <>
+          <SessionDraftManager
+            focusedDraftId={focusedDraftId}
+            kinds={["league"]}
+            workspace={workspace}
+          />
+          <EventInventory dashboard={dashboard} kinds={["league"]} />
+        </>
       ) : module === "payments" ? (
         <PaymentsPanel dashboard={dashboard} workspace={workspace} />
       ) : module === "messages" ? (
