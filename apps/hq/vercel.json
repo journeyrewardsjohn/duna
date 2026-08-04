@@ -1,14 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm --filter @duna/db migrate && pnpm build",
-  "crons": [
-    {
-      "path": "/api/cron/sand?mode=index",
-      "schedule": "15 2 * * *"
-    },
-    {
-      "path": "/api/cron/sand?mode=live",
-      "schedule": "*/15 * * * *"
-    }
-  ]
+  "buildCommand": "pnpm --filter @duna/db migrate && pnpm build"
 }
