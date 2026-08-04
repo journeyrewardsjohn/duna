@@ -9,6 +9,7 @@ export interface GuardianReviewActionState {
 }
 
 export type FeatureFlagActionState = GuardianReviewActionState;
+export type VideoAdminActionState = GuardianReviewActionState;
 
 function parseConfiguration(
   value: FormDataEntryValue | null,
@@ -167,5 +168,145 @@ export async function reviewGuardianshipAction(
       message:
         error instanceof Error ? error.message : "Review could not be saved.",
     };
+  }
+}
+
+function videoActionError(
+  error: unknown,
+  fallback: string,
+): VideoAdminActionState {
+  return {
+    status: "error",
+    message: error instanceof Error ? error.message : fallback,
+  };
+}
+
+export async function grantComplimentaryDunaPlusAction(
+  _previous: VideoAdminActionState,
+  formData: FormData,
+): Promise<VideoAdminActionState> {
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
+  const endDate = String(formData.get("endDate") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  const endsAt = endDate ? new Date(`${endDate}T23:59:59.999Z`) : undefined;
+
+  if (
+    !email.includes("@") ||
+    reason.length < 8 ||
+    !confirmed ||
+    (endsAt && (Number.isNaN(endsAt.getTime()) || endsAt <= new Date()))
+  ) {
+    return {
+      status: "error",
+      message:
+        "Add a valid email, a future end date or leave it indefinite, an audit reason of at least 8 characters, and confirm the grant.",
+    };
+  }
+
+  try {
+    const caller = await getServerCaller();
+    const grant = await caller.admin.grantComplimentaryDunaPlus({
+      email,
+      startsAt: new Date().toISOString(),
+      endsAt: endsAt?.toISOString(),
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/video");
+    return {
+      status: "success",
+      message: `${grant.displayName ?? grant.email} now has Complimentary Duna+${grant.endsAt ? ` through ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(grant.endsAt))}` : " indefinitely"}.`,
+    };
+  } catch (error) {
+    return videoActionError(
+      error,
+      "The complimentary Duna+ grant could not be saved.",
+    );
+  }
+}
+
+export async function revokeComplimentaryDunaPlusAction(
+  _previous: VideoAdminActionState,
+  formData: FormData,
+): Promise<VideoAdminActionState> {
+  const grantId = String(formData.get("grantId") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  if (!grantId || reason.length < 8 || !confirmed) {
+    return {
+      status: "error",
+      message:
+        "Add a revocation reason of at least 8 characters and confirm the change.",
+    };
+  }
+
+  try {
+    const caller = await getServerCaller();
+    const grant = await caller.admin.revokeComplimentaryDunaPlus({
+      grantId,
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/video");
+    return {
+      status: "success",
+      message: `Complimentary Duna+ was revoked for ${grant.displayName ?? grant.email}.`,
+    };
+  } catch (error) {
+    return videoActionError(
+      error,
+      "The complimentary Duna+ grant could not be revoked.",
+    );
+  }
+}
+
+export async function updateVideoQuotaPolicyAction(
+  _previous: VideoAdminActionState,
+  formData: FormData,
+): Promise<VideoAdminActionState> {
+  const liveHours = Number(formData.get("liveHours"));
+  const uploadHours = Number(formData.get("uploadHours"));
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  if (
+    !Number.isFinite(liveHours) ||
+    !Number.isFinite(uploadHours) ||
+    liveHours < 0 ||
+    uploadHours < 0 ||
+    liveHours > 744 ||
+    uploadHours > 744 ||
+    reason.length < 8 ||
+    !confirmed
+  ) {
+    return {
+      status: "error",
+      message:
+        "Use limits between 0 and 744 hours, add an audit reason of at least 8 characters, and confirm the policy.",
+    };
+  }
+
+  try {
+    const caller = await getServerCaller();
+    const policy = await caller.admin.updateVideoQuotaPolicy({
+      monthlyLiveSeconds: Math.round(liveHours * 60 * 60),
+      monthlyUploadSeconds: Math.round(uploadHours * 60 * 60),
+      enforceLiveLimit: formData.get("enforceLiveLimit") === "true",
+      enforceUploadLimit: formData.get("enforceUploadLimit") === "true",
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/video");
+    return {
+      status: "success",
+      message: `Video policy saved: ${policy.monthlyLiveSeconds / 3600} live hours and ${policy.monthlyUploadSeconds / 3600} upload hours per month.`,
+    };
+  } catch (error) {
+    return videoActionError(
+      error,
+      "The video quota policy could not be saved.",
+    );
   }
 }

@@ -2602,6 +2602,296 @@ export const matches = pgTable(
   ],
 );
 
+// Player video, live streaming, direct uploads, sharing, and engagement
+export const videoQuotaPolicies = pgTable(
+  "video_quota_policies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id").references(() => people.id, {
+      onDelete: "cascade",
+    }),
+    monthlyLiveSeconds: integer("monthly_live_seconds")
+      .notNull()
+      .default(4 * 60 * 60),
+    monthlyUploadSeconds: integer("monthly_upload_seconds")
+      .notNull()
+      .default(24 * 60 * 60),
+    enforceLiveLimit: boolean("enforce_live_limit").notNull().default(true),
+    enforceUploadLimit: boolean("enforce_upload_limit")
+      .notNull()
+      .default(false),
+    updatedByPersonId: uuid("updated_by_person_id").references(() => people.id),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("video_quota_global_unique")
+      .on(sql`(1)`)
+      .where(sql`${table.personId} IS NULL`),
+    uniqueIndex("video_quota_person_unique")
+      .on(table.personId)
+      .where(sql`${table.personId} IS NOT NULL`),
+    check(
+      "video_quota_live_nonnegative",
+      sql`${table.monthlyLiveSeconds} >= 0`,
+    ),
+    check(
+      "video_quota_upload_nonnegative",
+      sql`${table.monthlyUploadSeconds} >= 0`,
+    ),
+  ],
+);
+
+export const videos = pgTable(
+  "videos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerPersonId: uuid("owner_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    source: varchar("source", { length: 16 }).notNull(),
+    category: varchar("category", { length: 16 }).notNull(),
+    title: text("title").notNull(),
+    eventId: uuid("event_id").references(() => sessions.id, {
+      onDelete: "set null",
+    }),
+    matchId: uuid("match_id").references(() => matches.id, {
+      onDelete: "set null",
+    }),
+    venueId: uuid("venue_id").references(() => venues.id, {
+      onDelete: "set null",
+    }),
+    venueName: text("venue_name"),
+    venueAddress: text("venue_address"),
+    googlePlaceId: varchar("google_place_id", { length: 255 }),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    status: varchar("status", { length: 24 }).notNull().default("draft"),
+    liveVisibility: varchar("live_visibility", { length: 16 })
+      .notNull()
+      .default("public"),
+    recordingVisibility: varchar("recording_visibility", { length: 16 })
+      .notNull()
+      .default("private"),
+    publishedToProfile: boolean("published_to_profile")
+      .notNull()
+      .default(false),
+    hasAudio: boolean("has_audio").notNull().default(true),
+    musicRemovalRequested: boolean("music_removal_requested")
+      .notNull()
+      .default(false),
+    musicRemovalStatus: varchar("music_removal_status", { length: 24 })
+      .notNull()
+      .default("not-requested"),
+    muxLiveStreamId: varchar("mux_live_stream_id", {
+      length: 128,
+    }).unique(),
+    muxLivePlaybackId: varchar("mux_live_playback_id", {
+      length: 128,
+    }).unique(),
+    muxLivePlaybackPolicy: varchar("mux_live_playback_policy", {
+      length: 16,
+    }),
+    muxAssetId: varchar("mux_asset_id", { length: 128 }).unique(),
+    muxAssetPlaybackId: varchar("mux_asset_playback_id", {
+      length: 128,
+    }).unique(),
+    muxAssetPlaybackPolicy: varchar("mux_asset_playback_policy", {
+      length: 16,
+    }),
+    r2ObjectKey: text("r2_object_key").unique(),
+    r2UploadId: text("r2_upload_id"),
+    r2Etag: text("r2_etag"),
+    originalFileName: text("original_file_name"),
+    mimeType: varchar("mime_type", { length: 128 }),
+    bytes: bigint("bytes", { mode: "number" }),
+    durationSeconds: integer("duration_seconds"),
+    courtCalibration: jsonb("court_calibration").$type<{
+      readonly courtWidthMeters: number;
+      readonly courtLengthMeters: number;
+      readonly netHeightMeters: number;
+      readonly qualityGrade: "excellent" | "good" | "limited" | "poor";
+      readonly qualityScore: number;
+      readonly confidence: number;
+      readonly corners?: readonly {
+        readonly x: number;
+        readonly y: number;
+      }[];
+      readonly deviceAttitude?: {
+        readonly pitch: number;
+        readonly roll: number;
+        readonly yaw: number;
+      };
+      readonly lens?: string;
+      readonly zoomFactor?: number;
+      readonly warnings: readonly string[];
+      readonly calibratedAt: string;
+    }>(),
+    startedAt: timestamp("started_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    endedAt: timestamp("ended_at", { withTimezone: true, mode: "date" }),
+    readyAt: timestamp("ready_at", { withTimezone: true, mode: "date" }),
+    failureReason: text("failure_reason"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("video_owner_created_idx").on(table.ownerPersonId, table.createdAt),
+    index("video_event_status_idx").on(table.eventId, table.status),
+    index("video_match_status_idx").on(table.matchId, table.status),
+    index("video_public_profile_idx").on(
+      table.ownerPersonId,
+      table.publishedToProfile,
+      table.status,
+    ),
+    check("video_source_valid", sql`${table.source} IN ('live', 'upload')`),
+    check(
+      "video_category_valid",
+      sql`${table.category} IN ('practice', 'event', 'match', 'social')`,
+    ),
+    check(
+      "video_status_valid",
+      sql`${table.status} IN ('draft', 'uploading', 'processing', 'ready', 'live', 'ended', 'failed', 'deleted')`,
+    ),
+    check(
+      "video_live_visibility_valid",
+      sql`${table.liveVisibility} IN ('public', 'link-only')`,
+    ),
+    check(
+      "video_recording_visibility_valid",
+      sql`${table.recordingVisibility} IN ('public', 'private')`,
+    ),
+    check(
+      "video_music_removal_status_valid",
+      sql`${table.musicRemovalStatus} IN ('not-requested', 'queued', 'processing', 'complete', 'failed', 'provider-required')`,
+    ),
+    check(
+      "video_duration_nonnegative",
+      sql`${table.durationSeconds} IS NULL OR ${table.durationSeconds} >= 0`,
+    ),
+    check(
+      "video_bytes_nonnegative",
+      sql`${table.bytes} IS NULL OR ${table.bytes} >= 0`,
+    ),
+    check(
+      "video_category_association",
+      sql`(${table.category} <> 'event' OR ${table.eventId} IS NOT NULL) AND (${table.category} <> 'match' OR ${table.matchId} IS NOT NULL)`,
+    ),
+    check(
+      "video_coordinates_pair",
+      sql`(${table.latitude} IS NULL AND ${table.longitude} IS NULL) OR (${table.latitude} IS NOT NULL AND ${table.longitude} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const videoShareLinks = pgTable(
+  "video_share_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" }),
+    tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+    createdByPersonId: uuid("created_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    revokedAt: timestamp("revoked_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    lastUsedAt: timestamp("last_used_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    useCount: integer("use_count").notNull().default(0),
+    createdAt,
+  },
+  (table) => [
+    index("video_share_link_video_idx").on(table.videoId, table.createdAt),
+    check("video_share_link_use_count", sql`${table.useCount} >= 0`),
+  ],
+);
+
+export const videoUploadParts = pgTable(
+  "video_upload_parts",
+  {
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" }),
+    partNumber: integer("part_number").notNull(),
+    etag: text("etag").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    uploadedAt: timestamp("uploaded_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.videoId, table.partNumber] }),
+    check(
+      "video_upload_part_number_valid",
+      sql`${table.partNumber} BETWEEN 1 AND 10000`,
+    ),
+    check("video_upload_part_size_valid", sql`${table.sizeBytes} >= 0`),
+  ],
+);
+
+export const videoViews = pgTable(
+  "video_views",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" }),
+    viewerPersonId: uuid("viewer_person_id").references(() => people.id, {
+      onDelete: "set null",
+    }),
+    shareLinkId: uuid("share_link_id").references(() => videoShareLinks.id, {
+      onDelete: "set null",
+    }),
+    sessionTokenHash: varchar("session_token_hash", { length: 128 }).notNull(),
+    platform: varchar("platform", { length: 16 }).notNull(),
+    watchedSeconds: integer("watched_seconds").notNull().default(0),
+    completed: boolean("completed").notNull().default(false),
+    startedAt: timestamp("started_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    lastHeartbeatAt: timestamp("last_heartbeat_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+  },
+  (table) => [
+    uniqueIndex("video_view_session_unique").on(
+      table.videoId,
+      table.sessionTokenHash,
+    ),
+    index("video_view_video_started_idx").on(table.videoId, table.startedAt),
+    check(
+      "video_view_platform_valid",
+      sql`${table.platform} IN ('ios', 'web')`,
+    ),
+    check("video_view_watched_nonnegative", sql`${table.watchedSeconds} >= 0`),
+  ],
+);
+
 export const matchHistoryDisputes = pgTable(
   "match_history_disputes",
   {
@@ -3703,6 +3993,48 @@ export const memberships = pgTable(
     check(
       "membership_pause_months_valid",
       sql`${table.pauseMonthsUsed} >= 0 AND ${table.pauseMonthsUsed} <= 4`,
+    ),
+  ],
+);
+
+export const dunaPlusGrants = pgTable(
+  "duna_plus_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id").references(() => people.id, {
+      onDelete: "cascade",
+    }),
+    emailNormalized: varchar("email_normalized", { length: 320 })
+      .notNull()
+      .unique(),
+    status: varchar("status", { length: 24 }).notNull().default("active"),
+    startsAt: timestamp("starts_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    endsAt: timestamp("ends_at", { withTimezone: true, mode: "date" }),
+    reason: text("reason").notNull().default("Complimentary Duna+"),
+    grantedByPersonId: uuid("granted_by_person_id").references(() => people.id),
+    revokedByPersonId: uuid("revoked_by_person_id").references(() => people.id),
+    revokedAt: timestamp("revoked_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("duna_plus_grant_person_idx").on(table.personId, table.status),
+    index("duna_plus_grant_status_end_idx").on(table.status, table.endsAt),
+    check(
+      "duna_plus_grant_status_valid",
+      sql`${table.status} IN ('active', 'revoked')`,
+    ),
+    check(
+      "duna_plus_grant_window_valid",
+      sql`${table.endsAt} IS NULL OR ${table.endsAt} > ${table.startsAt}`,
     ),
   ],
 );

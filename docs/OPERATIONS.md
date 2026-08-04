@@ -77,6 +77,20 @@ function. Stripe ingress remains safe if Inngest is unavailable because the
 signed payload and workflow job are committed to Neon first. Production dispatch
 requires both `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`.
 
+## Duna Video delivery
+
+Live streaming uses Mux RTMPS ingest and signed/public playback. Native uploads
+use private Cloudflare R2 multipart uploads with short-lived presigned URLs.
+Provider variables, privacy boundaries, migration order, and the physical-device
+release checklist are documented in
+[`VIDEO_PLATFORM.md`](VIDEO_PLATFORM.md).
+
+R2 S3 credentials must be present in Duna Web because its API signs upload and
+playback URLs. Duna HQ already has the provided sensitive values; Vercel does
+not allow those values to be exported for copying, so add the same
+`CF_ACCESS_KEY_ID` and `CE_SECRET_ACCESS_KEY` directly to Duna Web Preview and
+Production.
+
 ## Database delivery
 
 Migrations are forward-only and live in `packages/db/drizzle`. Apply them before
@@ -118,5 +132,9 @@ still requires external approvals or account data:
 - Apple Developer and Google Play organization credentials and store review
 - Knock, Resend, Twilio 10DLC, Ably, Inngest, R2, Sentry, Axiom, and PostHog
   production credentials
+- Mux account activation, API/signing keys, signed webhook, and a
+  physical-device iOS streaming check
+- An approved audio-isolation processor before music-removal requests can
+  modify recordings
 - VolleyballLife and BVBInfo data licenses
 - Wallet, escheatment, minors, privacy, and tax counsel review

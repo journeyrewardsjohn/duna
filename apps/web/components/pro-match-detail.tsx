@@ -1,4 +1,4 @@
-import type { PublicProMatchDetail } from "@duna/api";
+import type { PublicProMatchDetail, VideoSummary } from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowLeft,
@@ -12,6 +12,7 @@ import {
   Video,
 } from "lucide-react";
 import Link from "next/link";
+import { DunaVideoGallery } from "@/components/duna-video-gallery";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
@@ -74,8 +75,10 @@ function TeamCard({
 
 export function ProMatchDetail({
   detail,
+  videos = [],
 }: {
   readonly detail: PublicProMatchDetail;
+  readonly videos?: readonly VideoSummary[];
 }) {
   const { event, match } = detail;
   const teamAWins = match.sets.filter((set) => set.a > set.b).length;
@@ -336,6 +339,18 @@ export function ProMatchDetail({
             </p>
           )}
         </section>
+
+        {videos.length > 0 && (
+          <DunaVideoGallery
+            description="Choose a player-streamed angle or published replay from this match."
+            title={
+              videos.some((video) => video.status === "live")
+                ? "Watch this match live."
+                : "Match replays."
+            }
+            videos={videos}
+          />
+        )}
 
         <nav className="pro-match-source">
           <Link href={`/events/${event.slug}`}>

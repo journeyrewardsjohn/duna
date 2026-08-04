@@ -193,6 +193,13 @@ export interface PlayerSettings {
     readonly pauseMonthsUsed: number;
     readonly cancelAtPeriodEnd: boolean;
   };
+  readonly dunaPlus: {
+    readonly active: boolean;
+    readonly kind: "paid" | "complimentary" | "none";
+    readonly label: string;
+    readonly startsAt?: string;
+    readonly endsAt?: string;
+  };
   readonly dunaPlusPlans: readonly {
     readonly interval: "month" | "year";
     readonly priceMinor: number;

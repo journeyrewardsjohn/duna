@@ -86,6 +86,11 @@ export const demoRepository = {
         aiConfigured: Boolean(process.env.OPENAI_API_KEY),
       },
       household: [],
+      dunaPlus: {
+        active: true,
+        kind: "complimentary" as const,
+        label: "Complimentary Duna+",
+      },
       dunaPlusPlans: [
         {
           interval: "month" as const,

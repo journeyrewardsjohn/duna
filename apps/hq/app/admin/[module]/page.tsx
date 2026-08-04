@@ -44,6 +44,9 @@ export default async function AdminModulePage({
     module === "player-mapping"
       ? caller.admin.players({ query: q, limit: 40 })
       : Promise.resolve([]),
+    module === "video"
+      ? caller.admin.videoOverview()
+      : Promise.resolve(undefined),
   ])
     .then(
       ([
@@ -53,6 +56,7 @@ export default async function AdminModulePage({
         featureFlags,
         sandData,
         players,
+        video,
       ]) => ({
         overview,
         organizations,
@@ -60,6 +64,7 @@ export default async function AdminModulePage({
         featureFlags,
         sandData,
         players,
+        video,
       }),
     )
     .catch((error: unknown) => {
@@ -80,6 +85,7 @@ export default async function AdminModulePage({
         overview={result.overview}
         guardianReviews={result.guardianReviews}
         featureFlags={result.featureFlags}
+        video={result.video}
         sandData={result.sandData}
         playerDirectory={result.players}
         playerSearchQuery={q}

@@ -1,5 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const webPort = Number.parseInt(process.env.PLAYWRIGHT_WEB_PORT ?? "3000", 10);
+const hqPort = Number.parseInt(process.env.PLAYWRIGHT_HQ_PORT ?? "3001", 10);
+const webBaseUrl =
+  process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${webPort}`;
+const hqBaseUrl =
+  process.env.PLAYWRIGHT_HQ_BASE_URL ?? `http://127.0.0.1:${hqPort}`;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
@@ -7,7 +14,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000",
+    baseURL: webBaseUrl,
     browserName: "chromium",
     channel: process.env.CI ? undefined : "chrome",
     trace: "retain-on-failure",
@@ -15,14 +22,15 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "pnpm --filter @duna/web dev --hostname 127.0.0.1",
-      port: 3000,
+      command: `pnpm --filter @duna/web exec next dev --port ${webPort} --hostname 127.0.0.1`,
+      port: webPort,
+      env: { NEXT_PUBLIC_HQ_URL: hqBaseUrl },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
     {
-      command: "pnpm --filter @duna/hq dev --hostname 127.0.0.1",
-      port: 3001,
+      command: `pnpm --filter @duna/hq exec next dev --port ${hqPort} --hostname 127.0.0.1`,
+      port: hqPort,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

@@ -455,6 +455,249 @@ export const playerWalletSchema = z.object({
   entries: z.array(walletEntrySchema).readonly(),
   taxFormStatus: z.enum(["not-required", "pending", "ready"]),
 });
+
+export const videoSourceSchema = z.enum(["live", "upload"]);
+export const videoCategorySchema = z.enum([
+  "practice",
+  "event",
+  "match",
+  "social",
+]);
+export const videoStatusSchema = z.enum([
+  "draft",
+  "uploading",
+  "processing",
+  "ready",
+  "live",
+  "ended",
+  "failed",
+  "deleted",
+]);
+export const videoLiveVisibilitySchema = z.enum(["public", "link-only"]);
+export const videoRecordingVisibilitySchema = z.enum(["public", "private"]);
+export const videoMusicRemovalStatusSchema = z.enum([
+  "not-requested",
+  "queued",
+  "processing",
+  "complete",
+  "failed",
+  "provider-required",
+]);
+export const videoQualityGradeSchema = z.enum([
+  "excellent",
+  "good",
+  "limited",
+  "poor",
+]);
+export const courtCalibrationSchema = z.object({
+  courtWidthMeters: z.number().positive().max(30),
+  courtLengthMeters: z.number().positive().max(40),
+  netHeightMeters: z.number().positive().max(4),
+  qualityGrade: videoQualityGradeSchema,
+  qualityScore: z.number().min(0).max(100),
+  confidence: z.number().min(0).max(1),
+  corners: z
+    .array(
+      z.object({
+        x: z.number().min(0).max(1),
+        y: z.number().min(0).max(1),
+      }),
+    )
+    .length(4)
+    .readonly()
+    .optional(),
+  deviceAttitude: z
+    .object({
+      pitch: z.number(),
+      roll: z.number(),
+      yaw: z.number(),
+    })
+    .optional(),
+  lens: z.string().max(80).optional(),
+  zoomFactor: z.number().positive().max(30).optional(),
+  warnings: z.array(z.string().max(240)).max(12).readonly(),
+  calibratedAt: z.iso.datetime(),
+});
+export const videoSummarySchema = z.object({
+  id: z.string().uuid(),
+  owner: personSummarySchema,
+  source: videoSourceSchema,
+  category: videoCategorySchema,
+  title: z.string(),
+  status: videoStatusSchema,
+  event: z
+    .object({
+      id: z.string().uuid(),
+      slug: z.string(),
+      title: z.string(),
+    })
+    .optional(),
+  match: z
+    .object({
+      id: z.string().uuid(),
+      label: z.string(),
+    })
+    .optional(),
+  venue: z
+    .object({
+      id: z.string().uuid().optional(),
+      name: z.string(),
+      address: z.string().optional(),
+      googlePlaceId: z.string().optional(),
+      latitude: z.number().optional(),
+      longitude: z.number().optional(),
+    })
+    .optional(),
+  liveVisibility: videoLiveVisibilitySchema,
+  recordingVisibility: videoRecordingVisibilitySchema,
+  publishedToProfile: z.boolean(),
+  hasAudio: z.boolean(),
+  musicRemovalRequested: z.boolean(),
+  musicRemovalStatus: videoMusicRemovalStatusSchema,
+  durationSeconds: z.number().int().nonnegative().optional(),
+  bytes: z.number().int().nonnegative().optional(),
+  courtCalibration: courtCalibrationSchema.optional(),
+  startedAt: z.iso.datetime().optional(),
+  endedAt: z.iso.datetime().optional(),
+  readyAt: z.iso.datetime().optional(),
+  createdAt: z.iso.datetime(),
+});
+export const videoUsageSchema = z.object({
+  periodStartsAt: z.iso.datetime(),
+  periodEndsAt: z.iso.datetime(),
+  live: z.object({
+    usedSeconds: z.number().int().nonnegative(),
+    limitSeconds: z.number().int().nonnegative(),
+    remainingSeconds: z.number().int().nonnegative(),
+    enforced: z.boolean(),
+  }),
+  uploads: z.object({
+    usedSeconds: z.number().int().nonnegative(),
+    limitSeconds: z.number().int().nonnegative(),
+    remainingSeconds: z.number().int().nonnegative(),
+    overageSeconds: z.number().int().nonnegative(),
+    enforced: z.boolean(),
+  }),
+});
+export const dunaPlusEntitlementSchema = z.object({
+  active: z.boolean(),
+  kind: z.enum(["paid", "complimentary", "none"]),
+  label: z.string(),
+  startsAt: z.iso.datetime().optional(),
+  endsAt: z.iso.datetime().optional(),
+});
+export const videoStudioSchema = z.object({
+  entitlement: dunaPlusEntitlementSchema,
+  usage: videoUsageSchema,
+  videos: z.array(videoSummarySchema).readonly(),
+  liveNow: z.array(videoSummarySchema).readonly(),
+  liveConfigured: z.boolean(),
+  uploadsConfigured: z.boolean(),
+  dataEnvironmentKey: z.string().optional(),
+});
+export const videoAssociationOptionSchema = z.object({
+  type: z.enum(["event", "match"]),
+  id: z.string().uuid(),
+  eventId: z.string().uuid().optional(),
+  title: z.string(),
+  subtitle: z.string(),
+  associated: z.boolean(),
+  startsAt: z.iso.datetime().optional(),
+});
+export const videoPlaybackSchema = z.object({
+  video: videoSummarySchema,
+  provider: z.enum(["mux", "r2"]),
+  playbackId: z.string().optional(),
+  playbackToken: z.string().optional(),
+  sourceUrl: z.url().optional(),
+  posterUrl: z.url().optional(),
+  dataEnvironmentKey: z.string().optional(),
+  viewSessionId: z.string().uuid(),
+  isOwner: z.boolean(),
+});
+export const liveVideoSessionSchema = z.object({
+  video: videoSummarySchema,
+  streamUrl: z.url(),
+  streamKey: z.string().min(8),
+  maximumDurationSeconds: z.number().int().positive(),
+  shareUrl: z.url(),
+});
+export const videoUploadSessionSchema = z.object({
+  videoId: z.string().uuid(),
+  uploadId: z.string(),
+  objectKey: z.string(),
+  partSizeBytes: z
+    .number()
+    .int()
+    .min(5 * 1024 * 1024),
+  totalParts: z.number().int().min(1).max(10_000),
+  uploadedParts: z.array(z.number().int().min(1).max(10_000)).readonly(),
+  expiresAt: z.iso.datetime(),
+});
+export const videoUploadPartUrlSchema = z.object({
+  partNumber: z.number().int().min(1).max(10_000),
+  url: z.url(),
+  expiresAt: z.iso.datetime(),
+});
+export const videoMetricsSchema = z.object({
+  video: videoSummarySchema,
+  views: z.number().int().nonnegative(),
+  uniqueViewers: z.number().int().nonnegative(),
+  watchedSeconds: z.number().int().nonnegative(),
+  averageWatchSeconds: z.number().int().nonnegative(),
+  completionRate: z.number().min(0).max(1),
+  mux: z
+    .object({
+      views: z.number().int().nonnegative().optional(),
+      uniqueViewers: z.number().int().nonnegative().optional(),
+      playingTimeSeconds: z.number().nonnegative().optional(),
+      videoStartupTimeMs: z.number().nonnegative().optional(),
+      rebufferPercentage: z.number().nonnegative().optional(),
+      playbackFailurePercentage: z.number().nonnegative().optional(),
+      currentConcurrentViewers: z.number().int().nonnegative().optional(),
+    })
+    .optional(),
+});
+export const dunaPlusGrantSchema = z.object({
+  id: z.string().uuid(),
+  personId: z.string().uuid().optional(),
+  email: z.string().email(),
+  displayName: z.string().optional(),
+  status: z.enum(["active", "revoked"]),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime().optional(),
+  reason: z.string(),
+  grantedByName: z.string().optional(),
+});
+export const adminVideoOverviewSchema = z.object({
+  canManage: z.boolean(),
+  settings: z.object({
+    monthlyLiveSeconds: z.number().int().nonnegative(),
+    monthlyUploadSeconds: z.number().int().nonnegative(),
+    enforceLiveLimit: z.boolean(),
+    enforceUploadLimit: z.boolean(),
+  }),
+  totals: z.object({
+    videos: z.number().int().nonnegative(),
+    liveNow: z.number().int().nonnegative(),
+    storageBytes: z.number().int().nonnegative(),
+    watchedSeconds: z.number().int().nonnegative(),
+    complimentarySubscribers: z.number().int().nonnegative(),
+  }),
+  activeStreams: z.array(videoSummarySchema).readonly(),
+  topUsage: z
+    .array(
+      z.object({
+        person: personSummarySchema,
+        usage: videoUsageSchema,
+        videoCount: z.number().int().nonnegative(),
+      }),
+    )
+    .readonly(),
+  grants: z.array(dunaPlusGrantSchema).readonly(),
+  muxConfigured: z.boolean(),
+  r2Configured: z.boolean(),
+});
 export const accountDeletionReadinessSchema = z.object({
   canRequestDeletion: z.boolean(),
   blockingReasons: z
@@ -631,6 +874,7 @@ export const playerSettingsSchema = z.object({
       cancelAtPeriodEnd: z.boolean(),
     })
     .optional(),
+  dunaPlus: dunaPlusEntitlementSchema,
   dunaPlusPlans: z
     .array(
       z.object({
@@ -2444,3 +2688,10 @@ export const featureFlagCollectionSchema = z.object({
 
 export type FeatureFlagSummary = z.infer<typeof featureFlagSummarySchema>;
 export type FeatureFlagCollection = z.infer<typeof featureFlagCollectionSchema>;
+export type VideoSummary = z.infer<typeof videoSummarySchema>;
+export type VideoStudio = z.infer<typeof videoStudioSchema>;
+export type VideoUsage = z.infer<typeof videoUsageSchema>;
+export type VideoPlayback = z.infer<typeof videoPlaybackSchema>;
+export type VideoMetrics = z.infer<typeof videoMetricsSchema>;
+export type AdminVideoOverview = z.infer<typeof adminVideoOverviewSchema>;
+export type DunaPlusGrant = z.infer<typeof dunaPlusGrantSchema>;

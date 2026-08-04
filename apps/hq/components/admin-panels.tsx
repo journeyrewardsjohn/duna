@@ -1,6 +1,7 @@
 import type {
   AdminOrganizationDetail,
   AdminOverview as AdminOverviewData,
+  AdminVideoOverview,
   FeatureFlagCollection,
   GuardianReviewItem,
   SandDataOverview,
@@ -20,6 +21,7 @@ import {
   HeartPulse,
   MapPinned,
   ReceiptText,
+  Radio,
   RefreshCw,
   ScrollText,
   ShieldCheck,
@@ -37,6 +39,7 @@ import {
   RatingsLabPanel,
   SandDataPanel,
 } from "./sand-admin-controls";
+import { VideoAdminControls } from "./video-admin-controls";
 
 const adminMetricIcons = [
   WalletCards,
@@ -101,6 +104,12 @@ const copy: Record<
     eyebrow: "Platform financial operations",
     title: "Payments",
     description: "Connected GMV, webhook readiness, and payment audit events.",
+  },
+  video: {
+    eyebrow: "Live, uploaded, and governed",
+    title: "Video + Duna+",
+    description:
+      "Mux live streams, R2 uploads, player usage, complimentary entitlements, and global allowances.",
   },
   audit: {
     eyebrow: "Append-only governance",
@@ -699,6 +708,7 @@ export function AdminPanel({
   organizations,
   guardianReviews,
   featureFlags,
+  video,
   sandData,
   playerDirectory,
   playerSearchQuery,
@@ -708,6 +718,7 @@ export function AdminPanel({
   readonly organizations: readonly OrganizationSummary[];
   readonly guardianReviews: readonly GuardianReviewItem[];
   readonly featureFlags: FeatureFlagCollection;
+  readonly video?: AdminVideoOverview;
   readonly sandData?: SandDataOverview;
   readonly playerDirectory: readonly PersonSummary[];
   readonly playerSearchQuery?: string;
@@ -728,11 +739,13 @@ export function AdminPanel({
             ? Activity
             : module === "payments"
               ? WalletCards
-              : module === "audit"
-                ? ScrollText
-                : module === "flags"
-                  ? Flag
-                  : HeartPulse;
+              : module === "video"
+                ? Radio
+                : module === "audit"
+                  ? ScrollText
+                  : module === "flags"
+                    ? Flag
+                    : HeartPulse;
   const ratedPlayers = overview.metrics.find(
     (metric) => metric.label === "Rated players",
   );
@@ -812,6 +825,8 @@ export function AdminPanel({
           </section>
           <AuditList overview={{ ...overview, audit: filteredAudit }} />
         </div>
+      ) : module === "video" && video ? (
+        <VideoAdminControls overview={video} />
       ) : module === "audit" ? (
         <AuditList overview={overview} />
       ) : module === "health" ? (

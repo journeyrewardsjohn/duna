@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DunaVideoGallery } from "@/components/duna-video-gallery";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { ProEventDetail } from "@/components/pro-event-detail";
@@ -98,6 +99,9 @@ export default async function EventPage({
           .pickupManagement({ pickupSessionId: event.id })
           .catch(() => undefined)
       : undefined;
+  const videos = await caller.public
+    .videos({ eventId: event.id })
+    .catch(() => []);
 
   const cover = event.media?.[0];
   const fallbackMedia = defaultEventMedia(event.kind, event.id);
@@ -218,6 +222,20 @@ export default async function EventPage({
           title="Forecast at first serve"
         />
       </section>
+
+      {videos.length > 0 && (
+        <div className="event-public__video">
+          <DunaVideoGallery
+            description="Player-streamed views and published replays from this event."
+            title={
+              videos.some((video) => video.status === "live")
+                ? "Live from the sand."
+                : "Watch the event."
+            }
+            videos={videos}
+          />
+        </div>
+      )}
 
       <section className="event-public__layout">
         <div className="event-public__content">

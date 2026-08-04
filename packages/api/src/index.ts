@@ -28,4 +28,6 @@ export * from "./repository-contract";
 export * from "./router";
 export * from "./webhooks";
 export * from "./weather";
+export * from "./video-providers";
+export * from "./video-service";
 export * from "./workflows";

@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+const hqBaseUrl = process.env.PLAYWRIGHT_HQ_BASE_URL ?? "http://127.0.0.1:3001";
+
 async function expectNoHorizontalOverflow(page: Page) {
   const dimensions = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
@@ -115,7 +117,14 @@ test("public event creation carries a clean starter into guided HQ", async ({
   });
   await expect(continueButton).toBeEnabled();
   await continueButton.click();
-  await page.waitForURL(/:3001\/events\/create\?.*type=league/);
+  await page.waitForURL((url) => {
+    const expectedOrigin = new URL(hqBaseUrl).origin;
+    return (
+      url.origin === expectedOrigin &&
+      url.pathname === "/events/create" &&
+      url.searchParams.get("type") === "league"
+    );
+  });
   await expect(
     page.getByRole("heading", {
       name: "Create something players remember.",
@@ -332,7 +341,7 @@ test("account controls, profile editing, and legal documents stay reachable", as
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  await page.goto("http://127.0.0.1:3001/account");
+  await page.goto(`${hqBaseUrl}/account`);
   await expect(
     page.getByRole("heading", { name: "Your Duna identity." }),
   ).toBeVisible();
@@ -345,7 +354,7 @@ test("account controls, profile editing, and legal documents stay reachable", as
 test("HQ, admin, and AI changes preserve explicit control", async ({
   page,
 }) => {
-  await page.goto("http://127.0.0.1:3001/");
+  await page.goto(`${hqBaseUrl}/`);
   await expect(
     page.getByRole("heading", { name: "Good morning." }),
   ).toBeVisible();
@@ -356,7 +365,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  await page.goto("http://127.0.0.1:3001/locations/create");
+  await page.goto(`${hqBaseUrl}/locations/create`);
   await expect(
     page.getByRole("heading", { name: "Bring a venue into Duna." }),
   ).toBeVisible();
@@ -369,7 +378,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(page.getByText("Add a court image").first()).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  await page.goto("http://127.0.0.1:3001/calendar");
+  await page.goto(`${hqBaseUrl}/calendar`);
   await expect(page.getByRole("heading", { name: "Calendar" })).toBeVisible();
   await expect(
     page.getByText("Championship Court", { exact: true }),
@@ -380,7 +389,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(page.getByText("No courts yet")).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 
-  await page.goto("http://127.0.0.1:3001/events");
+  await page.goto(`${hqBaseUrl}/events`);
   await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
   await expect(
     page.getByRole("heading", {
@@ -395,7 +404,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(page.getByRole("link", { name: /Create event/ })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  await page.goto("http://127.0.0.1:3001/admin");
+  await page.goto(`${hqBaseUrl}/admin`);
   await expect(
     page.getByRole("heading", {
       name: "Platform administration access required.",
@@ -403,7 +412,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  await page.goto("http://127.0.0.1:3001/leagues");
+  await page.goto(`${hqBaseUrl}/leagues`);
   await expect(page.getByRole("heading", { name: "Leagues" })).toBeVisible();
   await expect(page.getByRole("link", { name: /Create league/ })).toBeVisible();
   await expect(page.getByText(/1 connected/)).toBeVisible();
@@ -415,7 +424,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
     page.getByRole("heading", { name: "League", exact: true }),
   ).toBeVisible();
 
-  await page.goto("http://127.0.0.1:3001/ai");
+  await page.goto(`${hqBaseUrl}/ai`);
   await expect(page.getByText("Grounded read-only analysis")).toBeVisible();
   await expect(page.getByText("Read-only", { exact: true })).toBeVisible();
   await expect(

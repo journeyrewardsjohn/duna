@@ -10,6 +10,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import Link from "next/link";
+import { DunaVideoGallery } from "@/components/duna-video-gallery";
 import { MatchConfirmation } from "@/components/match-confirmation";
 import { MatchHistoryControls } from "@/components/match-history-controls";
 import { getServerCaller } from "@/lib/api";
@@ -81,7 +82,10 @@ export default async function MatchPage({
 }) {
   const { id } = await params;
   const caller = await getServerCaller();
-  const match = await caller.player.matchById({ matchId: id });
+  const [match, videos] = await Promise.all([
+    caller.player.matchById({ matchId: id }),
+    caller.public.videos({ matchId: id }).catch(() => []),
+  ]);
   const explanation = ratingExplanation(match);
   return (
     <main className="standard-page match-detail">
@@ -168,6 +172,17 @@ export default async function MatchPage({
           </article>
         </div>
       </section>
+      {videos.length > 0 && (
+        <DunaVideoGallery
+          description="Choose between every public player angle for this match."
+          title={
+            videos.some((video) => video.status === "live")
+              ? "Watch this match live."
+              : "Match replays."
+          }
+          videos={videos}
+        />
+      )}
       <section className="match-detail__insight">
         <article>
           <TrendingUp aria-hidden size={21} />
@@ -245,6 +260,36 @@ export default async function MatchPage({
             ))}
           </article>
         ))}
+      </section>
+      <section className="match-detail__rating-story">
+        <div>
+          <span className="page-eyebrow">Why your rating moved</span>
+          <h2>{explanation.title}</h2>
+          <p>{explanation.body}</p>
+        </div>
+        <dl>
+          <div>
+            <dt>Pre-match chance</dt>
+            <dd>
+              {percentage(match.ratingExplanation?.expectedWinProbability) ??
+                "Not available"}
+            </dd>
+          </div>
+          <div>
+            <dt>Point share</dt>
+            <dd>
+              {percentage(match.ratingExplanation?.pointShare) ??
+                "Not available"}
+            </dd>
+          </div>
+          <div>
+            <dt>Your weighting</dt>
+            <dd>
+              {percentage(match.ratingExplanation?.responsibilityWeight) ??
+                "Not available"}
+            </dd>
+          </div>
+        </dl>
       </section>
       <section className="match-detail__rating-story">
         <div>
