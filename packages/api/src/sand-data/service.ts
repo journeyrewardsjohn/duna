@@ -2369,6 +2369,30 @@ export async function loadPublicProCoverage() {
       return (a.startsOn ?? "9999").localeCompare(b.startsOn ?? "9999");
     });
   const rankingDate = latestDate[0]?.date;
+  const matchPersonIds = [
+    ...new Set(
+      matchRows.flatMap((match) =>
+        match.participants.flatMap((participant) =>
+          participant.personId ? [participant.personId] : [],
+        ),
+      ),
+    ),
+  ];
+  const matchRatingRows =
+    matchPersonIds.length > 0
+      ? await database
+          .select({ personId: ratings.personId, display: ratings.display })
+          .from(ratings)
+          .where(
+            and(
+              inArray(ratings.personId, matchPersonIds),
+              eq(ratings.discipline, "beach-2s"),
+            ),
+          )
+      : [];
+  const matchRatingByPersonId = new Map(
+    matchRatingRows.map((rating) => [rating.personId, rating.display]),
+  );
   const rankingRows = rankingDate
     ? (
         await Promise.all(
@@ -2388,16 +2412,34 @@ export async function loadPublicProCoverage() {
         )
       ).flat()
     : [];
-  const tourForEvent = (event: (typeof eventRows)[number]) =>
-    event.sourceSlug === "avp-league"
-      ? ("avp" as const)
-      : event.category?.toLowerCase().includes("elite")
-        ? ("elite" as const)
-        : event.category?.toLowerCase().includes("challeng")
-          ? ("challenger" as const)
-          : event.category?.toLowerCase().includes("future")
-            ? ("futures" as const)
-            : ("other" as const);
+  const coverageTeam = (
+    participants: (typeof matchRows)[number]["participants"],
+    side: "A" | "B",
+  ) => {
+    const players = participants
+      .filter((participant) => participant.side === side)
+      .map((participant) => ({
+        name: participant.name,
+        ...(participant.personId ? { personId: participant.personId } : {}),
+        ...(participant.personId &&
+        matchRatingByPersonId.has(participant.personId)
+          ? { rating: matchRatingByPersonId.get(participant.personId) }
+          : {}),
+      }));
+    const rated = players.flatMap((player) =>
+      player.rating !== undefined ? [player.rating] : [],
+    );
+    return {
+      label: players.map((player) => player.name).join(" / ") || "TBD",
+      players,
+      ...(rated.length > 0
+        ? {
+            averageRating:
+              rated.reduce((sum, rating) => sum + rating, 0) / rated.length,
+          }
+        : {}),
+    };
+  };
   return {
     events: eventRows.map((event) => ({
       id: event.id,
@@ -2418,7 +2460,7 @@ export async function loadPublicProCoverage() {
         event.sourceSlug === "avp-league"
           ? ("avp" as const)
           : ("fivb" as const),
-      tour: tourForEvent(event),
+      tour: professionalTour(event.sourceSlug, event.category),
     })),
     matches: matchRows.map((match) => {
       const event = eventRows.find(
@@ -2432,13 +2474,23 @@ export async function loadPublicProCoverage() {
           .map((participant) => participant.name)
           .join(" / ");
       const matchSlug = slugSegment(`${team("A")}-vs-${team("B")}`) || "match";
+      const teamA = coverageTeam(match.participants, "A");
+      const teamB = coverageTeam(match.participants, "B");
       return {
         ...match,
         playedAt: match.playedAt?.toISOString(),
+        teamA,
+        teamB,
         ...(event
           ? {
               canonicalPath: `/events/${professionalEventSlug(event)}/match/${matchSlug}/${match.id}`,
-              tour: tourForEvent(event),
+              source: professionalSource(event.sourceSlug),
+              status: match.winnerSide
+                ? ("completed" as const)
+                : event.live
+                  ? ("live" as const)
+                  : ("scheduled" as const),
+              tour: professionalTour(event.sourceSlug, event.category),
             }
           : {}),
       };
@@ -2467,6 +2519,19 @@ function slugSegment(value: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 96);
+}
+
+function professionalSource(sourceSlug: string): "fivb" | "avp" {
+  return sourceSlug === "avp-league" ? "avp" : "fivb";
+}
+
+function professionalTour(sourceSlug: string, category?: string | null) {
+  if (sourceSlug === "avp-league") return "avp" as const;
+  const normalized = category?.toLowerCase() ?? "";
+  if (normalized.includes("elite")) return "elite" as const;
+  if (normalized.includes("challeng")) return "challenger" as const;
+  if (normalized.includes("future")) return "futures" as const;
+  return "other" as const;
 }
 
 function normalizedProGender(value: string): "mens" | "womens" | string {
@@ -3465,6 +3530,12 @@ export async function loadPublicProEvent(slug: string) {
     (candidate) => professionalEventSlug(candidate) === slug,
   );
   if (!event) return undefined;
+  const sourceRows = await database
+    .select({ slug: importSources.slug })
+    .from(importSources)
+    .where(eq(importSources.id, event.sourceId))
+    .limit(1);
+  const sourceSlug = sourceRows[0]?.slug ?? "fivb-12ndr";
 
   const matchRows = await database
     .select()
@@ -3720,6 +3791,8 @@ export async function loadPublicProEvent(slug: string) {
     location: event.location ?? undefined,
     countryCode: event.countryCode ?? undefined,
     category: event.category ?? undefined,
+    source: professionalSource(sourceSlug),
+    tour: professionalTour(sourceSlug, event.category),
     genderCategory: event.genderCategory,
     startsOn: event.startsOn ?? undefined,
     endsOn: event.endsOn ?? undefined,

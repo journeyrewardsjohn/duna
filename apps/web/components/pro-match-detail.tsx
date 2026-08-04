@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
+import { ProfessionalMatchCard } from "@/components/professional-match-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
@@ -173,7 +174,7 @@ export function ProMatchDetail({
           />
         </section>
 
-        <section className="pro-match-panel pro-match-sets">
+        <section className="pro-match-panel pro-match-sets" id="match-score">
           <header>
             <div>
               <span className="page-eyebrow">Set by set</span>
@@ -183,79 +184,18 @@ export function ProMatchDetail({
             </div>
             <Trophy aria-hidden size={22} />
           </header>
-          {match.sets.length > 0 ? (
-            <div className="pro-match-scoreboard">
-              <table>
-                <caption className="sr-only">
-                  Set-by-set score for {match.teamA.label} against{" "}
-                  {match.teamB.label}
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Team</th>
-                    {match.sets.map((_, index) => (
-                      <th key={index} scope="col">
-                        Set {index + 1}
-                      </th>
-                    ))}
-                    <th scope="col">Sets won</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    className={
-                      match.winnerSide === "A"
-                        ? "pro-match-scoreboard__winner"
-                        : undefined
-                    }
-                  >
-                    <th scope="row">
-                      <strong>{match.teamA.label}</strong>
-                      <small>
-                        Team A{match.winnerSide === "A" ? " · Winner" : ""}
-                      </small>
-                    </th>
-                    {match.sets.map((set, index) => (
-                      <td
-                        className={set.a > set.b ? "won" : undefined}
-                        key={index}
-                      >
-                        <span>{set.a}</span>
-                      </td>
-                    ))}
-                    <td className="pro-match-scoreboard__sets">{teamAWins}</td>
-                  </tr>
-                  <tr
-                    className={
-                      match.winnerSide === "B"
-                        ? "pro-match-scoreboard__winner"
-                        : undefined
-                    }
-                  >
-                    <th scope="row">
-                      <strong>{match.teamB.label}</strong>
-                      <small>
-                        Team B{match.winnerSide === "B" ? " · Winner" : ""}
-                      </small>
-                    </th>
-                    {match.sets.map((set, index) => (
-                      <td
-                        className={set.b > set.a ? "won" : undefined}
-                        key={index}
-                      >
-                        <span>{set.b}</span>
-                      </td>
-                    ))}
-                    <td className="pro-match-scoreboard__sets">{teamBWins}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p>
-              The official score will appear here as soon as it is reported.
-            </p>
-          )}
+          <ProfessionalMatchCard
+            context={match.court ?? event.location}
+            playedAt={match.playedAt}
+            roundLabel={match.roundLabel}
+            sets={match.sets}
+            source={event.source}
+            status={match.status}
+            teamA={match.teamA}
+            teamB={match.teamB}
+            timeLabel={match.time}
+            winnerSide={match.winnerSide}
+          />
         </section>
 
         <section className="pro-match-panel pro-match-prediction">
