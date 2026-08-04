@@ -225,6 +225,16 @@ export const eventPolicySchema = z.object({
   required: z.boolean(),
   requireFullScroll: z.boolean(),
 });
+export const eventDraftSmartRulesSchema = z.object({
+  waitlistEnabled: z.boolean(),
+  allowLateCancellation: z.boolean(),
+  freeCancellationHours: z.number().int().min(0).max(8_760),
+  bookingOpensDays: z.number().int().min(0).max(730),
+  bookingClosesMinutes: z.number().int().min(0).max(43_200),
+  autoCancelLowAttendance: z.boolean(),
+  minimumAttendance: z.number().int().min(1).max(10_000),
+  approvalRequired: z.boolean(),
+});
 export const leagueRecurrenceSchema = z.object({
   interval: z.enum(["weekly", "biweekly"]),
   days: z
@@ -247,6 +257,89 @@ export const leagueRecurrenceSchema = z.object({
   substitutesAllowed: z.boolean(),
   substituteApprovalRequired: z.boolean(),
   teamAssignment: z.enum(["signup", "rating-balanced", "manual"]),
+});
+export const eventDraftEditorSchema = z.object({
+  id: z.string().uuid(),
+  slug: z.string(),
+  status: z.literal("draft"),
+  title: z.string(),
+  shortSummary: z.string().optional(),
+  description: z.string().optional(),
+  kind: z.enum(["tournament", "league"]),
+  media: z.array(eventMediaSchema).readonly(),
+  location: eventLocationSchema.extend({
+    venueId: z.string().uuid().optional(),
+    courtIds: z.array(z.string().uuid()).readonly(),
+  }),
+  timezone: z.string(),
+  localStartsAt: z.string(),
+  localEndsAt: z.string(),
+  divisions: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string(),
+        description: z.string().optional(),
+        minimumTeams: z.number().int().positive(),
+        maximumTeams: z.number().int().positive(),
+        teamFormat: z.enum([
+          "solo",
+          "doubles",
+          "three-person",
+          "four-person",
+          "six-person",
+        ]),
+        surface: z.enum(["sand", "grass", "water", "indoor-sand"]),
+        gender: z.enum(["mens", "womens", "coed", "open"]),
+        priceBasis: z.enum(["per-person", "per-team"]),
+        priceMinor: z.number().int().nonnegative(),
+        ratingEnabled: z.boolean(),
+        ratingMinimum: z.number().optional(),
+        ratingMaximum: z.number().optional(),
+        ageEnabled: z.boolean(),
+        ageMinimum: z.number().int().nonnegative().optional(),
+        ageMaximum: z.number().int().positive().optional(),
+        tournamentFormat: z.enum([
+          "kob-qob",
+          "single-elimination",
+          "double-elimination-true",
+          "double-elimination-crossover",
+        ]),
+        poolPlay: z.object({
+          enabled: z.boolean(),
+          teamsPerPool: z.number().int().min(2),
+          format: z.enum(["full", "olympic-crossover"]),
+          teamsAdvancing: z.number().int().positive(),
+        }),
+        seeding: z.enum([
+          "first-come",
+          "sand-rating-score",
+          "sand-rating-best-8",
+          "sand-rating-ttm",
+          "manual",
+        ]),
+      }),
+    )
+    .readonly(),
+  tickets: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string(),
+        description: z.string().optional(),
+        priceMinor: z.number().int().nonnegative(),
+        quantity: z.number().int().positive().optional(),
+        waitlistEnabled: z.boolean(),
+        approvalRequired: z.boolean(),
+        availableOnline: z.boolean(),
+        availableInPerson: z.boolean(),
+      }),
+    )
+    .readonly(),
+  features: z.array(eventFeatureSchema).readonly(),
+  policies: z.array(eventPolicySchema).readonly(),
+  smartRules: eventDraftSmartRulesSchema,
+  recurrence: leagueRecurrenceSchema.optional(),
 });
 export const eventSummarySchema = z.object({
   id: z.string(),
@@ -1946,6 +2039,11 @@ export const stripeOnboardingResultSchema = z.object({
   chargesEnabled: z.boolean(),
 });
 
+export const stripeAccountReadinessResultSchema = z.object({
+  accountId: z.string(),
+  chargesEnabled: z.boolean(),
+});
+
 export const ticketApprovalSummarySchema = z.object({
   orderId: z.string().uuid(),
   ticketTypeId: z.string().uuid(),
@@ -1967,6 +2065,7 @@ export const ticketApprovalResultSchema = z.object({
 });
 
 export type OperatorWorkspace = z.infer<typeof operatorWorkspaceSchema>;
+export type EventDraftEditor = z.infer<typeof eventDraftEditorSchema>;
 export type PublicCatalogItem = z.infer<typeof publicCatalogItemSchema>;
 export type PublicOrganizationStorefront = z.infer<
   typeof publicOrganizationStorefrontSchema
@@ -1983,6 +2082,9 @@ export type TicketApprovalSummary = z.infer<typeof ticketApprovalSummarySchema>;
 export type TicketApprovalResult = z.infer<typeof ticketApprovalResultSchema>;
 export type StripeOnboardingResult = z.infer<
   typeof stripeOnboardingResultSchema
+>;
+export type StripeAccountReadinessResult = z.infer<
+  typeof stripeAccountReadinessResultSchema
 >;
 export const adminQueueSchema = z.object({
   id: z.string(),

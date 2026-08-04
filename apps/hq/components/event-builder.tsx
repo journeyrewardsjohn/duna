@@ -1,6 +1,6 @@
 "use client";
 
-import type { OperatorWorkspace } from "@duna/api";
+import type { EventDraftEditor, OperatorWorkspace } from "@duna/api";
 import {
   defaultEventMedia,
   eventMediaForKind,
@@ -35,9 +35,10 @@ import { useActionState, useMemo, useState } from "react";
 import {
   createEventDraftAction,
   type OperatorActionState,
+  updateEventDraftAction,
 } from "@/app/actions";
 import { createEventMediaPath, optimizeImageUpload } from "@/lib/media-storage";
-import { PlaceSearch, type PlaceDetails } from "./place-search";
+import { AddressEntry, type AddressValue } from "./place-address-fields";
 
 type EventKind = Extract<CoreEventKind, "tournament" | "league">;
 type LocationMode = "venue" | "address" | "online";
@@ -208,6 +209,10 @@ function teamSize(format: TeamFormat) {
 function moneyMinor(value: string) {
   const amount = Number(value);
   return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) : 0;
+}
+
+function moneyInput(value: number) {
+  return (value / 100).toFixed(2);
 }
 
 function Toggle({
@@ -557,6 +562,7 @@ function DivisionEditor({
 }
 
 export function EventBuilder({
+  initialDraft,
   initialKind = "tournament",
   initialTitle = "",
   initialSummary = "",
@@ -564,6 +570,7 @@ export function EventBuilder({
   initialStartsAt,
   workspace,
 }: {
+  readonly initialDraft?: EventDraftEditor;
   readonly initialKind?: EventKind;
   readonly initialTitle?: string;
   readonly initialSummary?: string;
@@ -572,18 +579,27 @@ export function EventBuilder({
   readonly workspace: OperatorWorkspace;
 }) {
   const [state, action, pending] = useActionState(
-    createEventDraftAction,
+    initialDraft ? updateEventDraftAction : createEventDraftAction,
     initialActionState,
   );
   const [step, setStep] = useState(0);
-  const [kind, setKind] = useState<EventKind>(initialKind);
-  const [title, setTitle] = useState(initialTitle);
-  const [shortSummary, setShortSummary] = useState(initialSummary);
-  const [description, setDescription] = useState("");
-  const [mediaUrl, setMediaUrl] = useState(
-    `https://duna.coach${defaultEventMedia(initialKind, initialTitle).path}`,
+  const [kind, setKind] = useState<EventKind>(
+    initialDraft?.kind ?? initialKind,
   );
-  const [mediaKind, setMediaKind] = useState<"image" | "video">("image");
+  const [title, setTitle] = useState(initialDraft?.title ?? initialTitle);
+  const [shortSummary, setShortSummary] = useState(
+    initialDraft?.shortSummary ?? initialSummary,
+  );
+  const [description, setDescription] = useState(
+    initialDraft?.description ?? "",
+  );
+  const [mediaUrl, setMediaUrl] = useState(
+    initialDraft?.media[0]?.url ??
+      `https://duna.coach${defaultEventMedia(initialDraft?.kind ?? initialKind, initialDraft?.title ?? initialTitle).path}`,
+  );
+  const [mediaKind, setMediaKind] = useState<"image" | "video">(
+    initialDraft?.media[0]?.kind ?? "image",
+  );
   const [mediaUploadState, setMediaUploadState] = useState<
     "idle" | "uploading" | "ready" | "error"
   >("idle");
@@ -591,51 +607,124 @@ export function EventBuilder({
   const activeVenues = workspace.venues.filter(
     (venue) => venue.status === "active",
   );
-  const initialVenue = activeVenues[0];
+  const initialVenue =
+    activeVenues.find((venue) => venue.id === initialDraft?.location.venueId) ??
+    activeVenues[0];
   const [locationMode, setLocationMode] = useState<LocationMode>(
-    initialVenueName ? "address" : initialVenue ? "venue" : "address",
+    initialDraft?.location.mode ??
+      (initialVenueName ? "address" : initialVenue ? "venue" : "address"),
   );
-  const [venueId, setVenueId] = useState(initialVenue?.id ?? "");
+  const [venueId, setVenueId] = useState(
+    initialDraft?.location.venueId ?? initialVenue?.id ?? "",
+  );
   const [venueName, setVenueName] = useState(
-    initialVenueName ?? initialVenue?.name ?? "Event venue",
+    initialDraft?.location.venueName ??
+      initialVenueName ??
+      initialVenue?.name ??
+      "Event venue",
   );
-  const [address, setAddress] = useState("");
-  const [addressPlace, setAddressPlace] = useState<PlaceDetails>({});
-  const [onlineUrl, setOnlineUrl] = useState("");
-  const [courtIds, setCourtIds] = useState<readonly string[]>([]);
-  const [customCourts, setCustomCourts] = useState("");
+  const [address, setAddress] = useState(initialDraft?.location.address ?? "");
+  const [addressPlace, setAddressPlace] = useState<AddressValue>({
+    googlePlaceId: initialDraft?.location.googlePlaceId,
+    formattedAddress: initialDraft?.location.address,
+    addressLine1: initialDraft?.location.address,
+    latitude: initialDraft?.location.latitude,
+    longitude: initialDraft?.location.longitude,
+  });
+  const [onlineUrl, setOnlineUrl] = useState(
+    initialDraft?.location.onlineUrl ?? "",
+  );
+  const [courtIds, setCourtIds] = useState<readonly string[]>(
+    initialDraft?.location.courtIds ?? [],
+  );
+  const [customCourts, setCustomCourts] = useState(
+    initialDraft?.location.courtNames?.join(", ") ?? "",
+  );
   const [timezone, setTimezone] = useState(
-    initialVenue?.timezone ?? workspace.organization.timezone,
+    initialDraft?.timezone ??
+      initialVenue?.timezone ??
+      workspace.organization.timezone,
   );
   const [startsAt, setStartsAt] = useState(
-    initialStartsAt ?? localDateTime(14, 9),
+    initialDraft?.localStartsAt ?? initialStartsAt ?? localDateTime(14, 9),
   );
-  const [endsAt, setEndsAt] = useState(localDateTime(14, 17));
-  const [divisions, setDivisions] = useState<readonly DivisionDraft[]>([
-    initialDivision("division-open"),
-  ]);
-  const [tickets, setTickets] = useState<readonly TicketDraft[]>([]);
-  const [features, setFeatures] = useState<readonly FeatureDraft[]>([]);
-  const [policies, setPolicies] = useState<readonly PolicyDraft[]>([]);
-  const [waitlistEnabled, setWaitlistEnabled] = useState(true);
-  const [allowLateCancellation, setAllowLateCancellation] = useState(false);
-  const [freeCancellationHours, setFreeCancellationHours] = useState(24);
-  const [bookingOpensDays, setBookingOpensDays] = useState(90);
-  const [bookingClosesMinutes, setBookingClosesMinutes] = useState(60);
-  const [autoCancelLowAttendance, setAutoCancelLowAttendance] = useState(false);
-  const [minimumAttendance, setMinimumAttendance] = useState(4);
-  const [approvalRequired, setApprovalRequired] = useState(false);
+  const [endsAt, setEndsAt] = useState(
+    initialDraft?.localEndsAt ?? localDateTime(14, 17),
+  );
+  const [divisions, setDivisions] = useState<readonly DivisionDraft[]>(
+    initialDraft?.divisions.length
+      ? initialDraft.divisions.map((division) => ({
+          ...division,
+          description: division.description ?? "",
+          price: moneyInput(division.priceMinor),
+          ratingMinimum: String(division.ratingMinimum ?? 3),
+          ratingMaximum: String(division.ratingMaximum ?? 6),
+          ageMinimum: String(division.ageMinimum ?? 18),
+          ageMaximum: String(division.ageMaximum ?? 99),
+        }))
+      : [initialDivision("division-open")],
+  );
+  const [tickets, setTickets] = useState<readonly TicketDraft[]>(
+    initialDraft?.tickets.map((ticket) => ({
+      ...ticket,
+      description: ticket.description ?? "",
+      price: moneyInput(ticket.priceMinor),
+      quantity: ticket.quantity ? String(ticket.quantity) : "",
+    })) ?? [],
+  );
+  const [features, setFeatures] = useState<readonly FeatureDraft[]>(
+    initialDraft?.features.map((feature) => ({
+      id: feature.id,
+      kind: feature.kind,
+      title: feature.title,
+      description: feature.description ?? "",
+      personId: feature.personId,
+    })) ?? [],
+  );
+  const [policies, setPolicies] = useState<readonly PolicyDraft[]>(
+    initialDraft?.policies ?? [],
+  );
+  const [waitlistEnabled, setWaitlistEnabled] = useState(
+    initialDraft?.smartRules.waitlistEnabled ?? true,
+  );
+  const [allowLateCancellation, setAllowLateCancellation] = useState(
+    initialDraft?.smartRules.allowLateCancellation ?? false,
+  );
+  const [freeCancellationHours, setFreeCancellationHours] = useState(
+    initialDraft?.smartRules.freeCancellationHours ?? 24,
+  );
+  const [bookingOpensDays, setBookingOpensDays] = useState(
+    initialDraft?.smartRules.bookingOpensDays ?? 90,
+  );
+  const [bookingClosesMinutes, setBookingClosesMinutes] = useState(
+    initialDraft?.smartRules.bookingClosesMinutes ?? 60,
+  );
+  const [autoCancelLowAttendance, setAutoCancelLowAttendance] = useState(
+    initialDraft?.smartRules.autoCancelLowAttendance ?? false,
+  );
+  const [minimumAttendance, setMinimumAttendance] = useState(
+    initialDraft?.smartRules.minimumAttendance ?? 4,
+  );
+  const [approvalRequired, setApprovalRequired] = useState(
+    initialDraft?.smartRules.approvalRequired ?? false,
+  );
   const [recurrenceInterval, setRecurrenceInterval] = useState<
     "weekly" | "biweekly"
-  >("weekly");
-  const [recurringDays, setRecurringDays] = useState<readonly RecurringDay[]>([
-    { day: "monday", startsAt: "18:00", endsAt: "21:00" },
-  ]);
-  const [substitutesAllowed, setSubstitutesAllowed] = useState(true);
-  const [substituteApproval, setSubstituteApproval] = useState(true);
+  >(initialDraft?.recurrence?.interval ?? "weekly");
+  const [recurringDays, setRecurringDays] = useState<readonly RecurringDay[]>(
+    initialDraft?.recurrence?.days ?? [
+      { day: "monday", startsAt: "18:00", endsAt: "21:00" },
+    ],
+  );
+  const [substitutesAllowed, setSubstitutesAllowed] = useState(
+    initialDraft?.recurrence?.substitutesAllowed ?? true,
+  );
+  const [substituteApproval, setSubstituteApproval] = useState(
+    initialDraft?.recurrence?.substituteApprovalRequired ?? true,
+  );
   const [teamAssignment, setTeamAssignment] = useState<
     "signup" | "rating-balanced" | "manual"
-  >("signup");
+  >(initialDraft?.recurrence?.teamAssignment ?? "signup");
   const mediaChoices = useMemo(() => eventMediaForKind(kind), [kind]);
 
   const selectKind = (nextKind: EventKind) => {
@@ -743,7 +832,7 @@ export function EventBuilder({
         address: locationMode === "address" ? address || undefined : undefined,
         googlePlaceId:
           locationMode === "address"
-            ? addressPlace.placeId || undefined
+            ? addressPlace.googlePlaceId || undefined
             : undefined,
         latitude:
           locationMode === "address" ? addressPlace.latitude : undefined,
@@ -952,11 +1041,18 @@ export function EventBuilder({
             <ArrowLeft aria-hidden size={16} /> Back to{" "}
             {kind === "league" ? "leagues" : "events"}
           </Link>
-          <span className="hq-eyebrow">Private draft · guided create</span>
-          <h1>Create something players remember.</h1>
+          <span className="hq-eyebrow">
+            Private draft · {initialDraft ? "event studio" : "guided create"}
+          </span>
+          <h1>
+            {initialDraft
+              ? "Make this event impossible to miss."
+              : "Create something players remember."}
+          </h1>
           <p>
-            One clear flow. Duna changes the setup when you choose the event
-            type.
+            {initialDraft
+              ? "Refine the story, schedule, registration, and player experience. Nothing goes live until you publish."
+              : "One clear flow. Duna changes the setup when you choose the event type."}
           </p>
         </div>
         <div className="event-builder__status">
@@ -1004,6 +1100,9 @@ export function EventBuilder({
         </aside>
 
         <form action={action} className="event-builder__canvas">
+          {initialDraft && (
+            <input name="sessionId" type="hidden" value={initialDraft.id} />
+          )}
           <input
             name="eventDraft"
             type="hidden"
@@ -1313,14 +1412,24 @@ export function EventBuilder({
                           value={customCourts}
                         />
                       </label>
-                      <PlaceSearch
-                        onAddress={(value) => {
-                          setAddress(value);
-                          setAddressPlace({});
+                      <AddressEntry
+                        includeFormFields={false}
+                        initial={{
+                          ...addressPlace,
+                          formattedAddress: address,
+                          addressLine1: addressPlace.addressLine1 ?? address,
                         }}
-                        onPlace={setAddressPlace}
+                        label="Search for the event address"
+                        onChange={(value) => {
+                          setAddress(
+                            value.formattedAddress ?? value.addressLine1 ?? "",
+                          );
+                          setAddressPlace(value);
+                        }}
                         onVenueName={setVenueName}
-                        value={address}
+                        required
+                        showAddressLine2={false}
+                        structuredFields={false}
                       />
                     </>
                   )}
@@ -2287,8 +2396,9 @@ export function EventBuilder({
                 />
                 <span>
                   <strong>I reviewed every division and ticket price.</strong>
-                  This saves a private draft. Going live is a separate, explicit
-                  action after Money is ready.
+                  This {initialDraft ? "updates" : "saves"} a private draft.
+                  Going live is a separate, explicit action after Money is
+                  ready.
                 </span>
               </label>
               {state.status !== "idle" && (
@@ -2304,7 +2414,9 @@ export function EventBuilder({
                   <span>
                     <strong>
                       {state.status === "success"
-                        ? "Draft created"
+                        ? initialDraft
+                          ? "Draft updated"
+                          : "Draft created"
                         : "Check the draft"}
                     </strong>
                     <small>{state.message}</small>
@@ -2332,14 +2444,20 @@ export function EventBuilder({
             >
               <ArrowLeft aria-hidden size={16} /> Back
             </button>
-            <span>Changes stay local until you save the private draft.</span>
+            <span>
+              Changes stay local until you save. The event remains private.
+            </span>
             {current.key === "review" ? (
               <button
                 className="hq-button hq-button--primary"
                 disabled={pending}
                 type="submit"
               >
-                {pending ? "Saving draft…" : "Save event draft"}
+                {pending
+                  ? "Saving draft…"
+                  : initialDraft
+                    ? "Save changes"
+                    : "Save event draft"}
                 <Check aria-hidden size={16} />
               </button>
             ) : (

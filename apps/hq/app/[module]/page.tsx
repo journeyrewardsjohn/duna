@@ -19,13 +19,22 @@ export default async function OperatorModulePage({
   searchParams,
 }: {
   readonly params: Promise<{ module: string }>;
-  readonly searchParams: Promise<{ draft?: string }>;
+  readonly searchParams: Promise<{ draft?: string; stripe?: string }>;
 }) {
   const { module } = await params;
-  const { draft } = await searchParams;
+  const { draft, stripe } = await searchParams;
   const item = operatorModules.find((entry) => entry.slug === module);
   if (!item || module === "overview") notFound();
   const caller = await getServerCaller();
+  if (module === "payments" && stripe === "return") {
+    try {
+      await caller.operator.refreshStripeOnboarding({
+        idempotencyKey: crypto.randomUUID(),
+      });
+    } catch (error) {
+      console.error("Stripe onboarding status refresh failed.", error);
+    }
+  }
   const [dashboard, workspace, ticketApprovals] = await Promise.all([
     caller.operator.dashboard(),
     caller.operator.workspace(),

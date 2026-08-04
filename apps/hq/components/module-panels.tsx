@@ -3,7 +3,7 @@ import type {
   OperatorWorkspace,
   TicketApprovalSummary,
 } from "@duna/api";
-import { formatMoney, formatVenueTime } from "@duna/core";
+import { defaultEventMedia, formatMoney, formatVenueTime } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowRight,
@@ -12,6 +12,7 @@ import {
   CalendarDays,
   CircleAlert,
   CreditCard,
+  ExternalLink,
   Boxes,
   PackageCheck,
   ShoppingBag,
@@ -136,46 +137,87 @@ function EventInventory({
   const events = kinds
     ? dashboard.events.filter((event) => kinds.includes(event.kind))
     : dashboard.events;
+  const publicWebUrl =
+    process.env.NEXT_PUBLIC_DUNA_WEB_URL?.replace(/\/$/, "") ??
+    process.env.NEXT_PUBLIC_WEB_URL?.replace(/\/$/, "") ??
+    "https://duna.coach";
   return (
-    <section className="hq-card connected-table">
+    <section className="hq-card connected-table event-live-inventory">
       <header className="hq-card-heading">
         <div>
-          <span className="hq-eyebrow">Published inventory</span>
-          <h2>{events.length} connected</h2>
+          <span className="hq-eyebrow">Live on Duna</span>
+          <h2>
+            {kinds
+              ? `${events.length} connected`
+              : `${events.length} live listing${events.length === 1 ? "" : "s"}`}
+          </h2>
+          <p>Open the exact player page or scan registration at a glance.</p>
         </div>
         <Badge>{dashboard.organization.timezone}</Badge>
       </header>
-      <div className="hq-connected-list">
-        {events.map((event) => (
-          <article key={event.id}>
-            <span>
-              <strong>{event.title}</strong>
-              <small>
-                {formatVenueTime(event.startsAt, event.timezone, "en-US", {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}{" "}
-                · {event.venueName}
-              </small>
-            </span>
-            <Badge>{event.kind.replaceAll("-", " ")}</Badge>
-            <span>
-              <Numeric>{event.spotsRemaining}</Numeric>
-              <small>spots</small>
-            </span>
-            <span>
-              <Numeric>
-                {event.price.amountMinor
-                  ? formatMoney(event.price.amountMinor, event.price.currency)
-                  : "Free"}
-              </Numeric>
-              <small>entry</small>
-            </span>
-          </article>
-        ))}
+      <div className="event-live-list">
+        {events.map((event) => {
+          const cover =
+            event.media?.find((item) => item.kind === "image")?.url ??
+            event.imageUrl ??
+            `${publicWebUrl}${defaultEventMedia(event.kind, event.title).path}`;
+          return (
+            <article key={event.id}>
+              <div
+                aria-hidden
+                className="event-live-list__cover"
+                style={{ backgroundImage: `url("${cover}")` }}
+              >
+                <Badge tone={event.live ? "live" : "positive"}>
+                  {event.live ? "Live now" : "Published"}
+                </Badge>
+              </div>
+              <div className="event-live-list__story">
+                <span>{event.kind.replaceAll("-", " ")}</span>
+                <strong>{event.title}</strong>
+                <small>
+                  {formatVenueTime(event.startsAt, event.timezone, "en-US", {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}{" "}
+                  · {event.venueName}
+                </small>
+              </div>
+              <dl>
+                <div>
+                  <dt>Available</dt>
+                  <dd>
+                    <Numeric>{event.spotsRemaining}</Numeric> spots
+                  </dd>
+                </div>
+                <div>
+                  <dt>Entry</dt>
+                  <dd>
+                    <Numeric>
+                      {event.price.amountMinor
+                        ? formatMoney(
+                            event.price.amountMinor,
+                            event.price.currency,
+                          )
+                        : "Free"}
+                    </Numeric>
+                  </dd>
+                </div>
+              </dl>
+              <a
+                className="hq-button hq-button--secondary event-live-list__action"
+                href={`${publicWebUrl}/events/${event.slug}`}
+                rel="noreferrer"
+                target="_blank"
+              >
+                View player page <ExternalLink aria-hidden size={15} />
+              </a>
+            </article>
+          );
+        })}
         {events.length === 0 && (
           <div className="hq-empty">
             <strong>No matching published inventory.</strong>

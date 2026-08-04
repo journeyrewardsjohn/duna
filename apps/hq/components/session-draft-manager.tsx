@@ -1,7 +1,7 @@
 "use client";
 
 import type { OperatorWorkspace } from "@duna/api";
-import { formatMoney, formatVenueTime } from "@duna/core";
+import { defaultEventMedia, formatMoney, formatVenueTime } from "@duna/core";
 import { Badge } from "@duna/ui";
 import {
   ArrowRight,
@@ -9,11 +9,18 @@ import {
   Check,
   CircleAlert,
   CreditCard,
+  Eye,
+  GalleryHorizontalEnd,
   MapPinned,
-  ShieldCheck,
+  MonitorSmartphone,
+  PencilLine,
+  Rocket,
+  Sparkles,
+  UsersRound,
+  X,
 } from "lucide-react";
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState, type CSSProperties } from "react";
 import { useFormStatus } from "react-dom";
 import { publishSessionAction, type OperatorActionState } from "@/app/actions";
 
@@ -23,12 +30,233 @@ const initialActionState: OperatorActionState = {
 };
 
 type DraftSession = OperatorWorkspace["sessions"][number];
+type PreviewMode = "page" | "poster";
 
 interface PublishBlocker {
   readonly code: "location" | "payments" | "schedule";
   readonly message: string;
   readonly href?: string;
   readonly linkLabel?: string;
+}
+
+function coverForSession(session: DraftSession) {
+  const media = session.media.find(
+    (item) => typeof item.url === "string" && item.url.length > 0,
+  );
+  const fallback = defaultEventMedia(session.kind, session.title);
+  return {
+    kind: media?.kind === "video" ? ("video" as const) : ("image" as const),
+    url:
+      typeof media?.url === "string"
+        ? media.url
+        : `https://duna.coach${fallback.path}`,
+    posterUrl:
+      typeof media?.posterUrl === "string" ? media.posterUrl : undefined,
+    alt:
+      typeof media?.alt === "string"
+        ? media.alt
+        : `${session.title} event cover`,
+  };
+}
+
+function venueDatePart(
+  value: string,
+  timezone: string,
+  options: Intl.DateTimeFormatOptions,
+) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    ...options,
+  }).format(new Date(value));
+}
+
+function PreviewWorkspace({
+  mode,
+  onClose,
+  onModeChange,
+  session,
+  workspace,
+}: {
+  readonly mode: PreviewMode;
+  readonly onClose: () => void;
+  readonly onModeChange: (mode: PreviewMode) => void;
+  readonly session: DraftSession;
+  readonly workspace: OperatorWorkspace;
+}) {
+  const cover = coverForSession(session);
+  const backgroundUrl = cover.kind === "video" ? cover.posterUrl : cover.url;
+  const location = session.venueName ?? "Location shared after registration";
+  const date = venueDatePart(session.startsAt, session.timezone, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+  const time = venueDatePart(session.startsAt, session.timezone, {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+  const visualStyle = backgroundUrl
+    ? ({ "--event-preview-image": `url("${backgroundUrl}")` } as CSSProperties)
+    : undefined;
+
+  return (
+    <section className="event-draft-preview" aria-label="Private event preview">
+      <header>
+        <div>
+          <span className="event-draft-preview__lock">
+            <Eye aria-hidden size={14} /> Private preview
+          </span>
+          <strong>
+            {mode === "page" ? "Player event page" : "Discovery poster"}
+          </strong>
+          <small>
+            Exactly the story players will meet before registration.
+          </small>
+        </div>
+        <nav aria-label="Preview format">
+          <button
+            aria-pressed={mode === "page"}
+            className={mode === "page" ? "active" : undefined}
+            onClick={() => onModeChange("page")}
+            type="button"
+          >
+            <MonitorSmartphone aria-hidden size={15} /> Event page
+          </button>
+          <button
+            aria-pressed={mode === "poster"}
+            className={mode === "poster" ? "active" : undefined}
+            onClick={() => onModeChange("poster")}
+            type="button"
+          >
+            <GalleryHorizontalEnd aria-hidden size={15} /> Card / poster
+          </button>
+          <button aria-label="Close preview" onClick={onClose} type="button">
+            <X aria-hidden size={16} />
+          </button>
+        </nav>
+      </header>
+
+      {mode === "page" ? (
+        <div className="event-player-preview">
+          <div className="event-player-preview__browser">
+            <span aria-hidden />
+            <span aria-hidden />
+            <span aria-hidden />
+            <strong>duna.coach/events/{session.slug}</strong>
+          </div>
+          <div className="event-player-preview__hero">
+            <article>
+              <span className="event-player-preview__kicker">
+                {session.kind.replaceAll("-", " ")} · Hosted by{" "}
+                {workspace.organization.name}
+              </span>
+              <h3>{session.title}</h3>
+              <p>
+                {session.shortSummary ??
+                  session.description ??
+                  "A connected Duna event with everything players need in one place."}
+              </p>
+              <dl>
+                <div>
+                  <dt>When</dt>
+                  <dd>{date}</dd>
+                </div>
+                <div>
+                  <dt>First serve</dt>
+                  <dd>{time}</dd>
+                </div>
+                <div>
+                  <dt>Where</dt>
+                  <dd>{location}</dd>
+                </div>
+              </dl>
+            </article>
+            <div className="event-player-preview__visual" style={visualStyle}>
+              {cover.kind === "video" && !cover.posterUrl && (
+                <video
+                  aria-label={cover.alt}
+                  muted
+                  playsInline
+                  src={cover.url}
+                />
+              )}
+              <span>
+                <UsersRound aria-hidden size={18} />
+                <strong>{session.capacity} player spots</strong>
+              </span>
+            </div>
+          </div>
+          <div className="event-player-preview__lower">
+            <article>
+              <small>The experience</small>
+              <strong>
+                {session.kind === "league"
+                  ? "A season with a real rhythm."
+                  : "Built for the full day of play."}
+              </strong>
+              <p>
+                {session.description ??
+                  "Eligibility, payment, arrival, scoring, and results stay connected from the moment a player joins."}
+              </p>
+            </article>
+            <aside>
+              <span>Registration</span>
+              <strong>
+                {formatMoney(session.priceMinor, session.currency)}
+              </strong>
+              <small>per entry · {session.capacity} spots</small>
+              <button disabled type="button">
+                Preview only
+              </button>
+            </aside>
+          </div>
+        </div>
+      ) : (
+        <div className="event-poster-preview">
+          <div className="event-poster-preview__stage">
+            <article style={visualStyle}>
+              <header>
+                <span>DUNA</span>
+                <small>{session.kind.replaceAll("-", " ")}</small>
+              </header>
+              <div>
+                <span>{date}</span>
+                <h3>{session.title}</h3>
+                <p>{location}</p>
+              </div>
+              <footer>
+                <strong>{workspace.organization.name}</strong>
+                <span>{formatMoney(session.priceMinor, session.currency)}</span>
+              </footer>
+            </article>
+          </div>
+          <article className="event-poster-preview__context">
+            <span className="hq-eyebrow">Discovery placement</span>
+            <h3>Designed to stop the scroll.</h3>
+            <p>
+              This is the visual players see in Duna discovery, shared event
+              links, and promotional placements.
+            </p>
+            <dl>
+              <div>
+                <dt>Story</dt>
+                <dd>{session.shortSummary ? "Ready" : "Needs a summary"}</dd>
+              </div>
+              <div>
+                <dt>Cover</dt>
+                <dd>{session.media.length > 0 ? "Custom" : "Duna library"}</dd>
+              </div>
+              <div>
+                <dt>Action</dt>
+                <dd>View & register</dd>
+              </div>
+            </dl>
+          </article>
+        </div>
+      )}
+    </section>
+  );
 }
 
 function publishBlockers(
@@ -93,69 +321,180 @@ function DraftPublicationCard({
     publishSessionAction,
     initialActionState,
   );
+  const [previewMode, setPreviewMode] = useState<PreviewMode | null>(null);
   const blockers = publishBlockers(session, workspace);
   const venue = session.venueId
     ? workspace.venues.find((item) => item.id === session.venueId)
     : undefined;
   const locationLabel = venue?.name ?? "Custom or online location";
+  const cover = coverForSession(session);
+  const coverUrl = cover.kind === "video" ? cover.posterUrl : cover.url;
+  const coverStyle = coverUrl
+    ? ({ "--event-draft-cover": `url("${coverUrl}")` } as CSSProperties)
+    : undefined;
+  const editHref = `/events/create?draft=${session.id}`;
 
   return (
     <article
       className={`event-draft-card${focused ? " event-draft-card--focused" : ""}`}
       id={`draft-${session.id}`}
     >
-      <header>
-        <span>
+      <div className="event-draft-card__overview">
+        <div className="event-draft-card__cover" style={coverStyle}>
+          {cover.kind === "video" && !cover.posterUrl && (
+            <video aria-label={cover.alt} muted playsInline src={cover.url} />
+          )}
           <Badge tone="warning">Private draft</Badge>
-          <strong>{session.title}</strong>
-          <small>{session.kind.replaceAll("-", " ")}</small>
-        </span>
-        <strong>{formatMoney(session.priceMinor, session.currency)}</strong>
-      </header>
-
-      <div className="event-draft-card__facts">
-        <span>
-          <CalendarClock aria-hidden size={18} />
-          <small>Starts</small>
-          <strong>
-            {formatVenueTime(session.startsAt, session.timezone, "en-US", {
-              weekday: "short",
+          <span className="event-draft-card__date">
+            {venueDatePart(session.startsAt, session.timezone, {
               month: "short",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
             })}
-          </strong>
-        </span>
-        <span>
-          <MapPinned aria-hidden size={18} />
-          <small>Location</small>
-          <strong>{locationLabel}</strong>
-        </span>
-        <span>
-          <CreditCard aria-hidden size={18} />
-          <small>Registration</small>
-          <strong>
-            {session.priceMinor > 0
-              ? workspace.organization.stripeChargesEnabled
-                ? "Payments ready"
-                : "Money setup needed"
-              : "Free entry"}
-          </strong>
-        </span>
+            <strong>
+              {venueDatePart(session.startsAt, session.timezone, {
+                day: "numeric",
+              })}
+            </strong>
+          </span>
+        </div>
+
+        <div className="event-draft-card__content">
+          <header>
+            <div>
+              <span>
+                {session.kind.replaceAll("-", " ")} ·{" "}
+                {blockers.length === 0
+                  ? "ready to publish"
+                  : `${blockers.length} item${blockers.length === 1 ? "" : "s"} to finish`}
+              </span>
+              <h3>{session.title}</h3>
+              <p>
+                {session.shortSummary ??
+                  "Add the player-facing story, then check how it looks before opening registration."}
+              </p>
+            </div>
+            <strong>{formatMoney(session.priceMinor, session.currency)}</strong>
+          </header>
+
+          <div className="event-draft-card__facts">
+            <span>
+              <CalendarClock aria-hidden size={18} />
+              <small>First serve</small>
+              <strong>
+                {formatVenueTime(session.startsAt, session.timezone, "en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </strong>
+            </span>
+            <span>
+              <MapPinned aria-hidden size={18} />
+              <small>Location</small>
+              <strong>{locationLabel}</strong>
+            </span>
+            <span>
+              <UsersRound aria-hidden size={18} />
+              <small>Capacity</small>
+              <strong>{session.capacity} player spots</strong>
+            </span>
+            <span>
+              <CreditCard aria-hidden size={18} />
+              <small>Registration</small>
+              <strong>
+                {session.priceMinor > 0
+                  ? workspace.organization.stripeChargesEnabled
+                    ? "Payments ready"
+                    : "Money setup needed"
+                  : "Free entry"}
+              </strong>
+            </span>
+          </div>
+
+          <nav
+            className="event-draft-jobs"
+            aria-label={`${session.title} actions`}
+          >
+            <Link
+              className="event-draft-job event-draft-job--edit"
+              href={editHref}
+            >
+              <span>
+                <PencilLine aria-hidden size={18} />
+              </span>
+              <span>
+                <strong>Edit event</strong>
+                <small>Story, schedule, pricing & rules</small>
+              </span>
+              <ArrowRight aria-hidden size={16} />
+            </Link>
+            <button
+              aria-expanded={previewMode === "page"}
+              className="event-draft-job"
+              onClick={() =>
+                setPreviewMode((current) =>
+                  current === "page" ? null : "page",
+                )
+              }
+              type="button"
+            >
+              <span>
+                <MonitorSmartphone aria-hidden size={18} />
+              </span>
+              <span>
+                <strong>Preview page</strong>
+                <small>See exactly what players see</small>
+              </span>
+              <Eye aria-hidden size={16} />
+            </button>
+            <button
+              aria-expanded={previewMode === "poster"}
+              className="event-draft-job"
+              onClick={() =>
+                setPreviewMode((current) =>
+                  current === "poster" ? null : "poster",
+                )
+              }
+              type="button"
+            >
+              <span>
+                <GalleryHorizontalEnd aria-hidden size={18} />
+              </span>
+              <span>
+                <strong>Preview card</strong>
+                <small>Discovery & share poster</small>
+              </span>
+              <Sparkles aria-hidden size={16} />
+            </button>
+          </nav>
+        </div>
       </div>
+
+      {previewMode && (
+        <PreviewWorkspace
+          mode={previewMode}
+          onClose={() => setPreviewMode(null)}
+          onModeChange={setPreviewMode}
+          session={session}
+          workspace={workspace}
+        />
+      )}
 
       <details className="event-draft-review" open={focused ? true : undefined}>
         <summary>
           <span>
-            <ShieldCheck aria-hidden size={19} />
-            <strong>Review & publish</strong>
+            <Rocket aria-hidden size={19} />
+            <span>
+              <strong>Open registration</strong>
+              <small>Final readiness check & publish</small>
+            </span>
           </span>
-          <small>
+          <strong>
             {blockers.length === 0
               ? "Ready to open registration"
               : `${blockers.length} item${blockers.length === 1 ? "" : "s"} to finish`}
-          </small>
+          </strong>
         </summary>
         <div className="event-draft-review__body">
           {blockers.length > 0 ? (

@@ -8,7 +8,7 @@ import {
   updateStaffProfileAction,
   type OperatorActionState,
 } from "@/app/actions";
-import { PlaceAddressFields } from "./place-address-fields";
+import { AddressEntry } from "./place-address-fields";
 
 type StaffProfile = OperatorWorkspace["staff"][number];
 
@@ -364,7 +364,7 @@ export function TeamMemberEditor({
               </p>
             </div>
           </header>
-          <PlaceAddressFields
+          <AddressEntry
             initial={{
               googlePlaceId: person.googlePlaceId,
               addressLine1: person.addressLine1,

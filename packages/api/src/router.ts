@@ -50,6 +50,7 @@ import {
   courtCheckoutStatusSchema,
   courtHoldResultSchema,
   eventSummarySchema,
+  eventDraftEditorSchema,
   eventCheckoutResultSchema,
   eventCheckoutStatusSchema,
   featureFlagCollectionSchema,
@@ -76,6 +77,7 @@ import {
   publicOrganizationStorefrontSchema,
   registrationResultSchema,
   scoreStateSchema,
+  stripeAccountReadinessResultSchema,
   stripeOnboardingResultSchema,
   scoreEventSchema,
   teamClaimSummarySchema,
@@ -236,17 +238,20 @@ import {
   createVenue,
   draftCourtScheduleFromPrompt,
   loadDemoOperatorWorkspace,
+  loadEventDraft,
   loadOperatorWorkspace,
   loadPlayerInvitation,
   loadStaffInvitation,
   OperatorServiceError,
   publishSession,
   publishVenue,
+  refreshStripeOnboarding,
   saveMessageDraft,
   startStripeOnboarding,
   replaceCourtSchedule,
   updateCourtBookingConfiguration,
   updateStaffProfile,
+  updateEventDraft,
   updateVenueProfile,
 } from "./operator-service";
 import {
@@ -3914,6 +3919,19 @@ const operatorRouter = router({
         ? loadDemoOperatorWorkspace(ctx.actor!.organizationId!)
         : loadOperatorWorkspace(ctx.actor!.organizationId!),
     ),
+  eventDraft: organizationProcedure("sessions:read")
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .output(eventDraftEditorSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadEventDraft(
+          ctx.actor!.organizationId!,
+          input.sessionId,
+        );
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   createCatalogItem: organizationProcedure("payments:write")
     .input(
       z.object({
@@ -5463,6 +5481,35 @@ const operatorRouter = router({
         },
       }),
     ),
+  updateEventDraft: organizationProcedure("sessions:write")
+    .input(
+      z.intersection(
+        createEventDraftInputSchema,
+        z.object({ sessionId: z.string().uuid() }),
+      ),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.updateEventDraft",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateEventDraft({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   publishSession: organizationProcedure("sessions:write")
     .input(
       z.object({
@@ -5614,6 +5661,37 @@ const operatorRouter = router({
             return await createMarketingCampaignDraft({
               actor: ctx.actor!,
               ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  refreshStripeOnboarding: organizationProcedure("payments:write")
+    .use(
+      rateLimitMiddleware({
+        id: "stripe-status-refresh",
+        capacity: 12,
+        refillPerMinute: 3,
+        scope: "organization",
+      }),
+    )
+    .input(z.object({ idempotencyKey: z.string().uuid() }))
+    .output(stripeAccountReadinessResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.refreshStripeOnboarding",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await refreshStripeOnboarding({
+              actor: ctx.actor!,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,
