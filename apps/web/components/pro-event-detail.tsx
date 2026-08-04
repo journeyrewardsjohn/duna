@@ -21,6 +21,9 @@ import { countryFlag } from "@/lib/country-flag";
 
 type ProMatch = PublicProEvent["matches"][number];
 type ProTeam = ProMatch["teamA"];
+type AvpLeague = NonNullable<PublicProEvent["avpLeague"]>;
+type AvpDivisionTeam = AvpLeague["men"][number];
+type AvpOverallStanding = AvpLeague["overall"][number];
 
 function eventDates(start?: string, end?: string) {
   if (!start) return "Dates to be announced";
@@ -138,6 +141,139 @@ const entryListLabels = {
   league: "League teams",
 } as const;
 
+function AvpRoster({ team }: { readonly team: AvpDivisionTeam }) {
+  return (
+    <span className="pro-avp-roster">
+      {team.players.map((player, index) => (
+        <span key={player.personId ?? player.externalPersonId}>
+          {index > 0 && " / "}
+          {player.handle ? (
+            <Link href={`/players/${player.handle}`}>{player.name}</Link>
+          ) : (
+            player.name
+          )}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function AvpDivisionStandings({
+  label,
+  teams,
+}: {
+  readonly label: "Men's" | "Women's";
+  readonly teams: readonly AvpDivisionTeam[];
+}) {
+  return (
+    <section className="pro-avp-table">
+      <header>
+        <div>
+          <span>{label} division</span>
+          <h3>{label} standings</h3>
+        </div>
+        <span>{teams.length} teams</span>
+      </header>
+      <div className="pro-avp-table__scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Rank</th>
+              <th scope="col">League team</th>
+              <th scope="col">Record</th>
+              <th scope="col">Pts</th>
+              <th scope="col">Win %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {teams.map((team) => (
+              <tr key={team.externalTeamId}>
+                <td>
+                  <Numeric>{team.seed ?? "—"}</Numeric>
+                </td>
+                <th scope="row">
+                  <strong>{team.label}</strong>
+                  <AvpRoster team={team} />
+                </th>
+                <td>
+                  <strong>{team.wins ?? 0}</strong>–{team.losses ?? 0}
+                  <small>{team.matchesPlayed ?? 0} played</small>
+                </td>
+                <td className="pro-avp-table__points">
+                  {team.matchPoints ?? team.entryPoints ?? 0}
+                </td>
+                <td>
+                  {(team.winPercentage ?? 0).toLocaleString("en-US", {
+                    maximumFractionDigits: 1,
+                  })}
+                  %
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function AvpOverallStandings({
+  standings,
+}: {
+  readonly standings: readonly AvpOverallStanding[];
+}) {
+  return (
+    <section className="pro-avp-table pro-avp-table--overall">
+      <header>
+        <div>
+          <span>Combined men's + women's results</span>
+          <h3>Overall team standings</h3>
+        </div>
+        <span>{standings.length} clubs</span>
+      </header>
+      <div className="pro-avp-table__scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Rank</th>
+              <th scope="col">League team</th>
+              <th scope="col">Played</th>
+              <th scope="col">W</th>
+              <th scope="col">L</th>
+              <th scope="col">Match pts</th>
+              <th scope="col">Win %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {standings.map((standing) => (
+              <tr key={standing.teamName}>
+                <td>
+                  <Numeric>{standing.rank}</Numeric>
+                </td>
+                <th scope="row">{standing.teamName}</th>
+                <td>{standing.matchesPlayed}</td>
+                <td>
+                  <strong>{standing.wins}</strong>
+                </td>
+                <td>{standing.losses}</td>
+                <td className="pro-avp-table__points">
+                  {standing.matchPoints}
+                </td>
+                <td>
+                  {standing.winPercentage.toLocaleString("en-US", {
+                    maximumFractionDigits: 1,
+                  })}
+                  %
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
   const completedMatchCount = event.matches.filter(
     (match) => match.status === "completed",
@@ -148,6 +284,7 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
   const entryGroups = (
     ["main-draw", "qualification", "reserve", "withdrawn", "league"] as const
   ).flatMap((list) => {
+    if (list === "league" && event.avpLeague) return [];
     const teams = event.teamEntries.filter((entry) => entry.list === list);
     return teams.length > 0 ? [{ list, teams }] : [];
   });
@@ -306,6 +443,28 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
             </p>
           )}
         </section>
+
+        {event.avpLeague && (
+          <section className="pro-event-section pro-avp-league">
+            <header>
+              <div>
+                <span className="page-eyebrow">
+                  {event.avpLeague.season} AVP League
+                </span>
+                <h2>Team standings</h2>
+              </div>
+              <Badge>{event.avpLeague.overall.length} clubs</Badge>
+            </header>
+            <div className="pro-avp-division-grid">
+              <AvpDivisionStandings label="Men's" teams={event.avpLeague.men} />
+              <AvpDivisionStandings
+                label="Women's"
+                teams={event.avpLeague.women}
+              />
+            </div>
+            <AvpOverallStandings standings={event.avpLeague.overall} />
+          </section>
+        )}
 
         {entryGroups.length > 0 && (
           <section className="pro-event-section pro-entry-lists">
@@ -530,39 +689,41 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
           </section>
         )}
 
-        <section className="pro-event-section pro-live-table">
-          <header>
-            <div>
-              <span className="page-eyebrow">
-                {event.live ? "Updating live" : "Tournament table"}
-              </span>
-              <h2>{event.live ? "Live standings" : "Standings"}</h2>
+        {!event.avpLeague && (
+          <section className="pro-event-section pro-live-table">
+            <header>
+              <div>
+                <span className="page-eyebrow">
+                  {event.live ? "Updating live" : "Tournament table"}
+                </span>
+                <h2>{event.live ? "Live standings" : "Standings"}</h2>
+              </div>
+              <Activity aria-hidden size={23} />
+            </header>
+            <div className="pro-live-table__head">
+              <span>Place</span>
+              <span>Team</span>
+              <span>W</span>
+              <span>L</span>
+              <span>Sets</span>
+              <span>Points</span>
             </div>
-            <Activity aria-hidden size={23} />
-          </header>
-          <div className="pro-live-table__head">
-            <span>Place</span>
-            <span>Team</span>
-            <span>W</span>
-            <span>L</span>
-            <span>Sets</span>
-            <span>Points</span>
-          </div>
-          {event.liveStandings.slice(0, 25).map((standing, index) => (
-            <div className="pro-live-table__row" key={standing.team.key}>
-              <Numeric>{index + 1}</Numeric>
-              <TeamName compact team={standing.team} />
-              <strong>{standing.wins}</strong>
-              <span>{standing.losses}</span>
-              <span>
-                {standing.setsFor}–{standing.setsAgainst}
-              </span>
-              <span>
-                {standing.pointsFor}–{standing.pointsAgainst}
-              </span>
-            </div>
-          ))}
-        </section>
+            {event.liveStandings.slice(0, 25).map((standing, index) => (
+              <div className="pro-live-table__row" key={standing.team.key}>
+                <Numeric>{index + 1}</Numeric>
+                <TeamName compact team={standing.team} />
+                <strong>{standing.wins}</strong>
+                <span>{standing.losses}</span>
+                <span>
+                  {standing.setsFor}–{standing.setsAgainst}
+                </span>
+                <span>
+                  {standing.pointsFor}–{standing.pointsAgainst}
+                </span>
+              </div>
+            ))}
+          </section>
+        )}
 
         {upcomingMatches.length > 0 && (
           <section className="pro-event-section pro-predictions">
