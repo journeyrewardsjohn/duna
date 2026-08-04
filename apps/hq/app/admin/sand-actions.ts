@@ -72,10 +72,10 @@ export async function refreshFivbIndexAction(
     refreshSandAdmin();
     return {
       status: "success",
-      message: `${result.events} professional events refreshed.`,
+      message: `${result.events} events indexed; ${result.details.succeeded} upcoming event details hydrated.`,
     };
   } catch (error) {
-    return failure(error, "The FIVB index could not be refreshed.");
+    return failure(error, "The FIVB schedule could not be refreshed.");
   }
 }
 

@@ -1,9 +1,118 @@
 import { describe, expect, it } from "vitest";
 import {
+  inferHistoricalPersonId,
+  mergeProfessionalEventPayload,
   parseAvpLeagueEventPayload,
   parsePlayerSourceProfile,
   professionalEventSlug,
+  selectFivbRefreshCandidates,
+  shouldCreateUnclaimedSourceProfile,
 } from "./service";
+
+describe("FIVB event detail refresh", () => {
+  it("preserves hydrated registration details during a lightweight index refresh", () => {
+    const syncedAt = new Date("2026-08-04T14:00:00.000Z");
+    expect(
+      mergeProfessionalEventPayload({
+        incoming: { countryName: "Canada", detailLevel: "index" },
+        existing: {
+          detailLevel: "tournament",
+          detailSyncedAt: "2026-08-03T12:00:00.000Z",
+          teamEntries: [{ label: "Crabb / Benesh" }],
+          watchOptions: [{ id: "vbtv" }],
+        },
+        syncedAt,
+      }),
+    ).toMatchObject({
+      countryName: "Canada",
+      detailLevel: "tournament",
+      detailSyncedAt: "2026-08-03T12:00:00.000Z",
+      teamEntries: [{ label: "Crabb / Benesh" }],
+      watchOptions: [{ id: "vbtv" }],
+    });
+  });
+
+  it("rotates through unhydrated upcoming events before stale hydrated events", () => {
+    const selected = selectFivbRefreshCandidates(
+      [
+        {
+          externalEventId: "LIVE",
+          live: true,
+          startsOn: "2026-08-04",
+          rawPayload: {
+            detailLevel: "tournament",
+            detailSyncedAt: "2026-08-04T13:00:00.000Z",
+          },
+        },
+        {
+          externalEventId: "MONTREAL",
+          live: false,
+          startsOn: "2026-08-19",
+          rawPayload: { detailLevel: "index" },
+        },
+        {
+          externalEventId: "STALE",
+          live: false,
+          startsOn: "2026-08-06",
+          rawPayload: {
+            detailLevel: "tournament",
+            detailSyncedAt: "2026-08-01T12:00:00.000Z",
+          },
+        },
+      ],
+      2,
+    );
+    expect(selected.map((event) => event.externalEventId)).toEqual([
+      "LIVE",
+      "MONTREAL",
+    ]);
+  });
+});
+
+describe("source identity inference", () => {
+  it("reuses a unique same-source identity in future seasons", () => {
+    expect(
+      inferHistoricalPersonId({
+        displayName: "Taylor Crabb",
+        previous: [
+          {
+            normalizedName: "taylor crabb",
+            personId: "person-taylor",
+          },
+        ],
+      }),
+    ).toBe("person-taylor");
+  });
+
+  it("requires review when the historical name maps to multiple people", () => {
+    expect(
+      inferHistoricalPersonId({
+        displayName: "Crabb",
+        previous: [
+          { normalizedName: "crabb", personId: "person-taylor" },
+          { normalizedName: "crabb", personId: "person-trevor" },
+        ],
+      }),
+    ).toBeUndefined();
+  });
+
+  it("does not create a new canonical player from an AVP surname alone", () => {
+    expect(
+      shouldCreateUnclaimedSourceProfile({
+        source: "avp-league",
+        displayName: "Crabb",
+        candidateCount: 0,
+      }),
+    ).toBe(false);
+    expect(
+      shouldCreateUnclaimedSourceProfile({
+        source: "fivb-12ndr",
+        displayName: "Taylor Crabb",
+        candidateCount: 0,
+      }),
+    ).toBe(true);
+  });
+});
 
 describe("professionalEventSlug", () => {
   it("creates one stable gender segment when the name already includes it", () => {
