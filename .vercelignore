@@ -1,7 +1,14 @@
 .git
 .turbo
+.codex
+.worktrees
 **/.next
 **/node_modules
+**/.expo
+**/dist
+**/ios
+**/android
+**/*.tsbuildinfo
 artifacts
 playwright-report
 test-results
