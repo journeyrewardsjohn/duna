@@ -13,6 +13,7 @@ function event(
   return {
     category: "Elite16",
     endsOn: "2026-08-09",
+    editorial: { overrides: {}, media: [] },
     externalEventId: overrides.id,
     genderCategory: "men",
     lastSyncedAt: "2026-08-04T12:00:00.000Z",
@@ -24,6 +25,14 @@ function event(
     sourceName: "FIVB",
     sourceSlug: "fivb-12ndr",
     sourceUrl: "https://example.com",
+    scraped: {
+      name: overrides.name,
+      location: undefined,
+      category: "Elite16",
+      startsOn: "2026-08-05",
+      endsOn: "2026-08-09",
+    },
+    avpSeason: undefined,
     startsOn: "2026-08-05",
     status: "upcoming",
     teamCount: 0,
@@ -67,9 +76,15 @@ describe("professional event administration filters", () => {
       matches: [
         {
           id: "match",
+          court: undefined,
+          gender: "men",
           label: "A / B",
           playedAt: undefined,
           roundLabel: undefined,
+          teamAName: "A",
+          teamBName: "B",
+          time: undefined,
+          timezone: undefined,
           watchOptions: [
             {
               id: "center",

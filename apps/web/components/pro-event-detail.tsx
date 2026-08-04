@@ -238,6 +238,9 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
   const upcomingMatches = event.matches.filter(
     (match) => match.status !== "completed",
   );
+  const matchBroadcasts = event.matches.filter(
+    (match) => match.watchOptions.length > 0,
+  );
   const entryGroups = (
     ["main-draw", "qualification", "reserve", "withdrawn", "league"] as const
   ).flatMap((list) => {
@@ -245,6 +248,9 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
     const teams = event.teamEntries.filter((entry) => entry.list === list);
     return teams.length > 0 ? [{ list, teams }] : [];
   });
+  const featuredMedia =
+    event.editorial.media.find((media) => media.featured) ??
+    event.editorial.media[0];
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "SportsEvent",
@@ -256,13 +262,16 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
       : event.status === "completed"
         ? "https://schema.org/EventCompleted"
         : "https://schema.org/EventScheduled",
-    location: event.location
-      ? {
-          "@type": "Place",
-          name: event.location,
-          address: event.location,
-        }
-      : undefined,
+    image: featuredMedia?.url,
+    description: event.editorial.summary,
+    location:
+      event.location || event.editorial.venueName
+        ? {
+            "@type": "Place",
+            name: event.editorial.venueName ?? event.location,
+            address: event.editorial.venueAddress ?? event.location,
+          }
+        : undefined,
     sport: "Beach volleyball",
     url: `/events/${event.slug}`,
   };
@@ -302,13 +311,24 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
             </span>
             <span>
               <MapPin aria-hidden size={17} />
-              {event.location ?? "Location pending"}
+              {event.editorial.venueName ??
+                event.location ??
+                "Location pending"}
             </span>
             <span>
               <UsersRound aria-hidden size={17} />
               {event.teamCount || event.liveStandings.length} teams
             </span>
           </div>
+          {event.editorial.summary && (
+            <p className="pro-event-hero__summary">{event.editorial.summary}</p>
+          )}
+          {event.editorial.venueAddress && (
+            <p className="pro-event-hero__address">
+              <MapPin aria-hidden size={15} />
+              {event.editorial.venueAddress}
+            </p>
+          )}
           <div className="pro-event-hero__actions">
             {event.sibling && (
               <Link href={`/events/${event.sibling.slug}`}>
@@ -322,29 +342,52 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
             </a>
           </div>
         </div>
-        <div className="pro-event-hero__scorecard">
-          <span>Live tournament desk</span>
-          <strong>
-            <Numeric>{completedMatchCount}</Numeric>
-            <small> / {event.matchCount} matches</small>
-          </strong>
-          <div>
-            <i
-              style={{
-                width: `${event.matchCount ? Math.min(100, (completedMatchCount / event.matchCount) * 100) : 0}%`,
-              }}
-            />
+        <aside
+          className={`pro-event-hero__visual${featuredMedia ? " pro-event-hero__visual--media" : ""}`}
+        >
+          {featuredMedia && (
+            <figure>
+              {featuredMedia.kind === "hero-video" ? (
+                <video
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  poster={featuredMedia.posterUrl}
+                  src={featuredMedia.url}
+                />
+              ) : (
+                <img alt={featuredMedia.alt} src={featuredMedia.url} />
+              )}
+              {featuredMedia.caption && (
+                <figcaption>{featuredMedia.caption}</figcaption>
+              )}
+            </figure>
+          )}
+          <div className="pro-event-hero__scorecard">
+            <span>Live tournament desk</span>
+            <strong>
+              <Numeric>{completedMatchCount}</Numeric>
+              <small> / {event.matchCount} matches</small>
+            </strong>
+            <div>
+              <i
+                style={{
+                  width: `${event.matchCount ? Math.min(100, (completedMatchCount / event.matchCount) * 100) : 0}%`,
+                }}
+              />
+            </div>
+            <small>
+              Updated{" "}
+              {new Intl.DateTimeFormat("en-US", {
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              }).format(new Date(event.lastSyncedAt))}
+            </small>
           </div>
-          <small>
-            Updated{" "}
-            {new Intl.DateTimeFormat("en-US", {
-              month: "short",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            }).format(new Date(event.lastSyncedAt))}
-          </small>
-        </div>
+        </aside>
       </section>
 
       <div className="pro-event-content">
@@ -356,42 +399,90 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
             </div>
             <Tv aria-hidden size={23} />
           </header>
-          {event.watchOptions.length > 0 ? (
-            <div>
-              {event.watchOptions.map((option) => {
-                const content = (
-                  <>
-                    {option.kind === "youtube" ? (
-                      <Video aria-hidden size={19} />
+          {event.watchOptions.length > 0 || matchBroadcasts.length > 0 ? (
+            <>
+              {event.watchOptions.length > 0 && (
+                <div>
+                  {event.watchOptions.map((option) => {
+                    const content = (
+                      <>
+                        {option.kind === "youtube" ? (
+                          <Video aria-hidden size={19} />
+                        ) : (
+                          <Tv aria-hidden size={19} />
+                        )}
+                        <span>
+                          <strong>{option.label}</strong>
+                          <small>
+                            {option.channelName ??
+                              (option.url
+                                ? "Open stream"
+                                : "Broadcast details confirmed")}
+                          </small>
+                        </span>
+                        {option.url && <ExternalLink aria-hidden size={14} />}
+                      </>
+                    );
+                    return option.url ? (
+                      <a
+                        href={option.url}
+                        key={option.id}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        {content}
+                      </a>
                     ) : (
-                      <Tv aria-hidden size={19} />
-                    )}
-                    <span>
-                      <strong>{option.label}</strong>
-                      <small>
-                        {option.channelName ??
-                          (option.url
-                            ? "Open stream"
-                            : "Broadcast details confirmed")}
-                      </small>
-                    </span>
-                    {option.url && <ExternalLink aria-hidden size={14} />}
-                  </>
-                );
-                return option.url ? (
-                  <a
-                    href={option.url}
-                    key={option.id}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    {content}
-                  </a>
-                ) : (
-                  <article key={option.id}>{content}</article>
-                );
-              })}
-            </div>
+                      <article key={option.id}>{content}</article>
+                    );
+                  })}
+                </div>
+              )}
+              {matchBroadcasts.length > 0 && (
+                <div className="pro-watch__match-guide">
+                  {matchBroadcasts.flatMap((match) =>
+                    match.watchOptions.map((option) => {
+                      const content = (
+                        <>
+                          {option.kind === "youtube" ? (
+                            <Video aria-hidden size={19} />
+                          ) : (
+                            <Tv aria-hidden size={19} />
+                          )}
+                          <span>
+                            <small>
+                              {match.time ?? "Time pending"} · {option.label}
+                            </small>
+                            <strong>
+                              {match.leagueTeamAName ?? match.teamA.label} vs.{" "}
+                              {match.leagueTeamBName ?? match.teamB.label}
+                            </strong>
+                          </span>
+                          <ArrowRight aria-hidden size={14} />
+                        </>
+                      );
+                      return option.url ? (
+                        <a
+                          href={option.url}
+                          key={`${match.id}-${option.id}`}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {content}
+                        </a>
+                      ) : (
+                        <Link
+                          href={match.canonicalPath}
+                          key={`${match.id}-${option.id}`}
+                        >
+                          {content}
+                        </Link>
+                      );
+                    }),
+                  )}
+                </div>
+              )}
+            </>
           ) : (
             <p>
               Broadcast details have not been announced yet. Duna will show
@@ -725,7 +816,11 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
           <div>
             {event.matches.map((match) => (
               <ProfessionalMatchCard
-                context={event.name}
+                context={
+                  match.leagueTeamAName && match.leagueTeamBName
+                    ? `${match.leagueTeamAName} vs. ${match.leagueTeamBName}`
+                    : event.name
+                }
                 href={match.canonicalPath}
                 key={match.id}
                 playedAt={match.playedAt}

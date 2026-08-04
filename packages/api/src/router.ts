@@ -293,6 +293,7 @@ import {
   loadPublicProEvent,
   loadPublicProMatch,
   loadPublicProCoverage,
+  loadProfessionalEventMediaUploadContext,
   loadSandDataOverview,
   mergeUnclaimedProfile,
   queuePlayerSourceConnection,
@@ -305,8 +306,12 @@ import {
   reviewPlayerSourceConnection,
   SandDataServiceError,
   saveAvpRosterAssignment,
+  saveProfessionalEventEditorial,
+  saveProfessionalEventMedia,
+  saveProfessionalMatchSchedule,
   saveProfessionalWatchOption,
   searchDunaPlayers,
+  removeProfessionalEventMedia,
   removeProfessionalWatchOption,
 } from "./sand-data/service";
 import {
@@ -6321,6 +6326,116 @@ const adminRouter = router({
       try {
         return await refreshAvpLeague({
           season: input?.season,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  professionalEventMediaUploadContext: adminProcedure
+    .input(z.object({ professionalEventId: z.string().uuid() }))
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadProfessionalEventMediaUploadContext({
+          ...input,
+          actor: ctx.actor!,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  saveProfessionalEventEditorial: adminProcedure
+    .input(
+      z.object({
+        professionalEventId: z.string().uuid(),
+        overrides: z.object({
+          name: z.string().trim().min(2).max(180).optional(),
+          location: z.string().trim().min(2).max(180).optional(),
+          category: z.string().trim().min(2).max(100).optional(),
+          startsOn: z.iso.date().optional(),
+          endsOn: z.iso.date().optional(),
+        }),
+        summary: z.string().trim().max(1_500).optional(),
+        venueName: z.string().trim().max(180).optional(),
+        venueAddress: z.string().trim().max(300).optional(),
+        timezone: z.string().trim().max(80).optional(),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await saveProfessionalEventEditorial({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  saveProfessionalEventMedia: adminProcedure
+    .input(
+      z.object({
+        professionalEventId: z.string().uuid(),
+        kind: z.enum(["poster", "hero-image", "hero-video"]),
+        url: z.url(),
+        posterUrl: z.url().optional(),
+        alt: z.string().trim().min(2).max(240),
+        caption: z.string().trim().max(500).optional(),
+        featured: z.boolean(),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await saveProfessionalEventMedia({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  removeProfessionalEventMedia: adminProcedure
+    .input(
+      z.object({
+        professionalEventId: z.string().uuid(),
+        mediaId: z.string().uuid(),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await removeProfessionalEventMedia({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  saveProfessionalMatchSchedule: adminProcedure
+    .input(
+      z.object({
+        professionalEventId: z.string().uuid(),
+        importedMatchId: z.string().uuid().optional(),
+        gender: z.enum(["men", "women"]),
+        teamAName: z.string().trim().min(2).max(120),
+        teamBName: z.string().trim().min(2).max(120),
+        localStartsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
+        timezone: z.string().trim().min(2).max(80),
+        roundLabel: z.string().trim().max(120).optional(),
+        court: z.string().trim().max(120).optional(),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await saveProfessionalMatchSchedule({
+          ...input,
           actor: ctx.actor!,
           now: ctx.now,
         });

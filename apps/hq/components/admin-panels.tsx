@@ -40,7 +40,10 @@ import {
   RatingsLabPanel,
   SandDataPanel,
 } from "./sand-admin-controls";
-import { ProfessionalTourAdminPanel } from "./pro-tour-admin-controls";
+import {
+  ProfessionalTourAdminPanel,
+  type ProfessionalTourTool,
+} from "./pro-tour-admin-controls";
 import { VideoAdminControls } from "./video-admin-controls";
 
 const adminMetricIcons = [
@@ -720,6 +723,8 @@ export function AdminPanel({
   sandData,
   playerDirectory,
   playerSearchQuery,
+  proEventId,
+  proTourTool,
 }: {
   readonly module: AdminModule;
   readonly overview: AdminOverviewData;
@@ -730,6 +735,8 @@ export function AdminPanel({
   readonly sandData?: SandDataOverview;
   readonly playerDirectory: readonly PersonSummary[];
   readonly playerSearchQuery?: string;
+  readonly proEventId?: string;
+  readonly proTourTool?: ProfessionalTourTool;
 }) {
   if (module === "overview") return null;
   const content = copy[module];
@@ -816,7 +823,12 @@ export function AdminPanel({
       ) : module === "sand-data" && sandData ? (
         <SandDataPanel data={sandData} />
       ) : module === "pro-tour" && sandData ? (
-        <ProfessionalTourAdminPanel data={sandData} players={playerDirectory} />
+        <ProfessionalTourAdminPanel
+          data={sandData}
+          initialEventId={proEventId}
+          players={playerDirectory}
+          tool={proTourTool}
+        />
       ) : module === "player-mapping" && sandData ? (
         <PlayerMappingPanel
           data={sandData}
