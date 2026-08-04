@@ -9,7 +9,7 @@ import {
   validateEventMediaInput,
 } from "@/lib/media-storage";
 
-interface EventMediaClientPayload {
+interface MediaClientPayload {
   readonly organizationId: string;
   readonly fileName: string;
   readonly contentType: string;
@@ -17,16 +17,16 @@ interface EventMediaClientPayload {
   readonly purpose?: "brand" | "court" | "event" | "venue";
 }
 
-function parseClientPayload(value: string | null): EventMediaClientPayload {
-  if (!value) throw new Error("Event media details are required.");
-  const parsed = JSON.parse(value) as Partial<EventMediaClientPayload>;
+function parseClientPayload(value: string | null): MediaClientPayload {
+  if (!value) throw new Error("Media details are required.");
+  const parsed = JSON.parse(value) as Partial<MediaClientPayload>;
   if (
     typeof parsed.organizationId !== "string" ||
     typeof parsed.fileName !== "string" ||
     typeof parsed.contentType !== "string" ||
     typeof parsed.size !== "number"
   ) {
-    throw new Error("Event media details are invalid.");
+    throw new Error("Media details are invalid.");
   }
   return {
     organizationId: parsed.organizationId,
@@ -37,10 +37,10 @@ function parseClientPayload(value: string | null): EventMediaClientPayload {
       parsed.purpose === "brand"
         ? "brand"
         : parsed.purpose === "venue"
-        ? "venue"
-        : parsed.purpose === "court"
-          ? "court"
-          : "event",
+          ? "venue"
+          : parsed.purpose === "court"
+            ? "court"
+            : "event",
   };
 }
 
@@ -64,10 +64,7 @@ export async function POST(request: Request) {
             context.organizationId,
             media.extension,
           );
-        } else if (
-          payload.purpose === "venue" ||
-          payload.purpose === "court"
-        ) {
+        } else if (payload.purpose === "venue" || payload.purpose === "court") {
           if (media.kind !== "image") {
             throw new Error("Facility media must be an image.");
           }
@@ -113,7 +110,7 @@ export async function POST(request: Request) {
         error:
           error instanceof Error
             ? error.message
-            : "The event media upload could not be authorized.",
+            : "The media upload could not be authorized.",
       },
       { status: 400 },
     );

@@ -1,6 +1,6 @@
 "use client";
 
-import type { OperatorDashboard, OperatorWorkspace } from "@duna/api";
+import type { OperatorWorkspace } from "@duna/api";
 import { Badge } from "@duna/ui";
 import {
   ArrowRight,
@@ -40,11 +40,7 @@ import {
 import { PlaceAddressFields } from "./place-address-fields";
 
 export type SettingsSection =
-  | "overview"
-  | "business"
-  | "brand"
-  | "money"
-  | "operations";
+  "overview" | "business" | "brand" | "money" | "operations";
 
 const initialActionState: OperatorActionState = {
   status: "idle",
@@ -198,11 +194,9 @@ function SummaryCard({
 }
 
 export function SettingsCenter({
-  dashboard,
   initialSection = "overview",
   workspace,
 }: {
-  readonly dashboard: OperatorDashboard;
   readonly initialSection?: SettingsSection;
   readonly workspace: OperatorWorkspace;
 }) {
@@ -224,9 +218,9 @@ export function SettingsCenter({
   const themeReady = Boolean(workspace.theme.publishedAt);
   const addressReady = Boolean(
     organization.addressLine1 &&
-      organization.locality &&
-      organization.administrativeArea &&
-      organization.postalCode,
+    organization.locality &&
+    organization.administrativeArea &&
+    organization.postalCode,
   );
   const paymentsReady = organization.stripeChargesEnabled;
   const profileReady = Boolean(organization.name && organization.timezone);
@@ -323,7 +317,14 @@ export function SettingsCenter({
         {section === "overview" && (
           <div className="settings-overview">
             <section className="settings-readiness">
-              <div className="settings-readiness__score">
+              <div
+                className="settings-readiness__score"
+                style={
+                  {
+                    "--settings-completion": `${completion}%`,
+                  } as CSSProperties
+                }
+              >
                 <span>{completion}%</span>
                 <small>essential setup</small>
               </div>
@@ -340,10 +341,16 @@ export function SettingsCenter({
                 </button>
               </div>
               <ul>
-                <StatusLine complete={profileReady}>Business details</StatusLine>
-                <StatusLine complete={themeReady}>Published Theme Kit</StatusLine>
+                <StatusLine complete={profileReady}>
+                  Business details
+                </StatusLine>
+                <StatusLine complete={themeReady}>
+                  Published Theme Kit
+                </StatusLine>
                 <StatusLine complete={addressReady}>Legal address</StatusLine>
-                <StatusLine complete={paymentsReady}>Online payments</StatusLine>
+                <StatusLine complete={paymentsReady}>
+                  Online payments
+                </StatusLine>
               </ul>
             </section>
 
@@ -407,18 +414,14 @@ export function SettingsCenter({
                 onOpen={() => setSection("money")}
                 status={paymentStatus}
                 title={
-                  paymentsReady
-                    ? "Payments are ready"
-                    : "Finish payment setup"
+                  paymentsReady ? "Payments are ready" : "Finish payment setup"
                 }
                 tone={paymentTone}
               >
                 <dl>
                   <div>
                     <dt>Automatic tax</dt>
-                    <dd>
-                      {organization.stripeTaxEnabled ? "On" : "Off"}
-                    </dd>
+                    <dd>{organization.stripeTaxEnabled ? "On" : "Off"}</dd>
                   </div>
                   <div>
                     <dt>Tax status</dt>
@@ -463,14 +466,17 @@ export function SettingsCenter({
                 <span className="hq-eyebrow">Business identity</span>
                 <h2>The details customers see and schedules rely on.</h2>
                 <p>
-                  Keep this simple: one display name and one operating time
-                  zone across Duna.
+                  Keep this simple: one display name and one operating time zone
+                  across Duna.
                 </p>
               </div>
             </header>
 
             <div className="settings-business-layout">
-              <form action={profileAction} className="hq-card settings-form">
+              <form
+                action={profileAction}
+                className="hq-card operator-form settings-form"
+              >
                 <div className="operator-form-grid operator-form-grid--two">
                   <label className="operator-field--wide">
                     <span>Business display name</span>
@@ -672,7 +678,9 @@ export function SettingsCenter({
                   <li className="complete">
                     <Check aria-hidden size={15} /> Secure Duna integration
                   </li>
-                  <li className={organization.stripeAccountId ? "complete" : ""}>
+                  <li
+                    className={organization.stripeAccountId ? "complete" : ""}
+                  >
                     {organization.stripeAccountId ? (
                       <Check aria-hidden size={15} />
                     ) : (
@@ -726,7 +734,10 @@ export function SettingsCenter({
                 )}
               </article>
 
-              <form action={commerceAction} className="hq-card settings-form">
+              <form
+                action={commerceAction}
+                className="hq-card operator-form settings-form"
+              >
                 <header className="settings-form__heading">
                   <span>
                     <ReceiptText aria-hidden size={20} />
@@ -739,9 +750,7 @@ export function SettingsCenter({
                       the venue address.
                     </p>
                   </div>
-                  <Badge
-                    tone={addressReady ? "live" : "warning"}
-                  >
+                  <Badge tone={addressReady ? "live" : "warning"}>
                     {addressReady ? "Complete" : "Needed"}
                   </Badge>
                 </header>

@@ -11,7 +11,7 @@
   - `@journey-rewards-inc/duna-pro`
 - Vercel projects:
   - `https://duna-web.vercel.app`
-  - `https://duna-hq.vercel.app`
+  - `https://hq.duna.coach`
 
 Secrets remain outside source control. Local values live in ignored
 `.env.local`; deployed values belong in the hosting provider’s encrypted

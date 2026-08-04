@@ -60,7 +60,7 @@ jobs:
               --output "$response_file" \
               --write-out "%{http_code}" \
               --header "Authorization: Bearer $CRON_SECRET" \
-              "https://duna-hq.vercel.app/api/cron/sand?mode=$MODE")"; then
+              "https://hq.duna.coach/api/cron/sand?mode=$MODE")"; then
             cat "$response_file"
             exit 1
           fi

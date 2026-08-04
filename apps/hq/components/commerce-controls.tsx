@@ -2,6 +2,7 @@
 
 import type { OperatorWorkspace } from "@duna/api";
 import { Badge } from "@duna/ui";
+import { upload } from "@vercel/blob/client";
 import {
   Archive,
   BookOpen,
@@ -23,6 +24,7 @@ import {
   Sparkles,
   Trophy,
   Type,
+  UploadCloud,
   UserRound,
   WalletCards,
   X,
@@ -46,9 +48,18 @@ import {
   updateThemeAction,
   type OperatorActionState,
 } from "@/app/actions";
+import { createBrandMediaPath, optimizeImageUpload } from "@/lib/media-storage";
 import { PlaceAddressFields } from "./place-address-fields";
 
 const initialState: OperatorActionState = { status: "idle", message: "" };
+
+type BrandMediaTarget =
+  "logoUrl" | "markUrl" | "logoLightUrl" | "logoDarkUrl" | "heroMediaUrl";
+
+type BrandMediaUpload = {
+  readonly status: "idle" | "uploading" | "ready" | "error";
+  readonly message: string;
+};
 
 function ActionNotice({ state }: { readonly state: OperatorActionState }) {
   if (state.status === "idle") return null;
@@ -1859,6 +1870,15 @@ export function ThemeKitEditor({
   const [knowledgeKind, setKnowledgeKind] = useState<
     "note" | "link" | "document"
   >("note");
+  const [mediaUploads, setMediaUploads] = useState<
+    Record<BrandMediaTarget, BrandMediaUpload>
+  >({
+    logoUrl: { status: "idle", message: "" },
+    markUrl: { status: "idle", message: "" },
+    logoLightUrl: { status: "idle", message: "" },
+    logoDarkUrl: { status: "idle", message: "" },
+    heroMediaUrl: { status: "idle", message: "" },
+  });
   const previewStyle = {
     "--theme-preview-primary": palette.primary,
     "--theme-preview-accent": palette.accent,
@@ -1872,6 +1892,81 @@ export function ThemeKitEditor({
   const activeSources = workspace.brandKnowledge.sources.filter(
     (source) => source.status !== "archived",
   );
+
+  function setMediaUpload(
+    target: BrandMediaTarget,
+    status: BrandMediaUpload["status"],
+    message: string,
+  ) {
+    setMediaUploads((current) => ({
+      ...current,
+      [target]: { status, message },
+    }));
+  }
+
+  function setBrandMediaValue(target: BrandMediaTarget, value: string) {
+    if (target === "logoUrl") setLogoUrl(value);
+    if (target === "markUrl") setMarkUrl(value);
+    if (target === "logoLightUrl") setLogoLightUrl(value);
+    if (target === "logoDarkUrl") setLogoDarkUrl(value);
+    if (target === "heroMediaUrl") setHeroMediaUrl(value);
+  }
+
+  async function uploadBrandMedia(
+    file: File | undefined,
+    target: BrandMediaTarget,
+  ) {
+    if (!file) return;
+    if (target !== "heroMediaUrl" && !file.type.startsWith("image/")) {
+      setMediaUpload(target, "error", "Choose an image for this logo.");
+      return;
+    }
+    setMediaUpload(target, "uploading", "Preparing your file…");
+    try {
+      const prepared = file.type.startsWith("image/")
+        ? await optimizeImageUpload(file)
+        : file;
+      const stored = await upload(
+        createBrandMediaPath(workspace.organization.id, prepared.type),
+        prepared,
+        {
+          access: "public",
+          clientPayload: JSON.stringify({
+            organizationId: workspace.organization.id,
+            fileName: prepared.name,
+            contentType: prepared.type,
+            size: prepared.size,
+            purpose: "brand",
+          }),
+          contentType: prepared.type,
+          handleUploadUrl: "/api/media/upload",
+          onUploadProgress: ({ percentage }) => {
+            setMediaUpload(
+              target,
+              "uploading",
+              `Uploading… ${Math.round(percentage)}%`,
+            );
+          },
+        },
+      );
+      if (!stored.url) {
+        throw new Error("Duna storage did not return a media URL.");
+      }
+      setBrandMediaValue(target, stored.url);
+      if (target === "heroMediaUrl") {
+        setHeroMediaType(
+          prepared.type.startsWith("video/") ? "video" : "image",
+        );
+      }
+      setMediaUpload(target, "ready", "Uploaded. Save to apply it.");
+    } catch (error) {
+      setMediaUpload(
+        target,
+        "error",
+        error instanceof Error ? error.message : "The upload could not finish.",
+      );
+    }
+  }
 
   return (
     <section
@@ -2012,6 +2107,7 @@ export function ThemeKitEditor({
                   {
                     label: "Primary logo",
                     name: "logoUrl",
+                    target: "logoUrl" as const,
                     value: logoUrl,
                     setter: setLogoUrl,
                     className: "theme-asset--light",
@@ -2019,6 +2115,7 @@ export function ThemeKitEditor({
                   {
                     label: "Compact mark",
                     name: "markUrl",
+                    target: "markUrl" as const,
                     value: markUrl,
                     setter: setMarkUrl,
                     className: "theme-asset--light",
@@ -2026,6 +2123,7 @@ export function ThemeKitEditor({
                   {
                     label: "Light-surface logo",
                     name: "logoLightUrl",
+                    target: "logoLightUrl" as const,
                     value: logoLightUrl,
                     setter: setLogoLightUrl,
                     className: "theme-asset--light",
@@ -2033,12 +2131,13 @@ export function ThemeKitEditor({
                   {
                     label: "Dark-surface logo",
                     name: "logoDarkUrl",
+                    target: "logoDarkUrl" as const,
                     value: logoDarkUrl,
                     setter: setLogoDarkUrl,
                     className: "theme-asset--dark",
                   },
                 ].map((asset) => (
-                  <label
+                  <div
                     className={`theme-asset ${asset.className}`}
                     key={asset.name}
                   >
@@ -2053,15 +2152,49 @@ export function ThemeKitEditor({
                       {!asset.value && brandDisplayName.slice(0, 2)}
                     </span>
                     <strong>{asset.label}</strong>
-                    <small>SVG or transparent PNG preferred</small>
-                    <input
-                      name={asset.name}
-                      onChange={(event) => asset.setter(event.target.value)}
-                      placeholder="Paste a secure asset URL"
-                      type="url"
-                      value={asset.value}
-                    />
-                  </label>
+                    <small>Transparent PNG, WebP, AVIF, or JPEG</small>
+                    <label className="theme-asset__upload">
+                      <input
+                        accept="image/avif,image/jpeg,image/png,image/webp"
+                        disabled={
+                          mediaUploads[asset.target].status === "uploading"
+                        }
+                        onChange={(event) => {
+                          const file = event.currentTarget.files?.[0];
+                          event.currentTarget.value = "";
+                          void uploadBrandMedia(file, asset.target);
+                        }}
+                        type="file"
+                      />
+                      <span>
+                        <UploadCloud aria-hidden size={15} />
+                        {mediaUploads[asset.target].status === "uploading"
+                          ? "Uploading…"
+                          : asset.value
+                            ? "Replace image"
+                            : "Upload image"}
+                      </span>
+                    </label>
+                    <details className="theme-asset__url">
+                      <summary>Use a hosted URL instead</summary>
+                      <input
+                        aria-label={`${asset.label} URL`}
+                        name={asset.name}
+                        onChange={(event) => asset.setter(event.target.value)}
+                        placeholder="https://…"
+                        type="url"
+                        value={asset.value}
+                      />
+                    </details>
+                    {mediaUploads[asset.target].message && (
+                      <span
+                        aria-live="polite"
+                        className={`theme-media-status theme-media-status--${mediaUploads[asset.target].status}`}
+                      >
+                        {mediaUploads[asset.target].message}
+                      </span>
+                    )}
+                  </div>
                 ))}
               </div>
             </section>
@@ -2076,6 +2209,57 @@ export function ThemeKitEditor({
                   </strong>
                 </div>
               </header>
+              <label className="theme-hero-upload">
+                <span
+                  className="theme-hero-upload__preview"
+                  style={
+                    heroMediaType === "image" && heroMediaUrl
+                      ? { backgroundImage: `url("${heroMediaUrl}")` }
+                      : undefined
+                  }
+                >
+                  {heroMediaType === "video" && heroMediaUrl ? (
+                    <span>Video ready</span>
+                  ) : !heroMediaUrl ? (
+                    <ImageIcon aria-hidden size={24} />
+                  ) : null}
+                </span>
+                <span className="theme-hero-upload__copy">
+                  <strong>
+                    {mediaUploads.heroMediaUrl.status === "uploading"
+                      ? mediaUploads.heroMediaUrl.message
+                      : heroMediaUrl
+                        ? "Replace hero media"
+                        : "Upload a hero image or video"}
+                  </strong>
+                  <small>
+                    Duna optimizes images. Videos upload directly and may take a
+                    moment.
+                  </small>
+                </span>
+                <span className="theme-hero-upload__button">
+                  <UploadCloud aria-hidden size={16} /> Choose file
+                </span>
+                <input
+                  accept="image/avif,image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
+                  disabled={mediaUploads.heroMediaUrl.status === "uploading"}
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    event.currentTarget.value = "";
+                    void uploadBrandMedia(file, "heroMediaUrl");
+                  }}
+                  type="file"
+                />
+              </label>
+              {mediaUploads.heroMediaUrl.message &&
+                mediaUploads.heroMediaUrl.status !== "uploading" && (
+                  <span
+                    aria-live="polite"
+                    className={`theme-media-status theme-media-status--${mediaUploads.heroMediaUrl.status}`}
+                  >
+                    {mediaUploads.heroMediaUrl.message}
+                  </span>
+                )}
               <div className="operator-form-grid operator-form-grid--two">
                 <label>
                   <span>Media type</span>
@@ -2112,7 +2296,7 @@ export function ThemeKitEditor({
                   </select>
                 </label>
                 <label className="operator-field--wide">
-                  <span>Image or video URL</span>
+                  <span>Hosted image or video URL · optional</span>
                   <input
                     name="heroMediaUrl"
                     onChange={(event) => setHeroMediaUrl(event.target.value)}

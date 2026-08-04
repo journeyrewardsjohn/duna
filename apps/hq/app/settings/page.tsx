@@ -1,4 +1,7 @@
-import { SettingsCenter, type SettingsSection } from "@/components/settings-center";
+import {
+  SettingsCenter,
+  type SettingsSection,
+} from "@/components/settings-center";
 import { OperatorShell } from "@/components/operator-shell";
 import { getServerCaller } from "@/lib/api";
 
@@ -46,11 +49,7 @@ export default async function SettingsPage({
             </p>
           </div>
         </header>
-        <SettingsCenter
-          dashboard={dashboard}
-          initialSection={initialSection}
-          workspace={workspace}
-        />
+        <SettingsCenter initialSection={initialSection} workspace={workspace} />
       </main>
     </OperatorShell>
   );
