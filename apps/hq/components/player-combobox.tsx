@@ -18,7 +18,20 @@ function uniqueOptions(
   return [...new Map(options.map((option) => [option.id, option])).values()];
 }
 
+function searchRank(option: PlayerComboboxOption, query: string): number {
+  if (!query) return 0;
+  const name = option.displayName.toLowerCase();
+  const handle = option.handle.toLowerCase();
+  const words = name.split(/[^a-z0-9]+/).filter(Boolean);
+  if (name === query || handle === query) return 0;
+  if (words.includes(query)) return 1;
+  if (name.startsWith(query) || handle.startsWith(query)) return 2;
+  if (words.some((word) => word.startsWith(query))) return 3;
+  return 4;
+}
+
 export function PlayerCombobox({
+  autoOpenOnSearchHint = true,
   currentOption,
   initialOptions,
   label = "Duna player",
@@ -28,6 +41,7 @@ export function PlayerCombobox({
   suggestedConfidence,
   suggestedOption,
 }: {
+  readonly autoOpenOnSearchHint?: boolean;
   readonly currentOption?: PlayerComboboxOption;
   readonly initialOptions: readonly PlayerComboboxOption[];
   readonly label?: string;
@@ -59,7 +73,7 @@ export function PlayerCombobox({
         option.handle.toLowerCase().includes(normalizedQuery.replace(/^@/, ""))
       );
     });
-    return uniqueOptions(
+    const merged = uniqueOptions(
       [
         ...(suggestedOption ? [suggestedOption] : []),
         ...(currentOption ? [currentOption] : []),
@@ -73,7 +87,21 @@ export function PlayerCombobox({
               .includes(normalizedQuery.replace(/^@/, ""))
           : true,
       ),
-    ).slice(0, 10);
+    );
+    return [...merged]
+      .sort((left, right) => {
+        if (left.id === right.id) return 0;
+        if (left.id === currentOption?.id) return -1;
+        if (right.id === currentOption?.id) return 1;
+        if (left.id === suggestedOption?.id) return -1;
+        if (right.id === suggestedOption?.id) return 1;
+        return (
+          searchRank(left, normalizedQuery) -
+            searchRank(right, normalizedQuery) ||
+          left.displayName.localeCompare(right.displayName)
+        );
+      })
+      .slice(0, 10);
   }, [
     currentOption,
     initialOptions,
@@ -85,8 +113,8 @@ export function PlayerCombobox({
   useEffect(() => {
     if (selected || !searchHint?.trim()) return;
     setQuery(searchHint.trim());
-    setOpen(true);
-  }, [searchHint, selected]);
+    setOpen(autoOpenOnSearchHint);
+  }, [autoOpenOnSearchHint, searchHint, selected]);
 
   useEffect(() => {
     const input = inputRef.current;

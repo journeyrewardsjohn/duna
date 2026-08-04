@@ -29,6 +29,7 @@ export default async function AdminModulePage({
   const caller = await getServerCaller();
   const needsSandData = [
     "sand-data",
+    "pro-tour",
     "player-mapping",
     "ratings-lab",
     "profile-merge",
@@ -41,7 +42,7 @@ export default async function AdminModulePage({
       ? caller.admin.featureFlags()
       : Promise.resolve({ flags: [], canManage: false }),
     needsSandData ? caller.admin.sandData() : Promise.resolve(undefined),
-    module === "player-mapping"
+    module === "player-mapping" || module === "pro-tour"
       ? caller.admin.players({ query: q, limit: 40 })
       : Promise.resolve([]),
     module === "video"

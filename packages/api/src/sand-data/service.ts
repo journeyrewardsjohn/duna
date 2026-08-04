@@ -1493,6 +1493,18 @@ export async function loadSandDataOverview() {
         )
       : undefined;
   const sourceById = new Map(sources.map((source) => [source.id, source]));
+  const linkedPlayerBySourceIdentity = new Map(
+    linkedMappingRows.map((mapping) => [
+      `${mapping.sourceId}:${mapping.externalPersonId}`,
+      mapping.personId && mapping.personDisplayName && mapping.personHandle
+        ? {
+            id: mapping.personId,
+            displayName: mapping.personDisplayName,
+            handle: mapping.personHandle,
+          }
+        : undefined,
+    ]),
+  );
   return {
     sources: sources.map((source) => ({
       id: source.id,
@@ -1568,6 +1580,10 @@ export async function loadSandDataOverview() {
     events: events.map((event) => ({
       id: event.id,
       externalEventId: event.externalEventId,
+      sourceSlug: sourceById.get(event.sourceId)?.slug ?? "unknown",
+      sourceName: sourceById.get(event.sourceId)?.name ?? "Unknown source",
+      sourceUrl: event.sourceUrl,
+      publicPath: `/events/${professionalEventSlug(event)}`,
       name: event.name,
       location: event.location ?? undefined,
       category: event.category ?? undefined,
@@ -1617,7 +1633,20 @@ export async function loadSandDataOverview() {
                   entry.entryTag === "women"
                     ? ("women" as const)
                     : ("men" as const),
-                players: entry.players,
+                standing: {
+                  rank: entry.seed,
+                  matchesPlayed: entry.matchesPlayed,
+                  wins: entry.wins,
+                  losses: entry.losses,
+                  matchPoints: entry.matchPoints,
+                  winPercentage: entry.winPercentage,
+                },
+                players: entry.players.map((player) => ({
+                  ...player,
+                  mappedPlayer: linkedPlayerBySourceIdentity.get(
+                    `${event.sourceId}:${player.externalPersonId}`,
+                  ),
+                })),
               }));
           })
           .map((team) => [team.key, team] as const),
