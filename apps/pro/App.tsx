@@ -29,8 +29,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   useWindowDimensions,
   View,
   type ViewStyle,
@@ -44,6 +42,11 @@ import {
   type OperatorMatches,
   type ProRuntime,
 } from "./runtime";
+import {
+  FellixText as Text,
+  FellixTextInput as TextInput,
+  useFellixFonts,
+} from "./fellix-text";
 
 const lightColors = {
   canvas: "#f8f7f3",
@@ -2924,6 +2927,11 @@ function ProApp() {
 }
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFellixFonts();
+
+  if (fontError) throw fontError;
+  if (!fontsLoaded) return null;
+
   return (
     <SafeAreaProvider>
       <ProRuntimeProvider>
@@ -2952,7 +2960,7 @@ function createStyles(palette: Palette) {
     flex: { flex: 1, minWidth: 0 },
     formError: {
       color: colors.danger,
-      fontSize: 9,
+      fontSize: 10,
       lineHeight: 14,
       marginTop: 12,
     },
@@ -2981,7 +2989,7 @@ function createStyles(palette: Palette) {
     },
     previewBannerText: {
       color: colors.warning,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "800",
       letterSpacing: 0.8,
       textAlign: "center",
@@ -2989,7 +2997,7 @@ function createStyles(palette: Palette) {
     scorerError: {
       backgroundColor: rgba(colors.dangerRgb, 0.12),
       color: colors.danger,
-      fontSize: 7,
+      fontSize: 10,
       lineHeight: 11,
       paddingHorizontal: 10,
       paddingVertical: 6,
@@ -3003,7 +3011,7 @@ function createStyles(palette: Palette) {
       marginTop: 18,
       padding: 13,
     },
-    signOutText: { color: colors.danger, fontSize: 9, fontWeight: "800" },
+    signOutText: { color: colors.danger, fontSize: 10, fontWeight: "800" },
     content: { paddingBottom: 116, paddingHorizontal: 18 },
     calendarContent: { paddingBottom: 138, paddingHorizontal: 18 },
     calendarIntro: {
@@ -3761,7 +3769,7 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.warningRgb, 0.12),
       borderRadius: 6,
       color: colors.warning,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 1,
       overflow: "hidden",
@@ -3777,7 +3785,7 @@ function createStyles(palette: Palette) {
     },
     headerContext: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       letterSpacing: 1,
       marginTop: 5,
     },
@@ -3817,7 +3825,7 @@ function createStyles(palette: Palette) {
       position: "relative",
       width: 38,
     },
-    profileText: { color: colors.bone, fontSize: 9, fontWeight: "900" },
+    profileText: { color: colors.bone, fontSize: 10, fontWeight: "900" },
     dot: {
       backgroundColor: colors.flare,
       borderColor: colors.ink,
@@ -3841,7 +3849,7 @@ function createStyles(palette: Palette) {
     },
     eyebrow: {
       color: colors.warning,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "800",
       letterSpacing: 1.1,
     },
@@ -3866,7 +3874,7 @@ function createStyles(palette: Palette) {
     },
     primaryActionText: {
       color: colors.onAccent,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "900",
     },
     subhead: { color: colors.muted, fontSize: 10, marginTop: 8 },
@@ -3885,7 +3893,7 @@ function createStyles(palette: Palette) {
     weatherOperationsIcon: { fontSize: 26 },
     weatherOperationsUpdated: {
       color: colors.muted,
-      fontSize: 6,
+      fontSize: 10,
       textAlign: "right",
     },
     createEventCard: {
@@ -3926,7 +3934,7 @@ function createStyles(palette: Palette) {
     },
     createEventPrimaryText: {
       color: colors.onAccent,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "900",
     },
     createEventSecondary: {
@@ -3940,7 +3948,7 @@ function createStyles(palette: Palette) {
     },
     createEventSecondaryText: {
       color: colors.bone,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "900",
     },
     metricGrid: {
@@ -3958,7 +3966,7 @@ function createStyles(palette: Palette) {
       padding: 12,
       width: "48.7%",
     },
-    metricLabel: { color: colors.muted, fontSize: 7, letterSpacing: 0.8 },
+    metricLabel: { color: colors.muted, fontSize: 10, letterSpacing: 0.8 },
     metricValue: {
       color: colors.bone,
       fontSize: 20,
@@ -3968,11 +3976,11 @@ function createStyles(palette: Palette) {
     },
     positiveText: {
       color: colors.positive,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "700",
       marginTop: 5,
     },
-    metaText: { color: colors.muted, fontSize: 7.5, marginTop: 3 },
+    metaText: { color: colors.muted, fontSize: 10, marginTop: 3 },
     meter: {
       backgroundColor: rgba(colors.overlayRgb, 0.08),
       borderRadius: 3,
@@ -3991,7 +3999,7 @@ function createStyles(palette: Palette) {
     },
     pillText: {
       color: colors.muted,
-      fontSize: 6,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.7,
     },
@@ -4009,7 +4017,7 @@ function createStyles(palette: Palette) {
       letterSpacing: -1,
       marginTop: 4,
     },
-    linkText: { color: colors.warning, fontSize: 8, fontWeight: "700" },
+    linkText: { color: colors.warning, fontSize: 10, fontWeight: "700" },
     scheduleCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.07),
@@ -4027,16 +4035,16 @@ function createStyles(palette: Palette) {
       padding: 9,
     },
     timeBlock: { width: 32 },
-    timeMain: { color: colors.bone, fontSize: 9, fontWeight: "700" },
-    timeSuffix: { color: colors.muted, fontSize: 6 },
+    timeMain: { color: colors.bone, fontSize: 10, fontWeight: "700" },
+    timeSuffix: { color: colors.muted, fontSize: 10 },
     scheduleWeather: {
       color: colors.aqua,
-      fontSize: 6,
+      fontSize: 10,
       fontWeight: "800",
       marginTop: 4,
     },
     statusLine: { borderRadius: 2, height: 35, width: 3 },
-    rowTitle: { color: colors.bone, fontSize: 9.5, fontWeight: "700" },
+    rowTitle: { color: colors.bone, fontSize: 10, fontWeight: "700" },
     rosterCount: { alignItems: "flex-end" },
     chevron: { color: colors.muted, fontSize: 19 },
     attentionCard: {
@@ -4097,7 +4105,7 @@ function createStyles(palette: Palette) {
     },
     aiBody: {
       color: colors.muted,
-      fontSize: 8,
+      fontSize: 10,
       lineHeight: 12,
       marginBottom: 9,
       marginTop: 4,
@@ -4134,7 +4142,7 @@ function createStyles(palette: Palette) {
       backgroundColor: colors.warning,
       borderColor: colors.warning,
     },
-    filterText: { color: colors.muted, fontSize: 8 },
+    filterText: { color: colors.muted, fontSize: 10 },
     filterTextActive: { color: colors.onAccent, fontWeight: "800" },
     peopleSummary: {
       backgroundColor: colors.navy,
@@ -4171,9 +4179,9 @@ function createStyles(palette: Palette) {
       justifyContent: "center",
       width: 34,
     },
-    personAvatarText: { color: colors.bone, fontSize: 8, fontWeight: "900" },
+    personAvatarText: { color: colors.bone, fontSize: 10, fontWeight: "900" },
     personRating: { alignItems: "flex-end", minWidth: 30 },
-    ratingNumber: { color: colors.bone, fontSize: 9, fontWeight: "800" },
+    ratingNumber: { color: colors.bone, fontSize: 10, fontWeight: "800" },
     scorer: { backgroundColor: colors.canvas, flex: 1 },
     scorerTop: {
       alignItems: "center",
@@ -4186,7 +4194,7 @@ function createStyles(palette: Palette) {
     },
     scorerVenue: {
       color: colors.bone,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "700",
       marginTop: 3,
     },
@@ -4199,8 +4207,8 @@ function createStyles(palette: Palette) {
       paddingHorizontal: 8,
       paddingVertical: 6,
     },
-    syncIcon: { color: colors.positive, fontSize: 8 },
-    syncText: { color: colors.muted, fontSize: 6 },
+    syncIcon: { color: colors.positive, fontSize: 10 },
+    syncText: { color: colors.muted, fontSize: 10 },
     scorerFormat: {
       alignItems: "center",
       flexDirection: "row",
@@ -4219,7 +4227,7 @@ function createStyles(palette: Palette) {
       paddingVertical: 6,
     },
     segmentActive: { backgroundColor: colors.aqua },
-    segmentText: { color: colors.muted, fontSize: 7, fontWeight: "700" },
+    segmentText: { color: colors.muted, fontSize: 10, fontWeight: "700" },
     segmentTextActive: { color: colors.onAccent },
     scoreNotice: {
       alignItems: "center",
@@ -4231,7 +4239,7 @@ function createStyles(palette: Palette) {
     scoreNoticeIcon: { color: colors.onAccent, fontSize: 14 },
     scoreNoticeTitle: {
       color: colors.onAccent,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "900",
     },
     court: { flex: 1, flexDirection: "row", minHeight: 0 },
@@ -4261,7 +4269,7 @@ function createStyles(palette: Palette) {
       height: 6,
       width: 6,
     },
-    serveText: { color: colors.muted, fontSize: 6, letterSpacing: 0.7 },
+    serveText: { color: colors.muted, fontSize: 10, letterSpacing: 0.7 },
     teamPeople: { alignItems: "center", flexDirection: "row" },
     scoreAvatar: {
       alignItems: "center",
@@ -4274,7 +4282,7 @@ function createStyles(palette: Palette) {
       marginLeft: -4,
       width: 26,
     },
-    scoreAvatarText: { color: colors.bone, fontSize: 6, fontWeight: "900" },
+    scoreAvatarText: { color: colors.bone, fontSize: 10, fontWeight: "900" },
     teamName: {
       color: colors.bone,
       fontSize: 10,
@@ -4289,7 +4297,7 @@ function createStyles(palette: Palette) {
       lineHeight: 130,
       marginVertical: 4,
     },
-    tapHint: { color: colors.muted, fontSize: 5.5, letterSpacing: 0.6 },
+    tapHint: { color: colors.muted, fontSize: 10, letterSpacing: 0.6 },
     versus: {
       alignItems: "center",
       backgroundColor: colors.ink,
@@ -4306,7 +4314,7 @@ function createStyles(palette: Palette) {
       width: 34,
       zIndex: 3,
     },
-    versusText: { color: colors.muted, fontSize: 6, fontWeight: "800" },
+    versusText: { color: colors.muted, fontSize: 10, fontWeight: "800" },
     scorerBottom: {
       alignItems: "center",
       borderTopColor: rgba(colors.overlayRgb, 0.07),
@@ -4324,7 +4332,11 @@ function createStyles(palette: Palette) {
       paddingHorizontal: 10,
       paddingVertical: 8,
     },
-    secondaryActionText: { color: colors.bone, fontSize: 7, fontWeight: "700" },
+    secondaryActionText: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "700",
+    },
     syncSummary: { alignItems: "center", flexDirection: "row", gap: 6 },
     sets: { flexDirection: "row", gap: 4 },
     setBox: {
@@ -4334,17 +4346,17 @@ function createStyles(palette: Palette) {
       paddingVertical: 4,
     },
     setBoxActive: { backgroundColor: rgba(colors.accentRgb, 0.09) },
-    setLabel: { color: colors.muted, fontSize: 5 },
+    setLabel: { color: colors.muted, fontSize: 10 },
     setScore: {
       color: colors.bone,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "800",
       marginTop: 2,
     },
     moreScore: { padding: 6 },
     moreScoreText: { color: colors.muted },
     exitScore: { left: 9, position: "absolute", top: 12, zIndex: 8 },
-    exitScoreText: { color: colors.aqua, fontSize: 8, fontWeight: "700" },
+    exitScoreText: { color: colors.aqua, fontSize: 10, fontWeight: "700" },
     balanceCard: {
       backgroundColor: colors.navy,
       borderColor: rgba(colors.warningRgb, 0.16),
@@ -4360,13 +4372,13 @@ function createStyles(palette: Palette) {
     },
     brandSmall: {
       color: colors.warning,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 1.3,
     },
     balanceLabel: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       letterSpacing: 1,
       marginTop: 34,
     },
@@ -4382,7 +4394,7 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.overlayRgb, 0.06),
       borderRadius: 16,
       color: colors.bone,
-      fontSize: 7.5,
+      fontSize: 10,
       fontWeight: "700",
       overflow: "hidden",
       paddingHorizontal: 10,
@@ -4413,7 +4425,7 @@ function createStyles(palette: Palette) {
       justifyContent: "center",
       width: 34,
     },
-    transactionAmount: { color: colors.bone, fontSize: 9, fontWeight: "800" },
+    transactionAmount: { color: colors.bone, fontSize: 10, fontWeight: "800" },
     boundaryNote: {
       alignItems: "center",
       backgroundColor: rgba(colors.accentRgb, 0.05),
@@ -4449,7 +4461,7 @@ function createStyles(palette: Palette) {
     orgName: { color: colors.bone, fontSize: 12, fontWeight: "800" },
     menuEyebrow: {
       color: colors.warning,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "800",
       letterSpacing: 1,
       marginBottom: 7,
@@ -4476,7 +4488,7 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.warningRgb, 0.08),
       borderRadius: 8,
       color: colors.warning,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "900",
       height: 30,
       lineHeight: 30,
@@ -4514,7 +4526,7 @@ function createStyles(palette: Palette) {
       position: "relative",
     },
     tabIcon: { color: colors.muted, fontSize: 17 },
-    tabLabel: { color: colors.muted, fontSize: 7, fontWeight: "600" },
+    tabLabel: { color: colors.muted, fontSize: 10, fontWeight: "600" },
     tabActive: { color: colors.warning },
     tabIndicator: {
       backgroundColor: colors.warning,
