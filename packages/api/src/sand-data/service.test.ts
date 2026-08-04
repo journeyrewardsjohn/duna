@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parsePlayerSourceProfile, professionalEventSlug } from "./service";
+import {
+  parseAvpLeagueEventPayload,
+  parsePlayerSourceProfile,
+  professionalEventSlug,
+} from "./service";
 
 describe("professionalEventSlug", () => {
   it("creates one stable gender segment when the name already includes it", () => {
@@ -20,6 +24,71 @@ describe("professionalEventSlug", () => {
         startsOn: "2026-08-20",
       }),
     ).toBe("elite-16-montreal-womens-2026-08-20");
+  });
+});
+
+describe("parseAvpLeagueEventPayload", () => {
+  it("keeps men's, women's, and overall club standings distinct", () => {
+    expect(
+      parseAvpLeagueEventPayload({
+        source: "avp-league",
+        season: 2026,
+        cityStandings: [
+          {
+            rank: 1,
+            teamName: "Miami Mayhem",
+            matchesPlayed: 16,
+            wins: 13,
+            losses: 3,
+            matchPoints: 34,
+            winPercentage: 81.25,
+          },
+        ],
+        rosters: [
+          {
+            rank: 1,
+            teamName: "Miami Mayhem",
+            matchesPlayed: 8,
+            wins: 7,
+            losses: 1,
+            matchPoints: 20,
+            winPercentage: 87.5,
+            gender: "men",
+            playerNames: ["Crabb", "Benesh"],
+          },
+          {
+            rank: 2,
+            teamName: "Miami Mayhem",
+            matchesPlayed: 8,
+            wins: 6,
+            losses: 2,
+            matchPoints: 14,
+            winPercentage: 75,
+            gender: "women",
+            playerNames: ["Cheng", "Kraft"],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      season: 2026,
+      overall: [{ rank: 1, teamName: "Miami Mayhem", matchPoints: 34 }],
+      men: [
+        {
+          rank: 1,
+          teamName: "Miami Mayhem",
+          matchPoints: 20,
+          playerNames: ["Crabb", "Benesh"],
+        },
+      ],
+      women: [
+        {
+          rank: 2,
+          teamName: "Miami Mayhem",
+          matchPoints: 14,
+          playerNames: ["Cheng", "Kraft"],
+        },
+      ],
+    });
   });
 });
 

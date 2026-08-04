@@ -2298,6 +2298,11 @@ type RawProfessionalTeamEntry = {
   readonly seedTechnicalPoints?: number;
   readonly countryCode?: string;
   readonly entryTag?: string;
+  readonly matchesPlayed?: number;
+  readonly wins?: number;
+  readonly losses?: number;
+  readonly matchPoints?: number;
+  readonly winPercentage?: number;
   readonly players: readonly {
     readonly externalPersonId: string;
     readonly displayName: string;
@@ -2319,6 +2324,81 @@ function optionalNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
+}
+
+type AvpLeagueStanding = {
+  readonly rank: number;
+  readonly teamName: string;
+  readonly matchesPlayed: number;
+  readonly wins: number;
+  readonly losses: number;
+  readonly matchPoints: number;
+  readonly winPercentage: number;
+};
+
+type AvpLeagueRosterStanding = AvpLeagueStanding & {
+  readonly gender: "men" | "women";
+  readonly playerNames: readonly string[];
+};
+
+export function parseAvpLeagueEventPayload(value: unknown):
+  | {
+      readonly season: number;
+      readonly overall: readonly AvpLeagueStanding[];
+      readonly men: readonly AvpLeagueRosterStanding[];
+      readonly women: readonly AvpLeagueRosterStanding[];
+    }
+  | undefined {
+  const payload = unknownRecord(value);
+  const season = optionalNumber(payload.season);
+  if (!season || !Array.isArray(payload.rosters)) return undefined;
+
+  const standing = (candidate: unknown): AvpLeagueStanding | undefined => {
+    const row = unknownRecord(candidate);
+    const teamName = optionalSnapshotString(row.teamName);
+    const rank = optionalNumber(row.rank);
+    if (!teamName || rank === undefined) return undefined;
+    return {
+      rank,
+      teamName,
+      matchesPlayed: optionalNumber(row.matchesPlayed) ?? 0,
+      wins: optionalNumber(row.wins) ?? 0,
+      losses: optionalNumber(row.losses) ?? 0,
+      matchPoints: optionalNumber(row.matchPoints) ?? 0,
+      winPercentage: optionalNumber(row.winPercentage) ?? 0,
+    };
+  };
+
+  const rosters = payload.rosters.flatMap<AvpLeagueRosterStanding>(
+    (candidate) => {
+      const row = unknownRecord(candidate);
+      const base = standing(row);
+      const gender =
+        row.gender === "men" || row.gender === "women" ? row.gender : undefined;
+      const playerNames = Array.isArray(row.playerNames)
+        ? row.playerNames.flatMap((name) => {
+            const normalized = optionalSnapshotString(name);
+            return normalized ? [normalized] : [];
+          })
+        : [];
+      return base && gender && playerNames.length >= 2
+        ? [{ ...base, gender, playerNames }]
+        : [];
+    },
+  );
+  const overall = Array.isArray(payload.cityStandings)
+    ? payload.cityStandings.flatMap((candidate) => {
+        const parsed = standing(candidate);
+        return parsed ? [parsed] : [];
+      })
+    : [];
+  if (rosters.length === 0 && overall.length === 0) return undefined;
+  return {
+    season,
+    overall,
+    men: rosters.filter((roster) => roster.gender === "men"),
+    women: rosters.filter((roster) => roster.gender === "women"),
+  };
 }
 
 function watchOptionsFromPayload(value: unknown): readonly PublicWatchOption[] {
@@ -2422,47 +2502,30 @@ function rawProfessionalTeamEntries(
       ];
     });
   }
-  if (!Array.isArray(payload.rosters)) return [];
-  const season = optionalNumber(payload.season);
-  if (!season) return [];
-  return payload.rosters.flatMap((candidate) => {
-    const roster = unknownRecord(candidate);
-    const teamName = optionalSnapshotString(roster.teamName);
-    const gender =
-      roster.gender === "men" || roster.gender === "women"
-        ? roster.gender
-        : undefined;
-    const playerNames = Array.isArray(roster.playerNames)
-      ? roster.playerNames.flatMap((name) => {
-          const value = optionalSnapshotString(name);
-          return value ? [value] : [];
-        })
-      : [];
-    if (!teamName || !gender || playerNames.length < 2) return [];
-    return [
-      {
-        externalTeamId: `${gender}:${slugSegment(teamName)}`,
-        list: "league" as const,
-        label: teamName,
-        ...(optionalNumber(roster.rank) !== undefined
-          ? { seed: optionalNumber(roster.rank) }
-          : {}),
-        ...(optionalNumber(roster.matchPoints) !== undefined
-          ? { entryPoints: optionalNumber(roster.matchPoints) }
-          : {}),
-        entryTag: gender,
-        players: playerNames.map((displayName) => ({
-          externalPersonId: avpExternalPlayerId({
-            season,
-            teamName,
-            gender,
-            displayName,
-          }),
-          displayName,
-        })),
-      },
-    ];
-  });
+  const avpLeague = parseAvpLeagueEventPayload(payload);
+  if (!avpLeague) return [];
+  return [...avpLeague.women, ...avpLeague.men].map((roster) => ({
+    externalTeamId: `${roster.gender}:${slugSegment(roster.teamName)}`,
+    list: "league" as const,
+    label: roster.teamName,
+    seed: roster.rank,
+    entryPoints: roster.matchPoints,
+    entryTag: roster.gender,
+    matchesPlayed: roster.matchesPlayed,
+    wins: roster.wins,
+    losses: roster.losses,
+    matchPoints: roster.matchPoints,
+    winPercentage: roster.winPercentage,
+    players: roster.playerNames.map((displayName) => ({
+      externalPersonId: avpExternalPlayerId({
+        season: avpLeague.season,
+        teamName: roster.teamName,
+        gender: roster.gender,
+        displayName,
+      }),
+      displayName,
+    })),
+  }));
 }
 
 function requireSuperAdmin(actor: ApiActor): void {
@@ -3153,6 +3216,7 @@ export async function loadPublicProEvent(slug: string) {
     )
     .orderBy(asc(importedMatches.playedAt), asc(importedMatches.createdAt));
   const rawTeamEntries = rawProfessionalTeamEntries(event.rawPayload);
+  const avpLeaguePayload = parseAvpLeagueEventPayload(event.rawPayload);
   const entryExternalPersonIds = [
     ...new Set(
       rawTeamEntries.flatMap((entry) =>
@@ -3238,6 +3302,14 @@ export async function loadPublicProEvent(slug: string) {
       };
     }),
   }));
+  const avpLeague = avpLeaguePayload
+    ? {
+        season: avpLeaguePayload.season,
+        overall: avpLeaguePayload.overall,
+        men: publicTeamEntries.filter((entry) => entry.entryTag === "men"),
+        women: publicTeamEntries.filter((entry) => entry.entryTag === "women"),
+      }
+    : undefined;
   const eventSlug = professionalEventSlug(event);
   const eventWatchOptions = watchOptionsFromPayload(event.rawPayload);
   const toTeam = (
@@ -3392,11 +3464,15 @@ export async function loadPublicProEvent(slug: string) {
     endsOn: event.endsOn ?? undefined,
     status: event.status,
     live: event.live,
-    teamCount: event.teamCount,
+    teamCount:
+      avpLeague && avpLeague.overall.length > 0
+        ? avpLeague.overall.length
+        : event.teamCount,
     matchCount: Math.max(event.matchCount, publicMatches.length),
     sourceUrl: event.sourceUrl,
     lastSyncedAt: event.lastSyncedAt.toISOString(),
     teamEntries: publicTeamEntries,
+    avpLeague,
     watchOptions: eventWatchOptions,
     sibling: sibling
       ? {
