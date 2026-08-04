@@ -15,6 +15,7 @@ import {
   Video,
 } from "lucide-react";
 import Link from "next/link";
+import { ProfessionalMatchCard } from "@/components/professional-match-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { countryFlag } from "@/lib/country-flag";
@@ -66,50 +67,6 @@ function TeamName({
         </span>
       ))}
     </span>
-  );
-}
-
-function SetScore({ match }: { readonly match: ProMatch }) {
-  if (match.sets.length === 0) {
-    return (
-      <span className="pro-match-score pro-match-score--pending">TBD</span>
-    );
-  }
-  return (
-    <span className="pro-match-score">
-      {match.sets.map((set, index) => (
-        <span key={`${set.a}-${set.b}-${index}`}>
-          {set.a}–{set.b}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-function MatchRow({ match }: { readonly match: ProMatch }) {
-  return (
-    <Link className="pro-match-row" href={match.canonicalPath}>
-      <span className="pro-match-row__round">
-        {match.status === "live" && <Radio aria-hidden size={12} />}
-        {match.roundLabel}
-      </span>
-      <span
-        className={
-          match.winnerSide === "A" ? "pro-match-row__winner" : undefined
-        }
-      >
-        <TeamName compact linkPlayers={false} team={match.teamA} />
-      </span>
-      <SetScore match={match} />
-      <span
-        className={
-          match.winnerSide === "B" ? "pro-match-row__winner" : undefined
-        }
-      >
-        <TeamName compact linkPlayers={false} team={match.teamB} />
-      </span>
-      <ArrowRight aria-hidden size={15} />
-    </Link>
   );
 }
 
@@ -754,7 +711,10 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
           </section>
         )}
 
-        <section className="pro-event-section pro-event-matches">
+        <section
+          className="pro-event-section pro-event-matches"
+          id="match-results"
+        >
           <header>
             <div>
               <span className="page-eyebrow">Every round</span>
@@ -764,7 +724,20 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
           </header>
           <div>
             {event.matches.map((match) => (
-              <MatchRow key={match.id} match={match} />
+              <ProfessionalMatchCard
+                context={event.name}
+                href={match.canonicalPath}
+                key={match.id}
+                playedAt={match.playedAt}
+                roundLabel={match.roundLabel}
+                sets={match.sets}
+                source={event.source}
+                status={match.status}
+                teamA={match.teamA}
+                teamB={match.teamB}
+                timeLabel={match.time}
+                winnerSide={match.winnerSide}
+              />
             ))}
           </div>
         </section>

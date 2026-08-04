@@ -2,9 +2,18 @@ import type { PublicProCoverage } from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
 import { Activity, CalendarDays, Globe2, Radio, Trophy } from "lucide-react";
 import Link from "next/link";
+import { DatePillFilter } from "@/components/date-pill-filter";
+import { ProfessionalMatchCard } from "@/components/professional-match-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { TourBrandMark, type TourBrand } from "@/components/tour-brand-mark";
 import { getServerCaller } from "@/lib/api";
+import {
+  datePillDays,
+  instantIsoDay,
+  isoDay as currentIsoDay,
+  parseIsoDay,
+} from "@/lib/date-filter";
 
 export const metadata = {
   title: "Pro beach volleyball",
@@ -18,12 +27,13 @@ type TourFilter = "all" | "elite" | "challenger" | "futures" | "avp";
 const tourFilters: readonly {
   readonly value: TourFilter;
   readonly label: string;
+  readonly brand?: TourBrand;
 }[] = [
   { value: "all", label: "All tours" },
-  { value: "elite", label: "Elite" },
-  { value: "challenger", label: "Challenger" },
-  { value: "futures", label: "Futures" },
-  { value: "avp", label: "AVP" },
+  { value: "elite", label: "Elite", brand: "fivb" },
+  { value: "challenger", label: "Challenger", brand: "fivb" },
+  { value: "futures", label: "Futures", brand: "fivb" },
+  { value: "avp", label: "AVP", brand: "avp" },
 ];
 
 function isoDay(date: Date): string {
@@ -64,7 +74,10 @@ function EventCard({ event }: { readonly event: ProEvent }) {
         </Badge>
         <span>{event.genderCategory}</span>
       </div>
-      <Trophy aria-hidden size={25} />
+      <div className="pro-event-card__brand">
+        <TourBrandMark brand={event.source} />
+        <Trophy aria-hidden size={22} />
+      </div>
       <h3>{event.name}</h3>
       <p>{event.category ?? "Professional beach volleyball"}</p>
       <footer>
@@ -115,9 +128,12 @@ function EventShelf({
 export default async function ProTourPage({
   searchParams,
 }: {
-  readonly searchParams: Promise<{ readonly tour?: string }>;
+  readonly searchParams: Promise<{
+    readonly tour?: string;
+    readonly date?: string;
+  }>;
 }) {
-  const [{ tour }, caller] = await Promise.all([
+  const [{ tour, date }, caller] = await Promise.all([
     searchParams,
     getServerCaller(),
   ]);
@@ -126,11 +142,27 @@ export default async function ProTourPage({
   )
     ? (tour as TourFilter)
     : "all";
+  const selectedDate = parseIsoDay(date);
+  const proHref = (
+    nextTour: TourFilter,
+    nextDate: string | null | undefined = selectedDate,
+  ) => {
+    const params = new URLSearchParams();
+    if (nextTour !== "all") params.set("tour", nextTour);
+    if (nextDate) params.set("date", nextDate);
+    const query = params.toString();
+    return query ? `/pro?${query}` : "/pro";
+  };
   const coverage = await caller.public.proCoverage().catch(() => undefined);
-  const filteredEvents =
+  const tourEvents =
     coverage?.events.filter(
       (event) => selectedTour === "all" || event.tour === selectedTour,
     ) ?? [];
+  const filteredEvents = selectedDate
+    ? tourEvents.filter((event) =>
+        overlaps(event, { start: selectedDate, end: selectedDate }),
+      )
+    : tourEvents;
   const liveEvents = filteredEvents.filter((event) => event.live);
   const week = currentWeek();
   const thisWeekEvents = filteredEvents.filter(
@@ -149,12 +181,23 @@ export default async function ProTourPage({
       .filter(
         (match) =>
           match.canonicalPath &&
-          (selectedTour === "all" || match.tour === selectedTour),
+          (selectedTour === "all" || match.tour === selectedTour) &&
+          (!selectedDate ||
+            (match.playedAt && instantIsoDay(match.playedAt) === selectedDate)),
       )
       .slice(0, 20) ?? [];
   const selectedTourLabel =
     tourFilters.find((filter) => filter.value === selectedTour)?.label ??
     "selected tour";
+  const calendarDays = datePillDays(selectedDate ?? currentIsoDay());
+  const selectedDateLabel = selectedDate
+    ? new Intl.DateTimeFormat("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "UTC",
+      }).format(new Date(`${selectedDate}T12:00:00Z`))
+    : undefined;
 
   return (
     <main className="pro-tour-page">
@@ -180,6 +223,14 @@ export default async function ProTourPage({
       </section>
 
       <section className="pro-tour-content">
+        <DatePillFilter
+          allHref={proHref(selectedTour, null)}
+          dates={calendarDays}
+          eyebrow="Quick date"
+          hrefForDate={(nextDate) => proHref(selectedTour, nextDate)}
+          selectedDate={selectedDate}
+          title="Scores and schedule"
+        />
         <nav
           aria-label="Filter professional tours"
           className="pro-tour-filters"
@@ -187,41 +238,57 @@ export default async function ProTourPage({
           {tourFilters.map((filter) => (
             <Link
               aria-current={selectedTour === filter.value ? "page" : undefined}
-              href={
-                filter.value === "all" ? "/pro" : `/pro?tour=${filter.value}`
-              }
+              href={proHref(filter.value)}
               key={filter.value}
             >
+              {filter.brand ? (
+                <TourBrandMark brand={filter.brand} compact decorative />
+              ) : (
+                <Globe2 aria-hidden size={15} />
+              )}
               {filter.label}
             </Link>
           ))}
         </nav>
 
-        <EventShelf
-          eyebrow="Updating frequently"
-          events={liveEvents}
-          live
-          title="Live now"
-        />
-        <EventShelf
-          eyebrow={`${week.start} – ${week.end}`}
-          events={thisWeekEvents}
-          title="Events this week"
-        />
-        <EventShelf
-          eyebrow="On the calendar"
-          events={comingEvents}
-          title="Coming up"
-        />
+        {selectedDate ? (
+          <EventShelf
+            eyebrow={selectedTourLabel}
+            events={filteredEvents}
+            live={liveEvents.length > 0}
+            title={`Events on ${selectedDateLabel}`}
+          />
+        ) : (
+          <>
+            <EventShelf
+              eyebrow="Updating frequently"
+              events={liveEvents}
+              live
+              title="Live now"
+            />
+            <EventShelf
+              eyebrow={`${week.start} – ${week.end}`}
+              events={thisWeekEvents}
+              title="Events this week"
+            />
+            <EventShelf
+              eyebrow="On the calendar"
+              events={comingEvents}
+              title="Coming up"
+            />
+          </>
+        )}
         {filteredEvents.length === 0 && (
           <p className="profile-empty">
-            {selectedTour === "all"
-              ? "No professional events are currently indexed."
-              : `No ${selectedTourLabel} events are currently indexed.`}
+            {selectedDate
+              ? `No ${selectedTour === "all" ? "professional" : selectedTourLabel} events are scheduled on ${selectedDateLabel}.`
+              : selectedTour === "all"
+                ? "No professional events are currently indexed."
+                : `No ${selectedTourLabel} events are currently indexed.`}
           </p>
         )}
 
-        <section className="pro-live-results">
+        <section className="pro-live-results" id="latest-match-updates">
           <header>
             <div>
               <span className="page-eyebrow">Live reporting</span>
@@ -235,39 +302,28 @@ export default async function ProTourPage({
                 No match updates are available for this tour yet.
               </p>
             ) : (
-              filteredMatches.map((match) => {
-                const team = (side: "A" | "B") =>
-                  match.participants
-                    .filter((participant) => participant.side === side)
-                    .map((participant) => participant.name)
-                    .join(" / ");
-                return (
-                  <article key={match.id}>
-                    <Link href={match.canonicalPath ?? "/pro"}>
-                      <div>
-                        <small>{match.roundLabel ?? match.title}</small>
-                        <strong>{team("A")}</strong>
-                        <span>{team("B")}</span>
-                      </div>
-                      <div>
-                        <strong>
-                          {match.sets
-                            .map((set) => `${set.a}–${set.b}`)
-                            .join(" · ") || "Scheduled"}
-                        </strong>
-                        <small>
-                          {match.playedAt
-                            ? new Intl.DateTimeFormat("en-US", {
-                                month: "short",
-                                day: "numeric",
-                              }).format(new Date(match.playedAt))
-                            : "Time pending"}
-                        </small>
-                      </div>
-                    </Link>
-                  </article>
-                );
-              })
+              filteredMatches.map((match) => (
+                <ProfessionalMatchCard
+                  context={match.title}
+                  href={match.canonicalPath ?? "/pro"}
+                  key={match.id}
+                  playedAt={match.playedAt}
+                  roundLabel={match.roundLabel ?? match.title}
+                  sets={match.sets}
+                  source={match.source ?? "fivb"}
+                  status={
+                    match.status ??
+                    (match.winnerSide ? "completed" : "scheduled")
+                  }
+                  teamA={match.teamA}
+                  teamB={match.teamB}
+                  winnerSide={
+                    match.winnerSide === "A" || match.winnerSide === "B"
+                      ? match.winnerSide
+                      : undefined
+                  }
+                />
+              ))
             )}
           </div>
         </section>

@@ -2,6 +2,7 @@ import type { MatchSummary } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import { Plus, ScanLine, TrendingUp } from "lucide-react";
 import Link from "next/link";
+import { DatePillFilter } from "@/components/date-pill-filter";
 import { MatchCard } from "@/components/match-card";
 import { MatchPerformanceAnalytics } from "@/components/match-performance-analytics";
 import { getServerCaller } from "@/lib/api";
@@ -10,6 +11,12 @@ import {
   getMatchTeammates,
   type MatchResult,
 } from "@/lib/match-insights";
+import {
+  datePillDays,
+  instantIsoDay,
+  isoDay,
+  parseIsoDay,
+} from "@/lib/date-filter";
 
 export const metadata = { title: "Matches" };
 
@@ -94,12 +101,31 @@ function groupMatchHistory(matches: readonly MatchSummary[]) {
   }));
 }
 
-export default async function MatchesPage() {
+export default async function MatchesPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<{ readonly date?: string }>;
+}) {
   const caller = await getServerCaller();
-  const [dashboard, matches] = await Promise.all([
+  const [{ date }, dashboard, allMatches] = await Promise.all([
+    searchParams,
     caller.player.dashboard(),
     caller.player.matches(),
   ]);
+  const selectedDate = parseIsoDay(date);
+  const matches = selectedDate
+    ? allMatches.filter(
+        (match) =>
+          instantIsoDay(match.playedAt, MATCH_TIME_ZONE) === selectedDate,
+      )
+    : allMatches;
+  const calendarAnchor =
+    selectedDate ??
+    (allMatches[0]
+      ? instantIsoDay(allMatches[0].playedAt, MATCH_TIME_ZONE)
+      : undefined) ??
+    isoDay();
+  const calendarDays = datePillDays(calendarAnchor);
   const viewerId = dashboard.player.id;
   const resultByMatch = new Map(
     matches.map(
@@ -179,6 +205,15 @@ export default async function MatchesPage() {
           </Link>
         </div>
       </section>
+
+      <DatePillFilter
+        allHref="/app/matches"
+        dates={calendarDays}
+        eyebrow="Quick date"
+        hrefForDate={(nextDate) => `/app/matches?date=${nextDate}`}
+        selectedDate={selectedDate}
+        title="Match calendar"
+      />
 
       <MatchPerformanceAnalytics
         confidence={dashboard.player.rating.confidence}

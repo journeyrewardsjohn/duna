@@ -1,10 +1,24 @@
 import type { MatchSummary } from "@duna/core";
-import { formatVenueTime } from "@duna/core";
-import { Badge, Numeric } from "@duna/ui";
-import { ChevronRight } from "lucide-react";
-import Link from "next/link";
+import { ProfessionalMatchCard } from "@/components/professional-match-card";
 import { getMatchResult } from "@/lib/match-insights";
 import { compactPlayerName } from "@/lib/player-name";
+
+function matchTour(match: MatchSummary): "fivb" | "avp" | undefined {
+  const source =
+    `${match.sourceUrl ?? ""} ${match.eventName ?? ""}`.toLowerCase();
+  if (source.includes("avp")) return "avp";
+  if (
+    source.includes("fivb") ||
+    source.includes("volleyball world") ||
+    source.includes("beach pro tour") ||
+    source.includes("elite16") ||
+    source.includes("challenger") ||
+    source.includes("futures")
+  ) {
+    return "fivb";
+  }
+  return undefined;
+}
 
 export function MatchCard({
   match,
@@ -18,105 +32,55 @@ export function MatchCard({
   const result = getMatchResult(match, viewerId);
   const resultLabel =
     result === "win" ? "Win" : result === "loss" ? "Loss" : "Unverified";
+  const isLive =
+    match.recordingMode === "live" &&
+    match.status !== "verified" &&
+    match.status !== "complete";
+  const outcomeLabel =
+    match.status === "pending-verification"
+      ? "Confirm result"
+      : match.status === "disputed"
+        ? "Result held"
+        : match.ratingImpact === "history-only"
+          ? `${resultLabel} · History only`
+          : resultLabel;
+  const context = [match.eventName, match.venueName]
+    .filter(Boolean)
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .join(" · ");
   return (
-    <Link
-      className={`match-card match-card--${result}${variant === "timeline" ? " match-card--timeline" : ""}`}
+    <ProfessionalMatchCard
+      className={`match-card--${result}${variant === "timeline" ? " match-card--timeline" : ""}`}
+      context={context}
       href={`/app/matches/${match.id}`}
-    >
-      {variant === "default" && (
-        <div className="match-card__date">
-          <span className="match-card__day">
-            {formatVenueTime(match.playedAt, "America/Los_Angeles", "en-US", {
-              day: "2-digit",
-            })}
-          </span>
-          <span className="match-card__month">
-            {formatVenueTime(match.playedAt, "America/Los_Angeles", "en-US", {
-              month: "short",
-              year: "numeric",
-            })}
-          </span>
-          <small>
-            {formatVenueTime(match.playedAt, "America/Los_Angeles", "en-US", {
-              hour: "numeric",
-              minute: "2-digit",
-            })}
-          </small>
-        </div>
-      )}
-      <div className="match-card__body">
-        <div className="match-card__meta">
-          <Badge
-            tone={
-              result === "win"
-                ? "positive"
-                : result === "loss"
-                  ? "neutral"
-                  : "warning"
-            }
-          >
-            {resultLabel}
-          </Badge>
-          {variant === "timeline" && (
-            <time dateTime={match.playedAt}>
-              {formatVenueTime(match.playedAt, "America/Los_Angeles", "en-US", {
-                hour: "numeric",
-                minute: "2-digit",
-              })}
-            </time>
-          )}
-          <span>{match.venueName}</span>
-        </div>
-        <div className="match-card__teams">
-          <div className={match.winner === "A" ? "winner" : undefined}>
-            <span>
-              {match.teamA
-                .map((player) => compactPlayerName(player.displayName))
-                .join(" / ")}
-            </span>
-            <span className="match-card__sets">
-              {match.score.map(([a], index) => (
-                <Numeric key={`${match.id}-a-${index}`}>{a}</Numeric>
-              ))}
-            </span>
-          </div>
-          <div className={match.winner === "B" ? "winner" : undefined}>
-            <span>
-              {match.teamB
-                .map((player) => compactPlayerName(player.displayName))
-                .join(" / ")}
-            </span>
-            <span className="match-card__sets">
-              {match.score.map(([, b], index) => (
-                <Numeric key={`${match.id}-b-${index}`}>{b}</Numeric>
-              ))}
-            </span>
-          </div>
-        </div>
-      </div>
-      <div className="match-card__delta">
-        {match.status === "pending-verification" ? (
-          <Badge tone="warning">Confirm</Badge>
-        ) : match.status === "disputed" ? (
-          <Badge tone="warning">Held</Badge>
-        ) : match.ratingImpact === "history-only" ? (
-          <Badge tone="neutral">History</Badge>
-        ) : (
-          <Badge
-            tone={
-              match.ratingDelta > 0
-                ? "positive"
-                : match.ratingDelta < 0
-                  ? "warning"
-                  : "neutral"
-            }
-          >
-            {match.ratingDelta > 0 ? "+" : ""}
-            {match.ratingDelta.toFixed(2)}
-          </Badge>
-        )}
-        <ChevronRight aria-hidden size={17} />
-      </div>
-    </Link>
+      outcomeLabel={outcomeLabel}
+      playedAt={match.playedAt}
+      ratingDelta={
+        match.ratingImpact === "history-only" ? undefined : match.ratingDelta
+      }
+      roundLabel={match.roundLabel ?? match.formatSummary ?? "Beach doubles"}
+      sets={match.score.map(([a, b]) => ({ a, b }))}
+      source={matchTour(match)}
+      status={isLive ? "live" : "completed"}
+      teamA={{
+        label: match.teamA
+          .map((player) => compactPlayerName(player.displayName))
+          .join(" / "),
+        players: match.teamA.map((player) => ({
+          name: compactPlayerName(player.displayName),
+          rating: player.rating.display,
+        })),
+      }}
+      teamB={{
+        label: match.teamB
+          .map((player) => compactPlayerName(player.displayName))
+          .join(" / "),
+        players: match.teamB.map((player) => ({
+          name: compactPlayerName(player.displayName),
+          rating: player.rating.display,
+        })),
+      }}
+      winnerSide={match.winner}
+    />
   );
 }
