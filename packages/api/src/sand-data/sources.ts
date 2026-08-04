@@ -1032,6 +1032,7 @@ export async function importFivbTournament(
     raw: {
       tcode,
       engine,
+      detailLevel: "tournament",
       countryName,
       advertisedTeamCount: advertisedTeamCount || undefined,
       teamEntries,
@@ -1104,7 +1105,7 @@ export function parseFivbEventIndexHtml(
           live,
           teamCount: 0,
           matchCount: 0,
-          raw: { countryName },
+          raw: { countryName, detailLevel: "index" },
         });
       };
       addGender(cells[2] ?? "", "men");

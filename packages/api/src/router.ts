@@ -292,6 +292,7 @@ import {
   mergeUnclaimedProfile,
   queuePlayerSourceConnection,
   refreshAvpLeague,
+  refreshActiveFivbEvents,
   refreshFivbEventIndex,
   refreshWorldRankings,
   rejectImportedMatch,
@@ -6191,11 +6192,16 @@ const adminRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       try {
-        return await refreshFivbEventIndex({
+        const index = await refreshFivbEventIndex({
           season: input?.season,
           actor: ctx.actor!,
           now: ctx.now,
         });
+        const details = await refreshActiveFivbEvents({
+          limit: 4,
+          now: ctx.now,
+        });
+        return { ...index, details };
       } catch (error) {
         return throwDomainError(error);
       }

@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Database,
   GitMerge,
+  History,
   Link2,
   LoaderCircle,
   Play,
@@ -21,7 +22,7 @@ import {
   UsersRound,
   Waves,
 } from "lucide-react";
-import { useActionState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import {
   approveSandMatchAction,
   evaluateRatingAction,
@@ -38,8 +39,22 @@ import {
   saveProfessionalWatchOptionAction,
   type SandActionState,
 } from "@/app/admin/sand-actions";
+import { PlayerCombobox, type PlayerComboboxOption } from "./player-combobox";
 
 const initialState: SandActionState = { status: "idle", message: "" };
+
+function playerComboboxOptions(
+  players: readonly PersonSummary[],
+): readonly PlayerComboboxOption[] {
+  return players.map((player) => ({
+    id: player.id,
+    displayName: player.displayName,
+    handle: player.handle,
+    isProfessional: player.isProfessional,
+    profileClaimStatus: player.profileClaimStatus,
+    rating: player.rating.display,
+  }));
+}
 
 function ActionFeedback({ state }: { readonly state: SandActionState }) {
   if (state.status === "idle") return null;
@@ -107,7 +122,7 @@ function RefreshFivbForm() {
       />
       <button disabled={pending}>
         <RefreshCw className={pending ? "spin" : undefined} size={15} />
-        FIVB event index
+        FIVB schedule + details
       </button>
       <ActionFeedback state={state} />
     </form>
@@ -633,9 +648,21 @@ function MappingReview({
     typeof evidence.candidateDisplayName === "string"
       ? evidence.candidateDisplayName
       : undefined;
-  const suggestedIsInDirectory = players.some(
-    (player) => player.id === suggestedPersonId,
-  );
+  const suggestedHandle =
+    typeof evidence.candidateHandle === "string"
+      ? evidence.candidateHandle
+      : "suggested-player";
+  const ambiguityCount = Array.isArray(evidence.candidates)
+    ? evidence.candidates.length
+    : 0;
+  const suggestedOption =
+    suggestedPersonId && suggestedName
+      ? {
+          id: suggestedPersonId,
+          displayName: suggestedName,
+          handle: suggestedHandle,
+        }
+      : undefined;
   return (
     <article className="mapping-review">
       <span className="mapping-review__avatar">
@@ -662,36 +689,36 @@ function MappingReview({
       <ArrowRight aria-hidden size={18} />
       <form action={action}>
         <input name="externalProfileId" type="hidden" value={mapping.id} />
-        <label>
-          <span>Canonical Duna player</span>
-          <select defaultValue={suggestedPersonId} name="personId" required>
-            <option value="">Choose a player</option>
-            {suggestedPersonId && !suggestedIsInDirectory && (
-              <option value={suggestedPersonId}>
-                {suggestedName ?? "Suggested player"} · suggested match
-              </option>
-            )}
-            {players.map((player) => (
-              <option key={player.id} value={player.id}>
-                {player.displayName} · @{player.handle} ·{" "}
-                {player.rating.display.toFixed(2)}
-              </option>
-            ))}
-          </select>
-        </label>
+        <PlayerCombobox
+          initialOptions={playerComboboxOptions(players)}
+          searchHint={mapping.displayName}
+          suggestedConfidence={
+            suggestedOption
+              ? Math.round((mapping.mappingScoreBps ?? 0) / 100)
+              : undefined
+          }
+          suggestedOption={suggestedOption}
+        />
         {suggestedName && (
-          <small>
-            Suggested: <strong>{suggestedName}</strong> ·{" "}
+          <small className="mapping-review__suggestion">
+            Suggested from matching source evidence:{" "}
+            <strong>{suggestedName}</strong> ·{" "}
             {((mapping.mappingScoreBps ?? 0) / 100).toFixed(0)}% confidence
+          </small>
+        )}
+        {!suggestedName && ambiguityCount > 1 && (
+          <small className="mapping-review__suggestion">
+            {ambiguityCount} possible name matches found. Search to choose the
+            correct player.
           </small>
         )}
         <input
           name="reason"
-          placeholder="Why these identities match"
+          placeholder="Review note, e.g. confirmed name and source history"
           required
         />
         <button disabled={pending}>
-          <Link2 size={15} /> Link identity
+          <Link2 size={15} /> Confirm mapping
         </button>
         <ActionFeedback state={state} />
       </form>
@@ -710,6 +737,14 @@ function AvpRosterAssignment({
     saveAvpRosterAssignmentAction,
     initialState,
   );
+  const [selectedTeamKey, setSelectedTeamKey] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [role, setRole] = useState<"starter" | "substitute">("starter");
+  const selectedTeam = data.avpTeams.find(
+    (team) =>
+      `${team.season}|${team.gender}|${team.teamName}` === selectedTeamKey,
+  );
+  const rosterListId = "avp-source-roster-names";
   if (data.avpTeams.length === 0) return null;
   return (
     <section className="hq-card avp-roster-admin">
@@ -721,14 +756,22 @@ function AvpRosterAssignment({
         <UsersRound size={20} />
       </header>
       <p>
-        Map a season roster or date-bounded substitute to a Duna player.
-        Substitutions replace one source roster slot in eligible imported
-        matches.
+        Choose the season and source roster name, then search Duna directly.
+        Existing source history is reused automatically when it identifies one
+        player; ambiguous surnames remain here for review.
       </p>
       <form action={action}>
         <label>
           <span>Season team</span>
-          <select name="team" required>
+          <select
+            name="team"
+            onChange={(event) => {
+              setSelectedTeamKey(event.target.value);
+              setDisplayName("");
+            }}
+            required
+            value={selectedTeamKey}
+          >
             <option value="">Choose a team</option>
             {data.avpTeams.map((team) => (
               <option
@@ -743,43 +786,60 @@ function AvpRosterAssignment({
         <label>
           <span>Source roster name</span>
           <input
+            disabled={!selectedTeam}
+            list={rosterListId}
             name="displayName"
-            placeholder="Name as shown by AVP"
+            onChange={(event) => setDisplayName(event.target.value)}
+            placeholder={
+              selectedTeam
+                ? "Choose or type the AVP roster name"
+                : "Choose a season team first"
+            }
             required
+            value={displayName}
           />
-        </label>
-        <label>
-          <span>Duna player</span>
-          <select name="personId" required>
-            <option value="">Choose from search results</option>
-            {players.map((player) => (
-              <option key={player.id} value={player.id}>
-                {player.displayName} · @{player.handle}
-              </option>
+          <datalist id={rosterListId}>
+            {(selectedTeam?.players ?? []).map((player) => (
+              <option
+                key={player.externalPersonId}
+                value={player.displayName}
+              />
             ))}
-          </select>
+          </datalist>
         </label>
+        <PlayerCombobox
+          initialOptions={playerComboboxOptions(players)}
+          searchHint={displayName}
+        />
         <label>
           <span>Assignment</span>
-          <select defaultValue="starter" name="role">
+          <select
+            name="role"
+            onChange={(event) =>
+              setRole(event.target.value as "starter" | "substitute")
+            }
+            value={role}
+          >
             <option value="starter">Season roster</option>
             <option value="substitute">Substitute</option>
           </select>
         </label>
         <label>
           <span>Replaces</span>
-          <select name="replacesExternalPersonId">
+          <select
+            disabled={role !== "substitute" || !selectedTeam}
+            name="replacesExternalPersonId"
+            required={role === "substitute"}
+          >
             <option value="">No replacement</option>
-            {data.avpTeams.flatMap((team) =>
-              team.players.map((player) => (
-                <option
-                  key={`${team.key}-${player.externalPersonId}`}
-                  value={player.externalPersonId}
-                >
-                  {team.teamName} · {team.gender} · {player.displayName}
-                </option>
-              )),
-            )}
+            {(selectedTeam?.players ?? []).map((player) => (
+              <option
+                key={player.externalPersonId}
+                value={player.externalPersonId}
+              >
+                {player.displayName}
+              </option>
+            ))}
           </select>
         </label>
         <label>
@@ -794,15 +854,177 @@ function AvpRosterAssignment({
           <span>Review note</span>
           <input
             name="reason"
-            placeholder="Source and reason for this roster decision"
+            placeholder="Why this season mapping is correct"
             required
           />
         </label>
         <button className="hq-button hq-button--primary" disabled={pending}>
-          Save roster assignment
+          {pending ? <LoaderCircle className="spin" size={16} /> : null}
+          Save season assignment
         </button>
         <ActionFeedback state={state} />
       </form>
+    </section>
+  );
+}
+
+function LinkedMappingEditor({
+  mapping,
+  players,
+}: {
+  readonly mapping: SandDataOverview["linkedMappings"][number];
+  readonly players: readonly PersonSummary[];
+}) {
+  const [state, action, pending] = useActionState(
+    linkSandPlayerAction,
+    initialState,
+  );
+  const currentOption = mapping.currentPlayer
+    ? {
+        id: mapping.currentPlayer.id,
+        displayName: mapping.currentPlayer.displayName,
+        handle: mapping.currentPlayer.handle,
+      }
+    : undefined;
+  return (
+    <article className="linked-mapping-row">
+      <div className="linked-mapping-row__source">
+        <small>{mapping.source}</small>
+        <strong>{mapping.displayName}</strong>
+        <span>
+          {mapping.sourceContext.season
+            ? `${mapping.sourceContext.season} · `
+            : ""}
+          {mapping.sourceContext.teamName
+            ? `${mapping.sourceContext.teamName} · `
+            : ""}
+          {mapping.sourceContext.gender ??
+            `source ID ${mapping.externalPersonId}`}
+        </span>
+      </div>
+      <ArrowRight aria-hidden size={18} />
+      <form action={action}>
+        <input name="externalProfileId" type="hidden" value={mapping.id} />
+        <PlayerCombobox
+          currentOption={currentOption}
+          initialOptions={playerComboboxOptions(players)}
+          label="Mapped Duna player"
+          searchHint={mapping.displayName}
+        />
+        <input
+          name="reason"
+          placeholder="Reason for changing this mapping"
+          required
+        />
+        <button disabled={pending}>
+          {pending ? (
+            <LoaderCircle className="spin" size={15} />
+          ) : (
+            <RefreshCw size={15} />
+          )}
+          Save change
+        </button>
+        <ActionFeedback state={state} />
+      </form>
+    </article>
+  );
+}
+
+function LinkedMappingHistory({
+  data,
+  players,
+}: {
+  readonly data: SandDataOverview;
+  readonly players: readonly PersonSummary[];
+}) {
+  const [query, setQuery] = useState("");
+  const [season, setSeason] = useState("all");
+  const seasons = useMemo(
+    () =>
+      [
+        ...new Set(
+          data.linkedMappings.flatMap((mapping) =>
+            mapping.sourceContext.season ? [mapping.sourceContext.season] : [],
+          ),
+        ),
+      ].sort((left, right) => right - left),
+    [data.linkedMappings],
+  );
+  const filtered = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return data.linkedMappings.filter((mapping) => {
+      const matchesSeason =
+        season === "all" ||
+        String(mapping.sourceContext.season ?? "") === season;
+      const matchesQuery =
+        !normalized ||
+        mapping.displayName.toLowerCase().includes(normalized) ||
+        mapping.currentPlayer?.displayName.toLowerCase().includes(normalized) ||
+        mapping.currentPlayer?.handle.toLowerCase().includes(normalized) ||
+        mapping.source.toLowerCase().includes(normalized) ||
+        mapping.sourceContext.teamName?.toLowerCase().includes(normalized);
+      return matchesSeason && matchesQuery;
+    });
+  }, [data.linkedMappings, query, season]);
+  const visible = filtered.slice(0, 40);
+  return (
+    <section className="hq-card linked-mapping-history">
+      <header className="hq-card-heading">
+        <div>
+          <span className="hq-eyebrow">Editable identity history</span>
+          <h2>Linked player mappings</h2>
+        </div>
+        <History size={20} />
+      </header>
+      <p>
+        Review past source links by season and change the canonical Duna player
+        at any time. Corrections update imported matches and future roster
+        refreshes with an audit record.
+      </p>
+      <div className="linked-mapping-history__filters">
+        <label>
+          <span>Find a mapping</span>
+          <input
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Source name, Duna player, handle, or team…"
+            type="search"
+            value={query}
+          />
+        </label>
+        <label>
+          <span>Season</span>
+          <select
+            onChange={(event) => setSeason(event.target.value)}
+            value={season}
+          >
+            <option value="all">All seasons</option>
+            {seasons.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Badge>{filtered.length} mappings</Badge>
+      </div>
+      <div className="linked-mapping-history__list">
+        {visible.map((mapping) => (
+          <LinkedMappingEditor
+            key={`${mapping.id}:${mapping.personId ?? "unlinked"}`}
+            mapping={mapping}
+            players={players}
+          />
+        ))}
+      </div>
+      {filtered.length === 0 && (
+        <p className="hq-empty">No saved mappings match these filters.</p>
+      )}
+      {filtered.length > visible.length && (
+        <small className="linked-mapping-history__more">
+          Showing the 40 most recently updated matches. Narrow the search or
+          season to find an older mapping.
+        </small>
+      )}
     </section>
   );
 }
@@ -876,6 +1098,8 @@ export function PlayerMappingPanel({
 
       <AvpRosterAssignment data={data} players={players} />
 
+      <LinkedMappingHistory data={data} players={players} />
+
       <section className="hq-card mapping-queue">
         <header className="hq-card-heading">
           <div>
@@ -887,8 +1111,9 @@ export function PlayerMappingPanel({
           </Badge>
         </header>
         <p>
-          Search the player directory, compare source evidence, then select the
-          canonical identity. Exact source IDs still link automatically.
+          Duna now reuses exact source IDs and unique historical name matches.
+          This queue holds ambiguous or new identities that still need a human
+          decision.
         </p>
         <div>
           {data.mappings.map((mapping) => (

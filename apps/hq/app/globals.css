@@ -10439,6 +10439,251 @@ button {
   grid-column: 1 / -1;
 }
 
+.player-combobox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  position: relative;
+}
+
+.player-combobox > label,
+.linked-mapping-history__filters label > span {
+  color: var(--color-bone-muted);
+  font-size: 0.61rem;
+  font-weight: 750;
+}
+
+.player-combobox__control {
+  align-items: center;
+  display: flex;
+  position: relative;
+}
+
+.player-combobox__control > svg:first-child {
+  color: var(--color-bone-muted);
+  left: 0.78rem;
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
+}
+
+.player-combobox__control > input {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  color: var(--color-bone);
+  min-height: 46px;
+  outline: none;
+  padding: 0.7rem 2.5rem 0.7rem 2.45rem;
+  width: 100%;
+}
+
+.player-combobox__control > input:focus {
+  border-color: rgb(var(--accent-rgb) / 55%);
+  box-shadow: 0 0 0 3px rgb(var(--accent-rgb) / 9%);
+}
+
+.player-combobox__control > button,
+.mapping-review .player-combobox__control > button,
+.linked-mapping-row .player-combobox__control > button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--color-bone-muted);
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  min-height: 0;
+  padding: 0;
+  position: absolute;
+  right: 0.5rem;
+  width: 32px;
+}
+
+.player-combobox__control > .spin {
+  color: var(--color-bone-muted);
+  position: absolute;
+  right: 0.85rem;
+}
+
+.player-combobox__menu {
+  background: var(--color-card);
+  border: 1px solid var(--color-line-strong);
+  border-radius: 14px;
+  box-shadow: 0 18px 45px rgb(5 14 30 / 16%);
+  display: grid;
+  left: 0;
+  max-height: 290px;
+  overflow: auto;
+  padding: 0.35rem;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 60;
+}
+
+.player-combobox__menu > button,
+.mapping-review .player-combobox__menu > button,
+.linked-mapping-row .player-combobox__menu > button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  color: var(--color-bone);
+  display: flex;
+  font-size: 0.68rem;
+  font-weight: 600;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-height: 52px;
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  width: 100%;
+}
+
+.player-combobox__menu > button:hover,
+.player-combobox__menu > button.is-highlighted {
+  background: var(--color-aqua-soft);
+}
+
+.player-combobox__menu > button > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.player-combobox__menu small,
+.player-combobox__selected,
+.player-combobox__empty {
+  color: var(--color-bone-muted);
+  font-size: 0.58rem;
+}
+
+.player-combobox__menu em {
+  align-items: center;
+  color: var(--color-positive);
+  display: inline-flex;
+  font-size: 0.55rem;
+  font-style: normal;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+.player-combobox__empty {
+  padding: 0.85rem;
+}
+
+.player-combobox__selected strong {
+  color: var(--color-bone);
+}
+
+.mapping-review form > .player-combobox {
+  grid-column: 1 / 2;
+}
+
+.mapping-review__suggestion {
+  align-self: center;
+}
+
+.linked-mapping-history {
+  display: grid;
+  gap: 1rem;
+}
+
+.linked-mapping-history > p {
+  color: var(--color-bone-muted);
+  font-size: 0.7rem;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 780px;
+}
+
+.linked-mapping-history__filters {
+  align-items: end;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(260px, 1fr) minmax(130px, 0.25fr) auto;
+}
+
+.linked-mapping-history__filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.linked-mapping-history__filters input,
+.linked-mapping-history__filters select,
+.linked-mapping-row form > input {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 11px;
+  color: var(--color-bone);
+  min-height: 43px;
+  outline: none;
+  padding: 0.65rem 0.75rem;
+  width: 100%;
+}
+
+.linked-mapping-history__list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.linked-mapping-row {
+  align-items: center;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: minmax(190px, 0.55fr) auto minmax(420px, 1.45fr);
+  padding: 0.85rem;
+}
+
+.linked-mapping-row__source {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.linked-mapping-row__source small,
+.linked-mapping-row__source span,
+.linked-mapping-history__more {
+  color: var(--color-bone-muted);
+  font-size: 0.58rem;
+}
+
+.linked-mapping-row__source strong {
+  font-size: 0.72rem;
+}
+
+.linked-mapping-row form {
+  align-items: end;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(220px, 1fr) minmax(190px, 0.8fr) auto;
+}
+
+.linked-mapping-row form > button {
+  align-items: center;
+  background: rgb(var(--accent-rgb));
+  border: 0;
+  border-radius: 10px;
+  color: var(--color-white);
+  display: inline-flex;
+  font-size: 0.64rem;
+  font-weight: 750;
+  gap: 0.4rem;
+  justify-content: center;
+  min-height: 43px;
+  padding: 0.55rem 0.75rem;
+}
+
+.linked-mapping-row .sand-action-feedback {
+  grid-column: 1 / -1;
+}
+
 .ratings-lab {
   grid-template-columns: minmax(0, 1fr) minmax(300px, 0.65fr);
 }
@@ -16420,6 +16665,22 @@ button {
   .mapping-review form {
     grid-column: 1 / -1;
   }
+
+  .linked-mapping-row {
+    grid-template-columns: 1fr;
+  }
+
+  .linked-mapping-row > svg {
+    display: none;
+  }
+
+  .linked-mapping-row form {
+    grid-template-columns: minmax(220px, 1fr) minmax(190px, 0.8fr);
+  }
+
+  .linked-mapping-row form > button {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 680px) {
@@ -16461,7 +16722,17 @@ button {
   }
 
   .mapping-review form label,
-  .mapping-review form > small {
+  .mapping-review form > small,
+  .mapping-review form > .player-combobox {
+    grid-column: auto;
+  }
+
+  .linked-mapping-history__filters,
+  .linked-mapping-row form {
+    grid-template-columns: 1fr;
+  }
+
+  .linked-mapping-row form > button {
     grid-column: auto;
   }
 

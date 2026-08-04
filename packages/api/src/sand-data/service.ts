@@ -118,6 +118,102 @@ function preserveEditorialPayload(
   };
 }
 
+function hasTournamentDetail(payload: Record<string, unknown>): boolean {
+  return (
+    payload.detailLevel === "tournament" || Array.isArray(payload.teamEntries)
+  );
+}
+
+export function mergeProfessionalEventPayload(input: {
+  readonly incoming: Readonly<Record<string, unknown>>;
+  readonly existing: unknown;
+  readonly syncedAt: Date;
+}): Record<string, unknown> {
+  const previous = unknownRecord(input.existing);
+  const incoming = unknownRecord(input.incoming);
+  const incomingHasDetail = hasTournamentDetail(incoming);
+  const retainsDetail = incomingHasDetail || hasTournamentDetail(previous);
+  return preserveEditorialPayload(
+    {
+      ...previous,
+      ...incoming,
+      detailLevel: retainsDetail ? "tournament" : "index",
+      ...(incomingHasDetail
+        ? { detailSyncedAt: input.syncedAt.toISOString() }
+        : {}),
+    },
+    previous,
+  );
+}
+
+export interface FivbRefreshCandidate {
+  readonly externalEventId: string;
+  readonly live: boolean;
+  readonly startsOn?: string | null;
+  readonly rawPayload: unknown;
+}
+
+function detailSyncedAt(candidate: FivbRefreshCandidate): string {
+  const value = unknownRecord(candidate.rawPayload).detailSyncedAt;
+  return typeof value === "string" ? value : "";
+}
+
+export function selectFivbRefreshCandidates(
+  rows: readonly FivbRefreshCandidate[],
+  limit: number,
+): readonly FivbRefreshCandidate[] {
+  return [...rows]
+    .sort((left, right) => {
+      if (left.live !== right.live) return left.live ? -1 : 1;
+      const leftDetail = hasTournamentDetail(unknownRecord(left.rawPayload));
+      const rightDetail = hasTournamentDetail(unknownRecord(right.rawPayload));
+      if (leftDetail !== rightDetail) return leftDetail ? 1 : -1;
+      const detailOrder = detailSyncedAt(left).localeCompare(
+        detailSyncedAt(right),
+      );
+      if (detailOrder !== 0) return detailOrder;
+      const dateOrder = (left.startsOn ?? "9999-12-31").localeCompare(
+        right.startsOn ?? "9999-12-31",
+      );
+      if (dateOrder !== 0) return dateOrder;
+      return left.externalEventId.localeCompare(right.externalEventId);
+    })
+    .slice(0, Math.max(0, Math.floor(limit)));
+}
+
+export function inferHistoricalPersonId(input: {
+  readonly displayName: string;
+  readonly previous: readonly {
+    readonly normalizedName: string;
+    readonly personId: string;
+  }[];
+}): string | undefined {
+  const normalizedName = normalizePersonName(input.displayName);
+  const personIds = new Set(
+    input.previous
+      .filter((profile) => profile.normalizedName === normalizedName)
+      .map((profile) => profile.personId),
+  );
+  return personIds.size === 1 ? [...personIds][0] : undefined;
+}
+
+export function shouldCreateUnclaimedSourceProfile(input: {
+  readonly source: SandDataSource;
+  readonly displayName: string;
+  readonly candidateCount: number;
+}): boolean {
+  if (input.source === "volleyball-world" || input.candidateCount > 0) {
+    return false;
+  }
+  if (
+    input.source === "avp-league" &&
+    normalizePersonName(input.displayName).split(" ").length < 2
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function optionalSnapshotString(value: unknown): string | undefined {
   const normalized =
     typeof value === "string" || typeof value === "number"
@@ -206,7 +302,7 @@ async function persistExternalPlayers(input: {
   readonly suggested: number;
 }> {
   const database = getDatabase();
-  const [personRows, existingLinks] = await Promise.all([
+  const [personRows, existingLinks, historicalProfiles] = await Promise.all([
     database
       .select({
         id: people.id,
@@ -221,7 +317,32 @@ async function persistExternalPlayers(input: {
       .select()
       .from(importLinks)
       .where(eq(importLinks.sourceId, input.sourceId)),
+    database
+      .select({
+        normalizedName: externalPlayerProfiles.normalizedName,
+        personId: externalPlayerProfiles.personId,
+      })
+      .from(externalPlayerProfiles)
+      .innerJoin(people, eq(externalPlayerProfiles.personId, people.id))
+      .where(
+        and(
+          eq(externalPlayerProfiles.sourceId, input.sourceId),
+          eq(externalPlayerProfiles.mappingState, "linked"),
+          ne(people.status, "deleted"),
+          sql`${externalPlayerProfiles.personId} IS NOT NULL`,
+        ),
+      ),
   ]);
+  const reusableHistoricalProfiles = historicalProfiles.flatMap((profile) =>
+    profile.personId
+      ? [
+          {
+            normalizedName: profile.normalizedName,
+            personId: profile.personId,
+          },
+        ]
+      : [],
+  );
   const linkByExternalId = new Map(
     existingLinks.map((link) => [link.externalPersonId, link] as const),
   );
@@ -241,6 +362,22 @@ async function persistExternalPlayers(input: {
     let evidence: Record<string, unknown> = personId
       ? { method: "existing-source-id" }
       : {};
+
+    if (!personId) {
+      const historicalPersonId = inferHistoricalPersonId({
+        displayName: external.displayName,
+        previous: reusableHistoricalProfiles,
+      });
+      if (historicalPersonId) {
+        personId = historicalPersonId;
+        mappingState = "linked";
+        mappingScoreBps = 9_900;
+        evidence = {
+          method: "same-source-name-history",
+          normalizedName: normalizePersonName(external.displayName),
+        };
+      }
+    }
 
     if (!personId) {
       const candidates = personRows
@@ -269,7 +406,23 @@ async function persistExternalPlayers(input: {
           candidateDisplayName: best.candidate.displayName,
         };
         suggested += 1;
-      } else if (input.source !== "volleyball-world") {
+      } else if (tied) {
+        evidence = {
+          method: "ambiguous-name",
+          candidates: candidates.slice(0, 5).map(({ candidate, score }) => ({
+            personId: candidate.id,
+            displayName: candidate.displayName,
+            handle: candidate.handle,
+            scoreBps: score,
+          })),
+        };
+      } else if (
+        shouldCreateUnclaimedSourceProfile({
+          source: input.source,
+          displayName: external.displayName,
+          candidateCount: candidates.length,
+        })
+      ) {
         const handle = safeExternalHandle(
           input.source,
           external.externalPersonId,
@@ -318,6 +471,11 @@ async function persistExternalPlayers(input: {
           inserted += 1;
           linked += 1;
         }
+      } else if (input.source === "avp-league") {
+        evidence = {
+          method: "insufficient-name-evidence",
+          searchQuery: external.displayName,
+        };
       }
     } else {
       linked += 1;
@@ -669,10 +827,25 @@ async function persistProfessionalEvents(input: {
         eq(professionalEvents.externalEventId, event.externalEventId),
       ),
     });
-    const rawPayload = preserveEditorialPayload(
-      event.raw,
-      existing?.rawPayload,
-    );
+    const incomingHasDetail = hasTournamentDetail(unknownRecord(event.raw));
+    const isFivbIndexEvent =
+      input.result.source === "fivb-12ndr" && !incomingHasDetail;
+    const rawPayload =
+      input.result.source === "fivb-12ndr"
+        ? mergeProfessionalEventPayload({
+            incoming: event.raw,
+            existing: existing?.rawPayload,
+            syncedAt: input.now,
+          })
+        : preserveEditorialPayload(event.raw, existing?.rawPayload);
+    const teamCount =
+      isFivbIndexEvent && event.teamCount === 0
+        ? (existing?.teamCount ?? 0)
+        : Math.floor(event.teamCount);
+    const matchCount =
+      isFivbIndexEvent && event.matchCount === 0
+        ? (existing?.matchCount ?? 0)
+        : event.matchCount;
     await database
       .insert(professionalEvents)
       .values({
@@ -688,8 +861,8 @@ async function persistProfessionalEvents(input: {
         endsOn: event.endsOn,
         status: event.status,
         live: event.live,
-        teamCount: Math.floor(event.teamCount),
-        matchCount: event.matchCount,
+        teamCount,
+        matchCount,
         rawPayload,
         lastSyncedAt: input.now,
         createdAt: input.now,
@@ -711,8 +884,8 @@ async function persistProfessionalEvents(input: {
           endsOn: event.endsOn,
           status: event.status,
           live: event.live,
-          teamCount: Math.floor(event.teamCount),
-          matchCount: event.matchCount,
+          teamCount,
+          matchCount,
           rawPayload,
           lastSyncedAt: input.now,
           updatedAt: input.now,
@@ -1029,7 +1202,9 @@ export async function refreshActiveFivbEvents(input: {
   const rows = await getDatabase()
     .select({
       externalEventId: professionalEvents.externalEventId,
-      status: professionalEvents.status,
+      live: professionalEvents.live,
+      startsOn: professionalEvents.startsOn,
+      rawPayload: professionalEvents.rawPayload,
     })
     .from(professionalEvents)
     .where(
@@ -1038,14 +1213,14 @@ export async function refreshActiveFivbEvents(input: {
         inArray(professionalEvents.status, ["live", "upcoming"]),
       ),
     )
-    .orderBy(desc(professionalEvents.live), asc(professionalEvents.startsOn))
-    .limit(input.limit ?? 4);
+    .limit(250);
+  const candidates = selectFivbRefreshCandidates(rows, input.limit ?? 4);
   const results: {
     readonly externalEventId: string;
     readonly status: "succeeded" | "failed";
     readonly message?: string;
   }[] = [];
-  for (const row of rows) {
+  for (const row of candidates) {
     try {
       await importSandSource({
         source: "fivb-12ndr",
@@ -1078,6 +1253,7 @@ export async function loadSandDataOverview() {
     sources,
     runs,
     mappingRows,
+    linkedMappingRows,
     imported,
     events,
     rankingDates,
@@ -1116,6 +1292,31 @@ export async function loadSandDataOverview() {
       )
       .orderBy(desc(externalPlayerProfiles.mappingScoreBps))
       .limit(100),
+    database
+      .select({
+        id: externalPlayerProfiles.id,
+        sourceId: externalPlayerProfiles.sourceId,
+        externalPersonId: externalPlayerProfiles.externalPersonId,
+        displayName: externalPlayerProfiles.displayName,
+        profileUrl: externalPlayerProfiles.profileUrl,
+        mappingScoreBps: externalPlayerProfiles.mappingScoreBps,
+        mappingEvidence: externalPlayerProfiles.mappingEvidence,
+        personId: externalPlayerProfiles.personId,
+        rawProfile: externalPlayerProfiles.rawProfile,
+        personDisplayName: people.displayName,
+        personHandle: people.handle,
+        updatedAt: externalPlayerProfiles.updatedAt,
+      })
+      .from(externalPlayerProfiles)
+      .leftJoin(people, eq(externalPlayerProfiles.personId, people.id))
+      .where(eq(externalPlayerProfiles.mappingState, "linked"))
+      .orderBy(
+        desc(
+          sql`CASE WHEN ${externalPlayerProfiles.rawProfile}->>'source' = 'avp-league' THEN 1 ELSE 0 END`,
+        ),
+        desc(externalPlayerProfiles.updatedAt),
+      )
+      .limit(500),
     database
       .select({
         id: importedMatches.id,
@@ -1329,6 +1530,35 @@ export async function loadSandDataOverview() {
         role: optionalSnapshotString(unknownRecord(mapping.rawProfile).role),
       },
     })),
+    linkedMappings: linkedMappingRows.map((mapping) => ({
+      id: mapping.id,
+      source: sourceById.get(mapping.sourceId)?.name ?? "Unknown source",
+      externalPersonId: mapping.externalPersonId,
+      displayName: mapping.displayName,
+      profileUrl: mapping.profileUrl ?? undefined,
+      mappingScoreBps: mapping.mappingScoreBps ?? undefined,
+      mappingEvidence: mapping.mappingEvidence,
+      personId: mapping.personId ?? undefined,
+      currentPlayer:
+        mapping.personId && mapping.personDisplayName && mapping.personHandle
+          ? {
+              id: mapping.personId,
+              displayName: mapping.personDisplayName,
+              handle: mapping.personHandle,
+            }
+          : undefined,
+      sourceContext: {
+        season: optionalNumber(unknownRecord(mapping.rawProfile).season),
+        teamName: optionalSnapshotString(
+          unknownRecord(mapping.rawProfile).teamName,
+        ),
+        gender: optionalSnapshotString(
+          unknownRecord(mapping.rawProfile).gender,
+        ),
+        role: optionalSnapshotString(unknownRecord(mapping.rawProfile).role),
+      },
+      updatedAt: mapping.updatedAt.toISOString(),
+    })),
     matches: imported.map((match) => ({
       ...match,
       playedAt: match.playedAt?.toISOString(),
@@ -1498,6 +1728,37 @@ export async function linkExternalPlayer(input: {
       createdAt: now,
     }),
   ]);
+  const rawProfile = unknownRecord(profile.rawProfile);
+  if (rawProfile.source === "avp-league") {
+    const eventRows = await database
+      .select({
+        id: professionalEvents.id,
+        rawPayload: professionalEvents.rawPayload,
+      })
+      .from(professionalEvents)
+      .where(eq(professionalEvents.sourceId, profile.sourceId));
+    for (const event of eventRows) {
+      const rawPayload = unknownRecord(event.rawPayload);
+      if (!Array.isArray(rawPayload.rosterOverrides)) continue;
+      let changed = false;
+      const rosterOverrides = rawPayload.rosterOverrides.map((candidate) => {
+        const assignment = unknownRecord(candidate);
+        if (assignment.externalPersonId !== profile.externalPersonId) {
+          return candidate;
+        }
+        changed = true;
+        return { ...assignment, personId: person.id };
+      });
+      if (!changed) continue;
+      await database
+        .update(professionalEvents)
+        .set({
+          rawPayload: { ...rawPayload, rosterOverrides },
+          updatedAt: now,
+        })
+        .where(eq(professionalEvents.id, event.id));
+    }
+  }
   await refreshMatchMappingStates(profile.sourceId, now);
   return {
     externalProfileId: profile.id,
