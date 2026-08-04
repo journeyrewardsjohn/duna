@@ -7,7 +7,9 @@ import {
   MapPin,
   Radio,
   Sparkles,
+  Tv,
   Trophy,
+  Video,
 } from "lucide-react";
 import Link from "next/link";
 import { SiteFooter } from "@/components/site-footer";
@@ -225,10 +227,64 @@ export function ProMatchDetail({
             <span style={{ width: `${match.prediction.teamA}%` }} />
           </div>
           <p>
-            {match.prediction.basis === "SandRating"
-              ? "Probability is derived from the latest mapped Duna SandRatings. It is a forecast, not a guarantee."
-              : "Both teams currently have an even prior because mapped rating data is incomplete."}
+            {match.prediction.outcome === "upset"
+              ? "Upset: the result went against the pre-match Sand Rating favorite."
+              : match.prediction.outcome === "predicted"
+                ? "The result matched the pre-match Sand Rating favorite."
+                : match.prediction.basis === "SandRating"
+                  ? "Probability is derived from the latest mapped Duna Sand Ratings. It is a forecast, not a guarantee."
+                  : "Both teams currently have an even prior because mapped rating data is incomplete."}
           </p>
+        </section>
+
+        <section className="pro-match-panel pro-watch">
+          <header>
+            <div>
+              <span className="page-eyebrow">Match broadcast</span>
+              <h2>How to watch</h2>
+            </div>
+            <Tv aria-hidden size={22} />
+          </header>
+          {match.watchOptions.length > 0 ? (
+            <div>
+              {match.watchOptions.map((option) => {
+                const content = (
+                  <>
+                    {option.kind === "youtube" ? (
+                      <Video aria-hidden size={19} />
+                    ) : (
+                      <Tv aria-hidden size={19} />
+                    )}
+                    <span>
+                      <strong>{option.label}</strong>
+                      <small>
+                        {option.channelName ??
+                          (option.url ? "Open stream" : "Live TV")}
+                      </small>
+                    </span>
+                    {option.url && <ExternalLink aria-hidden size={14} />}
+                  </>
+                );
+                return option.url ? (
+                  <a
+                    href={option.url}
+                    key={option.id}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {content}
+                  </a>
+                ) : (
+                  <article key={option.id}>{content}</article>
+                );
+              })}
+            </div>
+          ) : (
+            <p>
+              This match uses the event broadcast guide. A match-specific link
+              or TV channel will appear here when configured.
+            </p>
+          )}
         </section>
 
         <nav className="pro-match-source">

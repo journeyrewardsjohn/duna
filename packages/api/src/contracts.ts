@@ -313,6 +313,11 @@ export const matchSummarySchema = z.object({
   confirmationRequired: z.boolean().optional(),
   playedAt: z.iso.datetime(),
   venueName: z.string(),
+  eventName: z.string().optional(),
+  eventSlug: z.string().optional(),
+  roundLabel: z.string().optional(),
+  sourceUrl: z.url().optional(),
+  formatSummary: z.string().optional(),
   teamA: z.array(personSummarySchema).readonly(),
   teamB: z.array(personSummarySchema).readonly(),
   score: z
@@ -341,6 +346,15 @@ export const matchSummarySchema = z.object({
       address: z.string().optional(),
       latitude: z.number().optional(),
       longitude: z.number().optional(),
+    })
+    .optional(),
+  prediction: z
+    .object({
+      teamA: z.number().min(0).max(100),
+      teamB: z.number().min(0).max(100),
+      favorite: z.enum(["A", "B", "even"]),
+      outcome: z.enum(["predicted", "upset", "even"]),
+      basis: z.literal("Sand Rating"),
     })
     .optional(),
   origin: z.enum(["imported", "self-reported", "live-scored"]).optional(),

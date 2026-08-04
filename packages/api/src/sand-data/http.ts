@@ -4,6 +4,7 @@ import { SandDataUpstreamError, type SandDataSource } from "./types";
 type ScrapeEngine = "firecrawl" | "native";
 
 const sourceSpacingMs: Readonly<Record<SandDataSource, number>> = {
+  "avp-league": 3_000,
   bvbinfo: 2_000,
   "fivb-12ndr": 3_000,
   "volleyball-life": 1_000,
@@ -21,6 +22,7 @@ function firecrawlKey(): string | undefined {
 }
 
 export function scrapeEngine(source: SandDataSource): ScrapeEngine {
+  if (source === "avp-league") return "firecrawl";
   if (
     source === "volleyball-life" ||
     source === "volleyball-world" ||
@@ -70,11 +72,11 @@ async function withRetry<T>(
   throw latest;
 }
 
-function firecrawlClient(): Firecrawl {
+function firecrawlClient(source: SandDataSource): Firecrawl {
   const apiKey = firecrawlKey();
   if (!apiKey) {
     throw new SandDataUpstreamError(
-      "bvbinfo",
+      source,
       "not-configured",
       "FIRECRAWL_API_KEY is required for rendered scraping.",
     );
@@ -107,7 +109,7 @@ export async function scrapeHtml(
   try {
     if (engine === "firecrawl") {
       const document = await withRetry(source, () =>
-        firecrawlClient().scrape(url, {
+        firecrawlClient(source).scrape(url, {
           formats: ["html", "rawHtml"],
           onlyMainContent: false,
           waitFor: options.waitForMs,
@@ -116,7 +118,10 @@ export async function scrapeHtml(
           blockAds: true,
         }),
       );
-      const html = document.rawHtml ?? document.html ?? "";
+      const html =
+        source === "avp-league"
+          ? (document.html ?? document.rawHtml ?? "")
+          : (document.rawHtml ?? document.html ?? "");
       if (!html) {
         throw new SandDataUpstreamError(
           source,

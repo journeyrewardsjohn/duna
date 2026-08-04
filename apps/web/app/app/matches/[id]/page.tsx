@@ -1,6 +1,14 @@
 import { formatVenueTime } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
-import { ArrowLeft, Radio, ShieldCheck, TrendingUp } from "lucide-react";
+import {
+  ArrowLeft,
+  ExternalLink,
+  MapPin,
+  Radio,
+  ShieldCheck,
+  Sparkles,
+  TrendingUp,
+} from "lucide-react";
 import Link from "next/link";
 import { MatchConfirmation } from "@/components/match-confirmation";
 import { MatchHistoryControls } from "@/components/match-history-controls";
@@ -106,7 +114,22 @@ export default async function MatchPage({
             dateStyle: "full",
           })}
         </span>
-        <h1>{match.venueName}</h1>
+        <h1>{match.eventName ?? match.venueName}</h1>
+        <div className="match-detail__context">
+          <span>
+            <MapPin aria-hidden size={15} /> {match.venueName}
+          </span>
+          {match.roundLabel && <span>{match.roundLabel}</span>}
+          {match.formatSummary && <span>{match.formatSummary}</span>}
+          {match.eventSlug && (
+            <Link href={`/events/${match.eventSlug}`}>Event details</Link>
+          )}
+          {match.sourceUrl && (
+            <a href={match.sourceUrl} rel="noreferrer" target="_blank">
+              Official source <ExternalLink aria-hidden size={13} />
+            </a>
+          )}
+        </div>
         <div className="match-detail__score">
           <article className={match.winner === "A" ? "winner" : undefined}>
             <div>
@@ -171,6 +194,57 @@ export default async function MatchPage({
             <small>Verification basis</small>
           </span>
         </article>
+        {match.prediction && (
+          <article
+            className={
+              match.prediction.outcome === "upset"
+                ? "match-detail__prediction match-detail__prediction--upset"
+                : "match-detail__prediction"
+            }
+          >
+            <Sparkles aria-hidden size={21} />
+            <span>
+              <strong>
+                {match.prediction.outcome === "upset"
+                  ? "Upset"
+                  : match.prediction.outcome === "predicted"
+                    ? "Predicted result"
+                    : "Even matchup"}
+              </strong>
+              <small>
+                {match.prediction.teamA.toFixed(0)}% /{" "}
+                {match.prediction.teamB.toFixed(0)}% pre-match
+              </small>
+            </span>
+          </article>
+        )}
+      </section>
+      <section className="match-detail__players">
+        {(
+          [
+            ["A", match.teamA],
+            ["B", match.teamB],
+          ] as const
+        ).map(([side, players]) => (
+          <article key={side}>
+            <header>
+              <span>Team {side}</span>
+              {match.winner === side && <Badge tone="positive">Winner</Badge>}
+            </header>
+            {players.map((player) => (
+              <div key={player.id}>
+                <span className="avatar">{player.initials}</span>
+                <span>
+                  <strong>{player.displayName}</strong>
+                  <small>
+                    @{player.handle} · {player.homeMarket}
+                  </small>
+                </span>
+                <Numeric>{player.rating.display.toFixed(2)}</Numeric>
+              </div>
+            ))}
+          </article>
+        ))}
       </section>
       <section className="match-detail__rating-story">
         <div>

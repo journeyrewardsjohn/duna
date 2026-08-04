@@ -33,7 +33,9 @@ export async function importSandSourceAction(
   const source = String(formData.get("source") ?? "");
   const externalId = String(formData.get("externalId") ?? "").trim();
   if (
-    !["bvbinfo", "volleyball-life", "fivb-12ndr"].includes(source) ||
+    !["bvbinfo", "volleyball-life", "fivb-12ndr", "avp-league"].includes(
+      source,
+    ) ||
     !externalId
   ) {
     return {
@@ -44,7 +46,8 @@ export async function importSandSourceAction(
   try {
     const caller = await getServerCaller();
     const result = await caller.admin.importSandSource({
-      source: source as "bvbinfo" | "volleyball-life" | "fivb-12ndr",
+      source: source as
+        "bvbinfo" | "volleyball-life" | "fivb-12ndr" | "avp-league",
       externalId,
     });
     refreshSandAdmin();
@@ -90,6 +93,147 @@ export async function refreshWorldRankingsAction(
     };
   } catch (error) {
     return failure(error, "World rankings could not be refreshed.");
+  }
+}
+
+export async function saveProfessionalWatchOptionAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  let professionalEventId = String(
+    formData.get("professionalEventId") ?? "",
+  ).trim();
+  const matchSelection = String(formData.get("importedMatchId") ?? "").trim();
+  let importedMatchId: string | undefined;
+  if (matchSelection.includes(":")) {
+    const [selectedEventId, selectedMatchId] = matchSelection.split(":");
+    professionalEventId = selectedEventId ?? professionalEventId;
+    importedMatchId = selectedMatchId || undefined;
+  } else {
+    importedMatchId = matchSelection || undefined;
+  }
+  const kind = String(formData.get("kind") ?? "");
+  const label = String(formData.get("label") ?? "").trim() || undefined;
+  const url = String(formData.get("url") ?? "").trim() || undefined;
+  const channelName =
+    String(formData.get("channelName") ?? "").trim() || undefined;
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (
+    !professionalEventId ||
+    !["vbtv", "youtube", "live-tv"].includes(kind) ||
+    reason.length < 10
+  ) {
+    return {
+      status: "error",
+      message: "Choose a destination and document the broadcast update.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.saveProfessionalWatchOption({
+      professionalEventId,
+      importedMatchId,
+      kind: kind as "vbtv" | "youtube" | "live-tv",
+      label,
+      url,
+      channelName,
+      reason,
+    });
+    refreshSandAdmin();
+    return {
+      status: "success",
+      message: `${result.label} was added to the broadcast guide.`,
+    };
+  } catch (error) {
+    return failure(error, "The broadcast option could not be saved.");
+  }
+}
+
+export async function removeProfessionalWatchOptionAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const professionalEventId = String(
+    formData.get("professionalEventId") ?? "",
+  ).trim();
+  const importedMatchId =
+    String(formData.get("importedMatchId") ?? "").trim() || undefined;
+  const optionId = String(formData.get("optionId") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!professionalEventId || !optionId || reason.length < 10) {
+    return {
+      status: "error",
+      message: "Document why this broadcast option is being removed.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    await caller.admin.removeProfessionalWatchOption({
+      professionalEventId,
+      importedMatchId,
+      optionId,
+      reason,
+    });
+    refreshSandAdmin();
+    return { status: "success", message: "Broadcast option removed." };
+  } catch (error) {
+    return failure(error, "The broadcast option could not be removed.");
+  }
+}
+
+export async function saveAvpRosterAssignmentAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const teamSelection = String(formData.get("team") ?? "");
+  const [seasonValue, genderValue, ...teamParts] = teamSelection.split("|");
+  const season = Number.parseInt(seasonValue ?? "", 10);
+  const teamName = teamParts.join("|").trim();
+  const displayName = String(formData.get("displayName") ?? "").trim();
+  const personId = String(formData.get("personId") ?? "").trim();
+  const role = String(formData.get("role") ?? "");
+  const effectiveFrom =
+    String(formData.get("effectiveFrom") ?? "").trim() || undefined;
+  const effectiveTo =
+    String(formData.get("effectiveTo") ?? "").trim() || undefined;
+  const replacesExternalPersonId =
+    String(formData.get("replacesExternalPersonId") ?? "").trim() || undefined;
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (
+    !Number.isInteger(season) ||
+    !teamName ||
+    !["men", "women"].includes(genderValue ?? "") ||
+    !displayName ||
+    !personId ||
+    !["starter", "substitute"].includes(role) ||
+    reason.length < 10
+  ) {
+    return {
+      status: "error",
+      message: "Complete the AVP team, Duna player, role, and review note.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.saveAvpRosterAssignment({
+      season,
+      teamName,
+      gender: genderValue as "men" | "women",
+      displayName,
+      personId,
+      role: role as "starter" | "substitute",
+      effectiveFrom,
+      effectiveTo,
+      replacesExternalPersonId,
+      reason,
+    });
+    refreshSandAdmin();
+    return {
+      status: "success",
+      message: `${result.displayName} is assigned to ${result.teamName} for ${result.season}.`,
+    };
+  } catch (error) {
+    return failure(error, "The AVP roster assignment could not be saved.");
   }
 }
 

@@ -1,4 +1,5 @@
 import {
+  refreshAvpLeague,
   refreshActiveFivbEvents,
   refreshFivbEventIndex,
   refreshWorldRankings,
@@ -27,6 +28,9 @@ export async function GET(request: Request) {
     }
     if (mode === "live") {
       return NextResponse.json(await refreshActiveFivbEvents({ limit: 4 }));
+    }
+    if (mode === "avp") {
+      return NextResponse.json(await refreshAvpLeague({}));
     }
     return NextResponse.json({ error: "Unknown mode" }, { status: 400 });
   } catch (error) {

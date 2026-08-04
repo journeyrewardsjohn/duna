@@ -16,6 +16,8 @@ import {
   Search,
   ShieldCheck,
   TriangleAlert,
+  Trash2,
+  Tv,
   UsersRound,
   Waves,
 } from "lucide-react";
@@ -28,9 +30,12 @@ import {
   mergeSandProfilesAction,
   refreshFivbIndexAction,
   refreshWorldRankingsAction,
+  removeProfessionalWatchOptionAction,
   reviewMatchHistoryDisputeAction,
   reviewSandMatchAction,
+  saveAvpRosterAssignmentAction,
   saveRatingConfigurationAction,
+  saveProfessionalWatchOptionAction,
   type SandActionState,
 } from "@/app/admin/sand-actions";
 
@@ -63,13 +68,14 @@ function SourceImportForm() {
           <option value="volleyball-life">VolleyballLife player</option>
           <option value="bvbinfo">BVBInfo player</option>
           <option value="fivb-12ndr">FIVB event</option>
+          <option value="avp-league">AVP League season</option>
         </select>
       </label>
       <label>
         <span>Player ID, event tcode, or source URL</span>
         <input
           name="externalId"
-          placeholder="e.g. 653 or MWORLD2026"
+          placeholder="e.g. 653, MHAM2026, or 2026"
           required
         />
       </label>
@@ -204,6 +210,180 @@ function MatchReview({
   );
 }
 
+function BroadcastOption({
+  eventId,
+  importedMatchId,
+  option,
+}: {
+  readonly eventId: string;
+  readonly importedMatchId?: string;
+  readonly option: SandDataOverview["events"][number]["watchOptions"][number];
+}) {
+  const [state, action, pending] = useActionState(
+    removeProfessionalWatchOptionAction,
+    initialState,
+  );
+  return (
+    <article className="sand-watch-option">
+      <Tv aria-hidden size={16} />
+      <span>
+        <strong>{option.label}</strong>
+        <small>{option.channelName ?? option.kind}</small>
+      </span>
+      <form action={action}>
+        <input name="professionalEventId" type="hidden" value={eventId} />
+        {importedMatchId && (
+          <input name="importedMatchId" type="hidden" value={importedMatchId} />
+        )}
+        <input name="optionId" type="hidden" value={option.id} />
+        <input
+          aria-label="Removal reason"
+          name="reason"
+          placeholder="Removal reason"
+          required
+        />
+        <button aria-label={`Remove ${option.label}`} disabled={pending}>
+          <Trash2 aria-hidden size={14} />
+        </button>
+      </form>
+      <ActionFeedback state={state} />
+    </article>
+  );
+}
+
+function BroadcastConfiguration({
+  events,
+}: {
+  readonly events: SandDataOverview["events"];
+}) {
+  const [state, action, pending] = useActionState(
+    saveProfessionalWatchOptionAction,
+    initialState,
+  );
+  const currentEvents = events
+    .filter((event) => event.status !== "completed")
+    .sort((a, b) =>
+      (a.startsOn ?? "9999-12-31").localeCompare(b.startsOn ?? "9999-12-31"),
+    )
+    .slice(0, 20);
+  return (
+    <section className="hq-card sand-watch-config">
+      <header className="hq-card-heading">
+        <div>
+          <span className="hq-eyebrow">Super-admin broadcast guide</span>
+          <h2>Where to watch</h2>
+        </div>
+        <Tv size={20} />
+      </header>
+      <p>
+        Set an event default, or choose one match to replace the event guide
+        with its own link or TV channel.
+      </p>
+      <form action={action} className="sand-watch-form">
+        <label>
+          <span>Event</span>
+          <select name="professionalEventId" required>
+            <option value="">Choose an upcoming event</option>
+            {currentEvents.map((event) => (
+              <option key={event.id} value={event.id}>
+                {event.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Match override</span>
+          <select name="importedMatchId">
+            <option value="">Use as event default</option>
+            {currentEvents.flatMap((event) =>
+              event.matches.map((match) => (
+                <option key={match.id} value={`${event.id}:${match.id}`}>
+                  {event.name} · {match.roundLabel ?? match.label}
+                </option>
+              )),
+            )}
+          </select>
+        </label>
+        <label>
+          <span>Destination</span>
+          <select defaultValue="vbtv" name="kind">
+            <option value="vbtv">VBTV</option>
+            <option value="youtube">YouTube</option>
+            <option value="live-tv">Live TV</option>
+          </select>
+        </label>
+        <label>
+          <span>Display label</span>
+          <input name="label" placeholder="e.g. Center Court on VBTV" />
+        </label>
+        <label>
+          <span>Link</span>
+          <input name="url" placeholder="https://…" type="url" />
+        </label>
+        <label>
+          <span>TV channel</span>
+          <input name="channelName" placeholder="e.g. ESPN2" />
+        </label>
+        <label className="sand-watch-form__reason">
+          <span>Review note</span>
+          <input
+            name="reason"
+            placeholder="Source and reason for this broadcast update"
+            required
+          />
+        </label>
+        <button className="hq-button hq-button--primary" disabled={pending}>
+          Add watch option
+        </button>
+        <ActionFeedback state={state} />
+      </form>
+      <div className="sand-watch-events">
+        {currentEvents
+          .filter(
+            (event) =>
+              event.watchOptions.length > 0 ||
+              event.matches.some((match) => match.watchOptions.length > 0),
+          )
+          .map((event) => (
+            <section key={event.id}>
+              <header>
+                <strong>{event.name}</strong>
+                <small>
+                  {event.watchOptions.length} default ·{" "}
+                  {
+                    event.matches.filter(
+                      (match) => match.watchOptions.length > 0,
+                    ).length
+                  }{" "}
+                  match overrides
+                </small>
+              </header>
+              {event.watchOptions.map((option) => (
+                <BroadcastOption
+                  eventId={event.id}
+                  key={option.id}
+                  option={option}
+                />
+              ))}
+              {event.matches.flatMap((match) =>
+                match.watchOptions.map((option) => (
+                  <div className="sand-watch-match" key={option.id}>
+                    <small>{match.roundLabel ?? match.label}</small>
+                    <BroadcastOption
+                      eventId={event.id}
+                      importedMatchId={match.id}
+                      option={option}
+                    />
+                  </div>
+                )),
+              )}
+            </section>
+          ))}
+      </div>
+    </section>
+  );
+}
+
 function HistoryDisputeReview({
   dispute,
 }: {
@@ -277,6 +457,8 @@ export function SandDataPanel({ data }: { readonly data: SandDataOverview }) {
           <RefreshRankingsForm />
         </div>
       </section>
+
+      <BroadcastConfiguration events={data.events} />
 
       <section className="sand-summary-grid">
         <article>
@@ -470,6 +652,12 @@ function MappingReview({
           {mapping.isProfessional ? "Professional" : "Player"} · source ID{" "}
           {mapping.externalPersonId}
         </span>
+        {mapping.sourceContext.teamName && (
+          <span>
+            {mapping.sourceContext.season} · {mapping.sourceContext.teamName} ·{" "}
+            {mapping.sourceContext.gender}
+          </span>
+        )}
       </div>
       <ArrowRight aria-hidden size={18} />
       <form action={action}>
@@ -508,6 +696,114 @@ function MappingReview({
         <ActionFeedback state={state} />
       </form>
     </article>
+  );
+}
+
+function AvpRosterAssignment({
+  data,
+  players,
+}: {
+  readonly data: SandDataOverview;
+  readonly players: readonly PersonSummary[];
+}) {
+  const [state, action, pending] = useActionState(
+    saveAvpRosterAssignmentAction,
+    initialState,
+  );
+  if (data.avpTeams.length === 0) return null;
+  return (
+    <section className="hq-card avp-roster-admin">
+      <header className="hq-card-heading">
+        <div>
+          <span className="hq-eyebrow">Seasonal AVP moderation</span>
+          <h2>Team roster assignments</h2>
+        </div>
+        <UsersRound size={20} />
+      </header>
+      <p>
+        Map a season roster or date-bounded substitute to a Duna player.
+        Substitutions replace one source roster slot in eligible imported
+        matches.
+      </p>
+      <form action={action}>
+        <label>
+          <span>Season team</span>
+          <select name="team" required>
+            <option value="">Choose a team</option>
+            {data.avpTeams.map((team) => (
+              <option
+                key={team.key}
+                value={`${team.season}|${team.gender}|${team.teamName}`}
+              >
+                {team.season} · {team.teamName} · {team.gender}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Source roster name</span>
+          <input
+            name="displayName"
+            placeholder="Name as shown by AVP"
+            required
+          />
+        </label>
+        <label>
+          <span>Duna player</span>
+          <select name="personId" required>
+            <option value="">Choose from search results</option>
+            {players.map((player) => (
+              <option key={player.id} value={player.id}>
+                {player.displayName} · @{player.handle}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Assignment</span>
+          <select defaultValue="starter" name="role">
+            <option value="starter">Season roster</option>
+            <option value="substitute">Substitute</option>
+          </select>
+        </label>
+        <label>
+          <span>Replaces</span>
+          <select name="replacesExternalPersonId">
+            <option value="">No replacement</option>
+            {data.avpTeams.flatMap((team) =>
+              team.players.map((player) => (
+                <option
+                  key={`${team.key}-${player.externalPersonId}`}
+                  value={player.externalPersonId}
+                >
+                  {team.teamName} · {team.gender} · {player.displayName}
+                </option>
+              )),
+            )}
+          </select>
+        </label>
+        <label>
+          <span>Starts</span>
+          <input name="effectiveFrom" type="date" />
+        </label>
+        <label>
+          <span>Ends</span>
+          <input name="effectiveTo" type="date" />
+        </label>
+        <label className="avp-roster-admin__reason">
+          <span>Review note</span>
+          <input
+            name="reason"
+            placeholder="Source and reason for this roster decision"
+            required
+          />
+        </label>
+        <button className="hq-button hq-button--primary" disabled={pending}>
+          Save roster assignment
+        </button>
+        <ActionFeedback state={state} />
+      </form>
+    </section>
   );
 }
 
@@ -577,6 +873,8 @@ export function PlayerMappingPanel({
           )}
         </div>
       </section>
+
+      <AvpRosterAssignment data={data} players={players} />
 
       <section className="hq-card mapping-queue">
         <header className="hq-card-heading">

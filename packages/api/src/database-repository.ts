@@ -10,6 +10,7 @@ import {
   getDatabase,
   guardianInvitations,
   guardianships,
+  importedMatches,
   matchConfirmations,
   matchHistoryDisputes,
   matches,
@@ -312,6 +313,13 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
       ),
     ),
   ];
+  const divisionIds = [
+    ...new Set(
+      matchRows.flatMap((match) =>
+        match.divisionId ? [match.divisionId] : [],
+      ),
+    ),
+  ];
   const [
     allMembershipRows,
     teamRows,
@@ -320,6 +328,8 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
     venueRows,
     confirmationRows,
     disputeRows,
+    importedContextRows,
+    divisionContextRows,
   ] = await Promise.all([
     database
       .select()
@@ -334,12 +344,7 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
     database
       .select()
       .from(ratingEvents)
-      .where(
-        and(
-          eq(ratingEvents.personId, personId),
-          inArray(ratingEvents.matchId, matchIds),
-        ),
-      ),
+      .where(inArray(ratingEvents.matchId, matchIds)),
     database
       .select({ id: venues.id, name: venues.name })
       .from(venues)
@@ -367,6 +372,32 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
           inArray(matchHistoryDisputes.matchId, matchIds),
         ),
       ),
+    database
+      .select({
+        canonicalMatchId: importedMatches.canonicalMatchId,
+        title: importedMatches.title,
+        roundLabel: importedMatches.roundLabel,
+        location: importedMatches.location,
+        sourceUrl: importedMatches.sourceUrl,
+      })
+      .from(importedMatches)
+      .where(inArray(importedMatches.canonicalMatchId, matchIds)),
+    divisionIds.length > 0
+      ? database
+          .select({
+            divisionId: divisions.id,
+            divisionName: divisions.name,
+            sessionTitle: sessions.title,
+            sessionSlug: sessions.slug,
+            venueName: venues.name,
+            venueLocality: venues.locality,
+            venueRegion: venues.administrativeArea,
+          })
+          .from(divisions)
+          .innerJoin(sessions, eq(divisions.sessionId, sessions.id))
+          .leftJoin(venues, eq(sessions.venueId, venues.id))
+          .where(inArray(divisions.id, divisionIds))
+      : Promise.resolve([]),
   ]);
   const allPersonIds = [
     ...new Set(allMembershipRows.map((member) => member.personId)),
@@ -386,40 +417,67 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
     disputeRows.map((row) => [row.matchId, row] as const),
   );
   const ratingByMatch = new Map(
-    deltaRows.map((event) => {
-      const before =
-        typeof event.before.display === "number" ? event.before.display : 0;
-      const after =
-        typeof event.after.display === "number" ? event.after.display : before;
-      const explanation =
-        typeof event.explanation === "object" && event.explanation !== null
-          ? event.explanation
-          : {};
-      const optionalNumber = (value: unknown) =>
-        typeof value === "number" && Number.isFinite(value) ? value : undefined;
-      return [
-        event.matchId,
-        {
-          before,
-          after,
-          delta: after - before,
-          explanation: {
-            expectedWinProbability: optionalNumber(
-              explanation.expectedWinProbability,
-            ),
-            actualResult: optionalNumber(explanation.actualResult),
-            pointShare: optionalNumber(explanation.pointShare),
-            marginMultiplier: optionalNumber(explanation.marginMultiplier),
-            responsibilityWeight: optionalNumber(
-              explanation.responsibilityWeight,
-            ),
-            verificationWeight: optionalNumber(explanation.verificationWeight),
-            displayDelta:
-              optionalNumber(explanation.displayDelta) ?? after - before,
+    deltaRows
+      .filter((event) => event.personId === personId)
+      .map((event) => {
+        const before =
+          typeof event.before.display === "number" ? event.before.display : 0;
+        const after =
+          typeof event.after.display === "number"
+            ? event.after.display
+            : before;
+        const explanation =
+          typeof event.explanation === "object" && event.explanation !== null
+            ? event.explanation
+            : {};
+        const optionalNumber = (value: unknown) =>
+          typeof value === "number" && Number.isFinite(value)
+            ? value
+            : undefined;
+        return [
+          event.matchId,
+          {
+            before,
+            after,
+            delta: after - before,
+            explanation: {
+              expectedWinProbability: optionalNumber(
+                explanation.expectedWinProbability,
+              ),
+              actualResult: optionalNumber(explanation.actualResult),
+              pointShare: optionalNumber(explanation.pointShare),
+              marginMultiplier: optionalNumber(explanation.marginMultiplier),
+              responsibilityWeight: optionalNumber(
+                explanation.responsibilityWeight,
+              ),
+              verificationWeight: optionalNumber(
+                explanation.verificationWeight,
+              ),
+              displayDelta:
+                optionalNumber(explanation.displayDelta) ?? after - before,
+            },
           },
-        },
-      ] as const;
+        ] as const;
+      }),
+  );
+  const ratingBeforeByMatchPerson = new Map(
+    deltaRows.flatMap((event) => {
+      const display =
+        typeof event.before.display === "number"
+          ? event.before.display
+          : undefined;
+      return display === undefined
+        ? []
+        : [[`${event.matchId}:${event.personId}`, display] as const];
     }),
+  );
+  const importedContextByMatch = new Map(
+    importedContextRows.flatMap((row) =>
+      row.canonicalMatchId ? [[row.canonicalMatchId, row] as const] : [],
+    ),
+  );
+  const divisionContextById = new Map(
+    divisionContextRows.map((row) => [row.divisionId, row] as const),
   );
   return matchRows.flatMap((match): MatchSummary[] => {
     if (!match.teamAId || !match.teamBId) return [];
@@ -439,28 +497,61 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
         return person ? [person] : [];
       });
     if (teamAPlayers.length === 0 || teamBPlayers.length === 0) return [];
+    const format =
+      typeof match.format === "object" && match.format !== null
+        ? match.format
+        : {};
     const events = rallyRows
       .filter((event) => event.matchId === match.id)
       .map((event) => event.payload as unknown as ScoreEvent);
-    let score;
-    try {
-      score = foldScore(events, storedMatchFormat(match.format));
-    } catch {
-      return [];
+    const storedSets = Array.isArray(format.sets)
+      ? format.sets.flatMap((value) => {
+          if (!value || typeof value !== "object") return [];
+          const set = value as { a?: unknown; b?: unknown };
+          return Number.isSafeInteger(set.a) &&
+            Number.isSafeInteger(set.b) &&
+            Number(set.a) >= 0 &&
+            Number(set.b) >= 0 &&
+            set.a !== set.b
+            ? [{ a: Number(set.a), b: Number(set.b) }]
+            : [];
+        })
+      : [];
+    let scoredSets: readonly { readonly a: number; readonly b: number }[] = [];
+    let foldedWinner: "A" | "B" | undefined;
+    if (events.length > 0) {
+      try {
+        const score = foldScore(events, storedMatchFormat(match.format));
+        scoredSets = score.sets
+          .filter((set) => set.winner)
+          .map((set) => ({ a: set.a, b: set.b }));
+        foldedWinner = score.winner;
+      } catch {
+        if (storedSets.length === 0) return [];
+      }
     }
+    if (scoredSets.length === 0) scoredSets = storedSets;
+    if (scoredSets.length === 0) return [];
+    const setWinsA = scoredSets.filter((set) => set.a > set.b).length;
+    const setWinsB = scoredSets.filter((set) => set.b > set.a).length;
     const winner =
       match.winnerTeamId === match.teamAId
         ? "A"
         : match.winnerTeamId === match.teamBId
           ? "B"
-          : score.winner;
+          : (foldedWinner ??
+            (setWinsA > setWinsB
+              ? "A"
+              : setWinsB > setWinsA
+                ? "B"
+                : undefined));
     if (!winner) return [];
     const confirmation = confirmationByMatch.get(match.id);
     const dispute = disputeByMatch.get(match.id);
-    const format =
-      typeof match.format === "object" && match.format !== null
-        ? match.format
-        : {};
+    const importedContext = importedContextByMatch.get(match.id);
+    const divisionContext = match.divisionId
+      ? divisionContextById.get(match.divisionId)
+      : undefined;
     const matchType =
       "matchType" in format &&
       (format.matchType === "competitive" || format.matchType === "friendly")
@@ -512,6 +603,37 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
                 : undefined,
           }
         : undefined;
+    const bestOf =
+      "bestOf" in format &&
+      typeof format.bestOf === "number" &&
+      Number.isInteger(format.bestOf)
+        ? format.bestOf
+        : scoredSets.length;
+    const teamRating = (players: readonly PersonSummary[]) => {
+      const values = players.flatMap((player) => {
+        const rating = ratingBeforeByMatchPerson.get(
+          `${match.id}:${player.id}`,
+        );
+        return rating === undefined ? [] : [rating];
+      });
+      return values.length === players.length
+        ? values.reduce((sum, value) => sum + value, 0) / values.length
+        : undefined;
+    };
+    const teamARating = teamRating(teamAPlayers);
+    const teamBRating = teamRating(teamBPlayers);
+    const teamAChance =
+      teamARating !== undefined && teamBRating !== undefined
+        ? Math.round(
+            (100 / (1 + 10 ** ((teamBRating - teamARating) / 1.5))) * 10,
+          ) / 10
+        : undefined;
+    const favorite =
+      teamAChance === undefined || teamAChance === 50
+        ? "even"
+        : teamAChance > 50
+          ? "A"
+          : "B";
     const rating = ratingByMatch.get(match.id);
     const origin =
       "importedMatchId" in format || "source" in format
@@ -543,18 +665,57 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
         venueName:
           (match.venueId && venueById.get(match.venueId)) ??
           storedLocation?.label ??
+          importedContext?.location ??
+          divisionContext?.venueName ??
+          ([divisionContext?.venueLocality, divisionContext?.venueRegion]
+            .filter(Boolean)
+            .join(", ") ||
+            undefined) ??
           "Location not recorded",
+        ...(importedContext?.title || divisionContext?.sessionTitle
+          ? {
+              eventName:
+                importedContext?.title ?? divisionContext?.sessionTitle,
+            }
+          : {}),
+        ...(divisionContext?.sessionSlug
+          ? { eventSlug: divisionContext.sessionSlug }
+          : {}),
+        ...(importedContext?.roundLabel || divisionContext?.divisionName
+          ? {
+              roundLabel:
+                importedContext?.roundLabel ?? divisionContext?.divisionName,
+            }
+          : {}),
+        ...(importedContext?.sourceUrl
+          ? { sourceUrl: importedContext.sourceUrl }
+          : {}),
+        formatSummary: `Beach ${teamSize === 2 ? "doubles" : `${teamSize}-player teams`} · best of ${bestOf}`,
         teamA: teamAPlayers,
         teamB: teamBPlayers,
-        score: score.sets
-          .filter((set) => set.winner)
-          .map((set) => [set.a, set.b] as const),
+        score: scoredSets.map((set) => [set.a, set.b] as const),
         winner,
         ratingDelta: rating?.delta ?? 0,
         ratingBefore: rating?.before,
         ratingAfter: rating?.after,
         ratingExplanation: rating?.explanation,
         location: storedLocation,
+        ...(teamAChance !== undefined
+          ? {
+              prediction: {
+                teamA: teamAChance,
+                teamB: Math.round((100 - teamAChance) * 10) / 10,
+                favorite,
+                outcome:
+                  favorite === "even"
+                    ? ("even" as const)
+                    : winner === favorite
+                      ? ("predicted" as const)
+                      : ("upset" as const),
+                basis: "Sand Rating" as const,
+              },
+            }
+          : {}),
         origin,
         ratingEligibility: match.ratingEligible ? "eligible" : "held",
         matchType,
