@@ -24,14 +24,14 @@ export default async function ThemeKitPage() {
       <main className="hq-page operator-create-page theme-kit-page">
         <header className="hq-page-heading operator-create-page__heading">
           <div>
-            <Link href="/settings">
+            <Link href="/settings?section=brand">
               <ArrowLeft aria-hidden size={16} /> Back to settings
             </Link>
-            <span className="hq-eyebrow">Brand system + AI context</span>
-            <h1>Theme Kit.</h1>
+            <span className="hq-eyebrow">Brand & storefront</span>
+            <h1>Theme Kit</h1>
             <p>
-              Shape every player-facing surface and give Duna AI approved
-              knowledge about how your organization works.
+              Give every player-facing surface one clear identity, then teach
+              Duna AI only the business knowledge you approve.
             </p>
           </div>
         </header>

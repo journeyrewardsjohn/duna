@@ -143,6 +143,7 @@ import {
   setCatalogItemStatus,
   updateCatalogItem,
   updateOrganizationCommerceSettings,
+  updateOrganizationProfileSettings,
   updateOrganizationTheme,
 } from "./catalog-service";
 import {
@@ -3633,6 +3634,37 @@ const operatorRouter = router({
             return await updateOrganizationCommerceSettings({
               actor: ctx.actor!,
               ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  updateOrganizationProfile: organizationProcedure("members:write")
+    .input(
+      z.object({
+        name: z.string().trim().min(2).max(120),
+        timezone: z.string().trim().min(3).max(64),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.updateOrganizationProfile",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateOrganizationProfileSettings({
+              actor: ctx.actor!,
+              name: input.name,
+              timezone: input.timezone,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,

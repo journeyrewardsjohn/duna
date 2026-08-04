@@ -2,6 +2,7 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
 import { getServerCaller } from "@/lib/api";
 import {
+  assertBrandMediaPath,
   assertCourtMediaPath,
   assertEventMediaPath,
   assertVenueMediaPath,
@@ -13,7 +14,7 @@ interface EventMediaClientPayload {
   readonly fileName: string;
   readonly contentType: string;
   readonly size: number;
-  readonly purpose?: "court" | "event" | "venue";
+  readonly purpose?: "brand" | "court" | "event" | "venue";
 }
 
 function parseClientPayload(value: string | null): EventMediaClientPayload {
@@ -33,7 +34,9 @@ function parseClientPayload(value: string | null): EventMediaClientPayload {
     contentType: parsed.contentType,
     size: parsed.size,
     purpose:
-      parsed.purpose === "venue"
+      parsed.purpose === "brand"
+        ? "brand"
+        : parsed.purpose === "venue"
         ? "venue"
         : parsed.purpose === "court"
           ? "court"
@@ -55,7 +58,16 @@ export async function POST(request: Request) {
           throw new Error("Event media must stay inside your organization.");
         }
         const media = validateEventMediaInput(payload);
-        if (payload.purpose === "venue" || payload.purpose === "court") {
+        if (payload.purpose === "brand") {
+          assertBrandMediaPath(
+            pathname,
+            context.organizationId,
+            media.extension,
+          );
+        } else if (
+          payload.purpose === "venue" ||
+          payload.purpose === "court"
+        ) {
           if (media.kind !== "image") {
             throw new Error("Facility media must be an image.");
           }
