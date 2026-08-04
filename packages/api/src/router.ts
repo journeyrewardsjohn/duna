@@ -70,6 +70,7 @@ import {
   playerSettingsSchema,
   playerWalletSchema,
   pricingSchema,
+  publicCoachSchema,
   publicOrganizationStorefrontSchema,
   registrationResultSchema,
   scoreStateSchema,
@@ -121,15 +122,26 @@ import {
   updatePickup,
 } from "./pickup-service";
 import {
+  addOrganizationBrandKnowledgeSource,
+  addCalendarEquipment,
+  addCalendarParticipant,
+  archiveOrganizationBrandKnowledgeSource,
+  cancelCalendarSession,
   confirmCalendarChange,
+  createCalendarBlock,
   createCatalogItem,
   createInventoryStock,
   issueOrganizationCredits,
   loadPlayerOrganizationWallets,
+  loadPublicCoach,
+  loadPublicCoaches,
   loadPublicOrganizationStorefront,
   proposeCalendarChange,
   refundOrganizationOrder,
+  removeCalendarEquipment,
+  removeCalendarParticipant,
   setCatalogItemStatus,
+  updateCatalogItem,
   updateOrganizationCommerceSettings,
   updateOrganizationTheme,
 } from "./catalog-service";
@@ -156,6 +168,7 @@ import {
 } from "./idempotency";
 import {
   addDependent,
+  checkOwnHandleAvailability,
   IdentityError,
   loadGuardianReviewQueue,
   recordOwnBirthDate,
@@ -245,6 +258,7 @@ import {
   refreshFivbEventIndex,
   refreshWorldRankings,
   rejectImportedMatch,
+  requestProfileClaim,
   reviewPlayerSourceConnection,
   SandDataServiceError,
   searchDunaPlayers,
@@ -830,7 +844,9 @@ function throwDomainError(error: unknown): never {
     const code =
       error.code === "MATCH_NOT_FOUND" || error.code === "PLAYER_NOT_FOUND"
         ? "NOT_FOUND"
-        : error.code === "MAPPING_CONFLICT" || error.code === "MERGE_CONFLICT"
+        : error.code === "MAPPING_CONFLICT" ||
+            error.code === "MERGE_CONFLICT" ||
+            error.code === "CLAIM_CONFLICT"
           ? "CONFLICT"
           : error.code === "SUPER_ADMIN_REQUIRED"
             ? "FORBIDDEN"
@@ -1068,6 +1084,33 @@ const publicRouter = router({
       const storefront = await loadPublicOrganizationStorefront(input.slug);
       if (!storefront) throw new TRPCError({ code: "NOT_FOUND" });
       return storefront;
+    }),
+  coaches: publicProcedure
+    .input(
+      z
+        .object({
+          organizationSlug: z.string().trim().min(1).max(64).optional(),
+        })
+        .optional(),
+    )
+    .output(z.array(publicCoachSchema).readonly())
+    .query(({ input }) =>
+      loadPublicCoaches({
+        organizationSlug: input?.organizationSlug,
+      }),
+    ),
+  coach: publicProcedure
+    .input(
+      z.object({
+        handle: z.string().trim().min(2).max(48),
+        organizationSlug: z.string().trim().min(1).max(64).optional(),
+      }),
+    )
+    .output(publicCoachSchema)
+    .query(async ({ input }) => {
+      const coach = await loadPublicCoach(input.handle, input.organizationSlug);
+      if (!coach) throw new TRPCError({ code: "NOT_FOUND" });
+      return coach;
     }),
 });
 
@@ -1451,7 +1494,18 @@ const playerRouter = router({
           teamAIds: z.array(z.string().uuid()).min(1).max(6),
           teamBIds: z.array(z.string().uuid()).min(1).max(6),
           venueId: z.string().uuid().optional(),
+          location: z
+            .object({
+              label: z.string().trim().min(1).max(500),
+              googlePlaceId: z.string().trim().min(1).max(255).optional(),
+              name: z.string().trim().min(1).max(255).optional(),
+              address: z.string().trim().min(1).max(500).optional(),
+              latitude: z.number().min(-90).max(90).optional(),
+              longitude: z.number().min(-180).max(180).optional(),
+            })
+            .optional(),
           playedAt: z.iso.datetime(),
+          setsToWin: z.union([z.literal(1), z.literal(2), z.literal(3)]),
           setScores: z
             .array(
               z.object({
@@ -1460,7 +1514,7 @@ const playerRouter = router({
               }),
             )
             .min(1)
-            .max(3),
+            .max(5),
           matchType: z.enum(["competitive", "friendly"]),
           allPlayersAgreedToRecord: z.literal(true),
           deviceId: z.string().trim().min(8).max(128),
@@ -1485,7 +1539,9 @@ const playerRouter = router({
               teamAIds: input.teamAIds,
               teamBIds: input.teamBIds,
               venueId: input.venueId,
+              location: input.location,
               playedAt: new Date(input.playedAt),
+              setsToWin: input.setsToWin,
               setScores: input.setScores,
               matchType: input.matchType,
               allPlayersAgreedToRecord: input.allPlayersAgreedToRecord,
@@ -1957,6 +2013,51 @@ const playerRouter = router({
         },
       }),
     ),
+  requestProfileClaim: protectedProcedure
+    .use(requireScope("profile:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "player-profile-claim",
+        capacity: 4,
+        refillPerMinute: 0.5,
+      }),
+    )
+    .input(
+      z.object({
+        subjectPersonId: z.string().uuid().optional(),
+        targetHandle: z.string().trim().min(2).max(48),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        jobId: z.string().uuid(),
+        status: z.literal("review-required"),
+        targetPersonId: z.string().uuid(),
+        targetHandle: z.string(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.requestProfileClaim",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await requestProfileClaim({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   reviewPlayerSource: protectedProcedure
     .use(requireScope("profile:write"))
     .use(
@@ -2000,6 +2101,47 @@ const playerRouter = router({
         },
       }),
     ),
+  handleAvailability: protectedProcedure
+    .use(requireScope("profile:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "handle-availability",
+        capacity: 30,
+        refillPerMinute: 15,
+      }),
+    )
+    .input(
+      z.object({
+        handle: z
+          .string()
+          .trim()
+          .toLowerCase()
+          .min(3)
+          .max(48)
+          .regex(
+            /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+            "Handle can use lowercase letters, numbers, and single hyphens.",
+          ),
+      }),
+    )
+    .output(
+      z.object({
+        handle: z.string(),
+        available: z.boolean(),
+        isCurrent: z.boolean(),
+        message: z.string(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        return await checkOwnHandleAvailability({
+          actor: ctx.actor!,
+          handle: input.handle,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   updateProfile: protectedProcedure
     .use(requireScope("profile:write"))
     .use(
@@ -3389,6 +3531,41 @@ const operatorRouter = router({
         },
       }),
     ),
+  updateCatalogItem: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        catalogItemId: z.string().uuid(),
+        title: z.string().trim().min(2).max(140),
+        shortSummary: z.string().trim().max(240).optional(),
+        description: z.string().trim().max(20_000).optional(),
+        visibility: z.enum(["public", "members", "private"]),
+        configuration: z.record(z.string(), z.unknown()).default({}),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.updateCatalogItem",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateCatalogItem({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   setCatalogItemStatus: organizationProcedure("payments:write")
     .input(
       z.object({
@@ -3465,18 +3642,25 @@ const operatorRouter = router({
   updateTheme: organizationProcedure("sessions:write")
     .input(
       z.object({
+        brandDisplayName: z.string().trim().max(120).optional(),
+        membershipProgramName: z.string().trim().max(120).optional(),
         logoUrl: z.url().optional(),
+        markUrl: z.url().optional(),
+        logoLightUrl: z.url().optional(),
+        logoDarkUrl: z.url().optional(),
         heroMediaType: z.enum(["image", "video"]).optional(),
         heroMediaUrl: z.url().optional(),
         heroPosterUrl: z.url().optional(),
         tagline: z.string().trim().max(180).optional(),
         profileSummary: z.string().trim().max(2_000).optional(),
+        brandVoice: z.string().trim().max(4_000).optional(),
         palette: z.object({
           primary: z.string().regex(/^#[0-9a-f]{6}$/i),
           accent: z.string().regex(/^#[0-9a-f]{6}$/i),
           sand: z.string().regex(/^#[0-9a-f]{6}$/i),
           ink: z.string().regex(/^#[0-9a-f]{6}$/i),
           canvas: z.string().regex(/^#[0-9a-f]{6}$/i),
+          success: z.string().regex(/^#[0-9a-f]{6}$/i),
         }),
         typography: z.object({
           heading: z.enum([
@@ -3487,6 +3671,8 @@ const operatorRouter = router({
           ]),
           body: z.enum(["Archivo", "Inter", "DM Sans", "Source Sans 3"]),
         }),
+        fontLicenseConfirmed: z.boolean(),
+        safeFallbackFont: z.string().trim().min(2).max(240),
         cardStyle: z.enum(["soft", "crisp", "borderless"]),
         profileLayout: z.enum(["editorial", "immersive", "compact"]),
         publish: z.boolean(),
@@ -3506,6 +3692,73 @@ const operatorRouter = router({
             return await updateOrganizationTheme({
               actor: ctx.actor!,
               ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  addBrandKnowledgeSource: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        scope: z.enum(["brand", "organization", "venue", "service", "product"]),
+        kind: z.enum(["note", "link", "document"]),
+        title: z.string().trim().min(2).max(160),
+        sourceUrl: z.url().optional(),
+        storageUrl: z.url().optional(),
+        mimeType: z.string().trim().max(120).optional(),
+        originalFilename: z.string().trim().max(500).optional(),
+        contentText: z.string().trim().min(20).max(100_000),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.addBrandKnowledgeSource",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await addOrganizationBrandKnowledgeSource({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  archiveBrandKnowledgeSource: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        sourceId: z.string().uuid(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.archiveBrandKnowledgeSource",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await archiveOrganizationBrandKnowledgeSource({
+              actor: ctx.actor!,
+              sourceId: input.sourceId,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,
@@ -3612,6 +3865,207 @@ const operatorRouter = router({
               actor: ctx.actor!,
               proposalId: input.proposalId,
               confirmed: input.confirmed,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  addCalendarParticipant: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        personId: z.string().uuid(),
+        reason: z.string().trim().min(3).max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.addCalendarParticipant",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await addCalendarParticipant({
+              actor: ctx.actor!,
+              sessionId: input.sessionId,
+              personId: input.personId,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  removeCalendarParticipant: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        registrationId: z.string().uuid(),
+        reason: z.string().trim().min(3).max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.removeCalendarParticipant",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await removeCalendarParticipant({
+              actor: ctx.actor!,
+              registrationId: input.registrationId,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  cancelCalendarSession: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.cancelCalendarSession",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await cancelCalendarSession({
+              actor: ctx.actor!,
+              sessionId: input.sessionId,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createCalendarBlock: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        resourceType: z.enum(["court", "coach"]),
+        resourceId: z.string().uuid(),
+        startsAt: z.iso.datetime(),
+        endsAt: z.iso.datetime(),
+        mode: z.enum(["blocked", "maintenance"]),
+        reason: z.string().trim().min(3).max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createCalendarBlock",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createCalendarBlock({
+              actor: ctx.actor!,
+              resourceType: input.resourceType,
+              resourceId: input.resourceId,
+              startsAt: new Date(input.startsAt),
+              endsAt: new Date(input.endsAt),
+              mode: input.mode,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  addCalendarEquipment: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        inventoryStockItemId: z.string().uuid(),
+        quantity: z.number().int().positive().max(1_000),
+        reason: z.string().trim().min(3).max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.addCalendarEquipment",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await addCalendarEquipment({
+              actor: ctx.actor!,
+              sessionId: input.sessionId,
+              inventoryStockItemId: input.inventoryStockItemId,
+              quantity: input.quantity,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  removeCalendarEquipment: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        reservationId: z.string().uuid(),
+        reason: z.string().trim().min(3).max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.removeCalendarEquipment",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await removeCalendarEquipment({
+              actor: ctx.actor!,
+              reservationId: input.reservationId,
+              reason: input.reason,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,
@@ -3754,11 +4208,14 @@ const operatorRouter = router({
           role: z.enum(["coach", "manager", "front-desk", "accountant"]),
           workerClassification: z.enum(["1099-contractor", "w2-employee"]),
           preferredChannel: z.enum(["email", "sms"]).optional(),
+          deliveryMode: z.enum(["send", "link-only"]).default("send"),
           confirmed: z.literal(true),
           idempotencyKey: z.string().uuid(),
         })
         .refine(
-          (value) => Boolean(value.invitedEmail || value.invitedPhoneE164),
+          (value) =>
+            value.deliveryMode === "link-only" ||
+            Boolean(value.invitedEmail || value.invitedPhoneE164),
           "Provide an email address or mobile number.",
         ),
     )
@@ -3796,6 +4253,7 @@ const operatorRouter = router({
     .input(
       z.object({
         personId: z.string().uuid(),
+        displayName: z.string().trim().min(2).max(80),
         role: z.enum(["coach", "manager", "front-desk", "accountant"]),
         workerClassification: z.enum(["1099-contractor", "w2-employee"]),
         compensationModel: z.enum([

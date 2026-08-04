@@ -166,6 +166,22 @@ export async function updateProfileAction(input: {
   }
 }
 
+export async function checkHandleAvailabilityAction(handle: string) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.handleAvailability({ handle });
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Duna could not check that handle.",
+    };
+  }
+}
+
 export async function recordBirthDateAction(birthDate: string) {
   try {
     const caller = await getServerCaller();
@@ -340,6 +356,31 @@ export async function connectPlayerSourceAction(input: {
         error instanceof Error
           ? error.message
           : "The match-history import could not be queued.",
+    };
+  }
+}
+
+export async function requestProfileClaimAction(input: {
+  subjectPersonId?: string;
+  targetHandle: string;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.requestProfileClaim({
+      ...input,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/app/onboarding");
+    revalidatePath("/app/settings");
+    revalidatePath(`/players/${result.targetHandle}`);
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The profile claim could not be sent for review.",
     };
   }
 }

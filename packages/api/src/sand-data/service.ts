@@ -72,6 +72,7 @@ export class SandDataServiceError extends Error {
       | "PLAYER_NOT_FOUND"
       | "MAPPING_CONFLICT"
       | "MERGE_CONFLICT"
+      | "CLAIM_CONFLICT"
       | "INVALID_PROFILE_URL"
       | "PROFESSIONAL_REQUIRED"
       | "SUPER_ADMIN_REQUIRED",
@@ -2395,12 +2396,17 @@ export async function loadPublicPlayerPerformance(personId: string) {
         explanation: ratingEvents.explanation,
         verificationWeightBps: ratingEvents.verificationWeightBps,
         createdAt: ratingEvents.createdAt,
+        completedAt: matches.completedAt,
+        startedAt: matches.startedAt,
+        scheduledAt: matches.scheduledAt,
+        matchCreatedAt: matches.createdAt,
         matchTitle: importedMatches.title,
         sourceUrl: importedMatches.sourceUrl,
         sets: importedMatches.sets,
         participants: importedMatches.participants,
       })
       .from(ratingEvents)
+      .leftJoin(matches, eq(matches.id, ratingEvents.matchId))
       .leftJoin(
         importedMatches,
         eq(importedMatches.canonicalMatchId, ratingEvents.matchId),
@@ -2433,6 +2439,34 @@ export async function loadPublicPlayerPerformance(personId: string) {
       .orderBy(desc(worldRankings.rankingDate), asc(worldRankings.rank))
       .limit(1),
   ]);
+  const participantPersonIds = [
+    ...new Set(
+      eventRows.flatMap((event) =>
+        (event.participants ?? []).flatMap((participant) =>
+          participant.personId ? [participant.personId] : [],
+        ),
+      ),
+    ),
+  ];
+  const participantProfiles =
+    participantPersonIds.length > 0
+      ? await database
+          .select({
+            id: people.id,
+            handle: people.handle,
+            displayName: people.displayName,
+            avatarUrl: people.avatarUrl,
+          })
+          .from(people)
+          .where(
+            and(
+              inArray(people.id, participantPersonIds),
+              eq(people.status, "active"),
+              eq(people.profileVisibility, "public"),
+              eq(people.isMinor, false),
+            ),
+          )
+      : [];
   const world = latestRanking[0];
   return {
     history: eventRows.map((event) => ({
@@ -2459,7 +2493,13 @@ export async function loadPublicPlayerPerformance(personId: string) {
           ? event.explanation.pointShare
           : 0,
       verificationWeightBps: event.verificationWeightBps,
-      occurredAt: event.createdAt.toISOString(),
+      occurredAt: (
+        event.completedAt ??
+        event.startedAt ??
+        event.scheduledAt ??
+        event.matchCreatedAt ??
+        event.createdAt
+      ).toISOString(),
       matchTitle: event.matchTitle ?? "Duna match",
       sourceUrl: event.sourceUrl ?? undefined,
       sets: event.sets ?? [],
@@ -2472,6 +2512,10 @@ export async function loadPublicPlayerPerformance(personId: string) {
       externalRatingConfidence: source.externalRatingConfidence ?? undefined,
       externalMatchCount: source.externalMatchCount ?? undefined,
       lastImportedAt: source.lastImportedAt?.toISOString(),
+    })),
+    participantProfiles: participantProfiles.map((profile) => ({
+      ...profile,
+      avatarUrl: profile.avatarUrl ?? undefined,
     })),
     worldRanking: world
       ? {
@@ -2772,6 +2816,192 @@ export async function queuePlayerSourceConnection(input: {
     source: input.source,
     profileUrl: parsed.profileUrl,
     apiProfileUrl: parsed.apiProfileUrl,
+  };
+}
+
+function personNameVariants(
+  person: Pick<
+    typeof people.$inferSelect,
+    | "displayName"
+    | "givenName"
+    | "familyName"
+    | "legalGivenName"
+    | "legalMiddleName"
+    | "legalFamilyName"
+  >,
+): Set<string> {
+  const variants = [
+    person.displayName,
+    [person.givenName, person.familyName].filter(Boolean).join(" "),
+    [person.legalGivenName, person.legalFamilyName].filter(Boolean).join(" "),
+    [person.legalGivenName, person.legalMiddleName, person.legalFamilyName]
+      .filter(Boolean)
+      .join(" "),
+  ];
+  return new Set(
+    variants
+      .map((value) => normalizePersonName(value))
+      .filter((value) => value.length > 0),
+  );
+}
+
+export async function requestProfileClaim(input: {
+  readonly actor: ApiActor;
+  readonly subjectPersonId?: string;
+  readonly targetHandle: string;
+  readonly idempotencyKey: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}) {
+  requireDatabase();
+  const database = getDatabase();
+  const subject = await assertProfileSubjectAuthority({
+    actor: input.actor,
+    subjectPersonId: input.subjectPersonId,
+  });
+  const target = await database.query.people.findFirst({
+    where: and(
+      eq(people.handle, input.targetHandle),
+      eq(people.status, "active"),
+      eq(people.isMinor, false),
+    ),
+  });
+  if (!target) {
+    throw new SandDataServiceError(
+      "PLAYER_NOT_FOUND",
+      "That public player profile is no longer available.",
+    );
+  }
+  if (target.id === subject.id) {
+    throw new SandDataServiceError(
+      "CLAIM_CONFLICT",
+      "This profile is already connected to your account.",
+    );
+  }
+  if (target.profileClaimStatus === "claimed") {
+    throw new SandDataServiceError(
+      "CLAIM_CONFLICT",
+      "This player profile already has an owner. Use account recovery or ask Duna support to review it.",
+    );
+  }
+  if (target.profileClaimStatus === "merged") {
+    throw new SandDataServiceError(
+      "CLAIM_CONFLICT",
+      "This player profile has already been consolidated into another profile.",
+    );
+  }
+
+  const targetSources = await database
+    .select({
+      normalizedName: externalPlayerProfiles.normalizedName,
+      displayName: externalPlayerProfiles.displayName,
+      birthDate: externalPlayerProfiles.birthDate,
+    })
+    .from(externalPlayerProfiles)
+    .where(eq(externalPlayerProfiles.personId, target.id));
+  const subjectNames = personNameVariants(subject);
+  const targetNames = personNameVariants(target);
+  for (const source of targetSources) {
+    const normalized =
+      source.normalizedName || normalizePersonName(source.displayName);
+    if (normalized) targetNames.add(normalized);
+  }
+  const nameMatched = [...subjectNames].some((name) => targetNames.has(name));
+  const targetBirthDates = new Set(
+    [
+      target.birthDate,
+      ...targetSources.map((source) => source.birthDate),
+    ].filter((value): value is string => Boolean(value)),
+  );
+  const birthDateMatched =
+    Boolean(subject.birthDate) && targetBirthDates.has(subject.birthDate!);
+  if (!nameMatched || !birthDateMatched) {
+    throw new SandDataServiceError(
+      "CLAIM_CONFLICT",
+      "We could not verify an exact legal-name and birth-date match. Check your player details or send this profile to Duna support for a manual review.",
+    );
+  }
+
+  const existingRequest = await database.query.workflowJobs.findFirst({
+    where: and(
+      eq(workflowJobs.kind, "sand.profile-claim-review"),
+      inArray(workflowJobs.status, ["queued", "review-required", "running"]),
+      sql`${workflowJobs.payload} ->> 'subjectPersonId' = ${subject.id}`,
+      sql`${workflowJobs.payload} ->> 'targetPersonId' = ${target.id}`,
+    ),
+  });
+  if (existingRequest) {
+    return {
+      jobId: existingRequest.id,
+      status: "review-required" as const,
+      targetPersonId: target.id,
+      targetHandle: target.handle,
+    };
+  }
+
+  const evidenceHash = stableHash({
+    subjectPersonId: subject.id,
+    targetPersonId: target.id,
+    nameMatched,
+    birthDateMatched,
+  });
+  const jobId = crypto.randomUUID();
+  await database.batch([
+    database.insert(workflowJobs).values({
+      id: jobId,
+      kind: "sand.profile-claim-review",
+      idempotencyKey: `sand-profile-claim:${subject.id}:${target.id}:${input.idempotencyKey}`,
+      personId: subject.id,
+      payload: {
+        requestedByPersonId: input.actor.personId,
+        subjectPersonId: subject.id,
+        targetPersonId: target.id,
+        targetHandle: target.handle,
+        evidence: {
+          nameMatched,
+          birthDateMatched,
+          evidenceHash,
+        },
+        requestId: input.requestId,
+      },
+      status: "review-required",
+      maximumAttempts: 1,
+      traceId: input.requestId,
+      createdAt: input.now,
+      updatedAt: input.now,
+    }),
+    database
+      .update(people)
+      .set({
+        profileClaimStatus: "claim-pending",
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(people.id, target.id),
+          eq(people.profileClaimStatus, "unclaimed"),
+        ),
+      ),
+    database.insert(auditLog).values({
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "sand-data.profile-claim.requested",
+      entityType: "person",
+      entityId: target.id,
+      afterHash: evidenceHash,
+      reason:
+        "A signed-in player requested an identity-reviewed claim after exact legal-name and birth-date matching.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return {
+    jobId,
+    status: "review-required" as const,
+    targetPersonId: target.id,
+    targetHandle: target.handle,
   };
 }
 

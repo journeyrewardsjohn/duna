@@ -33,6 +33,8 @@ apps/*/credentials/
 .idea/
 .vscode/
 *.log
+.worktrees/
+.codex/worktrees/
 
 # generated brand artifacts that have not been approved
 artifacts/

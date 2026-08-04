@@ -151,7 +151,7 @@ export default async function ProfilePage() {
           </div>
           <div className="match-list">
             {matches.slice(0, 2).map((match) => (
-              <MatchCard key={match.id} match={match} />
+              <MatchCard key={match.id} match={match} viewerId={player.id} />
             ))}
             {matches.length === 0 && (
               <article className="empty-state">

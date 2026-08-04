@@ -253,6 +253,8 @@ export const eventSummarySchema = z.object({
   slug: z.string(),
   title: z.string(),
   kind: eventKindSchema,
+  organizationId: z.string().uuid().optional(),
+  organizationSlug: z.string().optional(),
   organizationName: z.string(),
   venueName: z.string(),
   shortSummary: z.string().optional(),
@@ -318,6 +320,29 @@ export const matchSummarySchema = z.object({
     .readonly(),
   winner: z.enum(["A", "B"]),
   ratingDelta: z.number(),
+  ratingBefore: z.number().optional(),
+  ratingAfter: z.number().optional(),
+  ratingExplanation: z
+    .object({
+      expectedWinProbability: z.number().optional(),
+      actualResult: z.number().optional(),
+      pointShare: z.number().optional(),
+      marginMultiplier: z.number().optional(),
+      responsibilityWeight: z.number().optional(),
+      verificationWeight: z.number().optional(),
+      displayDelta: z.number().optional(),
+    })
+    .optional(),
+  location: z
+    .object({
+      label: z.string(),
+      googlePlaceId: z.string().optional(),
+      name: z.string().optional(),
+      address: z.string().optional(),
+      latitude: z.number().optional(),
+      longitude: z.number().optional(),
+    })
+    .optional(),
   origin: z.enum(["imported", "self-reported", "live-scored"]).optional(),
   ratingEligibility: z.enum(["eligible", "held"]).optional(),
   matchType: z.enum(["competitive", "friendly"]).optional(),
@@ -820,9 +845,56 @@ export const operatorSessionSchema = z.object({
   timezone: z.string(),
   capacity: z.number().int().positive(),
   venueId: z.string().uuid().optional(),
+  venueName: z.string().optional(),
   courtId: z.string().uuid().optional(),
+  courtName: z.string().optional(),
+  shortSummary: z.string().optional(),
+  description: z.string().optional(),
+  media: z.array(z.record(z.string(), z.unknown())).readonly(),
+  registrationClosesAt: z.iso.datetime().optional(),
   priceMinor: z.number().int().nonnegative(),
   currency: currencySchema,
+  analytics: z.object({
+    impressions: z.number().int().nonnegative(),
+    uniqueViewers: z.number().int().nonnegative(),
+    registrations: z.number().int().nonnegative(),
+    ticketHolders: z.number().int().nonnegative(),
+    conversionRateBps: z.number().int().min(0).max(10_000),
+  }),
+});
+
+export const operatorEventRegistrationSchema = z.object({
+  id: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  personId: z.string().uuid(),
+  displayName: z.string(),
+  avatarUrl: z.string().url().optional(),
+  email: z.string().email().optional(),
+  phoneE164: z.string().optional(),
+  status: z.enum([
+    "pending",
+    "confirmed",
+    "waitlisted",
+    "cancelled",
+    "refunded",
+    "checked-in",
+  ]),
+  orderId: z.string().uuid().optional(),
+  ticketCount: z.number().int().nonnegative(),
+  checkedInAt: z.iso.datetime().optional(),
+  registeredAt: z.iso.datetime(),
+});
+
+export const operatorEventAudienceSchema = z.object({
+  sessionId: z.string().uuid(),
+  kind: z.enum([
+    "non-registered-members",
+    "registered-attendees",
+    "ticket-holders",
+  ]),
+  label: z.string(),
+  description: z.string(),
+  size: z.number().int().nonnegative(),
 });
 
 export const operatorMessageRecipientSchema = z.object({
@@ -1068,9 +1140,13 @@ export const operatorStaffProfileSchema = z.object({
   id: z.string().uuid(),
   personId: z.string().uuid(),
   displayName: z.string(),
+  handle: z.string(),
   avatarUrl: z.string().optional(),
   email: z.string().email().optional(),
   phoneE164: z.string().optional(),
+  homeMarket: z.string().optional(),
+  bio: z.string().optional(),
+  profileVisibility: z.enum(["public", "members", "private"]),
   role: z.enum(["coach", "manager", "front-desk", "accountant"]),
   workerClassification: z.enum(["1099-contractor", "w2-employee"]),
   compensationModel: z.enum([
@@ -1110,19 +1186,93 @@ export const operatorStaffInvitationSchema = z.object({
   status: z.enum(["pending", "claimed", "expired", "cancelled"]),
   deliveryChannel: z.enum(["email", "sms"]).optional(),
   deliveryStatus: z.enum(["not-configured", "queued", "sent", "failed"]),
+  inviteUrl: z.string().url(),
   expiresAt: z.iso.datetime(),
   createdAt: z.iso.datetime(),
 });
 
 export const operatorMarketingFlowSchema = z.object({
   id: z.string().uuid(),
+  sessionId: z.string().uuid().optional(),
   name: z.string(),
   description: z.string().optional(),
   segment: z.record(z.string(), z.unknown()),
   trigger: z.record(z.string(), z.unknown()),
   action: z.record(z.string(), z.unknown()),
+  audienceSize: z.number().int().nonnegative(),
   status: z.enum(["draft", "active", "paused", "archived"]),
   createdAt: z.iso.datetime(),
+});
+
+export const operatorOrganizationDomainSchema = z.object({
+  id: z.string().uuid(),
+  hostname: z.string(),
+  kind: z.enum(["duna-subdomain", "custom", "purchased"]),
+  status: z.enum(["pending", "verifying", "active", "failed", "disabled"]),
+  isPrimary: z.boolean(),
+  verification: z.array(z.record(z.string(), z.unknown())).readonly(),
+  lastCheckedAt: z.iso.datetime().optional(),
+});
+
+export const operatorCommunicationSettingsSchema = z.object({
+  senderDisplayName: z.string().optional(),
+  senderEmailLocalPart: z.string().optional(),
+  senderEmailDomain: z.string().optional(),
+  senderEmail: z.string().email().optional(),
+  emailDomainStatus: z.enum([
+    "not-configured",
+    "pending",
+    "verified",
+    "failed",
+  ]),
+  emailDnsRecords: z
+    .array(
+      z.object({
+        type: z.string(),
+        name: z.string(),
+        value: z.string(),
+        status: z.string(),
+        priority: z.number().int().optional(),
+      }),
+    )
+    .readonly(),
+  messagingAddonStatus: z.enum([
+    "disabled",
+    "trialing",
+    "active",
+    "past-due",
+    "cancelled",
+  ]),
+  messagingPhoneNumber: z.string().optional(),
+  messagingSenderId: z.string().optional(),
+  smsEnabled: z.boolean(),
+  rcsEnabled: z.boolean(),
+  whatsappEnabled: z.boolean(),
+  includedWithPlan: z.boolean(),
+  emailMessageLimit: z.number().int().nonnegative(),
+  emailContactLimit: z.number().int().nonnegative(),
+  messagingMessageLimit: z.number().int().nonnegative(),
+  messagingContactLimit: z.number().int().nonnegative(),
+  boostUnits: z.number().int().nonnegative(),
+  alertThresholdBps: z.number().int().min(1).max(10_000),
+  softOverageBps: z.number().int().min(0).max(10_000),
+});
+
+export const operatorCommunicationUsageSchema = z.object({
+  periodStart: z.string(),
+  emailContacts: z.number().int().nonnegative(),
+  emailMessages: z.number().int().nonnegative(),
+  messagingContacts: z.number().int().nonnegative(),
+  smsMessages: z.number().int().nonnegative(),
+  rcsMessages: z.number().int().nonnegative(),
+  whatsappMessages: z.number().int().nonnegative(),
+  pushMessages: z.number().int().nonnegative(),
+  delivered: z.number().int().nonnegative(),
+  opened: z.number().int().nonnegative(),
+  clicked: z.number().int().nonnegative(),
+  bounced: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  converted: z.number().int().nonnegative(),
 });
 
 export const operatorMarketingCampaignSchema = z.object({
@@ -1163,12 +1313,24 @@ export const operatorBillingRecoverySchema = z.object({
 
 export const operatorCalendarEntrySchema = z.object({
   id: z.string(),
-  sourceType: z.enum(["session", "booking", "busy-block"]),
+  sourceType: z.enum(["session", "booking", "busy-block", "operator-block"]),
   title: z.string(),
   startsAt: z.iso.datetime(),
   endsAt: z.iso.datetime(),
   timezone: z.string(),
   status: z.string(),
+  kind: z
+    .enum([
+      "tournament",
+      "league",
+      "clinic",
+      "open-play",
+      "private-lesson",
+      "court-rental",
+      "pickup",
+    ])
+    .optional(),
+  venueId: z.string().uuid().optional(),
   venueName: z.string().optional(),
   courtId: z.string().uuid().optional(),
   courtName: z.string().optional(),
@@ -1178,6 +1340,35 @@ export const operatorCalendarEntrySchema = z.object({
   capacity: z.number().int().nonnegative(),
   color: z.string(),
   draggable: z.boolean(),
+  attendees: z
+    .array(
+      z.object({
+        registrationId: z.string().uuid(),
+        personId: z.string().uuid(),
+        displayName: z.string(),
+        avatarUrl: z.string().optional(),
+        isMinor: z.boolean(),
+        status: z.enum([
+          "pending",
+          "confirmed",
+          "waitlisted",
+          "cancelled",
+          "refunded",
+          "checked-in",
+        ]),
+      }),
+    )
+    .readonly(),
+  equipment: z
+    .array(
+      z.object({
+        reservationId: z.string().uuid(),
+        inventoryStockItemId: z.string().uuid(),
+        label: z.string(),
+        quantity: z.number().int().positive(),
+      }),
+    )
+    .readonly(),
 });
 
 export const operatorCalendarConnectionSchema = z.object({
@@ -1197,27 +1388,60 @@ export const operatorCalendarConnectionSchema = z.object({
 });
 
 export const operatorThemeSchema = z.object({
+  brandDisplayName: z.string().optional(),
+  membershipProgramName: z.string().optional(),
   logoUrl: z.string().optional(),
   markUrl: z.string().optional(),
+  logoLightUrl: z.string().optional(),
+  logoDarkUrl: z.string().optional(),
   heroMediaType: z.enum(["image", "video"]).optional(),
   heroMediaUrl: z.string().optional(),
   heroPosterUrl: z.string().optional(),
   tagline: z.string().optional(),
   profileSummary: z.string().optional(),
+  brandVoice: z.string().optional(),
   palette: z.object({
     primary: z.string(),
     accent: z.string(),
     sand: z.string(),
     ink: z.string(),
     canvas: z.string(),
+    success: z.string(),
   }),
   typography: z.object({
     heading: z.string(),
     body: z.string(),
   }),
+  fontLicenseConfirmed: z.boolean(),
+  safeFallbackFont: z.string(),
   cardStyle: z.enum(["soft", "crisp", "borderless"]),
   profileLayout: z.string(),
   publishedAt: z.iso.datetime().optional(),
+});
+
+export const operatorBrandKnowledgeSourceSchema = z.object({
+  id: z.string().uuid(),
+  scope: z.enum(["brand", "organization", "venue", "service", "product"]),
+  kind: z.enum(["note", "link", "document"]),
+  title: z.string(),
+  sourceUrl: z.string().optional(),
+  storageUrl: z.string().optional(),
+  mimeType: z.string().optional(),
+  originalFilename: z.string().optional(),
+  contentText: z.string().optional(),
+  status: z.enum(["processing", "ready", "failed", "archived"]),
+  approvedAt: z.iso.datetime().optional(),
+  failureReason: z.string().optional(),
+  lastProcessedAt: z.iso.datetime().optional(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const operatorBrandKnowledgeSchema = z.object({
+  sources: z.array(operatorBrandKnowledgeSourceSchema).readonly(),
+  activeSourceCount: z.number().int().nonnegative(),
+  contextRevision: z.string(),
+  contextPreview: z.array(z.string()).readonly(),
+  safetyRules: z.array(z.string()).readonly(),
 });
 
 export const publicOrganizationStorefrontSchema = z.object({
@@ -1229,6 +1453,34 @@ export const publicOrganizationStorefrontSchema = z.object({
   paymentsReady: z.boolean(),
   theme: operatorThemeSchema,
   catalog: z.array(publicCatalogItemSchema).readonly(),
+});
+
+export const publicCoachSchema = z.object({
+  personId: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  organizationSlug: z.string(),
+  organizationName: z.string(),
+  displayName: z.string(),
+  handle: z.string(),
+  avatarUrl: z.string().optional(),
+  homeMarket: z.string().optional(),
+  bio: z.string().optional(),
+  availability: z.array(z.record(z.string(), z.unknown())).readonly(),
+  services: z.array(publicCatalogItemSchema).readonly(),
+  upcomingSessions: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        slug: z.string(),
+        title: z.string(),
+        kind: eventKindSchema,
+        startsAt: z.iso.datetime(),
+        endsAt: z.iso.datetime(),
+        timezone: z.string(),
+        venueName: z.string().optional(),
+      }),
+    )
+    .readonly(),
 });
 
 export const organizationWalletSummarySchema = z.object({
@@ -1246,6 +1498,7 @@ export const organizationWalletSummarySchema = z.object({
 export const operatorWorkspaceSchema = z.object({
   organization: z.object({
     id: z.string().uuid(),
+    slug: z.string(),
     name: z.string(),
     legalName: z.string().optional(),
     plan: z.enum(["coach", "small-club", "club", "multi-venue"]),
@@ -1273,6 +1526,8 @@ export const operatorWorkspaceSchema = z.object({
   ratePlans: z.array(operatorRatePlanSchema).readonly(),
   venues: z.array(operatorVenueSchema).readonly(),
   sessions: z.array(operatorSessionSchema).readonly(),
+  eventRegistrations: z.array(operatorEventRegistrationSchema).readonly(),
+  eventAudiences: z.array(operatorEventAudienceSchema).readonly(),
   participants: z.array(operatorParticipantSchema).readonly(),
   people: z.array(operatorPersonRelationshipSchema).readonly(),
   invitations: z.array(operatorInvitationSchema).readonly(),
@@ -1299,6 +1554,7 @@ export const operatorWorkspaceSchema = z.object({
     resourceConflicts: z.number().int().nonnegative(),
   }),
   theme: operatorThemeSchema,
+  brandKnowledge: operatorBrandKnowledgeSchema,
   ledger: z.object({
     postedJournalCount: z.number().int().nonnegative(),
     draftJournalCount: z.number().int().nonnegative(),
@@ -1329,6 +1585,9 @@ export const operatorWorkspaceSchema = z.object({
   marketingFlows: z.array(operatorMarketingFlowSchema).readonly(),
   marketingCampaigns: z.array(operatorMarketingCampaignSchema).readonly(),
   billingRecovery: z.array(operatorBillingRecoverySchema).readonly(),
+  organizationDomains: z.array(operatorOrganizationDomainSchema).readonly(),
+  communicationSettings: operatorCommunicationSettingsSchema,
+  communicationUsage: operatorCommunicationUsageSchema,
   deliveryProviders: z.object({
     email: z.boolean(),
     sms: z.boolean(),
@@ -1377,12 +1636,19 @@ export const operatorMutationResultSchema = z.object({
     "staff-invitation",
     "staff-profile",
     "marketing-flow",
+    "event-playbook",
     "marketing-campaign",
     "catalog-item",
     "inventory-item",
     "organization-theme",
+    "brand-knowledge-source",
     "organization-settings",
+    "organization-domain",
+    "communication-settings",
+    "event-impression",
     "calendar-change",
+    "registration",
+    "inventory-reservation",
     "credit-adjustment",
     "refund",
   ]),
@@ -1447,6 +1713,7 @@ export type PublicCatalogItem = z.infer<typeof publicCatalogItemSchema>;
 export type PublicOrganizationStorefront = z.infer<
   typeof publicOrganizationStorefrontSchema
 >;
+export type PublicCoach = z.infer<typeof publicCoachSchema>;
 export type OperatorMutationResult = z.infer<
   typeof operatorMutationResultSchema
 >;

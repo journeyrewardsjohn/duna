@@ -148,6 +148,22 @@ export function TeamMemberEditor({
             <ShieldCheck aria-hidden size={22} />
           </header>
           <div className="operator-form-grid operator-form-grid--two">
+            <label className="operator-field--wide">
+              <span>Public display name</span>
+              <input
+                defaultValue={person.displayName}
+                maxLength={80}
+                minLength={2}
+                name="displayName"
+                placeholder="Coach Ticao"
+                required
+                type="text"
+              />
+              <small>
+                This is the name players see on coach profiles, services, and
+                schedules.
+              </small>
+            </label>
             <label>
               <span>Role</span>
               <select defaultValue={person.role} name="role">

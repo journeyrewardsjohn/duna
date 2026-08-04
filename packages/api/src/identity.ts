@@ -9,9 +9,9 @@ import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import type { ApiActor, ApiAgeBand } from "./context";
 
-export const GUARDIAN_CONSENT_DISCLOSURE_VERSION = "guardian-v1";
+export const GUARDIAN_CONSENT_DISCLOSURE_VERSION = "guardian-v2";
 export const GUARDIAN_CONSENT_DISCLOSURE =
-  "I certify that I am this child's parent or legal guardian, authorize Duna to create and operate this child account for sports participation, and understand that the relationship remains pending until Duna completes identity and relationship review.";
+  "I certify that I am this child's parent or legal guardian and authorize Duna to create and operate this dependent profile for sports participation. I agree, on this dependent's behalf, to the same waivers, releases, policies, and terms that I previously accepted or later accept through Duna for activities in which this dependent participates. I understand that emergency-contact permission allows an organization to contact me about an urgent health or safety issue, while spending permission allows me to approve purchases for this dependent using an authorized guardian payment method or wallet. The relationship remains pending until Duna completes identity and relationship review. Duna will retain an immutable electronic record of this consent, including its exact text and version, date and time, actor identity, IP address, and device information.";
 
 type ProfileVisibility = "public" | "members" | "private";
 type MeasurementSystem = "imperial" | "metric";
@@ -90,6 +90,36 @@ function dependentHandle(displayName: string): string {
       .replaceAll(/(^-|-$)/g, "")
       .slice(0, 32) || "player";
   return `${base}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+export async function checkOwnHandleAvailability(input: {
+  readonly actor: ApiActor;
+  readonly handle: string;
+}): Promise<{
+  readonly handle: string;
+  readonly available: boolean;
+  readonly isCurrent: boolean;
+  readonly message: string;
+}> {
+  requireDatabase();
+  const normalizedHandle = input.handle.trim().toLowerCase();
+  const database = getDatabase();
+  const handleOwner = await database.query.people.findFirst({
+    where: eq(people.handle, normalizedHandle),
+    columns: { id: true },
+  });
+  const isCurrent = handleOwner?.id === input.actor.personId;
+  const available = !handleOwner || isCurrent;
+  return {
+    handle: normalizedHandle,
+    available,
+    isCurrent,
+    message: isCurrent
+      ? "This is your current Duna handle."
+      : available
+        ? `@${normalizedHandle} is available.`
+        : `@${normalizedHandle} is already taken.`,
+  };
 }
 
 export async function updateOwnProfile(input: {

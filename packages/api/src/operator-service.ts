@@ -1,10 +1,12 @@
 import {
   auditLog,
+  communicationUsagePeriods,
   consents,
   courtBookings,
   courts,
   divisions,
   eventBlueprints,
+  eventImpressions,
   eventTypes,
   getDatabase,
   guardianships,
@@ -13,6 +15,8 @@ import {
   memberships,
   membershipTiers,
   messages,
+  organizationCommunicationSettings,
+  organizationDomains,
   organizationInvitations,
   organizationMemberships,
   organizationParticipants,
@@ -28,6 +32,7 @@ import {
   schedules,
   sessions,
   ticketTypes,
+  tickets,
   venues,
 } from "@duna/db";
 import { demoOrganization } from "@duna/core/demo";
@@ -245,6 +250,50 @@ function plan(value: string): OperatorWorkspace["organization"]["plan"] {
   return "coach";
 }
 
+function organizationDomainKind(
+  value: string,
+): OperatorWorkspace["organizationDomains"][number]["kind"] {
+  if (value === "custom" || value === "purchased") return value;
+  return "duna-subdomain";
+}
+
+function organizationDomainStatus(
+  value: string,
+): OperatorWorkspace["organizationDomains"][number]["status"] {
+  if (
+    value === "verifying" ||
+    value === "active" ||
+    value === "failed" ||
+    value === "disabled"
+  ) {
+    return value;
+  }
+  return "pending";
+}
+
+function emailDomainStatus(
+  value: string | undefined,
+): OperatorWorkspace["communicationSettings"]["emailDomainStatus"] {
+  if (value === "pending" || value === "verified" || value === "failed") {
+    return value;
+  }
+  return "not-configured";
+}
+
+function messagingAddonStatus(
+  value: string | undefined,
+): OperatorWorkspace["communicationSettings"]["messagingAddonStatus"] {
+  if (
+    value === "trialing" ||
+    value === "active" ||
+    value === "past-due" ||
+    value === "cancelled"
+  ) {
+    return value;
+  }
+  return "disabled";
+}
+
 function currency(value: string): CurrencyCode {
   if (
     value === "USD" ||
@@ -348,7 +397,7 @@ function playerInvitationUrl(inviteToken: string): string {
   const origin =
     process.env.NEXT_PUBLIC_WEB_URL ??
     process.env.NEXT_PUBLIC_APP_URL ??
-    "https://duna.com";
+    "https://duna.coach";
   return `${origin.replace(/\/$/, "")}/join/organization/${encodeURIComponent(inviteToken)}`;
 }
 
@@ -419,6 +468,7 @@ export function loadDemoOperatorWorkspace(
     organization: {
       id: demoOrganization.id,
       name: demoOrganization.name,
+      slug: "beach-elite-vb-academy",
       plan: plan(demoOrganization.plan),
       currency: "USD",
       timezone: demoOrganization.timezone,
@@ -544,6 +594,8 @@ export function loadDemoOperatorWorkspace(
       },
     ],
     sessions: [],
+    eventRegistrations: [],
+    eventAudiences: [],
     participants: [],
     invitations: [],
     staff: [],
@@ -553,6 +605,39 @@ export function loadDemoOperatorWorkspace(
     marketingFlows: [],
     marketingCampaigns: [],
     billingRecovery: [],
+    organizationDomains: [],
+    communicationSettings: {
+      emailDomainStatus: "not-configured",
+      emailDnsRecords: [],
+      messagingAddonStatus: "disabled",
+      smsEnabled: false,
+      rcsEnabled: false,
+      whatsappEnabled: false,
+      includedWithPlan: true,
+      emailMessageLimit: 1_000,
+      emailContactLimit: 100,
+      messagingMessageLimit: 1_000,
+      messagingContactLimit: 100,
+      boostUnits: 0,
+      alertThresholdBps: 8_000,
+      softOverageBps: 5_000,
+    },
+    communicationUsage: {
+      periodStart: new Date().toISOString().slice(0, 10),
+      emailContacts: 0,
+      emailMessages: 0,
+      messagingContacts: 0,
+      smsMessages: 0,
+      rcsMessages: 0,
+      whatsappMessages: 0,
+      pushMessages: 0,
+      delivered: 0,
+      opened: 0,
+      clicked: 0,
+      bounced: 0,
+      failed: 0,
+      converted: 0,
+    },
     deliveryProviders: {
       email: false,
       sms: false,
@@ -570,6 +655,7 @@ export function loadDemoOperatorWorkspace(
           endsAt: nextSessionEnd.toISOString(),
           timezone: "America/Los_Angeles",
           status: "registration-open",
+          kind: "clinic",
           venueName: "Beach Elite Training Center",
           courtId: courtOneId,
           courtName: "Championship Court",
@@ -577,6 +663,8 @@ export function loadDemoOperatorWorkspace(
           capacity: 8,
           color: "#2867a5",
           draggable: true,
+          attendees: [],
+          equipment: [],
         },
       ],
     },
@@ -604,6 +692,8 @@ export async function loadOperatorWorkspace(
     sessionRows,
     memberRows,
     registrationRows,
+    ticketRows,
+    impressionRows,
     participantRows,
     invitationRows,
     draftRows,
@@ -612,6 +702,9 @@ export async function loadOperatorWorkspace(
     marketingFlowRows,
     marketingCampaignRows,
     billingRecoveryRows,
+    organizationDomainRows,
+    communicationSettingRows,
+    communicationUsageRows,
   ] = await Promise.all([
     database
       .select()
@@ -705,17 +798,25 @@ export async function loadOperatorWorkspace(
         status: sessions.status,
         capacity: sessions.capacity,
         venueId: sessions.venueId,
+        venueName: venues.name,
         courtId: sessions.courtId,
+        courtName: courts.name,
         coachPersonId: sessions.coachPersonId,
         kindFromProgram: programs.kind,
         kindFromEventType: eventTypes.kind,
         priceMinor: eventTypes.priceMinor,
         currency: eventTypes.currency,
+        shortSummary: eventBlueprints.shortSummary,
+        description: eventBlueprints.description,
+        media: eventBlueprints.media,
+        registrationSettings: eventBlueprints.registrationSettings,
       })
       .from(sessions)
       .leftJoin(programs, eq(sessions.programId, programs.id))
       .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
       .leftJoin(venues, eq(sessions.venueId, venues.id))
+      .leftJoin(courts, eq(sessions.courtId, courts.id))
+      .leftJoin(eventBlueprints, eq(sessions.id, eventBlueprints.sessionId))
       .where(
         or(
           eq(programs.organizationId, organizationId),
@@ -742,15 +843,61 @@ export async function loadOperatorWorkspace(
       ),
     database
       .select({
-        id: people.id,
+        id: registrations.id,
+        sessionId: registrations.sessionId,
+        personId: registrations.personId,
         displayName: people.displayName,
+        avatarUrl: people.avatarUrl,
         email: people.email,
         phoneE164: people.phoneE164,
         isMinor: people.isMinor,
+        status: registrations.status,
+        orderId: registrations.orderId,
+        checkedInAt: registrations.checkedInAt,
+        createdAt: registrations.createdAt,
       })
       .from(registrations)
       .innerJoin(people, eq(registrations.personId, people.id))
       .innerJoin(sessions, eq(registrations.sessionId, sessions.id))
+      .leftJoin(programs, eq(sessions.programId, programs.id))
+      .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
+      .leftJoin(venues, eq(sessions.venueId, venues.id))
+      .where(
+        or(
+          eq(programs.organizationId, organizationId),
+          eq(eventTypes.organizationId, organizationId),
+          eq(venues.organizationId, organizationId),
+        ),
+      ),
+    database
+      .select({
+        id: tickets.id,
+        sessionId: ticketTypes.sessionId,
+        ownerPersonId: tickets.ownerPersonId,
+        status: tickets.status,
+      })
+      .from(tickets)
+      .innerJoin(ticketTypes, eq(tickets.ticketTypeId, ticketTypes.id))
+      .innerJoin(sessions, eq(ticketTypes.sessionId, sessions.id))
+      .leftJoin(programs, eq(sessions.programId, programs.id))
+      .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
+      .leftJoin(venues, eq(sessions.venueId, venues.id))
+      .where(
+        or(
+          eq(programs.organizationId, organizationId),
+          eq(eventTypes.organizationId, organizationId),
+          eq(venues.organizationId, organizationId),
+        ),
+      ),
+    database
+      .select({
+        id: eventImpressions.id,
+        sessionId: eventImpressions.sessionId,
+        viewerPersonId: eventImpressions.viewerPersonId,
+        anonymousId: eventImpressions.anonymousId,
+      })
+      .from(eventImpressions)
+      .innerJoin(sessions, eq(eventImpressions.sessionId, sessions.id))
       .leftJoin(programs, eq(sessions.programId, programs.id))
       .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
       .leftJoin(venues, eq(sessions.venueId, venues.id))
@@ -812,9 +959,13 @@ export async function loadOperatorWorkspace(
       .select({
         profile: organizationStaffProfiles,
         displayName: people.displayName,
+        handle: people.handle,
         avatarUrl: people.avatarUrl,
         email: people.email,
         phoneE164: people.phoneE164,
+        homeMarket: people.homeMarket,
+        bio: people.experienceSummary,
+        profileVisibility: people.profileVisibility,
       })
       .from(organizationStaffProfiles)
       .innerJoin(people, eq(organizationStaffProfiles.personId, people.id))
@@ -855,12 +1006,39 @@ export async function loadOperatorWorkspace(
         ),
       )
       .orderBy(desc(memberships.updatedAt)),
+    database
+      .select()
+      .from(organizationDomains)
+      .where(eq(organizationDomains.organizationId, organizationId))
+      .orderBy(
+        desc(organizationDomains.isPrimary),
+        asc(organizationDomains.hostname),
+      ),
+    database
+      .select()
+      .from(organizationCommunicationSettings)
+      .where(
+        eq(organizationCommunicationSettings.organizationId, organizationId),
+      )
+      .limit(1),
+    database
+      .select()
+      .from(communicationUsagePeriods)
+      .where(eq(communicationUsagePeriods.organizationId, organizationId))
+      .orderBy(desc(communicationUsagePeriods.periodStart))
+      .limit(1),
   ]);
 
   const recipientMap = new Map(
     [
       ...memberRows,
-      ...registrationRows,
+      ...registrationRows.map((row) => ({
+        id: row.personId,
+        displayName: row.displayName,
+        email: row.email,
+        phoneE164: row.phoneE164,
+        isMinor: row.isMinor,
+      })),
       ...participantRows.map((row) => ({
         id: row.personId,
         displayName: row.displayName,
@@ -919,6 +1097,132 @@ export async function loadOperatorWorkspace(
       );
     }
   }
+  const activeRegistrationStatuses = new Set(["confirmed", "checked-in"]);
+  const activeTicketStatuses = new Set(["issued", "transferred", "scanned"]);
+  const ticketCountBySessionAndPerson = new Map<string, number>();
+  const ticketHolderIdsBySession = new Map<string, Set<string>>();
+  for (const ticket of ticketRows) {
+    if (!activeTicketStatuses.has(ticket.status)) continue;
+    const key = `${ticket.sessionId}:${ticket.ownerPersonId}`;
+    ticketCountBySessionAndPerson.set(
+      key,
+      (ticketCountBySessionAndPerson.get(key) ?? 0) + 1,
+    );
+    const holders =
+      ticketHolderIdsBySession.get(ticket.sessionId) ?? new Set<string>();
+    holders.add(ticket.ownerPersonId);
+    ticketHolderIdsBySession.set(ticket.sessionId, holders);
+  }
+  const registeredPersonIdsBySession = new Map<string, Set<string>>();
+  for (const registration of registrationRows) {
+    if (!activeRegistrationStatuses.has(registration.status)) continue;
+    const peopleForSession =
+      registeredPersonIdsBySession.get(registration.sessionId) ??
+      new Set<string>();
+    peopleForSession.add(registration.personId);
+    registeredPersonIdsBySession.set(registration.sessionId, peopleForSession);
+  }
+  const audienceSizeBySessionAndKind = new Map<string, number>();
+  const eventAudiences = sessionRows.flatMap((session) => {
+    const registered =
+      registeredPersonIdsBySession.get(session.id) ?? new Set<string>();
+    const ticketHolders =
+      ticketHolderIdsBySession.get(session.id) ?? new Set<string>();
+    const audiences = [
+      {
+        sessionId: session.id,
+        kind: "non-registered-members" as const,
+        label: "All non-registered members",
+        description:
+          "Active organization members who have not registered for this event.",
+        size: memberRows.filter((member) => !registered.has(member.id)).length,
+      },
+      {
+        sessionId: session.id,
+        kind: "registered-attendees" as const,
+        label: "All registered attendees",
+        description:
+          "People with confirmed registrations or completed check-in.",
+        size: registered.size,
+      },
+      {
+        sessionId: session.id,
+        kind: "ticket-holders" as const,
+        label: "All ticket holders",
+        description: "People who currently hold one or more valid tickets.",
+        size: ticketHolders.size,
+      },
+    ];
+    for (const audience of audiences) {
+      audienceSizeBySessionAndKind.set(
+        `${session.id}:${audience.kind}`,
+        audience.size,
+      );
+    }
+    return audiences;
+  });
+  const impressionMetricsBySession = new Map<
+    string,
+    { impressions: number; uniqueViewerKeys: Set<string> }
+  >();
+  for (const impression of impressionRows) {
+    const metric = impressionMetricsBySession.get(impression.sessionId) ?? {
+      impressions: 0,
+      uniqueViewerKeys: new Set<string>(),
+    };
+    metric.impressions += 1;
+    const viewerKey = impression.viewerPersonId
+      ? `person:${impression.viewerPersonId}`
+      : impression.anonymousId
+        ? `anonymous:${impression.anonymousId}`
+        : undefined;
+    if (viewerKey) metric.uniqueViewerKeys.add(viewerKey);
+    impressionMetricsBySession.set(impression.sessionId, metric);
+  }
+  const registrationClosesAt = (
+    settings: Record<string, unknown> | null | undefined,
+  ): string | undefined => {
+    const value =
+      settings?.registrationClosesAt ??
+      settings?.registrationCloseAt ??
+      settings?.closesAt;
+    if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
+      return undefined;
+    }
+    return new Date(value).toISOString();
+  };
+  const audienceSizeForFlow = (
+    sessionId: string | null | undefined,
+    segment: Record<string, unknown>,
+  ): number => {
+    const kind =
+      typeof segment.kind === "string"
+        ? segment.kind
+        : typeof segment.audience === "string"
+          ? segment.audience
+          : "all-active-people";
+    if (sessionId) {
+      const eventAudience = audienceSizeBySessionAndKind.get(
+        `${sessionId}:${kind}`,
+      );
+      if (eventAudience !== undefined) return eventAudience;
+    }
+    if (kind === "registered-attendees") {
+      return new Set(
+        registrationRows
+          .filter((row) => activeRegistrationStatuses.has(row.status))
+          .map((row) => row.personId),
+      ).size;
+    }
+    if (kind === "ticket-holders") {
+      return new Set(
+        ticketRows
+          .filter((row) => activeTicketStatuses.has(row.status))
+          .map((row) => row.ownerPersonId),
+      ).size;
+    }
+    return memberRows.length;
+  };
   const availabilityModes = new Set([
     "open",
     "rentals-only",
@@ -1057,6 +1361,7 @@ export async function loadOperatorWorkspace(
     organization: {
       id: organization.id,
       name: organization.name,
+      slug: organization.slug,
       plan: plan(organization.plan),
       currency: currency(organization.currency),
       timezone: organization.timezone,
@@ -1184,10 +1489,53 @@ export async function loadOperatorWorkspace(
       timezone: row.timezone,
       capacity: row.capacity,
       venueId: row.venueId ?? undefined,
+      venueName: row.venueName ?? undefined,
       courtId: row.courtId ?? undefined,
+      courtName: row.courtName ?? undefined,
+      shortSummary: row.shortSummary ?? undefined,
+      description: row.description ?? undefined,
+      media: row.media ?? [],
+      registrationClosesAt: registrationClosesAt(row.registrationSettings),
       priceMinor: row.priceMinor ?? 0,
       currency: currency(row.currency ?? organization.currency),
+      analytics: (() => {
+        const impressionMetric = impressionMetricsBySession.get(row.id);
+        const registrations =
+          registeredPersonIdsBySession.get(row.id)?.size ?? 0;
+        const ticketHolders = ticketHolderIdsBySession.get(row.id)?.size ?? 0;
+        const impressions = impressionMetric?.impressions ?? 0;
+        return {
+          impressions,
+          uniqueViewers: impressionMetric?.uniqueViewerKeys.size ?? 0,
+          registrations,
+          ticketHolders,
+          conversionRateBps:
+            impressions > 0
+              ? Math.min(
+                  10_000,
+                  Math.round((registrations / impressions) * 10_000),
+                )
+              : 0,
+        };
+      })(),
     })),
+    eventRegistrations: registrationRows.map((row) => ({
+      id: row.id,
+      sessionId: row.sessionId,
+      personId: row.personId,
+      displayName: row.displayName,
+      avatarUrl: row.avatarUrl ?? undefined,
+      email: row.email ?? undefined,
+      phoneE164: row.phoneE164 ?? undefined,
+      status: row.status,
+      orderId: row.orderId ?? undefined,
+      ticketCount:
+        ticketCountBySessionAndPerson.get(`${row.sessionId}:${row.personId}`) ??
+        0,
+      checkedInAt: row.checkedInAt?.toISOString(),
+      registeredAt: row.createdAt.toISOString(),
+    })),
+    eventAudiences,
     participants: participantRows.map((row) => ({
       id: row.id,
       personId: row.personId,
@@ -1254,9 +1602,17 @@ export async function loadOperatorWorkspace(
         id: row.profile.id,
         personId: row.profile.personId,
         displayName: row.displayName,
+        handle: row.handle,
         avatarUrl: row.avatarUrl ?? undefined,
         email: row.email ?? undefined,
         phoneE164: row.phoneE164 ?? undefined,
+        homeMarket: row.homeMarket ?? undefined,
+        bio: row.bio ?? undefined,
+        profileVisibility:
+          row.profileVisibility === "public" ||
+          row.profileVisibility === "members"
+            ? row.profileVisibility
+            : "private",
         role: role as OperatorWorkspace["staff"][number]["role"],
         workerClassification:
           row.profile.workerClassification === "w2-employee"
@@ -1345,6 +1701,7 @@ export async function loadOperatorWorkspace(
         row.deliveryStatus === "failed"
           ? row.deliveryStatus
           : "not-configured",
+      inviteUrl: staffInvitationUrl(row.inviteToken),
       expiresAt: row.expiresAt.toISOString(),
       createdAt: row.createdAt.toISOString(),
     })),
@@ -1373,11 +1730,13 @@ export async function loadOperatorWorkspace(
     })),
     marketingFlows: marketingFlowRows.map((row) => ({
       id: row.id,
+      sessionId: row.sessionId ?? undefined,
       name: row.name,
       description: row.description ?? undefined,
       segment: row.segment,
       trigger: row.trigger,
       action: row.action,
+      audienceSize: audienceSizeForFlow(row.sessionId, row.segment),
       status:
         row.status === "active" ||
         row.status === "paused" ||
@@ -1421,6 +1780,61 @@ export async function loadOperatorWorkspace(
           : "The member needs to update their payment method before access can resume.",
     })),
     deliveryProviders: providerReadiness(),
+    organizationDomains: organizationDomainRows.map((row) => ({
+      id: row.id,
+      hostname: row.hostname,
+      kind: organizationDomainKind(row.kind),
+      status: organizationDomainStatus(row.status),
+      isPrimary: row.isPrimary,
+      verification: row.verification,
+      lastCheckedAt: row.lastCheckedAt?.toISOString(),
+    })),
+    communicationSettings: (() => {
+      const row = communicationSettingRows[0];
+      return {
+        senderDisplayName: row?.senderDisplayName ?? organization.name,
+        senderEmailLocalPart: row?.senderEmailLocalPart ?? "hello",
+        senderEmailDomain: row?.senderEmailDomain ?? undefined,
+        senderEmail: row?.senderEmail ?? undefined,
+        emailDomainStatus: emailDomainStatus(row?.emailDomainStatus),
+        emailDnsRecords: row?.emailDnsRecords ?? [],
+        messagingAddonStatus: messagingAddonStatus(row?.messagingAddonStatus),
+        messagingPhoneNumber: row?.messagingPhoneNumber ?? undefined,
+        messagingSenderId: row?.messagingSenderId ?? undefined,
+        smsEnabled: row?.smsEnabled ?? false,
+        rcsEnabled: row?.rcsEnabled ?? false,
+        whatsappEnabled: row?.whatsappEnabled ?? false,
+        includedWithPlan: true,
+        emailMessageLimit: row?.emailMessageLimit ?? 1_000,
+        emailContactLimit: row?.emailContactLimit ?? 100,
+        messagingMessageLimit: row?.messagingMessageLimit ?? 1_000,
+        messagingContactLimit: row?.messagingContactLimit ?? 100,
+        boostUnits: row?.boostUnits ?? 0,
+        alertThresholdBps: row?.alertThresholdBps ?? 8_000,
+        softOverageBps: row?.softOverageBps ?? 5_000,
+      };
+    })(),
+    communicationUsage: (() => {
+      const row = communicationUsageRows[0];
+      return {
+        periodStart:
+          row?.periodStart.toISOString().slice(0, 10) ??
+          now.toISOString().slice(0, 10),
+        emailContacts: row?.emailContacts ?? 0,
+        emailMessages: row?.emailMessages ?? 0,
+        messagingContacts: row?.messagingContacts ?? 0,
+        smsMessages: row?.smsMessages ?? 0,
+        rcsMessages: row?.rcsMessages ?? 0,
+        whatsappMessages: row?.whatsappMessages ?? 0,
+        pushMessages: row?.pushMessages ?? 0,
+        delivered: row?.delivered ?? 0,
+        opened: row?.opened ?? 0,
+        clicked: row?.clicked ?? 0,
+        bounced: row?.bounced ?? 0,
+        failed: row?.failed ?? 0,
+        converted: row?.converted ?? 0,
+      };
+    })(),
     ...commerce,
   };
 }
@@ -1581,6 +1995,7 @@ export async function createStaffInvitation(input: {
   readonly role: "coach" | "manager" | "front-desk" | "accountant";
   readonly workerClassification: "1099-contractor" | "w2-employee";
   readonly preferredChannel?: "email" | "sms";
+  readonly deliveryMode?: "send" | "link-only";
   readonly confirmed: boolean;
   readonly requestId: string;
   readonly ipAddress?: string;
@@ -1604,18 +2019,21 @@ export async function createStaffInvitation(input: {
       "Enter the team member's name.",
     );
   }
-  if (!invitedEmail && !invitedPhoneE164) {
+  const deliveryMode = input.deliveryMode ?? "send";
+  if (deliveryMode === "send" && !invitedEmail && !invitedPhoneE164) {
     throw new OperatorServiceError(
       "DELIVERY_DESTINATION_MISSING",
       "Enter an email address or mobile number for the team member.",
     );
   }
   const deliveryChannel =
-    input.preferredChannel === "sms" && invitedPhoneE164
-      ? "sms"
-      : invitedEmail
-        ? "email"
-        : "sms";
+    deliveryMode === "link-only"
+      ? undefined
+      : input.preferredChannel === "sms" && invitedPhoneE164
+        ? "sms"
+        : invitedEmail
+          ? "email"
+          : "sms";
   const id = crypto.randomUUID();
   const inviteToken = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll(
     "-",
@@ -1662,42 +2080,26 @@ export async function createStaffInvitation(input: {
 
   const inviteUrl = staffInvitationUrl(inviteToken);
   const delivery =
-    deliveryChannel === "email" && invitedEmail
-      ? await sendTransactionalEmail({
-          to: invitedEmail,
-          subject: `Join ${organization.name} on Duna`,
-          text: [
-            `${input.actor.displayName} invited you to join ${organization.name} as ${input.role.replaceAll("-", " ")}.`,
-            "",
-            `Your worker classification is set by the organization as ${input.workerClassification === "w2-employee" ? "W-2 employee" : "1099 contractor"}. You can complete your own contact, address, availability, and goals after accepting.`,
-            "",
-            `Accept your invitation: ${inviteUrl}`,
-            "",
-            "This invitation expires in 7 days.",
-          ].join("\n"),
-          idempotencyKey: `staff-invite:${id}`,
-        }).catch((error: unknown) => ({
-          configured: true,
+    deliveryMode === "link-only"
+      ? {
+          configured: false,
           sent: false,
           messageId: undefined,
-          reason:
-            error instanceof Error
-              ? error.message
-              : "Email delivery did not complete.",
-        }))
-      : invitedPhoneE164
-        ? await sendTemplateSms({
-            to: invitedPhoneE164,
-            templateName:
-              process.env.SENT_DM_STAFF_INVITE_TEMPLATE_NAME ??
-              "duna_staff_invitation",
-            parameters: {
-              organization_name: organization.name,
-              invited_name: invitedName,
-              inviter_name: input.actor.displayName,
-              role: input.role.replaceAll("-", " "),
-              invite_url: inviteUrl,
-            },
+          reason: "A private claim link was created without sending it.",
+        }
+      : deliveryChannel === "email" && invitedEmail
+        ? await sendTransactionalEmail({
+            to: invitedEmail,
+            subject: `Join ${organization.name} on Duna`,
+            text: [
+              `${input.actor.displayName} invited you to join ${organization.name} as ${input.role.replaceAll("-", " ")}.`,
+              "",
+              `Your worker classification is set by the organization as ${input.workerClassification === "w2-employee" ? "W-2 employee" : "1099 contractor"}. You can complete your own contact, address, availability, and goals after accepting.`,
+              "",
+              `Accept your invitation: ${inviteUrl}`,
+              "",
+              "This invitation expires in 7 days.",
+            ].join("\n"),
             idempotencyKey: `staff-invite:${id}`,
           }).catch((error: unknown) => ({
             configured: true,
@@ -1706,14 +2108,37 @@ export async function createStaffInvitation(input: {
             reason:
               error instanceof Error
                 ? error.message
-                : "SMS delivery did not complete.",
+                : "Email delivery did not complete.",
           }))
-        : {
-            configured: false,
-            sent: false,
-            messageId: undefined,
-            reason: "No delivery destination was available.",
-          };
+        : invitedPhoneE164
+          ? await sendTemplateSms({
+              to: invitedPhoneE164,
+              templateName:
+                process.env.SENT_DM_STAFF_INVITE_TEMPLATE_NAME ??
+                "duna_staff_invitation",
+              parameters: {
+                organization_name: organization.name,
+                invited_name: invitedName,
+                inviter_name: input.actor.displayName,
+                role: input.role.replaceAll("-", " "),
+                invite_url: inviteUrl,
+              },
+              idempotencyKey: `staff-invite:${id}`,
+            }).catch((error: unknown) => ({
+              configured: true,
+              sent: false,
+              messageId: undefined,
+              reason:
+                error instanceof Error
+                  ? error.message
+                  : "SMS delivery did not complete.",
+            }))
+          : {
+              configured: false,
+              sent: false,
+              messageId: undefined,
+              reason: "No delivery destination was available.",
+            };
   await database
     .update(organizationStaffInvitations)
     .set({
@@ -1938,6 +2363,7 @@ export async function claimStaffInvitation(input: {
 export async function updateStaffProfile(input: {
   readonly actor: ApiActor;
   readonly personId: string;
+  readonly displayName: string;
   readonly role: "coach" | "manager" | "front-desk" | "accountant";
   readonly workerClassification: "1099-contractor" | "w2-employee";
   readonly compensationModel:
@@ -1974,6 +2400,13 @@ export async function updateStaffProfile(input: {
     );
   }
   const organizationId = requireOrganization(input.actor);
+  const displayName = input.displayName.trim();
+  if (displayName.length < 2 || displayName.length > 80) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Display name must be between 2 and 80 characters.",
+    );
+  }
   if (
     (input.compensationModel === "hourly" ||
       input.compensationModel === "hourly-plus-profit-share") &&
@@ -2073,6 +2506,10 @@ export async function updateStaffProfile(input: {
   };
   await database.transaction(async (transaction) => {
     await transaction
+      .update(people)
+      .set({ displayName, updatedAt: input.now })
+      .where(eq(people.id, input.personId));
+    await transaction
       .update(organizationMemberships)
       .set({ active: false, updatedAt: input.now })
       .where(
@@ -2116,9 +2553,14 @@ export async function updateStaffProfile(input: {
       entityType: "staff-profile",
       entityId: current.id,
       beforeHash: stableHash(current),
-      afterHash: stableHash({ ...values, role: input.role, scopes }),
+      afterHash: stableHash({
+        ...values,
+        displayName,
+        role: input.role,
+        scopes,
+      }),
       reason:
-        "Organization administrator updated role, classification, compensation, availability, goals, or payroll-readiness details.",
+        "Organization administrator updated display name, role, classification, compensation, availability, goals, or payroll-readiness details.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,

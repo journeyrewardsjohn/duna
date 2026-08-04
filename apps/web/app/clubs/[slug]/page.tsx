@@ -1,4 +1,4 @@
-import type { PublicCatalogItem } from "@duna/api";
+import type { OperatorWorkspace, PublicCatalogItem } from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowRight,
@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
+import { CoachCard } from "@/components/coach-card";
 import { EventCard } from "@/components/event-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -138,15 +139,19 @@ export default async function ClubPage({
 }) {
   const { slug } = await params;
   const caller = await getServerCaller();
-  const [organization, storefront, allEvents, allVenues] = await Promise.all([
-    caller.public.organizationBySlug({ slug }).catch(() => undefined),
-    caller.public.organizationStorefront({ slug }).catch(() => undefined),
-    caller.public.events(),
-    caller.public.venues(),
-  ]);
+  const [organization, storefront, allEvents, allVenues, coaches] =
+    await Promise.all([
+      caller.public.organizationBySlug({ slug }).catch(() => undefined),
+      caller.public.organizationStorefront({ slug }).catch(() => undefined),
+      caller.public.events(),
+      caller.public.venues(),
+      caller.public.coaches({ organizationSlug: slug }).catch(() => []),
+    ]);
   if (!organization) notFound();
   const events = allEvents.filter(
-    (event) => event.organizationName === organization.name,
+    (event) =>
+      event.organizationId === organization.id ||
+      (!event.organizationId && event.organizationName === organization.name),
   );
   const venues = allVenues.filter(
     (venue) => venue.organizationId === organization.id,
@@ -157,15 +162,18 @@ export default async function ClubPage({
     .map((part) => part[0])
     .join("")
     .toUpperCase();
-  const theme = storefront?.theme ?? {
+  const theme: OperatorWorkspace["theme"] = storefront?.theme ?? {
     palette: {
       primary: "#173A63",
       accent: "#2B67A4",
       sand: "#E9DFC9",
       ink: "#101828",
       canvas: "#FAFAF7",
+      success: "#3E7A5D",
     },
     typography: { heading: "Instrument Sans", body: "Archivo" },
+    fontLicenseConfirmed: false,
+    safeFallbackFont: "Arial, Helvetica, sans-serif",
     cardStyle: "soft" as const,
     profileLayout: "editorial",
   };
@@ -252,6 +260,7 @@ export default async function ClubPage({
       <nav aria-label="Club profile" className="club-profile-nav">
         <a href="#book">Events</a>
         {services.length > 0 && <a href="#services">Services</a>}
+        {coaches.length > 0 && <a href="#coaches">Coaches</a>}
         {plans.length > 0 && <a href="#plans">Memberships + credits</a>}
         {goods.length > 0 && <a href="#shop">Shop</a>}
         <a href="#locations">Locations</a>
@@ -292,6 +301,32 @@ export default async function ClubPage({
           slug={slug}
           title="Train with intention."
         />
+        {coaches.length > 0 && (
+          <section className="club-offerings" id="coaches">
+            <header>
+              <div>
+                <span className="section__eyebrow">Meet the team</span>
+                <h2>Choose your coach.</h2>
+                <p>
+                  Explore each coach’s approach, availability, upcoming
+                  sessions, and bookable services.
+                </p>
+              </div>
+              <span className="club-offerings__icon">
+                <Users />
+              </span>
+            </header>
+            <div className="coach-grid">
+              {coaches.map((coach) => (
+                <CoachCard
+                  coach={coach}
+                  key={`${coach.organizationId}-${coach.personId}`}
+                  preferred
+                />
+              ))}
+            </div>
+          </section>
+        )}
         <CatalogSection
           description="Member pricing and organization credits stay with this club and remain visible in your wallet."
           eyebrow="Memberships + credit packs"

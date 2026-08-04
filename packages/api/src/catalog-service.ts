@@ -12,9 +12,12 @@ import {
   catalogVariants,
   courtBookings,
   courts,
+  eventTypes,
   getDatabase,
+  guardianships,
   inventoryLocations,
   inventoryMovements,
+  inventoryReservations,
   inventoryStockItems,
   ledgerAccounts,
   ledgerEntries,
@@ -23,8 +26,10 @@ import {
   membershipTiers,
   memberships,
   organizationCreditGrants,
+  organizationBrandKnowledgeSources,
   organizationMemberships,
   organizationParticipants,
+  organizationStaffProfiles,
   organizationThemes,
   organizationWallets,
   organizations,
@@ -35,9 +40,11 @@ import {
   registrations,
   refundRecords,
   resourceReservations,
+  scheduleOverrides,
+  schedules,
   sessions,
   venues,
-  eventTypes,
+  messages,
 } from "@duna/db";
 import {
   assertBalancedJournal,
@@ -49,9 +56,11 @@ import { stableHash } from "./canonical";
 import type {
   OperatorMutationResult,
   OperatorWorkspace,
+  PublicCoach,
   PublicOrganizationStorefront,
 } from "./contracts";
 import type { ApiActor } from "./context";
+import { enforceGuardianCopies } from "./messaging";
 import { getStripeClient, isStripeConfigured, refundPayment } from "./payments";
 
 type CatalogItemType = OperatorWorkspace["catalog"][number]["type"];
@@ -66,14 +75,96 @@ const DEFAULT_THEME: OperatorWorkspace["theme"] = {
     sand: "#E9DFC9",
     ink: "#101828",
     canvas: "#FAFAF7",
+    success: "#4E7C67",
   },
   typography: {
     heading: "Instrument Sans",
     body: "Archivo",
   },
+  fontLicenseConfirmed: false,
+  safeFallbackFont: "Arial, Helvetica, sans-serif",
   cardStyle: "soft",
   profileLayout: "editorial",
 };
+
+const BRAND_KNOWLEDGE_SAFETY_RULES = [
+  "Approved sources inform drafts, recommendations, and answers.",
+  "Sources never override access, safety, pricing, legal, payment, or platform controls.",
+  "When sources conflict, current structured organization, venue, product, and team data wins.",
+] as const;
+
+const EMPTY_BRAND_KNOWLEDGE: OperatorWorkspace["brandKnowledge"] = {
+  sources: [],
+  activeSourceCount: 0,
+  contextRevision: stableHash([]),
+  contextPreview: [],
+  safetyRules: BRAND_KNOWLEDGE_SAFETY_RULES,
+};
+
+function normalizeThemePalette(
+  palette: (typeof organizationThemes.$inferSelect)["palette"],
+): OperatorWorkspace["theme"]["palette"] {
+  return {
+    ...DEFAULT_THEME.palette,
+    ...palette,
+  };
+}
+
+function buildBrandKnowledge(
+  rows: readonly (typeof organizationBrandKnowledgeSources.$inferSelect)[],
+): OperatorWorkspace["brandKnowledge"] {
+  const sources: OperatorWorkspace["brandKnowledge"]["sources"] = rows.map(
+    (row) => ({
+      id: row.id,
+      scope:
+        row.scope === "organization" ||
+        row.scope === "venue" ||
+        row.scope === "service" ||
+        row.scope === "product"
+          ? row.scope
+          : "brand",
+      kind: row.kind === "link" || row.kind === "document" ? row.kind : "note",
+      title: row.title,
+      sourceUrl: row.sourceUrl ?? undefined,
+      storageUrl: row.storageUrl ?? undefined,
+      mimeType: row.mimeType ?? undefined,
+      originalFilename: row.originalFilename ?? undefined,
+      contentText: row.contentText ?? undefined,
+      status:
+        row.status === "processing" ||
+        row.status === "failed" ||
+        row.status === "archived"
+          ? row.status
+          : "ready",
+      approvedAt: row.approvedAt?.toISOString(),
+      failureReason: row.failureReason ?? undefined,
+      lastProcessedAt: row.lastProcessedAt?.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    }),
+  );
+  const readyRows = rows.filter((row) => row.status === "ready");
+  return {
+    sources,
+    activeSourceCount: readyRows.length,
+    contextRevision: stableHash(
+      readyRows.map((row) => ({
+        id: row.id,
+        scope: row.scope,
+        contentHash: row.contentHash,
+        updatedAt: row.updatedAt.toISOString(),
+      })),
+    ),
+    contextPreview: readyRows.slice(0, 8).map((row) => {
+      const detail =
+        row.contentText?.replaceAll(/\s+/g, " ").trim() ||
+        row.sourceUrl ||
+        row.originalFilename ||
+        "Approved source";
+      return `${row.title}: ${detail.slice(0, 180)}`;
+    }),
+    safetyRules: BRAND_KNOWLEDGE_SAFETY_RULES,
+  };
+}
 
 function requireDatabase(): void {
   if (!process.env.DATABASE_URL) {
@@ -207,6 +298,7 @@ export function loadDemoCommerceWorkspace(): Pick<
   | "people"
   | "calendar"
   | "theme"
+  | "brandKnowledge"
   | "ledger"
   | "recommendations"
 > {
@@ -222,6 +314,7 @@ export function loadDemoCommerceWorkspace(): Pick<
       resourceConflicts: 0,
     },
     theme: DEFAULT_THEME,
+    brandKnowledge: EMPTY_BRAND_KNOWLEDGE,
     ledger: {
       postedJournalCount: 0,
       draftJournalCount: 0,
@@ -255,6 +348,7 @@ export async function loadOperatorCommerceWorkspace(
     | "people"
     | "calendar"
     | "theme"
+    | "brandKnowledge"
     | "ledger"
     | "recommendations"
   >
@@ -282,6 +376,7 @@ export async function loadOperatorCommerceWorkspace(
     connectionRows,
     busyRows,
     themeRow,
+    brandKnowledgeRows,
     journalRows,
     reconciliationRow,
     proposalRows,
@@ -372,8 +467,11 @@ export async function loadOperatorCommerceWorkspace(
         timezone: sessions.timezone,
         status: sessions.status,
         capacity: sessions.capacity,
+        venueId: sessions.venueId,
         courtId: sessions.courtId,
         coachPersonId: sessions.coachPersonId,
+        programKind: programs.kind,
+        eventKind: eventTypes.kind,
         coachName: people.displayName,
         courtName: courts.name,
         venueName: venues.name,
@@ -458,6 +556,14 @@ export async function loadOperatorCommerceWorkspace(
     database.query.organizationThemes.findFirst({
       where: eq(organizationThemes.organizationId, organizationId),
     }),
+    database
+      .select()
+      .from(organizationBrandKnowledgeSources)
+      .where(
+        eq(organizationBrandKnowledgeSources.organizationId, organizationId),
+      )
+      .orderBy(desc(organizationBrandKnowledgeSources.updatedAt))
+      .limit(200),
     database
       .select({ status: ledgerJournals.status })
       .from(ledgerJournals)
@@ -958,25 +1064,143 @@ export async function loadOperatorCommerceWorkspace(
   );
 
   const registrationCounts = new Map<string, number>();
+  const attendeesBySession = new Map<
+    string,
+    OperatorWorkspace["calendar"]["entries"][number]["attendees"]
+  >();
+  const equipmentBySession = new Map<
+    string,
+    OperatorWorkspace["calendar"]["entries"][number]["equipment"]
+  >();
   if (sessionRows.length > 0) {
-    const counts = await database
-      .select({
-        sessionId: registrations.sessionId,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(registrations)
-      .where(
-        and(
-          inArray(
-            registrations.sessionId,
-            sessionRows.map((session) => session.id),
+    const sessionIds = sessionRows.map((session) => session.id);
+    const [counts, attendeeRows, equipmentRows] = await Promise.all([
+      database
+        .select({
+          sessionId: registrations.sessionId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(registrations)
+        .where(
+          and(
+            inArray(registrations.sessionId, sessionIds),
+            inArray(registrations.status, ["confirmed", "checked-in"]),
           ),
-          inArray(registrations.status, ["confirmed", "checked-in"]),
-        ),
-      )
-      .groupBy(registrations.sessionId);
+        )
+        .groupBy(registrations.sessionId),
+      database
+        .select({
+          registrationId: registrations.id,
+          sessionId: registrations.sessionId,
+          personId: registrations.personId,
+          displayName: people.displayName,
+          avatarUrl: people.avatarUrl,
+          isMinor: people.isMinor,
+          status: registrations.status,
+        })
+        .from(registrations)
+        .innerJoin(people, eq(registrations.personId, people.id))
+        .where(
+          and(
+            inArray(registrations.sessionId, sessionIds),
+            inArray(registrations.status, [
+              "pending",
+              "confirmed",
+              "waitlisted",
+              "checked-in",
+            ]),
+          ),
+        )
+        .orderBy(asc(people.displayName)),
+      database
+        .select({
+          reservationId: inventoryReservations.id,
+          sessionId: inventoryReservations.sourceId,
+          inventoryStockItemId: inventoryReservations.inventoryStockItemId,
+          quantity: inventoryReservations.quantity,
+          itemTitle: catalogItems.title,
+          variantTitle: catalogVariants.title,
+        })
+        .from(inventoryReservations)
+        .innerJoin(
+          inventoryStockItems,
+          eq(
+            inventoryReservations.inventoryStockItemId,
+            inventoryStockItems.id,
+          ),
+        )
+        .innerJoin(
+          catalogVariants,
+          eq(inventoryStockItems.catalogVariantId, catalogVariants.id),
+        )
+        .innerJoin(
+          catalogItems,
+          eq(catalogVariants.catalogItemId, catalogItems.id),
+        )
+        .where(
+          and(
+            eq(inventoryReservations.organizationId, organizationId),
+            eq(inventoryReservations.sourceType, "session"),
+            inArray(inventoryReservations.sourceId, sessionIds),
+            inArray(inventoryReservations.status, ["held", "confirmed"]),
+          ),
+        )
+        .orderBy(asc(catalogItems.title), asc(catalogVariants.title)),
+    ]);
     for (const row of counts) registrationCounts.set(row.sessionId, row.count);
+    for (const row of attendeeRows) {
+      const attendees = attendeesBySession.get(row.sessionId) ?? [];
+      attendeesBySession.set(row.sessionId, [
+        ...attendees,
+        {
+          registrationId: row.registrationId,
+          personId: row.personId,
+          displayName: row.displayName,
+          avatarUrl: row.avatarUrl ?? undefined,
+          isMinor: row.isMinor,
+          status: row.status,
+        },
+      ]);
+    }
+    for (const row of equipmentRows) {
+      const equipment = equipmentBySession.get(row.sessionId) ?? [];
+      equipmentBySession.set(row.sessionId, [
+        ...equipment,
+        {
+          reservationId: row.reservationId,
+          inventoryStockItemId: row.inventoryStockItemId,
+          label:
+            row.variantTitle === "Default"
+              ? row.itemTitle
+              : `${row.itemTitle} · ${row.variantTitle}`,
+          quantity: row.quantity,
+        },
+      ]);
+    }
   }
+  const operatorBlockRows = await database
+    .select({
+      id: scheduleOverrides.id,
+      startsAt: scheduleOverrides.startsAt,
+      endsAt: scheduleOverrides.endsAt,
+      mode: scheduleOverrides.mode,
+      reason: scheduleOverrides.reason,
+      resourceType: schedules.resourceType,
+      resourceId: schedules.resourceId,
+      scheduleName: schedules.name,
+    })
+    .from(scheduleOverrides)
+    .innerJoin(schedules, eq(scheduleOverrides.scheduleId, schedules.id))
+    .where(
+      and(
+        eq(schedules.organizationId, organizationId),
+        inArray(scheduleOverrides.mode, ["blocked", "maintenance"]),
+        gt(scheduleOverrides.endsAt, horizonStart),
+        lt(scheduleOverrides.startsAt, horizonEnd),
+      ),
+    )
+    .orderBy(asc(scheduleOverrides.startsAt))
+    .limit(10_000);
   const calendarEntries: OperatorWorkspace["calendar"]["entries"] = [
     ...sessionRows.map((session) => ({
       id: session.id,
@@ -986,6 +1210,8 @@ export async function loadOperatorCommerceWorkspace(
       endsAt: session.endsAt.toISOString(),
       timezone: session.timezone,
       status: session.status,
+      kind: session.programKind ?? session.eventKind ?? undefined,
+      venueId: session.venueId ?? undefined,
       venueName: session.venueName ?? undefined,
       courtId: session.courtId ?? undefined,
       courtName: session.courtName ?? undefined,
@@ -995,6 +1221,8 @@ export async function loadOperatorCommerceWorkspace(
       capacity: session.capacity,
       color: session.status === "live" ? "#1E8E72" : "#2B67A4",
       draggable: !["live", "completed", "cancelled"].includes(session.status),
+      attendees: attendeesBySession.get(session.id) ?? [],
+      equipment: equipmentBySession.get(session.id) ?? [],
     })),
     ...bookingRows.map((booking) => ({
       id: booking.id,
@@ -1011,6 +1239,8 @@ export async function loadOperatorCommerceWorkspace(
       capacity: booking.capacity,
       color: "#B98435",
       draggable: false,
+      attendees: [],
+      equipment: [],
     })),
     ...busyRows.map((row) => ({
       id: row.block.id,
@@ -1026,6 +1256,25 @@ export async function loadOperatorCommerceWorkspace(
       capacity: 0,
       color: "#8A94A3",
       draggable: false,
+      attendees: [],
+      equipment: [],
+    })),
+    ...operatorBlockRows.map((row) => ({
+      id: row.id,
+      sourceType: "operator-block" as const,
+      title: row.reason || row.scheduleName,
+      startsAt: row.startsAt.toISOString(),
+      endsAt: row.endsAt.toISOString(),
+      timezone: organization.timezone,
+      status: row.mode,
+      courtId: row.resourceType === "court" ? row.resourceId : undefined,
+      coachPersonId: row.resourceType === "coach" ? row.resourceId : undefined,
+      participantCount: 0,
+      capacity: 0,
+      color: row.mode === "maintenance" ? "#B98435" : "#8A94A3",
+      draggable: false,
+      attendees: [],
+      equipment: [],
     })),
   ].toSorted((left, right) => left.startsAt.localeCompare(right.startsAt));
 
@@ -1047,8 +1296,12 @@ export async function loadOperatorCommerceWorkspace(
 
   const theme: OperatorWorkspace["theme"] = themeRow
     ? {
+        brandDisplayName: themeRow.brandDisplayName ?? undefined,
+        membershipProgramName: themeRow.membershipProgramName ?? undefined,
         logoUrl: themeRow.logoUrl ?? undefined,
         markUrl: themeRow.markUrl ?? undefined,
+        logoLightUrl: themeRow.logoLightUrl ?? undefined,
+        logoDarkUrl: themeRow.logoDarkUrl ?? undefined,
         heroMediaType:
           themeRow.heroMediaType === "image" ||
           themeRow.heroMediaType === "video"
@@ -1058,8 +1311,11 @@ export async function loadOperatorCommerceWorkspace(
         heroPosterUrl: themeRow.heroPosterUrl ?? undefined,
         tagline: themeRow.tagline ?? undefined,
         profileSummary: themeRow.profileSummary ?? undefined,
-        palette: themeRow.palette,
+        brandVoice: themeRow.brandVoice ?? undefined,
+        palette: normalizeThemePalette(themeRow.palette),
         typography: themeRow.typography,
+        fontLicenseConfirmed: themeRow.fontLicenseConfirmed,
+        safeFallbackFont: themeRow.safeFallbackFont,
         cardStyle:
           themeRow.cardStyle === "crisp" || themeRow.cardStyle === "borderless"
             ? themeRow.cardStyle
@@ -1068,6 +1324,7 @@ export async function loadOperatorCommerceWorkspace(
         publishedAt: themeRow.publishedAt?.toISOString(),
       }
     : DEFAULT_THEME;
+  const brandKnowledge = buildBrandKnowledge(brandKnowledgeRows);
 
   const recommendations: Array<OperatorWorkspace["recommendations"][number]> =
     [];
@@ -1139,6 +1396,17 @@ export async function loadOperatorCommerceWorkspace(
       tone: "setup",
     });
   }
+  if (brandKnowledge.activeSourceCount === 0) {
+    recommendations.push({
+      id: "brand-knowledge",
+      title: "Teach Duna how your business works",
+      detail:
+        "Add approved brand voice, service, venue, product, and operating knowledge so Duna drafts from your real business context.",
+      action: "Add Brand Knowledge",
+      href: "/settings#brand-knowledge",
+      tone: "setup",
+    });
+  }
 
   return {
     catalog,
@@ -1185,6 +1453,7 @@ export async function loadOperatorCommerceWorkspace(
       ),
     },
     theme,
+    brandKnowledge,
     ledger: {
       postedJournalCount,
       draftJournalCount,
@@ -1327,8 +1596,12 @@ export async function loadPublicOrganizationStorefront(
 
   const theme: OperatorWorkspace["theme"] = themeRow
     ? {
+        brandDisplayName: themeRow.brandDisplayName ?? undefined,
+        membershipProgramName: themeRow.membershipProgramName ?? undefined,
         logoUrl: themeRow.logoUrl ?? undefined,
         markUrl: themeRow.markUrl ?? undefined,
+        logoLightUrl: themeRow.logoLightUrl ?? undefined,
+        logoDarkUrl: themeRow.logoDarkUrl ?? undefined,
         heroMediaType:
           themeRow.heroMediaType === "image" ||
           themeRow.heroMediaType === "video"
@@ -1338,8 +1611,11 @@ export async function loadPublicOrganizationStorefront(
         heroPosterUrl: themeRow.heroPosterUrl ?? undefined,
         tagline: themeRow.tagline ?? undefined,
         profileSummary: themeRow.profileSummary ?? undefined,
-        palette: themeRow.palette,
+        brandVoice: themeRow.brandVoice ?? undefined,
+        palette: normalizeThemePalette(themeRow.palette),
         typography: themeRow.typography,
+        fontLicenseConfirmed: themeRow.fontLicenseConfirmed,
+        safeFallbackFont: themeRow.safeFallbackFont,
         cardStyle:
           themeRow.cardStyle === "crisp" || themeRow.cardStyle === "borderless"
             ? themeRow.cardStyle
@@ -1367,7 +1643,10 @@ export async function loadPublicOrganizationStorefront(
       title: item.title,
       shortSummary: item.shortSummary ?? undefined,
       description: item.description ?? undefined,
-      visibility: "public" as const,
+      visibility:
+        item.visibility === "members"
+          ? ("members" as const)
+          : ("public" as const),
       taxable: item.taxable,
       allowCard: item.allowCard,
       allowCash: item.allowCash,
@@ -1411,6 +1690,187 @@ export async function loadPublicOrganizationStorefront(
       })),
     })),
   };
+}
+
+function catalogItemSupportsCoach(
+  item: PublicOrganizationStorefront["catalog"][number],
+  personId: string,
+): boolean {
+  if (item.type !== "event" && item.type !== "service") return false;
+  const mode = item.configuration.coachAssignmentMode;
+  if (mode !== "selected") return true;
+  const selected = Array.isArray(item.configuration.coachPersonIds)
+    ? item.configuration.coachPersonIds.filter(
+        (value): value is string => typeof value === "string",
+      )
+    : [];
+  return selected.includes(personId);
+}
+
+export async function loadPublicCoaches(
+  input: {
+    readonly organizationSlug?: string;
+    readonly handle?: string;
+    readonly now?: Date;
+  } = {},
+): Promise<readonly PublicCoach[]> {
+  requireDatabase();
+  const database = getDatabase();
+  const now = input.now ?? new Date();
+  const coachRows = await database
+    .select({
+      profile: organizationStaffProfiles,
+      personId: people.id,
+      displayName: people.displayName,
+      handle: people.handle,
+      avatarUrl: people.avatarUrl,
+      homeMarket: people.homeMarket,
+      bio: people.experienceSummary,
+      isMinor: people.isMinor,
+      profileVisibility: people.profileVisibility,
+      profileClaimStatus: people.profileClaimStatus,
+      organizationId: organizations.id,
+      organizationSlug: organizations.slug,
+      organizationName: organizations.name,
+    })
+    .from(organizationStaffProfiles)
+    .innerJoin(people, eq(organizationStaffProfiles.personId, people.id))
+    .innerJoin(
+      organizationMemberships,
+      and(
+        eq(
+          organizationMemberships.organizationId,
+          organizationStaffProfiles.organizationId,
+        ),
+        eq(
+          organizationMemberships.personId,
+          organizationStaffProfiles.personId,
+        ),
+        eq(organizationMemberships.role, "coach"),
+        eq(organizationMemberships.active, true),
+      ),
+    )
+    .innerJoin(
+      organizations,
+      eq(organizations.id, organizationStaffProfiles.organizationId),
+    )
+    .where(
+      and(
+        eq(organizationStaffProfiles.active, true),
+        input.organizationSlug
+          ? eq(organizations.slug, input.organizationSlug)
+          : undefined,
+        input.handle ? eq(people.handle, input.handle) : undefined,
+      ),
+    )
+    .orderBy(asc(people.displayName))
+    .limit(100);
+
+  const visibleRows = coachRows.filter(
+    (row) =>
+      !row.isMinor &&
+      (row.profileVisibility === "public" ||
+        row.profileClaimStatus === "unclaimed" ||
+        row.profileClaimStatus === "claim-pending"),
+  );
+  if (visibleRows.length === 0) return [];
+
+  const storefrontByOrganization = new Map<
+    string,
+    PublicOrganizationStorefront
+  >();
+  await Promise.all(
+    [...new Set(visibleRows.map((row) => row.organizationSlug))].map(
+      async (slug) => {
+        const storefront = await loadPublicOrganizationStorefront(slug);
+        if (storefront) {
+          storefrontByOrganization.set(storefront.organizationId, storefront);
+        }
+      },
+    ),
+  );
+
+  const coachIds = [...new Set(visibleRows.map((row) => row.personId))];
+  const upcomingRows = await database
+    .select({
+      id: sessions.id,
+      slug: sessions.slug,
+      title: sessions.title,
+      kind: eventTypes.kind,
+      startsAt: sessions.startsAt,
+      endsAt: sessions.endsAt,
+      timezone: sessions.timezone,
+      coachPersonId: sessions.coachPersonId,
+      organizationId: eventTypes.organizationId,
+      venueName: venues.name,
+    })
+    .from(sessions)
+    .innerJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
+    .leftJoin(venues, eq(sessions.venueId, venues.id))
+    .where(
+      and(
+        inArray(sessions.coachPersonId, coachIds),
+        gt(sessions.startsAt, now),
+        inArray(sessions.status, [
+          "published",
+          "registration-open",
+          "weather-hold",
+          "live",
+        ]),
+      ),
+    )
+    .orderBy(asc(sessions.startsAt))
+    .limit(300);
+
+  return visibleRows.map((row) => {
+    const storefront = storefrontByOrganization.get(row.organizationId);
+    return {
+      personId: row.personId,
+      organizationId: row.organizationId,
+      organizationSlug: row.organizationSlug,
+      organizationName: row.organizationName,
+      displayName: row.displayName,
+      handle: row.handle,
+      avatarUrl: row.avatarUrl ?? undefined,
+      homeMarket: row.homeMarket ?? undefined,
+      bio: row.bio ?? undefined,
+      availability: row.profile.availability,
+      services: (storefront?.catalog ?? []).filter(
+        (item) =>
+          item.visibility === "public" &&
+          catalogItemSupportsCoach(item, row.personId),
+      ),
+      upcomingSessions: upcomingRows
+        .filter(
+          (session) =>
+            session.coachPersonId === row.personId &&
+            session.organizationId === row.organizationId,
+        )
+        .slice(0, 12)
+        .map((session) => ({
+          id: session.id,
+          slug: session.slug,
+          title: session.title,
+          kind: session.kind,
+          startsAt: session.startsAt.toISOString(),
+          endsAt: session.endsAt.toISOString(),
+          timezone: session.timezone,
+          venueName: session.venueName ?? undefined,
+        })),
+    } satisfies PublicCoach;
+  });
+}
+
+export async function loadPublicCoach(
+  handle: string,
+  organizationSlug?: string,
+): Promise<PublicCoach | undefined> {
+  return (
+    await loadPublicCoaches({
+      handle: handle.trim().toLowerCase(),
+      organizationSlug,
+    })
+  )[0];
 }
 
 export async function loadPlayerOrganizationWallets(
@@ -1732,6 +2192,89 @@ export async function createCatalogItem(
       );
     }
   }
+  let normalizedConfiguration: Readonly<Record<string, unknown>> =
+    input.configuration;
+  if (input.type === "event" || input.type === "service") {
+    const coachMemberships = await database
+      .select({ personId: organizationMemberships.personId })
+      .from(organizationMemberships)
+      .innerJoin(
+        organizationStaffProfiles,
+        and(
+          eq(
+            organizationStaffProfiles.organizationId,
+            organizationMemberships.organizationId,
+          ),
+          eq(
+            organizationStaffProfiles.personId,
+            organizationMemberships.personId,
+          ),
+          eq(organizationStaffProfiles.active, true),
+        ),
+      )
+      .where(
+        and(
+          eq(organizationMemberships.organizationId, organizationId),
+          eq(organizationMemberships.role, "coach"),
+          eq(organizationMemberships.active, true),
+        ),
+      );
+    const eligibleCoachIds = [
+      ...new Set(coachMemberships.map((row) => row.personId)),
+    ];
+    const requestedMode =
+      input.configuration.coachAssignmentMode === "selected"
+        ? "selected"
+        : "all";
+    const requestedCoachIds = Array.isArray(input.configuration.coachPersonIds)
+      ? [
+          ...new Set(
+            input.configuration.coachPersonIds.filter(
+              (value): value is string => typeof value === "string",
+            ),
+          ),
+        ]
+      : [];
+    const coachPersonIds =
+      requestedMode === "selected" ? requestedCoachIds : eligibleCoachIds;
+    if (
+      coachPersonIds.some((personId) => !eligibleCoachIds.includes(personId))
+    ) {
+      throw new Error(
+        "Every selected coach must be an active coach in this organization.",
+      );
+    }
+    if (requestedMode === "selected" && coachPersonIds.length === 0) {
+      throw new Error("Select at least one coach for this offering.");
+    }
+    const requestedRequiredCoachCount = Number(
+      input.configuration.requiredCoachCount ?? 1,
+    );
+    if (
+      !Number.isSafeInteger(requestedRequiredCoachCount) ||
+      requestedRequiredCoachCount < 1
+    ) {
+      throw new Error(
+        "The required coach count must be a positive whole number.",
+      );
+    }
+    if (
+      coachPersonIds.length > 0 &&
+      requestedRequiredCoachCount > coachPersonIds.length
+    ) {
+      throw new Error(
+        "The required coach count cannot exceed the number of assigned coaches.",
+      );
+    }
+    normalizedConfiguration = {
+      ...input.configuration,
+      coachAssignmentMode: requestedMode,
+      coachPersonIds,
+      requiredCoachCount: requestedRequiredCoachCount,
+      customerCoachSelection:
+        input.configuration.customerCoachSelection !== false,
+    };
+  }
   const coordinates = variantMatrix(input.options);
   const itemId = crypto.randomUUID();
   const slug = await uniqueCatalogSlug(organizationId, input.title);
@@ -1923,7 +2466,7 @@ export async function createCatalogItem(
     allowCredits: input.allowCredits,
     membershipRequired: input.membershipRequired,
     defaultFulfillment: defaultFulfillment(input.type, input.subtype),
-    configuration: input.configuration,
+    configuration: normalizedConfiguration,
   };
   await database.batch([
     database.insert(catalogItems).values({
@@ -1983,6 +2526,150 @@ export async function createCatalogItem(
     }),
   ]);
   return { id: itemId, entity: "catalog-item", status: "draft" };
+}
+
+export async function updateCatalogItem(input: {
+  readonly actor: ApiActor;
+  readonly catalogItemId: string;
+  readonly title: string;
+  readonly shortSummary?: string;
+  readonly description?: string;
+  readonly visibility: "public" | "members" | "private";
+  readonly configuration: Readonly<Record<string, unknown>>;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const item = await database.query.catalogItems.findFirst({
+    where: and(
+      eq(catalogItems.id, input.catalogItemId),
+      eq(catalogItems.organizationId, organizationId),
+    ),
+  });
+  if (!item) throw new Error("Product was not found in this organization.");
+
+  let normalizedConfiguration: Readonly<Record<string, unknown>> = {
+    ...item.configuration,
+    ...input.configuration,
+  };
+  if (item.type === "event" || item.type === "service") {
+    const coachMemberships = await database
+      .select({ personId: organizationMemberships.personId })
+      .from(organizationMemberships)
+      .innerJoin(
+        organizationStaffProfiles,
+        and(
+          eq(
+            organizationStaffProfiles.organizationId,
+            organizationMemberships.organizationId,
+          ),
+          eq(
+            organizationStaffProfiles.personId,
+            organizationMemberships.personId,
+          ),
+          eq(organizationStaffProfiles.active, true),
+        ),
+      )
+      .where(
+        and(
+          eq(organizationMemberships.organizationId, organizationId),
+          eq(organizationMemberships.role, "coach"),
+          eq(organizationMemberships.active, true),
+        ),
+      );
+    const eligibleCoachIds = [
+      ...new Set(coachMemberships.map((row) => row.personId)),
+    ];
+    const requestedMode =
+      normalizedConfiguration.coachAssignmentMode === "selected"
+        ? "selected"
+        : "all";
+    const requestedCoachIds = Array.isArray(
+      normalizedConfiguration.coachPersonIds,
+    )
+      ? [
+          ...new Set(
+            normalizedConfiguration.coachPersonIds.filter(
+              (value): value is string => typeof value === "string",
+            ),
+          ),
+        ]
+      : [];
+    const coachPersonIds =
+      requestedMode === "selected" ? requestedCoachIds : eligibleCoachIds;
+    if (
+      coachPersonIds.some((personId) => !eligibleCoachIds.includes(personId))
+    ) {
+      throw new Error(
+        "Every selected coach must be an active coach in this organization.",
+      );
+    }
+    if (requestedMode === "selected" && coachPersonIds.length === 0) {
+      throw new Error("Select at least one coach for this offering.");
+    }
+    const requiredCoachCount = Number(
+      normalizedConfiguration.requiredCoachCount ?? 1,
+    );
+    if (!Number.isSafeInteger(requiredCoachCount) || requiredCoachCount < 1) {
+      throw new Error(
+        "The required coach count must be a positive whole number.",
+      );
+    }
+    if (
+      coachPersonIds.length > 0 &&
+      requiredCoachCount > coachPersonIds.length
+    ) {
+      throw new Error(
+        "The required coach count cannot exceed the number of assigned coaches.",
+      );
+    }
+    normalizedConfiguration = {
+      ...normalizedConfiguration,
+      coachAssignmentMode: requestedMode,
+      coachPersonIds,
+      requiredCoachCount,
+      customerCoachSelection:
+        normalizedConfiguration.customerCoachSelection !== false,
+    };
+  }
+
+  const changes = {
+    title: input.title.trim(),
+    shortSummary: input.shortSummary?.trim() || undefined,
+    description: input.description?.trim() || undefined,
+    visibility: input.visibility,
+    configuration: normalizedConfiguration,
+    updatedAt: input.now,
+  };
+  await database.batch([
+    database
+      .update(catalogItems)
+      .set(changes)
+      .where(
+        and(
+          eq(catalogItems.id, item.id),
+          eq(catalogItems.organizationId, organizationId),
+        ),
+      ),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "catalog.item_updated",
+      entityType: "catalog-item",
+      entityId: item.id,
+      beforeHash: stableHash(item),
+      afterHash: stableHash({ ...item, ...changes }),
+      reason: "Operator updated a catalog offer and its coach assignment.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return { id: item.id, entity: "catalog-item", status: item.status };
 }
 
 async function ensureCatalogStripeResources(input: {
@@ -2553,14 +3240,22 @@ export async function updateOrganizationCommerceSettings(input: {
 
 export async function updateOrganizationTheme(input: {
   readonly actor: ApiActor;
+  readonly brandDisplayName?: string;
+  readonly membershipProgramName?: string;
   readonly logoUrl?: string;
+  readonly markUrl?: string;
+  readonly logoLightUrl?: string;
+  readonly logoDarkUrl?: string;
   readonly heroMediaType?: "image" | "video";
   readonly heroMediaUrl?: string;
   readonly heroPosterUrl?: string;
   readonly tagline?: string;
   readonly profileSummary?: string;
+  readonly brandVoice?: string;
   readonly palette: OperatorWorkspace["theme"]["palette"];
   readonly typography: OperatorWorkspace["theme"]["typography"];
+  readonly fontLicenseConfirmed: boolean;
+  readonly safeFallbackFont: string;
   readonly cardStyle: "soft" | "crisp" | "borderless";
   readonly profileLayout: "editorial" | "immersive" | "compact";
   readonly publish: boolean;
@@ -2575,14 +3270,23 @@ export async function updateOrganizationTheme(input: {
     where: eq(organizationThemes.organizationId, organizationId),
   });
   const values = {
+    brandDisplayName: input.brandDisplayName?.trim() || undefined,
+    membershipProgramName: input.membershipProgramName?.trim() || undefined,
     logoUrl: input.logoUrl?.trim() || undefined,
+    markUrl: input.markUrl?.trim() || undefined,
+    logoLightUrl: input.logoLightUrl?.trim() || undefined,
+    logoDarkUrl: input.logoDarkUrl?.trim() || undefined,
     heroMediaType: input.heroMediaType,
     heroMediaUrl: input.heroMediaUrl?.trim() || undefined,
     heroPosterUrl: input.heroPosterUrl?.trim() || undefined,
     tagline: input.tagline?.trim() || undefined,
     profileSummary: input.profileSummary?.trim() || undefined,
+    brandVoice: input.brandVoice?.trim() || undefined,
     palette: input.palette,
     typography: input.typography,
+    fontLicenseConfirmed: input.fontLicenseConfirmed,
+    safeFallbackFont:
+      input.safeFallbackFont.trim() || DEFAULT_THEME.safeFallbackFont,
     cardStyle: input.cardStyle,
     profileLayout: input.profileLayout,
     publishedAt: input.publish ? input.now : current?.publishedAt,
@@ -2619,6 +3323,141 @@ export async function updateOrganizationTheme(input: {
     id: organizationId,
     entity: "organization-theme",
     status: input.publish ? "published" : "draft",
+  };
+}
+
+export async function addOrganizationBrandKnowledgeSource(input: {
+  readonly actor: ApiActor;
+  readonly scope: "brand" | "organization" | "venue" | "service" | "product";
+  readonly kind: "note" | "link" | "document";
+  readonly title: string;
+  readonly sourceUrl?: string;
+  readonly storageUrl?: string;
+  readonly mimeType?: string;
+  readonly originalFilename?: string;
+  readonly contentText: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const title = input.title.trim();
+  const contentText = input.contentText.trim();
+  const sourceUrl = input.sourceUrl?.trim() || undefined;
+  const storageUrl = input.storageUrl?.trim() || undefined;
+  if (!title) throw new Error("Give this source a clear title.");
+  if (contentText.length < 20) {
+    throw new Error(
+      "Add a short approved summary of what Duna should learn from this source.",
+    );
+  }
+  if (input.kind === "link" && !sourceUrl) {
+    throw new Error("A linked source needs a public URL.");
+  }
+  if (input.kind === "document" && !storageUrl && !input.originalFilename) {
+    throw new Error("A document source needs a file reference.");
+  }
+  const sourceId = crypto.randomUUID();
+  const values = {
+    id: sourceId,
+    organizationId,
+    scope: input.scope,
+    kind: input.kind,
+    title,
+    sourceUrl,
+    storageUrl,
+    mimeType: input.mimeType?.trim() || undefined,
+    originalFilename: input.originalFilename?.trim() || undefined,
+    contentText,
+    contentHash: stableHash({
+      scope: input.scope,
+      kind: input.kind,
+      title,
+      sourceUrl,
+      storageUrl,
+      contentText,
+    }),
+    status: "ready",
+    approvedByPersonId: input.actor.personId,
+    approvedAt: input.now,
+    lastProcessedAt: input.now,
+    createdAt: input.now,
+    updatedAt: input.now,
+  } as const;
+  await database.batch([
+    database.insert(organizationBrandKnowledgeSources).values(values),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "organization.brand_knowledge_source_approved",
+      entityType: "brand-knowledge-source",
+      entityId: sourceId,
+      afterHash: stableHash(values),
+      reason:
+        "Operator approved a source for Duna AI drafts and recommendations.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return {
+    id: sourceId,
+    entity: "brand-knowledge-source",
+    status: "ready",
+  };
+}
+
+export async function archiveOrganizationBrandKnowledgeSource(input: {
+  readonly actor: ApiActor;
+  readonly sourceId: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const current =
+    await database.query.organizationBrandKnowledgeSources.findFirst({
+      where: and(
+        eq(organizationBrandKnowledgeSources.organizationId, organizationId),
+        eq(organizationBrandKnowledgeSources.id, input.sourceId),
+      ),
+    });
+  if (!current) throw new Error("Brand Knowledge source was not found.");
+  await database.batch([
+    database
+      .update(organizationBrandKnowledgeSources)
+      .set({ status: "archived", updatedAt: input.now })
+      .where(
+        and(
+          eq(organizationBrandKnowledgeSources.organizationId, organizationId),
+          eq(organizationBrandKnowledgeSources.id, input.sourceId),
+        ),
+      ),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "organization.brand_knowledge_source_archived",
+      entityType: "brand-knowledge-source",
+      entityId: input.sourceId,
+      beforeHash: stableHash(current),
+      afterHash: stableHash({ ...current, status: "archived" }),
+      reason:
+        "Operator removed a source from the active Duna AI brand context.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return {
+    id: input.sourceId,
+    entity: "brand-knowledge-source",
+    status: "archived",
   };
 }
 
@@ -2931,6 +3770,804 @@ export async function issueOrganizationCredits(input: {
   return { id: grantId, entity: "credit-adjustment", status: "posted" };
 }
 
+async function loadOrganizationCalendarSession(input: {
+  readonly organizationId: string;
+  readonly sessionId: string;
+}) {
+  const session = await getDatabase()
+    .select({
+      session: sessions,
+      organizationId: sql<
+        string | null
+      >`coalesce(${programs.organizationId}, ${eventTypes.organizationId}, ${venues.organizationId})`,
+      venueName: venues.name,
+      courtName: courts.name,
+      coachName: people.displayName,
+    })
+    .from(sessions)
+    .leftJoin(programs, eq(sessions.programId, programs.id))
+    .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
+    .leftJoin(venues, eq(sessions.venueId, venues.id))
+    .leftJoin(courts, eq(sessions.courtId, courts.id))
+    .leftJoin(people, eq(sessions.coachPersonId, people.id))
+    .where(eq(sessions.id, input.sessionId))
+    .limit(1)
+    .then((rows) => rows[0]);
+  if (!session || session.organizationId !== input.organizationId) {
+    throw new Error("Session was not found in this organization.");
+  }
+  return session;
+}
+
+function formatCalendarMoment(date: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: timezone,
+    timeZoneName: "short",
+  }).format(date);
+}
+
+async function queueCalendarNotifications(input: {
+  readonly organizationId: string;
+  readonly sessionId: string;
+  readonly senderPersonId: string;
+  readonly subject: string;
+  readonly body: string;
+  readonly kind: string;
+  readonly now: Date;
+  readonly personIds?: readonly string[];
+}): Promise<number> {
+  const database = getDatabase();
+  const recipientRows =
+    input.personIds && input.personIds.length > 0
+      ? await database
+          .select({
+            personId: people.id,
+            isMinor: people.isMinor,
+          })
+          .from(people)
+          .where(inArray(people.id, [...new Set(input.personIds)]))
+      : await database
+          .select({
+            personId: people.id,
+            isMinor: people.isMinor,
+          })
+          .from(registrations)
+          .innerJoin(people, eq(registrations.personId, people.id))
+          .where(
+            and(
+              eq(registrations.sessionId, input.sessionId),
+              inArray(registrations.status, [
+                "pending",
+                "confirmed",
+                "waitlisted",
+                "checked-in",
+              ]),
+            ),
+          );
+  if (recipientRows.length === 0) return 0;
+  const minorIds = recipientRows
+    .filter((recipient) => recipient.isMinor)
+    .map((recipient) => recipient.personId);
+  const guardianRows =
+    minorIds.length === 0
+      ? []
+      : await database
+          .select({
+            minorId: guardianships.minorId,
+            guardianId: guardianships.guardianId,
+          })
+          .from(guardianships)
+          .where(
+            and(
+              inArray(guardianships.minorId, minorIds),
+              eq(guardianships.verified, true),
+              eq(guardianships.reviewStatus, "verified"),
+            ),
+          );
+  const guardiansByMinor = new Map<string, string[]>();
+  for (const row of guardianRows) {
+    guardiansByMinor.set(row.minorId, [
+      ...(guardiansByMinor.get(row.minorId) ?? []),
+      row.guardianId,
+    ]);
+  }
+  const notificationRows = recipientRows.flatMap((recipient) => {
+    let guardianCopyPersonIds: readonly string[] = [];
+    try {
+      guardianCopyPersonIds = enforceGuardianCopies({
+        recipientPersonId: recipient.personId,
+        recipientIsMinor: recipient.isMinor,
+        verifiedGuardianPersonIds:
+          guardiansByMinor.get(recipient.personId) ?? [],
+      }).guardianCopyPersonIds;
+    } catch {
+      // A minor without a verified guardian cannot receive direct operator
+      // messaging yet. The audit trail still records the calendar change.
+      return [];
+    }
+    return (["in-app", "push"] as const).map((channel) => ({
+      id: crypto.randomUUID(),
+      organizationId: input.organizationId,
+      senderPersonId: input.senderPersonId,
+      recipientPersonId: recipient.personId,
+      guardianCopyPersonIds: [...guardianCopyPersonIds],
+      channel,
+      kind: input.kind,
+      subject: input.subject,
+      body: input.body,
+      status: "queued",
+      scheduledAt: input.now,
+    }));
+  });
+  if (notificationRows.length > 0) {
+    await database.insert(messages).values(notificationRows);
+  }
+  return new Set(notificationRows.map((row) => row.recipientPersonId)).size;
+}
+
+export async function addCalendarParticipant(input: {
+  readonly actor: ApiActor;
+  readonly sessionId: string;
+  readonly personId: string;
+  readonly reason: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const calendarSession = await loadOrganizationCalendarSession({
+    organizationId,
+    sessionId: input.sessionId,
+  });
+  if (
+    ["completed", "cancelled"].includes(calendarSession.session.status) ||
+    calendarSession.session.endsAt <= input.now
+  ) {
+    throw new Error("Players cannot be added to a finished session.");
+  }
+  const connectedPerson = await database
+    .select({
+      personId: people.id,
+      displayName: people.displayName,
+    })
+    .from(people)
+    .leftJoin(
+      organizationParticipants,
+      and(
+        eq(organizationParticipants.personId, people.id),
+        eq(organizationParticipants.organizationId, organizationId),
+        eq(organizationParticipants.status, "active"),
+      ),
+    )
+    .leftJoin(
+      organizationMemberships,
+      and(
+        eq(organizationMemberships.personId, people.id),
+        eq(organizationMemberships.organizationId, organizationId),
+        eq(organizationMemberships.active, true),
+      ),
+    )
+    .where(
+      and(
+        eq(people.id, input.personId),
+        or(
+          sql`${organizationParticipants.id} IS NOT NULL`,
+          sql`${organizationMemberships.id} IS NOT NULL`,
+        ),
+      ),
+    )
+    .limit(1)
+    .then((rows) => rows[0]);
+  if (!connectedPerson) {
+    throw new Error("This person is not connected to the organization.");
+  }
+  const confirmedCount = await database
+    .select({ count: sql<number>`count(*)::int` })
+    .from(registrations)
+    .where(
+      and(
+        eq(registrations.sessionId, input.sessionId),
+        inArray(registrations.status, ["confirmed", "checked-in"]),
+        sql`${registrations.personId} <> ${input.personId}`,
+      ),
+    )
+    .then((rows) => rows[0]?.count ?? 0);
+  if (confirmedCount >= calendarSession.session.capacity) {
+    throw new Error("This session is full. Add the player to its waitlist.");
+  }
+  const registrationId = crypto.randomUUID();
+  const eligibilityDecision = {
+    source: "operator-calendar",
+    status: "approved",
+    recordedAt: input.now.toISOString(),
+  };
+  const [registration] = await database
+    .insert(registrations)
+    .values({
+      id: registrationId,
+      sessionId: input.sessionId,
+      personId: input.personId,
+      status: "confirmed",
+      eligibilityDecision,
+      overriddenByPersonId: input.actor.personId,
+      overrideReason: input.reason,
+    })
+    .onConflictDoUpdate({
+      target: [registrations.sessionId, registrations.personId],
+      set: {
+        status: "confirmed",
+        eligibilityDecision,
+        overriddenByPersonId: input.actor.personId,
+        overrideReason: input.reason,
+        orderId: null,
+        holdExpiresAt: null,
+        updatedAt: input.now,
+      },
+    })
+    .returning({ id: registrations.id });
+  const resolvedRegistrationId = registration?.id ?? registrationId;
+  await database.insert(auditLog).values({
+    organizationId,
+    actorPersonId: input.actor.personId,
+    actorType: "person",
+    action: "calendar.participant_added",
+    entityType: "registration",
+    entityId: resolvedRegistrationId,
+    afterHash: stableHash({
+      sessionId: input.sessionId,
+      personId: input.personId,
+      status: "confirmed",
+    }),
+    reason: input.reason,
+    traceId: input.requestId,
+    ipAddress: input.ipAddress,
+    createdAt: input.now,
+  });
+  await queueCalendarNotifications({
+    organizationId,
+    sessionId: input.sessionId,
+    senderPersonId: input.actor.personId,
+    personIds: [input.personId],
+    subject: `You're in: ${calendarSession.session.title}`,
+    body: `${connectedPerson.displayName}, you were added to ${calendarSession.session.title} on ${formatCalendarMoment(calendarSession.session.startsAt, calendarSession.session.timezone)}.`,
+    kind: "calendar-participant-added",
+    now: input.now,
+  });
+  return {
+    id: resolvedRegistrationId,
+    entity: "registration",
+    status: "confirmed",
+  };
+}
+
+export async function removeCalendarParticipant(input: {
+  readonly actor: ApiActor;
+  readonly registrationId: string;
+  readonly reason: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const registration = await database
+    .select({
+      registration: registrations,
+      sessionId: sessions.id,
+      sessionTitle: sessions.title,
+      sessionStartsAt: sessions.startsAt,
+      sessionTimezone: sessions.timezone,
+      personName: people.displayName,
+      organizationId: sql<
+        string | null
+      >`coalesce(${programs.organizationId}, ${eventTypes.organizationId}, ${venues.organizationId})`,
+    })
+    .from(registrations)
+    .innerJoin(sessions, eq(registrations.sessionId, sessions.id))
+    .innerJoin(people, eq(registrations.personId, people.id))
+    .leftJoin(programs, eq(sessions.programId, programs.id))
+    .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
+    .leftJoin(venues, eq(sessions.venueId, venues.id))
+    .where(eq(registrations.id, input.registrationId))
+    .limit(1)
+    .then((rows) => rows[0]);
+  if (!registration || registration.organizationId !== organizationId) {
+    throw new Error("Registration was not found in this organization.");
+  }
+  if (["cancelled", "refunded"].includes(registration.registration.status)) {
+    throw new Error("This player has already left the session.");
+  }
+  await database.batch([
+    database
+      .update(registrations)
+      .set({
+        status: "cancelled",
+        overriddenByPersonId: input.actor.personId,
+        overrideReason: input.reason,
+        updatedAt: input.now,
+      })
+      .where(eq(registrations.id, input.registrationId)),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "calendar.participant_removed",
+      entityType: "registration",
+      entityId: input.registrationId,
+      beforeHash: stableHash({
+        status: registration.registration.status,
+        personId: registration.registration.personId,
+      }),
+      afterHash: stableHash({
+        status: "cancelled",
+        personId: registration.registration.personId,
+      }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  await queueCalendarNotifications({
+    organizationId,
+    sessionId: registration.sessionId,
+    senderPersonId: input.actor.personId,
+    personIds: [registration.registration.personId],
+    subject: `Registration updated: ${registration.sessionTitle}`,
+    body: `${registration.personName}, you were removed from ${registration.sessionTitle}, scheduled for ${formatCalendarMoment(registration.sessionStartsAt, registration.sessionTimezone)}. Contact the organizer if this was unexpected.`,
+    kind: "calendar-participant-removed",
+    now: input.now,
+  });
+  return {
+    id: input.registrationId,
+    entity: "registration",
+    status: "cancelled",
+  };
+}
+
+export async function cancelCalendarSession(input: {
+  readonly actor: ApiActor;
+  readonly sessionId: string;
+  readonly reason: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const calendarSession = await loadOrganizationCalendarSession({
+    organizationId,
+    sessionId: input.sessionId,
+  });
+  if (calendarSession.session.status === "cancelled") {
+    throw new Error("This session is already cancelled.");
+  }
+  if (calendarSession.session.status === "completed") {
+    throw new Error("A completed session cannot be cancelled.");
+  }
+  const recipientIds = await database
+    .select({ personId: registrations.personId })
+    .from(registrations)
+    .where(
+      and(
+        eq(registrations.sessionId, input.sessionId),
+        inArray(registrations.status, [
+          "pending",
+          "confirmed",
+          "waitlisted",
+          "checked-in",
+        ]),
+      ),
+    )
+    .then((rows) => rows.map((row) => row.personId));
+  await database.batch([
+    database
+      .update(sessions)
+      .set({ status: "cancelled", updatedAt: input.now })
+      .where(eq(sessions.id, input.sessionId)),
+    database
+      .update(resourceReservations)
+      .set({ status: "released", updatedAt: input.now })
+      .where(
+        and(
+          eq(resourceReservations.organizationId, organizationId),
+          eq(resourceReservations.sourceType, "session"),
+          eq(resourceReservations.sourceId, input.sessionId),
+          inArray(resourceReservations.status, ["held", "confirmed"]),
+        ),
+      ),
+    database
+      .update(inventoryReservations)
+      .set({ status: "released", updatedAt: input.now })
+      .where(
+        and(
+          eq(inventoryReservations.organizationId, organizationId),
+          eq(inventoryReservations.sourceType, "session"),
+          eq(inventoryReservations.sourceId, input.sessionId),
+          inArray(inventoryReservations.status, ["held", "confirmed"]),
+        ),
+      ),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "calendar.session_cancelled",
+      entityType: "session",
+      entityId: input.sessionId,
+      beforeHash: stableHash({
+        status: calendarSession.session.status,
+      }),
+      afterHash: stableHash({ status: "cancelled" }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  await queueCalendarNotifications({
+    organizationId,
+    sessionId: input.sessionId,
+    senderPersonId: input.actor.personId,
+    personIds: recipientIds,
+    subject: `Cancelled: ${calendarSession.session.title}`,
+    body: `${calendarSession.session.title} on ${formatCalendarMoment(calendarSession.session.startsAt, calendarSession.session.timezone)} was cancelled. Reason: ${input.reason}`,
+    kind: "calendar-session-cancelled",
+    now: input.now,
+  });
+  return {
+    id: input.sessionId,
+    entity: "session",
+    status: "cancelled",
+  };
+}
+
+export async function createCalendarBlock(input: {
+  readonly actor: ApiActor;
+  readonly resourceType: "court" | "coach";
+  readonly resourceId: string;
+  readonly startsAt: Date;
+  readonly endsAt: Date;
+  readonly mode: "blocked" | "maintenance";
+  readonly reason: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  if (input.endsAt <= input.startsAt || input.endsAt <= input.now) {
+    throw new Error("Blocked time must end in the future after it starts.");
+  }
+  const organization = await database.query.organizations.findFirst({
+    where: eq(organizations.id, organizationId),
+  });
+  if (!organization) throw new Error("Organization was not found.");
+  let resourceName: string;
+  if (input.resourceType === "court") {
+    const resource = await database
+      .select({ name: courts.name })
+      .from(courts)
+      .innerJoin(venues, eq(courts.venueId, venues.id))
+      .where(
+        and(
+          eq(courts.id, input.resourceId),
+          eq(venues.organizationId, organizationId),
+        ),
+      )
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (!resource) throw new Error("Court was not found.");
+    resourceName = resource.name;
+  } else {
+    const resource = await database
+      .select({ name: people.displayName })
+      .from(organizationMemberships)
+      .innerJoin(people, eq(organizationMemberships.personId, people.id))
+      .where(
+        and(
+          eq(organizationMemberships.organizationId, organizationId),
+          eq(organizationMemberships.personId, input.resourceId),
+          eq(organizationMemberships.active, true),
+        ),
+      )
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (!resource) throw new Error("Coach was not found.");
+    resourceName = resource.name;
+  }
+  const conflict = await database
+    .select({ id: resourceReservations.id })
+    .from(resourceReservations)
+    .where(
+      and(
+        eq(resourceReservations.organizationId, organizationId),
+        eq(resourceReservations.resourceType, input.resourceType),
+        eq(resourceReservations.resourceId, input.resourceId),
+        inArray(resourceReservations.status, ["held", "confirmed"]),
+        lt(resourceReservations.startsAt, input.endsAt),
+        gt(resourceReservations.endsAt, input.startsAt),
+      ),
+    )
+    .limit(1);
+  if (conflict[0]) {
+    throw new Error(
+      `${resourceName} already has a reservation during this time.`,
+    );
+  }
+  let schedule = await database.query.schedules.findFirst({
+    where: and(
+      eq(schedules.organizationId, organizationId),
+      eq(schedules.resourceType, input.resourceType),
+      eq(schedules.resourceId, input.resourceId),
+    ),
+  });
+  if (!schedule) {
+    const scheduleId = crypto.randomUUID();
+    await database.insert(schedules).values({
+      id: scheduleId,
+      organizationId,
+      name: `${resourceName} availability`,
+      timezone: organization.timezone,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId,
+    });
+    schedule = await database.query.schedules.findFirst({
+      where: eq(schedules.id, scheduleId),
+    });
+  }
+  if (!schedule) throw new Error("Resource schedule could not be created.");
+  const blockId = crypto.randomUUID();
+  await database.batch([
+    database.insert(scheduleOverrides).values({
+      id: blockId,
+      scheduleId: schedule.id,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+      mode: input.mode,
+      reason: input.reason,
+    }),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "calendar.time_blocked",
+      entityType: "schedule-override",
+      entityId: blockId,
+      afterHash: stableHash({
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
+        startsAt: input.startsAt,
+        endsAt: input.endsAt,
+        mode: input.mode,
+      }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return {
+    id: blockId,
+    entity: "schedule-override",
+    status: input.mode,
+  };
+}
+
+export async function addCalendarEquipment(input: {
+  readonly actor: ApiActor;
+  readonly sessionId: string;
+  readonly inventoryStockItemId: string;
+  readonly quantity: number;
+  readonly reason: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const calendarSession = await loadOrganizationCalendarSession({
+    organizationId,
+    sessionId: input.sessionId,
+  });
+  if (!Number.isSafeInteger(input.quantity) || input.quantity <= 0) {
+    throw new Error("Equipment quantity must be a positive whole number.");
+  }
+  const stock = await database
+    .select({
+      stock: inventoryStockItems,
+      itemTitle: catalogItems.title,
+      variantTitle: catalogVariants.title,
+    })
+    .from(inventoryStockItems)
+    .innerJoin(
+      catalogVariants,
+      eq(inventoryStockItems.catalogVariantId, catalogVariants.id),
+    )
+    .innerJoin(catalogItems, eq(catalogVariants.catalogItemId, catalogItems.id))
+    .where(
+      and(
+        eq(inventoryStockItems.id, input.inventoryStockItemId),
+        eq(inventoryStockItems.organizationId, organizationId),
+      ),
+    )
+    .limit(1)
+    .then((rows) => rows[0]);
+  if (!stock || stock.stock.purpose === "sale") {
+    throw new Error("Choose equipment configured for operations or coaching.");
+  }
+  const reservedQuantity = await database
+    .select({
+      quantity: sql<number>`coalesce(sum(${inventoryReservations.quantity}), 0)::int`,
+    })
+    .from(inventoryReservations)
+    .where(
+      and(
+        eq(
+          inventoryReservations.inventoryStockItemId,
+          input.inventoryStockItemId,
+        ),
+        inArray(inventoryReservations.status, ["held", "confirmed"]),
+        lt(inventoryReservations.startsAt, calendarSession.session.endsAt),
+        gt(inventoryReservations.endsAt, calendarSession.session.startsAt),
+      ),
+    )
+    .then((rows) => rows[0]?.quantity ?? 0);
+  if (reservedQuantity + input.quantity > stock.stock.quantityOnHand) {
+    throw new Error(
+      `Only ${Math.max(0, stock.stock.quantityOnHand - reservedQuantity)} available during this session.`,
+    );
+  }
+  const reservationId = crypto.randomUUID();
+  await database.batch([
+    database.insert(inventoryReservations).values({
+      id: reservationId,
+      organizationId,
+      inventoryStockItemId: input.inventoryStockItemId,
+      quantity: input.quantity,
+      startsAt: calendarSession.session.startsAt,
+      endsAt: calendarSession.session.endsAt,
+      sourceType: "session",
+      sourceId: input.sessionId,
+      status: "confirmed",
+    }),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "calendar.equipment_added",
+      entityType: "inventory-reservation",
+      entityId: reservationId,
+      afterHash: stableHash({
+        sessionId: input.sessionId,
+        inventoryStockItemId: input.inventoryStockItemId,
+        quantity: input.quantity,
+      }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  const label =
+    stock.variantTitle === "Default"
+      ? stock.itemTitle
+      : `${stock.itemTitle} · ${stock.variantTitle}`;
+  await queueCalendarNotifications({
+    organizationId,
+    sessionId: input.sessionId,
+    senderPersonId: input.actor.personId,
+    subject: `Equipment updated: ${calendarSession.session.title}`,
+    body: `${input.quantity} × ${label} was added to ${calendarSession.session.title}.`,
+    kind: "calendar-equipment-added",
+    now: input.now,
+  });
+  return {
+    id: reservationId,
+    entity: "inventory-reservation",
+    status: "confirmed",
+  };
+}
+
+export async function removeCalendarEquipment(input: {
+  readonly actor: ApiActor;
+  readonly reservationId: string;
+  readonly reason: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const reservation = await database
+    .select({
+      reservation: inventoryReservations,
+      itemTitle: catalogItems.title,
+      variantTitle: catalogVariants.title,
+    })
+    .from(inventoryReservations)
+    .innerJoin(
+      inventoryStockItems,
+      eq(inventoryReservations.inventoryStockItemId, inventoryStockItems.id),
+    )
+    .innerJoin(
+      catalogVariants,
+      eq(inventoryStockItems.catalogVariantId, catalogVariants.id),
+    )
+    .innerJoin(catalogItems, eq(catalogVariants.catalogItemId, catalogItems.id))
+    .where(
+      and(
+        eq(inventoryReservations.id, input.reservationId),
+        eq(inventoryReservations.organizationId, organizationId),
+        eq(inventoryReservations.sourceType, "session"),
+      ),
+    )
+    .limit(1)
+    .then((rows) => rows[0]);
+  if (!reservation) {
+    throw new Error("Equipment reservation was not found.");
+  }
+  if (!["held", "confirmed"].includes(reservation.reservation.status)) {
+    throw new Error("This equipment is no longer reserved.");
+  }
+  const calendarSession = await loadOrganizationCalendarSession({
+    organizationId,
+    sessionId: reservation.reservation.sourceId,
+  });
+  await database.batch([
+    database
+      .update(inventoryReservations)
+      .set({ status: "released", updatedAt: input.now })
+      .where(eq(inventoryReservations.id, input.reservationId)),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "calendar.equipment_removed",
+      entityType: "inventory-reservation",
+      entityId: input.reservationId,
+      beforeHash: stableHash({
+        status: reservation.reservation.status,
+        quantity: reservation.reservation.quantity,
+      }),
+      afterHash: stableHash({ status: "released" }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  const label =
+    reservation.variantTitle === "Default"
+      ? reservation.itemTitle
+      : `${reservation.itemTitle} · ${reservation.variantTitle}`;
+  await queueCalendarNotifications({
+    organizationId,
+    sessionId: calendarSession.session.id,
+    senderPersonId: input.actor.personId,
+    subject: `Equipment updated: ${calendarSession.session.title}`,
+    body: `${reservation.reservation.quantity} × ${label} was removed from ${calendarSession.session.title}.`,
+    kind: "calendar-equipment-removed",
+    now: input.now,
+  });
+  return {
+    id: input.reservationId,
+    entity: "inventory-reservation",
+    status: "released",
+  };
+}
+
 export async function proposeCalendarChange(input: {
   readonly actor: ApiActor;
   readonly sessionId: string;
@@ -3086,6 +4723,10 @@ export async function confirmCalendarChange(input: {
       "Resolve the resource conflicts before moving this session.",
     );
   }
+  const calendarSession = await loadOrganizationCalendarSession({
+    organizationId,
+    sessionId: proposal.sessionId,
+  });
   const reservations = [
     proposal.proposedCourtId
       ? {
@@ -3174,6 +4815,15 @@ export async function confirmCalendarChange(input: {
       createdAt: input.now,
     }),
   ]);
+  await queueCalendarNotifications({
+    organizationId,
+    sessionId: proposal.sessionId,
+    senderPersonId: input.actor.personId,
+    subject: `Schedule updated: ${calendarSession.session.title}`,
+    body: `${calendarSession.session.title} is now scheduled for ${formatCalendarMoment(proposal.proposedStartsAt, calendarSession.session.timezone)}.`,
+    kind: "calendar-session-rescheduled",
+    now: input.now,
+  });
   return {
     id: proposal.id,
     entity: "calendar-change",

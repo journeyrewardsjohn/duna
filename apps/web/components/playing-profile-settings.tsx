@@ -21,6 +21,27 @@ function splitName(value: string) {
   return { given: parts[0] ?? "", family: parts.slice(1).join(" ") };
 }
 
+function sourceStatusLabel(
+  status: PlayerSettings["sourceConnections"][number]["status"],
+) {
+  switch (status) {
+    case "review-required":
+      return "Confirm profile";
+    case "queued":
+      return "Import queued";
+    case "syncing":
+      return "Importing";
+    case "linked":
+      return "Linked";
+    case "failed":
+      return "Import needs attention";
+    case "disconnected":
+      return "Disconnected";
+    default:
+      return "Unknown";
+  }
+}
+
 export function PlayingProfileSettings({
   settings,
 }: {
@@ -357,7 +378,7 @@ export function PlayingProfileSettings({
               <Link2 /> VolleyballLife profile
               {connectionStatus("volleyball-life") && (
                 <Badge tone="neutral">
-                  {connectionStatus("volleyball-life")}
+                  {sourceStatusLabel(connectionStatus("volleyball-life")!)}
                 </Badge>
               )}
             </span>
@@ -377,7 +398,9 @@ export function PlayingProfileSettings({
               <span>
                 <Link2 /> BVBInfo profile
                 {connectionStatus("bvbinfo") && (
-                  <Badge tone="neutral">{connectionStatus("bvbinfo")}</Badge>
+                  <Badge tone="neutral">
+                    {sourceStatusLabel(connectionStatus("bvbinfo")!)}
+                  </Badge>
                 )}
               </span>
               <input
@@ -452,6 +475,12 @@ export function PlayingProfileSettings({
                     value={connection.progress.current}
                   />
                 )}
+                {connection.status === "failed" && connection.lastError && (
+                  <small className="source-import-status__error" role="alert">
+                    {connection.lastError} Review the profile link, then save
+                    again to retry.
+                  </small>
+                )}
                 {connection.status === "review-required" &&
                   connection.verificationStatus === "pending" && (
                     <span className="source-import-status__actions">
@@ -481,7 +510,7 @@ export function PlayingProfileSettings({
                       : "neutral"
                 }
               >
-                {connection.status.replaceAll("-", " ")}
+                {sourceStatusLabel(connection.status)}
               </Badge>
             </article>
           );

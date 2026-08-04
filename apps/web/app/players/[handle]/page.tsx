@@ -1,18 +1,100 @@
+import type { PublicPlayerPerformance } from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
 import {
+  ArrowRight,
+  CalendarDays,
   ExternalLink,
   Globe2,
   MapPin,
-  Share2,
+  Sparkles,
   TrendingUp,
   Trophy,
-  UserPlus,
+  UserRoundCheck,
 } from "lucide-react";
+import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import {
+  RatingTrendChart,
+  type RatingTrendPoint,
+} from "@/components/rating-trend-chart";
 import { RatingOrbit } from "@/components/rating-orbit";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
+import {
+  getProfessionalEditorialSummary,
+  professionalEditorialHash,
+} from "@/lib/pro-editorial";
+
+type PerformanceEvent = PublicPlayerPerformance["history"][number];
+type PublicParticipant =
+  PublicPlayerPerformance["history"][number]["participants"][number];
+
+type MatchResult = "win" | "loss" | "unknown";
+
+function matchResult(event: PerformanceEvent, personId: string): MatchResult {
+  const side = event.participants.find(
+    (participant) => participant.personId === personId,
+  )?.side;
+  if (!side || event.sets.length === 0) return "unknown";
+  const setWins = event.sets.reduce(
+    (record, set) => ({
+      a: record.a + (set.a > set.b ? 1 : 0),
+      b: record.b + (set.b > set.a ? 1 : 0),
+    }),
+    { a: 0, b: 0 },
+  );
+  if (setWins.a === setWins.b) return "unknown";
+  const winner = setWins.a > setWins.b ? "A" : "B";
+  return winner === side ? "win" : "loss";
+}
+
+function formatMatchDate(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(value));
+}
+
+function teamName(participants: readonly PublicParticipant[], side: "A" | "B") {
+  return participants
+    .filter((participant) => participant.side === side)
+    .map((participant) => participant.name)
+    .join(" / ");
+}
+
+function profileStateLabel(state: string | undefined) {
+  if (state === "unclaimed") return "Unclaimed profile";
+  if (state === "claim-pending") return "Claim under review";
+  return "Claimed profile";
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  readonly params: Promise<{ handle: string }>;
+}): Promise<Metadata> {
+  const { handle } = await params;
+  const caller = await getServerCaller();
+  const player = await caller.public
+    .playerProfile({ handle })
+    .catch(() => undefined);
+  if (!player) return { title: "Player not found · Duna" };
+  return {
+    title: `${player.displayName} beach volleyball profile · Duna`,
+    description: `${player.displayName}'s Sand Rating, verified match history, partnerships, and connected beach volleyball records.`,
+    alternates: { canonical: `/players/${player.handle}` },
+    openGraph: {
+      title: `${player.displayName} · Sand Rating ${player.rating.display.toFixed(2)}`,
+      description: `Match history and performance trends for ${player.displayName}.`,
+      type: "profile",
+      images: player.avatarUrl ? [player.avatarUrl] : undefined,
+    },
+  };
+}
 
 export default async function PublicPlayerPage({
   params,
@@ -26,13 +108,148 @@ export default async function PublicPlayerPage({
     caller.public.playerPerformance({ handle }).catch(() => undefined),
   ]);
   if (!player) notFound();
-  const wins =
-    performance?.history.filter((event) => event.actualResult === 1).length ??
-    0;
-  const losses = (performance?.history.length ?? 0) - wins;
+
+  const history = performance?.history ?? [];
+  const results = history.map((event) => ({
+    event,
+    result: matchResult(event, player.id),
+  }));
+  const wins = results.filter(({ result }) => result === "win").length;
+  const losses = results.filter(({ result }) => result === "loss").length;
+  const unknown = results.length - wins - losses;
+  const profileById = new Map(
+    (performance?.participantProfiles ?? []).map((profile) => [
+      profile.id,
+      profile,
+    ]),
+  );
+  const partnerships = new Map<
+    string,
+    {
+      personId: string;
+      handle: string;
+      name: string;
+      avatarUrl?: string;
+      matches: number;
+      wins: number;
+      losses: number;
+      lastPlayedAt: string;
+    }
+  >();
+  for (const { event, result } of results) {
+    const side = event.participants.find(
+      (participant) => participant.personId === player.id,
+    )?.side;
+    if (!side) continue;
+    for (const participant of event.participants) {
+      if (
+        participant.side !== side ||
+        !participant.personId ||
+        participant.personId === player.id
+      ) {
+        continue;
+      }
+      const profile = profileById.get(participant.personId);
+      if (!profile?.handle) continue;
+      const existing = partnerships.get(profile.id);
+      partnerships.set(profile.id, {
+        personId: profile.id,
+        handle: profile.handle,
+        name: profile.displayName,
+        avatarUrl: profile.avatarUrl,
+        matches: (existing?.matches ?? 0) + 1,
+        wins: (existing?.wins ?? 0) + (result === "win" ? 1 : 0),
+        losses: (existing?.losses ?? 0) + (result === "loss" ? 1 : 0),
+        lastPlayedAt:
+          !existing ||
+          new Date(event.occurredAt) > new Date(existing.lastPlayedAt)
+            ? event.occurredAt
+            : existing.lastPlayedAt,
+      });
+    }
+  }
+  const partnershipRows = [...partnerships.values()].sort(
+    (a, b) =>
+      b.matches - a.matches ||
+      new Date(b.lastPlayedAt).getTime() - new Date(a.lastPlayedAt).getTime(),
+  );
+  const trendPoints: RatingTrendPoint[] = history.map((event) => ({
+    id: event.id,
+    occurredAt: event.occurredAt,
+    rating: event.afterDisplay,
+    before: event.beforeDisplay,
+  }));
+  const earliest = history
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime(),
+    )[0];
+  const latest = history
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
+    )[0];
+  const fallbackSummary = history.length
+    ? `${player.displayName} has ${wins} verified wins and ${losses} losses across ${history.length} rated results in Duna. The connected record runs from ${formatMatchDate(earliest!.occurredAt)} through ${formatMatchDate(latest!.occurredAt)}, with a current Sand Rating of ${player.rating.display.toFixed(2)}.`
+    : `${player.displayName}'s public profile is connected, but no approved match evidence is available yet.`;
+  const editorial =
+    player.isProfessional && history.length > 0
+      ? await getProfessionalEditorialSummary({
+          kind: "player",
+          subject: player.displayName,
+          facts: [
+            `Current Sand Rating: ${player.rating.display.toFixed(2)} (${player.rating.discipline.replace("-", " ")}).`,
+            `Verified record: ${wins} wins, ${losses} losses, ${unknown} results without a resolved winner, across ${history.length} rated matches.`,
+            `Connected history spans ${formatMatchDate(earliest!.occurredAt)} through ${formatMatchDate(latest!.occurredAt)}.`,
+            performance?.worldRanking
+              ? `Latest connected world ranking: ${performance.worldRanking.rank} with ${performance.worldRanking.points.toFixed(0)} points on ${performance.worldRanking.rankingDate}.`
+              : "No current world ranking is connected.",
+            partnershipRows.length
+              ? `Most frequent connected partners: ${partnershipRows
+                  .slice(0, 3)
+                  .map(
+                    (row) =>
+                      `${row.name} (${row.matches} matches, ${row.wins}-${row.losses})`,
+                  )
+                  .join("; ")}.`
+              : "No resolved partnership record is available.",
+          ],
+          fallback: fallbackSummary,
+          contentHash: professionalEditorialHash({
+            playerId: player.id,
+            rating: player.rating.display,
+            ranking: performance?.worldRanking,
+            matches: history.map((event) => [
+              event.matchId,
+              event.occurredAt,
+              event.afterDisplay,
+            ]),
+          }),
+        })
+      : undefined;
+  const claimPath = `/app/onboarding?claimProfile=${encodeURIComponent(player.handle)}`;
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    name: player.displayName,
+    url: `/players/${player.handle}`,
+    image: player.avatarUrl,
+    homeLocation: player.homeMarket
+      ? { "@type": "Place", name: player.homeMarket }
+      : undefined,
+    description: editorial ?? fallbackSummary,
+    knowsAbout: ["Beach volleyball", "Sand Rating"],
+  };
+
   return (
     <main className="public-detail">
       <SiteHeader />
+      <script
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        type="application/ld+json"
+      />
       <section className="public-profile-hero">
         <div className="public-profile-hero__dune" />
         <div className="public-profile-hero__identity">
@@ -48,11 +265,7 @@ export default async function PublicPlayerPage({
           </span>
           <div>
             <div className="profile-badge-row">
-              <Badge>
-                {player.profileClaimStatus === "unclaimed"
-                  ? "Unclaimed profile"
-                  : "Claimed profile"}
-              </Badge>
+              <Badge>{profileStateLabel(player.profileClaimStatus)}</Badge>
               {player.isProfessional && (
                 <Badge tone="positive">
                   <Trophy aria-hidden size={12} /> Professional
@@ -67,18 +280,35 @@ export default async function PublicPlayerPage({
             </div>
             <h1>{player.displayName}</h1>
             <p>
-              @{player.handle} · <MapPin aria-hidden size={14} />{" "}
-              {player.homeMarket}
+              @{player.handle}
+              {player.homeMarket ? (
+                <>
+                  {" "}
+                  · <MapPin aria-hidden size={14} /> {player.homeMarket}
+                </>
+              ) : null}
             </p>
           </div>
         </div>
         <div className="public-profile-hero__actions">
-          <button>
-            <UserPlus aria-hidden size={17} /> Follow
-          </button>
-          <button>
-            <Share2 aria-hidden size={17} /> Share
-          </button>
+          {player.profileClaimStatus === "unclaimed" ? (
+            <Link href={claimPath}>
+              <UserRoundCheck aria-hidden size={17} /> Claim this profile
+            </Link>
+          ) : player.profileClaimStatus === "claim-pending" ? (
+            <span>
+              <UserRoundCheck aria-hidden size={17} /> Claim under review
+            </span>
+          ) : (
+            <a href="#match-history">
+              Explore results <ArrowRight aria-hidden size={16} />
+            </a>
+          )}
+          {player.isProfessional && (
+            <Link href="/pro">
+              Pro tour <Trophy aria-hidden size={16} />
+            </Link>
+          )}
         </div>
         <RatingOrbit
           confidence={player.rating.confidence}
@@ -86,6 +316,7 @@ export default async function PublicPlayerPage({
           value={player.rating.display}
         />
       </section>
+
       <section className="public-profile-body">
         <div className="profile-summary-grid">
           <article>
@@ -99,22 +330,34 @@ export default async function PublicPlayerPage({
             <span>Verification-weighted</span>
           </article>
           <article>
-            <small>Record</small>
+            <small>Verified record</small>
             <strong>
               {wins}–{losses}
             </strong>
-            <span>{performance?.history.length ?? 0} rated matches</span>
+            <span>
+              {history.length} rated matches
+              {unknown ? ` · ${unknown} unresolved` : ""}
+            </span>
           </article>
           <article>
-            <small>Profile state</small>
-            <strong>
-              {player.profileClaimStatus === "unclaimed"
-                ? "Unclaimed"
-                : "Claimed"}
-            </strong>
-            <span>{performance?.sources.length ?? 0} connected sources</span>
+            <small>Connected evidence</small>
+            <strong>{performance?.sources.length ?? 0}</strong>
+            <span>source profiles</span>
           </article>
         </div>
+
+        {editorial && (
+          <section className="public-profile-editorial">
+            <span>
+              <Sparkles aria-hidden size={18} />
+              Professional form report
+            </span>
+            <h2>The story in the results.</h2>
+            <p>{editorial}</p>
+            <small>Regenerated when new verified match evidence arrives.</small>
+          </section>
+        )}
+
         {performance?.worldRanking && (
           <section className="pro-ranking-strip">
             <span>
@@ -135,97 +378,146 @@ export default async function PublicPlayerPage({
             </a>
           </section>
         )}
+
         <section className="profile-performance-grid">
           <div className="profile-rating-history">
             <header>
               <div>
                 <span className="page-eyebrow">Rating history</span>
-                <h2>Every move, explained.</h2>
+                <h2>Form over time.</h2>
+                <p>Ordered by when every match was played—not imported.</p>
               </div>
               <TrendingUp aria-hidden size={24} />
             </header>
-            <div className="rating-history-track" aria-hidden>
-              {(performance?.history ?? [])
-                .slice()
-                .reverse()
-                .map((event) => (
-                  <i
-                    key={event.id}
-                    style={{
-                      height: `${Math.max(12, (event.afterDisplay / 8) * 100)}%`,
-                    }}
-                    title={event.afterDisplay.toFixed(2)}
-                  />
-                ))}
-            </div>
-            {(performance?.history.length ?? 0) === 0 && (
-              <p className="profile-empty">
-                This player has no approved rating events yet.
-              </p>
-            )}
+            <RatingTrendChart points={trendPoints} />
           </div>
           <aside className="profile-source-card">
             <span className="page-eyebrow">Provenance</span>
             <h2>Connected records</h2>
-            {(performance?.sources ?? []).map((source) => (
-              <a
-                href={source.profileUrl}
-                key={source.id}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <span>
+            {(performance?.sources ?? []).map((source) =>
+              source.profileUrl ? (
+                <a
+                  href={source.profileUrl}
+                  key={source.id}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <span>
+                    <strong>{source.source}</strong>
+                    <small>
+                      {source.externalMatchCount
+                        ? `${source.externalMatchCount} source matches`
+                        : "Profile connected"}
+                    </small>
+                  </span>
+                  <ExternalLink aria-hidden size={15} />
+                </a>
+              ) : (
+                <div className="profile-source-card__record" key={source.id}>
                   <strong>{source.source}</strong>
-                  <small>
-                    {source.externalMatchCount
-                      ? `${source.externalMatchCount} source matches`
-                      : "Profile connected"}
-                  </small>
-                </span>
-                <ExternalLink aria-hidden size={15} />
-              </a>
-            ))}
+                  <small>Profile connected</small>
+                </div>
+              ),
+            )}
             {(performance?.sources.length ?? 0) === 0 && (
               <p>No external records are connected.</p>
             )}
           </aside>
         </section>
-        <section className="public-match-history">
+
+        {partnershipRows.length > 0 && (
+          <section className="profile-partnerships">
+            <header>
+              <div>
+                <span className="page-eyebrow">Partnerships</span>
+                <h2>Who they&apos;ve built results with.</h2>
+              </div>
+              <Badge>{partnershipRows.length}</Badge>
+            </header>
+            <div>
+              {partnershipRows.slice(0, 8).map((partner) => (
+                <Link
+                  href={`/teams/${player.handle}/${partner.handle}`}
+                  key={partner.personId}
+                >
+                  <span
+                    className="profile-partnerships__avatar"
+                    style={
+                      partner.avatarUrl
+                        ? {
+                            backgroundImage: `url("${partner.avatarUrl}")`,
+                          }
+                        : undefined
+                    }
+                  >
+                    {partner.avatarUrl
+                      ? null
+                      : partner.name
+                          .split(/\s+/)
+                          .map((part) => part[0])
+                          .join("")
+                          .slice(0, 2)}
+                  </span>
+                  <span>
+                    <strong>{partner.name}</strong>
+                    <small>
+                      {partner.matches} matches · {partner.wins}–
+                      {partner.losses}
+                    </small>
+                  </span>
+                  <ArrowRight aria-hidden size={16} />
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section className="public-match-history" id="match-history">
           <header>
             <div>
               <span className="page-eyebrow">Match history</span>
               <h2>Results behind the rating.</h2>
             </div>
-            <Badge>{performance?.history.length ?? 0}</Badge>
+            <Badge>{history.length}</Badge>
           </header>
           <div>
-            {(performance?.history ?? []).map((event) => {
+            {results.map(({ event, result }) => {
               const side = event.participants.find(
                 (participant) => participant.personId === player.id,
               )?.side;
-              const team = (teamSide: "A" | "B") =>
-                event.participants
-                  .filter((participant) => participant.side === teamSide)
-                  .map((participant) => participant.name)
-                  .join(" / ");
+              const opponentSide = side === "B" ? "A" : "B";
               return (
-                <article key={event.id}>
+                <article data-result={result} key={event.id}>
                   <span
-                    className={
-                      event.actualResult === 1
-                        ? "match-result match-result--win"
-                        : "match-result match-result--loss"
+                    className={`match-date-chip match-date-chip--${result}`}
+                  >
+                    <CalendarDays aria-hidden size={15} />
+                    {formatMatchDate(event.occurredAt)}
+                  </span>
+                  <span
+                    className={`match-result match-result--${result}`}
+                    aria-label={
+                      result === "unknown"
+                        ? "Winner unresolved"
+                        : result === "win"
+                          ? "Win"
+                          : "Loss"
                     }
                   >
-                    {event.actualResult === 1 ? "W" : "L"}
+                    {result === "win" ? "W" : result === "loss" ? "L" : "—"}
                   </span>
                   <div>
                     <small>{event.matchTitle}</small>
                     <strong>
-                      {team(side ?? "A")} vs. {team(side === "B" ? "A" : "B")}
+                      {teamName(event.participants, side ?? "A")} vs.{" "}
+                      {teamName(event.participants, opponentSide)}
                     </strong>
                     <span>
-                      {event.sets.map((set) => `${set.a}–${set.b}`).join(" · ")}
+                      {event.sets.length
+                        ? event.sets
+                            .map((set) => `${set.a}–${set.b}`)
+                            .join(" · ")
+                        : "Score not connected"}
                     </span>
                   </div>
                   <div className="match-rating-result">
@@ -239,11 +531,33 @@ export default async function PublicPlayerPage({
                     </strong>
                     <Numeric>{event.afterDisplay.toFixed(2)}</Numeric>
                   </div>
+                  <div className="public-match-history__actions">
+                    {event.matchId && (
+                      <Link href={`/app/matches/${event.matchId}`}>
+                        Match details <ArrowRight aria-hidden size={14} />
+                      </Link>
+                    )}
+                    {event.sourceUrl && (
+                      <a
+                        href={event.sourceUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Source <ExternalLink aria-hidden size={13} />
+                      </a>
+                    )}
+                  </div>
                 </article>
               );
             })}
+            {history.length === 0 && (
+              <p className="profile-empty">
+                This player has no approved rating events yet.
+              </p>
+            )}
           </div>
         </section>
+
         <section className="public-method-note">
           <span className="page-eyebrow">Trust the number</span>
           <h2>Imported evidence is never silently accepted.</h2>

@@ -20,10 +20,12 @@ import {
   recordCompletedMatchAction,
   startMatchAction,
 } from "@/app/app/score/actions";
+import { PlaceSearch, type PlaceDetails } from "@/components/place-search";
 
 type TeamSide = "A" | "B";
 type RecordingMode = "completed" | "live";
 type MatchType = "competitive" | "friendly";
+type MatchLength = "single" | "best-of-3" | "best-of-5";
 type TeamSize = 1 | 2 | 3 | 4 | 5 | 6;
 type PlayerTarget =
   | {
@@ -99,13 +101,21 @@ export function MatchRecorder({
   const [teamAIds, setTeamAIds] = useState<string[]>([currentPlayer.id, ""]);
   const [teamBIds, setTeamBIds] = useState<string[]>(["", ""]);
   const [venueId, setVenueId] = useState("");
+  const [locationValue, setLocationValue] = useState("");
+  const [location, setLocation] = useState<PlaceDetails>({});
   const [playedAt, setPlayedAt] = useState(localDateTime);
-  const [matchLength, setMatchLength] = useState<"single" | "best-of-3">(
-    initialWatchScores.length === 1 ? "single" : "best-of-3",
+  const [matchLength, setMatchLength] = useState<MatchLength>(
+    initialWatchScores.length === 1
+      ? "single"
+      : initialWatchScores.length > 3
+        ? "best-of-5"
+        : "best-of-3",
   );
-  const [thirdSet, setThirdSet] = useState(initialWatchScores.length >= 3);
+  const [scoreCount, setScoreCount] = useState(
+    initialWatchScores.length > 0 ? Math.min(initialWatchScores.length, 5) : 2,
+  );
   const [setScores, setSetScores] = useState(() =>
-    Array.from({ length: 3 }, (_, index) => ({
+    Array.from({ length: 5 }, (_, index) => ({
       a:
         initialWatchScores[index] === undefined
           ? ""
@@ -230,7 +240,15 @@ export function MatchRecorder({
     teamBIds,
   ]);
 
-  const visibleScoreCount = matchLength === "single" ? 1 : thirdSet ? 3 : 2;
+  const setsToWin = (
+    matchLength === "single" ? 1 : matchLength === "best-of-3" ? 2 : 3
+  ) as 1 | 2 | 3;
+  const minimumScoreCount = setsToWin;
+  const maximumScoreCount = setsToWin * 2 - 1;
+  const visibleScoreCount = Math.min(
+    maximumScoreCount,
+    Math.max(minimumScoreCount, scoreCount),
+  );
   const teamsComplete =
     teamAIds.length === teamSize &&
     teamBIds.length === teamSize &&
@@ -293,7 +311,18 @@ export function MatchRecorder({
           teamAIds,
           teamBIds,
           venueId: venueId || undefined,
+          location: locationValue.trim()
+            ? {
+                label: location.address ?? locationValue.trim(),
+                googlePlaceId: location.placeId,
+                name: location.name,
+                address: location.address,
+                latitude: location.latitude,
+                longitude: location.longitude,
+              }
+            : undefined,
           playedAt: new Date(playedAt).toISOString(),
+          setsToWin,
           setScores: scores,
           matchType,
           allPlayersAgreedToRecord: true,
@@ -576,20 +605,41 @@ export function MatchRecorder({
         </header>
 
         <div className="match-recorder__details">
-          <label>
+          <div className="match-recorder__place-field">
             <span>Where</span>
-            <select
-              onChange={(event) => setVenueId(event.target.value)}
-              value={venueId}
-            >
-              <option value="">Location not recorded</option>
-              {venues.map((venue) => (
-                <option key={venue.id} value={venue.id}>
-                  {venue.name}
-                </option>
-              ))}
-            </select>
-          </label>
+            <PlaceSearch
+              onPlace={(details) => {
+                setLocation(details);
+                if (
+                  details.latitude === undefined ||
+                  details.longitude === undefined
+                ) {
+                  setVenueId("");
+                  return;
+                }
+                const normalizedName = details.name?.trim().toLocaleLowerCase();
+                const connectedVenue = venues.find((venue) => {
+                  const sameName =
+                    normalizedName !== undefined &&
+                    venue.name.trim().toLocaleLowerCase() === normalizedName;
+                  const nearby =
+                    Math.hypot(
+                      venue.latitude - details.latitude!,
+                      venue.longitude - details.longitude!,
+                    ) < 0.002;
+                  return sameName || nearby;
+                });
+                setVenueId(connectedVenue?.id ?? "");
+              }}
+              onValue={setLocationValue}
+              value={locationValue}
+            />
+            <small>
+              {venueId
+                ? "Connected venue recognized"
+                : "Choose a Google place to save a map-ready location"}
+            </small>
+          </div>
           <label>
             <span>{mode === "completed" ? "Played" : "Starts"}</span>
             <input
@@ -612,7 +662,7 @@ export function MatchRecorder({
                   }
                   onClick={() => {
                     setMatchLength("single");
-                    setThirdSet(false);
+                    setScoreCount(1);
                   }}
                   type="button"
                 >
@@ -622,10 +672,25 @@ export function MatchRecorder({
                   className={
                     matchLength === "best-of-3" ? "is-selected" : undefined
                   }
-                  onClick={() => setMatchLength("best-of-3")}
+                  onClick={() => {
+                    setMatchLength("best-of-3");
+                    setScoreCount(2);
+                  }}
                   type="button"
                 >
                   Best of 3
+                </button>
+                <button
+                  className={
+                    matchLength === "best-of-5" ? "is-selected" : undefined
+                  }
+                  onClick={() => {
+                    setMatchLength("best-of-5");
+                    setScoreCount(3);
+                  }}
+                  type="button"
+                >
+                  Best of 5
                 </button>
               </div>
             </div>
@@ -651,21 +716,35 @@ export function MatchRecorder({
                 </div>
               ))}
             </div>
-            {matchLength === "best-of-3" && (
-              <button
-                className="match-recorder__third-set"
-                onClick={() => setThirdSet((current) => !current)}
-                type="button"
-              >
-                {thirdSet ? (
-                  <X aria-hidden size={16} />
-                ) : (
-                  <Plus aria-hidden size={16} />
+            {matchLength !== "single" && (
+              <div className="match-recorder__set-actions">
+                {visibleScoreCount < maximumScoreCount && (
+                  <button
+                    onClick={() =>
+                      setScoreCount((current) =>
+                        Math.min(maximumScoreCount, current + 1),
+                      )
+                    }
+                    type="button"
+                  >
+                    <Plus aria-hidden size={16} />
+                    Add set {visibleScoreCount + 1}
+                  </button>
                 )}
-                {thirdSet
-                  ? "Remove deciding set"
-                  : "They played a deciding set"}
-              </button>
+                {visibleScoreCount > minimumScoreCount && (
+                  <button
+                    onClick={() =>
+                      setScoreCount((current) =>
+                        Math.max(minimumScoreCount, current - 1),
+                      )
+                    }
+                    type="button"
+                  >
+                    <X aria-hidden size={16} />
+                    Remove set {visibleScoreCount}
+                  </button>
+                )}
+              </div>
             )}
           </>
         ) : (

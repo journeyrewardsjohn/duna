@@ -1,7 +1,12 @@
 "use client";
 
 import type { OperatorWorkspace } from "@duna/api";
-import { formatMoney } from "@duna/core";
+import {
+  defaultEventMedia,
+  eventMediaForKind,
+  formatMoney,
+  type EventKind as CoreEventKind,
+} from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import { upload } from "@vercel/blob/client";
 import {
@@ -34,7 +39,7 @@ import {
 import { createEventMediaPath, optimizeImageUpload } from "@/lib/media-storage";
 import { PlaceSearch, type PlaceDetails } from "./place-search";
 
-type EventKind = "tournament" | "league";
+type EventKind = Extract<CoreEventKind, "tournament" | "league">;
 type LocationMode = "venue" | "address" | "online";
 type TeamFormat =
   "solo" | "doubles" | "three-person" | "four-person" | "six-person";
@@ -575,7 +580,9 @@ export function EventBuilder({
   const [title, setTitle] = useState(initialTitle);
   const [shortSummary, setShortSummary] = useState(initialSummary);
   const [description, setDescription] = useState("");
-  const [mediaUrl, setMediaUrl] = useState("");
+  const [mediaUrl, setMediaUrl] = useState(
+    `https://duna.coach${defaultEventMedia(initialKind, initialTitle).path}`,
+  );
   const [mediaKind, setMediaKind] = useState<"image" | "video">("image");
   const [mediaUploadState, setMediaUploadState] = useState<
     "idle" | "uploading" | "ready" | "error"
@@ -629,6 +636,17 @@ export function EventBuilder({
   const [teamAssignment, setTeamAssignment] = useState<
     "signup" | "rating-balanced" | "manual"
   >("signup");
+  const mediaChoices = useMemo(() => eventMediaForKind(kind), [kind]);
+
+  const selectKind = (nextKind: EventKind) => {
+    setKind(nextKind);
+    if (mediaUrl.includes("/media/event-library/")) {
+      setMediaKind("image");
+      setMediaUrl(
+        `https://duna.coach${defaultEventMedia(nextKind, title).path}`,
+      );
+    }
+  };
 
   const uploadMedia = async (file?: File) => {
     if (!file) return;
@@ -1002,7 +1020,7 @@ export function EventBuilder({
             <section className="event-type-grid">
               <button
                 className={kind === "tournament" ? "selected" : undefined}
-                onClick={() => setKind("tournament")}
+                onClick={() => selectKind("tournament")}
                 type="button"
               >
                 <span>
@@ -1021,7 +1039,7 @@ export function EventBuilder({
               </button>
               <button
                 className={kind === "league" ? "selected" : undefined}
-                onClick={() => setKind("league")}
+                onClick={() => selectKind("league")}
                 type="button"
               >
                 <span>
@@ -1149,6 +1167,47 @@ export function EventBuilder({
                   </p>
                 )}
               </div>
+
+              <section className="event-media-library">
+                <header>
+                  <div>
+                    <strong>Duna image library</strong>
+                    <small>
+                      A real, energetic cover is selected automatically. Pick
+                      another or upload your own.
+                    </small>
+                  </div>
+                  <Badge>{mediaChoices.length} covers</Badge>
+                </header>
+                <div className="event-media-library__grid">
+                  {mediaChoices.map((item) => {
+                    const selected = mediaUrl.endsWith(item.path);
+                    return (
+                      <button
+                        aria-label={`Use ${item.title} event cover`}
+                        aria-pressed={selected}
+                        className={selected ? "selected" : undefined}
+                        key={item.id}
+                        onClick={() => {
+                          setMediaKind("image");
+                          setMediaUrl(`https://duna.coach${item.path}`);
+                          setMediaUploadState("idle");
+                          setMediaUploadMessage("");
+                        }}
+                        style={{ backgroundImage: `url("${item.path}")` }}
+                        type="button"
+                      >
+                        <span>{item.title}</span>
+                        {selected && (
+                          <i>
+                            <Check aria-hidden size={14} />
+                          </i>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
 
               <fieldset className="event-location">
                 <legend>Location</legend>

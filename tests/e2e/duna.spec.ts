@@ -20,6 +20,13 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await expect(
     page.getByRole("link", { name: /Find your next game/ }),
   ).toBeVisible();
+  await expect(page.locator(".campaign-hero video")).toHaveAttribute(
+    "poster",
+    "/media/duna-hero-poster.webp",
+  );
+  await expect(
+    page.locator('.campaign-hero video source[type="video/mp4"]'),
+  ).toHaveAttribute("src", "/media/duna-hero.mp4");
   await expect(
     page.getByRole("link", { name: "Duna HQ" }).first(),
   ).toHaveAttribute("href", /.+/);
@@ -30,6 +37,28 @@ test("marketing and player discovery stay usable", async ({ page }) => {
     page.getByRole("heading", { name: "Find your next game." }),
   ).toBeVisible();
   await expect(page.getByLabel("Search Duna")).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test("branded identity entry preserves the secure auth handoff", async ({
+  page,
+}) => {
+  await page.goto("/sign-in?returnTo=%2Fapp%2Fprofile");
+  await expect(
+    page.getByRole("heading", { name: /Your game.*stays with you/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Continue to Duna" }),
+  ).toHaveAttribute("href", "/sign-in/start?returnTo=%2Fapp%2Fprofile");
+  await expect(
+    page.getByText("Secure authentication · Duna never sees your password"),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await page.goto("/sign-up");
+  await expect(
+    page.getByRole("link", { name: "Create my Duna account" }),
+  ).toHaveAttribute("href", "/sign-up/start?returnTo=%2Fapp");
   await expectNoHorizontalOverflow(page);
 });
 

@@ -190,7 +190,13 @@ export function HouseholdSettings({
                   }
                   type="checkbox"
                 />
-                Emergency contact
+                <span>
+                  <strong>Emergency contact</strong>
+                  <small>
+                    This organization may contact you about an urgent health or
+                    safety issue involving this child.
+                  </small>
+                </span>
               </label>
               <label>
                 <input
@@ -203,7 +209,13 @@ export function HouseholdSettings({
                   }
                   type="checkbox"
                 />
-                May approve spending
+                <span>
+                  <strong>May approve spending</strong>
+                  <small>
+                    You may approve this child&apos;s bookings and purchases
+                    using your authorized wallet or payment method.
+                  </small>
+                </span>
               </label>
             </div>
           </div>
@@ -219,7 +231,10 @@ export function HouseholdSettings({
               required
               type="checkbox"
             />
-            <span>{consentDisclosure}</span>
+            <span>
+              <strong>Guardian authorization and dependent waivers</strong>
+              <small>{consentDisclosure}</small>
+            </span>
           </label>
           <div className="settings-form__actions">
             <button

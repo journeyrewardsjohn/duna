@@ -8,6 +8,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import Link from "next/link";
+import { CoachCard } from "@/components/coach-card";
 import { EventCard } from "@/components/event-card";
 import { getServerCaller } from "@/lib/api";
 
@@ -15,10 +16,25 @@ export const metadata = { title: "Discover" };
 
 export default async function DiscoverPage() {
   const caller = await getServerCaller();
-  const [events, venues] = await Promise.all([
+  const [events, venues, coaches, organizationWallets] = await Promise.all([
     caller.public.events(),
     caller.public.venues(),
+    caller.public.coaches().catch(() => []),
+    caller.player.organizationWallets().catch(() => []),
   ]);
+  const homeOrganizationIds = new Set(
+    organizationWallets
+      .filter((wallet) => wallet.status !== "closed")
+      .map((wallet) => wallet.organizationId),
+  );
+  const homeEvents = events.filter(
+    (event) =>
+      event.organizationId && homeOrganizationIds.has(event.organizationId),
+  );
+  const homeCoaches = coaches.filter((coach) =>
+    homeOrganizationIds.has(coach.organizationId),
+  );
+  const hasHomeClub = organizationWallets.length > 0;
   const courtCount = venues.reduce(
     (total, venue) => total + venue.courtCount,
     0,
@@ -63,10 +79,53 @@ export default async function DiscoverPage() {
         </button>
       </section>
 
+      {hasHomeClub && (
+        <section className="member-home">
+          <header className="member-home__header">
+            <div>
+              <span className="page-eyebrow">Your club</span>
+              <h2>Start where you already belong.</h2>
+              <p>
+                Your memberships, coaches, and club offerings stay first. You
+                can still explore every connected Duna community below.
+              </p>
+            </div>
+            <div className="member-home__organizations">
+              {organizationWallets.map((wallet) => (
+                <Link
+                  href={`/clubs/${wallet.organizationSlug}`}
+                  key={wallet.organizationId}
+                >
+                  <span>
+                    <strong>{wallet.organizationName}</strong>
+                    <small>
+                      {wallet.membershipName ??
+                        `${wallet.credits} club credits`}
+                    </small>
+                  </span>
+                  <Badge tone="positive">Member</Badge>
+                </Link>
+              ))}
+            </div>
+          </header>
+          {(homeEvents.length > 0 || homeCoaches.length > 0) && (
+            <div className="member-home__content">
+              {homeEvents.slice(0, 3).map((event) => (
+                <EventCard event={event} key={event.id} />
+              ))}
+              {homeCoaches.slice(0, 3).map((coach) => (
+                <CoachCard coach={coach} key={coach.personId} preferred />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       <section className="discover-map-layout">
         <div className="discover-results">
           <div className="discover-results__heading">
             <span>
+              {hasHomeClub ? "Explore all Duna · " : null}
               <Numeric>{events.length}</Numeric>{" "}
               {events.length === 1 ? "published option" : "published options"}
             </span>
@@ -108,6 +167,27 @@ export default async function DiscoverPage() {
               </Link>
             ))}
           </section>
+          {coaches.length > 0 && (
+            <section className="discover-coaches">
+              <div className="discover-results__heading">
+                <span>
+                  <Numeric>{coaches.length}</Numeric>{" "}
+                  {coaches.length === 1
+                    ? "connected coach"
+                    : "connected coaches"}
+                </span>
+              </div>
+              <div className="coach-grid">
+                {coaches.map((coach) => (
+                  <CoachCard
+                    coach={coach}
+                    key={`${coach.organizationId}-${coach.personId}`}
+                    preferred={homeOrganizationIds.has(coach.organizationId)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
         <aside className="discovery-map" aria-label="South Bay activity map">
           <div className="discovery-map__water" />

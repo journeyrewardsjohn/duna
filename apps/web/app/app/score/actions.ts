@@ -44,7 +44,16 @@ export async function recordCompletedMatchAction(input: {
   readonly teamAIds: readonly string[];
   readonly teamBIds: readonly string[];
   readonly venueId?: string;
+  readonly location?: {
+    readonly label: string;
+    readonly googlePlaceId?: string;
+    readonly name?: string;
+    readonly address?: string;
+    readonly latitude?: number;
+    readonly longitude?: number;
+  };
   readonly playedAt: string;
+  readonly setsToWin: 1 | 2 | 3;
   readonly setScores: readonly {
     readonly a: number;
     readonly b: number;

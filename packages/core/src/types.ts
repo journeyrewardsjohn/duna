@@ -288,6 +288,8 @@ export interface EventSummary {
   readonly slug: string;
   readonly title: string;
   readonly kind: EventKind;
+  readonly organizationId?: string;
+  readonly organizationSlug?: string;
   readonly organizationName: string;
   readonly venueName: string;
   readonly shortSummary?: string;
@@ -330,6 +332,25 @@ export interface MatchSummary {
   readonly score: readonly (readonly [number, number])[];
   readonly winner: "A" | "B";
   readonly ratingDelta: number;
+  readonly ratingBefore?: number;
+  readonly ratingAfter?: number;
+  readonly ratingExplanation?: {
+    readonly expectedWinProbability?: number;
+    readonly actualResult?: number;
+    readonly pointShare?: number;
+    readonly marginMultiplier?: number;
+    readonly responsibilityWeight?: number;
+    readonly verificationWeight?: number;
+    readonly displayDelta?: number;
+  };
+  readonly location?: {
+    readonly label: string;
+    readonly googlePlaceId?: string;
+    readonly name?: string;
+    readonly address?: string;
+    readonly latitude?: number;
+    readonly longitude?: number;
+  };
   readonly origin?: "imported" | "self-reported" | "live-scored";
   readonly ratingEligibility?: "eligible" | "held";
   readonly matchType?: "competitive" | "friendly";

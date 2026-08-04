@@ -245,7 +245,11 @@ export default async function PlayerDashboard() {
           </div>
           <div className="match-list">
             {dashboard.recentMatches.map((match) => (
-              <MatchCard key={match.id} match={match} />
+              <MatchCard
+                key={match.id}
+                match={match}
+                viewerId={dashboard.player.id}
+              />
             ))}
             {dashboard.recentMatches.length === 0 && (
               <article className="empty-state">

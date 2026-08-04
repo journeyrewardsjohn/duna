@@ -524,6 +524,10 @@ function TeamMemberComposer({
 }: {
   readonly workspace: OperatorWorkspace;
 }) {
+  const [deliveryMode, setDeliveryMode] = useState<"send" | "link-only">(
+    "send",
+  );
+  const [copiedInvitationId, setCopiedInvitationId] = useState<string>();
   const [state, action, pending] = useActionState(
     createStaffInvitationAction,
     initialOperatorActionState,
@@ -580,12 +584,27 @@ function TeamMemberComposer({
               </select>
             </label>
             <label>
-              <span>Send by</span>
-              <select name="preferredChannel" defaultValue="email">
-                <option value="email">Email · Resend</option>
-                <option value="sms">SMS · Sent.dm</option>
+              <span>Share access</span>
+              <select
+                name="deliveryMode"
+                value={deliveryMode}
+                onChange={(event) =>
+                  setDeliveryMode(event.target.value as "send" | "link-only")
+                }
+              >
+                <option value="send">Send invitation now</option>
+                <option value="link-only">Create private claim link</option>
               </select>
             </label>
+            {deliveryMode === "send" && (
+              <label>
+                <span>Send by</span>
+                <select name="preferredChannel" defaultValue="email">
+                  <option value="email">Email · Resend</option>
+                  <option value="sms">SMS · Sent.dm</option>
+                </select>
+              </label>
+            )}
           </div>
           <div className="operator-legal-boundary">
             <ShieldCheck aria-hidden size={18} />
@@ -604,7 +623,11 @@ function TeamMemberComposer({
           </label>
           <div className="operator-form-footer">
             <ActionNotice state={state} />
-            <SubmitButton pending={pending}>Send team invitation</SubmitButton>
+            <SubmitButton pending={pending}>
+              {deliveryMode === "link-only"
+                ? "Create claim link"
+                : "Send team invitation"}
+            </SubmitButton>
           </div>
         </form>
       </section>
@@ -640,17 +663,34 @@ function TeamMemberComposer({
                   {invitation.deliveryStatus}
                 </small>
               </span>
-              <Badge
-                tone={
-                  invitation.status === "claimed"
-                    ? "live"
-                    : invitation.status === "pending"
-                      ? "warning"
-                      : "neutral"
-                }
-              >
-                {invitation.status}
-              </Badge>
+              <span className="operator-invite-actions">
+                {invitation.status === "pending" && (
+                  <button
+                    type="button"
+                    className="hq-button hq-button--secondary hq-button--compact"
+                    onClick={() => {
+                      void navigator.clipboard
+                        .writeText(invitation.inviteUrl)
+                        .then(() => setCopiedInvitationId(invitation.id));
+                    }}
+                  >
+                    {copiedInvitationId === invitation.id
+                      ? "Copied"
+                      : "Copy claim link"}
+                  </button>
+                )}
+                <Badge
+                  tone={
+                    invitation.status === "claimed"
+                      ? "live"
+                      : invitation.status === "pending"
+                        ? "warning"
+                        : "neutral"
+                  }
+                >
+                  {invitation.status}
+                </Badge>
+              </span>
             </article>
           ))}
           {workspace.staffInvitations.length === 0 && (

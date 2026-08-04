@@ -130,6 +130,43 @@ describe("tRPC contract surface", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
+  it("exposes an operational calendar contract to coaches and managers", async () => {
+    const caller = createCaller(
+      createApiContext({ actor: createDemoActor(["coach"]) }),
+    );
+
+    const workspace = await caller.operator.workspace();
+    expect(workspace.calendar.entries.length).toBeGreaterThan(0);
+    expect(workspace.calendar.entries[0]).toMatchObject({
+      id: expect.any(String),
+      kind: expect.any(String),
+      title: expect.any(String),
+      startsAt: expect.any(String),
+      endsAt: expect.any(String),
+      participantCount: expect.any(Number),
+      attendees: expect.any(Array),
+      equipment: expect.any(Array),
+    });
+  });
+
+  it("keeps calendar schedule changes behind sessions-write access", async () => {
+    const caller = createCaller(
+      createApiContext({ actor: createDemoActor(["front-desk"]) }),
+    );
+
+    await expect(
+      caller.operator.createCalendarBlock({
+        resourceType: "court",
+        resourceId: crypto.randomUUID(),
+        startsAt: "2030-08-01T14:00:00.000Z",
+        endsAt: "2030-08-01T15:00:00.000Z",
+        mode: "blocked",
+        reason: "Coach protected preparation time.",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
   it("keeps rollout mutations behind the super-admin role", async () => {
     const caller = createCaller(
       createApiContext({ actor: createDemoActor(["admin"]) }),

@@ -385,13 +385,40 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
   const disputeByMatch = new Map(
     disputeRows.map((row) => [row.matchId, row] as const),
   );
-  const deltaByMatch = new Map(
+  const ratingByMatch = new Map(
     deltaRows.map((event) => {
       const before =
         typeof event.before.display === "number" ? event.before.display : 0;
       const after =
         typeof event.after.display === "number" ? event.after.display : before;
-      return [event.matchId, after - before] as const;
+      const explanation =
+        typeof event.explanation === "object" && event.explanation !== null
+          ? event.explanation
+          : {};
+      const optionalNumber = (value: unknown) =>
+        typeof value === "number" && Number.isFinite(value) ? value : undefined;
+      return [
+        event.matchId,
+        {
+          before,
+          after,
+          delta: after - before,
+          explanation: {
+            expectedWinProbability: optionalNumber(
+              explanation.expectedWinProbability,
+            ),
+            actualResult: optionalNumber(explanation.actualResult),
+            pointShare: optionalNumber(explanation.pointShare),
+            marginMultiplier: optionalNumber(explanation.marginMultiplier),
+            responsibilityWeight: optionalNumber(
+              explanation.responsibilityWeight,
+            ),
+            verificationWeight: optionalNumber(explanation.verificationWeight),
+            displayDelta:
+              optionalNumber(explanation.displayDelta) ?? after - before,
+          },
+        },
+      ] as const;
     }),
   );
   return matchRows.flatMap((match): MatchSummary[] => {
@@ -450,6 +477,42 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
       (format.recordingMode === "completed" || format.recordingMode === "live")
         ? format.recordingMode
         : undefined;
+    const storedLocation =
+      "location" in format &&
+      typeof format.location === "object" &&
+      format.location !== null &&
+      "label" in format.location &&
+      typeof format.location.label === "string"
+        ? {
+            label: format.location.label,
+            googlePlaceId:
+              "googlePlaceId" in format.location &&
+              typeof format.location.googlePlaceId === "string"
+                ? format.location.googlePlaceId
+                : undefined,
+            name:
+              "name" in format.location &&
+              typeof format.location.name === "string"
+                ? format.location.name
+                : undefined,
+            address:
+              "address" in format.location &&
+              typeof format.location.address === "string"
+                ? format.location.address
+                : undefined,
+            latitude:
+              "latitude" in format.location &&
+              typeof format.location.latitude === "number"
+                ? format.location.latitude
+                : undefined,
+            longitude:
+              "longitude" in format.location &&
+              typeof format.location.longitude === "number"
+                ? format.location.longitude
+                : undefined,
+          }
+        : undefined;
+    const rating = ratingByMatch.get(match.id);
     const origin =
       "importedMatchId" in format || "source" in format
         ? "imported"
@@ -479,6 +542,7 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
         ).toISOString(),
         venueName:
           (match.venueId && venueById.get(match.venueId)) ??
+          storedLocation?.label ??
           "Location not recorded",
         teamA: teamAPlayers,
         teamB: teamBPlayers,
@@ -486,7 +550,11 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
           .filter((set) => set.winner)
           .map((set) => [set.a, set.b] as const),
         winner,
-        ratingDelta: deltaByMatch.get(match.id) ?? 0,
+        ratingDelta: rating?.delta ?? 0,
+        ratingBefore: rating?.before,
+        ratingAfter: rating?.after,
+        ratingExplanation: rating?.explanation,
+        location: storedLocation,
         origin,
         ratingEligibility: match.ratingEligible ? "eligible" : "held",
         matchType,
@@ -780,11 +848,18 @@ async function loadEvents(input?: {
     organizationIds.size === 0
       ? []
       : await database
-          .select({ id: organizations.id, name: organizations.name })
+          .select({
+            id: organizations.id,
+            name: organizations.name,
+            slug: organizations.slug,
+          })
           .from(organizations)
           .where(inArray(organizations.id, [...organizationIds]));
   const organizationNames = new Map(
     organizationRows.map((row) => [row.id, row.name] as const),
+  );
+  const organizationSlugs = new Map(
+    organizationRows.map((row) => [row.id, row.slug] as const),
   );
   const registrationCount = new Map<string, number>();
   const divisionRegistrationCount = new Map<string, number>();
@@ -920,6 +995,10 @@ async function loadEvents(input?: {
         slug: row.slug,
         title: row.title,
         kind,
+        organizationId,
+        organizationSlug:
+          (organizationId && organizationSlugs.get(organizationId)) ??
+          undefined,
         organizationName:
           (organizationId && organizationNames.get(organizationId)) ??
           "Independent organizer",
@@ -986,6 +1065,10 @@ async function loadEvents(input?: {
         slug: `pickup-${row.id}`,
         title: row.title,
         kind: "pickup",
+        organizationId,
+        organizationSlug:
+          (organizationId && organizationSlugs.get(organizationId)) ??
+          undefined,
         organizationName:
           (organizationId && organizationNames.get(organizationId)) ??
           `Hosted by ${row.hostName}`,

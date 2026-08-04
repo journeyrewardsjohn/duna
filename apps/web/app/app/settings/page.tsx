@@ -2,15 +2,6 @@ import {
   GUARDIAN_CONSENT_DISCLOSURE,
   unavailableAccountDeletionReadiness,
 } from "@duna/api";
-import {
-  Bell,
-  CreditCard,
-  ShieldCheck,
-  Sparkles,
-  UserRound,
-  Users,
-  WalletCards,
-} from "lucide-react";
 import { FamilyWalletSettings } from "@/components/family-wallet-settings";
 import { HouseholdSettings } from "@/components/household-settings";
 import { MembershipSettings } from "@/components/membership-settings";
@@ -18,6 +9,7 @@ import { NotificationSettings } from "@/components/notification-settings";
 import { PlayingProfileSettings } from "@/components/playing-profile-settings";
 import { PrivacySettings } from "@/components/privacy-settings";
 import { ProfileSettings } from "@/components/profile-settings";
+import { SettingsSectionNav } from "@/components/settings-section-nav";
 import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Settings" };
@@ -57,31 +49,7 @@ export default async function SettingsPage({
       </section>
 
       <section className="settings-layout">
-        <nav aria-label="Settings sections">
-          <a className="active" href="#membership">
-            <CreditCard size={17} /> Membership
-          </a>
-          <a href="#profile">
-            <UserRound size={17} /> Profile
-          </a>
-          <a href="#playing-profile">
-            <Sparkles size={17} /> Player details
-          </a>
-          <a href="#household">
-            <Users size={17} /> Household
-          </a>
-          {familyWallets.length > 0 && (
-            <a href="#family-wallets">
-              <WalletCards size={17} /> Family wallets
-            </a>
-          )}
-          <a href="#notifications">
-            <Bell size={17} /> Notifications
-          </a>
-          <a href="#privacy">
-            <ShieldCheck size={17} /> Privacy + safety
-          </a>
-        </nav>
+        <SettingsSectionNav showFamilyWallets={familyWallets.length > 0} />
 
         <div className="settings-content">
           <MembershipSettings

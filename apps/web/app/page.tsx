@@ -20,10 +20,10 @@ import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
 
 const campaignMedia = {
-  rally: "/media/duna-campaign-rally.webp",
-  rallyVideo: "/media/duna-campaign-rally.mp4",
-  serve: "/media/duna-campaign-serve.webp",
-  celebrate: "/media/duna-campaign-celebrate.webp",
+  rally: "/media/duna-hero-poster.webp",
+  rallyVideo: "/media/duna-hero.mp4",
+  serve: "/media/duna-action-serve.webp",
+  celebrate: "/media/duna-action-dive.webp",
 } as const;
 
 export default async function HomePage() {
@@ -63,6 +63,7 @@ export default async function HomePage() {
             <source src={campaignMedia.rallyVideo} type="video/mp4" />
           </video>
           <div className="campaign-hero__wash" />
+          <div className="campaign-hero__grain" />
         </div>
 
         <div className="campaign-shell campaign-hero__content">

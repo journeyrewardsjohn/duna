@@ -22,6 +22,7 @@ import {
   createGuardianInvitationAction,
   inferPlayingExperienceAction,
   recordBirthDateAction,
+  requestProfileClaimAction,
   startIdentityVerificationAction,
   updatePlayingProfileAction,
 } from "@/app/app/settings/actions";
@@ -29,6 +30,15 @@ import { HeightInput } from "@/components/height-input";
 import { VoiceExperienceGuide } from "@/components/voice-experience-guide";
 
 type Experience = "amateur" | "high-school" | "collegiate" | "professional";
+
+type ClaimCandidate = {
+  readonly id: string;
+  readonly handle: string;
+  readonly displayName: string;
+  readonly avatarUrl?: string;
+  readonly profileClaimStatus: "unclaimed" | "claim-pending";
+  readonly isProfessional: boolean;
+};
 
 const experienceOptions: readonly {
   value: Experience;
@@ -67,8 +77,10 @@ function splitDisplayName(displayName: string) {
 
 export function PlayerOnboarding({
   settings,
+  claimCandidate,
 }: {
   readonly settings: PlayerSettings;
+  readonly claimCandidate?: ClaimCandidate;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -153,6 +165,7 @@ export function PlayerOnboarding({
   const [guardianInviteUrl, setGuardianInviteUrl] = useState<string>();
   const [learnedFacts, setLearnedFacts] = useState<readonly string[]>([]);
   const [missingFields, setMissingFields] = useState<readonly string[]>([]);
+  const [claimAccepted, setClaimAccepted] = useState(false);
 
   function selectSubject(nextSubjectId: string) {
     const next = subjects.find(
@@ -278,6 +291,15 @@ export function PlayerOnboarding({
         setError(profileResponse.error);
         return;
       }
+      if (isSelf && claimCandidate && claimAccepted) {
+        const claimResponse = await requestProfileClaimAction({
+          targetHandle: claimCandidate.handle,
+        });
+        if (!claimResponse.ok) {
+          setError(claimResponse.error);
+          return;
+        }
+      }
       for (const connection of [
         {
           source: "volleyball-life" as const,
@@ -300,9 +322,11 @@ export function PlayerOnboarding({
       }
       setStep(4);
       setNotice(
-        profileResponse.result.guardianRequired
-          ? "Playing profile saved. Connect a parent or guardian to unlock protected features."
-          : "Playing profile saved. Any linked match history is now queued for import.",
+        claimCandidate && claimAccepted
+          ? "Your profile claim is in identity review. Duna will preserve the existing match history while it confirms the connection."
+          : profileResponse.result.guardianRequired
+            ? "Playing profile saved. Connect a parent or guardian to unlock protected features."
+            : "Playing profile saved. Any linked match history is now queued for import.",
       );
       router.refresh();
     });
@@ -702,6 +726,57 @@ export function PlayerOnboarding({
                     .join(", ")}
                 </p>
               )}
+              {isSelf && claimCandidate && (
+                <article className="onboarding-claim-card">
+                  <div className="onboarding-claim-card__identity">
+                    {claimCandidate.avatarUrl ? (
+                      <img
+                        alt=""
+                        height={64}
+                        src={claimCandidate.avatarUrl}
+                        width={64}
+                      />
+                    ) : (
+                      <span aria-hidden="true">
+                        {claimCandidate.displayName
+                          .split(/\s+/)
+                          .slice(0, 2)
+                          .map((part) => part[0])
+                          .join("")}
+                      </span>
+                    )}
+                    <div>
+                      <Badge tone="neutral">
+                        {claimCandidate.isProfessional
+                          ? "Professional profile"
+                          : "Existing match profile"}
+                      </Badge>
+                      <h3>{claimCandidate.displayName}</h3>
+                      <p>
+                        Duna already has verified results connected to this
+                        player. Claiming it prevents a duplicate history.
+                      </p>
+                    </div>
+                  </div>
+                  <label className="onboarding-claim-card__choice">
+                    <input
+                      checked={claimAccepted}
+                      onChange={(event) =>
+                        setClaimAccepted(event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <span>
+                      <strong>This is my player profile</strong>
+                      Duna will compare the legal name and date of birth you
+                      entered, then send the claim to identity review.
+                    </span>
+                  </label>
+                  <Link href={`/players/${claimCandidate.handle}`}>
+                    Review the public profile <ExternalLink />
+                  </Link>
+                </article>
+              )}
               <div className="source-link-grid">
                 <label>
                   <span>
@@ -756,7 +831,12 @@ export function PlayerOnboarding({
                 disabled={isPending}
                 type="submit"
               >
-                {isPending ? "Saving…" : "Save profile"} <ArrowRight />
+                {isPending
+                  ? "Saving…"
+                  : claimCandidate && claimAccepted
+                    ? "Save and request claim"
+                    : "Save profile"}{" "}
+                <ArrowRight />
               </button>
             )}
           </div>

@@ -393,7 +393,12 @@ function ProductCatalogPanel({
         </header>
         <div className="catalog-table">
           {workspace.catalog.map((item) => (
-            <article key={item.id}>
+            <Link
+              aria-label={`Edit ${item.title}`}
+              className="catalog-table__row"
+              href={`/products/${item.id}`}
+              key={item.id}
+            >
               <span
                 className={`catalog-type-mark catalog-type-mark--${item.type}`}
               >
@@ -436,7 +441,8 @@ function ProductCatalogPanel({
               <Badge tone={item.status === "active" ? "live" : "neutral"}>
                 {item.status}
               </Badge>
-            </article>
+              <ArrowRight aria-hidden size={16} />
+            </Link>
           ))}
           {workspace.catalog.length === 0 && (
             <div className="hq-empty">
@@ -1316,6 +1322,31 @@ function SettingsPanel({
         <Badge tone={workspace.theme.publishedAt ? "live" : "warning"}>
           {workspace.theme.publishedAt ? "published" : "draft"}
         </Badge>
+        <div className="theme-kit-summary-meta">
+          <span>
+            <strong>{workspace.brandKnowledge.activeSourceCount}</strong>
+            approved AI{" "}
+            {workspace.brandKnowledge.activeSourceCount === 1
+              ? "source"
+              : "sources"}
+          </span>
+          <span>
+            <strong>
+              {
+                [
+                  workspace.theme.logoLightUrl,
+                  workspace.theme.logoDarkUrl,
+                  workspace.theme.heroMediaUrl,
+                ].filter(Boolean).length
+              }
+              /3
+            </strong>
+            adaptive assets
+          </span>
+        </div>
+        <Link className="module-card-action" href="/settings/theme">
+          Manage Theme Kit + AI knowledge <ArrowRight size={15} />
+        </Link>
       </section>
       <section className="hq-card module-feature-card">
         <CreditCard size={24} />

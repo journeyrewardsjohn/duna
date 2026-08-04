@@ -1,4 +1,4 @@
-import { formatMoney, formatVenueTime } from "@duna/core";
+import { defaultEventMedia, formatMoney, formatVenueTime } from "@duna/core";
 import {
   demoBookings,
   demoEvents,
@@ -17,6 +17,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
+  Image,
   ImageBackground,
   Modal,
   Platform,
@@ -36,7 +37,11 @@ import {
   type LiveActivityPushToken,
 } from "./live-activities";
 import { dunaWebUrl, type DunaApiClient } from "./mobile-api";
-import { PlayerRuntimeProvider, usePlayerRuntime } from "./runtime";
+import {
+  PlayerRuntimeProvider,
+  usePlayerRuntime,
+  type PlayerRuntime,
+} from "./runtime";
 import {
   clearPendingWatchScoreDraft,
   getPendingWatchScoreDraft,
@@ -47,6 +52,11 @@ import {
 // Metro requires a static module reference so the campaign image ships in the native bundle.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaCampaignRally = require("./assets/duna-campaign-rally.jpg");
+
+type MobileCoach = NonNullable<PlayerRuntime["coaches"]>[number];
+type OrganizationWallet = NonNullable<
+  PlayerRuntime["organizationWallets"]
+>[number];
 
 const lightColors = {
   canvas: "#f8f7f3",
@@ -357,6 +367,262 @@ function AppHeader({ eyebrow }: { readonly eyebrow?: string }) {
   );
 }
 
+function coachInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+}
+
+function CoachCard({
+  coach,
+  preferred = false,
+  onPress,
+}: {
+  readonly coach: MobileCoach;
+  readonly preferred?: boolean;
+  readonly onPress: (coach: MobileCoach) => void;
+}) {
+  return (
+    <Pressable
+      accessibilityHint={`Open ${coach.displayName}'s schedule and services`}
+      accessibilityLabel={coach.displayName}
+      accessibilityRole="button"
+      onPress={() => {
+        selectionHaptic();
+        onPress(coach);
+      }}
+      style={({ pressed }) => [
+        styles.coachCard,
+        preferred && styles.coachCardPreferred,
+        pressed && styles.coachCardPressed,
+      ]}
+    >
+      {coach.avatarUrl ? (
+        <Image
+          accessibilityIgnoresInvertColors
+          source={{ uri: coach.avatarUrl }}
+          style={styles.coachAvatar}
+        />
+      ) : (
+        <View style={styles.coachAvatarFallback}>
+          <Text style={styles.coachAvatarFallbackText}>
+            {coachInitials(coach.displayName)}
+          </Text>
+        </View>
+      )}
+      <View style={styles.flex}>
+        <View style={styles.coachCardTop}>
+          <Text numberOfLines={1} style={styles.coachCardName}>
+            {coach.displayName}
+          </Text>
+          {preferred && <Pill tone="positive">Your club</Pill>}
+        </View>
+        <Text numberOfLines={1} style={styles.coachCardOrganization}>
+          {coach.organizationName}
+        </Text>
+        <Text numberOfLines={2} style={styles.coachCardMeta}>
+          {coach.services.length > 0
+            ? `${coach.services.length} way${coach.services.length === 1 ? "" : "s"} to train`
+            : "New sessions coming soon"}
+          {coach.upcomingSessions.length > 0
+            ? ` · ${coach.upcomingSessions.length} upcoming`
+            : ""}
+        </Text>
+      </View>
+      <Text style={styles.coachCardArrow}>›</Text>
+    </Pressable>
+  );
+}
+
+function CoachProfileModal({
+  coach,
+  onClose,
+}: {
+  readonly coach?: MobileCoach;
+  readonly onClose: () => void;
+}) {
+  if (!coach) return null;
+
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="pageSheet"
+      visible
+    >
+      <SafeAreaView style={styles.modalSafe}>
+        <View style={styles.coachModalHeader}>
+          <View>
+            <Text style={styles.eyebrow}>DUNA COACH</Text>
+            <Text style={styles.coachModalHandle}>@{coach.handle}</Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Close coach profile"
+            accessibilityRole="button"
+            onPress={onClose}
+            style={styles.coachModalClose}
+          >
+            <Text style={styles.closeText}>×</Text>
+          </Pressable>
+        </View>
+        <ScrollView
+          contentContainerStyle={styles.coachModalContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.coachModalHero}>
+            {coach.avatarUrl ? (
+              <Image
+                accessibilityIgnoresInvertColors
+                source={{ uri: coach.avatarUrl }}
+                style={styles.coachModalAvatar}
+              />
+            ) : (
+              <View style={styles.coachModalAvatarFallback}>
+                <Text style={styles.coachModalAvatarText}>
+                  {coachInitials(coach.displayName)}
+                </Text>
+              </View>
+            )}
+            <Text style={styles.coachModalName}>{coach.displayName}</Text>
+            <Text style={styles.coachModalOrganization}>
+              {coach.organizationName}
+              {coach.homeMarket ? ` · ${coach.homeMarket}` : ""}
+            </Text>
+            <Text style={styles.coachModalBio}>
+              {coach.bio ??
+                `Book training and upcoming sessions with ${coach.displayName}.`}
+            </Text>
+          </View>
+
+          <SectionHeader
+            eyebrow="WAYS TO TRAIN"
+            title="Choose what fits."
+            action={`${coach.services.length} services`}
+          />
+          <View style={styles.coachServiceList}>
+            {coach.services.map((service) => (
+              <Pressable
+                key={service.id}
+                onPress={() => {
+                  selectionHaptic();
+                  void WebBrowser.openBrowserAsync(
+                    `${dunaWebUrl}/clubs/${coach.organizationSlug}/products/${service.slug}`,
+                  );
+                }}
+                style={styles.coachServiceCard}
+              >
+                <Text style={styles.coachServiceType}>
+                  {service.subtype.replaceAll("-", " ").toUpperCase()}
+                </Text>
+                <Text style={styles.coachServiceTitle}>{service.title}</Text>
+                <Text numberOfLines={3} style={styles.coachServiceBody}>
+                  {service.shortSummary ??
+                    service.description ??
+                    "See live availability and booking options."}
+                </Text>
+                <Text style={styles.coachServiceAction}>
+                  View availability →
+                </Text>
+              </Pressable>
+            ))}
+            {coach.services.length === 0 && (
+              <View style={styles.coachEmptyCard}>
+                <Text style={styles.coachServiceTitle}>
+                  New availability is coming.
+                </Text>
+                <Text style={styles.coachServiceBody}>
+                  Follow {coach.organizationName} for the next published
+                  session.
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {coach.upcomingSessions.length > 0 && (
+            <>
+              <SectionHeader
+                eyebrow="ON THE CALENDAR"
+                title={`Upcoming with ${coach.displayName}.`}
+              />
+              <View style={styles.listCard}>
+                {coach.upcomingSessions.map((session) => (
+                  <Pressable
+                    key={session.id}
+                    onPress={() => {
+                      selectionHaptic();
+                      void WebBrowser.openBrowserAsync(
+                        `${dunaWebUrl}/events/${session.slug}`,
+                      );
+                    }}
+                    style={styles.coachSessionRow}
+                  >
+                    <View style={styles.coachSessionDate}>
+                      <Text style={styles.coachSessionMonth}>
+                        {new Date(session.startsAt)
+                          .toLocaleDateString("en-US", { month: "short" })
+                          .toUpperCase()}
+                      </Text>
+                      <Text style={styles.coachSessionDay}>
+                        {new Date(session.startsAt).getDate()}
+                      </Text>
+                    </View>
+                    <View style={styles.flex}>
+                      <Text style={styles.rowTitle}>{session.title}</Text>
+                      <Text style={styles.rowMeta}>
+                        {new Date(session.startsAt).toLocaleTimeString(
+                          "en-US",
+                          {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          },
+                        )}
+                        {session.venueName ? ` · ${session.venueName}` : ""}
+                      </Text>
+                    </View>
+                    <Text style={styles.chevron}>›</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+function MemberOrganizationCard({
+  organization,
+}: {
+  readonly organization: OrganizationWallet;
+}) {
+  return (
+    <View style={styles.memberOrganizationCard}>
+      <View style={styles.memberOrganizationMark}>
+        <Text style={styles.memberOrganizationMarkText}>
+          {organization.organizationName.slice(0, 1).toUpperCase()}
+        </Text>
+      </View>
+      <View style={styles.flex}>
+        <Text style={styles.memberOrganizationEyebrow}>YOUR CLUB</Text>
+        <Text style={styles.memberOrganizationName}>
+          {organization.organizationName}
+        </Text>
+        <Text style={styles.memberOrganizationMeta}>
+          {organization.membershipName
+            ? `${organization.membershipName} · `
+            : ""}
+          {organization.credits.toLocaleString()} credits
+        </Text>
+      </View>
+      <Text style={styles.memberOrganizationArrow}>›</Text>
+    </View>
+  );
+}
+
 function HomeScreen({
   onBook,
 }: {
@@ -364,14 +630,45 @@ function HomeScreen({
 }) {
   const { width } = useWindowDimensions();
   const compact = width < 480;
-  const { client, dashboard, people: livePeople } = usePlayerRuntime();
+  const {
+    client,
+    coaches,
+    dashboard,
+    organizationWallets,
+    people: livePeople,
+  } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
   const bookings = dashboard?.bookings ?? demoBookings;
   const events = dashboard?.events ?? demoEvents;
   const matches = dashboard?.recentMatches ?? demoMatches;
   const people = livePeople ?? demoPeople;
+  const homeOrganization =
+    organizationWallets?.find(
+      (organization) =>
+        organization.membershipStatus === "active" &&
+        organization.status === "active",
+    ) ??
+    organizationWallets?.find(
+      (organization) => organization.status === "active",
+    ) ??
+    organizationWallets?.[0];
+  const isHomeOrganizationEvent = (event: (typeof events)[number]) =>
+    Boolean(
+      homeOrganization &&
+      (event.organizationId === homeOrganization.organizationId ||
+        event.organizationSlug === homeOrganization.organizationSlug),
+    );
+  const homeEvents = events.filter(isHomeOrganizationEvent);
+  const exploreEvents = homeOrganization
+    ? events.filter((event) => !isHomeOrganizationEvent(event))
+    : events;
+  const homeCoaches =
+    coaches?.filter(
+      (coach) => coach.organizationId === homeOrganization?.organizationId,
+    ) ?? [];
   const nextBooking = bookings[0];
   const [liveActivityNotice, setLiveActivityNotice] = useState<string>();
+  const [selectedCoach, setSelectedCoach] = useState<MobileCoach>();
   const metrics = dashboard?.metrics.slice(0, 4) ?? [
     { label: "Win rate", value: "61%" },
     { label: "Last 10", value: "8–2" },
@@ -387,237 +684,315 @@ function HomeScreen({
     .format(new Date())
     .toUpperCase();
   return (
-    <ScrollView
-      contentContainerStyle={styles.screenContent}
-      showsVerticalScrollIndicator={false}
-    >
-      <AppHeader eyebrow={today.replace(", ", " · ")} />
-      <ImageBackground
-        imageStyle={styles.homeCampaignImage}
-        source={dunaCampaignRally}
-        style={[styles.homeCampaign, compact && styles.homeCampaignCompact]}
-      >
-        <View style={styles.homeCampaignWash} />
-        <View style={styles.homeCampaignContent}>
-          <Text style={styles.homeCampaignEyebrow}>YOUR GAME · TODAY</Text>
-          <Text
-            style={[
-              styles.homeCampaignTitle,
-              compact && styles.homeCampaignTitleCompact,
-            ]}
-          >
-            Good morning,{`\n`}
-            {player.displayName.split(" ")[0]}.
-          </Text>
-          <Text style={styles.homeCampaignSubtitle}>
-            Your next game, latest movement, and everything happening around
-            you.
-          </Text>
-          <Pressable
-            onPress={() =>
-              void WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/score`)
-            }
-            style={styles.homeCampaignAction}
-          >
-            <Text style={styles.homeCampaignActionText}>＋ Record a match</Text>
-          </Pressable>
-        </View>
-      </ImageBackground>
-      <View style={styles.heroGrid}>
-        <View style={styles.ratingCard}>
-          <View style={styles.cardTitleRow}>
-            <View>
-              <Text style={styles.eyebrow}>YOUR LEVEL</Text>
-              <Text style={styles.cardTitle}>Built by every rally.</Text>
-            </View>
-            <Pill tone="positive">{player.rating.confidence}</Pill>
-          </View>
-          <RatingOrbit />
-          <View style={styles.ratingStats}>
-            <View>
-              <Text style={styles.statValue}>
-                {player.rating.percentile
-                  ? `${player.rating.percentile}%`
-                  : "—"}
-              </Text>
-              <Text style={styles.statLabel}>Percentile</Text>
-            </View>
-            <View>
-              <Text style={styles.statValue}>{player.homeMarket || "—"}</Text>
-              <Text style={styles.statLabel}>Home market</Text>
-            </View>
-            <View>
-              <Text style={styles.statValue}>{matches.length}</Text>
-              <Text style={styles.statLabel}>Matches</Text>
-            </View>
-          </View>
-        </View>
-        <View style={styles.nextCard}>
-          <View style={styles.cardTitleRow}>
-            <Text style={styles.eyebrow}>NEXT UP</Text>
-            <Pill>Confirmed</Pill>
-          </View>
-          <Text style={styles.nextDate}>
-            {nextBooking
-              ? new Date(nextBooking.startsAt)
-                  .toLocaleDateString("en-US", { weekday: "short" })
-                  .toUpperCase()
-              : "OPEN"}
-          </Text>
-          <Text style={styles.nextDay}>
-            {nextBooking ? new Date(nextBooking.startsAt).getDate() : "—"}
-          </Text>
-          <Text style={styles.nextTitle}>
-            {nextBooking?.title ?? "Nothing booked yet"}
-          </Text>
-          <Text style={styles.nextMeta}>
-            {nextBooking
-              ? `${new Date(nextBooking.startsAt).toLocaleTimeString("en-US", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })} · ${nextBooking.venueName}`
-              : "Discover a session built for your level"}
-          </Text>
-          <View style={styles.avatarStack}>
-            {people.slice(0, 4).map((person) => (
-              <View style={styles.miniAvatar} key={person.id}>
-                <Text style={styles.miniAvatarText}>{person.initials}</Text>
-              </View>
-            ))}
-          </View>
-          <Pressable style={styles.cardLink}>
-            <Text style={styles.cardLinkText}>Open game thread →</Text>
-          </Pressable>
-          {Platform.OS === "ios" && nextBooking && (
-            <Pressable
-              onPress={() => {
-                selectionHaptic();
-                void startDunaLiveActivity(
-                  {
-                    subjectId: nextBooking.id,
-                    kind: "upcoming",
-                    title: nextBooking.title,
-                    subtitle: `${new Date(
-                      nextBooking.startsAt,
-                    ).toLocaleTimeString("en-US", {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })} · ${nextBooking.venueName}`,
-                    status: "Upcoming",
-                    startsAt: nextBooking.startsAt,
-                  },
-                  {
-                    onPushToken: (token) => {
-                      void rememberLiveActivityToken(token, client).catch(
-                        () => undefined,
-                      );
-                    },
-                  },
-                )
-                  .then(() => {
-                    successHaptic();
-                    setLiveActivityNotice("Added to your Lock Screen.");
-                  })
-                  .catch((reason) => {
-                    setLiveActivityNotice(displayError(reason));
-                  });
-              }}
-              style={styles.liveActivityButton}
-            >
-              <Text style={styles.liveActivityButtonText}>
-                ◉ Keep on Lock Screen
-              </Text>
-            </Pressable>
-          )}
-          {liveActivityNotice && (
-            <Text style={styles.liveActivityNotice}>{liveActivityNotice}</Text>
-          )}
-        </View>
-      </View>
-      <View style={styles.metricStrip}>
-        {metrics.map((metric) => (
-          <View key={metric.label}>
-            <Text style={styles.metricNumber}>{metric.value}</Text>
-            <Text style={styles.metricLabel}>{metric.label}</Text>
-          </View>
-        ))}
-      </View>
-      <SectionHeader
-        eyebrow="MADE FOR YOUR LEVEL"
-        title="Play next."
-        action="See all"
-      />
+    <>
       <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.horizontalBleed}
+        contentContainerStyle={styles.screenContent}
+        showsVerticalScrollIndicator={false}
       >
-        {events.slice(0, 4).map((event, index) => (
-          <EventCard eventIndex={index} key={event.id} onPress={onBook} />
-        ))}
-      </ScrollView>
-      <SectionHeader
-        eyebrow="RECENT FORM"
-        title="Every result tells a story."
-        action="Matches"
-      />
-      <View style={styles.listCard}>
-        {matches.slice(0, 2).map((match) => (
-          <View style={styles.matchRow} key={match.id}>
-            <View
+        <AppHeader eyebrow={today.replace(", ", " · ")} />
+        <ImageBackground
+          imageStyle={styles.homeCampaignImage}
+          source={dunaCampaignRally}
+          style={[styles.homeCampaign, compact && styles.homeCampaignCompact]}
+        >
+          <View style={styles.homeCampaignWash} />
+          <View style={styles.homeCampaignContent}>
+            <Text style={styles.homeCampaignEyebrow}>YOUR GAME · TODAY</Text>
+            <Text
               style={[
-                styles.resultBadge,
-                {
-                  backgroundColor:
-                    match.winner === "A" ? colors.aqua : colors.danger,
-                },
+                styles.homeCampaignTitle,
+                compact && styles.homeCampaignTitleCompact,
               ]}
             >
-              <Text style={styles.resultText}>
-                {match.winner === "A" ? "W" : "L"}
+              Good morning,{`\n`}
+              {player.displayName.split(" ")[0]}.
+            </Text>
+            <Text style={styles.homeCampaignSubtitle}>
+              Your next game, latest movement, and everything happening around
+              you.
+            </Text>
+            <Pressable
+              onPress={() =>
+                void WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/score`)
+              }
+              style={styles.homeCampaignAction}
+            >
+              <Text style={styles.homeCampaignActionText}>
+                ＋ Record a match
               </Text>
+            </Pressable>
+          </View>
+        </ImageBackground>
+        {homeOrganization && (
+          <MemberOrganizationCard organization={homeOrganization} />
+        )}
+        {homeEvents.length > 0 && (
+          <>
+            <SectionHeader
+              eyebrow="FROM YOUR CLUB"
+              title="Made for your membership."
+              action="See club"
+            />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.horizontalBleed}
+            >
+              {homeEvents.slice(0, 6).map((event) => (
+                <EventCard
+                  eventIndex={events.findIndex(
+                    (candidate) => candidate.id === event.id,
+                  )}
+                  key={event.id}
+                  onPress={onBook}
+                />
+              ))}
+            </ScrollView>
+          </>
+        )}
+        {homeCoaches.length > 0 && (
+          <>
+            <SectionHeader
+              eyebrow="YOUR COACHES"
+              title="Train with people you know."
+              action={`${homeCoaches.length} coaches`}
+            />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.horizontalBleed}
+            >
+              <View style={styles.coachCardRow}>
+                {homeCoaches.map((coach) => (
+                  <CoachCard
+                    coach={coach}
+                    key={coach.personId}
+                    onPress={setSelectedCoach}
+                    preferred
+                  />
+                ))}
+              </View>
+            </ScrollView>
+          </>
+        )}
+        <View style={styles.heroGrid}>
+          <View style={styles.ratingCard}>
+            <View style={styles.cardTitleRow}>
+              <View>
+                <Text style={styles.eyebrow}>YOUR LEVEL</Text>
+                <Text style={styles.cardTitle}>Built by every rally.</Text>
+              </View>
+              <Pill tone="positive">{player.rating.confidence}</Pill>
             </View>
-            <View style={styles.flex}>
-              <Text style={styles.rowTitle}>
-                {match.teamA[0]?.displayName.split(" ")[0]} /{" "}
-                {match.teamA[1]?.displayName.split(" ")[0]}
-              </Text>
-              <Text style={styles.rowMeta}>
-                vs {match.teamB[0]?.displayName.split(" ")[0]} /{" "}
-                {match.teamB[1]?.displayName.split(" ")[0]} · {match.venueName}
-              </Text>
-            </View>
-            <View style={styles.matchScore}>
-              <Text style={styles.rowTitle}>
-                {match.score.map((set) => `${set[0]}–${set[1]}`).join("  ")}
-              </Text>
-              <Text style={[styles.rowMeta, { color: colors.positive }]}>
-                +{match.ratingDelta?.toFixed(2)}
-              </Text>
+            <RatingOrbit />
+            <View style={styles.ratingStats}>
+              <View>
+                <Text style={styles.statValue}>
+                  {player.rating.percentile
+                    ? `${player.rating.percentile}%`
+                    : "—"}
+                </Text>
+                <Text style={styles.statLabel}>Percentile</Text>
+              </View>
+              <View>
+                <Text style={styles.statValue}>{player.homeMarket || "—"}</Text>
+                <Text style={styles.statLabel}>Home market</Text>
+              </View>
+              <View>
+                <Text style={styles.statValue}>{matches.length}</Text>
+                <Text style={styles.statLabel}>Matches</Text>
+              </View>
             </View>
           </View>
-        ))}
-      </View>
-      {(insight || !dashboard) && (
-        <View style={styles.aiInsight}>
-          <View style={styles.aiIcon}>
-            <Text style={styles.aiIconText}>✦</Text>
-          </View>
-          <View style={styles.flex}>
-            <Text style={styles.eyebrow}>
-              {insight?.eyebrow ?? "DUNA INSIGHT"}
+          <View style={styles.nextCard}>
+            <View style={styles.cardTitleRow}>
+              <Text style={styles.eyebrow}>NEXT UP</Text>
+              <Pill>Confirmed</Pill>
+            </View>
+            <Text style={styles.nextDate}>
+              {nextBooking
+                ? new Date(nextBooking.startsAt)
+                    .toLocaleDateString("en-US", { weekday: "short" })
+                    .toUpperCase()
+                : "OPEN"}
             </Text>
-            <Text style={styles.aiTitle}>
-              {insight?.title ?? "Your sideout game is becoming an edge."}
+            <Text style={styles.nextDay}>
+              {nextBooking ? new Date(nextBooking.startsAt).getDate() : "—"}
             </Text>
-            <Text style={styles.aiBody}>
-              {insight?.body ??
-                "You are winning 8.4% more often than expected in sideout-scored matches. Preview insight only."}
+            <Text style={styles.nextTitle}>
+              {nextBooking?.title ?? "Nothing booked yet"}
             </Text>
+            <Text style={styles.nextMeta}>
+              {nextBooking
+                ? `${new Date(nextBooking.startsAt).toLocaleTimeString(
+                    "en-US",
+                    {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    },
+                  )} · ${nextBooking.venueName}`
+                : "Discover a session built for your level"}
+            </Text>
+            <View style={styles.avatarStack}>
+              {people.slice(0, 4).map((person) => (
+                <View style={styles.miniAvatar} key={person.id}>
+                  <Text style={styles.miniAvatarText}>{person.initials}</Text>
+                </View>
+              ))}
+            </View>
+            <Pressable style={styles.cardLink}>
+              <Text style={styles.cardLinkText}>Open game thread →</Text>
+            </Pressable>
+            {Platform.OS === "ios" && nextBooking && (
+              <Pressable
+                onPress={() => {
+                  selectionHaptic();
+                  void startDunaLiveActivity(
+                    {
+                      subjectId: nextBooking.id,
+                      kind: "upcoming",
+                      title: nextBooking.title,
+                      subtitle: `${new Date(
+                        nextBooking.startsAt,
+                      ).toLocaleTimeString("en-US", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })} · ${nextBooking.venueName}`,
+                      status: "Upcoming",
+                      startsAt: nextBooking.startsAt,
+                    },
+                    {
+                      onPushToken: (token) => {
+                        void rememberLiveActivityToken(token, client).catch(
+                          () => undefined,
+                        );
+                      },
+                    },
+                  )
+                    .then(() => {
+                      successHaptic();
+                      setLiveActivityNotice("Added to your Lock Screen.");
+                    })
+                    .catch((reason) => {
+                      setLiveActivityNotice(displayError(reason));
+                    });
+                }}
+                style={styles.liveActivityButton}
+              >
+                <Text style={styles.liveActivityButtonText}>
+                  ◉ Keep on Lock Screen
+                </Text>
+              </Pressable>
+            )}
+            {liveActivityNotice && (
+              <Text style={styles.liveActivityNotice}>
+                {liveActivityNotice}
+              </Text>
+            )}
           </View>
         </View>
-      )}
-    </ScrollView>
+        <View style={styles.metricStrip}>
+          {metrics.map((metric) => (
+            <View key={metric.label}>
+              <Text style={styles.metricNumber}>{metric.value}</Text>
+              <Text style={styles.metricLabel}>{metric.label}</Text>
+            </View>
+          ))}
+        </View>
+        <SectionHeader
+          eyebrow={
+            homeOrganization
+              ? "EXPLORE BEYOND YOUR CLUB"
+              : "MADE FOR YOUR LEVEL"
+          }
+          title={homeOrganization ? "Travel. Try something new." : "Play next."}
+          action="See all"
+        />
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.horizontalBleed}
+        >
+          {(exploreEvents.length > 0 ? exploreEvents : events)
+            .slice(0, 4)
+            .map((event) => (
+              <EventCard
+                eventIndex={events.findIndex(
+                  (candidate) => candidate.id === event.id,
+                )}
+                key={event.id}
+                onPress={onBook}
+              />
+            ))}
+        </ScrollView>
+        <SectionHeader
+          eyebrow="RECENT FORM"
+          title="Every result tells a story."
+          action="Matches"
+        />
+        <View style={styles.listCard}>
+          {matches.slice(0, 2).map((match) => (
+            <View style={styles.matchRow} key={match.id}>
+              <View
+                style={[
+                  styles.resultBadge,
+                  {
+                    backgroundColor:
+                      match.winner === "A" ? colors.aqua : colors.danger,
+                  },
+                ]}
+              >
+                <Text style={styles.resultText}>
+                  {match.winner === "A" ? "W" : "L"}
+                </Text>
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.rowTitle}>
+                  {match.teamA[0]?.displayName.split(" ")[0]} /{" "}
+                  {match.teamA[1]?.displayName.split(" ")[0]}
+                </Text>
+                <Text style={styles.rowMeta}>
+                  vs {match.teamB[0]?.displayName.split(" ")[0]} /{" "}
+                  {match.teamB[1]?.displayName.split(" ")[0]} ·{" "}
+                  {match.venueName}
+                </Text>
+              </View>
+              <View style={styles.matchScore}>
+                <Text style={styles.rowTitle}>
+                  {match.score.map((set) => `${set[0]}–${set[1]}`).join("  ")}
+                </Text>
+                <Text style={[styles.rowMeta, { color: colors.positive }]}>
+                  +{match.ratingDelta?.toFixed(2)}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+        {(insight || !dashboard) && (
+          <View style={styles.aiInsight}>
+            <View style={styles.aiIcon}>
+              <Text style={styles.aiIconText}>✦</Text>
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.eyebrow}>
+                {insight?.eyebrow ?? "DUNA INSIGHT"}
+              </Text>
+              <Text style={styles.aiTitle}>
+                {insight?.title ?? "Your sideout game is becoming an edge."}
+              </Text>
+              <Text style={styles.aiBody}>
+                {insight?.body ??
+                  "You are winning 8.4% more often than expected in sideout-scored matches. Preview insight only."}
+              </Text>
+            </View>
+          </View>
+        )}
+      </ScrollView>
+      <CoachProfileModal
+        coach={selectedCoach}
+        onClose={() => setSelectedCoach(undefined)}
+      />
+    </>
   );
 }
 
@@ -654,8 +1029,10 @@ function EventCard({
 }) {
   const { dashboard } = usePlayerRuntime();
   const event = (dashboard?.events ?? demoEvents)[eventIndex]!;
-  const accents = [colors.aquaDeep, "#745f3a", colors.navyLift, "#6b392f"];
   const weather = closestWeather(event.weather?.hourly, event.startsAt);
+  const imageUrl =
+    event.imageUrl ??
+    `${dunaWebUrl}${defaultEventMedia(event.kind, event.id).path}`;
   return (
     <Pressable
       onPress={() => {
@@ -664,20 +1041,19 @@ function EventCard({
       }}
       style={styles.eventCard}
     >
-      <View
-        style={[
-          styles.eventArt,
-          { backgroundColor: accents[eventIndex % accents.length] },
-        ]}
+      <ImageBackground
+        imageStyle={styles.eventArtImage}
+        source={{ uri: imageUrl }}
+        style={styles.eventArt}
       >
-        <View style={styles.courtLine} />
+        <View style={styles.eventArtWash} />
         <View style={styles.eventBadges}>
           <Pill tone={event.live ? "live" : "neutral"}>
             {event.live ? "Live" : event.kind}
           </Pill>
         </View>
         <Text style={styles.eventArrow}>↗</Text>
-      </View>
+      </ImageBackground>
       <View style={styles.eventBody}>
         <Text style={styles.eventTime}>
           {formatVenueTime(event.startsAt, event.timezone, "en-US", {
@@ -1815,41 +2191,96 @@ function DiscoverScreen({
   const [filter, setFilter] = useState("For you");
   const [search, setSearch] = useState("");
   const [bookingVenueId, setBookingVenueId] = useState<string>();
+  const [selectedCoach, setSelectedCoach] = useState<MobileCoach>();
   const [showProTour, setShowProTour] = useState(false);
-  const { dashboard, proCoverage, venues } = usePlayerRuntime();
+  const { coaches, dashboard, organizationWallets, proCoverage, venues } =
+    usePlayerRuntime();
   const events = dashboard?.events ?? demoEvents;
-  const filteredEvents = events.filter((event) => {
-    const query = search.trim().toLowerCase();
-    if (
-      query &&
-      ![
-        event.title,
-        event.venueName,
-        event.organizationName,
-        event.kind,
-        ...event.tags,
+  const query = search.trim().toLowerCase();
+  const homeOrganization =
+    organizationWallets?.find(
+      (organization) =>
+        organization.membershipStatus === "active" &&
+        organization.status === "active",
+    ) ??
+    organizationWallets?.find(
+      (organization) => organization.status === "active",
+    ) ??
+    organizationWallets?.[0];
+  const isHomeOrganizationEvent = (event: (typeof events)[number]) =>
+    Boolean(
+      homeOrganization &&
+      (event.organizationId === homeOrganization.organizationId ||
+        event.organizationSlug === homeOrganization.organizationSlug),
+    );
+  const filteredEvents = events
+    .filter((event) => {
+      if (
+        query &&
+        ![
+          event.title,
+          event.venueName,
+          event.organizationName,
+          event.kind,
+          ...event.tags,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query)
+      ) {
+        return false;
+      }
+      if (filter === "Today") {
+        return (
+          new Date(event.startsAt).toDateString() === new Date().toDateString()
+        );
+      }
+      if (filter === "Tournaments") return event.kind === "tournament";
+      if (filter === "Training") {
+        return ["clinic", "private-lesson"].includes(event.kind);
+      }
+      if (filter === "Open play") {
+        return ["open-play", "pickup"].includes(event.kind);
+      }
+      if (filter === "Free") return event.price.amountMinor === 0;
+      return true;
+    })
+    .sort(
+      (left, right) =>
+        Number(isHomeOrganizationEvent(right)) -
+        Number(isHomeOrganizationEvent(left)),
+    );
+  const homeEvents = filteredEvents.filter(isHomeOrganizationEvent);
+  const networkEvents = homeOrganization
+    ? filteredEvents.filter((event) => !isHomeOrganizationEvent(event))
+    : filteredEvents;
+  const matchingCoaches = (coaches ?? [])
+    .filter((coach) => {
+      if (!query) return true;
+      return [
+        coach.displayName,
+        coach.handle,
+        coach.organizationName,
+        coach.homeMarket ?? "",
+        ...coach.services.map((service) => service.title),
       ]
         .join(" ")
         .toLowerCase()
-        .includes(query)
-    ) {
-      return false;
-    }
-    if (filter === "Today") {
-      return (
-        new Date(event.startsAt).toDateString() === new Date().toDateString()
-      );
-    }
-    if (filter === "Tournaments") return event.kind === "tournament";
-    if (filter === "Training") {
-      return ["clinic", "private-lesson"].includes(event.kind);
-    }
-    if (filter === "Open play") {
-      return ["open-play", "pickup"].includes(event.kind);
-    }
-    if (filter === "Free") return event.price.amountMinor === 0;
-    return true;
-  });
+        .includes(query);
+    })
+    .sort(
+      (left, right) =>
+        Number(right.organizationId === homeOrganization?.organizationId) -
+        Number(left.organizationId === homeOrganization?.organizationId),
+    );
+  const homeCoaches = matchingCoaches.filter(
+    (coach) => coach.organizationId === homeOrganization?.organizationId,
+  );
+  const networkCoaches = homeOrganization
+    ? matchingCoaches.filter(
+        (coach) => coach.organizationId !== homeOrganization.organizationId,
+      )
+    : matchingCoaches;
   const resultCount = filteredEvents.length;
   return (
     <>
@@ -1865,6 +2296,9 @@ function DiscoverScreen({
           }
         />
         <Text style={styles.displayTitle}>Find your game.</Text>
+        {homeOrganization && (
+          <MemberOrganizationCard organization={homeOrganization} />
+        )}
         <Pressable
           onPress={() => {
             selectionHaptic();
@@ -1932,6 +2366,55 @@ function DiscoverScreen({
             ))}
           </View>
         </ScrollView>
+        {homeCoaches.length > 0 && (
+          <>
+            <SectionHeader
+              eyebrow="YOUR CLUB · COACHES"
+              title="Start with people you know."
+              action={`${homeCoaches.length} coaches`}
+            />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.horizontalBleed}
+            >
+              <View style={styles.coachCardRow}>
+                {homeCoaches.map((coach) => (
+                  <CoachCard
+                    coach={coach}
+                    key={coach.personId}
+                    onPress={setSelectedCoach}
+                    preferred
+                  />
+                ))}
+              </View>
+            </ScrollView>
+          </>
+        )}
+        {homeEvents.length > 0 && (
+          <>
+            <SectionHeader
+              eyebrow="YOUR CLUB · INCLUDED + PREFERRED"
+              title="Your membership, first."
+              action={`${homeEvents.length} events`}
+            />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.horizontalBleed}
+            >
+              {homeEvents.map((event) => (
+                <EventCard
+                  eventIndex={events.findIndex(
+                    (candidate) => candidate.id === event.id,
+                  )}
+                  key={event.id}
+                  onPress={onBook}
+                />
+              ))}
+            </ScrollView>
+          </>
+        )}
         {venues && venues.length > 0 && (
           <>
             <SectionHeader
@@ -1998,12 +2481,12 @@ function DiscoverScreen({
           </View>
         </View>
         <SectionHeader
-          eyebrow={`${filter.toUpperCase()} · ${resultCount} RESULTS`}
-          title="Around you."
+          eyebrow={`${filter.toUpperCase()} · ${networkEvents.length} RESULTS`}
+          title={homeOrganization ? "Explore beyond your club." : "Around you."}
           action="Map"
         />
         <View style={styles.eventGrid}>
-          {filteredEvents.map((event) => {
+          {networkEvents.map((event) => {
             const eventIndex = events.findIndex(
               (candidate) => candidate.id === event.id,
             );
@@ -2015,7 +2498,42 @@ function DiscoverScreen({
               />
             );
           })}
+          {networkEvents.length === 0 && (
+            <View style={styles.coachEmptyCard}>
+              <Text style={styles.coachServiceTitle}>
+                Nothing else matches yet.
+              </Text>
+              <Text style={styles.coachServiceBody}>
+                Your club results stay above. Try a broader search to explore
+                the wider Duna network.
+              </Text>
+            </View>
+          )}
         </View>
+        {networkCoaches.length > 0 && (
+          <>
+            <SectionHeader
+              eyebrow="COACHES ACROSS DUNA"
+              title="Find a different perspective."
+              action={`${networkCoaches.length} coaches`}
+            />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.horizontalBleed}
+            >
+              <View style={styles.coachCardRow}>
+                {networkCoaches.map((coach) => (
+                  <CoachCard
+                    coach={coach}
+                    key={coach.personId}
+                    onPress={setSelectedCoach}
+                  />
+                ))}
+              </View>
+            </ScrollView>
+          </>
+        )}
       </ScrollView>
       <VenueBookingModal
         onClose={() => setBookingVenueId(undefined)}
@@ -2025,6 +2543,10 @@ function DiscoverScreen({
       <ProTourModal
         onClose={() => setShowProTour(false)}
         visible={showProTour}
+      />
+      <CoachProfileModal
+        coach={selectedCoach}
+        onClose={() => setSelectedCoach(undefined)}
       />
     </>
   );
@@ -2766,10 +3288,20 @@ function BookingModal({
               <Text style={styles.modalHeaderTitle}>Secure checkout</Text>
               <Text style={styles.rowMeta}>Secure payment</Text>
             </View>
-            <View style={styles.checkoutArt}>
-              <View style={styles.courtLine} />
+            <ImageBackground
+              imageStyle={styles.checkoutArtImage}
+              source={{
+                uri:
+                  event.imageUrl ??
+                  `${dunaWebUrl}${
+                    defaultEventMedia(event.kind, event.id).path
+                  }`,
+              }}
+              style={styles.checkoutArt}
+            >
+              <View style={styles.eventArtWash} />
               <Pill>{event.kind}</Pill>
-            </View>
+            </ImageBackground>
             <Text style={styles.checkoutTitle}>{event.title}</Text>
             <Text style={styles.checkoutMeta}>
               {event.venueName} ·{" "}
@@ -4257,6 +4789,263 @@ function createStyles(palette: Palette) {
       fontSize: 11,
       fontWeight: "900",
     },
+    memberOrganizationCard: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.accentRgb, 0.2),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      marginBottom: 4,
+      padding: 14,
+    },
+    memberOrganizationMark: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 15,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    memberOrganizationMarkText: {
+      color: colors.onAccent,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    memberOrganizationEyebrow: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1,
+    },
+    memberOrganizationName: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+    memberOrganizationMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 3,
+    },
+    memberOrganizationArrow: {
+      color: colors.aqua,
+      fontSize: 24,
+      fontWeight: "500",
+    },
+    coachCardRow: {
+      flexDirection: "row",
+      gap: 10,
+      paddingHorizontal: 18,
+      paddingRight: 36,
+    },
+    coachCard: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      minHeight: 116,
+      padding: 13,
+      width: 304,
+    },
+    coachCardPreferred: {
+      backgroundColor: rgba(colors.accentRgb, 0.06),
+      borderColor: rgba(colors.accentRgb, 0.35),
+    },
+    coachCardPressed: { opacity: 0.78 },
+    coachAvatar: {
+      borderRadius: 19,
+      height: 66,
+      width: 66,
+    },
+    coachAvatarFallback: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 19,
+      height: 66,
+      justifyContent: "center",
+      width: 66,
+    },
+    coachAvatarFallbackText: {
+      color: colors.aqua,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    coachCardTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 7,
+    },
+    coachCardName: {
+      color: colors.bone,
+      flexShrink: 1,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    coachCardOrganization: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "700",
+      marginTop: 4,
+    },
+    coachCardMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 5,
+    },
+    coachCardArrow: {
+      color: colors.aqua,
+      fontSize: 24,
+      fontWeight: "500",
+    },
+    coachModalHeader: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.08),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingHorizontal: 18,
+      paddingVertical: 14,
+    },
+    coachModalHandle: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+    coachModalClose: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderRadius: 20,
+      height: 40,
+      justifyContent: "center",
+      width: 40,
+    },
+    coachModalContent: {
+      paddingBottom: 90,
+      paddingHorizontal: 18,
+    },
+    coachModalHero: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 24,
+      borderWidth: 1,
+      marginTop: 18,
+      padding: 22,
+    },
+    coachModalAvatar: {
+      borderRadius: 42,
+      height: 84,
+      width: 84,
+    },
+    coachModalAvatarFallback: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 42,
+      height: 84,
+      justifyContent: "center",
+      width: 84,
+    },
+    coachModalAvatarText: {
+      color: colors.aqua,
+      fontSize: 24,
+      fontWeight: "900",
+    },
+    coachModalName: {
+      color: colors.bone,
+      fontSize: 28,
+      fontWeight: "900",
+      letterSpacing: -1.1,
+      marginTop: 14,
+    },
+    coachModalOrganization: {
+      color: colors.aqua,
+      fontSize: 11,
+      fontWeight: "700",
+      marginTop: 5,
+      textAlign: "center",
+    },
+    coachModalBio: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 14,
+      textAlign: "center",
+    },
+    coachServiceList: { gap: 10 },
+    coachServiceCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      padding: 15,
+    },
+    coachServiceType: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    coachServiceTitle: {
+      color: colors.bone,
+      fontSize: 17,
+      fontWeight: "900",
+      marginTop: 6,
+    },
+    coachServiceBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 6,
+    },
+    coachServiceAction: {
+      color: colors.aqua,
+      fontSize: 11,
+      fontWeight: "800",
+      marginTop: 12,
+    },
+    coachEmptyCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      padding: 16,
+    },
+    coachSessionRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 74,
+      paddingHorizontal: 13,
+      paddingVertical: 10,
+    },
+    coachSessionDate: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 12,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    coachSessionMonth: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    coachSessionDay: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+    },
     homeGreeting: {
       alignItems: "flex-end",
       flexDirection: "row",
@@ -4528,6 +5317,15 @@ function createStyles(palette: Palette) {
       padding: 10,
       position: "relative",
     },
+    eventArtImage: { borderRadius: 16 },
+    eventArtWash: {
+      backgroundColor: "rgba(7,17,29,0.28)",
+      bottom: 0,
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
     courtLine: {
       borderColor: rgba(colors.overlayRgb, 0.28),
       borderWidth: 1,
@@ -4540,8 +5338,9 @@ function createStyles(palette: Palette) {
     },
     eventBadges: { flexDirection: "row" },
     eventArrow: {
-      color: colors.bone,
+      color: "#ffffff",
       fontSize: 16,
+      fontWeight: "900",
       position: "absolute",
       right: 10,
       top: 10,
@@ -5409,6 +6208,7 @@ function createStyles(palette: Palette) {
       padding: 12,
       position: "relative",
     },
+    checkoutArtImage: { borderRadius: 18 },
     checkoutTitle: {
       color: colors.bone,
       fontSize: 29,

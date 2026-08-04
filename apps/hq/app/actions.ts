@@ -294,6 +294,41 @@ export async function setCatalogItemStatusAction(
   }
 }
 
+export async function updateCatalogItemAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const visibility = field(formData, "visibility");
+    if (
+      visibility !== "public" &&
+      visibility !== "members" &&
+      visibility !== "private"
+    ) {
+      throw new Error("Choose who can see this product.");
+    }
+    const configurationValue = optionalField(formData, "configuration");
+    const caller = await getServerCaller();
+    await caller.operator.updateCatalogItem({
+      catalogItemId: field(formData, "catalogItemId"),
+      title: field(formData, "title"),
+      shortSummary: optionalField(formData, "shortSummary"),
+      description: optionalField(formData, "description"),
+      visibility,
+      configuration: configurationValue
+        ? (JSON.parse(configurationValue) as Record<string, unknown>)
+        : {},
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    revalidatePath(`/products/${field(formData, "catalogItemId")}`);
+    return result("success", "Product and coach availability settings saved.");
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
 export async function updateCommerceSettingsAction(
   _previous: OperatorActionState,
   formData: FormData,
@@ -371,24 +406,34 @@ export async function updateThemeAction(
     }
     const caller = await getServerCaller();
     await caller.operator.updateTheme({
+      brandDisplayName: optionalField(formData, "brandDisplayName"),
+      membershipProgramName: optionalField(formData, "membershipProgramName"),
       logoUrl: optionalField(formData, "logoUrl"),
+      markUrl: optionalField(formData, "markUrl"),
+      logoLightUrl: optionalField(formData, "logoLightUrl"),
+      logoDarkUrl: optionalField(formData, "logoDarkUrl"),
       heroMediaType,
       heroMediaUrl: optionalField(formData, "heroMediaUrl"),
       heroPosterUrl: optionalField(formData, "heroPosterUrl"),
       tagline: optionalField(formData, "tagline"),
       profileSummary: optionalField(formData, "profileSummary"),
+      brandVoice: optionalField(formData, "brandVoice"),
       palette: {
         primary: field(formData, "primary"),
         accent: field(formData, "accent"),
         sand: field(formData, "sand"),
         ink: field(formData, "ink"),
         canvas: field(formData, "canvas"),
+        success: field(formData, "success"),
       },
       typography: {
         heading: headingFont as
           "Instrument Sans" | "DM Sans" | "Space Grotesk" | "Playfair Display",
         body: bodyFont as "Archivo" | "Inter" | "DM Sans" | "Source Sans 3",
       },
+      fontLicenseConfirmed: field(formData, "fontLicenseConfirmed") === "true",
+      safeFallbackFont:
+        field(formData, "safeFallbackFont") || "Arial, Helvetica, sans-serif",
       cardStyle,
       profileLayout,
       publish: field(formData, "publish") === "true",
@@ -401,6 +446,71 @@ export async function updateThemeAction(
       field(formData, "publish") === "true"
         ? "Theme Kit published to the organization profile."
         : "Theme Kit draft saved.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function addBrandKnowledgeSourceAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const scope = field(formData, "scope");
+    if (
+      scope !== "brand" &&
+      scope !== "organization" &&
+      scope !== "venue" &&
+      scope !== "service" &&
+      scope !== "product"
+    ) {
+      throw new Error("Choose where this knowledge should apply.");
+    }
+    const kind = field(formData, "kind");
+    if (kind !== "note" && kind !== "link" && kind !== "document") {
+      throw new Error("Choose note, link, or document.");
+    }
+    const caller = await getServerCaller();
+    const created = await caller.operator.addBrandKnowledgeSource({
+      scope,
+      kind,
+      title: field(formData, "title"),
+      sourceUrl: optionalField(formData, "sourceUrl"),
+      storageUrl: optionalField(formData, "storageUrl"),
+      mimeType: optionalField(formData, "mimeType"),
+      originalFilename: optionalField(formData, "originalFilename"),
+      contentText: field(formData, "contentText"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Brand Knowledge source approved and added to Duna AI context.",
+      undefined,
+      created.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function archiveBrandKnowledgeSourceAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.archiveBrandKnowledgeSource({
+      sourceId: field(formData, "sourceId"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Source archived and removed from active Duna AI context.",
     );
   } catch (error) {
     return errorState(error);
@@ -522,6 +632,143 @@ export async function confirmCalendarChangeAction(
   }
 }
 
+export async function addCalendarParticipantAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.addCalendarParticipant({
+      sessionId: field(formData, "sessionId"),
+      personId: field(formData, "personId"),
+      reason: field(formData, "reason") || "Added by an organization operator.",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Player added. Their in-app and push updates are queued.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function removeCalendarParticipantAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.removeCalendarParticipant({
+      registrationId: field(formData, "registrationId"),
+      reason:
+        field(formData, "reason") ||
+        "Removed from the session by an organization operator.",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Player removed. Their in-app and push updates are queued.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function cancelCalendarSessionAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.cancelCalendarSession({
+      sessionId: field(formData, "sessionId"),
+      reason: field(formData, "reason"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Session cancelled, reservations released, and player updates queued.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function createCalendarBlockAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const resourceType = field(formData, "resourceType");
+    const mode = field(formData, "mode");
+    if (resourceType !== "court" && resourceType !== "coach") {
+      throw new Error("Choose a court or coach.");
+    }
+    if (mode !== "blocked" && mode !== "maintenance") {
+      throw new Error("Choose blocked time or maintenance.");
+    }
+    const caller = await getServerCaller();
+    await caller.operator.createCalendarBlock({
+      resourceType,
+      resourceId: field(formData, "resourceId"),
+      startsAt: new Date(field(formData, "startsAt")).toISOString(),
+      endsAt: new Date(field(formData, "endsAt")).toISOString(),
+      mode,
+      reason: field(formData, "reason"),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result("success", "Time blocked on the live resource calendar.");
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function addCalendarEquipmentAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.addCalendarEquipment({
+      sessionId: field(formData, "sessionId"),
+      inventoryStockItemId: field(formData, "inventoryStockItemId"),
+      quantity: numberField(formData, "quantity"),
+      reason:
+        field(formData, "reason") || "Reserved from the organization calendar.",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result("success", "Equipment reserved and visible on the session.");
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function removeCalendarEquipmentAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.removeCalendarEquipment({
+      reservationId: field(formData, "reservationId"),
+      reason:
+        field(formData, "reason") || "Released from the organization calendar.",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result("success", "Equipment released from this session.");
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
 type ServerCaller = Awaited<ReturnType<typeof getServerCaller>>;
 type CreateEventDraftPayload = Parameters<
   ServerCaller["operator"]["createEventDraft"]
@@ -581,8 +828,16 @@ export async function createStaffInvitationAction(
     ) {
       throw new Error("Choose 1099 contractor or W-2 employee.");
     }
+    const deliveryMode = field(formData, "deliveryMode") || "send";
+    if (deliveryMode !== "send" && deliveryMode !== "link-only") {
+      throw new Error("Choose how to share the team invitation.");
+    }
     const preferredChannel = field(formData, "preferredChannel");
-    if (preferredChannel !== "email" && preferredChannel !== "sms") {
+    if (
+      deliveryMode === "send" &&
+      preferredChannel !== "email" &&
+      preferredChannel !== "sms"
+    ) {
       throw new Error("Choose email or SMS.");
     }
     const caller = await getServerCaller();
@@ -592,16 +847,22 @@ export async function createStaffInvitationAction(
       invitedPhoneE164: optionalField(formData, "invitedPhoneE164"),
       role,
       workerClassification,
-      preferredChannel,
+      preferredChannel:
+        preferredChannel === "email" || preferredChannel === "sms"
+          ? preferredChannel
+          : undefined,
+      deliveryMode,
       confirmed: confirmed(formData),
       idempotencyKey: crypto.randomUUID(),
     });
     revalidateOperator();
     return result(
       "success",
-      created.status === "sent"
-        ? "Team invitation sent."
-        : "Team invitation created. Delivery will resume when the selected provider is ready.",
+      deliveryMode === "link-only"
+        ? "Private claim link created. Copy it from pending team access."
+        : created.status === "sent"
+          ? "Team invitation sent."
+          : "Team invitation created. Delivery will resume when the selected provider is ready.",
       undefined,
       created.id,
     );
@@ -659,6 +920,7 @@ export async function updateStaffProfileAction(
     const caller = await getServerCaller();
     const updated = await caller.operator.updateStaffProfile({
       personId: field(formData, "personId"),
+      displayName: field(formData, "displayName"),
       role,
       workerClassification,
       compensationModel,

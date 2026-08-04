@@ -54,7 +54,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#F7F3EA"
         }
-      ]
+      ],
+      "expo-video"
     ],
     "extra": {
       "eas": {

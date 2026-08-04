@@ -699,19 +699,176 @@ export const organizations = pgTable(
   ],
 );
 
+export const organizationDomains = pgTable(
+  "organization_domains",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    hostname: varchar("hostname", { length: 253 }).notNull(),
+    kind: varchar("kind", { length: 24 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("pending"),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    vercelProjectId: text("vercel_project_id"),
+    vercelDomainId: text("vercel_domain_id"),
+    verification: jsonb("verification")
+      .notNull()
+      .$type<readonly Record<string, unknown>[]>()
+      .default([]),
+    lastCheckedAt: timestamp("last_checked_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("organization_domain_hostname_unique").on(table.hostname),
+    uniqueIndex("organization_domain_primary_unique")
+      .on(table.organizationId)
+      .where(sql`${table.isPrimary} = true`),
+    index("organization_domain_status_idx").on(
+      table.organizationId,
+      table.status,
+    ),
+    check(
+      "organization_domain_kind_valid",
+      sql`${table.kind} IN ('duna-subdomain', 'custom', 'purchased')`,
+    ),
+    check(
+      "organization_domain_status_valid",
+      sql`${table.status} IN ('pending', 'verifying', 'active', 'failed', 'disabled')`,
+    ),
+  ],
+);
+
+export const organizationCommunicationSettings = pgTable(
+  "organization_communication_settings",
+  {
+    organizationId: uuid("organization_id")
+      .primaryKey()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    senderDisplayName: text("sender_display_name"),
+    senderEmailLocalPart: varchar("sender_email_local_part", { length: 64 }),
+    senderEmailDomain: varchar("sender_email_domain", { length: 253 }),
+    senderEmail: varchar("sender_email", { length: 320 }),
+    emailDomainStatus: varchar("email_domain_status", { length: 24 })
+      .notNull()
+      .default("not-configured"),
+    emailDnsRecords: jsonb("email_dns_records")
+      .notNull()
+      .$type<
+        readonly {
+          type: string;
+          name: string;
+          value: string;
+          status: string;
+          priority?: number;
+        }[]
+      >()
+      .default([]),
+    messagingAddonStatus: varchar("messaging_addon_status", { length: 24 })
+      .notNull()
+      .default("disabled"),
+    messagingPhoneNumber: varchar("messaging_phone_number", { length: 32 }),
+    messagingSenderId: varchar("messaging_sender_id", { length: 64 }),
+    smsEnabled: boolean("sms_enabled").notNull().default(false),
+    rcsEnabled: boolean("rcs_enabled").notNull().default(false),
+    whatsappEnabled: boolean("whatsapp_enabled").notNull().default(false),
+    stripeSubscriptionId: varchar("stripe_subscription_id", { length: 128 }),
+    stripeMessagingItemId: varchar("stripe_messaging_item_id", {
+      length: 128,
+    }),
+    stripeBoostItemId: varchar("stripe_boost_item_id", { length: 128 }),
+    emailMessageLimit: integer("email_message_limit").notNull().default(1000),
+    emailContactLimit: integer("email_contact_limit").notNull().default(100),
+    messagingMessageLimit: integer("messaging_message_limit")
+      .notNull()
+      .default(1000),
+    messagingContactLimit: integer("messaging_contact_limit")
+      .notNull()
+      .default(100),
+    boostUnits: integer("boost_units").notNull().default(0),
+    alertThresholdBps: integer("alert_threshold_bps").notNull().default(8000),
+    softOverageBps: integer("soft_overage_bps").notNull().default(5000),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    check(
+      "organization_email_domain_status_valid",
+      sql`${table.emailDomainStatus} IN ('not-configured', 'pending', 'verified', 'failed')`,
+    ),
+    check(
+      "organization_messaging_addon_status_valid",
+      sql`${table.messagingAddonStatus} IN ('disabled', 'trialing', 'active', 'past-due', 'cancelled')`,
+    ),
+    check(
+      "organization_communication_limits_valid",
+      sql`${table.emailMessageLimit} >= 0 AND ${table.emailContactLimit} >= 0 AND ${table.messagingMessageLimit} >= 0 AND ${table.messagingContactLimit} >= 0 AND ${table.boostUnits} >= 0`,
+    ),
+    check(
+      "organization_communication_thresholds_valid",
+      sql`${table.alertThresholdBps} BETWEEN 1 AND 10000 AND ${table.softOverageBps} BETWEEN 0 AND 10000`,
+    ),
+  ],
+);
+
+export const communicationUsagePeriods = pgTable(
+  "communication_usage_periods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    periodStart: date("period_start", { mode: "date" }).notNull(),
+    emailContacts: integer("email_contacts").notNull().default(0),
+    emailMessages: integer("email_messages").notNull().default(0),
+    messagingContacts: integer("messaging_contacts").notNull().default(0),
+    smsMessages: integer("sms_messages").notNull().default(0),
+    rcsMessages: integer("rcs_messages").notNull().default(0),
+    whatsappMessages: integer("whatsapp_messages").notNull().default(0),
+    pushMessages: integer("push_messages").notNull().default(0),
+    delivered: integer("delivered").notNull().default(0),
+    opened: integer("opened").notNull().default(0),
+    clicked: integer("clicked").notNull().default(0),
+    bounced: integer("bounced").notNull().default(0),
+    failed: integer("failed").notNull().default(0),
+    converted: integer("converted").notNull().default(0),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("communication_usage_period_unique").on(
+      table.organizationId,
+      table.periodStart,
+    ),
+    check(
+      "communication_usage_nonnegative",
+      sql`${table.emailContacts} >= 0 AND ${table.emailMessages} >= 0 AND ${table.messagingContacts} >= 0 AND ${table.smsMessages} >= 0 AND ${table.rcsMessages} >= 0 AND ${table.whatsappMessages} >= 0 AND ${table.pushMessages} >= 0 AND ${table.delivered} >= 0 AND ${table.opened} >= 0 AND ${table.clicked} >= 0 AND ${table.bounced} >= 0 AND ${table.failed} >= 0 AND ${table.converted} >= 0`,
+    ),
+  ],
+);
+
 export const organizationThemes = pgTable(
   "organization_themes",
   {
     organizationId: uuid("organization_id")
       .primaryKey()
       .references(() => organizations.id, { onDelete: "cascade" }),
+    brandDisplayName: text("brand_display_name"),
+    membershipProgramName: text("membership_program_name"),
     logoUrl: text("logo_url"),
     markUrl: text("mark_url"),
+    logoLightUrl: text("logo_light_url"),
+    logoDarkUrl: text("logo_dark_url"),
     heroMediaType: varchar("hero_media_type", { length: 16 }),
     heroMediaUrl: text("hero_media_url"),
     heroPosterUrl: text("hero_poster_url"),
     tagline: text("tagline"),
     profileSummary: text("profile_summary"),
+    brandVoice: text("brand_voice"),
     palette: jsonb("palette")
       .notNull()
       .$type<{
@@ -720,6 +877,7 @@ export const organizationThemes = pgTable(
         sand: string;
         ink: string;
         canvas: string;
+        success: string;
       }>()
       .default({
         primary: "#173A63",
@@ -727,11 +885,18 @@ export const organizationThemes = pgTable(
         sand: "#E9DFC9",
         ink: "#101828",
         canvas: "#FAFAF7",
+        success: "#4E7C67",
       }),
     typography: jsonb("typography")
       .notNull()
       .$type<{ heading: string; body: string }>()
       .default({ heading: "Instrument Sans", body: "Archivo" }),
+    fontLicenseConfirmed: boolean("font_license_confirmed")
+      .notNull()
+      .default(false),
+    safeFallbackFont: text("safe_fallback_font")
+      .notNull()
+      .default("Arial, Helvetica, sans-serif"),
     cardStyle: varchar("card_style", { length: 24 }).notNull().default("soft"),
     profileLayout: varchar("profile_layout", { length: 24 })
       .notNull()
@@ -759,6 +924,67 @@ export const organizationThemes = pgTable(
     check(
       "organization_theme_profile_layout_valid",
       sql`${table.profileLayout} IN ('editorial', 'immersive', 'compact')`,
+    ),
+  ],
+);
+
+export const organizationBrandKnowledgeSources = pgTable(
+  "organization_brand_knowledge_sources",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    scope: varchar("scope", { length: 24 }).notNull().default("brand"),
+    kind: varchar("kind", { length: 24 }).notNull(),
+    title: text("title").notNull(),
+    sourceUrl: text("source_url"),
+    storageUrl: text("storage_url"),
+    mimeType: varchar("mime_type", { length: 120 }),
+    originalFilename: text("original_filename"),
+    contentText: text("content_text"),
+    contentHash: varchar("content_hash", { length: 64 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("ready"),
+    approvedByPersonId: uuid("approved_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    approvedAt: timestamp("approved_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    failureReason: text("failure_reason"),
+    lastProcessedAt: timestamp("last_processed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    check(
+      "organization_brand_knowledge_scope_valid",
+      sql`${table.scope} IN ('brand', 'organization', 'venue', 'service', 'product')`,
+    ),
+    check(
+      "organization_brand_knowledge_kind_valid",
+      sql`${table.kind} IN ('note', 'link', 'document')`,
+    ),
+    check(
+      "organization_brand_knowledge_status_valid",
+      sql`${table.status} IN ('processing', 'ready', 'failed', 'archived')`,
+    ),
+    check(
+      "organization_brand_knowledge_payload_present",
+      sql`${table.contentText} IS NOT NULL OR ${table.sourceUrl} IS NOT NULL OR ${table.storageUrl} IS NOT NULL`,
+    ),
+    index("organization_brand_knowledge_status_idx").on(
+      table.organizationId,
+      table.status,
+    ),
+    index("organization_brand_knowledge_scope_idx").on(
+      table.organizationId,
+      table.scope,
     ),
   ],
 );
@@ -1377,6 +1603,53 @@ export const eventBlueprints = pgTable("event_blueprints", {
   createdAt,
   updatedAt,
 });
+
+export const eventImpressions = pgTable(
+  "event_impressions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    viewerPersonId: uuid("viewer_person_id").references(() => people.id, {
+      onDelete: "set null",
+    }),
+    anonymousId: varchar("anonymous_id", { length: 128 }),
+    surface: varchar("surface", { length: 24 }).notNull(),
+    placement: varchar("placement", { length: 64 })
+      .notNull()
+      .default("event-page"),
+    source: varchar("source", { length: 120 }),
+    campaignId: uuid("campaign_id"),
+    dedupeKey: varchar("dedupe_key", { length: 192 }).notNull(),
+    occurredAt: timestamp("occurred_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("event_impression_dedupe_unique").on(table.dedupeKey),
+    index("event_impression_session_time_idx").on(
+      table.sessionId,
+      table.occurredAt,
+    ),
+    index("event_impression_campaign_idx").on(
+      table.campaignId,
+      table.occurredAt,
+    ),
+    check(
+      "event_impression_surface_valid",
+      sql`${table.surface} IN ('web', 'player-app', 'pro-app', 'hq')`,
+    ),
+    check(
+      "event_impression_viewer_present",
+      sql`${table.viewerPersonId} IS NOT NULL OR ${table.anonymousId} IS NOT NULL`,
+    ),
+  ],
+);
 
 // Organization catalog: events, services, goods, and plans share one sellable model.
 export const catalogItems = pgTable(
@@ -4520,6 +4793,9 @@ export const marketingFlows = pgTable(
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id").references(() => sessions.id, {
+      onDelete: "cascade",
+    }),
     name: text("name").notNull(),
     description: text("description"),
     segment: jsonb("segment")
@@ -4548,6 +4824,11 @@ export const marketingFlows = pgTable(
   (table) => [
     index("marketing_flow_org_status_idx").on(
       table.organizationId,
+      table.status,
+      table.createdAt,
+    ),
+    index("marketing_flow_session_status_idx").on(
+      table.sessionId,
       table.status,
       table.createdAt,
     ),
@@ -4610,6 +4891,57 @@ export const marketingCampaigns = pgTable(
     check(
       "marketing_campaign_status_valid",
       sql`${table.status} IN ('draft', 'scheduled', 'sending', 'sent', 'paused', 'cancelled')`,
+    ),
+  ],
+);
+
+export const messageDeliveryEvents = pgTable(
+  "message_delivery_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    messageId: uuid("message_id").references(() => messages.id, {
+      onDelete: "set null",
+    }),
+    campaignId: uuid("campaign_id").references(() => marketingCampaigns.id, {
+      onDelete: "set null",
+    }),
+    providerEventId: varchar("provider_event_id", { length: 192 }).notNull(),
+    channel: messageChannelEnum("channel").notNull(),
+    transport: varchar("transport", { length: 24 }).notNull(),
+    eventType: varchar("event_type", { length: 24 }).notNull(),
+    recipientHash: varchar("recipient_hash", { length: 64 }),
+    metadata: jsonb("metadata")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    occurredAt: timestamp("occurred_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("message_delivery_provider_event_unique").on(
+      table.providerEventId,
+    ),
+    index("message_delivery_org_time_idx").on(
+      table.organizationId,
+      table.occurredAt,
+    ),
+    index("message_delivery_campaign_idx").on(
+      table.campaignId,
+      table.occurredAt,
+    ),
+    check(
+      "message_delivery_transport_valid",
+      sql`${table.transport} IN ('email', 'sms', 'rcs', 'whatsapp', 'push', 'in-app')`,
+    ),
+    check(
+      "message_delivery_event_type_valid",
+      sql`${table.eventType} IN ('queued', 'sent', 'delivered', 'opened', 'clicked', 'bounced', 'failed', 'unsubscribed', 'converted')`,
     ),
   ],
 );

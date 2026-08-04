@@ -18,6 +18,14 @@ export interface MatchFormat {
   readonly allPlayersAgreedToRecord?: boolean;
   readonly serviceOrder?: Readonly<Record<TeamSide, readonly string[]>>;
   readonly playedAt?: string;
+  readonly location?: {
+    readonly label: string;
+    readonly googlePlaceId?: string;
+    readonly name?: string;
+    readonly address?: string;
+    readonly latitude?: number;
+    readonly longitude?: number;
+  };
 }
 
 export const standardBeachFormat: MatchFormat = {

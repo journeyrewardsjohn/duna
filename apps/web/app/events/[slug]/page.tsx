@@ -1,4 +1,4 @@
-import { formatMoney, formatVenueTime } from "@duna/core";
+import { defaultEventMedia, formatMoney, formatVenueTime } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowRight,
@@ -67,6 +67,15 @@ export async function generateMetadata({
     alternates: {
       canonical: `/events/${slug}`,
     },
+    openGraph: event
+      ? {
+          images: [
+            event.media?.find((item) => item.kind === "image")?.url ??
+              event.imageUrl ??
+              defaultEventMedia(event.kind, event.id).path,
+          ],
+        }
+      : undefined,
   };
 }
 
@@ -91,6 +100,11 @@ export default async function EventPage({
       : undefined;
 
   const cover = event.media?.[0];
+  const fallbackMedia = defaultEventMedia(event.kind, event.id);
+  const visualImageUrl =
+    cover?.kind === "image"
+      ? cover.url
+      : (event.imageUrl ?? fallbackMedia.path);
   const capacityUsed = Math.max(0, event.capacity - event.spotsRemaining);
   const capacityPercent =
     event.capacity > 0
@@ -162,9 +176,9 @@ export default async function EventPage({
             cover?.kind === "video" ? "event-public__visual--video" : ""
           }`}
           style={
-            cover?.kind === "image" || (!cover && event.imageUrl)
+            cover?.kind !== "video"
               ? {
-                  backgroundImage: `linear-gradient(180deg, transparent 45%, rgb(16 24 40 / 55%)), url("${cover?.url ?? event.imageUrl}")`,
+                  backgroundImage: `linear-gradient(180deg, transparent 45%, rgb(16 24 40 / 55%)), url("${visualImageUrl}")`,
                 }
               : undefined
           }
@@ -178,14 +192,6 @@ export default async function EventPage({
               poster={cover.posterUrl}
               src={cover.url}
             />
-          )}
-          {!cover && !event.imageUrl && (
-            <>
-              <div className="event-public__sun" />
-              <div className="event-public__net" />
-              <div className="event-public__court" />
-              <span>South Bay · Duna</span>
-            </>
           )}
           <article className="event-public__availability">
             <span>

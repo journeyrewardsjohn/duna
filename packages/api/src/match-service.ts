@@ -844,7 +844,9 @@ export async function recordCompletedMatch(input: {
   readonly teamAIds: readonly string[];
   readonly teamBIds: readonly string[];
   readonly venueId?: string;
+  readonly location?: MatchFormat["location"];
   readonly playedAt: Date;
+  readonly setsToWin: 1 | 2 | 3;
   readonly setScores: readonly {
     readonly a: number;
     readonly b: number;
@@ -881,10 +883,14 @@ export async function recordCompletedMatch(input: {
       "The person recording a match must be one of its players.",
     );
   }
-  if (input.setScores.length < 1 || input.setScores.length > 3) {
+  const maximumSets = input.setsToWin * 2 - 1;
+  if (
+    input.setScores.length < input.setsToWin ||
+    input.setScores.length > maximumSets
+  ) {
     throw new MatchServiceError(
       "MATCH_NOT_READY",
-      "Record one set, a two-set sweep, or a full three-set result.",
+      `A best-of-${maximumSets} match needs ${input.setsToWin} to ${maximumSets} completed sets.`,
     );
   }
   if (
@@ -905,14 +911,24 @@ export async function recordCompletedMatch(input: {
   }
   const teamAWins = input.setScores.filter((set) => set.a > set.b).length;
   const teamBWins = input.setScores.filter((set) => set.b > set.a).length;
-  const setsToWin = input.setScores.length === 1 ? 1 : 2;
+  let runningAWins = 0;
+  let runningBWins = 0;
+  const endedBeforeFinalSet = input.setScores.some((set, index) => {
+    if (set.a > set.b) runningAWins += 1;
+    else runningBWins += 1;
+    return (
+      index < input.setScores.length - 1 &&
+      (runningAWins === input.setsToWin || runningBWins === input.setsToWin)
+    );
+  });
   if (
-    Math.max(teamAWins, teamBWins) !== setsToWin ||
-    Math.min(teamAWins, teamBWins) !== input.setScores.length - setsToWin
+    endedBeforeFinalSet ||
+    Math.max(teamAWins, teamBWins) !== input.setsToWin ||
+    Math.min(teamAWins, teamBWins) >= input.setsToWin
   ) {
     throw new MatchServiceError(
       "MATCH_NOT_READY",
-      "The set scores must describe a single set, a 2–0 sweep, or a 2–1 result.",
+      `The final score must end when one team wins ${input.setsToWin} ${input.setsToWin === 1 ? "set" : "sets"}.`,
     );
   }
   const participantRows = await database
@@ -945,16 +961,26 @@ export async function recordCompletedMatch(input: {
   const winnerTeamId = teamAWins > teamBWins ? teamAId : teamBId;
   const format: MatchFormat = {
     ...standardBeachFormat,
-    setsToWin,
-    maximumSets: input.setScores.length,
-    pointTargets: input.setScores.map((set) => Math.max(set.a, set.b)),
-    hardCaps: input.setScores.map(() => null),
-    sideSwitchIntervals: input.setScores.map(() => 7),
+    setsToWin: input.setsToWin,
+    maximumSets,
+    pointTargets: Array.from({ length: maximumSets }, (_, index) => {
+      const recorded = input.setScores[index];
+      return recorded
+        ? Math.max(recorded.a, recorded.b)
+        : index === maximumSets - 1
+          ? 15
+          : 21;
+    }),
+    hardCaps: Array.from({ length: maximumSets }, () => null),
+    sideSwitchIntervals: Array.from({ length: maximumSets }, (_, index) =>
+      index === maximumSets - 1 ? 5 : 7,
+    ),
     teamSize: input.teamAIds.length,
     matchType: input.matchType,
     recordingMode: "completed",
     allPlayersAgreedToRecord: input.allPlayersAgreedToRecord,
     playedAt: input.playedAt.toISOString(),
+    location: input.location,
   };
   const scoreEvents: readonly ScoreEvent[] = [
     {

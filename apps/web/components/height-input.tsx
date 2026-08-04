@@ -61,6 +61,7 @@ export function HeightInput({
         <label>
           <span className="sr-only">Height in centimeters</span>
           <input
+            aria-label="Height in centimeters"
             inputMode="numeric"
             max={260}
             min={60}
@@ -83,6 +84,7 @@ export function HeightInput({
           <label>
             <span className="sr-only">Height in feet</span>
             <input
+              aria-label="Height in feet"
               inputMode="numeric"
               max={8}
               min={2}
@@ -98,6 +100,7 @@ export function HeightInput({
           <label>
             <span className="sr-only">Additional height in inches</span>
             <input
+              aria-label="Additional height in inches"
               inputMode="numeric"
               max={11}
               min={0}

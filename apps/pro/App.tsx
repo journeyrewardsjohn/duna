@@ -1,4 +1,4 @@
-import { formatMoney, formatVenueTime } from "@duna/core";
+import { formatVenueTime } from "@duna/core";
 import { demoOrganization, demoPeople } from "@duna/core/demo";
 import {
   createUndoEvent,
@@ -24,6 +24,7 @@ import {
 import {
   Animated,
   Easing,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -41,6 +42,7 @@ import {
   useProRuntime,
   type OperatorMatchScoringState,
   type OperatorMatches,
+  type ProRuntime,
 } from "./runtime";
 
 const lightColors = {
@@ -135,15 +137,21 @@ function ThemeButton() {
   );
 }
 
-type Tab = "today" | "people" | "score" | "money" | "more";
+type Tab = "today" | "calendar" | "score" | "people" | "more";
 
 const tabs: readonly { key: Tab; label: string; icon: string }[] = [
   { key: "today", label: "Today", icon: "⌂" },
-  { key: "people", label: "People", icon: "◎" },
+  { key: "calendar", label: "Calendar", icon: "▦" },
   { key: "score", label: "Score", icon: "＋" },
-  { key: "money", label: "Money", icon: "$" },
+  { key: "people", label: "People", icon: "◎" },
   { key: "more", label: "More", icon: "•••" },
 ];
+
+type ProCalendarEntry = NonNullable<
+  ProRuntime["workspace"]
+>["calendar"]["entries"][number];
+type CalendarResourceFilter = "all" | "courts" | "coaches";
+type CalendarSheetMode = "session" | "block";
 
 function displayError(reason: unknown): string {
   return reason instanceof Error
@@ -184,6 +192,122 @@ function weatherSymbol(icon: string | undefined): string {
 
 function fahrenheit(celsius: number | undefined): string {
   return celsius === undefined ? "" : `${Math.round((celsius * 9) / 5 + 32)}°`;
+}
+
+function calendarDateKey(date: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function calendarDayAtNoon(date: Date, offset: number): Date {
+  const value = new Date(date);
+  value.setHours(12, 0, 0, 0);
+  value.setDate(value.getDate() + offset);
+  return value;
+}
+
+function formatCalendarDay(date: Date): {
+  readonly weekday: string;
+  readonly day: string;
+  readonly month: string;
+} {
+  return {
+    weekday: new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(
+      date,
+    ),
+    day: new Intl.DateTimeFormat("en-US", { day: "2-digit" }).format(date),
+    month: new Intl.DateTimeFormat("en-US", { month: "short" }).format(date),
+  };
+}
+
+function formatCalendarTime(iso: string, timezone: string): string {
+  return formatVenueTime(iso, timezone, "en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function zonedLocalToIso(
+  dateKey: string,
+  hour: number,
+  minute: number,
+  timezone: string,
+): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const desiredUtc = Date.UTC(year!, month! - 1, day!, hour, minute);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(desiredUtc));
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)]),
+  );
+  const representedUtc = Date.UTC(
+    values.year!,
+    values.month! - 1,
+    values.day!,
+    values.hour!,
+    values.minute!,
+    values.second!,
+  );
+  const firstPass = desiredUtc - (representedUtc - desiredUtc);
+  const firstParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(firstPass));
+  const firstValues = Object.fromEntries(
+    firstParts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)]),
+  );
+  const remaining =
+    Date.UTC(year!, month! - 1, day!, hour, minute) -
+    Date.UTC(
+      firstValues.year!,
+      firstValues.month! - 1,
+      firstValues.day!,
+      firstValues.hour!,
+      firstValues.minute!,
+    );
+  return new Date(firstPass + remaining).toISOString();
+}
+
+function entryLabel(entry: ProCalendarEntry): string {
+  if (entry.sourceType === "operator-block")
+    return entry.status === "maintenance" ? "Maintenance" : "Blocked time";
+  if (entry.sourceType === "busy-block") return "External busy time";
+  return (entry.kind ?? "session").replaceAll("-", " ");
+}
+
+function personInitials(displayName: string): string {
+  return displayName
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
 }
 
 async function loadDeviceId(): Promise<string> {
@@ -359,7 +483,11 @@ const schedule = [
   ],
 ] as const;
 
-function TodayScreen({ onScore }: { readonly onScore: () => void }) {
+function TodayScreen({
+  onCalendar,
+}: {
+  readonly onCalendar: (entryId?: string) => void;
+}) {
   const { dashboard, mode, workspace } = useProRuntime();
   const organization = dashboard?.organization ?? demoOrganization;
   const metrics = dashboard?.metrics.slice(0, 4) ?? [
@@ -532,6 +660,7 @@ function TodayScreen({ onScore }: { readonly onScore: () => void }) {
         eyebrow="LIVE OPERATIONS"
         title="Today on sand"
         action="Calendar"
+        onAction={() => onCalendar()}
       />
       <View style={styles.scheduleCard}>
         {scheduleItems.map((item, index) => {
@@ -561,7 +690,7 @@ function TodayScreen({ onScore }: { readonly onScore: () => void }) {
               key={`${item.time}-${item.title}`}
               onPress={() => {
                 selectionHaptic();
-                onScore();
+                onCalendar(calendarEntry?.id);
               }}
               style={styles.scheduleRow}
             >
@@ -662,10 +791,12 @@ function SectionTitle({
   eyebrow,
   title,
   action,
+  onAction,
 }: {
   readonly eyebrow: string;
   readonly title: string;
   readonly action?: string;
+  readonly onAction?: () => void;
 }) {
   return (
     <View style={styles.sectionTitle}>
@@ -674,11 +805,1155 @@ function SectionTitle({
         <Text style={styles.sectionHeading}>{title}</Text>
       </View>
       {action && (
-        <Pressable>
+        <Pressable disabled={!onAction} onPress={onAction}>
           <Text style={styles.linkText}>{action} →</Text>
         </Pressable>
       )}
     </View>
+  );
+}
+
+function CalendarScreen({
+  focusEntryId,
+  onScore,
+}: {
+  readonly focusEntryId?: string;
+  readonly onScore: () => void;
+}) {
+  const { client, dashboard, mode, refresh, workspace } = useProRuntime();
+  const timezone =
+    workspace?.organization.timezone ??
+    dashboard?.organization.timezone ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const [selectedDate, setSelectedDate] = useState(() =>
+    calendarDayAtNoon(new Date(), 0),
+  );
+  const [resourceFilter, setResourceFilter] =
+    useState<CalendarResourceFilter>("all");
+  const [selectedId, setSelectedId] = useState<string>();
+  const [sheetMode, setSheetMode] = useState<CalendarSheetMode>("session");
+  const [busyAction, setBusyAction] = useState<string>();
+  const [feedback, setFeedback] = useState<string>();
+  const [cancelReason, setCancelReason] = useState("");
+  const [blockResourceType, setBlockResourceType] = useState<"court" | "coach">(
+    "court",
+  );
+  const [blockResourceId, setBlockResourceId] = useState("");
+  const [blockMode, setBlockMode] = useState<"blocked" | "maintenance">(
+    "blocked",
+  );
+  const [blockStartHour, setBlockStartHour] = useState(9);
+  const [blockDuration, setBlockDuration] = useState(60);
+  const [blockReason, setBlockReason] = useState("");
+
+  const previewEntries = useMemo<readonly ProCalendarEntry[]>(() => {
+    const start = new Date();
+    start.setMinutes(0, 0, 0);
+    return schedule.slice(0, 3).map((item, index) => {
+      const startsAt = new Date(start.getTime() + (index + 1) * 90 * 60_000);
+      const endsAt = new Date(startsAt.getTime() + 60 * 60_000);
+      return {
+        id: `preview-calendar-${index}`,
+        sourceType: "session",
+        title: item[2],
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+        timezone,
+        status: index === 0 ? "live" : "scheduled",
+        kind: index === 1 ? "clinic" : "open-play",
+        venueName: index === 0 ? "Manhattan Beach" : "Hermosa Beach",
+        courtName: `Court ${index + 1}`,
+        coachName: index === 0 ? "Coach Sam" : "Coach Alex",
+        participantCount: Number(item[4].split(" / ")[0]),
+        capacity: Number(item[4].split(" / ")[1]),
+        color: index === 0 ? colors.flare : colors.aqua,
+        draggable: true,
+        attendees: [],
+        equipment: [],
+      };
+    });
+  }, [timezone]);
+  const entries = workspace?.calendar.entries ?? previewEntries;
+  const dayKey = calendarDateKey(selectedDate, timezone);
+  const days = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, index) =>
+        calendarDayAtNoon(selectedDate, index - 3),
+      ),
+    [selectedDate],
+  );
+  const visibleEntries = useMemo(
+    () =>
+      entries
+        .filter(
+          (entry) =>
+            calendarDateKey(new Date(entry.startsAt), timezone) === dayKey,
+        )
+        .filter((entry) => {
+          if (resourceFilter === "courts") return Boolean(entry.courtId);
+          if (resourceFilter === "coaches") return Boolean(entry.coachPersonId);
+          return true;
+        })
+        .slice()
+        .sort(
+          (left, right) =>
+            Date.parse(left.startsAt) - Date.parse(right.startsAt),
+        ),
+    [dayKey, entries, resourceFilter, timezone],
+  );
+  const selectedEntry = entries.find((entry) => entry.id === selectedId);
+  const connectedPeople = new Set(
+    selectedEntry?.attendees.map((attendee) => attendee.personId) ?? [],
+  );
+  const participantCandidates =
+    workspace?.people.filter(
+      (person) =>
+        person.status === "active" &&
+        person.roles.includes("player") &&
+        !connectedPeople.has(person.personId),
+    ) ?? [];
+  const reservedEquipment = new Set(
+    selectedEntry?.equipment.map((item) => item.inventoryStockItemId) ?? [],
+  );
+  const equipmentCandidates =
+    workspace?.inventory.filter(
+      (item) =>
+        item.purpose !== "sale" &&
+        item.quantityOnHand > item.quantityReserved &&
+        !reservedEquipment.has(item.id),
+    ) ?? [];
+  const blockResources =
+    blockResourceType === "court"
+      ? (workspace?.venues.flatMap((venue) =>
+          venue.courts.map((court) => ({
+            id: court.id,
+            label: `${venue.name} · ${court.name}`,
+          })),
+        ) ?? [])
+      : (workspace?.staff
+          .filter((person) => person.active)
+          .map((person) => ({
+            id: person.personId,
+            label: person.displayName,
+          })) ?? []);
+  const selectedVenue = selectedEntry?.venueId
+    ? workspace?.venues.find((venue) => venue.id === selectedEntry.venueId)
+    : workspace?.venues.find(
+        (venue) => venue.name === selectedEntry?.venueName,
+      );
+  const selectedWeather = selectedEntry
+    ? selectedVenue?.weather?.hourly
+        .slice()
+        .sort(
+          (left, right) =>
+            Math.abs(
+              Date.parse(left.startsAt) - Date.parse(selectedEntry.startsAt),
+            ) -
+            Math.abs(
+              Date.parse(right.startsAt) - Date.parse(selectedEntry.startsAt),
+            ),
+        )[0]
+    : undefined;
+
+  useEffect(() => {
+    if (!focusEntryId) return;
+    const entry = entries.find((candidate) => candidate.id === focusEntryId);
+    if (!entry) return;
+    setSelectedDate(calendarDayAtNoon(new Date(entry.startsAt), 0));
+    setSelectedId(entry.id);
+    setSheetMode("session");
+  }, [entries, focusEntryId]);
+
+  useEffect(() => {
+    if (!blockResourceId && blockResources[0])
+      setBlockResourceId(blockResources[0].id);
+  }, [blockResourceId, blockResources]);
+
+  const closeSheet = () => {
+    setSelectedId(undefined);
+    setSheetMode("session");
+    setFeedback(undefined);
+    setCancelReason("");
+  };
+
+  const perform = async (key: string, action: () => Promise<unknown>) => {
+    if (!client || mode !== "live") {
+      setFeedback("Live calendar changes are disabled in preview.");
+      return false;
+    }
+    setBusyAction(key);
+    setFeedback(undefined);
+    try {
+      await action();
+      await refresh();
+      successHaptic();
+      setFeedback("Saved. Connected people will receive the relevant update.");
+      return true;
+    } catch (reason) {
+      setFeedback(displayError(reason));
+      return false;
+    } finally {
+      setBusyAction(undefined);
+    }
+  };
+
+  const openEntry = (entry: ProCalendarEntry) => {
+    selectionHaptic();
+    setSelectedId(entry.id);
+    setSheetMode("session");
+    setFeedback(undefined);
+  };
+
+  const openBlock = () => {
+    selectionHaptic();
+    setSelectedId(undefined);
+    setSheetMode("block");
+    setFeedback(undefined);
+  };
+
+  const createBlock = async () => {
+    if (!blockResourceId) {
+      setFeedback("Choose a court or coach before blocking time.");
+      return;
+    }
+    const startsAt = zonedLocalToIso(dayKey, blockStartHour, 0, timezone);
+    const endsAt = new Date(
+      Date.parse(startsAt) + blockDuration * 60_000,
+    ).toISOString();
+    const saved = await perform("block", () =>
+      client!.operator.createCalendarBlock.mutate({
+        resourceType: blockResourceType,
+        resourceId: blockResourceId,
+        startsAt,
+        endsAt,
+        mode: blockMode,
+        reason:
+          blockReason.trim() ||
+          (blockMode === "maintenance"
+            ? "Facility maintenance window."
+            : "Blocked by the organization."),
+        idempotencyKey: Crypto.randomUUID(),
+      }),
+    );
+    if (saved) closeSheet();
+  };
+
+  const fullWorkspaceHref = selectedEntry
+    ? selectedEntry.kind === "league"
+      ? `${dunaHqUrl}/leagues`
+      : selectedEntry.kind === "court-rental"
+        ? `${dunaHqUrl}/facilities`
+        : selectedEntry.kind === "private-lesson"
+          ? `${dunaHqUrl}/products`
+          : `${dunaHqUrl}/events`
+    : `${dunaHqUrl}/calendar`;
+
+  return (
+    <>
+      <ScrollView
+        contentContainerStyle={styles.calendarContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Header
+          context={`${dashboard?.organization.name ?? "DUNA PRO"} · CALENDAR`}
+        />
+        <PageTitle
+          action="New"
+          eyebrow="THE OPERATING HUB"
+          onAction={() =>
+            void WebBrowser.openBrowserAsync(`${dunaHqUrl}/events/create`)
+          }
+          title="Calendar."
+        />
+        <Text style={styles.calendarIntro}>
+          Sessions, clinics, events, court time, coaches, players, equipment,
+          and changes in one live schedule.
+        </Text>
+
+        <View style={styles.calendarToolbar}>
+          <View style={styles.calendarToolbarActions}>
+            <Pressable onPress={openBlock} style={styles.calendarBlockButton}>
+              <Text style={styles.calendarBlockButtonText}>▧ Block time</Text>
+            </Pressable>
+            <Pressable
+              onPress={() =>
+                void WebBrowser.openBrowserAsync(`${dunaHqUrl}/events/create`)
+              }
+              style={styles.calendarNewButton}
+            >
+              <Text style={styles.calendarNewButtonText}>＋ Add event</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.calendarTimezone}>{timezone}</Text>
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.calendarDayBleed}
+        >
+          <View style={styles.calendarDayStrip}>
+            {days.map((day) => {
+              const label = formatCalendarDay(day);
+              const active =
+                calendarDateKey(day, timezone) ===
+                calendarDateKey(selectedDate, timezone);
+              return (
+                <Pressable
+                  accessibilityState={{ selected: active }}
+                  key={day.toISOString()}
+                  onPress={() => {
+                    selectionHaptic();
+                    setSelectedDate(day);
+                  }}
+                  style={[
+                    styles.calendarDayButton,
+                    active && styles.calendarDayButtonActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.calendarDayWeekday,
+                      active && styles.calendarDayTextActive,
+                    ]}
+                  >
+                    {label.weekday}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.calendarDayNumber,
+                      active && styles.calendarDayTextActive,
+                    ]}
+                  >
+                    {label.day}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.calendarDayMonth,
+                      active && styles.calendarDayTextActive,
+                    ]}
+                  >
+                    {label.month}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </ScrollView>
+
+        <View style={styles.calendarFilterRow}>
+          {(
+            [
+              ["all", "Everything"],
+              ["courts", "By court"],
+              ["coaches", "By coach"],
+            ] as const
+          ).map(([key, label]) => (
+            <Pressable
+              key={key}
+              onPress={() => setResourceFilter(key)}
+              style={[
+                styles.calendarFilter,
+                resourceFilter === key && styles.calendarFilterActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.calendarFilterText,
+                  resourceFilter === key && styles.calendarFilterTextActive,
+                ]}
+              >
+                {label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={styles.calendarAgendaHeading}>
+          <View>
+            <Text style={styles.eyebrow}>DAY AGENDA</Text>
+            <Text style={styles.calendarAgendaTitle}>
+              {new Intl.DateTimeFormat("en-US", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              }).format(selectedDate)}
+            </Text>
+          </View>
+          <Pill tone={visibleEntries.length > 0 ? "positive" : "neutral"}>
+            {`${visibleEntries.length} items`}
+          </Pill>
+        </View>
+
+        <View style={styles.calendarAgenda}>
+          {visibleEntries.length === 0 ? (
+            <View style={styles.calendarEmpty}>
+              <Text style={styles.calendarEmptyIcon}>☀</Text>
+              <Text style={styles.calendarEmptyTitle}>The day is open.</Text>
+              <Text style={styles.calendarEmptyBody}>
+                Add a clinic, lesson, event, or protect time for a coach or
+                court.
+              </Text>
+              <View style={styles.calendarEmptyActions}>
+                <Pressable
+                  onPress={openBlock}
+                  style={styles.calendarEmptySecondary}
+                >
+                  <Text style={styles.calendarEmptySecondaryText}>
+                    Block time
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() =>
+                    void WebBrowser.openBrowserAsync(
+                      `${dunaHqUrl}/events/create`,
+                    )
+                  }
+                  style={styles.calendarEmptyPrimary}
+                >
+                  <Text style={styles.calendarEmptyPrimaryText}>
+                    Add something
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            visibleEntries.map((entry) => {
+              const venue = entry.venueId
+                ? workspace?.venues.find(
+                    (candidate) => candidate.id === entry.venueId,
+                  )
+                : workspace?.venues.find(
+                    (candidate) => candidate.name === entry.venueName,
+                  );
+              const weather = venue?.weather?.hourly
+                .slice()
+                .sort(
+                  (left, right) =>
+                    Math.abs(
+                      Date.parse(left.startsAt) - Date.parse(entry.startsAt),
+                    ) -
+                    Math.abs(
+                      Date.parse(right.startsAt) - Date.parse(entry.startsAt),
+                    ),
+                )[0];
+              const blocked =
+                entry.sourceType === "operator-block" ||
+                entry.sourceType === "busy-block";
+              return (
+                <Pressable
+                  key={entry.id}
+                  onPress={() => openEntry(entry)}
+                  style={[
+                    styles.calendarAgendaCard,
+                    blocked && styles.calendarAgendaCardBlocked,
+                  ]}
+                >
+                  <View style={styles.calendarAgendaTime}>
+                    <Text style={styles.calendarAgendaTimeMain}>
+                      {formatCalendarTime(entry.startsAt, timezone)}
+                    </Text>
+                    <Text style={styles.calendarAgendaTimeEnd}>
+                      {formatCalendarTime(entry.endsAt, timezone)}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.calendarAgendaAccent,
+                      { backgroundColor: entry.color },
+                    ]}
+                  />
+                  <View style={styles.flex}>
+                    <View style={styles.calendarAgendaTopline}>
+                      <Text style={styles.calendarAgendaKind}>
+                        {entryLabel(entry).toUpperCase()}
+                      </Text>
+                      {weather && !blocked && (
+                        <Text style={styles.calendarAgendaWeather}>
+                          {weatherSymbol(weather.icon)}{" "}
+                          {fahrenheit(weather.temperatureC)}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={styles.calendarAgendaName}>{entry.title}</Text>
+                    <Text style={styles.calendarAgendaMeta}>
+                      {[
+                        entry.courtName ?? entry.venueName,
+                        entry.coachName,
+                        blocked
+                          ? entry.status
+                          : `${entry.participantCount}/${entry.capacity || "open"} coming`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </Text>
+                    {!blocked && entry.attendees.length > 0 && (
+                      <View style={styles.calendarAvatarRow}>
+                        {entry.attendees.slice(0, 5).map((attendee, index) => (
+                          <View
+                            key={attendee.registrationId}
+                            style={[
+                              styles.calendarAvatar,
+                              index > 0 && styles.calendarAvatarOverlap,
+                            ]}
+                          >
+                            <Text style={styles.calendarAvatarText}>
+                              {personInitials(attendee.displayName)}
+                            </Text>
+                          </View>
+                        ))}
+                        {entry.attendees.length > 5 && (
+                          <Text style={styles.calendarAvatarMore}>
+                            +{entry.attendees.length - 5}
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.chevron}>›</Text>
+                </Pressable>
+              );
+            })
+          )}
+        </View>
+
+        <View style={styles.calendarNotificationNote}>
+          <Text style={styles.calendarNotificationIcon}>◈</Text>
+          <View style={styles.flex}>
+            <Text style={styles.calendarNotificationTitle}>
+              Every connected change is communicated.
+            </Text>
+            <Text style={styles.calendarNotificationBody}>
+              Roster, time, equipment, and cancellation updates queue in-app and
+              push notifications. Verified guardians receive copies for minors.
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+
+      <Modal
+        animationType="slide"
+        onRequestClose={closeSheet}
+        transparent
+        visible={Boolean(selectedEntry) || sheetMode === "block"}
+      >
+        <Pressable onPress={closeSheet} style={styles.calendarSheetBackdrop}>
+          <Pressable
+            onPress={(event) => event.stopPropagation()}
+            style={styles.calendarSheet}
+          >
+            <View style={styles.calendarSheetHandle} />
+            <View style={styles.calendarSheetHeader}>
+              <Pressable
+                accessibilityLabel="Close calendar details"
+                onPress={closeSheet}
+                style={styles.calendarSheetClose}
+              >
+                <Text style={styles.calendarSheetCloseText}>×</Text>
+              </Pressable>
+              <View style={styles.flex}>
+                <Text style={styles.calendarSheetEyebrow}>
+                  {sheetMode === "block"
+                    ? "PROTECT THE SCHEDULE"
+                    : selectedEntry
+                      ? entryLabel(selectedEntry).toUpperCase()
+                      : "CALENDAR"}
+                </Text>
+                <Text style={styles.calendarSheetTitle}>
+                  {sheetMode === "block" ? "Block time" : selectedEntry?.title}
+                </Text>
+              </View>
+              {selectedEntry && <Pill>{selectedEntry.status}</Pill>}
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.calendarSheetScroll}
+              showsVerticalScrollIndicator={false}
+            >
+              {feedback && (
+                <View style={styles.calendarFeedback}>
+                  <Text style={styles.calendarFeedbackText}>{feedback}</Text>
+                </View>
+              )}
+
+              {sheetMode === "block" ? (
+                <>
+                  <Text style={styles.calendarFieldLabel}>RESOURCE TYPE</Text>
+                  <View style={styles.calendarChoiceRow}>
+                    {(["court", "coach"] as const).map((type) => (
+                      <Pressable
+                        key={type}
+                        onPress={() => {
+                          setBlockResourceType(type);
+                          setBlockResourceId("");
+                        }}
+                        style={[
+                          styles.calendarChoice,
+                          blockResourceType === type &&
+                            styles.calendarChoiceActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.calendarChoiceText,
+                            blockResourceType === type &&
+                              styles.calendarChoiceTextActive,
+                          ]}
+                        >
+                          {type === "court" ? "Court" : "Coach"}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={styles.calendarFieldLabel}>
+                    {blockResourceType === "court" ? "COURT" : "COACH"}
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={styles.calendarOptionRow}>
+                      {blockResources.map((resource) => (
+                        <Pressable
+                          key={resource.id}
+                          onPress={() => setBlockResourceId(resource.id)}
+                          style={[
+                            styles.calendarOption,
+                            blockResourceId === resource.id &&
+                              styles.calendarOptionActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.calendarOptionText,
+                              blockResourceId === resource.id &&
+                                styles.calendarOptionTextActive,
+                            ]}
+                          >
+                            {resource.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </ScrollView>
+                  <Text style={styles.calendarFieldLabel}>START TIME</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={styles.calendarOptionRow}>
+                      {[6, 8, 10, 12, 14, 16, 18, 20].map((hour) => (
+                        <Pressable
+                          key={hour}
+                          onPress={() => setBlockStartHour(hour)}
+                          style={[
+                            styles.calendarTimeOption,
+                            blockStartHour === hour &&
+                              styles.calendarOptionActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.calendarOptionText,
+                              blockStartHour === hour &&
+                                styles.calendarOptionTextActive,
+                            ]}
+                          >
+                            {new Intl.DateTimeFormat("en-US", {
+                              hour: "numeric",
+                            }).format(new Date(2026, 0, 1, hour, 0, 0, 0))}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </ScrollView>
+                  <Text style={styles.calendarFieldLabel}>DURATION</Text>
+                  <View style={styles.calendarChoiceRow}>
+                    {[30, 60, 90, 120].map((duration) => (
+                      <Pressable
+                        key={duration}
+                        onPress={() => setBlockDuration(duration)}
+                        style={[
+                          styles.calendarChoice,
+                          blockDuration === duration &&
+                            styles.calendarChoiceActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.calendarChoiceText,
+                            blockDuration === duration &&
+                              styles.calendarChoiceTextActive,
+                          ]}
+                        >
+                          {duration} min
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={styles.calendarFieldLabel}>BLOCK TYPE</Text>
+                  <View style={styles.calendarChoiceRow}>
+                    {(["blocked", "maintenance"] as const).map((value) => (
+                      <Pressable
+                        key={value}
+                        onPress={() => setBlockMode(value)}
+                        style={[
+                          styles.calendarChoice,
+                          blockMode === value && styles.calendarChoiceActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.calendarChoiceText,
+                            blockMode === value &&
+                              styles.calendarChoiceTextActive,
+                          ]}
+                        >
+                          {value === "blocked" ? "Unavailable" : "Maintenance"}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={styles.calendarFieldLabel}>
+                    NOTE FOR THE TEAM
+                  </Text>
+                  <TextInput
+                    multiline
+                    onChangeText={setBlockReason}
+                    placeholder="Lunch, private hold, facility repair…"
+                    placeholderTextColor={colors.muted}
+                    style={styles.calendarTextArea}
+                    value={blockReason}
+                  />
+                  <Text style={styles.calendarTimezoneNote}>
+                    {new Intl.DateTimeFormat("en-US", {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                    }).format(selectedDate)}{" "}
+                    · {timezone}
+                  </Text>
+                  <Pressable
+                    disabled={busyAction === "block"}
+                    onPress={() => void createBlock()}
+                    style={styles.calendarSheetPrimary}
+                  >
+                    <Text style={styles.calendarSheetPrimaryText}>
+                      {busyAction === "block" ? "Blocking…" : "Block this time"}
+                    </Text>
+                  </Pressable>
+                </>
+              ) : (
+                selectedEntry && (
+                  <>
+                    <View style={styles.calendarSheetSummary}>
+                      <View style={styles.calendarSheetSummaryItem}>
+                        <Text style={styles.calendarSheetSummaryLabel}>
+                          WHEN
+                        </Text>
+                        <Text style={styles.calendarSheetSummaryValue}>
+                          {formatCalendarTime(selectedEntry.startsAt, timezone)}{" "}
+                          – {formatCalendarTime(selectedEntry.endsAt, timezone)}
+                        </Text>
+                      </View>
+                      <View style={styles.calendarSheetSummaryItem}>
+                        <Text style={styles.calendarSheetSummaryLabel}>
+                          WHERE
+                        </Text>
+                        <Text style={styles.calendarSheetSummaryValue}>
+                          {selectedEntry.courtName ??
+                            selectedEntry.venueName ??
+                            "Not assigned"}
+                        </Text>
+                      </View>
+                      <View style={styles.calendarSheetSummaryItem}>
+                        <Text style={styles.calendarSheetSummaryLabel}>
+                          COACH
+                        </Text>
+                        <Text style={styles.calendarSheetSummaryValue}>
+                          {selectedEntry.coachName ?? "Not assigned"}
+                        </Text>
+                      </View>
+                      {selectedWeather && (
+                        <View style={styles.calendarSheetSummaryItem}>
+                          <Text style={styles.calendarSheetSummaryLabel}>
+                            FORECAST
+                          </Text>
+                          <Text style={styles.calendarSheetSummaryValue}>
+                            {weatherSymbol(selectedWeather.icon)}{" "}
+                            {fahrenheit(selectedWeather.temperatureC)}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {selectedEntry.sourceType === "session" ? (
+                      <>
+                        <View style={styles.calendarSheetSectionHeader}>
+                          <View>
+                            <Text style={styles.calendarSheetEyebrow}>
+                              ROSTER
+                            </Text>
+                            <Text style={styles.calendarSheetSectionTitle}>
+                              {selectedEntry.attendees.length} people coming
+                            </Text>
+                          </View>
+                          <Pill tone="positive">
+                            {`${Math.max(
+                              0,
+                              selectedEntry.capacity -
+                                selectedEntry.participantCount,
+                            )} spots`}
+                          </Pill>
+                        </View>
+                        <View style={styles.calendarRoster}>
+                          {selectedEntry.attendees.length === 0 ? (
+                            <Text style={styles.calendarRosterEmpty}>
+                              No confirmed players yet.
+                            </Text>
+                          ) : (
+                            selectedEntry.attendees.map((attendee) => (
+                              <View
+                                key={attendee.registrationId}
+                                style={styles.calendarRosterRow}
+                              >
+                                <View style={styles.calendarRosterAvatar}>
+                                  <Text style={styles.calendarRosterAvatarText}>
+                                    {personInitials(attendee.displayName)}
+                                  </Text>
+                                </View>
+                                <View style={styles.flex}>
+                                  <Text style={styles.calendarRosterName}>
+                                    {attendee.displayName}
+                                  </Text>
+                                  <Text style={styles.calendarRosterMeta}>
+                                    {attendee.status}
+                                    {attendee.isMinor
+                                      ? " · guardian receives updates"
+                                      : ""}
+                                  </Text>
+                                </View>
+                                <Pressable
+                                  disabled={
+                                    busyAction === attendee.registrationId
+                                  }
+                                  onPress={() =>
+                                    void perform(attendee.registrationId, () =>
+                                      client!.operator.removeCalendarParticipant.mutate(
+                                        {
+                                          registrationId:
+                                            attendee.registrationId,
+                                          reason:
+                                            "Removed from the session by an organization operator in Duna Pro.",
+                                          idempotencyKey: Crypto.randomUUID(),
+                                        },
+                                      ),
+                                    )
+                                  }
+                                  style={styles.calendarRemoveButton}
+                                >
+                                  <Text style={styles.calendarRemoveButtonText}>
+                                    Remove
+                                  </Text>
+                                </Pressable>
+                              </View>
+                            ))
+                          )}
+                        </View>
+                        {participantCandidates.length > 0 && (
+                          <>
+                            <Text style={styles.calendarFieldLabel}>
+                              ADD A CONNECTED PLAYER
+                            </Text>
+                            <ScrollView
+                              horizontal
+                              showsHorizontalScrollIndicator={false}
+                            >
+                              <View style={styles.calendarPeopleOptions}>
+                                {participantCandidates
+                                  .slice(0, 12)
+                                  .map((person) => (
+                                    <Pressable
+                                      disabled={busyAction === person.personId}
+                                      key={person.personId}
+                                      onPress={() =>
+                                        void perform(person.personId, () =>
+                                          client!.operator.addCalendarParticipant.mutate(
+                                            {
+                                              sessionId: selectedEntry.id,
+                                              personId: person.personId,
+                                              reason:
+                                                "Added to the session by an organization operator in Duna Pro.",
+                                              idempotencyKey:
+                                                Crypto.randomUUID(),
+                                            },
+                                          ),
+                                        )
+                                      }
+                                      style={styles.calendarPersonOption}
+                                    >
+                                      <View
+                                        style={
+                                          styles.calendarPersonOptionAvatar
+                                        }
+                                      >
+                                        <Text
+                                          style={
+                                            styles.calendarPersonOptionAvatarText
+                                          }
+                                        >
+                                          {personInitials(person.displayName)}
+                                        </Text>
+                                      </View>
+                                      <Text
+                                        numberOfLines={1}
+                                        style={styles.calendarPersonOptionName}
+                                      >
+                                        {person.displayName}
+                                      </Text>
+                                      <Text
+                                        style={styles.calendarPersonOptionAdd}
+                                      >
+                                        ＋ Add
+                                      </Text>
+                                    </Pressable>
+                                  ))}
+                              </View>
+                            </ScrollView>
+                          </>
+                        )}
+
+                        <View style={styles.calendarSheetSectionHeader}>
+                          <View>
+                            <Text style={styles.calendarSheetEyebrow}>
+                              EQUIPMENT
+                            </Text>
+                            <Text style={styles.calendarSheetSectionTitle}>
+                              Reserved for this session
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.calendarRoster}>
+                          {selectedEntry.equipment.length === 0 ? (
+                            <Text style={styles.calendarRosterEmpty}>
+                              No equipment reserved.
+                            </Text>
+                          ) : (
+                            selectedEntry.equipment.map((item) => (
+                              <View
+                                key={item.reservationId}
+                                style={styles.calendarRosterRow}
+                              >
+                                <View style={styles.calendarEquipmentIcon}>
+                                  <Text
+                                    style={styles.calendarEquipmentIconText}
+                                  >
+                                    ◇
+                                  </Text>
+                                </View>
+                                <View style={styles.flex}>
+                                  <Text style={styles.calendarRosterName}>
+                                    {item.label}
+                                  </Text>
+                                  <Text style={styles.calendarRosterMeta}>
+                                    {item.quantity} reserved
+                                  </Text>
+                                </View>
+                                <Pressable
+                                  disabled={busyAction === item.reservationId}
+                                  onPress={() =>
+                                    void perform(item.reservationId, () =>
+                                      client!.operator.removeCalendarEquipment.mutate(
+                                        {
+                                          reservationId: item.reservationId,
+                                          reason:
+                                            "Equipment reservation removed in Duna Pro.",
+                                          idempotencyKey: Crypto.randomUUID(),
+                                        },
+                                      ),
+                                    )
+                                  }
+                                  style={styles.calendarRemoveButton}
+                                >
+                                  <Text style={styles.calendarRemoveButtonText}>
+                                    Remove
+                                  </Text>
+                                </Pressable>
+                              </View>
+                            ))
+                          )}
+                        </View>
+                        {equipmentCandidates.length > 0 && (
+                          <>
+                            <Text style={styles.calendarFieldLabel}>
+                              AVAILABLE EQUIPMENT
+                            </Text>
+                            <ScrollView
+                              horizontal
+                              showsHorizontalScrollIndicator={false}
+                            >
+                              <View style={styles.calendarOptionRow}>
+                                {equipmentCandidates
+                                  .slice(0, 12)
+                                  .map((item) => (
+                                    <Pressable
+                                      disabled={busyAction === item.id}
+                                      key={item.id}
+                                      onPress={() =>
+                                        void perform(item.id, () =>
+                                          client!.operator.addCalendarEquipment.mutate(
+                                            {
+                                              sessionId: selectedEntry.id,
+                                              inventoryStockItemId: item.id,
+                                              quantity: 1,
+                                              reason:
+                                                "Reserved for the session in Duna Pro.",
+                                              idempotencyKey:
+                                                Crypto.randomUUID(),
+                                            },
+                                          ),
+                                        )
+                                      }
+                                      style={styles.calendarEquipmentOption}
+                                    >
+                                      <Text
+                                        style={
+                                          styles.calendarEquipmentOptionTitle
+                                        }
+                                      >
+                                        {item.itemTitle}
+                                      </Text>
+                                      <Text
+                                        style={
+                                          styles.calendarEquipmentOptionMeta
+                                        }
+                                      >
+                                        {item.quantityOnHand -
+                                          item.quantityReserved}{" "}
+                                        available
+                                      </Text>
+                                      <Text
+                                        style={
+                                          styles.calendarEquipmentOptionAction
+                                        }
+                                      >
+                                        ＋ Reserve one
+                                      </Text>
+                                    </Pressable>
+                                  ))}
+                              </View>
+                            </ScrollView>
+                          </>
+                        )}
+
+                        <View style={styles.calendarConnectedUpdate}>
+                          <Text style={styles.calendarConnectedUpdateIcon}>
+                            ◈
+                          </Text>
+                          <View style={styles.flex}>
+                            <Text style={styles.calendarConnectedUpdateTitle}>
+                              Updates are automatic
+                            </Text>
+                            <Text style={styles.calendarConnectedUpdateBody}>
+                              Players and verified guardians receive connected
+                              changes through their allowed notification
+                              channels.
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.calendarDangerZone}>
+                          <Text style={styles.calendarSheetEyebrow}>
+                            CANCEL SESSION
+                          </Text>
+                          <Text style={styles.calendarDangerTitle}>
+                            Release resources and notify everyone
+                          </Text>
+                          <TextInput
+                            multiline
+                            onChangeText={setCancelReason}
+                            placeholder="Weather, coach unavailable, venue closure…"
+                            placeholderTextColor={colors.muted}
+                            style={styles.calendarTextArea}
+                            value={cancelReason}
+                          />
+                          <Pressable
+                            disabled={
+                              busyAction === "cancel" ||
+                              cancelReason.trim().length < 3
+                            }
+                            onPress={() => {
+                              void perform("cancel", () =>
+                                client!.operator.cancelCalendarSession.mutate({
+                                  sessionId: selectedEntry.id,
+                                  reason: cancelReason.trim(),
+                                  confirmed: true,
+                                  idempotencyKey: Crypto.randomUUID(),
+                                }),
+                              ).then((saved) => {
+                                if (saved) closeSheet();
+                              });
+                            }}
+                            style={[
+                              styles.calendarDangerButton,
+                              cancelReason.trim().length < 3 &&
+                                styles.buttonDisabled,
+                            ]}
+                          >
+                            <Text style={styles.calendarDangerButtonText}>
+                              {busyAction === "cancel"
+                                ? "Cancelling…"
+                                : "Cancel and notify"}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      </>
+                    ) : (
+                      <View style={styles.calendarConnectedUpdate}>
+                        <Text style={styles.calendarConnectedUpdateIcon}>
+                          ▧
+                        </Text>
+                        <View style={styles.flex}>
+                          <Text style={styles.calendarConnectedUpdateTitle}>
+                            {entryLabel(selectedEntry)}
+                          </Text>
+                          <Text style={styles.calendarConnectedUpdateBody}>
+                            This protected time remains visible beside sessions
+                            so the organization avoids conflicts.
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                  </>
+                )
+              )}
+            </ScrollView>
+
+            {sheetMode === "session" && selectedEntry && (
+              <View style={styles.calendarSheetFooter}>
+                {selectedEntry.sourceType === "session" &&
+                  ["tournament", "league", "pickup"].includes(
+                    selectedEntry.kind ?? "",
+                  ) && (
+                    <Pressable
+                      onPress={onScore}
+                      style={styles.calendarSheetSecondary}
+                    >
+                      <Text style={styles.calendarSheetSecondaryText}>
+                        Live score
+                      </Text>
+                    </Pressable>
+                  )}
+                <Pressable
+                  onPress={() =>
+                    void WebBrowser.openBrowserAsync(fullWorkspaceHref)
+                  }
+                  style={styles.calendarSheetPrimary}
+                >
+                  <Text style={styles.calendarSheetPrimaryText}>
+                    Open full details
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
@@ -1389,142 +2664,7 @@ function ScorerScreen() {
   );
 }
 
-function MoneyScreen() {
-  const { dashboard, mode, workspace } = useProRuntime();
-  const stripeReady = Boolean(workspace?.organization.stripeChargesEnabled);
-  const metrics = dashboard?.metrics.slice(0, 3) ?? [
-    { label: "Gross · July", value: "$84,260", change: "+18.4%" },
-    { label: "Refunds", value: "$2,184", change: "2.59% gross" },
-    { label: "Net sales", value: "$78,132", change: "92.7% retained" },
-  ];
-  return (
-    <ScrollView
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      <Header context="STRIPE-CONNECTED MONEY" />
-      <PageTitle
-        action="Open HQ"
-        eyebrow="SALES + PAYOUTS"
-        onAction={() => void WebBrowser.openBrowserAsync(`${dunaHqUrl}/money`)}
-        title="Money."
-      />
-      <View style={styles.balanceCard}>
-        <View style={styles.cardTop}>
-          <Pill tone={stripeReady ? "positive" : "warning"}>
-            {stripeReady ? "Charges enabled" : "Payments restricted"}
-          </Pill>
-          <Text style={styles.brandSmall}>DUNA PRO</Text>
-        </View>
-        <Text style={styles.balanceLabel}>PAYMENTS STATUS</Text>
-        <Text style={styles.balanceValue}>
-          {stripeReady ? "Ready" : "Action needed"}
-        </Text>
-        <Text style={styles.metaText}>
-          {stripeReady
-            ? "Connected charges are routed directly through the club’s payment account."
-            : "Finish payment setup in HQ before publishing paid products."}
-        </Text>
-        <View style={styles.balanceActions}>
-          <Pressable
-            onPress={() =>
-              void WebBrowser.openBrowserAsync(`${dunaHqUrl}/money`)
-            }
-          >
-            <Text style={styles.balanceAction}>Open money workspace ↗</Text>
-          </Pressable>
-        </View>
-      </View>
-      <View style={styles.moneyMetrics}>
-        {metrics.map((metric) => (
-          <View key={metric.label}>
-            <Text style={styles.metricLabel}>{metric.label.toUpperCase()}</Text>
-            <Text style={styles.metricValue}>{metric.value}</Text>
-            {metric.change && (
-              <Text style={styles.metaText}>{metric.change}</Text>
-            )}
-          </View>
-        ))}
-      </View>
-      <SectionTitle
-        eyebrow="TODAY"
-        title="Transactions"
-        action="All activity"
-      />
-      {mode === "preview" ? (
-        <View style={styles.transactions}>
-          {[
-            ["↓", "Mara Lewis", "Tournament registration", 9600, "Succeeded"],
-            ["↓", "Theo Park", "Private coaching", 12000, "Succeeded"],
-            ["↑", "Priya Lewis", "Weather refund", -4800, "Wallet credit"],
-            ["↓", "Elena Torres", "Membership renewal", 15900, "Recovered"],
-          ].map((item) => (
-            <View
-              style={styles.transactionRow}
-              key={String(item[1]) + String(item[2])}
-            >
-              <View
-                style={[
-                  styles.transactionIcon,
-                  (item[3] as number) < 0 && {
-                    backgroundColor: rgba(colors.warningRgb, 0.08),
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    color:
-                      (item[3] as number) < 0
-                        ? colors.warning
-                        : colors.positive,
-                  }}
-                >
-                  {item[0]}
-                </Text>
-              </View>
-              <View style={styles.flex}>
-                <Text style={styles.rowTitle}>{item[2]}</Text>
-                <Text style={styles.metaText}>
-                  {item[1]} · {item[4]}
-                </Text>
-              </View>
-              <Text style={styles.transactionAmount}>
-                {formatMoney(item[3] as number, "USD")}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : (
-        <View style={styles.emptyState}>
-          <Text style={styles.rowTitle}>Open the verified ledger in HQ.</Text>
-          <Text style={styles.metaText}>
-            Duna Pro does not infer balances or recent transactions when the
-            connected ledger projection is unavailable on mobile.
-          </Text>
-        </View>
-      )}
-      <View style={styles.boundaryNote}>
-        <Text style={styles.boundaryIcon}>◇</Text>
-        <View style={styles.flex}>
-          <Text style={styles.rowTitle}>
-            {mode === "preview"
-              ? "Preview reconciliation only."
-              : "The payment account is connected; balances remain source-owned."}
-          </Text>
-          <Text style={styles.metaText}>
-            Funds remain in Stripe-managed accounts. Duna never custodies
-            operator or player money.
-          </Text>
-        </View>
-        <Pill tone={stripeReady ? "positive" : "warning"}>
-          {stripeReady ? "Connected" : "Action needed"}
-        </Pill>
-      </View>
-    </ScrollView>
-  );
-}
-
-function MoreScreen() {
+function MoreScreen({ onCalendar }: { readonly onCalendar: () => void }) {
   const { dashboard, mode, signOut, workspace } = useProRuntime();
   const organization = dashboard?.organization ?? demoOrganization;
   const organizationInitials = organization.name
@@ -1609,13 +2749,17 @@ function MoreScreen() {
           <View style={styles.menuCard}>
             {section[1].map((item) => (
               <Pressable
-                disabled={mode === "preview"}
+                disabled={mode === "preview" && item !== "Calendar"}
                 key={item}
-                onPress={() =>
+                onPress={() => {
+                  if (item === "Calendar") {
+                    onCalendar();
+                    return;
+                  }
                   void WebBrowser.openBrowserAsync(
                     `${dunaHqUrl}/${routes[item] ?? "dashboard"}`,
-                  )
-                }
+                  );
+                }}
                 style={styles.menuRow}
               >
                 <Text style={styles.menuIcon}>{item.charAt(0)}</Text>
@@ -1692,8 +2836,19 @@ function TabBar({
 
 function ProApp() {
   const [tab, setTab] = useState<Tab>("today");
+  const [calendarEntryId, setCalendarEntryId] = useState<string>();
   const [theme, setTheme] = useState<ThemeName>("light");
   const screenTransition = useRef(new Animated.Value(1)).current;
+
+  const openCalendar = (entryId?: string) => {
+    setCalendarEntryId(entryId);
+    setTab("calendar");
+  };
+
+  const changeTab = (nextTab: Tab) => {
+    if (nextTab === "calendar") setCalendarEntryId(undefined);
+    setTab(nextTab);
+  };
 
   useEffect(() => {
     void AsyncStorage.getItem("duna-theme").then((stored) => {
@@ -1745,13 +2900,18 @@ function ProApp() {
               },
             ]}
           >
-            {tab === "today" && <TodayScreen onScore={() => setTab("score")} />}
+            {tab === "today" && <TodayScreen onCalendar={openCalendar} />}
+            {tab === "calendar" && (
+              <CalendarScreen
+                focusEntryId={calendarEntryId}
+                onScore={() => setTab("score")}
+              />
+            )}
             {tab === "people" && <PeopleScreen />}
             {tab === "score" && <ScorerScreen />}
-            {tab === "money" && <MoneyScreen />}
-            {tab === "more" && <MoreScreen />}
+            {tab === "more" && <MoreScreen onCalendar={() => openCalendar()} />}
           </Animated.View>
-          {tab !== "score" && <TabBar active={tab} onChange={setTab} />}
+          {tab !== "score" && <TabBar active={tab} onChange={changeTab} />}
           {tab === "score" && (
             <Pressable onPress={() => setTab("today")} style={styles.exitScore}>
               <Text style={styles.exitScoreText}>‹ Exit</Text>
@@ -1845,6 +3005,723 @@ function createStyles(palette: Palette) {
     },
     signOutText: { color: colors.danger, fontSize: 9, fontWeight: "800" },
     content: { paddingBottom: 116, paddingHorizontal: 18 },
+    calendarContent: { paddingBottom: 138, paddingHorizontal: 18 },
+    calendarIntro: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 8,
+      maxWidth: 520,
+    },
+    calendarToolbar: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+      marginTop: 18,
+    },
+    calendarToolbarActions: { flexDirection: "row", gap: 8 },
+    calendarBlockButton: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.12),
+      borderRadius: 14,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 42,
+      paddingHorizontal: 13,
+    },
+    calendarBlockButtonText: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    calendarNewButton: {
+      alignItems: "center",
+      backgroundColor: colors.warning,
+      borderRadius: 14,
+      justifyContent: "center",
+      minHeight: 42,
+      paddingHorizontal: 13,
+    },
+    calendarNewButtonText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    calendarTimezone: {
+      color: colors.muted,
+      fontSize: 10,
+      maxWidth: 130,
+      textAlign: "right",
+    },
+    calendarDayBleed: {
+      marginHorizontal: -18,
+      marginTop: 18,
+      paddingHorizontal: 18,
+    },
+    calendarDayStrip: {
+      flexDirection: "row",
+      gap: 8,
+      paddingRight: 36,
+    },
+    calendarDayButton: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 88,
+      paddingHorizontal: 13,
+      paddingVertical: 10,
+      width: 68,
+    },
+    calendarDayButtonActive: {
+      backgroundColor: colors.warning,
+      borderColor: colors.warning,
+    },
+    calendarDayWeekday: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+      textTransform: "uppercase",
+    },
+    calendarDayNumber: {
+      color: colors.bone,
+      fontSize: 22,
+      fontWeight: "900",
+      lineHeight: 27,
+      marginTop: 2,
+    },
+    calendarDayMonth: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    calendarDayTextActive: { color: colors.onAccent },
+    calendarFilterRow: {
+      flexDirection: "row",
+      gap: 7,
+      marginTop: 14,
+    },
+    calendarFilter: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 18,
+      borderWidth: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+    },
+    calendarFilterActive: {
+      backgroundColor: rgba(colors.accentRgb, 0.12),
+      borderColor: colors.aqua,
+    },
+    calendarFilterText: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    calendarFilterTextActive: { color: colors.aqua },
+    calendarAgendaHeading: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 11,
+      marginTop: 26,
+    },
+    calendarAgendaTitle: {
+      color: colors.bone,
+      fontSize: 22,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+      marginTop: 4,
+    },
+    calendarAgenda: { gap: 9 },
+    calendarEmpty: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 20,
+      borderWidth: 1,
+      paddingHorizontal: 18,
+      paddingVertical: 28,
+    },
+    calendarEmptyIcon: { color: colors.warning, fontSize: 30 },
+    calendarEmptyTitle: {
+      color: colors.bone,
+      fontSize: 20,
+      fontWeight: "900",
+      marginTop: 8,
+    },
+    calendarEmptyBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 17,
+      marginTop: 6,
+      maxWidth: 310,
+      textAlign: "center",
+    },
+    calendarEmptyActions: {
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 16,
+      width: "100%",
+    },
+    calendarEmptySecondary: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.12),
+      borderRadius: 14,
+      borderWidth: 1,
+      flex: 1,
+      minHeight: 44,
+      justifyContent: "center",
+    },
+    calendarEmptySecondaryText: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    calendarEmptyPrimary: {
+      alignItems: "center",
+      backgroundColor: colors.warning,
+      borderRadius: 14,
+      flex: 1,
+      minHeight: 44,
+      justifyContent: "center",
+    },
+    calendarEmptyPrimaryText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    calendarAgendaCard: {
+      alignItems: "stretch",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 112,
+      padding: 12,
+    },
+    calendarAgendaCardBlocked: {
+      backgroundColor: rgba(colors.overlayRgb, 0.025),
+      borderStyle: "dashed",
+    },
+    calendarAgendaTime: {
+      alignItems: "flex-start",
+      justifyContent: "center",
+      width: 58,
+    },
+    calendarAgendaTimeMain: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    calendarAgendaTimeEnd: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 3,
+    },
+    calendarAgendaAccent: {
+      alignSelf: "stretch",
+      borderRadius: 3,
+      width: 4,
+    },
+    calendarAgendaTopline: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "space-between",
+    },
+    calendarAgendaKind: {
+      color: colors.warning,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    calendarAgendaWeather: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    calendarAgendaName: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+      letterSpacing: -0.3,
+      marginTop: 5,
+    },
+    calendarAgendaMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 3,
+    },
+    calendarAvatarRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      marginTop: 9,
+      minHeight: 25,
+    },
+    calendarAvatar: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderColor: colors.depth,
+      borderRadius: 13,
+      borderWidth: 2,
+      height: 26,
+      justifyContent: "center",
+      width: 26,
+    },
+    calendarAvatarOverlap: { marginLeft: -7 },
+    calendarAvatarText: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    calendarAvatarMore: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+      marginLeft: 5,
+    },
+    calendarNotificationNote: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.07),
+      borderColor: rgba(colors.accentRgb, 0.15),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      marginTop: 18,
+      padding: 14,
+    },
+    calendarNotificationIcon: { color: colors.aqua, fontSize: 20 },
+    calendarNotificationTitle: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    calendarNotificationBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 3,
+    },
+    calendarSheetBackdrop: {
+      backgroundColor: rgba(colors.inkRgb, 0.72),
+      flex: 1,
+      justifyContent: "flex-end",
+    },
+    calendarSheet: {
+      backgroundColor: colors.canvas,
+      borderTopLeftRadius: 26,
+      borderTopRightRadius: 26,
+      maxHeight: "92%",
+      minHeight: "55%",
+      overflow: "hidden",
+    },
+    calendarSheetHandle: {
+      alignSelf: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.18),
+      borderRadius: 3,
+      height: 5,
+      marginTop: 9,
+      width: 46,
+    },
+    calendarSheetHeader: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.08),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      padding: 16,
+    },
+    calendarSheetClose: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.12),
+      borderRadius: 16,
+      borderWidth: 1,
+      height: 34,
+      justifyContent: "center",
+      width: 34,
+    },
+    calendarSheetCloseText: {
+      color: colors.bone,
+      fontSize: 23,
+      lineHeight: 26,
+    },
+    calendarSheetEyebrow: {
+      color: colors.warning,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1,
+      textTransform: "uppercase",
+    },
+    calendarSheetTitle: {
+      color: colors.bone,
+      fontSize: 20,
+      fontWeight: "900",
+      letterSpacing: -0.5,
+      marginTop: 3,
+    },
+    calendarSheetScroll: { padding: 16, paddingBottom: 30 },
+    calendarFeedback: {
+      backgroundColor: rgba(colors.accentRgb, 0.09),
+      borderColor: rgba(colors.accentRgb, 0.18),
+      borderRadius: 12,
+      borderWidth: 1,
+      marginBottom: 14,
+      padding: 11,
+    },
+    calendarFeedbackText: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "700",
+      lineHeight: 15,
+    },
+    calendarFieldLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1,
+      marginBottom: 8,
+      marginTop: 18,
+    },
+    calendarChoiceRow: { flexDirection: "row", gap: 8 },
+    calendarChoice: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 14,
+      borderWidth: 1,
+      flex: 1,
+      minHeight: 44,
+      justifyContent: "center",
+    },
+    calendarChoiceActive: {
+      backgroundColor: rgba(colors.accentRgb, 0.12),
+      borderColor: colors.aqua,
+    },
+    calendarChoiceText: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    calendarChoiceTextActive: { color: colors.aqua },
+    calendarOptionRow: {
+      flexDirection: "row",
+      gap: 8,
+      paddingRight: 24,
+    },
+    calendarOption: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 14,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 44,
+      paddingHorizontal: 13,
+    },
+    calendarOptionActive: {
+      backgroundColor: colors.warning,
+      borderColor: colors.warning,
+    },
+    calendarOptionText: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    calendarOptionTextActive: { color: colors.onAccent },
+    calendarTimeOption: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 14,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 44,
+      minWidth: 76,
+      paddingHorizontal: 12,
+    },
+    calendarTextArea: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 14,
+      borderWidth: 1,
+      color: colors.bone,
+      fontSize: 11,
+      lineHeight: 17,
+      marginTop: 10,
+      minHeight: 86,
+      padding: 12,
+      textAlignVertical: "top",
+    },
+    calendarTimezoneNote: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 12,
+    },
+    calendarSheetSummary: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      marginBottom: 18,
+      padding: 13,
+    },
+    calendarSheetSummaryItem: {
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      paddingVertical: 9,
+    },
+    calendarSheetSummaryLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.7,
+      textTransform: "uppercase",
+    },
+    calendarSheetSummaryValue: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "800",
+      lineHeight: 17,
+      marginTop: 3,
+    },
+    calendarSheetSectionHeader: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 9,
+      marginTop: 18,
+    },
+    calendarSheetSectionTitle: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+    calendarRoster: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 15,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    calendarRosterEmpty: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      padding: 14,
+    },
+    calendarRosterRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      minHeight: 58,
+      padding: 10,
+    },
+    calendarRosterAvatar: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 10,
+      height: 36,
+      justifyContent: "center",
+      width: 36,
+    },
+    calendarRosterAvatarText: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    calendarRosterName: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    calendarRosterMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 2,
+    },
+    calendarRemoveButton: {
+      borderColor: rgba(colors.dangerRgb, 0.22),
+      borderRadius: 12,
+      borderWidth: 1,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    calendarRemoveButtonText: {
+      color: colors.danger,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    calendarPeopleOptions: {
+      flexDirection: "row",
+      gap: 8,
+      paddingRight: 24,
+    },
+    calendarPersonOption: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 15,
+      borderWidth: 1,
+      padding: 10,
+      width: 116,
+    },
+    calendarPersonOptionAvatar: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 18,
+      height: 36,
+      justifyContent: "center",
+      width: 36,
+    },
+    calendarPersonOptionAvatarText: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    calendarPersonOptionName: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "800",
+      marginTop: 7,
+      maxWidth: 94,
+    },
+    calendarPersonOptionAdd: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      marginTop: 7,
+    },
+    calendarEquipmentIcon: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderRadius: 10,
+      height: 36,
+      justifyContent: "center",
+      width: 36,
+    },
+    calendarEquipmentIconText: { color: colors.aqua, fontSize: 17 },
+    calendarEquipmentOption: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 15,
+      borderWidth: 1,
+      minHeight: 104,
+      padding: 12,
+      width: 148,
+    },
+    calendarEquipmentOptionTitle: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    calendarEquipmentOptionMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 5,
+    },
+    calendarEquipmentOptionAction: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      marginTop: 15,
+    },
+    calendarConnectedUpdate: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.07),
+      borderColor: rgba(colors.accentRgb, 0.15),
+      borderRadius: 14,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 18,
+      padding: 12,
+    },
+    calendarConnectedUpdateIcon: { color: colors.aqua, fontSize: 19 },
+    calendarConnectedUpdateTitle: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    calendarConnectedUpdateBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 3,
+    },
+    calendarDangerZone: {
+      backgroundColor: rgba(colors.dangerRgb, 0.06),
+      borderColor: rgba(colors.dangerRgb, 0.15),
+      borderRadius: 15,
+      borderWidth: 1,
+      marginTop: 18,
+      padding: 13,
+    },
+    calendarDangerTitle: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "900",
+      marginTop: 4,
+    },
+    calendarDangerButton: {
+      alignItems: "center",
+      backgroundColor: colors.danger,
+      borderRadius: 13,
+      justifyContent: "center",
+      marginTop: 10,
+      minHeight: 44,
+    },
+    calendarDangerButtonText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    calendarSheetFooter: {
+      backgroundColor: colors.canvas,
+      borderTopColor: rgba(colors.overlayRgb, 0.08),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      padding: 12,
+      paddingBottom: Platform.OS === "ios" ? 26 : 12,
+    },
+    calendarSheetSecondary: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.12),
+      borderRadius: 14,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 46,
+    },
+    calendarSheetSecondaryText: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    calendarSheetPrimary: {
+      alignItems: "center",
+      backgroundColor: colors.warning,
+      borderRadius: 14,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 46,
+    },
+    calendarSheetPrimaryText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
     wordmark: { alignItems: "center", flexDirection: "row", gap: 7 },
     mark: {
       alignItems: "center",

@@ -3,17 +3,27 @@
 import type { OperatorWorkspace } from "@duna/api";
 import { Badge } from "@duna/ui";
 import {
+  Archive,
+  BookOpen,
   Boxes,
   CalendarDays,
   Check,
   CircleAlert,
   CreditCard,
+  FileText,
+  Globe2,
+  ImageIcon,
+  Link2,
+  Palette,
   Plus,
   ReceiptText,
+  Search,
   ShieldCheck,
   ShoppingBag,
   Sparkles,
   Trophy,
+  Type,
+  UserRound,
   WalletCards,
   X,
 } from "lucide-react";
@@ -25,6 +35,8 @@ import {
   type ReactNode,
 } from "react";
 import {
+  addBrandKnowledgeSourceAction,
+  archiveBrandKnowledgeSourceAction,
   createCatalogItemAction,
   createInventoryStockAction,
   issueOrganizationCreditsAction,
@@ -205,6 +217,15 @@ function ProductComposer({
   const [installmentCount, setInstallmentCount] = useState(3);
   const [deliveryMode, setDeliveryMode] = useState<"venue" | "online">("venue");
   const [venueId, setVenueId] = useState(workspace.venues[0]?.id ?? "");
+  const [coachAssignmentMode, setCoachAssignmentMode] = useState<
+    "all" | "selected"
+  >("all");
+  const [selectedCoachIds, setSelectedCoachIds] = useState<readonly string[]>(
+    [],
+  );
+  const [requiredCoachCount, setRequiredCoachCount] = useState(1);
+  const [customerCoachSelection, setCustomerCoachSelection] = useState(true);
+  const [coachSearch, setCoachSearch] = useState("");
   const [options, setOptions] = useState<
     { readonly id: string; readonly name: string; readonly values: string }[]
   >([]);
@@ -268,6 +289,22 @@ function ProductComposer({
   };
   const annualMemberPrice = annualPrice(memberPrice);
   const annualNonMemberPrice = annualPrice(nonMemberPrice);
+  const eligibleCoaches = workspace.staff.filter(
+    (person) => person.active && person.role === "coach",
+  );
+  const filteredCoaches = eligibleCoaches.filter((person) => {
+    const query = coachSearch.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      person.displayName.toLowerCase().includes(query) ||
+      person.handle.toLowerCase().includes(query) ||
+      person.homeMarket?.toLowerCase().includes(query)
+    );
+  });
+  const assignedCoachCount =
+    coachAssignmentMode === "all"
+      ? eligibleCoaches.length
+      : selectedCoachIds.length;
 
   const chooseType = (next: typeof type) => {
     setType(next);
@@ -361,6 +398,13 @@ function ProductComposer({
             ...((type === "event" || type === "service") && {
               deliveryMode,
               venueId: deliveryMode === "venue" ? venueId : undefined,
+              coachAssignmentMode,
+              coachPersonIds:
+                coachAssignmentMode === "selected"
+                  ? selectedCoachIds
+                  : eligibleCoaches.map((coach) => coach.personId),
+              requiredCoachCount,
+              customerCoachSelection,
             }),
           })}
         />
@@ -465,6 +509,204 @@ function ProductComposer({
             </>
           )}
         </div>
+
+        {(type === "event" || type === "service") && (
+          <fieldset className="product-coach-assignment">
+            <legend>
+              <UserRound aria-hidden size={18} />
+              Who can lead this?
+            </legend>
+            <p>
+              Duna combines the offer with each assigned coach&apos;s
+              availability. Customers can see only times that the required
+              coaching team can actually cover.
+            </p>
+            {eligibleCoaches.length === 0 ? (
+              <div className="product-coach-empty">
+                <span>
+                  <strong>Add or invite a coach first.</strong>
+                  You can still save this draft, but it will not expose bookable
+                  coach availability until a coach is connected.
+                </span>
+                <a href="/team/invite">Open team setup</a>
+              </div>
+            ) : (
+              <>
+                <div className="product-coach-mode">
+                  <button
+                    className={
+                      coachAssignmentMode === "all" ? "active" : undefined
+                    }
+                    onClick={() => setCoachAssignmentMode("all")}
+                    type="button"
+                  >
+                    <span className="product-coach-stack" aria-hidden>
+                      {eligibleCoaches
+                        .slice(0, 3)
+                        .map((coach) =>
+                          coach.avatarUrl ? (
+                            <img
+                              alt=""
+                              key={coach.personId}
+                              src={coach.avatarUrl}
+                            />
+                          ) : (
+                            <i key={coach.personId}>
+                              {coach.displayName.slice(0, 1).toUpperCase()}
+                            </i>
+                          ),
+                        )}
+                    </span>
+                    <span>
+                      <strong>All active coaches</strong>
+                      <small>
+                        New active coaches become eligible automatically.
+                      </small>
+                    </span>
+                  </button>
+                  <button
+                    className={
+                      coachAssignmentMode === "selected" ? "active" : undefined
+                    }
+                    onClick={() => setCoachAssignmentMode("selected")}
+                    type="button"
+                  >
+                    <span className="product-coach-stack" aria-hidden>
+                      {(selectedCoachIds.length > 0
+                        ? eligibleCoaches.filter((coach) =>
+                            selectedCoachIds.includes(coach.personId),
+                          )
+                        : eligibleCoaches
+                      )
+                        .slice(0, 3)
+                        .map((coach) =>
+                          coach.avatarUrl ? (
+                            <img
+                              alt=""
+                              key={coach.personId}
+                              src={coach.avatarUrl}
+                            />
+                          ) : (
+                            <i key={coach.personId}>
+                              {coach.displayName.slice(0, 1).toUpperCase()}
+                            </i>
+                          ),
+                        )}
+                    </span>
+                    <span>
+                      <strong>Only selected coaches</strong>
+                      <small>
+                        Keep this offer limited to a specific coaching team.
+                      </small>
+                    </span>
+                  </button>
+                </div>
+                {coachAssignmentMode === "selected" && (
+                  <div className="product-coach-picker">
+                    <label className="product-coach-search">
+                      <Search aria-hidden size={17} />
+                      <input
+                        onChange={(event) => setCoachSearch(event.target.value)}
+                        placeholder="Search coaches by name, handle, or market"
+                        type="search"
+                        value={coachSearch}
+                      />
+                    </label>
+                    <div className="product-coach-grid">
+                      {filteredCoaches.map((coach) => {
+                        const checked = selectedCoachIds.includes(
+                          coach.personId,
+                        );
+                        return (
+                          <label
+                            className={checked ? "active" : undefined}
+                            key={coach.personId}
+                          >
+                            <input
+                              checked={checked}
+                              onChange={(event) => {
+                                setSelectedCoachIds((current) =>
+                                  event.target.checked
+                                    ? [...current, coach.personId]
+                                    : current.filter(
+                                        (id) => id !== coach.personId,
+                                      ),
+                                );
+                              }}
+                              type="checkbox"
+                            />
+                            {coach.avatarUrl ? (
+                              <img alt="" src={coach.avatarUrl} />
+                            ) : (
+                              <span className="product-coach-fallback">
+                                {coach.displayName.slice(0, 1).toUpperCase()}
+                              </span>
+                            )}
+                            <span>
+                              <strong>{coach.displayName}</strong>
+                              <small>
+                                @{coach.handle}
+                                {coach.homeMarket
+                                  ? ` · ${coach.homeMarket}`
+                                  : ""}
+                              </small>
+                            </span>
+                            <i aria-hidden />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                <div className="product-coach-rules">
+                  <label>
+                    <span>Coaches required at the same time</span>
+                    <input
+                      max={Math.max(1, assignedCoachCount)}
+                      min="1"
+                      onChange={(event) =>
+                        setRequiredCoachCount(
+                          Math.max(
+                            1,
+                            Math.min(
+                              Math.max(1, assignedCoachCount),
+                              Number(event.target.value),
+                            ),
+                          ),
+                        )
+                      }
+                      type="number"
+                      value={requiredCoachCount}
+                    />
+                    <small>
+                      Use more than one for multi-coach clinics or programs.
+                    </small>
+                  </label>
+                  <label className="operator-switch">
+                    <input
+                      checked={customerCoachSelection}
+                      onChange={(event) =>
+                        setCustomerCoachSelection(event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <span>
+                      <strong>Let the customer choose a coach</strong>
+                      The booking flow shows a visual coach filter with photo,
+                      display name, and available times.
+                    </span>
+                  </label>
+                </div>
+                {coachAssignmentMode === "selected" &&
+                  selectedCoachIds.length === 0 && (
+                    <p className="product-coach-warning" role="alert">
+                      Select at least one coach before saving this offer.
+                    </p>
+                  )}
+              </>
+            )}
+          </fieldset>
+        )}
 
         <fieldset className="product-payment-settings">
           <legend>How can players pay?</legend>
@@ -1487,7 +1729,82 @@ export function PeopleRefundControls({
   );
 }
 
-function ThemeKitEditor({
+function BrandKnowledgeSourceCard({
+  source,
+}: {
+  readonly source: OperatorWorkspace["brandKnowledge"]["sources"][number];
+}) {
+  const [state, action, pending] = useActionState(
+    archiveBrandKnowledgeSourceAction,
+    initialState,
+  );
+  const sourceHref = source.sourceUrl ?? source.storageUrl;
+  const updated = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(source.updatedAt));
+  return (
+    <article className="brand-knowledge-source">
+      <div className="brand-knowledge-source__icon" aria-hidden>
+        {source.kind === "link" ? (
+          <Link2 size={18} />
+        ) : source.kind === "document" ? (
+          <FileText size={18} />
+        ) : (
+          <BookOpen size={18} />
+        )}
+      </div>
+      <div className="brand-knowledge-source__copy">
+        <div className="brand-knowledge-source__title">
+          <strong>{source.title}</strong>
+          <span
+            className={`brand-knowledge-status brand-knowledge-status--${source.status}`}
+          >
+            {source.status}
+          </span>
+        </div>
+        <p>{source.contentText}</p>
+        <small>
+          {source.scope} · {source.kind} · updated {updated}
+        </small>
+        {source.failureReason && (
+          <span className="brand-knowledge-source__error">
+            {source.failureReason}
+          </span>
+        )}
+      </div>
+      <div className="brand-knowledge-source__actions">
+        {sourceHref && (
+          <a
+            aria-label={`Open ${source.title}`}
+            href={sourceHref}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <Globe2 aria-hidden size={17} />
+          </a>
+        )}
+        {source.status !== "archived" && (
+          <form action={action}>
+            <input name="sourceId" type="hidden" value={source.id} />
+            <input name="confirmed" type="hidden" value="true" />
+            <button
+              aria-label={`Archive ${source.title}`}
+              disabled={pending}
+              type="submit"
+            >
+              <Archive aria-hidden size={17} />
+            </button>
+          </form>
+        )}
+      </div>
+      <ActionNotice state={state} />
+    </article>
+  );
+}
+
+export function ThemeKitEditor({
   workspace,
 }: {
   readonly workspace: OperatorWorkspace;
@@ -1496,7 +1813,24 @@ function ThemeKitEditor({
     updateThemeAction,
     initialState,
   );
+  const [knowledgeState, knowledgeAction, knowledgePending] = useActionState(
+    addBrandKnowledgeSourceAction,
+    initialState,
+  );
+  const [brandDisplayName, setBrandDisplayName] = useState(
+    workspace.theme.brandDisplayName ?? workspace.organization.name,
+  );
+  const [membershipProgramName, setMembershipProgramName] = useState(
+    workspace.theme.membershipProgramName ?? "",
+  );
   const [logoUrl, setLogoUrl] = useState(workspace.theme.logoUrl ?? "");
+  const [markUrl, setMarkUrl] = useState(workspace.theme.markUrl ?? "");
+  const [logoLightUrl, setLogoLightUrl] = useState(
+    workspace.theme.logoLightUrl ?? "",
+  );
+  const [logoDarkUrl, setLogoDarkUrl] = useState(
+    workspace.theme.logoDarkUrl ?? "",
+  );
   const [heroMediaType, setHeroMediaType] = useState<"image" | "video">(
     workspace.theme.heroMediaType ?? "image",
   );
@@ -1506,6 +1840,9 @@ function ThemeKitEditor({
   const [tagline, setTagline] = useState(workspace.theme.tagline ?? "");
   const [profileSummary, setProfileSummary] = useState(
     workspace.theme.profileSummary ?? "",
+  );
+  const [brandVoice, setBrandVoice] = useState(
+    workspace.theme.brandVoice ?? "",
   );
   const [palette, setPalette] = useState(workspace.theme.palette);
   const [headingFont, setHeadingFont] = useState(
@@ -1519,239 +1856,701 @@ function ThemeKitEditor({
       ? workspace.theme.profileLayout
       : "editorial",
   );
+  const [knowledgeKind, setKnowledgeKind] = useState<
+    "note" | "link" | "document"
+  >("note");
   const previewStyle = {
     "--theme-preview-primary": palette.primary,
     "--theme-preview-accent": palette.accent,
     "--theme-preview-sand": palette.sand,
     "--theme-preview-ink": palette.ink,
     "--theme-preview-canvas": palette.canvas,
+    "--theme-preview-success": palette.success,
     "--theme-preview-heading": `"${headingFont}", sans-serif`,
     "--theme-preview-body": `"${bodyFont}", sans-serif`,
   } as CSSProperties;
+  const activeSources = workspace.brandKnowledge.sources.filter(
+    (source) => source.status !== "archived",
+  );
+
   return (
     <section
       className="hq-card operator-control-card theme-kit-editor"
       id="theme-kit"
     >
-      <header className="hq-card-heading">
+      <header className="theme-kit-identity-header">
         <div>
-          <span className="hq-eyebrow">Player-facing profile</span>
-          <h2>Theme Kit</h2>
+          <span className="hq-eyebrow">Brand Theme Kit</span>
+          <h2>One source for every branded surface.</h2>
           <p>
-            Customize the organization profile without turning setup into a
-            website builder.
+            Profiles, offers, messages, event posters, and Duna AI previews
+            resolve this same saved identity.
           </p>
         </div>
-        <Sparkles aria-hidden size={24} />
+        <span className="theme-kit-canonical">
+          <ShieldCheck aria-hidden size={17} />
+          Canonical identity
+        </span>
       </header>
-      <form action={action} className="operator-form">
+
+      <form action={action} className="operator-form theme-kit-form">
         <div className="theme-kit-workspace">
           <div className="theme-kit-settings">
-            <div className="operator-form-grid operator-form-grid--two">
-              <label>
-                <span>Logo URL</span>
-                <input
-                  name="logoUrl"
-                  onChange={(event) => setLogoUrl(event.target.value)}
-                  type="url"
-                  value={logoUrl}
-                />
-              </label>
-              <label>
-                <span>Hero media</span>
-                <select
-                  name="heroMediaType"
-                  onChange={(event) =>
-                    setHeroMediaType(
-                      event.target.value === "video" ? "video" : "image",
-                    )
-                  }
-                  value={heroMediaType}
-                >
-                  <option value="image">Image</option>
-                  <option value="video">Video</option>
-                </select>
-              </label>
-              <label className="operator-field--wide">
-                <span>Hero image or video URL</span>
-                <input
-                  name="heroMediaUrl"
-                  onChange={(event) => setHeroMediaUrl(event.target.value)}
-                  type="url"
-                  value={heroMediaUrl}
-                />
-              </label>
-              <label className="operator-field--wide">
-                <span>Tagline</span>
-                <input
-                  name="tagline"
-                  onChange={(event) => setTagline(event.target.value)}
-                  placeholder="Where the next point begins."
-                  value={tagline}
-                />
-              </label>
-              <label className="operator-field--wide">
-                <span>Profile summary</span>
-                <textarea
-                  name="profileSummary"
-                  onChange={(event) => setProfileSummary(event.target.value)}
-                  rows={4}
-                  value={profileSummary}
-                />
-              </label>
-              {Object.entries(palette).map(([name, value]) => (
-                <label className="theme-color-field" key={name}>
-                  <span>{name}</span>
+            <section className="theme-kit-section">
+              <header className="theme-kit-section__heading">
+                <ShieldCheck aria-hidden size={20} />
+                <div>
+                  <span>Identity foundation</span>
+                  <strong>Name it once. Carry its voice everywhere.</strong>
+                </div>
+              </header>
+              <div className="operator-form-grid operator-form-grid--two">
+                <label>
+                  <span>Brand display name</span>
                   <input
-                    name={name}
+                    maxLength={120}
+                    name="brandDisplayName"
                     onChange={(event) =>
-                      setPalette((current) => ({
-                        ...current,
-                        [name]: event.target.value,
-                      }))
+                      setBrandDisplayName(event.target.value)
                     }
-                    type="color"
-                    value={value}
+                    value={brandDisplayName}
                   />
-                  <code>{value}</code>
                 </label>
-              ))}
-              <label>
-                <span>Heading font</span>
-                <select
-                  name="headingFont"
-                  onChange={(event) => setHeadingFont(event.target.value)}
-                  value={headingFont}
-                >
-                  {[
-                    "Instrument Sans",
-                    "DM Sans",
-                    "Space Grotesk",
-                    "Playfair Display",
-                  ].map((font) => (
-                    <option key={font}>{font}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Body font</span>
-                <select
-                  name="bodyFont"
-                  onChange={(event) => setBodyFont(event.target.value)}
-                  value={bodyFont}
-                >
-                  {["Archivo", "Inter", "DM Sans", "Source Sans 3"].map(
-                    (font) => (
+                <label>
+                  <span>Membership program name</span>
+                  <input
+                    maxLength={120}
+                    name="membershipProgramName"
+                    onChange={(event) =>
+                      setMembershipProgramName(event.target.value)
+                    }
+                    placeholder={`${brandDisplayName || "Your brand"} Members`}
+                    value={membershipProgramName}
+                  />
+                </label>
+                <label className="operator-field--wide">
+                  <span>Tagline</span>
+                  <input
+                    maxLength={180}
+                    name="tagline"
+                    onChange={(event) => setTagline(event.target.value)}
+                    placeholder="Where the next point begins."
+                    value={tagline}
+                  />
+                </label>
+                <label className="operator-field--wide">
+                  <span>Profile summary</span>
+                  <textarea
+                    maxLength={2000}
+                    name="profileSummary"
+                    onChange={(event) => setProfileSummary(event.target.value)}
+                    placeholder="What should players and parents understand first?"
+                    rows={4}
+                    value={profileSummary}
+                  />
+                </label>
+                <label className="operator-field--wide">
+                  <span>Brand voice</span>
+                  <textarea
+                    maxLength={4000}
+                    name="brandVoice"
+                    onChange={(event) => setBrandVoice(event.target.value)}
+                    placeholder="Describe how your organization sounds. Include words to use, words to avoid, and an example welcome message."
+                    rows={5}
+                    value={brandVoice}
+                  />
+                  <small>
+                    Used as guidance for drafts. Every outbound message remains
+                    reviewable before it is sent.
+                  </small>
+                </label>
+              </div>
+            </section>
+
+            <section className="theme-kit-section">
+              <header className="theme-kit-section__heading">
+                <Palette aria-hidden size={20} />
+                <div>
+                  <span>Color system</span>
+                  <strong>A palette with a job for every color.</strong>
+                </div>
+              </header>
+              <div className="theme-color-system">
+                {Object.entries(palette).map(([name, value]) => (
+                  <label className="theme-color-field" key={name}>
+                    <input
+                      aria-label={`${name} color`}
+                      name={name}
+                      onChange={(event) =>
+                        setPalette((current) => ({
+                          ...current,
+                          [name]: event.target.value,
+                        }))
+                      }
+                      type="color"
+                      value={value}
+                    />
+                    <strong>{name}</strong>
+                    <code>{value}</code>
+                  </label>
+                ))}
+              </div>
+            </section>
+
+            <section className="theme-kit-section">
+              <header className="theme-kit-section__heading">
+                <ImageIcon aria-hidden size={20} />
+                <div>
+                  <span>Adaptive identity assets</span>
+                  <strong>
+                    Correct marks for light, dark, and compact use.
+                  </strong>
+                </div>
+              </header>
+              <div className="theme-asset-grid">
+                {[
+                  {
+                    label: "Primary logo",
+                    name: "logoUrl",
+                    value: logoUrl,
+                    setter: setLogoUrl,
+                    className: "theme-asset--light",
+                  },
+                  {
+                    label: "Compact mark",
+                    name: "markUrl",
+                    value: markUrl,
+                    setter: setMarkUrl,
+                    className: "theme-asset--light",
+                  },
+                  {
+                    label: "Light-surface logo",
+                    name: "logoLightUrl",
+                    value: logoLightUrl,
+                    setter: setLogoLightUrl,
+                    className: "theme-asset--light",
+                  },
+                  {
+                    label: "Dark-surface logo",
+                    name: "logoDarkUrl",
+                    value: logoDarkUrl,
+                    setter: setLogoDarkUrl,
+                    className: "theme-asset--dark",
+                  },
+                ].map((asset) => (
+                  <label
+                    className={`theme-asset ${asset.className}`}
+                    key={asset.name}
+                  >
+                    <span
+                      className="theme-asset__preview"
+                      style={
+                        asset.value
+                          ? { backgroundImage: `url("${asset.value}")` }
+                          : undefined
+                      }
+                    >
+                      {!asset.value && brandDisplayName.slice(0, 2)}
+                    </span>
+                    <strong>{asset.label}</strong>
+                    <small>SVG or transparent PNG preferred</small>
+                    <input
+                      name={asset.name}
+                      onChange={(event) => asset.setter(event.target.value)}
+                      placeholder="Paste a secure asset URL"
+                      type="url"
+                      value={asset.value}
+                    />
+                  </label>
+                ))}
+              </div>
+            </section>
+
+            <section className="theme-kit-section">
+              <header className="theme-kit-section__heading">
+                <ImageIcon aria-hidden size={20} />
+                <div>
+                  <span>Hero media</span>
+                  <strong>
+                    Set the atmosphere without hiding the utility.
+                  </strong>
+                </div>
+              </header>
+              <div className="operator-form-grid operator-form-grid--two">
+                <label>
+                  <span>Media type</span>
+                  <select
+                    name="heroMediaType"
+                    onChange={(event) =>
+                      setHeroMediaType(
+                        event.target.value === "video" ? "video" : "image",
+                      )
+                    }
+                    value={heroMediaType}
+                  >
+                    <option value="image">Image</option>
+                    <option value="video">Video</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Layout</span>
+                  <select
+                    name="profileLayout"
+                    onChange={(event) =>
+                      setProfileLayout(
+                        event.target.value === "immersive" ||
+                          event.target.value === "compact"
+                          ? event.target.value
+                          : "editorial",
+                      )
+                    }
+                    value={profileLayout}
+                  >
+                    <option value="editorial">Editorial</option>
+                    <option value="immersive">Immersive hero</option>
+                    <option value="compact">Compact utility</option>
+                  </select>
+                </label>
+                <label className="operator-field--wide">
+                  <span>Image or video URL</span>
+                  <input
+                    name="heroMediaUrl"
+                    onChange={(event) => setHeroMediaUrl(event.target.value)}
+                    type="url"
+                    value={heroMediaUrl}
+                  />
+                </label>
+                <label className="operator-field--wide">
+                  <span>Video poster URL</span>
+                  <input
+                    defaultValue={workspace.theme.heroPosterUrl}
+                    name="heroPosterUrl"
+                    type="url"
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="theme-kit-section">
+              <header className="theme-kit-section__heading">
+                <Type aria-hidden size={20} />
+                <div>
+                  <span>Type & licensing</span>
+                  <strong>Brand type, with resilient fallbacks.</strong>
+                </div>
+              </header>
+              <div className="operator-form-grid operator-form-grid--two">
+                <label>
+                  <span>Heading font</span>
+                  <select
+                    name="headingFont"
+                    onChange={(event) => setHeadingFont(event.target.value)}
+                    value={headingFont}
+                  >
+                    {[
+                      "Instrument Sans",
+                      "DM Sans",
+                      "Space Grotesk",
+                      "Playfair Display",
+                    ].map((font) => (
                       <option key={font}>{font}</option>
-                    ),
-                  )}
-                </select>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Body font</span>
+                  <select
+                    name="bodyFont"
+                    onChange={(event) => setBodyFont(event.target.value)}
+                    value={bodyFont}
+                  >
+                    {["Archivo", "Inter", "DM Sans", "Source Sans 3"].map(
+                      (font) => (
+                        <option key={font}>{font}</option>
+                      ),
+                    )}
+                  </select>
+                </label>
+                <label>
+                  <span>Card style</span>
+                  <select
+                    name="cardStyle"
+                    onChange={(event) =>
+                      setCardStyle(
+                        event.target.value === "crisp" ||
+                          event.target.value === "borderless"
+                          ? event.target.value
+                          : "soft",
+                      )
+                    }
+                    value={cardStyle}
+                  >
+                    <option value="soft">Soft</option>
+                    <option value="crisp">Crisp</option>
+                    <option value="borderless">Borderless</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Safe fallback</span>
+                  <input
+                    defaultValue={workspace.theme.safeFallbackFont}
+                    name="safeFallbackFont"
+                    required
+                  />
+                </label>
+              </div>
+              <label className="operator-confirmation theme-font-license">
+                <input
+                  defaultChecked={workspace.theme.fontLicenseConfirmed}
+                  name="fontLicenseConfirmed"
+                  type="checkbox"
+                  value="true"
+                />
+                <span>
+                  <strong>
+                    I confirm these fonts have a valid web-use license.
+                  </strong>
+                  Duna never assumes a license and always keeps a system
+                  fallback available.
+                </span>
               </label>
-              <label>
-                <span>Card style</span>
-                <select
-                  name="cardStyle"
-                  onChange={(event) =>
-                    setCardStyle(
-                      event.target.value === "crisp" ||
-                        event.target.value === "borderless"
-                        ? event.target.value
-                        : "soft",
-                    )
-                  }
-                  value={cardStyle}
-                >
-                  <option value="soft">Soft</option>
-                  <option value="crisp">Crisp</option>
-                  <option value="borderless">Borderless</option>
-                </select>
-              </label>
-              <label>
-                <span>Profile layout</span>
-                <select
-                  name="profileLayout"
-                  onChange={(event) =>
-                    setProfileLayout(
-                      event.target.value === "immersive" ||
-                        event.target.value === "compact"
-                        ? event.target.value
-                        : "editorial",
-                    )
-                  }
-                  value={profileLayout}
-                >
-                  <option value="editorial">Editorial</option>
-                  <option value="immersive">Immersive hero</option>
-                  <option value="compact">Compact utility</option>
-                </select>
-              </label>
-            </div>
+            </section>
           </div>
+
           <aside
             className={`theme-kit-preview theme-kit-preview--${profileLayout} theme-kit-preview--${cardStyle}`}
             style={previewStyle}
           >
-            <span className="hq-eyebrow">Live player preview</span>
-            <div
-              className="theme-kit-preview__hero"
-              style={
-                heroMediaType === "image" && heroMediaUrl
-                  ? { backgroundImage: `url("${heroMediaUrl}")` }
-                  : undefined
-              }
-            >
-              {logoUrl ? (
-                <span
-                  aria-label={`${workspace.organization.name} logo`}
-                  className="theme-kit-preview__logo"
-                  role="img"
-                  style={{ backgroundImage: `url("${logoUrl}")` }}
-                />
-              ) : (
-                <span>{workspace.organization.name.slice(0, 2)}</span>
-              )}
+            <span className="hq-eyebrow">Live member preview</span>
+            <div className="theme-kit-preview__frame">
+              <div
+                className="theme-kit-preview__hero"
+                style={
+                  heroMediaType === "image" && heroMediaUrl
+                    ? { backgroundImage: `url("${heroMediaUrl}")` }
+                    : undefined
+                }
+              >
+                {heroMediaType === "video" && heroMediaUrl && (
+                  <video autoPlay loop muted playsInline src={heroMediaUrl} />
+                )}
+                {logoLightUrl || logoUrl ? (
+                  <span
+                    aria-label={`${brandDisplayName} logo`}
+                    className="theme-kit-preview__logo"
+                    role="img"
+                    style={{
+                      backgroundImage: `url("${logoLightUrl || logoUrl}")`,
+                    }}
+                  />
+                ) : (
+                  <span>{brandDisplayName.slice(0, 2)}</span>
+                )}
+              </div>
+              <div className="theme-kit-preview__copy">
+                <small>{brandDisplayName}</small>
+                <h3>{tagline || "Make every session count."}</h3>
+                <p>
+                  {profileSummary ||
+                    "A clear, welcoming home for your community, schedule, and offers."}
+                </p>
+              </div>
+              <div className="theme-kit-preview__cards">
+                <article>
+                  <small>Next up</small>
+                  <strong>Community open play</strong>
+                  <span>8 spots · 6:00 PM</span>
+                </article>
+                <article>
+                  <small>{membershipProgramName || "For members"}</small>
+                  <strong>Book with one tap</strong>
+                  <span>Credits and access apply automatically</span>
+                </article>
+              </div>
+              <button type="button">Explore the schedule</button>
             </div>
-            <div className="theme-kit-preview__copy">
-              <small>{workspace.organization.name}</small>
-              <h3>{tagline || "Make every session count."}</h3>
-              <p>
-                {profileSummary ||
-                  "A clear, welcoming home for your community, schedule, and offers."}
-              </p>
-            </div>
-            <div className="theme-kit-preview__cards">
-              <article>
-                <small>Next up</small>
-                <strong>Community open play</strong>
-                <span>8 spots · 6:00 PM</span>
-              </article>
-              <article>
-                <small>For members</small>
-                <strong>Book with one tap</strong>
-                <span>Credits and access apply automatically</span>
-              </article>
+            <div className="theme-kit-preview__voice">
+              <Sparkles aria-hidden size={17} />
+              <div>
+                <small>Voice sample</small>
+                <p>
+                  {brandVoice ||
+                    "Welcome back. We found a few sessions that fit the way you like to play."}
+                </p>
+              </div>
             </div>
           </aside>
         </div>
+
         <label className="operator-switch">
-          <input name="publish" type="checkbox" value="true" />
+          <input
+            defaultChecked={Boolean(workspace.theme.publishedAt)}
+            name="publish"
+            type="checkbox"
+            value="true"
+          />
           <span>
-            <strong>Publish after saving</strong>
-            Leave off to keep this as a private draft.
+            <strong>Apply this identity to player-facing surfaces</strong>
+            Leave off while the first Theme Kit is still being prepared.
           </span>
         </label>
         <label className="operator-confirmation">
           <input name="confirmed" required type="checkbox" value="true" />
           <span>
-            <strong>I reviewed the player-facing preview.</strong>
-            Publishing updates the organization profile theme.
+            <strong>I reviewed the identity and live preview.</strong>
+            Saved changes become the canonical source for supported surfaces.
           </span>
         </label>
         <div className="operator-form-footer">
           <ActionNotice state={state} />
-          <SubmitButton pending={pending}>Save Theme Kit</SubmitButton>
+          <SubmitButton pending={pending}>
+            Save canonical Theme Kit
+          </SubmitButton>
         </div>
       </form>
+
+      <section className="brand-knowledge">
+        <header className="brand-knowledge__header">
+          <div>
+            <span className="hq-eyebrow">Brand Knowledge</span>
+            <h3>Teach Duna how your business works.</h3>
+            <p>
+              Approve the voice, services, policies, venues, and operating
+              context Duna should use when drafting and recommending.
+            </p>
+          </div>
+          <div className="brand-knowledge__metrics">
+            <span>
+              <strong>{workspace.brandKnowledge.activeSourceCount}</strong>
+              active sources
+            </span>
+            <span>
+              <strong>
+                {workspace.brandKnowledge.contextRevision.slice(0, 8)}
+              </strong>
+              context revision
+            </span>
+          </div>
+        </header>
+
+        <div className="brand-knowledge__workspace">
+          <form
+            action={knowledgeAction}
+            className="brand-knowledge-composer operator-form"
+          >
+            <div className="brand-knowledge-composer__heading">
+              <Sparkles aria-hidden size={20} />
+              <div>
+                <strong>Add approved knowledge</strong>
+                <span>
+                  Nothing joins Duna AI context until an operator confirms it.
+                </span>
+              </div>
+            </div>
+            <fieldset className="brand-knowledge-choice-grid">
+              <legend>Source type</legend>
+              {[
+                {
+                  value: "note",
+                  label: "Knowledge note",
+                  help: "A direct fact, rule, or brand instruction",
+                  icon: BookOpen,
+                },
+                {
+                  value: "link",
+                  label: "Approved link",
+                  help: "A public page plus your approved summary",
+                  icon: Link2,
+                },
+                {
+                  value: "document",
+                  label: "Document",
+                  help: "A private file reference plus approved summary",
+                  icon: FileText,
+                },
+              ].map((option) => {
+                const Icon = option.icon;
+                return (
+                  <label
+                    className={
+                      knowledgeKind === option.value ? "is-selected" : ""
+                    }
+                    key={option.value}
+                  >
+                    <input
+                      checked={knowledgeKind === option.value}
+                      name="kind"
+                      onChange={() =>
+                        setKnowledgeKind(
+                          option.value as "note" | "link" | "document",
+                        )
+                      }
+                      type="radio"
+                      value={option.value}
+                    />
+                    <Icon aria-hidden size={19} />
+                    <strong>{option.label}</strong>
+                    <small>{option.help}</small>
+                  </label>
+                );
+              })}
+            </fieldset>
+            <div className="operator-form-grid operator-form-grid--two">
+              <label>
+                <span>Knowledge scope</span>
+                <select defaultValue="brand" name="scope">
+                  <option value="brand">Brand-wide</option>
+                  <option value="organization">Organization operations</option>
+                  <option value="venue">Venue-specific</option>
+                  <option value="service">Service-specific</option>
+                  <option value="product">Product-specific</option>
+                </select>
+              </label>
+              <label>
+                <span>Source title</span>
+                <input
+                  maxLength={160}
+                  name="title"
+                  placeholder="Youth clinic voice & expectations"
+                  required
+                />
+              </label>
+              {knowledgeKind === "link" && (
+                <label className="operator-field--wide">
+                  <span>Public source URL</span>
+                  <input name="sourceUrl" required type="url" />
+                </label>
+              )}
+              {knowledgeKind === "document" && (
+                <>
+                  <label>
+                    <span>Secure document URL</span>
+                    <input name="storageUrl" required type="url" />
+                  </label>
+                  <label>
+                    <span>File name</span>
+                    <input
+                      name="originalFilename"
+                      placeholder="club-handbook.pdf"
+                      required
+                    />
+                  </label>
+                  <label className="operator-field--wide">
+                    <span>File type</span>
+                    <input name="mimeType" placeholder="application/pdf" />
+                  </label>
+                </>
+              )}
+              <label className="operator-field--wide">
+                <span>Approved knowledge</span>
+                <textarea
+                  maxLength={100000}
+                  minLength={20}
+                  name="contentText"
+                  placeholder={
+                    knowledgeKind === "note"
+                      ? "State the fact, policy, preference, or voice instruction Duna should use."
+                      : "Summarize exactly what Duna is approved to learn and use from this source."
+                  }
+                  required
+                  rows={6}
+                />
+                <small>
+                  Be explicit. Duna uses this text as the approved context and
+                  retains the source for traceability.
+                </small>
+              </label>
+            </div>
+            <label className="operator-confirmation">
+              <input name="confirmed" required type="checkbox" value="true" />
+              <span>
+                <strong>I approve this source for Duna AI.</strong>
+                It may inform drafts and recommendations, but never bypasses
+                product, safety, legal, access, pricing, or payment controls.
+              </span>
+            </label>
+            <div className="operator-form-footer">
+              <ActionNotice state={knowledgeState} />
+              <SubmitButton pending={knowledgePending}>
+                Approve and add source
+              </SubmitButton>
+            </div>
+          </form>
+
+          <aside className="brand-knowledge-context">
+            <div className="brand-knowledge-context__heading">
+              <ShieldCheck aria-hidden size={22} />
+              <div>
+                <span className="hq-eyebrow">Effective AI context</span>
+                <strong>Grounded, scoped, and reviewable.</strong>
+              </div>
+            </div>
+            <div className="brand-knowledge-context__preview">
+              <small>What Duna currently knows</small>
+              {workspace.brandKnowledge.contextPreview.length > 0 ? (
+                <ul>
+                  {workspace.brandKnowledge.contextPreview.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p>
+                  Add the first approved source to create this organization’s
+                  grounded brand context.
+                </p>
+              )}
+            </div>
+            <div className="brand-knowledge-context__rules">
+              <small>Always authoritative</small>
+              <ul>
+                {workspace.brandKnowledge.safetyRules.map((rule) => (
+                  <li key={rule}>
+                    <ShieldCheck aria-hidden size={15} />
+                    {rule}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </aside>
+        </div>
+
+        <div className="brand-knowledge-library">
+          <div className="brand-knowledge-library__heading">
+            <div>
+              <span className="hq-eyebrow">Source library</span>
+              <h4>
+                {activeSources.length === 0
+                  ? "No approved sources yet."
+                  : `${activeSources.length} approved ${
+                      activeSources.length === 1 ? "source" : "sources"
+                    }`}
+              </h4>
+            </div>
+            <span>
+              Archived sources stay in the audit trail and leave active AI
+              context immediately.
+            </span>
+          </div>
+          {workspace.brandKnowledge.sources.length > 0 ? (
+            <div className="brand-knowledge-source-list">
+              {workspace.brandKnowledge.sources.map((source) => (
+                <BrandKnowledgeSourceCard key={source.id} source={source} />
+              ))}
+            </div>
+          ) : (
+            <div className="brand-knowledge-empty">
+              <BookOpen aria-hidden size={22} />
+              <div>
+                <strong>Start with the facts your team repeats most.</strong>
+                <span>
+                  Voice guidance, service descriptions, venue details, and
+                  approved FAQs are good first sources.
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
     </section>
   );
 }
