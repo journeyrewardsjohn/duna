@@ -19,6 +19,10 @@ describe("FIVB event detail refresh", () => {
           detailLevel: "tournament",
           detailSyncedAt: "2026-08-03T12:00:00.000Z",
           teamEntries: [{ label: "Crabb / Benesh" }],
+          professionalEditorial: {
+            overrides: { startsOn: "2026-08-07" },
+            media: [{ id: "dallas-poster", kind: "poster" }],
+          },
           watchOptions: [{ id: "vbtv" }],
         },
         syncedAt,
@@ -28,6 +32,10 @@ describe("FIVB event detail refresh", () => {
       detailLevel: "tournament",
       detailSyncedAt: "2026-08-03T12:00:00.000Z",
       teamEntries: [{ label: "Crabb / Benesh" }],
+      professionalEditorial: {
+        overrides: { startsOn: "2026-08-07" },
+        media: [{ id: "dallas-poster", kind: "poster" }],
+      },
       watchOptions: [{ id: "vbtv" }],
     });
   });

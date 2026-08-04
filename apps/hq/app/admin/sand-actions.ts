@@ -18,6 +18,8 @@ function refreshSandAdmin(): void {
   ]) {
     revalidatePath(path);
   }
+  revalidatePath("/pro");
+  revalidatePath("/events/[slug]", "page");
 }
 
 function failure(error: unknown, fallback: string): SandActionState {
@@ -169,6 +171,182 @@ export async function saveProfessionalWatchOptionAction(
     };
   } catch (error) {
     return failure(error, "The broadcast option could not be saved.");
+  }
+}
+
+export async function saveProfessionalEventEditorialAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const professionalEventId = String(
+    formData.get("professionalEventId") ?? "",
+  ).trim();
+  const enabled = (name: string) => formData.get(name) === "on";
+  const field = (name: string) =>
+    String(formData.get(name) ?? "").trim() || undefined;
+  const reason = field("reason") ?? "";
+  if (!professionalEventId || reason.length < 10) {
+    return {
+      status: "error",
+      message: "Choose an event and document the editorial update.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    await caller.admin.saveProfessionalEventEditorial({
+      professionalEventId,
+      overrides: {
+        ...(enabled("overrideName") && field("name")
+          ? { name: field("name") }
+          : {}),
+        ...(enabled("overrideLocation") && field("location")
+          ? { location: field("location") }
+          : {}),
+        ...(enabled("overrideCategory") && field("category")
+          ? { category: field("category") }
+          : {}),
+        ...(enabled("overrideStartsOn") && field("startsOn")
+          ? { startsOn: field("startsOn") }
+          : {}),
+        ...(enabled("overrideEndsOn") && field("endsOn")
+          ? { endsOn: field("endsOn") }
+          : {}),
+      },
+      summary: field("summary"),
+      venueName: field("venueName"),
+      venueAddress: field("venueAddress"),
+      timezone: field("timezone"),
+      reason,
+    });
+    refreshSandAdmin();
+    return {
+      status: "success",
+      message: "Duna editorial details now take priority where enabled.",
+    };
+  } catch (error) {
+    return failure(error, "The event details could not be saved.");
+  }
+}
+
+export async function saveProfessionalEventMediaAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const professionalEventId = String(
+    formData.get("professionalEventId") ?? "",
+  ).trim();
+  const kind = String(formData.get("kind") ?? "");
+  const url = String(formData.get("url") ?? "").trim();
+  const posterUrl = String(formData.get("posterUrl") ?? "").trim() || undefined;
+  const alt = String(formData.get("alt") ?? "").trim();
+  const caption = String(formData.get("caption") ?? "").trim() || undefined;
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (
+    !professionalEventId ||
+    !["poster", "hero-image", "hero-video"].includes(kind) ||
+    !url ||
+    !alt ||
+    reason.length < 10
+  ) {
+    return {
+      status: "error",
+      message: "Add the media, accessible description, and review note.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    await caller.admin.saveProfessionalEventMedia({
+      professionalEventId,
+      kind: kind as "poster" | "hero-image" | "hero-video",
+      url,
+      posterUrl,
+      alt,
+      caption,
+      featured: formData.get("featured") === "on",
+      reason,
+    });
+    refreshSandAdmin();
+    return { status: "success", message: "Event media published." };
+  } catch (error) {
+    return failure(error, "The event media could not be saved.");
+  }
+}
+
+export async function removeProfessionalEventMediaAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const professionalEventId = String(
+    formData.get("professionalEventId") ?? "",
+  ).trim();
+  const mediaId = String(formData.get("mediaId") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!professionalEventId || !mediaId || reason.length < 10) {
+    return { status: "error", message: "Document why media is removed." };
+  }
+  try {
+    const caller = await getServerCaller();
+    await caller.admin.removeProfessionalEventMedia({
+      professionalEventId,
+      mediaId,
+      reason,
+    });
+    refreshSandAdmin();
+    return { status: "success", message: "Event media removed." };
+  } catch (error) {
+    return failure(error, "The event media could not be removed.");
+  }
+}
+
+export async function saveProfessionalMatchScheduleAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const value = (name: string) =>
+    String(formData.get(name) ?? "").trim() || undefined;
+  const professionalEventId = value("professionalEventId") ?? "";
+  const importedMatchId = value("importedMatchId");
+  const gender = value("gender");
+  const teamAName = value("teamAName") ?? "";
+  const teamBName = value("teamBName") ?? "";
+  const localStartsAt = value("localStartsAt") ?? "";
+  const timezone = value("timezone") ?? "";
+  const reason = value("reason") ?? "";
+  if (
+    !professionalEventId ||
+    !["men", "women"].includes(gender ?? "") ||
+    !teamAName ||
+    !teamBName ||
+    !localStartsAt ||
+    !timezone ||
+    reason.length < 10
+  ) {
+    return {
+      status: "error",
+      message: "Complete both teams, local start time, timezone, and note.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    await caller.admin.saveProfessionalMatchSchedule({
+      professionalEventId,
+      importedMatchId,
+      gender: gender as "men" | "women",
+      teamAName,
+      teamBName,
+      localStartsAt,
+      timezone,
+      roundLabel: value("roundLabel"),
+      court: value("court"),
+      reason,
+    });
+    refreshSandAdmin();
+    return {
+      status: "success",
+      message: importedMatchId ? "Match schedule updated." : "Match added.",
+    };
+  } catch (error) {
+    return failure(error, "The AVP League match could not be saved.");
   }
 }
 

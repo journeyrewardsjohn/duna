@@ -86,6 +86,22 @@ export function createEventMediaPath(
   return `events/${organizationId}/${identifier}.${configuration.extension}`;
 }
 
+export function createProfessionalEventMediaPath(
+  professionalEventId: string,
+  contentType: string,
+  identifier = crypto.randomUUID(),
+): string {
+  const configuration = mediaType(contentType);
+  if (
+    !configuration ||
+    !uuidPattern.test(professionalEventId) ||
+    !uuidPattern.test(identifier)
+  ) {
+    throw new Error("Duna could not create a safe professional media path.");
+  }
+  return `professional-events/${professionalEventId}/${identifier}.${configuration.extension}`;
+}
+
 export function createVenueMediaPath(
   organizationId: string,
   contentType: string,
@@ -151,6 +167,24 @@ export function assertEventMediaPath(
     pathname !== `${prefix}${identifier}.${extension}`
   ) {
     throw new Error("The event media destination is invalid.");
+  }
+}
+
+export function assertProfessionalEventMediaPath(
+  pathname: string,
+  professionalEventId: string,
+  extension: string,
+): void {
+  const prefix = `professional-events/${professionalEventId}/`;
+  const identifier = pathname.slice(prefix.length, -(extension.length + 1));
+  if (
+    !uuidPattern.test(professionalEventId) ||
+    !pathname.startsWith(prefix) ||
+    !pathname.endsWith(`.${extension}`) ||
+    !uuidPattern.test(identifier) ||
+    pathname !== `${prefix}${identifier}.${extension}`
+  ) {
+    throw new Error("The professional event media destination is invalid.");
   }
 }
 

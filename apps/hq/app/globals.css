@@ -17038,6 +17038,11 @@ button {
   color: var(--color-white);
 }
 
+.pro-admin-jump-nav a.active {
+  background: var(--color-white);
+  color: var(--color-depth);
+}
+
 .pro-admin-metrics {
   display: grid;
   gap: 0.8rem;
@@ -17733,26 +17738,376 @@ button {
   grid-column: 1 / -1;
 }
 
+.pro-admin-tool-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pro-admin-tool-grid > a {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 18px;
+  color: var(--color-bone);
+  display: grid;
+  gap: 0.45rem;
+  min-height: 150px;
+  padding: 1rem;
+  text-decoration: none;
+}
+
+.pro-admin-tool-grid > a:hover {
+  border-color: rgb(var(--accent-rgb) / 55%);
+  box-shadow: 0 12px 32px rgb(7 19 35 / 8%);
+  transform: translateY(-2px);
+}
+
+.pro-admin-tool-grid svg {
+  color: var(--color-warning);
+}
+
+.pro-admin-tool-grid strong {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  margin-top: auto;
+}
+
+.pro-admin-tool-grid span,
+.pro-admin-editorial > p,
+.pro-admin-schedule > p {
+  color: var(--color-bone-muted);
+}
+
+.pro-admin-editorial-form,
+.pro-admin-media-form,
+.pro-admin-schedule-form {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 17px;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.pro-admin-editorial-form label,
+.pro-admin-media-form label,
+.pro-admin-schedule-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.pro-admin-editorial-form label > span,
+.pro-admin-media-form label > span,
+.pro-admin-schedule-form label > span {
+  color: var(--color-bone-muted);
+  font-size: max(0.72rem, 10px);
+  font-weight: 780;
+}
+
+.pro-admin-editorial-form input,
+.pro-admin-editorial-form textarea,
+.pro-admin-media-form input,
+.pro-admin-media-form select,
+.pro-admin-schedule-form input,
+.pro-admin-schedule-form select {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 11px;
+  color: var(--color-bone);
+  min-height: 44px;
+  outline: none;
+  padding: 0.65rem 0.75rem;
+  width: 100%;
+}
+
+.pro-admin-editorial-form textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.pro-admin-editorial-form input:focus,
+.pro-admin-editorial-form textarea:focus,
+.pro-admin-media-form input:focus,
+.pro-admin-media-form select:focus,
+.pro-admin-schedule-form input:focus,
+.pro-admin-schedule-form select:focus {
+  border-color: rgb(var(--accent-rgb) / 55%);
+  box-shadow: 0 0 0 3px rgb(var(--accent-rgb) / 9%);
+}
+
+.pro-admin-override-field {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 13px;
+  padding: 0.7rem;
+}
+
+.pro-admin-override-field > span {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+}
+
+.pro-admin-override-field > span input,
+.pro-admin-toggle input {
+  accent-color: var(--color-warning);
+  min-height: auto;
+  width: auto;
+}
+
+.pro-admin-override-field small {
+  color: var(--color-bone-muted);
+  font-size: max(0.68rem, 10px);
+}
+
+.pro-admin-editorial-form__wide,
+.pro-admin-editorial-form__reason,
+.pro-admin-media-form__wide,
+.pro-admin-schedule-form__wide,
+.pro-admin-editorial-form > .sand-action-feedback,
+.pro-admin-media-form > .sand-action-feedback,
+.pro-admin-schedule-form > .sand-action-feedback {
+  grid-column: 1 / -1;
+}
+
+.pro-admin-media-form > header,
+.pro-admin-schedule-form > header {
+  align-items: center;
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: space-between;
+}
+
+.pro-admin-media-form h3,
+.pro-admin-schedule-form h3 {
+  font-family: var(--font-display);
+  margin: 0.2rem 0 0;
+}
+
+.pro-admin-media-drop {
+  align-items: center;
+  border: 1px dashed rgb(var(--accent-rgb) / 45%);
+  border-radius: 14px;
+  cursor: pointer;
+  display: grid !important;
+  grid-column: 1 / -1;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.9rem;
+}
+
+.pro-admin-media-drop > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.pro-admin-media-drop input {
+  border: 0;
+  max-width: 280px;
+  padding: 0;
+}
+
+.pro-admin-media-form__grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pro-admin-toggle {
+  align-items: center;
+  flex-direction: row !important;
+}
+
+.pro-admin-media-library {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 1rem;
+}
+
+.pro-admin-media-row {
+  align-items: center;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 15px;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: 120px minmax(0, 1fr) minmax(220px, 0.5fr);
+  overflow: hidden;
+  padding: 0.7rem;
+}
+
+.pro-admin-media-row > img,
+.pro-admin-media-row > video {
+  aspect-ratio: 4 / 3;
+  background: var(--color-ink);
+  border-radius: 10px;
+  height: 90px;
+  object-fit: cover;
+  width: 120px;
+}
+
+.pro-admin-media-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.pro-admin-media-row > div > span {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.pro-admin-media-row small {
+  color: var(--color-bone-muted);
+}
+
+.pro-admin-media-row form {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.pro-admin-media-row form input {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 9px;
+  color: var(--color-bone);
+  min-height: 40px;
+  padding: 0.55rem 0.65rem;
+}
+
+.pro-admin-media-row form button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--color-danger);
+  border-radius: 9px;
+  color: var(--color-danger);
+  display: flex;
+  gap: 0.35rem;
+  justify-content: center;
+  min-height: 38px;
+}
+
+.pro-admin-schedule__workspace {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(420px, 0.9fr) minmax(0, 1.1fr);
+}
+
+.pro-admin-schedule-form {
+  margin-top: 0;
+  position: sticky;
+  top: 1rem;
+}
+
+.pro-admin-schedule-form > header button,
+.pro-admin-schedule-list article > button {
+  background: transparent;
+  border: 1px solid var(--color-line);
+  border-radius: 9px;
+  color: var(--color-bone);
+  min-height: 36px;
+  padding: 0.5rem 0.7rem;
+}
+
+.pro-admin-schedule-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.pro-admin-schedule-list article {
+  align-items: center;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 13px;
+  display: flex;
+  gap: 0.7rem;
+  justify-content: space-between;
+  padding: 0.75rem;
+}
+
+.pro-admin-schedule-list article > span {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.pro-admin-schedule-list article small {
+  color: var(--color-bone-muted);
+}
+
+.pro-admin-pagination {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+  grid-column: 1 / -1;
+  justify-content: center;
+  margin-top: 0.8rem;
+}
+
+.pro-admin-pagination button {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  color: var(--color-bone);
+  min-height: 38px;
+  padding: 0.55rem 0.8rem;
+}
+
+.pro-admin-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.pro-admin-pagination span {
+  color: var(--color-bone-muted);
+  font-size: max(0.72rem, 10px);
+}
+
+.pro-admin-identity-search {
+  margin-top: 1rem;
+  max-width: 520px;
+}
+
 @media (max-width: 1180px) {
   .pro-admin-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .pro-admin-avp__workspace,
-  .pro-admin-broadcast__workspace {
+  .pro-admin-broadcast__workspace,
+  .pro-admin-schedule__workspace {
     grid-template-columns: 1fr;
   }
 
   .pro-admin-broadcast__workspace > aside,
-  .pro-admin-roster-editor {
+  .pro-admin-roster-editor,
+  .pro-admin-schedule-form {
     position: static;
   }
 }
 
 @media (max-width: 900px) {
   .pro-admin-sync__grid,
-  .pro-admin-event-grid {
+  .pro-admin-event-grid,
+  .pro-admin-tool-grid {
     grid-template-columns: 1fr;
+  }
+
+  .pro-admin-media-row {
+    grid-template-columns: 100px minmax(0, 1fr);
+  }
+
+  .pro-admin-media-row > img,
+  .pro-admin-media-row > video {
+    height: 78px;
+    width: 100px;
+  }
+
+  .pro-admin-media-row form {
+    grid-column: 1 / -1;
   }
 
   .pro-admin-event-filters {
@@ -17792,6 +18147,13 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .pro-admin-editorial-form,
+  .pro-admin-media-form,
+  .pro-admin-media-form__grid,
+  .pro-admin-schedule-form {
+    grid-template-columns: 1fr;
+  }
+
   .pro-admin-metrics article {
     min-height: 115px;
   }
@@ -17806,6 +18168,15 @@ button {
   .pro-admin-roster-editor__reason,
   .pro-admin-roster-editor > form > .sand-action-feedback,
   .pro-admin-identity-row form > button {
+    grid-column: auto;
+  }
+
+  .pro-admin-editorial-form__wide,
+  .pro-admin-editorial-form__reason,
+  .pro-admin-media-form__wide,
+  .pro-admin-schedule-form__wide,
+  .pro-admin-media-form > header,
+  .pro-admin-media-drop {
     grid-column: auto;
   }
 

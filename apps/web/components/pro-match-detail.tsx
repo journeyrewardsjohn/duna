@@ -133,6 +133,11 @@ export function ProMatchDetail({
               {match.status}
             </Badge>
             <Badge>{match.roundLabel}</Badge>
+            {match.leagueTeamAName && match.leagueTeamBName && (
+              <Badge>
+                {match.leagueTeamAName} vs. {match.leagueTeamBName}
+              </Badge>
+            )}
           </div>
           <h1>
             {match.teamA.label} <span>vs</span> {match.teamB.label}
@@ -149,7 +154,7 @@ export function ProMatchDetail({
                     month: "long",
                     day: "numeric",
                     year: "numeric",
-                    timeZone: "UTC",
+                    timeZone: match.timezone ?? "UTC",
                   }).format(new Date(match.playedAt))
                 : (event.startsOn ?? "Date pending")}
               {match.time ? ` · ${match.time}` : ""}
@@ -267,7 +272,13 @@ export function ProMatchDetail({
                       <strong>{option.label}</strong>
                       <small>
                         {option.channelName ??
-                          (option.url ? "Open stream" : "Live TV")}
+                          (option.url
+                            ? "Open stream"
+                            : option.kind === "youtube"
+                              ? "Direct link coming soon"
+                              : option.kind === "vbtv"
+                                ? "VBTV subscription"
+                                : "Live TV")}
                       </small>
                     </span>
                     {option.url && <ExternalLink aria-hidden size={14} />}

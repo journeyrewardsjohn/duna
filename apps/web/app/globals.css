@@ -8656,7 +8656,7 @@ a.professional-match-card:hover {
   border-bottom: 1px solid var(--color-line);
   display: grid;
   gap: clamp(2rem, 7vw, 7rem);
-  grid-template-columns: minmax(0, 1fr) minmax(250px, 340px);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 440px);
   padding: clamp(3.5rem, 8vw, 7rem) max(1.25rem, calc((100vw - 1240px) / 2));
 }
 
@@ -8737,6 +8737,70 @@ a.professional-match-card:hover {
   color: #fff;
 }
 
+.pro-event-hero__summary {
+  color: var(--color-bone-muted);
+  font-size: clamp(1rem, 1.35vw, 1.2rem);
+  line-height: 1.65;
+  margin: 1.4rem 0 0;
+  max-width: 760px;
+}
+
+.pro-event-hero__address {
+  align-items: center;
+  color: var(--color-bone-muted);
+  display: flex;
+  font-size: max(0.75rem, 10px);
+  gap: 0.4rem;
+  margin: 0.7rem 0 0;
+}
+
+.pro-event-hero__visual {
+  align-self: center;
+  display: grid;
+  gap: 0.8rem;
+  min-width: 0;
+  position: relative;
+}
+
+.pro-event-hero__visual > figure {
+  background: #102c43;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 28px;
+  box-shadow: 0 32px 90px rgb(9 33 51 / 22%);
+  margin: 0;
+  max-height: 620px;
+  overflow: hidden;
+  position: relative;
+}
+
+.pro-event-hero__visual > figure::after {
+  background: linear-gradient(to top, rgb(5 20 34 / 70%), transparent 46%);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.pro-event-hero__visual > figure img,
+.pro-event-hero__visual > figure video {
+  aspect-ratio: 4 / 5;
+  display: block;
+  height: auto;
+  max-height: 620px;
+  object-fit: cover;
+  width: 100%;
+}
+
+.pro-event-hero__visual > figure figcaption {
+  bottom: 1rem;
+  color: rgb(255 255 255 / 78%);
+  font-size: max(0.7rem, 10px);
+  left: 1.3rem;
+  position: absolute;
+  right: 1.3rem;
+  z-index: 2;
+}
+
 .pro-event-hero__scorecard {
   align-self: center;
   background: #102c43;
@@ -8748,6 +8812,18 @@ a.professional-match-card:hover {
   flex-direction: column;
   min-height: 250px;
   padding: 1.3rem;
+}
+
+.pro-event-hero__visual--media .pro-event-hero__scorecard {
+  backdrop-filter: blur(14px);
+  background: rgb(8 35 55 / 88%);
+  min-height: 118px;
+  padding: 1rem;
+}
+
+.pro-event-hero__visual--media .pro-event-hero__scorecard > strong {
+  font-size: 2.5rem;
+  margin: 0.55rem 0 0.6rem;
 }
 
 .pro-event-hero__scorecard > span {
@@ -8909,6 +8985,21 @@ a.professional-match-card:hover {
 .pro-watch > p {
   color: var(--color-bone-muted);
   font-size: 0.68rem;
+}
+
+.pro-watch__match-guide {
+  border-top: 1px solid var(--color-line);
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.pro-watch__match-guide > a span {
+  gap: 0.18rem;
+}
+
+.pro-watch__match-guide > a strong {
+  line-height: 1.35;
 }
 
 .pro-entry-lists__groups {
@@ -9812,6 +9903,10 @@ a.professional-match-card:hover {
     min-height: 190px;
   }
 
+  .pro-event-hero__visual--media .pro-event-hero__scorecard {
+    min-height: 118px;
+  }
+
   .pro-pool-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -9830,6 +9925,10 @@ a.professional-match-card:hover {
   .pro-event-hero h1,
   .pro-match-hero h1 {
     font-size: clamp(2.8rem, 16vw, 4.8rem);
+  }
+
+  .pro-watch__match-guide {
+    grid-template-columns: 1fr !important;
   }
 
   .pro-podium > div,
