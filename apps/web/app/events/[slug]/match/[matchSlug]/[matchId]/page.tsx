@@ -40,9 +40,10 @@ export default async function ProfessionalMatchPage({
 }) {
   const { slug, matchId } = await params;
   const caller = await getServerCaller();
-  const detail = await caller.public
-    .proMatch({ eventSlug: slug, matchId })
-    .catch(() => undefined);
+  const [detail, videos] = await Promise.all([
+    caller.public.proMatch({ eventSlug: slug, matchId }).catch(() => undefined),
+    caller.public.videos({ matchId }).catch(() => []),
+  ]);
   if (!detail) notFound();
-  return <ProMatchDetail detail={detail} />;
+  return <ProMatchDetail detail={detail} videos={videos} />;
 }

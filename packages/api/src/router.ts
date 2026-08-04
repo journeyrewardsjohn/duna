@@ -24,6 +24,7 @@ import {
   rateLimitMiddleware,
   requireScope,
   router,
+  superAdminProcedure,
 } from "./auth";
 import type { ApiContext } from "./context";
 import {
@@ -31,6 +32,7 @@ import {
   adminOrganizationDetailSchema,
   adminOverviewSchema,
   adminQueueSchema,
+  adminVideoOverviewSchema,
   agentDraftSchema,
   auditEventSchema,
   availableSlotSchema,
@@ -82,6 +84,16 @@ import {
   ticketScanResultSchema,
   tournamentScheduleSchema,
   venueSummarySchema,
+  courtCalibrationSchema,
+  dunaPlusGrantSchema,
+  liveVideoSessionSchema,
+  videoAssociationOptionSchema,
+  videoMetricsSchema,
+  videoPlaybackSchema,
+  videoStudioSchema,
+  videoSummarySchema,
+  videoUploadPartUrlSchema,
+  videoUploadSessionSchema,
 } from "./contracts";
 import {
   getCatalogOfferEligibility,
@@ -185,6 +197,29 @@ import {
   MembershipError,
   openDunaPlusPortal,
 } from "./membership";
+import {
+  abortVideoUpload,
+  beginVideoUpload,
+  completeVideoUpload,
+  createLiveVideo,
+  createVideoShareLink,
+  finishLiveVideo,
+  grantComplimentaryDunaPlus,
+  loadAdminVideoOverview,
+  loadOwnedVideoMetrics,
+  loadPublicVideos,
+  loadVideoPlayback,
+  loadVideoStudio,
+  presignVideoUploadPart,
+  recordVideoUploadPart,
+  recordVideoViewHeartbeat,
+  requestVideoMusicRemoval,
+  revokeComplimentaryDunaPlus,
+  searchVideoAssociations,
+  updateVideoPrivacy,
+  updateVideoQuotaPolicy,
+  VideoServiceError,
+} from "./video-service";
 import {
   activateCourt,
   blockCourtTime,
@@ -749,6 +784,26 @@ function throwDomainError(error: unknown): never {
           : "INTERNAL_SERVER_ERROR";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
+  if (error instanceof VideoServiceError) {
+    const code =
+      error.code === "VIDEO_NOT_FOUND" ||
+      error.code === "ASSOCIATION_NOT_FOUND" ||
+      error.code === "GRANT_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "PLAYBACK_FORBIDDEN"
+          ? "FORBIDDEN"
+          : error.code === "DATABASE_REQUIRED" ||
+              error.code === "MUX_REQUIRED" ||
+              error.code === "R2_REQUIRED" ||
+              error.code === "SIGNED_PLAYBACK_REQUIRED"
+            ? "INTERNAL_SERVER_ERROR"
+            : error.code === "INVALID_ASSOCIATION" ||
+                error.code === "UPLOAD_PART_INVALID" ||
+                error.code === "INVALID_GRANT_WINDOW"
+              ? "BAD_REQUEST"
+              : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
   if (error instanceof PrivacyError) {
     const code =
       error.code === "REQUEST_NOT_FOUND"
@@ -864,6 +919,24 @@ function throwDomainError(error: unknown): never {
   throw error;
 }
 
+const videoVenueInputSchema = z
+  .object({
+    venueId: z.string().uuid().optional(),
+    name: z.string().trim().min(1).max(180),
+    address: z.string().trim().max(500).optional(),
+    googlePlaceId: z.string().trim().max(255).optional(),
+    latitude: z.number().min(-90).max(90).optional(),
+    longitude: z.number().min(-180).max(180).optional(),
+  })
+  .refine(
+    (venue) =>
+      (venue.latitude === undefined) === (venue.longitude === undefined),
+    {
+      message: "Venue latitude and longitude must be supplied together.",
+      path: ["latitude"],
+    },
+  );
+
 const publicRouter = router({
   health: publicProcedure
     .output(
@@ -882,6 +955,74 @@ const publicRouter = router({
       databaseConfigured: Boolean(process.env.DATABASE_URL),
       stripeConfigured: isStripeConfigured(),
     })),
+  videos: publicProcedure
+    .input(
+      z
+        .object({
+          eventId: z.string().uuid().optional(),
+          matchId: z.string().uuid().optional(),
+          ownerHandle: z.string().trim().min(2).max(48).optional(),
+          liveOnly: z.boolean().optional(),
+        })
+        .optional(),
+    )
+    .output(z.array(videoSummarySchema).readonly())
+    .query(async ({ input }) => {
+      try {
+        return await loadPublicVideos(input ?? {});
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  videoPlayback: publicProcedure
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+        accessToken: z.string().trim().min(32).max(160).optional(),
+        platform: z.enum(["ios", "web"]),
+      }),
+    )
+    .output(videoPlaybackSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadVideoPlayback({
+          ...input,
+          actor: ctx.actor,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  videoViewHeartbeat: publicProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "video-view-heartbeat",
+        capacity: 180,
+        refillPerMinute: 120,
+        scope: "ip",
+      }),
+    )
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+        viewSessionId: z.string().uuid(),
+        watchedSeconds: z
+          .number()
+          .int()
+          .min(0)
+          .max(12 * 60 * 60),
+        completed: z.boolean(),
+      }),
+    )
+    .output(z.object({ recorded: z.literal(true) }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await recordVideoViewHeartbeat({ ...input, now: ctx.now });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   liveMatch: publicProcedure
     .input(z.object({ matchId: z.string().uuid() }))
     .output(matchScoringStateSchema)
@@ -1120,6 +1261,376 @@ const publicRouter = router({
 });
 
 const playerRouter = router({
+  videoStudio: protectedProcedure
+    .output(videoStudioSchema)
+    .query(async ({ ctx }) => {
+      try {
+        return await loadVideoStudio(ctx.actor!.personId, ctx.now);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  videoAssociations: protectedProcedure
+    .input(
+      z.object({
+        query: z.string().trim().max(120).default(""),
+      }),
+    )
+    .output(z.array(videoAssociationOptionSchema).readonly())
+    .query(async ({ input, ctx }) => {
+      try {
+        return await searchVideoAssociations(
+          ctx.actor!.personId,
+          input.query,
+          ctx.now,
+        );
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  videoMetrics: protectedProcedure
+    .output(z.array(videoMetricsSchema).readonly())
+    .query(async ({ ctx }) => {
+      try {
+        return await loadOwnedVideoMetrics(ctx.actor!.personId);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  createLiveVideo: adultProcedure
+    .use(requireScope("social:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "video-live-create",
+        capacity: 4,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(
+      z.object({
+        title: z.string().trim().min(2).max(180),
+        category: z.enum(["practice", "event", "match", "social"]),
+        eventId: z.string().uuid().optional(),
+        matchId: z.string().uuid().optional(),
+        venue: videoVenueInputSchema.optional(),
+        liveVisibility: z.enum(["public", "link-only"]),
+        recordingVisibility: z.enum(["public", "private"]),
+        hasAudio: z.boolean(),
+        courtCalibration: courtCalibrationSchema.optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(liveVideoSessionSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.createLiveVideo",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createLiveVideo({
+              ...input,
+              actor: ctx.actor!,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  finishLiveVideo: protectedProcedure
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(videoSummarySchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.finishLiveVideo",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await finishLiveVideo({
+              actor: ctx.actor!,
+              videoId: input.videoId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  updateVideoPrivacy: protectedProcedure
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+        liveVisibility: z.enum(["public", "link-only"]),
+        recordingVisibility: z.enum(["public", "private"]),
+        publishedToProfile: z.boolean(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(videoSummarySchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.updateVideoPrivacy",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateVideoPrivacy({
+              ...input,
+              actor: ctx.actor!,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createVideoShareLink: protectedProcedure
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+        expiresAt: z.iso.datetime().optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        shareUrl: z.url(),
+        expiresAt: z.iso.datetime().optional(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.createVideoShareLink",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createVideoShareLink({
+              actor: ctx.actor!,
+              videoId: input.videoId,
+              expiresAt: input.expiresAt
+                ? new Date(input.expiresAt)
+                : undefined,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  requestVideoMusicRemoval: protectedProcedure
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(videoSummarySchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.requestVideoMusicRemoval",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await requestVideoMusicRemoval({
+              actor: ctx.actor!,
+              videoId: input.videoId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  beginVideoUpload: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "video-upload-begin",
+        capacity: 12,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        title: z.string().trim().min(2).max(180),
+        category: z.enum(["practice", "event", "match", "social"]),
+        eventId: z.string().uuid().optional(),
+        matchId: z.string().uuid().optional(),
+        venue: videoVenueInputSchema.optional(),
+        recordingVisibility: z.enum(["public", "private"]),
+        publishedToProfile: z.boolean(),
+        hasAudio: z.boolean(),
+        originalFileName: z.string().trim().min(1).max(255),
+        mimeType: z.enum(["video/mp4", "video/quicktime"]),
+        bytes: z
+          .number()
+          .int()
+          .positive()
+          .max(5 * 1024 ** 4),
+        durationSeconds: z
+          .number()
+          .int()
+          .positive()
+          .max(24 * 60 * 60),
+        courtCalibration: courtCalibrationSchema.optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(videoUploadSessionSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.beginVideoUpload",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await beginVideoUpload({
+              ...input,
+              actor: ctx.actor!,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  videoUploadPartUrl: protectedProcedure
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+        partNumber: z.number().int().min(1).max(10_000),
+      }),
+    )
+    .output(videoUploadPartUrlSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await presignVideoUploadPart({
+          actor: ctx.actor!,
+          ...input,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  recordVideoUploadPart: protectedProcedure
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+        partNumber: z.number().int().min(1).max(10_000),
+        etag: z.string().trim().min(1).max(512),
+        sizeBytes: z
+          .number()
+          .int()
+          .positive()
+          .max(64 * 1024 * 1024),
+      }),
+    )
+    .output(
+      z.object({
+        uploadedParts: z.array(z.number().int().min(1).max(10_000)).readonly(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await recordVideoUploadPart({
+          actor: ctx.actor!,
+          ...input,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  completeVideoUpload: protectedProcedure
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(videoSummarySchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.completeVideoUpload",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await completeVideoUpload({
+              actor: ctx.actor!,
+              videoId: input.videoId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  abortVideoUpload: protectedProcedure
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(z.object({ aborted: z.literal(true) }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.abortVideoUpload",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await abortVideoUpload({
+              actor: ctx.actor!,
+              videoId: input.videoId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   dashboard: protectedProcedure
     .output(playerDashboardSchema)
     .query(({ ctx }) => getRepository().player.dashboard(ctx.actor!.personId)),
@@ -5467,6 +5978,133 @@ const adminRouter = router({
   overview: adminProcedure
     .output(adminOverviewSchema)
     .query(() => getRepository().admin.overview()),
+  videoOverview: adminProcedure
+    .output(adminVideoOverviewSchema)
+    .query(async ({ ctx }) => {
+      try {
+        return await loadAdminVideoOverview(
+          ctx.now,
+          ctx.actor.roles.includes("super-admin"),
+        );
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  grantComplimentaryDunaPlus: superAdminProcedure
+    .input(
+      z.object({
+        email: z.string().trim().email().max(320),
+        startsAt: z.iso.datetime(),
+        endsAt: z.iso.datetime().optional(),
+        reason: z.string().trim().min(8).max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(dunaPlusGrantSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.grantComplimentaryDunaPlus",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await grantComplimentaryDunaPlus({
+              actor: ctx.actor!,
+              email: input.email,
+              startsAt: new Date(input.startsAt),
+              endsAt: input.endsAt ? new Date(input.endsAt) : undefined,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  revokeComplimentaryDunaPlus: superAdminProcedure
+    .input(
+      z.object({
+        grantId: z.string().uuid(),
+        reason: z.string().trim().min(8).max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(dunaPlusGrantSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.revokeComplimentaryDunaPlus",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await revokeComplimentaryDunaPlus({
+              actor: ctx.actor!,
+              grantId: input.grantId,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  updateVideoQuotaPolicy: superAdminProcedure
+    .input(
+      z.object({
+        personId: z.string().uuid().optional(),
+        monthlyLiveSeconds: z
+          .number()
+          .int()
+          .min(0)
+          .max(31 * 24 * 60 * 60),
+        monthlyUploadSeconds: z
+          .number()
+          .int()
+          .min(0)
+          .max(31 * 24 * 60 * 60),
+        enforceLiveLimit: z.boolean(),
+        enforceUploadLimit: z.boolean(),
+        reason: z.string().trim().min(8).max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        monthlyLiveSeconds: z.number().int().nonnegative(),
+        monthlyUploadSeconds: z.number().int().nonnegative(),
+        enforceLiveLimit: z.boolean(),
+        enforceUploadLimit: z.boolean(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.updateVideoQuotaPolicy",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateVideoQuotaPolicy({
+              ...input,
+              actor: ctx.actor!,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   sandData: adminProcedure.query(async () => {
     try {
       return await loadSandDataOverview();

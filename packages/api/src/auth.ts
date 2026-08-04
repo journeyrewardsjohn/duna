@@ -138,3 +138,15 @@ export const adminProcedure = protectedProcedure.use(
     return next({ ctx: { ...ctx, actor: ctx.actor } });
   }),
 );
+
+export const superAdminProcedure = protectedProcedure.use(
+  t.middleware(({ ctx, next }) => {
+    if (!ctx.actor?.roles.includes("super-admin")) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Super Admin access required",
+      });
+    }
+    return next({ ctx: { ...ctx, actor: ctx.actor } });
+  }),
+);

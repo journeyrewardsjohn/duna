@@ -1,5 +1,12 @@
-import { auditLog, getDatabase, memberships, membershipTiers } from "@duna/db";
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import {
+  auditLog,
+  dunaPlusGrants,
+  getDatabase,
+  memberships,
+  membershipTiers,
+  people,
+} from "@duna/db";
+import { and, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import type { ApiActor } from "./context";
 import {
   createBillingPortalSession,
@@ -24,15 +31,31 @@ export class MembershipError extends Error {
   }
 }
 
-export async function hasActiveDunaPlusMembership(
+export interface DunaPlusEntitlement {
+  readonly active: boolean;
+  readonly kind: "paid" | "complimentary" | "none";
+  readonly label: string;
+  readonly startsAt?: string;
+  readonly endsAt?: string;
+}
+
+export async function getDunaPlusEntitlement(
   personId: string,
   now = new Date(),
-): Promise<boolean> {
-  if (!process.env.DATABASE_URL) return false;
-  const row = (
-    await getDatabase()
+): Promise<DunaPlusEntitlement> {
+  if (!process.env.DATABASE_URL) {
+    return { active: false, kind: "none", label: "Duna+ not active" };
+  }
+  const database = getDatabase();
+  const [person, paid] = await Promise.all([
+    database.query.people.findFirst({
+      columns: { id: true, email: true },
+      where: eq(people.id, personId),
+    }),
+    database
       .select({
         id: memberships.id,
+        currentPeriodStartsAt: memberships.currentPeriodStartsAt,
         currentPeriodEndsAt: memberships.currentPeriodEndsAt,
         pausedUntil: memberships.pausedUntil,
       })
@@ -51,10 +74,67 @@ export async function hasActiveDunaPlusMembership(
       )
       .orderBy(desc(memberships.updatedAt))
       .limit(1)
+      .then((rows) => rows[0]),
+  ]);
+  if (
+    paid &&
+    (!paid.pausedUntil || paid.pausedUntil <= now) &&
+    (!paid.currentPeriodEndsAt || paid.currentPeriodEndsAt >= now)
+  ) {
+    return {
+      active: true,
+      kind: "paid",
+      label: "Duna+",
+      startsAt: paid.currentPeriodStartsAt?.toISOString(),
+      endsAt: paid.currentPeriodEndsAt?.toISOString(),
+    };
+  }
+  if (!person) {
+    return { active: false, kind: "none", label: "Duna+ not active" };
+  }
+  const identityCondition = person.email
+    ? or(
+        eq(dunaPlusGrants.personId, personId),
+        eq(dunaPlusGrants.emailNormalized, person.email.trim().toLowerCase()),
+      )
+    : eq(dunaPlusGrants.personId, personId);
+  const grant = (
+    await database
+      .select({
+        id: dunaPlusGrants.id,
+        startsAt: dunaPlusGrants.startsAt,
+        endsAt: dunaPlusGrants.endsAt,
+      })
+      .from(dunaPlusGrants)
+      .where(
+        and(
+          identityCondition,
+          eq(dunaPlusGrants.status, "active"),
+          isNull(dunaPlusGrants.revokedAt),
+          lte(dunaPlusGrants.startsAt, now),
+          or(isNull(dunaPlusGrants.endsAt), gte(dunaPlusGrants.endsAt, now)),
+        ),
+      )
+      .orderBy(desc(dunaPlusGrants.updatedAt))
+      .limit(1)
   )[0];
-  if (!row) return false;
-  if (row.pausedUntil && row.pausedUntil > now) return false;
-  return !row.currentPeriodEndsAt || row.currentPeriodEndsAt >= now;
+  if (!grant) {
+    return { active: false, kind: "none", label: "Duna+ not active" };
+  }
+  return {
+    active: true,
+    kind: "complimentary",
+    label: "Complimentary Duna+",
+    startsAt: grant.startsAt.toISOString(),
+    endsAt: grant.endsAt?.toISOString(),
+  };
+}
+
+export async function hasActiveDunaPlusMembership(
+  personId: string,
+  now = new Date(),
+): Promise<boolean> {
+  return (await getDunaPlusEntitlement(personId, now)).active;
 }
 
 async function connectedMembership(personId: string) {

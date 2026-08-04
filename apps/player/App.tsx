@@ -48,6 +48,7 @@ import {
   subscribeToWatchScoreDraft,
   type WatchScoreDraft,
 } from "./watch-scoring";
+import { VideoStudioScreen } from "./video-studio";
 
 // Metro requires a static module reference so the campaign image ships in the native bundle.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -150,7 +151,7 @@ function ThemeButton() {
   );
 }
 
-type Tab = "home" | "discover" | "play" | "wallet" | "you";
+type Tab = "home" | "discover" | "play" | "video" | "wallet" | "you";
 
 type CourtInventory = Awaited<
   ReturnType<DunaApiClient["public"]["courtBookingInventory"]["query"]>
@@ -176,6 +177,7 @@ const tabs: readonly {
   { key: "home", label: "Home", icon: "⌂" },
   { key: "discover", label: "Discover", icon: "⌖" },
   { key: "play", label: "Play", icon: "◫" },
+  { key: "video", label: "Video", icon: "◉" },
   { key: "wallet", label: "Wallet", icon: "$" },
   { key: "you", label: "You", icon: "◎" },
 ];
@@ -2919,6 +2921,9 @@ function ProfileScreen() {
             <Pill tone={settings?.membership ? "positive" : "neutral"}>
               {settings?.membership?.tierName ?? "Player"}
             </Pill>
+            {settings?.dunaPlus.kind === "complimentary" && (
+              <Pill tone="positive">Complimentary Duna+</Pill>
+            )}
             <Text style={styles.profileName}>{player.displayName}</Text>
             <Text style={styles.profileHandle}>
               @{player.handle} · {player.homeMarket}
@@ -4158,6 +4163,7 @@ function WatchScoreInbox() {
 }
 
 function DunaApp() {
+  const runtime = usePlayerRuntime();
   const [tab, setTab] = useState<Tab>("home");
   const [eventIndex, setEventIndex] = useState<number | null>(null);
   const [theme, setTheme] = useState<ThemeName>("light");
@@ -4216,6 +4222,7 @@ function DunaApp() {
             {tab === "home" && <HomeScreen onBook={setEventIndex} />}
             {tab === "discover" && <DiscoverScreen onBook={setEventIndex} />}
             {tab === "play" && <PlayScreen />}
+            {tab === "video" && <VideoStudioScreen runtime={runtime} />}
             {tab === "wallet" && <WalletScreen />}
             {tab === "you" && <ProfileScreen />}
           </Animated.View>

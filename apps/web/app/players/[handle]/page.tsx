@@ -18,6 +18,7 @@ import {
   RatingTrendChart,
   type RatingTrendPoint,
 } from "@/components/rating-trend-chart";
+import { DunaVideoGallery } from "@/components/duna-video-gallery";
 import { RatingOrbit } from "@/components/rating-orbit";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -103,9 +104,10 @@ export default async function PublicPlayerPage({
 }) {
   const { handle } = await params;
   const caller = await getServerCaller();
-  const [player, performance] = await Promise.all([
+  const [player, performance, videos] = await Promise.all([
     caller.public.playerProfile({ handle }).catch(() => undefined),
     caller.public.playerPerformance({ handle }).catch(() => undefined),
+    caller.public.videos({ ownerHandle: handle }).catch(() => []),
   ]);
   if (!player) notFound();
 
@@ -345,6 +347,15 @@ export default async function PublicPlayerPage({
             <span>source profiles</span>
           </article>
         </div>
+
+        {videos.length > 0 && (
+          <DunaVideoGallery
+            description={`${player.displayName}'s public live streams and selected match replays.`}
+            eyebrow="Player video"
+            title="From their side of the court."
+            videos={videos}
+          />
+        )}
 
         {editorial && (
           <section className="public-profile-editorial">

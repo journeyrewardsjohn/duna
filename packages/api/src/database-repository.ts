@@ -89,6 +89,7 @@ import type {
 } from "./repository-contract";
 import { loadGuardianReviewQueue } from "./identity";
 import { loadIdentityVerification } from "./identity-verification";
+import { getDunaPlusEntitlement } from "./membership";
 
 const publicSessionStatuses = [
   "published",
@@ -1571,6 +1572,7 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
     sourceConnectionRows,
     guardianInvitation,
     identityVerification,
+    dunaPlus,
   ] = await Promise.all([
     database.query.people.findFirst({ where: eq(people.id, personId) }),
     loadPeople([personId]).then((rows) => rows[0]),
@@ -1630,6 +1632,7 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
       orderBy: desc(guardianInvitations.createdAt),
     }),
     loadIdentityVerification(personId),
+    getDunaPlusEntitlement(personId),
   ]);
   if (!person || !summary) throw new Error("Player profile was not found");
 
@@ -1812,6 +1815,7 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
       aiConfigured: Boolean(process.env.OPENAI_API_KEY),
     },
     household,
+    dunaPlus,
     membership:
       membership && interval
         ? {

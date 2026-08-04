@@ -85,3 +85,6 @@ The product and technical acceptance matrix lives in
 
 Connected-environment and release procedures live in
 [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
+
+The iOS-first live-streaming, upload, playback, privacy, and video-governance
+architecture lives in [`docs/VIDEO_PLATFORM.md`](docs/VIDEO_PLATFORM.md).

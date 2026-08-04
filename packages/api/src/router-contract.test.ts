@@ -183,5 +183,27 @@ describe("tRPC contract surface", () => {
     ).rejects.toMatchObject({
       code: "FORBIDDEN",
     });
+    await expect(
+      caller.admin.grantComplimentaryDunaPlus({
+        email: "player@example.com",
+        startsAt: "2026-08-04T18:00:00.000Z",
+        reason: "Complimentary partner access.",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    await expect(
+      caller.admin.updateVideoQuotaPolicy({
+        monthlyLiveSeconds: 14_400,
+        monthlyUploadSeconds: 86_400,
+        enforceLiveLimit: true,
+        enforceUploadLimit: false,
+        reason: "Attempted policy change without authority.",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
   });
 });

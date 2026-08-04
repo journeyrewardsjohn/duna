@@ -5,7 +5,7 @@
     "scheme": "duna",
     "version": "1.1.0",
     "platforms": ["ios", "android"],
-    "orientation": "portrait",
+    "orientation": "default",
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
     "ios": {
@@ -16,6 +16,9 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSSupportsLiveActivities": true,
         "NSSupportsLiveActivitiesFrequentUpdates": true,
+        "NSCameraUsageDescription": "Duna uses the camera to record and live stream beach volleyball.",
+        "NSMicrophoneUsageDescription": "Duna uses the microphone only when you choose to include audio in a recording or live stream.",
+        "NSPhotoLibraryUsageDescription": "Duna lets you choose volleyball videos to add to your private archive or profile.",
         "NSContactsUsageDescription": "Duna uses contacts you select to find frequent partners or send a one-time game invitation.",
         "NSLocationWhenInUseUsageDescription": "Duna uses your location to show nearby play and venues."
       }
@@ -34,6 +37,7 @@
     },
     "plugins": [
       "./plugins/with-watch-platforms",
+      "./plugins/with-ios-release-compatibility",
       "@bacons/apple-targets",
       "expo-contacts",
       [
