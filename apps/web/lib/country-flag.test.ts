@@ -5,6 +5,10 @@ describe("countryFlag", () => {
   it("renders two and three letter federation codes", () => {
     expect(countryFlag("SWE")).toBe("🇸🇪");
     expect(countryFlag("US")).toBe("🇺🇸");
+    expect(countryFlag("BLR")).toBe("🇧🇾");
+    expect(countryFlag("ISR")).toBe("🇮🇱");
+    expect(countryFlag("SVK")).toBe("🇸🇰");
+    expect(countryFlag("TUR")).toBe("🇹🇷");
   });
 
   it("uses a neutral flag when the federation is unknown", () => {
