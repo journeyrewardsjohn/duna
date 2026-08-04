@@ -11,6 +11,7 @@ export interface SandActionState {
 function refreshSandAdmin(): void {
   for (const path of [
     "/admin/sand-data",
+    "/admin/pro-tour",
     "/admin/player-mapping",
     "/admin/ratings-lab",
     "/admin/profile-merge",
@@ -93,6 +94,28 @@ export async function refreshWorldRankingsAction(
     };
   } catch (error) {
     return failure(error, "World rankings could not be refreshed.");
+  }
+}
+
+export async function refreshAvpLeagueAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const seasonValue = String(formData.get("season") ?? "").trim();
+  const season = seasonValue ? Number.parseInt(seasonValue, 10) : undefined;
+  if (season !== undefined && !Number.isInteger(season)) {
+    return { status: "error", message: "Enter a valid AVP season." };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.refreshAvpLeague({ season });
+    refreshSandAdmin();
+    return {
+      status: "success",
+      message: `AVP ${season ?? "current"} refreshed: ${result.counters.matches} matches and ${result.counters.players} player identities processed.`,
+    };
+  } catch (error) {
+    return failure(error, "The AVP League season could not be refreshed.");
   }
 }
 

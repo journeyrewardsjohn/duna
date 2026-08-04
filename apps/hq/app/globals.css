@@ -10508,7 +10508,7 @@ button {
 }
 
 .player-combobox__menu {
-  background: var(--color-card);
+  background: var(--color-surface-raised);
   border: 1px solid var(--color-line-strong);
   border-radius: 14px;
   box-shadow: 0 18px 45px rgb(5 14 30 / 16%);
@@ -16760,6 +16760,864 @@ button {
   .admin-audit-table p,
   .admin-audit-table time {
     margin-left: 1rem;
+  }
+}
+
+/* Super Admin professional operations */
+
+.pro-admin-layout {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.pro-admin-jump-nav {
+  align-items: center;
+  background: var(--color-ink);
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 18px;
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.55rem;
+  scrollbar-width: none;
+}
+
+.pro-admin-jump-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.pro-admin-jump-nav a {
+  align-items: center;
+  border-radius: 12px;
+  color: rgb(255 255 255 / 72%);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 800;
+  gap: 0.45rem;
+  min-height: 40px;
+  padding: 0.65rem 0.85rem;
+}
+
+.pro-admin-jump-nav a:hover {
+  background: rgb(255 255 255 / 9%);
+  color: var(--color-white);
+}
+
+.pro-admin-metrics {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.pro-admin-metrics article {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  min-height: 140px;
+  padding: 1rem;
+}
+
+.pro-admin-metrics small,
+.pro-admin-metrics span {
+  color: var(--color-bone-muted);
+}
+
+.pro-admin-metrics .duna-numeric {
+  font-size: clamp(1.9rem, 3vw, 2.8rem);
+  margin-top: auto;
+}
+
+.pro-admin-sync,
+.pro-admin-events,
+.pro-admin-broadcast,
+.pro-admin-avp,
+.pro-admin-identity-queue {
+  scroll-margin-top: 5.5rem;
+}
+
+.pro-admin-sync > p,
+.pro-admin-events > p,
+.pro-admin-broadcast > p,
+.pro-admin-avp > p,
+.pro-admin-identity-queue > p {
+  color: var(--color-bone-muted);
+  line-height: 1.65;
+  max-width: 880px;
+}
+
+.pro-admin-sync__grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.pro-admin-sync__grid > article {
+  align-items: center;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 1rem;
+}
+
+.pro-admin-source-mark {
+  align-items: center;
+  background: linear-gradient(135deg, #c88708, #f5c34d);
+  border-radius: 12px;
+  color: var(--color-depth);
+  display: flex;
+  font-size: 0.7rem;
+  font-weight: 950;
+  height: 42px;
+  justify-content: center;
+  letter-spacing: -0.05em;
+  width: 42px;
+}
+
+.pro-admin-source-mark--avp {
+  background: linear-gradient(135deg, #ffce19, #ef493e);
+  color: var(--color-white);
+  font-size: 0.58rem;
+  letter-spacing: -0.02em;
+}
+
+.pro-admin-sync__grid > article > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pro-admin-sync__grid small {
+  color: var(--color-bone-muted);
+  margin-top: 0.2rem;
+}
+
+.pro-admin-sync-form {
+  align-items: end;
+  display: grid;
+  gap: 0.55rem;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(120px, 0.35fr) minmax(220px, 1fr);
+}
+
+.pro-admin-sync-form label,
+.pro-admin-event-filters label,
+.pro-admin-event-picker,
+.pro-admin-watch-form label,
+.pro-admin-roster-editor form > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.pro-admin-sync-form label > span,
+.pro-admin-event-filters label > span,
+.pro-admin-event-picker > span,
+.pro-admin-watch-form label > span,
+.pro-admin-roster-editor form > label > span {
+  color: var(--color-bone-muted);
+  font-size: max(0.68rem, 10px);
+  font-weight: 750;
+}
+
+.pro-admin-sync-form input,
+.pro-admin-event-filters input,
+.pro-admin-event-filters select,
+.pro-admin-event-picker select,
+.pro-admin-watch-form input,
+.pro-admin-watch-form select,
+.pro-admin-watch-option form input,
+.pro-admin-avp__filters select,
+.pro-admin-roster-editor form > label input,
+.pro-admin-roster-editor form > label select,
+.pro-admin-identity-row form > input {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 11px;
+  color: var(--color-bone);
+  min-height: 44px;
+  outline: none;
+  padding: 0.65rem 0.75rem;
+  width: 100%;
+}
+
+.pro-admin-sync-form input:focus,
+.pro-admin-event-filters input:focus,
+.pro-admin-event-filters select:focus,
+.pro-admin-event-picker select:focus,
+.pro-admin-watch-form input:focus,
+.pro-admin-watch-form select:focus,
+.pro-admin-roster-editor input:focus,
+.pro-admin-roster-editor select:focus,
+.pro-admin-identity-row form > input:focus {
+  border-color: rgb(var(--accent-rgb) / 55%);
+  box-shadow: 0 0 0 3px rgb(var(--accent-rgb) / 9%);
+}
+
+.pro-admin-sync-form .sand-action-feedback {
+  grid-column: 1 / -1;
+}
+
+.pro-admin-event-filters {
+  align-items: end;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(260px, 1fr) minmax(130px, 0.25fr) minmax(
+      150px,
+      0.3fr
+    );
+  margin: 1rem 0;
+}
+
+.pro-admin-event-search {
+  align-items: center;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 11px;
+  display: grid !important;
+  gap: 0.4rem !important;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding-left: 0.75rem;
+}
+
+.pro-admin-event-search svg {
+  color: var(--color-bone-muted);
+}
+
+.pro-admin-event-search input {
+  background: transparent;
+  border: 0;
+  box-shadow: none !important;
+}
+
+.pro-admin-event-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pro-admin-event-card {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 17px;
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.pro-admin-event-card > header,
+.pro-admin-event-card > footer,
+.pro-admin-event-card__coverage,
+.pro-admin-watch-list section > header,
+.pro-admin-roster-editor > header,
+.pro-admin-team-card > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.pro-admin-event-card > header > span,
+.pro-admin-event-card > footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.pro-admin-event-card > header > small,
+.pro-admin-event-card__coverage > small,
+.pro-admin-more {
+  color: var(--color-bone-muted);
+}
+
+.pro-admin-event-card__body {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.pro-admin-event-card h3,
+.pro-admin-roster-editor h3,
+.pro-admin-team-card h3,
+.pro-admin-broadcast__workspace aside h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.035em;
+  margin: 0;
+}
+
+.pro-admin-event-card__body p {
+  align-items: center;
+  color: var(--color-bone-muted);
+  display: flex;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0;
+}
+
+.pro-admin-event-card dl,
+.pro-admin-team-card dl,
+.pro-admin-broadcast__workspace aside dl {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(3, minmax(54px, 1fr));
+  margin: 0;
+}
+
+.pro-admin-event-card dl > div,
+.pro-admin-team-card dl > div,
+.pro-admin-broadcast__workspace aside dl > div {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  min-width: 54px;
+  padding: 0.55rem;
+  text-align: center;
+}
+
+.pro-admin-event-card dt,
+.pro-admin-team-card dt,
+.pro-admin-broadcast__workspace aside dt {
+  color: var(--color-bone-muted);
+  font-size: 0.6rem;
+}
+
+.pro-admin-event-card dd,
+.pro-admin-team-card dd,
+.pro-admin-broadcast__workspace aside dd {
+  font-weight: 850;
+  margin: 0.2rem 0 0;
+}
+
+.pro-admin-event-card__coverage {
+  border-block: 1px solid var(--color-line);
+  gap: 0.8rem;
+  padding: 0.7rem 0;
+}
+
+.pro-admin-event-card__coverage > span {
+  align-items: center;
+  display: grid;
+  gap: 0 0.45rem;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.pro-admin-event-card__coverage > span svg {
+  color: var(--color-warning);
+  grid-row: 1 / 3;
+}
+
+.pro-admin-event-card__coverage small {
+  color: var(--color-bone-muted);
+}
+
+.pro-admin-event-card > footer a:last-child {
+  align-items: center;
+  color: var(--color-bone-muted);
+  display: inline-flex;
+  font-size: 0.7rem;
+  gap: 0.3rem;
+  margin-left: auto;
+  padding: 0.5rem;
+}
+
+.pro-admin-more {
+  display: block;
+  margin-top: 0.8rem;
+}
+
+.pro-admin-event-picker {
+  margin: 1rem 0;
+  max-width: 760px;
+}
+
+.pro-admin-broadcast__workspace {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(220px, 0.38fr) minmax(0, 1fr);
+}
+
+.pro-admin-broadcast__workspace > aside {
+  background: var(--color-ink);
+  border-radius: 16px;
+  color: var(--color-white);
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.pro-admin-broadcast__workspace > aside .hq-eyebrow,
+.pro-admin-broadcast__workspace > aside p,
+.pro-admin-broadcast__workspace > aside dt {
+  color: rgb(255 255 255 / 62%);
+}
+
+.pro-admin-broadcast__workspace > aside p {
+  margin: 0;
+}
+
+.pro-admin-broadcast__workspace > aside dl {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.pro-admin-broadcast__workspace > aside dl > div {
+  background: rgb(255 255 255 / 7%);
+  border-color: rgb(255 255 255 / 10%);
+}
+
+.pro-admin-watch-form {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pro-admin-watch-form__reason {
+  grid-column: 1 / -1;
+}
+
+.pro-admin-watch-form > button {
+  justify-content: center;
+}
+
+.pro-admin-watch-form > .sand-action-feedback {
+  grid-column: 1 / -1;
+}
+
+.pro-admin-watch-list {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 1rem;
+}
+
+.pro-admin-watch-list > section {
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  padding: 0.75rem;
+}
+
+.pro-admin-watch-list section > header > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.pro-admin-watch-list section > header small {
+  color: var(--color-bone-muted);
+}
+
+.pro-admin-watch-option {
+  align-items: center;
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  padding: 0.7rem 0;
+}
+
+.pro-admin-watch-option__icon {
+  align-items: center;
+  background: rgb(var(--warning-rgb) / 10%);
+  border-radius: 9px;
+  color: var(--color-warning);
+  display: flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.pro-admin-watch-option > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+}
+
+.pro-admin-watch-option small,
+.pro-admin-watch-option > a {
+  color: var(--color-bone-muted);
+}
+
+.pro-admin-watch-option > a {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.pro-admin-watch-option details {
+  position: relative;
+}
+
+.pro-admin-watch-option summary {
+  align-items: center;
+  border: 1px solid var(--color-line);
+  border-radius: 9px;
+  color: var(--color-bone-muted);
+  cursor: pointer;
+  display: flex;
+  height: 34px;
+  justify-content: center;
+  list-style: none;
+  width: 34px;
+}
+
+.pro-admin-watch-option details form {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  box-shadow: 0 18px 40px rgb(7 19 35 / 18%);
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  width: 250px;
+  z-index: 5;
+}
+
+.pro-admin-watch-option details button {
+  background: var(--color-danger);
+  border: 0;
+  border-radius: 9px;
+  color: var(--color-white);
+  min-height: 36px;
+}
+
+.pro-admin-watch-option > .sand-action-feedback {
+  grid-column: 2 / -1;
+}
+
+.pro-admin-avp__filters {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+
+.pro-admin-avp__filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.pro-admin-avp__filters label > span {
+  color: var(--color-bone-muted);
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.pro-admin-avp__filters > div {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+}
+
+.pro-admin-avp__filters > div button {
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  color: var(--color-bone-muted);
+  min-height: 38px;
+  padding: 0.55rem 0.75rem;
+  text-transform: capitalize;
+}
+
+.pro-admin-avp__filters > div button.active {
+  background: var(--color-ink);
+  color: var(--color-white);
+}
+
+.pro-admin-avp__filters > .duna-badge {
+  margin-left: auto;
+}
+
+.pro-admin-avp__workspace {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(340px, 0.8fr) minmax(440px, 1.2fr);
+}
+
+.pro-admin-team-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-height: 820px;
+  overflow: auto;
+  padding-right: 0.2rem;
+}
+
+.pro-admin-team-card {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 15px;
+  color: var(--color-bone);
+  cursor: pointer;
+  display: grid;
+  gap: 0.6rem;
+  min-height: 190px;
+  padding: 0.85rem;
+  text-align: left;
+}
+
+.pro-admin-team-card:hover,
+.pro-admin-team-card.active {
+  border-color: rgb(var(--accent-rgb) / 60%);
+  box-shadow: 0 0 0 3px rgb(var(--accent-rgb) / 8%);
+}
+
+.pro-admin-team-card header > span {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.pro-admin-team-card header > strong {
+  color: var(--color-bone-muted);
+  font-size: 0.65rem;
+}
+
+.pro-admin-team-card > p {
+  color: var(--color-bone-muted);
+  margin: 0;
+}
+
+.pro-admin-team-card dl {
+  margin-top: auto;
+}
+
+.pro-admin-roster-editor {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 17px;
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.pro-admin-roster-editor__players {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pro-admin-roster-editor__players > button {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  color: var(--color-bone);
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+  min-height: 62px;
+  padding: 0.7rem;
+  text-align: left;
+}
+
+.pro-admin-roster-editor__players > button.active {
+  border-color: rgb(var(--accent-rgb) / 60%);
+  box-shadow: 0 0 0 3px rgb(var(--accent-rgb) / 8%);
+}
+
+.pro-admin-roster-editor__players > button > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pro-admin-roster-editor__players small {
+  color: var(--color-bone-muted);
+}
+
+.pro-admin-roster-editor__players svg[aria-label="Mapped"] {
+  color: var(--color-positive);
+}
+
+.pro-admin-roster-editor__players svg[aria-label="Needs mapping"] {
+  color: var(--color-warning);
+}
+
+.pro-admin-roster-editor > form {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pro-admin-roster-editor > form > .player-combobox,
+.pro-admin-roster-editor__reason,
+.pro-admin-roster-editor > form > .sand-action-feedback {
+  grid-column: 1 / -1;
+}
+
+.pro-admin-roster-editor > form > button {
+  justify-content: center;
+}
+
+.pro-admin-identity-queue > div {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.pro-admin-identity-row {
+  align-items: center;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: minmax(180px, 0.4fr) minmax(0, 1fr);
+  padding: 0.8rem;
+}
+
+.pro-admin-identity-row > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.pro-admin-identity-row > span small {
+  color: var(--color-bone-muted);
+}
+
+.pro-admin-identity-row form {
+  align-items: end;
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: minmax(240px, 1fr) minmax(220px, 0.8fr) auto;
+}
+
+.pro-admin-identity-row form > .sand-action-feedback {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1180px) {
+  .pro-admin-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pro-admin-avp__workspace,
+  .pro-admin-broadcast__workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-admin-broadcast__workspace > aside,
+  .pro-admin-roster-editor {
+    position: static;
+  }
+}
+
+@media (max-width: 900px) {
+  .pro-admin-sync__grid,
+  .pro-admin-event-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-admin-event-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pro-admin-event-search {
+    grid-column: 1 / -1;
+  }
+
+  .pro-admin-team-grid {
+    max-height: 560px;
+  }
+
+  .pro-admin-identity-row {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-admin-identity-row form {
+    grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
+  }
+
+  .pro-admin-identity-row form > button {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 680px) {
+  .pro-admin-metrics,
+  .pro-admin-event-filters,
+  .pro-admin-team-grid,
+  .pro-admin-roster-editor__players,
+  .pro-admin-watch-form,
+  .pro-admin-roster-editor > form,
+  .pro-admin-identity-row form {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-admin-metrics article {
+    min-height: 115px;
+  }
+
+  .pro-admin-sync-form {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-admin-event-search,
+  .pro-admin-watch-form__reason,
+  .pro-admin-roster-editor > form > .player-combobox,
+  .pro-admin-roster-editor__reason,
+  .pro-admin-roster-editor > form > .sand-action-feedback,
+  .pro-admin-identity-row form > button {
+    grid-column: auto;
+  }
+
+  .pro-admin-event-card__body {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-admin-event-card > footer .hq-button {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .pro-admin-event-card > footer a:last-child {
+    margin-left: 0;
+  }
+
+  .pro-admin-broadcast__workspace > aside dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pro-admin-watch-option {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .pro-admin-watch-option > a {
+    grid-column: 2;
+  }
+
+  .pro-admin-watch-option > details {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+
+  .pro-admin-watch-option details form {
+    max-width: calc(100vw - 4rem);
+  }
+
+  .pro-admin-roster-editor .player-combobox__menu,
+  .pro-admin-identity-row .player-combobox__menu {
+    margin-top: 0.35rem;
+    position: static;
+  }
+
+  .pro-admin-avp__filters > .duna-badge {
+    margin-left: 0;
   }
 }
 

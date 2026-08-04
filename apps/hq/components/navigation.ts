@@ -59,6 +59,7 @@ export const adminModules = [
   { slug: "trust", label: "Trust + safety", icon: ShieldCheck },
   { slug: "ratings", label: "Ratings", icon: Activity },
   { slug: "sand-data", label: "Sand data", icon: DatabaseZap },
+  { slug: "pro-tour", label: "Pro tour", icon: Trophy },
   { slug: "player-mapping", label: "Player mapping", icon: UserRoundSearch },
   { slug: "ratings-lab", label: "Ratings lab", icon: FlaskConical },
   { slug: "profile-merge", label: "Merge profiles", icon: GitMerge },
