@@ -41,23 +41,16 @@ function formatMatchDate(value: string, options: Intl.DateTimeFormatOptions) {
   }).format(new Date(value));
 }
 
-function smoothPath(
+function stepAfterPath(
   points: readonly { readonly x: number; readonly y: number }[],
 ) {
   if (points.length === 0) return "";
-  if (points.length === 1) return `M ${points[0]?.x ?? 0} ${points[0]?.y ?? 0}`;
 
   let path = `M ${points[0]?.x ?? 0} ${points[0]?.y ?? 0}`;
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const current = points[index] ?? points[0]!;
-    const next = points[index + 1] ?? current;
-    const before = points[index - 1] ?? current;
-    const after = points[index + 2] ?? next;
-    const controlOneX = current.x + (next.x - before.x) / 6;
-    const controlOneY = current.y + (next.y - before.y) / 6;
-    const controlTwoX = next.x - (after.x - current.x) / 6;
-    const controlTwoY = next.y - (after.y - current.y) / 6;
-    path += ` C ${controlOneX} ${controlOneY}, ${controlTwoX} ${controlTwoY}, ${next.x} ${next.y}`;
+  for (let index = 1; index < points.length; index += 1) {
+    const point = points[index];
+    if (!point) continue;
+    path += ` H ${point.x} V ${point.y}`;
   }
   return path;
 }
@@ -69,6 +62,19 @@ function selectedOpponent(match: MatchSummary | undefined, viewerId: string) {
   return opponents
     .map((player) => compactPlayerName(player.displayName))
     .join(" / ");
+}
+
+function selectedPartner(match: MatchSummary | undefined, viewerId: string) {
+  if (!match) return undefined;
+  const viewerOnA = match.teamA.some((player) => player.id === viewerId);
+  const viewerOnB = match.teamB.some((player) => player.id === viewerId);
+  if (!viewerOnA && !viewerOnB) return undefined;
+
+  const viewerTeam = viewerOnA ? match.teamA : match.teamB;
+  const partners = viewerTeam
+    .filter((player) => player.id !== viewerId)
+    .map((player) => compactPlayerName(player.displayName));
+  return partners.length > 0 ? partners.join(" / ") : undefined;
 }
 
 function scoreline(match: MatchSummary | undefined) {
@@ -194,6 +200,9 @@ export function MatchPerformanceAnalytics({
   const [selectedByMetric, setSelectedByMetric] = useState<
     Partial<Record<MetricKey, number>>
   >({});
+  const [hoveredByMetric, setHoveredByMetric] = useState<
+    Partial<Record<MetricKey, number>>
+  >({});
   const selectedIndex = Math.min(
     selectedByMetric[metric.key] ?? Math.max(metric.points.length - 1, 0),
     Math.max(metric.points.length - 1, 0),
@@ -209,6 +218,16 @@ export function MatchPerformanceAnalytics({
   const result = selectedMatch
     ? getMatchResult(selectedMatch, viewerId)
     : "unknown";
+  const hoveredIndex = hoveredByMetric[metric.key];
+  const hoveredPoint =
+    typeof hoveredIndex === "number" ? metric.points[hoveredIndex] : undefined;
+  const hoveredMatch = hoveredPoint
+    ? matchById.get(hoveredPoint.id)
+    : undefined;
+  const hoveredResult = hoveredMatch
+    ? getMatchResult(hoveredMatch, viewerId)
+    : "unknown";
+  const hoveredPartner = selectedPartner(hoveredMatch, viewerId);
   const gradientId = useId().replaceAll(":", "");
 
   const width = 920;
@@ -245,13 +264,34 @@ export function MatchPerformanceAnalytics({
       ((maximum - point.value) / range) *
         (height - padding.top - padding.bottom),
   }));
-  const linePath = smoothPath(chartPoints);
+  const linePath = stepAfterPath(chartPoints);
   const areaPath =
     chartPoints.length > 0
       ? `${linePath} L ${chartPoints.at(-1)?.x ?? 0} ${height - padding.bottom} L ${chartPoints[0]?.x ?? 0} ${height - padding.bottom} Z`
       : "";
   const firstDate = metric.points[0]?.playedAt;
   const lastDate = metric.points.at(-1)?.playedAt;
+  const hoveredChartPoint =
+    typeof hoveredIndex === "number" ? chartPoints[hoveredIndex] : undefined;
+
+  function revealPoint(index: number) {
+    setSelectedByMetric((current) => ({
+      ...current,
+      [metric.key]: index,
+    }));
+    setHoveredByMetric((current) => ({
+      ...current,
+      [metric.key]: index,
+    }));
+  }
+
+  function clearHoveredPoint() {
+    setHoveredByMetric((current) => {
+      const next = { ...current };
+      delete next[metric.key];
+      return next;
+    });
+  }
 
   return (
     <section
@@ -416,49 +456,53 @@ export function MatchPerformanceAnalytics({
                 })}
                 <path d={areaPath} fill={`url(#${gradientId})`} />
                 <path className="match-performance__line" d={linePath} />
-                {chartPoints.map(({ point, x, y }, index) => (
-                  <circle
-                    aria-label={`${formatMatchDate(point.playedAt, { month: "short", day: "numeric", year: "numeric" })}: ${metricValue(metric, point.value)}`}
-                    className={
-                      index === selectedIndex
-                        ? "match-performance__point is-active"
-                        : "match-performance__point"
-                    }
-                    cx={x}
-                    cy={y}
-                    key={point.id}
-                    onClick={() =>
-                      setSelectedByMetric((current) => ({
-                        ...current,
-                        [metric.key]: index,
-                      }))
-                    }
-                    onFocus={() =>
-                      setSelectedByMetric((current) => ({
-                        ...current,
-                        [metric.key]: index,
-                      }))
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setSelectedByMetric((current) => ({
-                          ...current,
-                          [metric.key]: index,
-                        }));
-                      }
-                    }}
-                    onMouseEnter={() =>
-                      setSelectedByMetric((current) => ({
-                        ...current,
-                        [metric.key]: index,
-                      }))
-                    }
-                    r={index === selectedIndex ? 7 : 4.5}
-                    role="button"
-                    tabIndex={0}
+                {hoveredChartPoint && (
+                  <line
+                    aria-hidden="true"
+                    className="match-performance__hover-guide"
+                    x1={hoveredChartPoint.x}
+                    x2={hoveredChartPoint.x}
+                    y1={padding.top}
+                    y2={height - padding.bottom}
                   />
-                ))}
+                )}
+                {chartPoints.map(({ point, x }, index) => {
+                  const previousX = chartPoints[index - 1]?.x ?? padding.left;
+                  const nextX =
+                    chartPoints[index + 1]?.x ?? width - padding.right;
+                  const startX =
+                    index === 0 ? padding.left : (previousX + x) / 2;
+                  const endX =
+                    index === chartPoints.length - 1
+                      ? width - padding.right
+                      : (x + nextX) / 2;
+
+                  return (
+                    <rect
+                      aria-label={`${formatMatchDate(point.playedAt, { month: "short", day: "numeric", year: "numeric" })}: ${metricValue(metric, point.value)}`}
+                      className="match-performance__hit-area"
+                      fill="transparent"
+                      height={height - padding.top - padding.bottom}
+                      key={point.id}
+                      onBlur={clearHoveredPoint}
+                      onClick={() => revealPoint(index)}
+                      onFocus={() => revealPoint(index)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          revealPoint(index);
+                        }
+                      }}
+                      onMouseEnter={() => revealPoint(index)}
+                      onMouseLeave={clearHoveredPoint}
+                      role="button"
+                      tabIndex={0}
+                      width={Math.max(endX - startX, 1)}
+                      x={startX}
+                      y={padding.top}
+                    />
+                  );
+                })}
                 {firstDate && (
                   <text
                     className="match-performance__axis-date"
@@ -485,6 +529,83 @@ export function MatchPerformanceAnalytics({
                   </text>
                 )}
               </svg>
+              {hoveredPoint && hoveredChartPoint && (
+                <div
+                  aria-live="polite"
+                  className={`match-performance__tooltip match-performance__tooltip--${hoveredResult} ${
+                    hoveredChartPoint.x / width < 0.3
+                      ? "is-right"
+                      : hoveredChartPoint.x / width > 0.7
+                        ? "is-left"
+                        : "is-center"
+                  }`}
+                  style={{ left: `${(hoveredChartPoint.x / width) * 100}%` }}
+                >
+                  <div className="match-performance__tooltip-topline">
+                    <span className="match-performance__tooltip-result">
+                      {hoveredResult === "win"
+                        ? "Win"
+                        : hoveredResult === "loss"
+                          ? "Loss"
+                          : "Result"}
+                    </span>
+                    <time dateTime={hoveredPoint.playedAt}>
+                      {formatMatchDate(hoveredPoint.playedAt, {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </time>
+                  </div>
+                  {(hoveredMatch?.eventName || hoveredMatch?.roundLabel) && (
+                    <small className="match-performance__tooltip-context">
+                      {[hoveredMatch?.eventName, hoveredMatch?.roundLabel]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </small>
+                  )}
+                  <strong className="match-performance__tooltip-matchup">
+                    <span>
+                      {hoveredPartner ? `You / ${hoveredPartner}` : "You"}
+                    </span>
+                    <em>vs</em>
+                    <span>
+                      {selectedOpponent(hoveredMatch, viewerId) ?? "Opponent"}
+                    </span>
+                  </strong>
+                  <small className="match-performance__tooltip-meta">
+                    {[hoveredPoint.venueName, scoreline(hoveredMatch)]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </small>
+                  <div className="match-performance__tooltip-movement">
+                    <div>
+                      <span>Movement</span>
+                      <strong
+                        className={
+                          hoveredPoint.change > 0
+                            ? "is-positive"
+                            : hoveredPoint.change < 0
+                              ? "is-negative"
+                              : undefined
+                        }
+                      >
+                        {signed(
+                          hoveredPoint.change,
+                          metric.key === "rating" ? 2 : 1,
+                        )}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>{metric.label} after</span>
+                      <strong>{metricValue(metric, hoveredPoint.value)}</strong>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
