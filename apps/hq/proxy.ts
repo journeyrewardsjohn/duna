@@ -6,25 +6,13 @@ import {
   partitionAuthkitHeaders,
 } from "@workos-inc/authkit-nextjs";
 import { type NextRequest, NextResponse } from "next/server";
-
-function routeMatches(pathname: string, root: string): boolean {
-  return pathname === root || pathname.startsWith(`${root}/`);
-}
-
-function isPublicRoute(pathname: string): boolean {
-  return (
-    routeMatches(pathname, "/sign-in") ||
-    routeMatches(pathname, "/sign-up") ||
-    routeMatches(pathname, "/auth/callback") ||
-    routeMatches(pathname, "/api/health")
-  );
-}
+import { isPublicHqRoute, routeMatches } from "./lib/public-routes";
 
 export default async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   if (!isWorkOSAuthKitConfigured()) {
     if (
-      isPublicRoute(pathname) ||
+      isPublicHqRoute(pathname) ||
       process.env.NEXT_PUBLIC_DEMO_MODE !== "false"
     ) {
       return NextResponse.next();
@@ -35,7 +23,7 @@ export default async function proxy(request: NextRequest) {
   const result = await authkit(request, {
     redirectUri: new URL("/auth/callback", request.url).toString(),
   });
-  if (!isPublicRoute(pathname) && !result.session.user) {
+  if (!isPublicHqRoute(pathname) && !result.session.user) {
     if (routeMatches(pathname, "/api")) {
       const { responseHeaders } = partitionAuthkitHeaders(
         request,
@@ -57,7 +45,7 @@ export default async function proxy(request: NextRequest) {
     result.session.user &&
     !result.session.organizationId &&
     !routeMatches(pathname, "/onboarding") &&
-    !isPublicRoute(pathname)
+    !isPublicHqRoute(pathname)
   ) {
     return handleAuthkitProxy(request, result.headers, {
       redirect: new URL("/onboarding", request.url),
