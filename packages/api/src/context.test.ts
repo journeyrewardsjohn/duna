@@ -3,6 +3,7 @@ import {
   createApiContext,
   createApiContextFromWorkOSSession,
   createDemoActor,
+  isWorkOSAccessTokenForClient,
   scopesForRoles,
   workOSAccessTokenExpiresAt,
 } from "./context";
@@ -42,5 +43,28 @@ describe("API identity context", () => {
     expect(workOSAccessTokenExpiresAt("not-a-token")).toBeLessThanOrEqual(
       Date.now(),
     );
+  });
+
+  it("accepts WorkOS application tokens regardless of issuer URL formatting", () => {
+    expect(
+      isWorkOSAccessTokenForClient(
+        {
+          sub: "user_test",
+          client_id: "client_test",
+          iss: "https://api.workos.com/",
+        },
+        "client_test",
+      ),
+    ).toBe(true);
+    expect(
+      isWorkOSAccessTokenForClient(
+        {
+          sub: "user_test",
+          client_id: "another_client",
+          iss: "https://auth.duna.coach",
+        },
+        "client_test",
+      ),
+    ).toBe(false);
   });
 });
