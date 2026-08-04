@@ -19,10 +19,10 @@ import {
   ImageBackground,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import { createDunaApiClient, type DunaApiClient } from "./mobile-api";
+import { FellixText as Text } from "./fellix-text";
 
 type PlayerDashboard = Awaited<
   ReturnType<DunaApiClient["player"]["dashboard"]["query"]>

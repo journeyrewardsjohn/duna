@@ -18,8 +18,6 @@ import {
   Share,
   StyleSheet,
   Switch,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import Video from "react-native-video";
@@ -32,6 +30,10 @@ import VideoCapture, {
 } from "./modules/duna-video-capture";
 import { dunaWebUrl, type DunaApiClient } from "./mobile-api";
 import type { PlayerRuntime } from "./runtime";
+import {
+  FellixText as Text,
+  FellixTextInput as TextInput,
+} from "./fellix-text";
 
 type VideoStudioData = Awaited<
   ReturnType<DunaApiClient["player"]["videoStudio"]["query"]>
@@ -1840,11 +1842,11 @@ const styles = StyleSheet.create({
     height: 6,
     width: 6,
   },
-  liveBadgeText: { color: "#ffffff", fontSize: 8, fontWeight: "900" },
+  liveBadgeText: { color: "#ffffff", fontSize: 10, fontWeight: "900" },
   videoThumbMeta: {
     bottom: 7,
     color: "rgba(255,255,255,0.8)",
-    fontSize: 9,
+    fontSize: 10,
     position: "absolute",
     right: 8,
   },
@@ -1856,7 +1858,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   videoMeta: { color: palette.muted, fontSize: 10 },
-  videoPrivacy: { color: palette.aqua, fontSize: 9, fontWeight: "700" },
+  videoPrivacy: { color: palette.aqua, fontSize: 10, fontWeight: "700" },
   metricLine: { color: palette.positive, fontSize: 10, fontWeight: "700" },
   emptyCard: {
     backgroundColor: "#f2efe8",
@@ -1941,7 +1943,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#e8f5ee",
     borderRadius: 8,
     color: palette.positive,
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "900",
     overflow: "hidden",
     paddingHorizontal: 6,
@@ -2084,7 +2086,7 @@ const styles = StyleSheet.create({
   },
   captureStatusText: {
     color: "#ffffff",
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
   },
@@ -2114,7 +2116,7 @@ const styles = StyleSheet.create({
   guidanceWarning: { color: "#ffffff", fontSize: 13, fontWeight: "700" },
   guidanceNote: {
     color: "rgba(255,255,255,0.66)",
-    fontSize: 9,
+    fontSize: 10,
     lineHeight: 14,
   },
   captureError: {
