@@ -64,7 +64,7 @@ document or selfie.
 ## Connected previews
 
 - Player, parent, and public network: <https://duna-web.vercel.app>
-- Club, coach, facility, and platform operations: <https://duna-hq.vercel.app>
+- Club, coach, facility, and platform operations: <https://hq.duna.coach>
 
 The hosted previews use the connected Neon production branch and Stripe test
 mode. Real-money activation, identity onboarding, messaging delivery, and store

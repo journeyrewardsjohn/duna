@@ -2,30 +2,31 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
 import { getServerCaller } from "@/lib/api";
 import {
+  assertBrandMediaPath,
   assertCourtMediaPath,
   assertEventMediaPath,
   assertVenueMediaPath,
   validateEventMediaInput,
 } from "@/lib/media-storage";
 
-interface EventMediaClientPayload {
+interface MediaClientPayload {
   readonly organizationId: string;
   readonly fileName: string;
   readonly contentType: string;
   readonly size: number;
-  readonly purpose?: "court" | "event" | "venue";
+  readonly purpose?: "brand" | "court" | "event" | "venue";
 }
 
-function parseClientPayload(value: string | null): EventMediaClientPayload {
-  if (!value) throw new Error("Event media details are required.");
-  const parsed = JSON.parse(value) as Partial<EventMediaClientPayload>;
+function parseClientPayload(value: string | null): MediaClientPayload {
+  if (!value) throw new Error("Media details are required.");
+  const parsed = JSON.parse(value) as Partial<MediaClientPayload>;
   if (
     typeof parsed.organizationId !== "string" ||
     typeof parsed.fileName !== "string" ||
     typeof parsed.contentType !== "string" ||
     typeof parsed.size !== "number"
   ) {
-    throw new Error("Event media details are invalid.");
+    throw new Error("Media details are invalid.");
   }
   return {
     organizationId: parsed.organizationId,
@@ -33,11 +34,13 @@ function parseClientPayload(value: string | null): EventMediaClientPayload {
     contentType: parsed.contentType,
     size: parsed.size,
     purpose:
-      parsed.purpose === "venue"
-        ? "venue"
-        : parsed.purpose === "court"
-          ? "court"
-          : "event",
+      parsed.purpose === "brand"
+        ? "brand"
+        : parsed.purpose === "venue"
+          ? "venue"
+          : parsed.purpose === "court"
+            ? "court"
+            : "event",
   };
 }
 
@@ -55,7 +58,13 @@ export async function POST(request: Request) {
           throw new Error("Event media must stay inside your organization.");
         }
         const media = validateEventMediaInput(payload);
-        if (payload.purpose === "venue" || payload.purpose === "court") {
+        if (payload.purpose === "brand") {
+          assertBrandMediaPath(
+            pathname,
+            context.organizationId,
+            media.extension,
+          );
+        } else if (payload.purpose === "venue" || payload.purpose === "court") {
           if (media.kind !== "image") {
             throw new Error("Facility media must be an image.");
           }
@@ -101,7 +110,7 @@ export async function POST(request: Request) {
         error:
           error instanceof Error
             ? error.message
-            : "The event media upload could not be authorized.",
+            : "The media upload could not be authorized.",
       },
       { status: 400 },
     );

@@ -1,5 +1,6 @@
 import { DunaMark } from "@duna/ui";
 import Link from "next/link";
+import { DUNA_HQ_URL } from "@/lib/site-urls";
 
 export function SiteFooter() {
   return (
@@ -18,9 +19,7 @@ export function SiteFooter() {
           </div>
           <div>
             <strong>Run</strong>
-            <a href={process.env.NEXT_PUBLIC_HQ_URL ?? "http://localhost:3001"}>
-              Duna HQ
-            </a>
+            <a href={DUNA_HQ_URL}>Duna HQ</a>
             <Link href="/clubs/south-bay-volleyball">Clubs</Link>
             <Link href="/app/discover">Coaches</Link>
           </div>

@@ -19,8 +19,9 @@ import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { DUNA_HQ_URL } from "@/lib/site-urls";
 
-const hqHref = process.env.NEXT_PUBLIC_HQ_URL ?? "http://localhost:3001";
+const hqHref = DUNA_HQ_URL;
 
 function SmartRulesPreview() {
   return (

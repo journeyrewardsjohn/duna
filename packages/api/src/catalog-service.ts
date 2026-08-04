@@ -179,6 +179,15 @@ function requireOrganization(actor: ApiActor): string {
   return actor.organizationId;
 }
 
+function organizationTimeZone(value: string): string {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format(new Date());
+    return value;
+  } catch {
+    throw new Error("Choose a valid time zone.");
+  }
+}
+
 function slugBase(value: string): string {
   return (
     value
@@ -3235,6 +3244,56 @@ export async function updateOrganizationCommerceSettings(input: {
     id: organizationId,
     entity: "organization-settings",
     status: input.stripeTaxEnabled ? "pending" : "saved",
+  };
+}
+
+export async function updateOrganizationProfileSettings(input: {
+  readonly actor: ApiActor;
+  readonly name: string;
+  readonly timezone: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const organization = await database.query.organizations.findFirst({
+    where: eq(organizations.id, organizationId),
+  });
+  if (!organization) throw new Error("Organization was not found.");
+
+  const values = {
+    name: input.name.trim(),
+    timezone: organizationTimeZone(input.timezone.trim()),
+  };
+  await database.batch([
+    database
+      .update(organizations)
+      .set({ ...values, updatedAt: input.now })
+      .where(eq(organizations.id, organizationId)),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "organization.profile_settings_updated",
+      entityType: "organization-settings",
+      entityId: organizationId,
+      beforeHash: stableHash({
+        name: organization.name,
+        timezone: organization.timezone,
+      }),
+      afterHash: stableHash(values),
+      reason: "Operator updated the organization display name or time zone.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return {
+    id: organizationId,
+    entity: "organization-settings",
+    status: "saved",
   };
 }
 

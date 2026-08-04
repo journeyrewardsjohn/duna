@@ -360,6 +360,24 @@ export async function updateCommerceSettingsAction(
   }
 }
 
+export async function updateOrganizationProfileAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.updateOrganizationProfile({
+      name: field(formData, "name"),
+      timezone: field(formData, "timezone"),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result("success", "Business details saved across Duna HQ.");
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
 export async function updateThemeAction(
   _previous: OperatorActionState,
   formData: FormData,

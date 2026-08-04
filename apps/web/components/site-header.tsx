@@ -3,6 +3,7 @@ import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { ArrowUpRight, Menu } from "lucide-react";
 import Link from "next/link";
+import { DUNA_HQ_URL } from "@/lib/site-urls";
 import { WebAuthButton } from "./web-auth-button";
 
 export function SiteHeader() {
@@ -22,10 +23,7 @@ export function SiteHeader() {
         </nav>
         <div className="site-header__actions">
           <ThemeToggle />
-          <a
-            className="site-header__operator"
-            href={process.env.NEXT_PUBLIC_HQ_URL ?? "http://localhost:3001"}
-          >
+          <a className="site-header__operator" href={DUNA_HQ_URL}>
             Duna HQ <ArrowUpRight aria-hidden size={15} />
           </a>
           <WebAuthButton configured={isWorkOSAuthKitConfigured()} />

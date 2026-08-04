@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertBrandMediaPath,
   assertCourtMediaPath,
   assertEventMediaPath,
   assertVenueMediaPath,
+  createBrandMediaPath,
   createCourtMediaPath,
   createEventMediaPath,
   createVenueMediaPath,
@@ -105,5 +107,22 @@ describe("event media storage", () => {
     expect(() =>
       createCourtMediaPath(organizationId, "video/mp4", identifier),
     ).toThrow("safe court image path");
+
+    const brandPath = createBrandMediaPath(
+      organizationId,
+      "video/mp4",
+      identifier,
+    );
+    expect(brandPath).toBe(`brand/${organizationId}/${identifier}.mp4`);
+    expect(() =>
+      assertBrandMediaPath(brandPath, organizationId, "mp4"),
+    ).not.toThrow();
+    expect(() =>
+      assertBrandMediaPath(
+        `brand/${organizationId}/../outside.mp4`,
+        organizationId,
+        "mp4",
+      ),
+    ).toThrow("destination is invalid");
   });
 });

@@ -120,6 +120,22 @@ export function createCourtMediaPath(
   return `courts/${organizationId}/${identifier}.${configuration.extension}`;
 }
 
+export function createBrandMediaPath(
+  organizationId: string,
+  contentType: string,
+  identifier = crypto.randomUUID(),
+): string {
+  const configuration = mediaType(contentType);
+  if (
+    !configuration ||
+    !uuidPattern.test(organizationId) ||
+    !uuidPattern.test(identifier)
+  ) {
+    throw new Error("Duna could not create a safe brand media path.");
+  }
+  return `brand/${organizationId}/${identifier}.${configuration.extension}`;
+}
+
 export function assertEventMediaPath(
   pathname: string,
   organizationId: string,
@@ -171,6 +187,24 @@ export function assertCourtMediaPath(
     pathname !== `${prefix}${identifier}.${extension}`
   ) {
     throw new Error("The court image destination is invalid.");
+  }
+}
+
+export function assertBrandMediaPath(
+  pathname: string,
+  organizationId: string,
+  extension: string,
+): void {
+  const prefix = `brand/${organizationId}/`;
+  const identifier = pathname.slice(prefix.length, -(extension.length + 1));
+  if (
+    !uuidPattern.test(organizationId) ||
+    !pathname.startsWith(prefix) ||
+    !pathname.endsWith(`.${extension}`) ||
+    !uuidPattern.test(identifier) ||
+    pathname !== `${prefix}${identifier}.${extension}`
+  ) {
+    throw new Error("The brand media destination is invalid.");
   }
 }
 
