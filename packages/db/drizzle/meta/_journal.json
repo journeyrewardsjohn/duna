@@ -302,6 +302,13 @@
       "when": 1785806148803,
       "tag": "0042_burly_rhino",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1785850447148,
+      "tag": "0043_fixed_strong_guy",
+      "breakpoints": true
     }
   ]
 }
