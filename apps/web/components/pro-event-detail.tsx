@@ -9,12 +9,15 @@ import {
   MapPin,
   Radio,
   Sparkles,
+  Tv,
   Trophy,
   UsersRound,
+  Video,
 } from "lucide-react";
 import Link from "next/link";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { countryFlag } from "@/lib/country-flag";
 
 type ProMatch = PublicProEvent["matches"][number];
 type ProTeam = ProMatch["teamA"];
@@ -127,6 +130,14 @@ function PodiumTeam({
   );
 }
 
+const entryListLabels = {
+  "main-draw": "Main draw teams",
+  qualification: "Qualification teams",
+  reserve: "Reserve teams",
+  withdrawn: "Withdrawn teams",
+  league: "League teams",
+} as const;
+
 export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
   const completedMatchCount = event.matches.filter(
     (match) => match.status === "completed",
@@ -134,6 +145,12 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
   const upcomingMatches = event.matches.filter(
     (match) => match.status !== "completed",
   );
+  const entryGroups = (
+    ["main-draw", "qualification", "reserve", "withdrawn", "league"] as const
+  ).flatMap((list) => {
+    const teams = event.teamEntries.filter((entry) => entry.list === list);
+    return teams.length > 0 ? [{ list, teams }] : [];
+  });
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "SportsEvent",
@@ -237,6 +254,133 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
       </section>
 
       <div className="pro-event-content">
+        <section className="pro-event-section pro-watch">
+          <header>
+            <div>
+              <span className="page-eyebrow">Broadcast guide</span>
+              <h2>Where to watch</h2>
+            </div>
+            <Tv aria-hidden size={23} />
+          </header>
+          {event.watchOptions.length > 0 ? (
+            <div>
+              {event.watchOptions.map((option) => {
+                const content = (
+                  <>
+                    {option.kind === "youtube" ? (
+                      <Video aria-hidden size={19} />
+                    ) : (
+                      <Tv aria-hidden size={19} />
+                    )}
+                    <span>
+                      <strong>{option.label}</strong>
+                      <small>
+                        {option.channelName ??
+                          (option.url
+                            ? "Open stream"
+                            : "Broadcast details confirmed")}
+                      </small>
+                    </span>
+                    {option.url && <ExternalLink aria-hidden size={14} />}
+                  </>
+                );
+                return option.url ? (
+                  <a
+                    href={option.url}
+                    key={option.id}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {content}
+                  </a>
+                ) : (
+                  <article key={option.id}>{content}</article>
+                );
+              })}
+            </div>
+          ) : (
+            <p>
+              Broadcast details have not been announced yet. Duna will show
+              VBTV, YouTube, or live TV coverage here as soon as it is
+              confirmed.
+            </p>
+          )}
+        </section>
+
+        {entryGroups.length > 0 && (
+          <section className="pro-event-section pro-entry-lists">
+            <header>
+              <div>
+                <span className="page-eyebrow">Official entry lists</span>
+                <h2>Teams</h2>
+              </div>
+              <Badge>{event.teamEntries.length}</Badge>
+            </header>
+            <div className="pro-entry-lists__groups">
+              {entryGroups.map((group) => (
+                <section key={group.list}>
+                  <header>
+                    <h3>{entryListLabels[group.list]}</h3>
+                    <span>{group.teams.length}</span>
+                  </header>
+                  <div className="pro-entry-list__head">
+                    <span>Seed</span>
+                    <span>Team</span>
+                    <span>Country</span>
+                    <span>Entry pts</span>
+                    <span>Technical</span>
+                  </div>
+                  {group.teams.map((team) => (
+                    <article
+                      className={
+                        group.list === "withdrawn"
+                          ? "pro-entry-team pro-entry-team--withdrawn"
+                          : "pro-entry-team"
+                      }
+                      key={`${group.list}-${team.externalTeamId}`}
+                    >
+                      <Numeric>{team.seed ?? "—"}</Numeric>
+                      <div>
+                        <strong>{team.label}</strong>
+                        <span>
+                          {team.players.map((player, index) => (
+                            <span
+                              key={player.personId ?? player.externalPersonId}
+                            >
+                              {index > 0 && " / "}
+                              {player.handle ? (
+                                <Link href={`/players/${player.handle}`}>
+                                  {player.name}
+                                </Link>
+                              ) : (
+                                player.name
+                              )}
+                            </span>
+                          ))}
+                        </span>
+                      </div>
+                      <span
+                        aria-label={team.countryCode ?? "Country pending"}
+                        className="pro-entry-team__country"
+                      >
+                        <b aria-hidden>{countryFlag(team.countryCode)}</b>
+                        {team.countryCode ?? "—"}
+                      </span>
+                      <span>
+                        {team.entryPoints?.toLocaleString("en-US") ?? "—"}
+                      </span>
+                      <span>
+                        {team.entryTechnicalPoints?.toLocaleString("en-US") ??
+                          "—"}
+                      </span>
+                    </article>
+                  ))}
+                </section>
+              ))}
+            </div>
+          </section>
+        )}
+
         {(event.podium.champion ||
           event.podium.runnerUp ||
           event.podium.thirdPlace) && (

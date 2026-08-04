@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseFivbEventIndexHtml,
   parseFivbPagePlayers,
+  parseFivbTeamEntries,
   parseVolleyballLifeMatchFeed,
   selectVolleyballLifeDivisionData,
 } from "./sources";
@@ -61,6 +62,53 @@ describe("FIVB event index parsing", () => {
         isProfessional: true,
       },
     ]);
+  });
+
+  it("extracts main draw, qualification, reserve, and withdrawn team metadata", () => {
+    const teamRow = (
+      id: string,
+      first: string,
+      second: string,
+      code: string,
+    ) => `
+      <tr>
+        <td>3060</td><td>11840</td><td>1</td><td>${first}/${second}</td><td>Q</td>
+        <td><a href="/player?player_id=${id}1">${first}</a></td>
+        <td><a href="/player?player_id=${id}2">${second}</a></td>
+        <td>${code}</td><td></td><td>3060</td><td>12020</td>
+      </tr>`;
+    const html = `
+      <h4 id="teams_md">Main</h4><table>${teamRow("1", "Jacob Hölting Nilsson", "Elmer Andersson", "SWE")}</table>
+      <h4 id="teams_qu">Qualification</h4><table>${teamRow("2", "Alex", "Blake", "USA")}</table>
+      <h4 id="teams_res">Reserve</h4><table>${teamRow("3", "Chris", "Drew", "GER")}</table>
+      <h4 id="teams_with">Withdrawn</h4><table>
+        <tr><td>3300</td><td>5120</td><td>Cherif/Ahmed</td>
+        <td><a href="/player?player_id=41">Cherif</a></td>
+        <td><a href="/player?player_id=42">Ahmed</a></td><td>QAT</td><td>Withdrawn</td></tr>
+      </table>
+    `;
+
+    const entries = parseFivbTeamEntries(html);
+
+    expect(entries.map((entry) => entry.list)).toEqual([
+      "main-draw",
+      "qualification",
+      "reserve",
+      "withdrawn",
+    ]);
+    expect(entries[0]).toMatchObject({
+      seed: 1,
+      countryCode: "SWE",
+      entryPoints: 3060,
+      entryTechnicalPoints: 11840,
+      seedPoints: 3060,
+      seedTechnicalPoints: 12020,
+    });
+    expect(entries[3]).toMatchObject({
+      label: "Cherif/Ahmed",
+      countryCode: "QAT",
+      entryTag: "Withdrawn",
+    });
   });
 });
 

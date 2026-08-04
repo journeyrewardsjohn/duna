@@ -643,6 +643,111 @@ function fivbTeam(cell: string): {
   };
 }
 
+export interface FivbTeamEntry {
+  readonly externalTeamId: string;
+  readonly list: "main-draw" | "qualification" | "reserve" | "withdrawn";
+  readonly label: string;
+  readonly seed?: number;
+  readonly entryPoints?: number;
+  readonly entryTechnicalPoints?: number;
+  readonly seedPoints?: number;
+  readonly seedTechnicalPoints?: number;
+  readonly countryCode?: string;
+  readonly entryTag?: string;
+  readonly players: readonly {
+    readonly externalPersonId: string;
+    readonly displayName: string;
+  }[];
+}
+
+function parseFivbTeamEntrySection(
+  html: string,
+  list: FivbTeamEntry["list"],
+): readonly FivbTeamEntry[] {
+  const entries: FivbTeamEntry[] = [];
+  for (const rowMatch of html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const rowCells = pageCells(rowMatch[1] ?? "");
+    const withdrawn = list === "withdrawn";
+    if (rowCells.length < (withdrawn ? 6 : 10)) continue;
+    const playerCells = withdrawn
+      ? [rowCells[3] ?? "", rowCells[4] ?? ""]
+      : [rowCells[5] ?? "", rowCells[6] ?? ""];
+    const players = playerCells.flatMap((cell) => {
+      const link = cell.match(
+        /<a[^>]*href="[^"]*player_id=(\d+)[^"]*"[^>]*>([^<]+)<\/a>/i,
+      );
+      const displayName = stripHtml(link?.[2] ?? cell);
+      return displayName
+        ? [
+            {
+              externalPersonId:
+                link?.[1] ??
+                hashValue(
+                  `${list}:${normalizePersonName(displayName)}:${entries.length}`,
+                ),
+              displayName,
+            },
+          ]
+        : [];
+    });
+    if (players.length < 2) continue;
+    const label = stripHtml(
+      rowCells[withdrawn ? 2 : 3] ??
+        players.map((player) => player.displayName).join("/"),
+    );
+    const countryCode = compactFederationCode(
+      stripHtml(rowCells[withdrawn ? 5 : 7] ?? ""),
+    );
+    const seed = withdrawn
+      ? undefined
+      : numberValue(stripHtml(rowCells[2] ?? ""));
+    entries.push({
+      externalTeamId:
+        players
+          .map((player) => player.externalPersonId)
+          .sort()
+          .join(":") || hashValue(`${list}:${label}`),
+      list,
+      label: label || players.map((player) => player.displayName).join(" / "),
+      ...(seed !== undefined ? { seed: Math.floor(seed) } : {}),
+      ...(numberValue(stripHtml(rowCells[0] ?? "")) !== undefined
+        ? { entryPoints: numberValue(stripHtml(rowCells[0] ?? "")) }
+        : {}),
+      ...(numberValue(stripHtml(rowCells[1] ?? "")) !== undefined
+        ? {
+            entryTechnicalPoints: numberValue(stripHtml(rowCells[1] ?? "")),
+          }
+        : {}),
+      ...(!withdrawn && numberValue(stripHtml(rowCells[9] ?? "")) !== undefined
+        ? { seedPoints: numberValue(stripHtml(rowCells[9] ?? "")) }
+        : {}),
+      ...(!withdrawn && numberValue(stripHtml(rowCells[10] ?? "")) !== undefined
+        ? {
+            seedTechnicalPoints: numberValue(stripHtml(rowCells[10] ?? "")),
+          }
+        : {}),
+      ...(countryCode ? { countryCode } : {}),
+      ...(stripHtml(rowCells[withdrawn ? 6 : 4] ?? "")
+        ? { entryTag: stripHtml(rowCells[withdrawn ? 6 : 4] ?? "") }
+        : {}),
+      players,
+    });
+  }
+  return entries;
+}
+
+export function parseFivbTeamEntries(html: string): readonly FivbTeamEntry[] {
+  return [
+    ...parseFivbTeamEntrySection(fivbSection(html, "teams_md"), "main-draw"),
+    ...parseFivbTeamEntrySection(
+      fivbSection(html, "teams_qu"),
+      "qualification",
+    ),
+    ...parseFivbTeamEntrySection(fivbSection(html, "teams_res"), "reserve"),
+    ...parseFivbTeamEntrySection(fivbSection(html, "teams_with"), "withdrawn"),
+  ];
+}
+
 export function parseFivbPagePlayers(
   html: string,
 ): readonly ExternalPlayerRecord[] {
@@ -854,6 +959,34 @@ export async function importFivbTournament(
       raw: existing?.raw ?? pagePlayer.raw,
     });
   }
+  const teamEntries = parseFivbTeamEntries(html).map((entry) => ({
+    ...entry,
+    players: entry.players.map((player) => ({
+      ...player,
+      displayName:
+        players.get(player.externalPersonId)?.displayName ?? player.displayName,
+    })),
+  }));
+  for (const entry of teamEntries) {
+    for (const entryPlayer of entry.players) {
+      const existing = players.get(entryPlayer.externalPersonId);
+      if (!existing) {
+        players.set(entryPlayer.externalPersonId, {
+          externalPersonId: entryPlayer.externalPersonId,
+          displayName: entryPlayer.displayName,
+          profileUrl: `${fivbBase}/player?player_id=${entryPlayer.externalPersonId}`,
+          countryCode: entry.countryCode,
+          isProfessional: true,
+          raw: {},
+        });
+      } else if (!existing.countryCode && entry.countryCode) {
+        players.set(entryPlayer.externalPersonId, {
+          ...existing,
+          countryCode: entry.countryCode,
+        });
+      }
+    }
+  }
   const enrichParticipants = (match: ExternalMatchRecord) => ({
     ...match,
     participants: match.participants.map((participant) => ({
@@ -871,6 +1004,15 @@ export async function importFivbTournament(
   const live = Boolean(
     startsOn && startsOn <= today && (!endsOn || endsOn >= today) && !completed,
   );
+  const eventInfoCells = pageCells(
+    html.match(
+      /<table[^>]*data-card-view="true"[^>]*>([\s\S]*?)<\/table>/i,
+    )?.[1] ?? "",
+  );
+  const advertisedTeamCount = Number.parseInt(
+    stripHtml(eventInfoCells[3] ?? ""),
+    10,
+  );
   const event: ProfessionalEventRecord = {
     externalEventId: tcode,
     sourceUrl: requestedUrl,
@@ -883,9 +1025,17 @@ export async function importFivbTournament(
     endsOn,
     status: completed ? "completed" : live ? "live" : "upcoming",
     live,
-    teamCount: players.size / 2,
+    teamCount:
+      advertisedTeamCount ||
+      teamEntries.filter((entry) => entry.list === "main-draw").length,
     matchCount: main.matches.length + qualification.matches.length,
-    raw: { tcode, engine, countryName },
+    raw: {
+      tcode,
+      engine,
+      countryName,
+      advertisedTeamCount: advertisedTeamCount || undefined,
+      teamEntries,
+    },
   };
   return {
     source: "fivb-12ndr",

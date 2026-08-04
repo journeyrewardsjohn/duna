@@ -327,6 +327,11 @@ export interface MatchSummary {
   readonly confirmationRequired?: boolean;
   readonly playedAt: string;
   readonly venueName: string;
+  readonly eventName?: string;
+  readonly eventSlug?: string;
+  readonly roundLabel?: string;
+  readonly sourceUrl?: string;
+  readonly formatSummary?: string;
   readonly teamA: readonly PersonSummary[];
   readonly teamB: readonly PersonSummary[];
   readonly score: readonly (readonly [number, number])[];
@@ -350,6 +355,13 @@ export interface MatchSummary {
     readonly address?: string;
     readonly latitude?: number;
     readonly longitude?: number;
+  };
+  readonly prediction?: {
+    readonly teamA: number;
+    readonly teamB: number;
+    readonly favorite: "A" | "B" | "even";
+    readonly outcome: "predicted" | "upset" | "even";
+    readonly basis: "Sand Rating";
   };
   readonly origin?: "imported" | "self-reported" | "live-scored";
   readonly ratingEligibility?: "eligible" | "held";

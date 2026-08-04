@@ -1,5 +1,9 @@
 export type SandDataSource =
-  "volleyball-life" | "bvbinfo" | "fivb-12ndr" | "volleyball-world";
+  | "volleyball-life"
+  | "bvbinfo"
+  | "fivb-12ndr"
+  | "volleyball-world"
+  | "avp-league";
 
 export interface ExternalPlayerRecord {
   readonly externalPersonId: string;
@@ -44,7 +48,7 @@ export interface ProfessionalEventRecord {
   readonly location?: string;
   readonly countryCode?: string;
   readonly category?: string;
-  readonly genderCategory: "men" | "women";
+  readonly genderCategory: "men" | "women" | "coed";
   readonly startsOn?: string;
   readonly endsOn?: string;
   readonly status: "upcoming" | "live" | "completed";

@@ -2,7 +2,8 @@ name: Sync Sand data
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/5 * * * *"
+    - cron: "*/30 * * * *"
     - cron: "15 */6 * * *"
     - cron: "10 10 * * *"
   workflow_dispatch:
@@ -14,6 +15,7 @@ on:
         type: choice
         options:
           - live
+          - avp
           - index
           - rankings
 
@@ -34,8 +36,10 @@ jobs:
         run: |
           if [ -n "$MANUAL_MODE" ]; then
             mode="$MANUAL_MODE"
-          elif [ "$SCHEDULE" = "*/15 * * * *" ]; then
+          elif [ "$SCHEDULE" = "*/5 * * * *" ]; then
             mode="live"
+          elif [ "$SCHEDULE" = "*/30 * * * *" ]; then
+            mode="avp"
           elif [ "$SCHEDULE" = "15 */6 * * *" ]; then
             mode="index"
           else

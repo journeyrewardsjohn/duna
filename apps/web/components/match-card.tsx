@@ -4,6 +4,7 @@ import { Badge, Numeric } from "@duna/ui";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { getMatchResult } from "@/lib/match-insights";
+import { compactPlayerName } from "@/lib/player-name";
 
 export function MatchCard({
   match,
@@ -58,7 +59,7 @@ export function MatchCard({
           <div className={match.winner === "A" ? "winner" : undefined}>
             <span>
               {match.teamA
-                .map((player) => player.displayName.split(" ")[0])
+                .map((player) => compactPlayerName(player.displayName))
                 .join(" / ")}
             </span>
             <span className="match-card__sets">
@@ -70,7 +71,7 @@ export function MatchCard({
           <div className={match.winner === "B" ? "winner" : undefined}>
             <span>
               {match.teamB
-                .map((player) => player.displayName.split(" ")[0])
+                .map((player) => compactPlayerName(player.displayName))
                 .join(" / ")}
             </span>
             <span className="match-card__sets">

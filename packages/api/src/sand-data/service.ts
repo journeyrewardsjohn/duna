@@ -33,6 +33,7 @@ import { scopesForRoles, type ApiActor } from "../context";
 import { publishImportedProfessionalActivities } from "../live-activities";
 import { applyApprovedImportedMatchRating } from "../match-service";
 import { assertProfileSubjectAuthority } from "../profile-onboarding";
+import { avpExternalPlayerId, importAvpLeague } from "./avp";
 import {
   crossSourceMatchFingerprint,
   matchMappingConfidence,
@@ -50,12 +51,14 @@ import {
 } from "./sources";
 import {
   SandDataUpstreamError,
+  type ExternalMatchRecord,
   type ExternalPlayerRecord,
   type SandDataSource,
   type SourceImportResult,
 } from "./types";
 
 const sourceNames: Readonly<Record<SandDataSource, string>> = {
+  "avp-league": "AVP League",
   bvbinfo: "BVBInfo",
   "fivb-12ndr": "FIVB via fivb.12ndr",
   "volleyball-life": "VolleyballLife",
@@ -74,6 +77,7 @@ export class SandDataServiceError extends Error {
       | "MERGE_CONFLICT"
       | "CLAIM_CONFLICT"
       | "INVALID_PROFILE_URL"
+      | "INVALID_WATCH_OPTION"
       | "PROFESSIONAL_REQUIRED"
       | "SUPER_ADMIN_REQUIRED",
     message: string,
@@ -96,6 +100,22 @@ function unknownRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function preserveEditorialPayload(
+  incoming: Readonly<Record<string, unknown>>,
+  existing: unknown,
+): Record<string, unknown> {
+  const previous = unknownRecord(existing);
+  return {
+    ...incoming,
+    ...(Array.isArray(previous.watchOptions)
+      ? { watchOptions: previous.watchOptions }
+      : {}),
+    ...(Array.isArray(previous.rosterOverrides)
+      ? { rosterOverrides: previous.rosterOverrides }
+      : {}),
+  };
 }
 
 function optionalSnapshotString(value: unknown): string | undefined {
@@ -446,20 +466,126 @@ async function persistImportedMatches(input: {
   let ready = 0;
   let needsMapping = 0;
   let duplicates = 0;
+  const avpRosterOverrides =
+    input.result.source === "avp-league"
+      ? [
+          ...new Map(
+            (
+              await database
+                .select({ rawPayload: professionalEvents.rawPayload })
+                .from(professionalEvents)
+                .where(eq(professionalEvents.sourceId, input.sourceId))
+            )
+              .flatMap((event) => {
+                const raw = unknownRecord(event.rawPayload);
+                return Array.isArray(raw.rosterOverrides)
+                  ? raw.rosterOverrides
+                  : [];
+              })
+              .map((candidate) => {
+                const override = unknownRecord(candidate);
+                return [
+                  optionalSnapshotString(override.id) ?? stableHash(override),
+                  override,
+                ] as const;
+              }),
+          ).values(),
+        ]
+      : [];
 
-  for (const match of input.result.matches) {
+  for (const sourceMatch of input.result.matches) {
+    const raw = unknownRecord(sourceMatch.raw);
+    const matchDate = sourceMatch.playedAt?.slice(0, 10);
+    const appliedAssignmentIds: string[] = [];
+    let effectiveParticipants = [...sourceMatch.participants];
+    for (const override of avpRosterOverrides) {
+      const season = optionalNumber(override.season);
+      const gender = optionalSnapshotString(override.gender);
+      const teamName = optionalSnapshotString(override.teamName);
+      const externalPersonId = optionalSnapshotString(
+        override.externalPersonId,
+      );
+      const replacesExternalPersonId = optionalSnapshotString(
+        override.replacesExternalPersonId,
+      );
+      const displayName = optionalSnapshotString(override.displayName);
+      if (
+        season !== optionalNumber(raw.season) ||
+        gender !== optionalSnapshotString(raw.gender) ||
+        !teamName ||
+        !externalPersonId ||
+        !replacesExternalPersonId ||
+        !displayName ||
+        (optionalSnapshotString(override.effectiveFrom) &&
+          matchDate &&
+          matchDate < optionalSnapshotString(override.effectiveFrom)!) ||
+        (optionalSnapshotString(override.effectiveTo) &&
+          matchDate &&
+          matchDate > optionalSnapshotString(override.effectiveTo)!)
+      ) {
+        continue;
+      }
+      const side =
+        normalizePersonName(optionalSnapshotString(raw.teamAName) ?? "") ===
+        normalizePersonName(teamName)
+          ? "A"
+          : normalizePersonName(optionalSnapshotString(raw.teamBName) ?? "") ===
+              normalizePersonName(teamName)
+            ? "B"
+            : undefined;
+      if (!side) continue;
+      let replaced = false;
+      effectiveParticipants = effectiveParticipants.map((participant) => {
+        if (
+          participant.side === side &&
+          participant.externalPersonId === replacesExternalPersonId
+        ) {
+          replaced = true;
+          return {
+            ...participant,
+            externalPersonId,
+            name: displayName,
+          };
+        }
+        return participant;
+      });
+      if (replaced) {
+        appliedAssignmentIds.push(
+          optionalSnapshotString(override.id) ?? stableHash(override),
+        );
+      }
+    }
+    const match: ExternalMatchRecord =
+      appliedAssignmentIds.length > 0
+        ? {
+            ...sourceMatch,
+            participants: effectiveParticipants,
+            raw: {
+              ...sourceMatch.raw,
+              rosterAssignmentIds: appliedAssignmentIds,
+            },
+          }
+        : sourceMatch;
     if (match.participants.length !== 4) continue;
     const sourceFingerprint = sourceMatchFingerprint(
       input.result.source,
       match,
     );
     const crossFingerprint = crossSourceMatchFingerprint(match);
-    const duplicate = await database.query.importedMatches.findFirst({
-      where: and(
-        eq(importedMatches.crossSourceFingerprint, crossFingerprint),
-        ne(importedMatches.sourceId, input.sourceId),
-      ),
-    });
+    const [duplicate, existing] = await Promise.all([
+      database.query.importedMatches.findFirst({
+        where: and(
+          eq(importedMatches.crossSourceFingerprint, crossFingerprint),
+          ne(importedMatches.sourceId, input.sourceId),
+        ),
+      }),
+      database.query.importedMatches.findFirst({
+        where: and(
+          eq(importedMatches.sourceId, input.sourceId),
+          eq(importedMatches.externalMatchId, match.externalMatchId),
+        ),
+      }),
+    ]);
     const participants = match.participants.map((participant) => ({
       ...participant,
       personId: peopleByExternalId.get(participant.externalPersonId),
@@ -467,13 +593,15 @@ async function persistImportedMatches(input: {
     const allMapped = participants.every((participant) => participant.personId);
     const complete = Boolean(match.winnerSide && match.sets.length > 0);
     const importState =
-      duplicate?.canonicalMatchId || duplicate?.importState === "approved"
-        ? "duplicate"
-        : complete && allMapped
-          ? "ready"
-          : complete
-            ? "needs-mapping"
-            : "staged";
+      existing?.importState === "approved"
+        ? "approved"
+        : duplicate?.canonicalMatchId || duplicate?.importState === "approved"
+          ? "duplicate"
+          : complete && allMapped
+            ? "ready"
+            : complete
+              ? "needs-mapping"
+              : "staged";
     await database
       .insert(importedMatches)
       .values({
@@ -494,7 +622,7 @@ async function persistImportedMatches(input: {
         winnerSide: match.winnerSide,
         importState,
         possibleDuplicateOfId: duplicate?.id,
-        rawPayload: match.raw,
+        rawPayload: preserveEditorialPayload(match.raw, existing?.rawPayload),
         createdAt: input.now,
         updatedAt: input.now,
       })
@@ -516,7 +644,7 @@ async function persistImportedMatches(input: {
           winnerSide: match.winnerSide,
           importState,
           possibleDuplicateOfId: duplicate?.id,
-          rawPayload: match.raw,
+          rawPayload: preserveEditorialPayload(match.raw, existing?.rawPayload),
           updatedAt: input.now,
         },
       });
@@ -535,6 +663,16 @@ async function persistProfessionalEvents(input: {
 }): Promise<number> {
   const database = getDatabase();
   for (const event of input.result.events ?? []) {
+    const existing = await database.query.professionalEvents.findFirst({
+      where: and(
+        eq(professionalEvents.sourceId, input.sourceId),
+        eq(professionalEvents.externalEventId, event.externalEventId),
+      ),
+    });
+    const rawPayload = preserveEditorialPayload(
+      event.raw,
+      existing?.rawPayload,
+    );
     await database
       .insert(professionalEvents)
       .values({
@@ -552,7 +690,7 @@ async function persistProfessionalEvents(input: {
         live: event.live,
         teamCount: Math.floor(event.teamCount),
         matchCount: event.matchCount,
-        rawPayload: event.raw,
+        rawPayload,
         lastSyncedAt: input.now,
         createdAt: input.now,
         updatedAt: input.now,
@@ -575,7 +713,7 @@ async function persistProfessionalEvents(input: {
           live: event.live,
           teamCount: Math.floor(event.teamCount),
           matchCount: event.matchCount,
-          rawPayload: event.raw,
+          rawPayload,
           lastSyncedAt: input.now,
           updatedAt: input.now,
         },
@@ -647,12 +785,14 @@ async function executeImport(input: {
       mode: input.mode,
       requestedExternalId: input.requestedExternalId,
       engine:
-        input.source === "volleyball-life" ||
-        input.source === "volleyball-world"
-          ? "native"
-          : process.env.FIRECRAWL_API_KEY || process.env.FIRECRAWL_API
-            ? "firecrawl"
-            : "native",
+        input.source === "avp-league"
+          ? "firecrawl"
+          : input.source === "volleyball-life" ||
+              input.source === "volleyball-world"
+            ? "native"
+            : process.env.FIRECRAWL_API_KEY || process.env.FIRECRAWL_API
+              ? "firecrawl"
+              : "native",
       createdByPersonId: input.actor?.personId,
       startedAt: input.now,
       createdAt: input.now,
@@ -727,7 +867,7 @@ async function executeImport(input: {
         createdAt: input.now,
       }),
     ]);
-    if (input.source === "fivb-12ndr") {
+    if (input.source === "fivb-12ndr" || input.source === "avp-league") {
       const externalEventIds = [
         ...new Set(
           result.matches.flatMap((match) =>
@@ -764,7 +904,7 @@ async function executeImport(input: {
 }
 
 export function importSandSource(input: {
-  readonly source: "bvbinfo" | "volleyball-life" | "fivb-12ndr";
+  readonly source: "bvbinfo" | "volleyball-life" | "fivb-12ndr" | "avp-league";
   readonly externalId: string;
   readonly actor?: ApiActor;
   readonly now?: Date;
@@ -794,6 +934,20 @@ export function importSandSource(input: {
         importVolleyballLifePlayer(input.externalId, input.onProgress),
     });
   }
+  if (input.source === "avp-league") {
+    const parsedSeason = Number.parseInt(input.externalId, 10);
+    return executeImport({
+      source: input.source,
+      mode: "season",
+      requestedExternalId: input.externalId,
+      actor: input.actor,
+      now,
+      loader: () =>
+        importAvpLeague(
+          Number.isInteger(parsedSeason) ? parsedSeason : undefined,
+        ),
+    });
+  }
   return executeImport({
     source: input.source,
     mode: "event",
@@ -801,6 +955,19 @@ export function importSandSource(input: {
     actor: input.actor,
     now,
     loader: () => importFivbTournament(input.externalId),
+  });
+}
+
+export function refreshAvpLeague(input: {
+  readonly season?: number;
+  readonly actor?: ApiActor;
+  readonly now?: Date;
+}) {
+  return importSandSource({
+    source: "avp-league",
+    externalId: String(input.season ?? new Date().getUTCFullYear()),
+    actor: input.actor,
+    now: input.now,
   });
 }
 
@@ -918,6 +1085,7 @@ export async function loadSandDataOverview() {
     evaluations,
     truVolleyRows,
     historyDisputeRows,
+    professionalMatchRows,
   ] = await Promise.all([
     database.select().from(importSources).orderBy(asc(importSources.name)),
     database
@@ -937,6 +1105,7 @@ export async function loadSandDataOverview() {
         mappingEvidence: externalPlayerProfiles.mappingEvidence,
         personId: externalPlayerProfiles.personId,
         isProfessional: externalPlayerProfiles.isProfessional,
+        rawProfile: externalPlayerProfiles.rawProfile,
       })
       .from(externalPlayerProfiles)
       .where(
@@ -974,7 +1143,7 @@ export async function loadSandDataOverview() {
       .select()
       .from(professionalEvents)
       .orderBy(desc(professionalEvents.live), desc(professionalEvents.startsOn))
-      .limit(50),
+      .limit(200),
     database
       .select({
         rankingDate: worldRankings.rankingDate,
@@ -1048,6 +1217,27 @@ export async function loadSandDataOverview() {
       .where(eq(matchHistoryDisputes.status, "pending"))
       .orderBy(asc(matchHistoryDisputes.createdAt))
       .limit(100),
+    database
+      .select({
+        id: importedMatches.id,
+        sourceId: importedMatches.sourceId,
+        externalEventId: importedMatches.externalEventId,
+        title: importedMatches.title,
+        roundLabel: importedMatches.roundLabel,
+        playedAt: importedMatches.playedAt,
+        participants: importedMatches.participants,
+        rawPayload: importedMatches.rawPayload,
+      })
+      .from(importedMatches)
+      .innerJoin(importSources, eq(importedMatches.sourceId, importSources.id))
+      .where(
+        and(
+          inArray(importSources.slug, ["fivb-12ndr", "avp-league"]),
+          sql`${importedMatches.externalEventId} IS NOT NULL`,
+        ),
+      )
+      .orderBy(desc(importedMatches.playedAt))
+      .limit(500),
   ]);
   const benchmarkPairs = truVolleyRows.flatMap((row) =>
     row.truVolleyRating === null
@@ -1128,6 +1318,16 @@ export async function loadSandDataOverview() {
       profileUrl: mapping.profileUrl ?? undefined,
       mappingScoreBps: mapping.mappingScoreBps ?? undefined,
       personId: mapping.personId ?? undefined,
+      sourceContext: {
+        season: optionalNumber(unknownRecord(mapping.rawProfile).season),
+        teamName: optionalSnapshotString(
+          unknownRecord(mapping.rawProfile).teamName,
+        ),
+        gender: optionalSnapshotString(
+          unknownRecord(mapping.rawProfile).gender,
+        ),
+        role: optionalSnapshotString(unknownRecord(mapping.rawProfile).role),
+      },
     })),
     matches: imported.map((match) => ({
       ...match,
@@ -1149,7 +1349,55 @@ export async function loadSandDataOverview() {
       teamCount: event.teamCount,
       matchCount: event.matchCount,
       lastSyncedAt: event.lastSyncedAt.toISOString(),
+      watchOptions: watchOptionsFromPayload(event.rawPayload),
+      matches: professionalMatchRows
+        .filter(
+          (match) =>
+            match.sourceId === event.sourceId &&
+            match.externalEventId === event.externalEventId,
+        )
+        .map((match) => ({
+          id: match.id,
+          label:
+            match.participants
+              .map((participant) => participant.name)
+              .join(" / ") || match.title,
+          roundLabel: match.roundLabel ?? undefined,
+          playedAt: match.playedAt?.toISOString(),
+          watchOptions: watchOptionsFromPayload(match.rawPayload),
+        })),
     })),
+    avpTeams: [
+      ...new Map(
+        events
+          .filter(
+            (event) => sourceById.get(event.sourceId)?.slug === "avp-league",
+          )
+          .flatMap((event) => {
+            const season = optionalNumber(
+              unknownRecord(event.rawPayload).season,
+            );
+            return rawProfessionalTeamEntries(event.rawPayload)
+              .filter((entry) => entry.list === "league")
+              .map((entry) => ({
+                key: `${season}:${entry.entryTag}:${entry.label}`,
+                season: season ?? new Date().getUTCFullYear(),
+                teamName: entry.label,
+                gender:
+                  entry.entryTag === "women"
+                    ? ("women" as const)
+                    : ("men" as const),
+                players: entry.players,
+              }));
+          })
+          .map((team) => [team.key, team] as const),
+      ).values(),
+    ].sort(
+      (a, b) =>
+        b.season - a.season ||
+        a.teamName.localeCompare(b.teamName) ||
+        a.gender.localeCompare(b.gender),
+    ),
     rankingDates,
     configurations: configurations.map((configuration) => ({
       ...configuration,
@@ -1349,7 +1597,9 @@ export async function approveImportedMatch(input: {
     where: eq(importSources.id, imported.sourceId),
   });
   const professional =
-    source?.slug === "bvbinfo" || source?.slug === "fivb-12ndr";
+    source?.slug === "bvbinfo" ||
+    source?.slug === "fivb-12ndr" ||
+    source?.slug === "avp-league";
   const teamAId = crypto.randomUUID();
   const teamBId = crypto.randomUUID();
   const matchId = crypto.randomUUID();
@@ -1803,18 +2053,25 @@ export async function createRatingConfiguration(input: {
 export async function loadPublicProCoverage() {
   requireDatabase();
   const database = getDatabase();
-  const [eventRows, matchRows, latestDate] = await Promise.all([
+  const [storedEventRows, matchRows, latestDate] = await Promise.all([
     database
-      .select()
+      .select({
+        event: professionalEvents,
+        sourceSlug: importSources.slug,
+      })
       .from(professionalEvents)
+      .innerJoin(
+        importSources,
+        eq(professionalEvents.sourceId, importSources.id),
+      )
       .where(
         inArray(professionalEvents.status, ["live", "upcoming", "completed"]),
       )
-      .orderBy(desc(professionalEvents.live), desc(professionalEvents.startsOn))
-      .limit(36),
+      .limit(200),
     database
       .select({
         id: importedMatches.id,
+        sourceId: importedMatches.sourceId,
         externalEventId: importedMatches.externalEventId,
         title: importedMatches.title,
         roundLabel: importedMatches.roundLabel,
@@ -1825,15 +2082,31 @@ export async function loadPublicProCoverage() {
       })
       .from(importedMatches)
       .innerJoin(importSources, eq(importedMatches.sourceId, importSources.id))
-      .where(eq(importSources.slug, "fivb-12ndr"))
+      .where(inArray(importSources.slug, ["fivb-12ndr", "avp-league"]))
       .orderBy(desc(importedMatches.playedAt))
-      .limit(100),
+      .limit(200),
     database
       .select({ date: worldRankings.rankingDate })
       .from(worldRankings)
       .orderBy(desc(worldRankings.rankingDate))
       .limit(1),
   ]);
+  const eventRows = storedEventRows
+    .map((row) => ({ ...row.event, sourceSlug: row.sourceSlug }))
+    .sort((a, b) => {
+      if (a.live !== b.live) return a.live ? -1 : 1;
+      if (a.status !== b.status) {
+        const order = { upcoming: 0, live: 0, completed: 1 } as const;
+        return (
+          order[a.status as keyof typeof order] -
+          order[b.status as keyof typeof order]
+        );
+      }
+      if (a.status === "completed") {
+        return (b.startsOn ?? "").localeCompare(a.startsOn ?? "");
+      }
+      return (a.startsOn ?? "9999").localeCompare(b.startsOn ?? "9999");
+    });
   const rankingDate = latestDate[0]?.date;
   const rankingRows = rankingDate
     ? (
@@ -1854,6 +2127,16 @@ export async function loadPublicProCoverage() {
         )
       ).flat()
     : [];
+  const tourForEvent = (event: (typeof eventRows)[number]) =>
+    event.sourceSlug === "avp-league"
+      ? ("avp" as const)
+      : event.category?.toLowerCase().includes("elite")
+        ? ("elite" as const)
+        : event.category?.toLowerCase().includes("challeng")
+          ? ("challenger" as const)
+          : event.category?.toLowerCase().includes("future")
+            ? ("futures" as const)
+            : ("other" as const);
   return {
     events: eventRows.map((event) => ({
       id: event.id,
@@ -1870,10 +2153,17 @@ export async function loadPublicProCoverage() {
       teamCount: event.teamCount,
       matchCount: event.matchCount,
       lastSyncedAt: event.lastSyncedAt.toISOString(),
+      source:
+        event.sourceSlug === "avp-league"
+          ? ("avp" as const)
+          : ("fivb" as const),
+      tour: tourForEvent(event),
     })),
     matches: matchRows.map((match) => {
       const event = eventRows.find(
-        (candidate) => candidate.externalEventId === match.externalEventId,
+        (candidate) =>
+          candidate.sourceId === match.sourceId &&
+          candidate.externalEventId === match.externalEventId,
       );
       const team = (side: "A" | "B") =>
         match.participants
@@ -1887,6 +2177,7 @@ export async function loadPublicProCoverage() {
         ...(event
           ? {
               canonicalPath: `/events/${professionalEventSlug(event)}/match/${matchSlug}/${match.id}`,
+              tour: tourForEvent(event),
             }
           : {}),
       };
@@ -1982,7 +2273,35 @@ type PublicProMatch = {
     readonly teamB: number;
     readonly favorite: "A" | "B" | "even";
     readonly basis: "SandRating" | "Even prior";
+    readonly outcome?: "predicted" | "upset" | "even";
   };
+  readonly watchOptions: readonly PublicWatchOption[];
+};
+
+type PublicWatchOption = {
+  readonly id: string;
+  readonly kind: "vbtv" | "youtube" | "live-tv";
+  readonly label: string;
+  readonly url?: string;
+  readonly channelName?: string;
+};
+
+type RawProfessionalTeamEntry = {
+  readonly externalTeamId: string;
+  readonly list:
+    "main-draw" | "qualification" | "reserve" | "withdrawn" | "league";
+  readonly label: string;
+  readonly seed?: number;
+  readonly entryPoints?: number;
+  readonly entryTechnicalPoints?: number;
+  readonly seedPoints?: number;
+  readonly seedTechnicalPoints?: number;
+  readonly countryCode?: string;
+  readonly entryTag?: string;
+  readonly players: readonly {
+    readonly externalPersonId: string;
+    readonly displayName: string;
+  }[];
 };
 
 type TeamStanding = {
@@ -1995,6 +2314,675 @@ type TeamStanding = {
   readonly pointsFor: number;
   readonly pointsAgainst: number;
 };
+
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function watchOptionsFromPayload(value: unknown): readonly PublicWatchOption[] {
+  const payload = unknownRecord(value);
+  if (!Array.isArray(payload.watchOptions)) return [];
+  return payload.watchOptions.flatMap((candidate, index) => {
+    const option = unknownRecord(candidate);
+    const kind =
+      option.kind === "vbtv" ||
+      option.kind === "youtube" ||
+      option.kind === "live-tv"
+        ? option.kind
+        : undefined;
+    if (!kind) return [];
+    const label =
+      optionalSnapshotString(option.label) ??
+      (kind === "vbtv"
+        ? "VBTV"
+        : kind === "youtube"
+          ? "YouTube"
+          : (optionalSnapshotString(option.channelName) ?? "Live TV"));
+    return [
+      {
+        id: optionalSnapshotString(option.id) ?? `${kind}-${index}`,
+        kind,
+        label,
+        ...(optionalSnapshotString(option.url)
+          ? { url: optionalSnapshotString(option.url) }
+          : {}),
+        ...(optionalSnapshotString(option.channelName)
+          ? { channelName: optionalSnapshotString(option.channelName) }
+          : {}),
+      },
+    ];
+  });
+}
+
+function rawProfessionalTeamEntries(
+  payloadValue: unknown,
+): readonly RawProfessionalTeamEntry[] {
+  const payload = unknownRecord(payloadValue);
+  if (Array.isArray(payload.teamEntries)) {
+    return payload.teamEntries.flatMap((candidate) => {
+      const entry = unknownRecord(candidate);
+      const list =
+        entry.list === "main-draw" ||
+        entry.list === "qualification" ||
+        entry.list === "reserve" ||
+        entry.list === "withdrawn"
+          ? entry.list
+          : undefined;
+      const externalTeamId = optionalSnapshotString(entry.externalTeamId);
+      const label = optionalSnapshotString(entry.label);
+      const players = Array.isArray(entry.players)
+        ? entry.players.flatMap((candidatePlayer) => {
+            const player = unknownRecord(candidatePlayer);
+            const externalPersonId = optionalSnapshotString(
+              player.externalPersonId,
+            );
+            const displayName = optionalSnapshotString(player.displayName);
+            return externalPersonId && displayName
+              ? [{ externalPersonId, displayName }]
+              : [];
+          })
+        : [];
+      if (!list || !externalTeamId || !label || players.length < 2) return [];
+      return [
+        {
+          externalTeamId,
+          list,
+          label,
+          ...(optionalNumber(entry.seed) !== undefined
+            ? { seed: optionalNumber(entry.seed) }
+            : {}),
+          ...(optionalNumber(entry.entryPoints) !== undefined
+            ? { entryPoints: optionalNumber(entry.entryPoints) }
+            : {}),
+          ...(optionalNumber(entry.entryTechnicalPoints) !== undefined
+            ? {
+                entryTechnicalPoints: optionalNumber(
+                  entry.entryTechnicalPoints,
+                ),
+              }
+            : {}),
+          ...(optionalNumber(entry.seedPoints) !== undefined
+            ? { seedPoints: optionalNumber(entry.seedPoints) }
+            : {}),
+          ...(optionalNumber(entry.seedTechnicalPoints) !== undefined
+            ? {
+                seedTechnicalPoints: optionalNumber(entry.seedTechnicalPoints),
+              }
+            : {}),
+          ...(optionalSnapshotString(entry.countryCode)
+            ? { countryCode: optionalSnapshotString(entry.countryCode) }
+            : {}),
+          ...(optionalSnapshotString(entry.entryTag)
+            ? { entryTag: optionalSnapshotString(entry.entryTag) }
+            : {}),
+          players,
+        },
+      ];
+    });
+  }
+  if (!Array.isArray(payload.rosters)) return [];
+  const season = optionalNumber(payload.season);
+  if (!season) return [];
+  return payload.rosters.flatMap((candidate) => {
+    const roster = unknownRecord(candidate);
+    const teamName = optionalSnapshotString(roster.teamName);
+    const gender =
+      roster.gender === "men" || roster.gender === "women"
+        ? roster.gender
+        : undefined;
+    const playerNames = Array.isArray(roster.playerNames)
+      ? roster.playerNames.flatMap((name) => {
+          const value = optionalSnapshotString(name);
+          return value ? [value] : [];
+        })
+      : [];
+    if (!teamName || !gender || playerNames.length < 2) return [];
+    return [
+      {
+        externalTeamId: `${gender}:${slugSegment(teamName)}`,
+        list: "league" as const,
+        label: teamName,
+        ...(optionalNumber(roster.rank) !== undefined
+          ? { seed: optionalNumber(roster.rank) }
+          : {}),
+        ...(optionalNumber(roster.matchPoints) !== undefined
+          ? { entryPoints: optionalNumber(roster.matchPoints) }
+          : {}),
+        entryTag: gender,
+        players: playerNames.map((displayName) => ({
+          externalPersonId: avpExternalPlayerId({
+            season,
+            teamName,
+            gender,
+            displayName,
+          }),
+          displayName,
+        })),
+      },
+    ];
+  });
+}
+
+function requireSuperAdmin(actor: ApiActor): void {
+  if (!actor.roles.includes("super-admin")) {
+    throw new SandDataServiceError(
+      "SUPER_ADMIN_REQUIRED",
+      "Only a super administrator can change professional event broadcasts.",
+    );
+  }
+}
+
+function validatedWatchUrl(
+  value: string | undefined,
+  kind: PublicWatchOption["kind"],
+): string | undefined {
+  if (!value?.trim()) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new SandDataServiceError(
+      "INVALID_WATCH_OPTION",
+      "Use a complete http or https broadcast link.",
+    );
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new SandDataServiceError(
+      "INVALID_WATCH_OPTION",
+      "Broadcast links must use http or https.",
+    );
+  }
+  if (
+    kind === "youtube" &&
+    !["youtube.com", "www.youtube.com", "youtu.be"].includes(
+      parsed.hostname.toLowerCase(),
+    )
+  ) {
+    throw new SandDataServiceError(
+      "INVALID_WATCH_OPTION",
+      "YouTube coverage must link to youtube.com or youtu.be.",
+    );
+  }
+  return parsed.toString();
+}
+
+export async function saveProfessionalWatchOption(input: {
+  readonly actor: ApiActor;
+  readonly professionalEventId: string;
+  readonly importedMatchId?: string;
+  readonly kind: PublicWatchOption["kind"];
+  readonly label?: string;
+  readonly url?: string;
+  readonly channelName?: string;
+  readonly reason: string;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  requireSuperAdmin(input.actor);
+  const now = input.now ?? new Date();
+  const database = getDatabase();
+  const event = await database.query.professionalEvents.findFirst({
+    where: eq(professionalEvents.id, input.professionalEventId),
+  });
+  if (!event) {
+    throw new SandDataServiceError(
+      "MATCH_NOT_FOUND",
+      "The professional event was not found.",
+    );
+  }
+  const url = validatedWatchUrl(input.url, input.kind);
+  const channelName = input.channelName?.trim() || undefined;
+  if (input.kind === "youtube" && !url) {
+    throw new SandDataServiceError(
+      "INVALID_WATCH_OPTION",
+      "Add the YouTube link for this broadcast.",
+    );
+  }
+  if (input.kind === "live-tv" && !channelName) {
+    throw new SandDataServiceError(
+      "INVALID_WATCH_OPTION",
+      "Add the live TV channel name.",
+    );
+  }
+  const option: PublicWatchOption = {
+    id: crypto.randomUUID(),
+    kind: input.kind,
+    label:
+      input.label?.trim() ||
+      (input.kind === "vbtv"
+        ? "VBTV"
+        : input.kind === "youtube"
+          ? "YouTube"
+          : (channelName ?? "Live TV")),
+    ...(url ? { url } : {}),
+    ...(channelName ? { channelName } : {}),
+  };
+  let entityType = "professional-event";
+  let entityId = event.id;
+  if (input.importedMatchId) {
+    const match = await database.query.importedMatches.findFirst({
+      where: eq(importedMatches.id, input.importedMatchId),
+    });
+    if (
+      !match ||
+      match.sourceId !== event.sourceId ||
+      match.externalEventId !== event.externalEventId
+    ) {
+      throw new SandDataServiceError(
+        "MATCH_NOT_FOUND",
+        "The selected match does not belong to this professional event.",
+      );
+    }
+    const rawPayload = unknownRecord(match.rawPayload);
+    const watchOptions = [
+      ...watchOptionsFromPayload(rawPayload),
+      option,
+    ] satisfies readonly PublicWatchOption[];
+    await database
+      .update(importedMatches)
+      .set({
+        rawPayload: { ...rawPayload, watchOptions },
+        updatedAt: now,
+      })
+      .where(eq(importedMatches.id, match.id));
+    entityType = "imported-match";
+    entityId = match.id;
+  } else {
+    const rawPayload = unknownRecord(event.rawPayload);
+    const watchOptions = [
+      ...watchOptionsFromPayload(rawPayload),
+      option,
+    ] satisfies readonly PublicWatchOption[];
+    await database
+      .update(professionalEvents)
+      .set({
+        rawPayload: { ...rawPayload, watchOptions },
+        updatedAt: now,
+      })
+      .where(eq(professionalEvents.id, event.id));
+  }
+  await database.insert(auditLog).values({
+    actorPersonId: input.actor.personId,
+    actorType: "person",
+    action: "professional-watch-option.created",
+    entityType,
+    entityId,
+    afterHash: stableHash(option),
+    reason: input.reason,
+    createdAt: now,
+  });
+  return {
+    ...option,
+    professionalEventId: event.id,
+    importedMatchId: input.importedMatchId,
+  };
+}
+
+export async function removeProfessionalWatchOption(input: {
+  readonly actor: ApiActor;
+  readonly professionalEventId: string;
+  readonly importedMatchId?: string;
+  readonly optionId: string;
+  readonly reason: string;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  requireSuperAdmin(input.actor);
+  const now = input.now ?? new Date();
+  const database = getDatabase();
+  const event = await database.query.professionalEvents.findFirst({
+    where: eq(professionalEvents.id, input.professionalEventId),
+  });
+  if (!event) {
+    throw new SandDataServiceError(
+      "MATCH_NOT_FOUND",
+      "The professional event was not found.",
+    );
+  }
+  let entityType = "professional-event";
+  let entityId = event.id;
+  let previous: readonly PublicWatchOption[];
+  if (input.importedMatchId) {
+    const match = await database.query.importedMatches.findFirst({
+      where: eq(importedMatches.id, input.importedMatchId),
+    });
+    if (
+      !match ||
+      match.sourceId !== event.sourceId ||
+      match.externalEventId !== event.externalEventId
+    ) {
+      throw new SandDataServiceError(
+        "MATCH_NOT_FOUND",
+        "The selected match does not belong to this professional event.",
+      );
+    }
+    const rawPayload = unknownRecord(match.rawPayload);
+    previous = watchOptionsFromPayload(rawPayload);
+    await database
+      .update(importedMatches)
+      .set({
+        rawPayload: {
+          ...rawPayload,
+          watchOptions: previous.filter(
+            (option) => option.id !== input.optionId,
+          ),
+        },
+        updatedAt: now,
+      })
+      .where(eq(importedMatches.id, match.id));
+    entityType = "imported-match";
+    entityId = match.id;
+  } else {
+    const rawPayload = unknownRecord(event.rawPayload);
+    previous = watchOptionsFromPayload(rawPayload);
+    await database
+      .update(professionalEvents)
+      .set({
+        rawPayload: {
+          ...rawPayload,
+          watchOptions: previous.filter(
+            (option) => option.id !== input.optionId,
+          ),
+        },
+        updatedAt: now,
+      })
+      .where(eq(professionalEvents.id, event.id));
+  }
+  if (!previous.some((option) => option.id === input.optionId)) {
+    throw new SandDataServiceError(
+      "INVALID_WATCH_OPTION",
+      "That broadcast option is no longer present.",
+    );
+  }
+  await database.insert(auditLog).values({
+    actorPersonId: input.actor.personId,
+    actorType: "person",
+    action: "professional-watch-option.removed",
+    entityType,
+    entityId,
+    reason: input.reason,
+    createdAt: now,
+  });
+  return { optionId: input.optionId, removed: true as const };
+}
+
+export async function saveAvpRosterAssignment(input: {
+  readonly actor: ApiActor;
+  readonly season: number;
+  readonly teamName: string;
+  readonly gender: "men" | "women";
+  readonly displayName: string;
+  readonly personId: string;
+  readonly role: "starter" | "substitute";
+  readonly effectiveFrom?: string;
+  readonly effectiveTo?: string;
+  readonly replacesExternalPersonId?: string;
+  readonly reason: string;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  requireSuperAdmin(input.actor);
+  if (
+    input.effectiveFrom &&
+    input.effectiveTo &&
+    input.effectiveTo < input.effectiveFrom
+  ) {
+    throw new SandDataServiceError(
+      "MAPPING_CONFLICT",
+      "The roster assignment end date must be after its start date.",
+    );
+  }
+  if (input.role === "substitute" && !input.replacesExternalPersonId) {
+    throw new SandDataServiceError(
+      "MAPPING_CONFLICT",
+      "Choose the roster player this substitute replaces.",
+    );
+  }
+  const now = input.now ?? new Date();
+  const database = getDatabase();
+  const [source, person] = await Promise.all([
+    ensureSource("avp-league"),
+    database.query.people.findFirst({
+      where: eq(people.id, input.personId),
+    }),
+  ]);
+  if (!person) {
+    throw new SandDataServiceError(
+      "PLAYER_NOT_FOUND",
+      "The selected Duna player was not found.",
+    );
+  }
+  const eventRows = await database
+    .select()
+    .from(professionalEvents)
+    .where(eq(professionalEvents.sourceId, source.id));
+  const seasonEvents = eventRows.filter(
+    (event) =>
+      optionalNumber(unknownRecord(event.rawPayload).season) === input.season,
+  );
+  const teamExists = seasonEvents.some((event) =>
+    rawProfessionalTeamEntries(event.rawPayload).some(
+      (entry) =>
+        entry.list === "league" &&
+        normalizePersonName(entry.label) ===
+          normalizePersonName(input.teamName) &&
+        entry.entryTag === input.gender,
+    ),
+  );
+  if (!teamExists) {
+    throw new SandDataServiceError(
+      "PLAYER_NOT_FOUND",
+      "Refresh the AVP season before adding a roster assignment.",
+    );
+  }
+  const externalPersonId = avpExternalPlayerId({
+    season: input.season,
+    teamName: input.teamName,
+    gender: input.gender,
+    displayName: input.displayName,
+  });
+  const assignment = {
+    id: crypto.randomUUID(),
+    season: input.season,
+    teamName: input.teamName,
+    teamExternalId: slugSegment(input.teamName),
+    gender: input.gender,
+    externalPersonId,
+    displayName: input.displayName.trim(),
+    personId: person.id,
+    role: input.role,
+    ...(input.effectiveFrom ? { effectiveFrom: input.effectiveFrom } : {}),
+    ...(input.effectiveTo ? { effectiveTo: input.effectiveTo } : {}),
+    ...(input.replacesExternalPersonId
+      ? { replacesExternalPersonId: input.replacesExternalPersonId }
+      : {}),
+  };
+  const evidence = {
+    method: "administrator-avp-roster",
+    reason: input.reason,
+    assignment,
+    linkedByPersonId: input.actor.personId,
+  };
+  await database
+    .insert(externalPlayerProfiles)
+    .values({
+      sourceId: source.id,
+      externalPersonId,
+      personId: person.id,
+      displayName: assignment.displayName,
+      normalizedName: normalizePersonName(assignment.displayName),
+      mappingState: "linked",
+      mappingScoreBps: 10_000,
+      mappingEvidence: evidence,
+      isProfessional: true,
+      rawProfile: {
+        source: "avp-league",
+        ...assignment,
+      },
+      lastSeenAt: now,
+      lastImportedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [
+        externalPlayerProfiles.sourceId,
+        externalPlayerProfiles.externalPersonId,
+      ],
+      set: {
+        personId: person.id,
+        displayName: assignment.displayName,
+        normalizedName: normalizePersonName(assignment.displayName),
+        mappingState: "linked",
+        mappingScoreBps: 10_000,
+        mappingEvidence: evidence,
+        rawProfile: { source: "avp-league", ...assignment },
+        lastSeenAt: now,
+        lastImportedAt: now,
+        updatedAt: now,
+      },
+    });
+  await database
+    .insert(importLinks)
+    .values({
+      sourceId: source.id,
+      externalPersonId,
+      personId: person.id,
+      resolutionScoreBps: 10_000,
+      resolutionState: "linked",
+      evidence,
+      claimedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [importLinks.sourceId, importLinks.externalPersonId],
+      set: {
+        personId: person.id,
+        resolutionScoreBps: 10_000,
+        resolutionState: "linked",
+        evidence,
+        claimedAt: now,
+        updatedAt: now,
+      },
+    });
+  for (const event of seasonEvents) {
+    const rawPayload = unknownRecord(event.rawPayload);
+    const previous = Array.isArray(rawPayload.rosterOverrides)
+      ? rawPayload.rosterOverrides
+      : [];
+    const rosterOverrides = [
+      ...previous.filter((candidate) => {
+        const stored = unknownRecord(candidate);
+        return !(
+          stored.teamExternalId === assignment.teamExternalId &&
+          stored.gender === assignment.gender &&
+          stored.externalPersonId === assignment.externalPersonId &&
+          stored.effectiveFrom === assignment.effectiveFrom
+        );
+      }),
+      assignment,
+    ];
+    await database
+      .update(professionalEvents)
+      .set({
+        rawPayload: { ...rawPayload, rosterOverrides },
+        updatedAt: now,
+      })
+      .where(eq(professionalEvents.id, event.id));
+  }
+  if (input.replacesExternalPersonId) {
+    const matchRows = await database
+      .select()
+      .from(importedMatches)
+      .where(
+        and(
+          eq(importedMatches.sourceId, source.id),
+          inArray(importedMatches.importState, [
+            "staged",
+            "needs-mapping",
+            "ready",
+          ]),
+        ),
+      );
+    for (const match of matchRows) {
+      const raw = unknownRecord(match.rawPayload);
+      const playedOn = match.playedAt?.toISOString().slice(0, 10);
+      if (
+        optionalNumber(raw.season) !== input.season ||
+        raw.gender !== input.gender ||
+        (input.effectiveFrom && playedOn && playedOn < input.effectiveFrom) ||
+        (input.effectiveTo && playedOn && playedOn > input.effectiveTo)
+      ) {
+        continue;
+      }
+      const side =
+        normalizePersonName(optionalSnapshotString(raw.teamAName) ?? "") ===
+        normalizePersonName(input.teamName)
+          ? "A"
+          : normalizePersonName(optionalSnapshotString(raw.teamBName) ?? "") ===
+              normalizePersonName(input.teamName)
+            ? "B"
+            : undefined;
+      if (!side) continue;
+      let replaced = false;
+      const participants = match.participants.map((participant) => {
+        if (
+          participant.side === side &&
+          participant.externalPersonId === input.replacesExternalPersonId
+        ) {
+          replaced = true;
+          return {
+            ...participant,
+            externalPersonId,
+            name: assignment.displayName,
+            personId: person.id,
+          };
+        }
+        return participant;
+      });
+      if (!replaced) continue;
+      const complete = Boolean(match.winnerSide && match.sets.length > 0);
+      await database
+        .update(importedMatches)
+        .set({
+          participants,
+          importState:
+            complete &&
+            participants.every((participant) => participant.personId)
+              ? "ready"
+              : complete
+                ? "needs-mapping"
+                : "staged",
+          rawPayload: {
+            ...raw,
+            rosterAssignmentIds: [
+              ...(Array.isArray(raw.rosterAssignmentIds)
+                ? raw.rosterAssignmentIds
+                : []),
+              assignment.id,
+            ],
+          },
+          updatedAt: now,
+        })
+        .where(eq(importedMatches.id, match.id));
+    }
+  }
+  await database.insert(auditLog).values({
+    actorPersonId: input.actor.personId,
+    actorType: "person",
+    action: "avp.roster-assignment.saved",
+    entityType: "avp-season",
+    entityId: source.id,
+    afterHash: stableHash(assignment),
+    reason: input.reason,
+    createdAt: now,
+  });
+  await refreshMatchMappingStates(source.id, now);
+  return assignment;
+}
 
 function objectString(
   value: Record<string, unknown>,
@@ -2164,14 +3152,40 @@ export async function loadPublicProEvent(slug: string) {
       ),
     )
     .orderBy(asc(importedMatches.playedAt), asc(importedMatches.createdAt));
-  const personIds = [
+  const rawTeamEntries = rawProfessionalTeamEntries(event.rawPayload);
+  const entryExternalPersonIds = [
     ...new Set(
-      matchRows.flatMap((match) =>
+      rawTeamEntries.flatMap((entry) =>
+        entry.players.map((player) => player.externalPersonId),
+      ),
+    ),
+  ];
+  const entryLinkRows =
+    entryExternalPersonIds.length > 0
+      ? await database
+          .select({
+            externalPersonId: importLinks.externalPersonId,
+            personId: importLinks.personId,
+          })
+          .from(importLinks)
+          .where(
+            and(
+              eq(importLinks.sourceId, event.sourceId),
+              inArray(importLinks.externalPersonId, entryExternalPersonIds),
+            ),
+          )
+      : [];
+  const personIds = [
+    ...new Set([
+      ...matchRows.flatMap((match) =>
         match.participants.flatMap((participant) =>
           participant.personId ? [participant.personId] : [],
         ),
       ),
-    ),
+      ...entryLinkRows.flatMap((link) =>
+        link.personId ? [link.personId] : [],
+      ),
+    ]),
   ];
   const [personRows, ratingRows] =
     personIds.length > 0
@@ -2179,6 +3193,7 @@ export async function loadPublicProEvent(slug: string) {
           database
             .select({
               id: people.id,
+              displayName: people.displayName,
               handle: people.handle,
               avatarUrl: people.avatarUrl,
             })
@@ -2202,7 +3217,29 @@ export async function loadPublicProEvent(slug: string) {
   const ratingByPersonId = new Map(
     ratingRows.map((rating) => [rating.personId, rating.display]),
   );
+  const personIdByExternalId = new Map(
+    entryLinkRows.flatMap((link) =>
+      link.personId ? [[link.externalPersonId, link.personId] as const] : [],
+    ),
+  );
+  const publicTeamEntries = rawTeamEntries.map((entry) => ({
+    ...entry,
+    players: entry.players.map((player) => {
+      const personId = personIdByExternalId.get(player.externalPersonId);
+      const person = personId ? personById.get(personId) : undefined;
+      const rating = personId ? ratingByPersonId.get(personId) : undefined;
+      return {
+        externalPersonId: player.externalPersonId,
+        name: person?.displayName ?? player.displayName,
+        ...(personId ? { personId } : {}),
+        ...(person?.handle ? { handle: person.handle } : {}),
+        ...(person?.avatarUrl ? { avatarUrl: person.avatarUrl } : {}),
+        ...(rating !== undefined ? { rating } : {}),
+      };
+    }),
+  }));
   const eventSlug = professionalEventSlug(event);
+  const eventWatchOptions = watchOptionsFromPayload(event.rawPayload);
   const toTeam = (
     participants: (typeof matchRows)[number]["participants"],
     side: "A" | "B",
@@ -2217,7 +3254,7 @@ export async function loadPublicProEvent(slug: string) {
           ? ratingByPersonId.get(participant.personId)
           : undefined;
         return {
-          name: participant.name,
+          name: person?.displayName ?? participant.name,
           ...(participant.personId ? { personId: participant.personId } : {}),
           ...(person?.handle ? { handle: person.handle } : {}),
           ...(person?.avatarUrl ? { avatarUrl: person.avatarUrl } : {}),
@@ -2264,6 +3301,9 @@ export async function loadPublicProEvent(slug: string) {
       match.winnerSide === "A" || match.winnerSide === "B"
         ? match.winnerSide
         : undefined;
+    const favorite =
+      teamAChance > 50 ? "A" : teamAChance < 50 ? "B" : ("even" as const);
+    const matchWatchOptions = watchOptionsFromPayload(match.rawPayload);
     return {
       id: match.id,
       externalMatchId: match.externalMatchId,
@@ -2286,9 +3326,21 @@ export async function loadPublicProEvent(slug: string) {
       prediction: {
         teamA: teamAChance,
         teamB: Math.round((100 - teamAChance) * 10) / 10,
-        favorite: teamAChance > 50 ? "A" : teamAChance < 50 ? "B" : "even",
+        favorite,
         basis: hasRatings ? "SandRating" : "Even prior",
+        ...(winnerSide
+          ? {
+              outcome:
+                favorite === "even"
+                  ? ("even" as const)
+                  : winnerSide === favorite
+                    ? ("predicted" as const)
+                    : ("upset" as const),
+            }
+          : {}),
       },
+      watchOptions:
+        matchWatchOptions.length > 0 ? matchWatchOptions : eventWatchOptions,
     };
   });
   const poolMap = new Map<string, PublicProMatch[]>();
@@ -2344,6 +3396,8 @@ export async function loadPublicProEvent(slug: string) {
     matchCount: Math.max(event.matchCount, publicMatches.length),
     sourceUrl: event.sourceUrl,
     lastSyncedAt: event.lastSyncedAt.toISOString(),
+    teamEntries: publicTeamEntries,
+    watchOptions: eventWatchOptions,
     sibling: sibling
       ? {
           name: sibling.name,

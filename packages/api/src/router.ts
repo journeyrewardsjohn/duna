@@ -255,13 +255,17 @@ import {
   loadSandDataOverview,
   mergeUnclaimedProfile,
   queuePlayerSourceConnection,
+  refreshAvpLeague,
   refreshFivbEventIndex,
   refreshWorldRankings,
   rejectImportedMatch,
   requestProfileClaim,
   reviewPlayerSourceConnection,
   SandDataServiceError,
+  saveAvpRosterAssignment,
+  saveProfessionalWatchOption,
   searchDunaPlayers,
+  removeProfessionalWatchOption,
 } from "./sand-data/service";
 import {
   buildPersonDataExport,
@@ -5480,7 +5484,12 @@ const adminRouter = router({
     )
     .input(
       z.object({
-        source: z.enum(["bvbinfo", "volleyball-life", "fivb-12ndr"]),
+        source: z.enum([
+          "bvbinfo",
+          "volleyball-life",
+          "fivb-12ndr",
+          "avp-league",
+        ]),
         externalId: z.string().trim().min(1).max(400),
       }),
     )
@@ -5532,6 +5541,101 @@ const adminRouter = router({
     .mutation(async ({ ctx }) => {
       try {
         return await refreshWorldRankings({
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  refreshAvpLeague: adminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-avp-league-refresh",
+        capacity: 4,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(
+      z
+        .object({
+          season: z.number().int().min(2000).max(2100).optional(),
+        })
+        .optional(),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await refreshAvpLeague({
+          season: input?.season,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  saveProfessionalWatchOption: adminProcedure
+    .input(
+      z.object({
+        professionalEventId: z.string().uuid(),
+        importedMatchId: z.string().uuid().optional(),
+        kind: z.enum(["vbtv", "youtube", "live-tv"]),
+        label: z.string().trim().max(100).optional(),
+        url: z.url().optional(),
+        channelName: z.string().trim().max(100).optional(),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await saveProfessionalWatchOption({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  saveAvpRosterAssignment: adminProcedure
+    .input(
+      z.object({
+        season: z.number().int().min(2000).max(2100),
+        teamName: z.string().trim().min(2).max(120),
+        gender: z.enum(["men", "women"]),
+        displayName: z.string().trim().min(2).max(120),
+        personId: z.string().uuid(),
+        role: z.enum(["starter", "substitute"]),
+        effectiveFrom: z.iso.date().optional(),
+        effectiveTo: z.iso.date().optional(),
+        replacesExternalPersonId: z.string().trim().max(300).optional(),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await saveAvpRosterAssignment({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  removeProfessionalWatchOption: adminProcedure
+    .input(
+      z.object({
+        professionalEventId: z.string().uuid(),
+        importedMatchId: z.string().uuid().optional(),
+        optionId: z.string().trim().min(1).max(100),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await removeProfessionalWatchOption({
+          ...input,
           actor: ctx.actor!,
           now: ctx.now,
         });

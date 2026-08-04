@@ -3,6 +3,7 @@
   "globalEnv": ["EXPO_PUBLIC_*", "NEXT_PUBLIC_*"],
   "globalPassThroughEnv": [
     "AI_GATEWAY_API_KEY",
+    "AI_GATEWAY_AVP_MODEL",
     "APNS_BUNDLE_ID",
     "APNS_KEY_ID",
     "APNS_PRIVATE_KEY",

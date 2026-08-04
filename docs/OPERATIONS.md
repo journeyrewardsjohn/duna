@@ -50,6 +50,26 @@ The production previews must use `DUNA_DATA_SOURCE=database`. If a hosted HQ
 ever displays seeded demonstration metrics, treat that as a release failure and
 verify the project-level environment before redeploying.
 
+## Professional tour data
+
+The Sand data workflow refreshes live FIVB tournaments every five minutes, the
+rendered AVP League season every thirty minutes, the FIVB event index every six
+hours, and Volleyball World rankings daily. Manual runs support `live`, `avp`,
+`index`, and `rankings`.
+
+AVP requires `FIRECRAWL_API_KEY` because the league tables are rendered in the
+browser. Structured normalization uses Vercel AI Gateway through
+`AI_GATEWAY_API_KEY` or the workload’s `VERCEL_OIDC_TOKEN`; the provider-qualified
+model defaults to `openai/gpt-5.6-luna` and can be changed with
+`AI_GATEWAY_AVP_MODEL`. The AVP code never calls an OpenAI provider endpoint
+directly. If Gateway normalization fails, the validated deterministic parse is
+kept and the ingestion checkpoint records the fallback instead of clearing
+stored results.
+
+Event and match broadcast options, including match overrides, are audited
+super-admin changes. Seasonal AVP team mappings and date-bounded substitutions
+are also audited; approved historical matches are not silently rewritten.
+
 ## Durable workflows
 
 `/api/inngest` serves the event-driven workflow processor and one-minute recovery

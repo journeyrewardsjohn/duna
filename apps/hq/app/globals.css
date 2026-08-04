@@ -9979,6 +9979,159 @@ button {
   gap: 0.55rem;
 }
 
+.sand-watch-config > p {
+  color: var(--color-bone-muted);
+}
+
+.sand-watch-form {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.sand-watch-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.sand-watch-form label > span {
+  color: var(--color-bone-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.sand-watch-form input,
+.sand-watch-form select,
+.sand-watch-option input {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  color: inherit;
+  min-height: 42px;
+  padding: 0.65rem 0.75rem;
+}
+
+.sand-watch-form__reason {
+  grid-column: span 2;
+}
+
+.sand-watch-form > .sand-action-feedback {
+  grid-column: 1 / -1;
+}
+
+.sand-watch-events {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1.2rem;
+}
+
+.sand-watch-events > section {
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  padding: 0.8rem;
+}
+
+.sand-watch-events > section > header {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.5rem;
+}
+
+.sand-watch-events header small,
+.sand-watch-match > small {
+  color: var(--color-bone-muted);
+}
+
+.sand-watch-option {
+  align-items: center;
+  border-top: 1px solid var(--color-line);
+  display: flex;
+  gap: 0.7rem;
+  padding: 0.65rem 0;
+}
+
+.sand-watch-option > span {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.sand-watch-option > span small {
+  color: var(--color-bone-muted);
+}
+
+.sand-watch-option form {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.sand-watch-option form input {
+  min-height: 34px;
+  width: 170px;
+}
+
+.sand-watch-option form button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--color-line);
+  border-radius: 9px;
+  color: var(--color-bone-muted);
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.sand-watch-match {
+  margin-top: 0.5rem;
+  padding-left: 1rem;
+}
+
+.avp-roster-admin > p {
+  color: var(--color-bone-muted);
+  font-size: 0.7rem;
+}
+
+.avp-roster-admin > form {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.avp-roster-admin label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.avp-roster-admin label > span {
+  color: var(--color-bone-muted);
+  font-size: 0.62rem;
+  font-weight: 750;
+}
+
+.avp-roster-admin input,
+.avp-roster-admin select {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 11px;
+  color: var(--color-bone);
+  min-height: 43px;
+  padding: 0.65rem 0.75rem;
+}
+
+.avp-roster-admin__reason {
+  grid-column: span 3;
+}
+
+.avp-roster-admin > form > .sand-action-feedback {
+  grid-column: 1 / -1;
+}
+
 .sand-mini-action {
   align-items: center;
   display: flex;
@@ -10502,6 +10655,8 @@ button {
 
 @media (max-width: 1080px) {
   .sand-import-form,
+  .sand-watch-form,
+  .avp-roster-admin > form,
   .mapping-review,
   .ratings-lab {
     grid-template-columns: 1fr;
@@ -10534,10 +10689,24 @@ button {
   }
 
   .sand-match-actions form,
+  .sand-watch-option,
+  .sand-watch-option form,
   .mapping-review form {
     align-items: stretch;
     flex-direction: column;
     grid-template-columns: 1fr;
+  }
+
+  .sand-watch-form__reason {
+    grid-column: auto;
+  }
+
+  .avp-roster-admin__reason {
+    grid-column: auto;
+  }
+
+  .sand-watch-option form input {
+    width: 100%;
   }
 
   .profile-merge-card form > svg {
