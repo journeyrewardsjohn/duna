@@ -9,37 +9,41 @@ import { compactPlayerName } from "@/lib/player-name";
 export function MatchCard({
   match,
   viewerId,
+  variant = "default",
 }: {
   readonly match: MatchSummary;
   readonly viewerId: string;
+  readonly variant?: "default" | "timeline";
 }) {
   const result = getMatchResult(match, viewerId);
   const resultLabel =
     result === "win" ? "Win" : result === "loss" ? "Loss" : "Unverified";
   return (
     <Link
-      className={`match-card match-card--${result}`}
+      className={`match-card match-card--${result}${variant === "timeline" ? " match-card--timeline" : ""}`}
       href={`/app/matches/${match.id}`}
     >
-      <div className="match-card__date">
-        <span className="match-card__day">
-          {formatVenueTime(match.playedAt, "America/Los_Angeles", "en-US", {
-            day: "2-digit",
-          })}
-        </span>
-        <span className="match-card__month">
-          {formatVenueTime(match.playedAt, "America/Los_Angeles", "en-US", {
-            month: "short",
-            year: "numeric",
-          })}
-        </span>
-        <small>
-          {formatVenueTime(match.playedAt, "America/Los_Angeles", "en-US", {
-            hour: "numeric",
-            minute: "2-digit",
-          })}
-        </small>
-      </div>
+      {variant === "default" && (
+        <div className="match-card__date">
+          <span className="match-card__day">
+            {formatVenueTime(match.playedAt, "America/Los_Angeles", "en-US", {
+              day: "2-digit",
+            })}
+          </span>
+          <span className="match-card__month">
+            {formatVenueTime(match.playedAt, "America/Los_Angeles", "en-US", {
+              month: "short",
+              year: "numeric",
+            })}
+          </span>
+          <small>
+            {formatVenueTime(match.playedAt, "America/Los_Angeles", "en-US", {
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </small>
+        </div>
+      )}
       <div className="match-card__body">
         <div className="match-card__meta">
           <Badge
@@ -53,6 +57,14 @@ export function MatchCard({
           >
             {resultLabel}
           </Badge>
+          {variant === "timeline" && (
+            <time dateTime={match.playedAt}>
+              {formatVenueTime(match.playedAt, "America/Los_Angeles", "en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </time>
+          )}
           <span>{match.venueName}</span>
         </div>
         <div className="match-card__teams">

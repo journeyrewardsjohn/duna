@@ -1,8 +1,9 @@
+import type { MatchSummary } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import { Plus, ScanLine, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { MatchCard } from "@/components/match-card";
-import { RatingTrendChart } from "@/components/rating-trend-chart";
+import { MatchPerformanceAnalytics } from "@/components/match-performance-analytics";
 import { getServerCaller } from "@/lib/api";
 import {
   getMatchResult,
@@ -11,6 +12,87 @@ import {
 } from "@/lib/match-insights";
 
 export const metadata = { title: "Matches" };
+
+const MATCH_TIME_ZONE = "America/Los_Angeles";
+
+interface MatchDayGroup {
+  readonly key: string;
+  readonly day: string;
+  readonly weekday: string;
+  readonly matches: readonly MatchSummary[];
+}
+
+interface MatchMonthGroup {
+  readonly key: string;
+  readonly label: string;
+  readonly days: readonly MatchDayGroup[];
+}
+
+function datePart(value: string, type: "year" | "month" | "day") {
+  return new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: MATCH_TIME_ZONE,
+  })
+    .formatToParts(new Date(value))
+    .find((part) => part.type === type)?.value;
+}
+
+function formatMatchDate(value: string, options: Intl.DateTimeFormatOptions) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: MATCH_TIME_ZONE,
+    ...options,
+  }).format(new Date(value));
+}
+
+function groupMatchHistory(matches: readonly MatchSummary[]) {
+  const months = new Map<
+    string,
+    {
+      label: string;
+      days: Map<
+        string,
+        Omit<MatchDayGroup, "matches"> & { matches: MatchSummary[] }
+      >;
+    }
+  >();
+
+  for (const match of [...matches].sort(
+    (left, right) =>
+      new Date(right.playedAt).getTime() - new Date(left.playedAt).getTime(),
+  )) {
+    const year = datePart(match.playedAt, "year") ?? "";
+    const month = datePart(match.playedAt, "month") ?? "";
+    const day = datePart(match.playedAt, "day") ?? "";
+    const monthKey = `${year}-${month}`;
+    const dayKey = `${monthKey}-${day}`;
+    const monthGroup = months.get(monthKey) ?? {
+      label: formatMatchDate(match.playedAt, {
+        month: "long",
+        year: "numeric",
+      }),
+      days: new Map(),
+    };
+    const dayGroup = monthGroup.days.get(dayKey) ?? {
+      key: dayKey,
+      day,
+      weekday: formatMatchDate(match.playedAt, {
+        weekday: "short",
+      }),
+      matches: [],
+    };
+    dayGroup.matches.push(match);
+    monthGroup.days.set(dayKey, dayGroup);
+    months.set(monthKey, monthGroup);
+  }
+
+  return [...months.entries()].map<MatchMonthGroup>(([key, group]) => ({
+    key,
+    label: group.label,
+    days: [...group.days.values()],
+  }));
+}
 
 export default async function MatchesPage() {
   const caller = await getServerCaller();
@@ -69,6 +151,7 @@ export default async function MatchesPage() {
   const topPartner = [...partners.values()].sort(
     (a, b) => b.matches - a.matches || b.wins - a.wins,
   )[0];
+  const matchHistory = groupMatchHistory(matches);
   return (
     <main className="standard-page">
       <section className="page-heading-row">
@@ -97,23 +180,18 @@ export default async function MatchesPage() {
         </div>
       </section>
 
-      <section className="match-insight-grid">
-        <article className="rating-trend-card">
-          <header>
-            <div>
-              <span className="page-eyebrow">Sand Rating history</span>
-              <h2>Your rating, match by match.</h2>
-            </div>
-            <Badge tone="neutral">By played date</Badge>
-          </header>
-          <RatingTrendChart matches={matches} />
-        </article>
-        <article className="match-rating-card">
-          <Badge tone="positive">{dashboard.player.rating.confidence}</Badge>
-          <span>Current Sand Rating</span>
-          <Numeric>{dashboard.player.rating.display.toFixed(2)}</Numeric>
-          <small>{dashboard.player.rating.discipline.replace("-", " ")}</small>
-        </article>
+      <MatchPerformanceAnalytics
+        confidence={dashboard.player.rating.confidence}
+        currentRating={dashboard.player.rating.display}
+        discipline={dashboard.player.rating.discipline}
+        matches={matches}
+        viewerId={viewerId}
+      />
+
+      <section
+        className="match-quick-insights"
+        aria-label="Recent match insights"
+      >
         <article className="match-form-card">
           <div>
             <span className="page-eyebrow">Last 10</span>
@@ -182,9 +260,43 @@ export default async function MatchesPage() {
           </div>
           <Badge tone="neutral">{matches.length} connected results</Badge>
         </div>
-        <div className="match-list match-list--page">
-          {matches.map((match) => (
-            <MatchCard key={match.id} match={match} viewerId={viewerId} />
+        <div className="match-history-groups">
+          {matchHistory.map((month) => (
+            <section className="match-history-month" key={month.key}>
+              <header className="match-history-month__header">
+                <h3>{month.label}</h3>
+                <span>
+                  {month.days.reduce(
+                    (total, day) => total + day.matches.length,
+                    0,
+                  )}{" "}
+                  results
+                </span>
+              </header>
+              <div className="match-history-month__days">
+                {month.days.map((day) => (
+                  <section className="match-history-day" key={day.key}>
+                    <div className="match-history-day__marker" aria-hidden>
+                      <span>{day.weekday}</span>
+                      <strong>{day.day}</strong>
+                      {day.matches.length > 1 && (
+                        <small>{day.matches.length} matches</small>
+                      )}
+                    </div>
+                    <div className="match-history-day__matches">
+                      {day.matches.map((match) => (
+                        <MatchCard
+                          key={match.id}
+                          match={match}
+                          variant="timeline"
+                          viewerId={viewerId}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </section>
           ))}
           {matches.length === 0 && (
             <article className="empty-state">
