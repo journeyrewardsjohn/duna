@@ -398,6 +398,8 @@ import {
   saveAvpRosterAssignment,
   saveProfessionalEventEditorial,
   saveProfessionalEventMedia,
+  saveProfessionalEventPrediction,
+  saveProfessionalMatchPrediction,
   saveProfessionalMatchSchedule,
   saveProfessionalWatchOption,
   searchPublicPlayers,
@@ -1458,11 +1460,17 @@ const publicRouter = router({
     }),
   ratingLab: publicProcedure.query(() => loadPublicRatingLab()),
   worldRankings: publicProcedure.query(() => loadPublicWorldRankings()),
-  proCoverage: publicProcedure.query(() => loadPublicProCoverage()),
+  proCoverage: publicProcedure.query(({ ctx }) =>
+    loadPublicProCoverage(ctx.now),
+  ),
   proEvent: publicProcedure
     .input(z.object({ slug: z.string().trim().min(1).max(180) }))
-    .query(async ({ input }) => {
-      const event = await loadPublicProEvent(input.slug);
+    .query(async ({ input, ctx }) => {
+      const event = await loadPublicProEvent(
+        input.slug,
+        ctx.actor?.personId,
+        ctx.now,
+      );
       if (!event) throw new TRPCError({ code: "NOT_FOUND" });
       return event;
     }),
@@ -1473,8 +1481,13 @@ const publicRouter = router({
         matchId: z.string().uuid(),
       }),
     )
-    .query(async ({ input }) => {
-      const match = await loadPublicProMatch(input.eventSlug, input.matchId);
+    .query(async ({ input, ctx }) => {
+      const match = await loadPublicProMatch(
+        input.eventSlug,
+        input.matchId,
+        ctx.actor?.personId,
+        ctx.now,
+      );
       if (!match) throw new TRPCError({ code: "NOT_FOUND" });
       return match;
     }),
@@ -2352,6 +2365,94 @@ const playerRouter = router({
               videoId: input.videoId,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  predictProEvent: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "professional-event-prediction",
+        capacity: 30,
+        refillPerMinute: 20,
+      }),
+    )
+    .input(
+      z.object({
+        eventSlug: z.string().trim().min(1).max(180),
+        externalTeamId: z.string().trim().min(1).max(180),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        eventId: z.string().uuid(),
+        externalTeamId: z.string(),
+        changed: z.boolean(),
+        updatedAt: z.iso.datetime(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.predictProEvent",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await saveProfessionalEventPrediction({
+              actor: ctx.actor!,
+              eventSlug: input.eventSlug,
+              externalTeamId: input.externalTeamId,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  predictProMatch: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "professional-match-prediction",
+        capacity: 60,
+        refillPerMinute: 30,
+      }),
+    )
+    .input(
+      z.object({
+        eventSlug: z.string().trim().min(1).max(180),
+        matchId: z.string().uuid(),
+        predictedSide: z.enum(["A", "B"]),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        matchId: z.string().uuid(),
+        predictedSide: z.enum(["A", "B"]),
+        changed: z.boolean(),
+        updatedAt: z.iso.datetime(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.predictProMatch",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await saveProfessionalMatchPrediction({
+              actor: ctx.actor!,
+              eventSlug: input.eventSlug,
+              matchId: input.matchId,
+              predictedSide: input.predictedSide,
               now: ctx.now,
             });
           } catch (error) {

@@ -4165,6 +4165,122 @@ export const professionalEvents = pgTable(
   ],
 );
 
+export const professionalEventPredictions = pgTable(
+  "professional_event_predictions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => professionalEvents.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    externalTeamId: text("external_team_id").notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("professional_event_prediction_person_unique").on(
+      table.eventId,
+      table.personId,
+    ),
+    index("professional_event_prediction_team_idx").on(
+      table.eventId,
+      table.externalTeamId,
+    ),
+  ],
+);
+
+export const professionalEventPredictionHistory = pgTable(
+  "professional_event_prediction_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => professionalEvents.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    previousExternalTeamId: text("previous_external_team_id"),
+    newExternalTeamId: text("new_external_team_id").notNull(),
+    changedAt: timestamp("changed_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("professional_event_prediction_history_person_idx").on(
+      table.eventId,
+      table.personId,
+      table.changedAt,
+    ),
+  ],
+);
+
+export const professionalMatchPredictions = pgTable(
+  "professional_match_predictions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    importedMatchId: uuid("imported_match_id")
+      .notNull()
+      .references(() => importedMatches.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    predictedSide: varchar("predicted_side", { length: 1 }).notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("professional_match_prediction_person_unique").on(
+      table.importedMatchId,
+      table.personId,
+    ),
+    index("professional_match_prediction_side_idx").on(
+      table.importedMatchId,
+      table.predictedSide,
+    ),
+    check(
+      "professional_match_prediction_side_valid",
+      sql`${table.predictedSide} IN ('A', 'B')`,
+    ),
+  ],
+);
+
+export const professionalMatchPredictionHistory = pgTable(
+  "professional_match_prediction_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    importedMatchId: uuid("imported_match_id")
+      .notNull()
+      .references(() => importedMatches.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    previousSide: varchar("previous_side", { length: 1 }),
+    newSide: varchar("new_side", { length: 1 }).notNull(),
+    changedAt: timestamp("changed_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("professional_match_prediction_history_person_idx").on(
+      table.importedMatchId,
+      table.personId,
+      table.changedAt,
+    ),
+    check(
+      "professional_match_prediction_history_side_valid",
+      sql`${table.newSide} IN ('A', 'B') AND (${table.previousSide} IS NULL OR ${table.previousSide} IN ('A', 'B'))`,
+    ),
+  ],
+);
+
 export const worldRankings = pgTable(
   "world_rankings",
   {

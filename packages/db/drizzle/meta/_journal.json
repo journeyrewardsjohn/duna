@@ -358,6 +358,13 @@
       "when": 1785935273769,
       "tag": "0050_wealthy_zodiak",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1785942009277,
+      "tag": "0051_magical_deadpool",
+      "breakpoints": true
     }
   ]
 }

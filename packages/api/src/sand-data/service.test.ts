@@ -5,7 +5,11 @@ import {
   mergeProfessionalEventPayload,
   parseAvpLeagueEventPayload,
   parsePlayerSourceProfile,
+  professionalEventCurrentRound,
   professionalEventSlug,
+  professionalMatchScheduledAt,
+  professionalMatchPredictionClosed,
+  professionalMatchStatus,
   selectFivbRefreshCandidates,
   shouldCreateUnclaimedSourceProfile,
 } from "./service";
@@ -148,6 +152,78 @@ describe("professionalEventSlug", () => {
         startsOn: "2026-08-20",
       }),
     ).toBe("elite-16-montreal-womens-2026-08-20");
+  });
+});
+
+describe("professional live match timing", () => {
+  it("combines the source date and local event clock without treating every event match as live", () => {
+    const scheduledAt = professionalMatchScheduledAt({
+      playedAt: new Date("2026-08-05T12:00:00.000Z"),
+      time: "13:00",
+      timezone: "Europe/Berlin",
+    });
+    expect(scheduledAt?.toISOString()).toBe("2026-08-05T11:00:00.000Z");
+    expect(
+      professionalMatchStatus({
+        eventLive: true,
+        scheduledAt,
+        now: new Date("2026-08-05T10:00:00.000Z"),
+      }),
+    ).toBe("scheduled");
+    expect(
+      professionalMatchStatus({
+        eventLive: true,
+        scheduledAt,
+        now: new Date("2026-08-05T11:20:00.000Z"),
+      }),
+    ).toBe("live");
+    expect(
+      professionalMatchStatus({
+        eventLive: true,
+        hasScore: true,
+      }),
+    ).toBe("live");
+    expect(
+      professionalMatchStatus({
+        eventLive: true,
+        hasScore: true,
+        winnerSide: "A",
+      }),
+    ).toBe("completed");
+    expect(
+      professionalMatchPredictionClosed({
+        status: "scheduled",
+        scheduledAt,
+        now: new Date("2026-08-05T11:01:00.000Z"),
+      }),
+    ).toBe(true);
+    expect(
+      professionalMatchPredictionClosed({
+        status: "scheduled",
+        scheduledAt,
+        now: new Date("2026-08-05T10:59:00.000Z"),
+      }),
+    ).toBe(false);
+  });
+
+  it("uses the active match round before the next scheduled round", () => {
+    expect(
+      professionalEventCurrentRound(
+        [
+          {
+            roundLabel: "Pool B (Standings)",
+            status: "live",
+            scheduledAt: "2026-08-05T15:00:00.000Z",
+          },
+          {
+            roundLabel: "Quarterfinals",
+            status: "scheduled",
+            scheduledAt: "2026-08-06T15:00:00.000Z",
+          },
+        ],
+        new Date("2026-08-05T15:30:00.000Z"),
+      ),
+    ).toBe("Pool B");
   });
 });
 
