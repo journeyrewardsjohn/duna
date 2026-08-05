@@ -1,10 +1,12 @@
 import type { PublicProEvent } from "@duna/api";
+import { googleMapsSearchUrl } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   Activity,
   ArrowLeft,
   ArrowRight,
   CalendarDays,
+  Clock3,
   ExternalLink,
   MapPin,
   Radio,
@@ -16,7 +18,12 @@ import {
   Video,
 } from "lucide-react";
 import Link from "next/link";
+import {
+  ProEventWinnerPicker,
+  ProMatchCommunityPicker,
+} from "@/components/pro-prediction-picker";
 import { ProfessionalMatchCard } from "@/components/professional-match-card";
+import { ProEventVenueCard } from "@/components/pro-event-venue-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { countryFlag } from "@/lib/country-flag";
@@ -42,6 +49,33 @@ function eventDates(start?: string, end?: string) {
     : format(start);
 }
 
+function eventRoundRank(label: string) {
+  const normalized = label.toLowerCase();
+  if (/final\s*(?:1st|first)|gold|championship|^final$/.test(normalized))
+    return 8;
+  if (/final\s*(?:3rd|third)|bronze|third[\s-]*place/.test(normalized))
+    return 7;
+  if (/semi|1\/2/.test(normalized)) return 6;
+  if (/quarter|1\/4/.test(normalized)) return 5;
+  if (/round\s*of\s*16|r16|1\/8/.test(normalized)) return 4;
+  if (/round\s*of\s*32|r32|1\/16/.test(normalized)) return 3;
+  if (/pool|group/.test(normalized)) return 2;
+  if (/qualif|lucky loser/.test(normalized)) return 1;
+  return 0;
+}
+
+function isConfirmedTeam(team: ProTeam) {
+  const placeholder = /\b(?:bye|loser|tbd|to be determined|unknown|winner)\b/i;
+  return (
+    team.players.length >= 2 &&
+    !placeholder.test(team.label) &&
+    team.players.every(
+      (player) =>
+        player.name.trim().length > 1 && !placeholder.test(player.name),
+    )
+  );
+}
+
 function TeamName({
   team,
   compact = false,
@@ -55,6 +89,11 @@ function TeamName({
     <span
       className={`pro-team-name ${compact ? "pro-team-name--compact" : ""}`}
     >
+      {team.countryCode && (
+        <b aria-label={team.countryCode} className="pro-team-name__flag">
+          {countryFlag(team.countryCode)}
+        </b>
+      )}
       {team.players.map((player, index) => (
         <span key={`${player.personId ?? player.name}-${index}`}>
           {index > 0 && <i>/</i>}
@@ -238,12 +277,27 @@ function AvpOverallStandings({
 }
 
 export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
-  const completedMatchCount = event.matches.filter(
-    (match) => match.status === "completed",
-  ).length;
-  const upcomingMatches = event.matches.filter(
-    (match) => match.status !== "completed",
-  );
+  const completedMatchCount = event.completedMatchCount;
+  const topMatches = event.matches
+    .filter(
+      (match) =>
+        match.status !== "completed" &&
+        isConfirmedTeam(match.teamA) &&
+        isConfirmedTeam(match.teamB),
+    )
+    .sort((a, b) => {
+      if (a.status !== b.status) return a.status === "live" ? -1 : 1;
+      if (a.status === "live") {
+        return eventRoundRank(b.roundLabel) - eventRoundRank(a.roundLabel);
+      }
+      const left = a.scheduledAt ? Date.parse(a.scheduledAt) : Infinity;
+      const right = b.scheduledAt ? Date.parse(b.scheduledAt) : Infinity;
+      return (
+        left - right ||
+        eventRoundRank(b.roundLabel) - eventRoundRank(a.roundLabel)
+      );
+    })
+    .slice(0, 6);
   const matchBroadcasts = event.matches.filter(
     (match) => match.watchOptions.length > 0,
   );
@@ -260,6 +314,7 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
   const venue = event.editorial.venue;
   const structuredVenueAddress = [
     venue?.addressLine1,
+    venue?.addressLine2,
     venue?.locality,
     venue?.administrativeArea,
     venue?.postalCode,
@@ -278,11 +333,34 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
   } else if (venueAddress) {
     venueMapParameters.set("address", venueAddress);
   }
-  const venueMapHref =
-    venue?.googleMapsUri ??
-    (venueAddress
-      ? `https://www.google.com/maps/search/?${new URLSearchParams({ api: "1", query: venueAddress }).toString()}`
-      : undefined);
+  const venueMapHref = venueAddress
+    ? googleMapsSearchUrl({
+        address: venueAddress,
+        googlePlaceId: venue?.googlePlaceId,
+      })
+    : undefined;
+  const confirmedBracket = event.bracket
+    .map((round) => ({
+      ...round,
+      matches: round.matches.filter(
+        (match) => isConfirmedTeam(match.teamA) && isConfirmedTeam(match.teamB),
+      ),
+    }))
+    .filter((round) => round.matches.length > 0);
+  const matchGroups = [
+    ...new Set(event.matches.map((match) => match.roundLabel)),
+  ]
+    .sort((a, b) => eventRoundRank(b) - eventRoundRank(a) || a.localeCompare(b))
+    .map((roundLabel) => ({
+      roundLabel,
+      matches: event.matches
+        .filter((match) => match.roundLabel === roundLabel)
+        .sort((a, b) =>
+          (a.scheduledAt ?? a.playedAt ?? "").localeCompare(
+            b.scheduledAt ?? b.playedAt ?? "",
+          ),
+        ),
+    }));
   const structuredData = professionalEventJsonLd(event);
 
   return (
@@ -311,6 +389,7 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
             </Badge>
             <Badge>{event.genderCategory}</Badge>
             <Badge>{event.category ?? "FIVB"}</Badge>
+            {event.currentRound && <Badge>{event.currentRound}</Badge>}
           </div>
           <h1>{event.name}</h1>
           <div className="pro-event-hero__facts">
@@ -385,7 +464,7 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
             </figure>
           )}
           <div className="pro-event-hero__scorecard">
-            <span>Live tournament desk</span>
+            <span>{event.currentRound ?? "Tournament desk"}</span>
             <strong>
               <Numeric>{completedMatchCount}</Numeric>
               <small> / {event.matchCount} matches</small>
@@ -410,37 +489,17 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
         </aside>
       </section>
 
-      <div className="pro-event-content">
+      <div
+        className={`pro-event-content${event.live ? " pro-event-content--live" : ""}`}
+      >
         {venueAddress && venueMapHref && (
-          <section className="pro-event-section pro-event-venue">
-            <a
-              aria-label={`Open ${event.editorial.venueName ?? venueAddress} in Google Maps`}
-              className="pro-event-venue__map"
-              href={venueMapHref}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <img
-                alt={`Map showing ${event.editorial.venueName ?? venueAddress}`}
-                loading="lazy"
-                src={`/api/places/map?${venueMapParameters.toString()}`}
-              />
-              <span>
-                Explore the venue <ExternalLink aria-hidden size={14} />
-              </span>
-            </a>
-            <div className="pro-event-venue__details">
-              <span className="page-eyebrow">Event location</span>
-              <h2>{event.editorial.venueName ?? event.location}</h2>
-              <p>{venueAddress}</p>
-              {event.editorial.timezone && (
-                <small>Schedule shown in {event.editorial.timezone}</small>
-              )}
-              <a href={venueMapHref} rel="noreferrer" target="_blank">
-                Directions <ArrowRight aria-hidden size={14} />
-              </a>
-            </div>
-          </section>
+          <ProEventVenueCard
+            address={venueAddress}
+            mapHref={venueMapHref}
+            mapImageSrc={`/api/places/map?${venueMapParameters.toString()}`}
+            timezone={event.editorial.timezone}
+            title={event.editorial.venueName ?? event.location ?? venueAddress}
+          />
         )}
         <section className="pro-event-section pro-watch">
           <header>
@@ -681,7 +740,7 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
           </section>
         )}
 
-        {event.bracket.length > 0 && (
+        {confirmedBracket.length > 0 && (
           <section className="pro-event-section pro-bracket">
             <header>
               <div>
@@ -689,7 +748,7 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
                 <h2>Bracket</h2>
               </div>
               <Badge>
-                {event.bracket.reduce(
+                {confirmedBracket.reduce(
                   (sum, round) => sum + round.matches.length,
                   0,
                 )}{" "}
@@ -700,10 +759,10 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
               <div
                 className="pro-bracket__rounds"
                 style={{
-                  gridTemplateColumns: `repeat(${event.bracket.length}, minmax(230px, 1fr))`,
+                  gridTemplateColumns: `repeat(${confirmedBracket.length}, minmax(230px, 1fr))`,
                 }}
               >
-                {event.bracket.map((round) => (
+                {confirmedBracket.map((round) => (
                   <section key={round.key}>
                     <h3>{round.label}</h3>
                     <div>
@@ -775,6 +834,7 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
                     <span>W</span>
                     <span>L</span>
                     <span>Sets</span>
+                    <span>Pts</span>
                   </div>
                   {pool.standings.map((standing, index) => (
                     <div className="pro-standing-row" key={standing.team.key}>
@@ -785,6 +845,9 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
                       <small>
                         {standing.setsFor}–{standing.setsAgainst}
                       </small>
+                      <small>
+                        {standing.pointsFor}–{standing.pointsAgainst}
+                      </small>
                     </div>
                   ))}
                 </article>
@@ -793,7 +856,7 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
           </section>
         )}
 
-        {!event.avpLeague && (
+        {!event.avpLeague && event.liveStandings.length > 0 && (
           <section className="pro-event-section pro-live-table">
             <header>
               <div>
@@ -802,7 +865,10 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
                 </span>
                 <h2>{event.live ? "Live standings" : "Standings"}</h2>
               </div>
-              <Activity aria-hidden size={23} />
+              <div className="pro-live-table__status">
+                {event.live && <Badge>Medals provisional</Badge>}
+                <Activity aria-hidden size={23} />
+              </div>
             </header>
             <div className="pro-live-table__head">
               <span>Place</span>
@@ -814,8 +880,29 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
             </div>
             {event.liveStandings.slice(0, 25).map((standing, index) => (
               <div className="pro-live-table__row" key={standing.team.key}>
-                <Numeric>{index + 1}</Numeric>
-                <TeamName compact team={standing.team} />
+                <span
+                  aria-label={`Place ${index + 1}`}
+                  className="pro-live-table__place"
+                >
+                  {standing.medal === 1 ||
+                  (event.live && !standing.medal && index === 0) ? (
+                    "🥇"
+                  ) : standing.medal === 2 ||
+                    (event.live && !standing.medal && index === 1) ? (
+                    "🥈"
+                  ) : standing.medal === 3 ||
+                    (event.live && !standing.medal && index === 2) ? (
+                    "🥉"
+                  ) : (
+                    <Numeric>{index + 1}</Numeric>
+                  )}
+                </span>
+                <div className="pro-live-table__team">
+                  <TeamName compact team={standing.team} />
+                  <small>
+                    {standing.stageLabel} · {standing.state}
+                  </small>
+                </div>
                 <strong>{standing.wins}</strong>
                 <span>{standing.losses}</span>
                 <span>
@@ -829,29 +916,72 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
           </section>
         )}
 
-        {upcomingMatches.length > 0 && (
-          <section className="pro-event-section pro-predictions">
+        {event.winnerPrediction.entries.length > 0 && (
+          <ProEventWinnerPicker event={event} />
+        )}
+
+        {topMatches.length > 0 && (
+          <section className="pro-event-section pro-top-matches">
             <header>
               <div>
-                <span className="page-eyebrow">SandRating model</span>
-                <h2>Matches + predictions</h2>
+                <span className="page-eyebrow">
+                  {event.live ? "Live now and next" : "Next on court"}
+                </span>
+                <h2>Top matches</h2>
               </div>
               <Sparkles aria-hidden size={22} />
             </header>
-            <div>
-              {upcomingMatches.slice(0, 12).map((match) => (
-                <article key={match.id}>
-                  <div>
-                    <small>{match.roundLabel}</small>
+            <div className="pro-top-matches__grid">
+              {topMatches.map((match) => (
+                <article
+                  className={match.status === "live" ? "is-live" : undefined}
+                  key={match.id}
+                >
+                  <header>
+                    <Badge
+                      tone={match.status === "live" ? "danger" : "neutral"}
+                    >
+                      {match.status === "live" ? (
+                        <>
+                          <Radio aria-hidden size={11} /> Live
+                        </>
+                      ) : (
+                        "Upcoming"
+                      )}
+                    </Badge>
+                    <span>{match.roundLabel}</span>
+                    <time dateTime={match.scheduledAt ?? match.playedAt}>
+                      <Clock3 aria-hidden size={13} />
+                      {match.time ?? "Time pending"}
+                    </time>
+                  </header>
+                  <Link
+                    className="pro-top-matches__matchup"
+                    href={match.canonicalPath}
+                  >
                     <TeamName compact team={match.teamA} />
+                    <span>vs</span>
                     <TeamName compact team={match.teamB} />
+                  </Link>
+                  <div className="pro-top-matches__model">
+                    <small>Duna forecast</small>
+                    <div className="pro-prediction-meter">
+                      <span style={{ width: `${match.prediction.teamA}%` }} />
+                      <strong>{match.prediction.teamA.toFixed(0)}%</strong>
+                      <strong>{match.prediction.teamB.toFixed(0)}%</strong>
+                    </div>
                   </div>
-                  <div className="pro-prediction-meter">
-                    <span style={{ width: `${match.prediction.teamA}%` }} />
-                    <strong>{match.prediction.teamA.toFixed(0)}%</strong>
-                    <strong>{match.prediction.teamB.toFixed(0)}%</strong>
-                  </div>
-                  <Link href={match.canonicalPath}>Match center</Link>
+                  <ProMatchCommunityPicker
+                    compact
+                    eventSlug={event.slug}
+                    match={match}
+                  />
+                  <Link
+                    className="pro-top-matches__open"
+                    href={match.canonicalPath}
+                  >
+                    Open match center <ArrowRight aria-hidden size={14} />
+                  </Link>
                 </article>
               ))}
             </div>
@@ -869,26 +999,36 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
             </div>
             <Badge>{event.matches.length}</Badge>
           </header>
-          <div>
-            {event.matches.map((match) => (
-              <ProfessionalMatchCard
-                context={
-                  match.leagueTeamAName && match.leagueTeamBName
-                    ? `${match.leagueTeamAName} vs. ${match.leagueTeamBName}`
-                    : event.name
-                }
-                href={match.canonicalPath}
-                key={match.id}
-                playedAt={match.playedAt}
-                roundLabel={match.roundLabel}
-                sets={match.sets}
-                source={event.source}
-                status={match.status}
-                teamA={match.teamA}
-                teamB={match.teamB}
-                timeLabel={match.time}
-                winnerSide={match.winnerSide}
-              />
+          <div className="pro-match-result-groups">
+            {matchGroups.map((group) => (
+              <section key={group.roundLabel}>
+                <header>
+                  <h3>{group.roundLabel}</h3>
+                  <span>{group.matches.length} matches</span>
+                </header>
+                <div>
+                  {group.matches.map((match) => (
+                    <ProfessionalMatchCard
+                      context={
+                        match.leagueTeamAName && match.leagueTeamBName
+                          ? `${match.leagueTeamAName} vs. ${match.leagueTeamBName}`
+                          : (match.court ?? event.name)
+                      }
+                      href={match.canonicalPath}
+                      key={match.id}
+                      playedAt={match.playedAt}
+                      roundLabel={match.roundLabel}
+                      sets={match.sets}
+                      source={event.source}
+                      status={match.status}
+                      teamA={match.teamA}
+                      teamB={match.teamB}
+                      timeLabel={match.time}
+                      winnerSide={match.winnerSide}
+                    />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         </section>

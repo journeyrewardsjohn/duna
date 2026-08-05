@@ -10,6 +10,46 @@ function failure(error: unknown, fallback: string) {
   };
 }
 
+export async function predictProEventAction(input: {
+  readonly slug: string;
+  readonly externalTeamId: string;
+  readonly idempotencyKey: string;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.predictProEvent({
+      eventSlug: input.slug,
+      externalTeamId: input.externalTeamId,
+      idempotencyKey: input.idempotencyKey,
+    });
+    revalidatePath(`/events/${input.slug}`);
+    return { ok: true as const, result };
+  } catch (error) {
+    return failure(error, "Your tournament pick could not be saved.");
+  }
+}
+
+export async function predictProMatchAction(input: {
+  readonly slug: string;
+  readonly matchId: string;
+  readonly predictedSide: "A" | "B";
+  readonly idempotencyKey: string;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.predictProMatch({
+      eventSlug: input.slug,
+      matchId: input.matchId,
+      predictedSide: input.predictedSide,
+      idempotencyKey: input.idempotencyKey,
+    });
+    revalidatePath(`/events/${input.slug}`);
+    return { ok: true as const, result };
+  } catch (error) {
+    return failure(error, "Your match pick could not be saved.");
+  }
+}
+
 export async function requestPickupJoinAction(input: {
   readonly pickupSessionId: string;
   readonly slug: string;

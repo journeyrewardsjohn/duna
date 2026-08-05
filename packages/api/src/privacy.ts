@@ -18,6 +18,10 @@ import {
   people,
   pickupParticipants,
   privacyRequests,
+  professionalEventPredictionHistory,
+  professionalEventPredictions,
+  professionalMatchPredictionHistory,
+  professionalMatchPredictions,
   ratings,
   registrations,
   videoShareLinks,
@@ -225,6 +229,10 @@ export async function buildPersonDataExport(input: {
     walletAccount,
     auditRows,
     healthData,
+    professionalEventPickRows,
+    professionalEventPickHistoryRows,
+    professionalMatchPickRows,
+    professionalMatchPickHistoryRows,
   ] = await Promise.all([
     database.query.people.findFirst({ where: eq(people.id, personId) }),
     database.select().from(ratings).where(eq(ratings.personId, personId)),
@@ -323,6 +331,26 @@ export async function buildPersonDataExport(input: {
       .where(eq(auditLog.actorPersonId, personId))
       .orderBy(desc(auditLog.createdAt)),
     exportHealthDataForPerson(personId),
+    database
+      .select()
+      .from(professionalEventPredictions)
+      .where(eq(professionalEventPredictions.personId, personId))
+      .orderBy(desc(professionalEventPredictions.updatedAt)),
+    database
+      .select()
+      .from(professionalEventPredictionHistory)
+      .where(eq(professionalEventPredictionHistory.personId, personId))
+      .orderBy(desc(professionalEventPredictionHistory.changedAt)),
+    database
+      .select()
+      .from(professionalMatchPredictions)
+      .where(eq(professionalMatchPredictions.personId, personId))
+      .orderBy(desc(professionalMatchPredictions.updatedAt)),
+    database
+      .select()
+      .from(professionalMatchPredictionHistory)
+      .where(eq(professionalMatchPredictionHistory.personId, personId))
+      .orderBy(desc(professionalMatchPredictionHistory.changedAt)),
   ]);
   if (!person) throw new Error("Player profile was not found");
 
@@ -388,6 +416,12 @@ export async function buildPersonDataExport(input: {
       : null,
     auditEventsInitiatedByYou: auditRows,
     health: healthData,
+    professionalPredictions: {
+      tournaments: professionalEventPickRows,
+      tournamentHistory: professionalEventPickHistoryRows,
+      matches: professionalMatchPickRows,
+      matchHistory: professionalMatchPickHistoryRows,
+    },
   };
 }
 

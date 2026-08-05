@@ -50,6 +50,16 @@ const match = {
     favorite: "A" as const,
     basis: "SandRating" as const,
   },
+  communityPrediction: {
+    total: 3,
+    teamACount: 2,
+    teamBCount: 1,
+    teamA: 67,
+    teamB: 33,
+    viewerAuthenticated: false,
+    viewerHistory: [],
+    closed: true,
+  },
   watchOptions: [
     {
       id: "youtube",
@@ -133,6 +143,12 @@ describe("professional public discovery metadata", () => {
     const data = professionalMatchJsonLd({
       event,
       match,
+      headToHead: {
+        total: 0,
+        teamAWins: 0,
+        teamBWins: 0,
+        meetings: [],
+      },
     } as PublicProMatchDetail) as {
       readonly "@graph": readonly Record<string, unknown>[];
     };

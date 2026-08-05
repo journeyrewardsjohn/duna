@@ -11,7 +11,11 @@ import {
   people,
   playerPublicProfiles,
   playerSourceConnections,
+  professionalEventPredictionHistory,
+  professionalEventPredictions,
   professionalEvents,
+  professionalMatchPredictionHistory,
+  professionalMatchPredictions,
   ratingBacktestPredictions,
   ratingBacktestRuns,
   profileMergeRecords,
@@ -37,6 +41,7 @@ import { publicPlayerPath } from "@duna/core";
 import {
   and,
   asc,
+  count,
   desc,
   eq,
   inArray,
@@ -3679,7 +3684,7 @@ export async function loadPublicWorldRankings() {
   };
 }
 
-export async function loadPublicProCoverage() {
+export async function loadPublicProCoverage(now = new Date()) {
   requireDatabase();
   const database = getDatabase();
   const [storedEventRows, matchRows, latestDate] = await Promise.all([
@@ -3708,12 +3713,13 @@ export async function loadPublicProCoverage() {
         participants: importedMatches.participants,
         sets: importedMatches.sets,
         winnerSide: importedMatches.winnerSide,
+        rawPayload: importedMatches.rawPayload,
       })
       .from(importedMatches)
       .innerJoin(importSources, eq(importedMatches.sourceId, importSources.id))
       .where(inArray(importSources.slug, ["fivb-12ndr", "avp-league"]))
       .orderBy(desc(importedMatches.playedAt))
-      .limit(200),
+      .limit(2_000),
     database
       .select({ date: worldRankings.rankingDate })
       .from(worldRankings)
@@ -3817,27 +3823,106 @@ export async function loadPublicProCoverage() {
     };
   };
   return {
-    events: eventRows.map((event) => ({
-      id: event.id,
-      externalEventId: event.externalEventId,
-      slug: professionalEventSlug(event),
-      name: event.effective.name,
-      location: event.effective.location,
-      category: event.effective.category,
-      genderCategory: event.genderCategory,
-      startsOn: event.effective.startsOn,
-      endsOn: event.effective.endsOn,
-      status: event.status,
-      live: event.live,
-      teamCount: event.teamCount,
-      matchCount: event.matchCount,
-      lastSyncedAt: event.lastSyncedAt.toISOString(),
-      source:
-        event.sourceSlug === "avp-league"
-          ? ("avp" as const)
-          : ("fivb" as const),
-      tour: professionalTour(event.sourceSlug, event.effective.category),
-    })),
+    events: eventRows.map((event) => {
+      const sibling = eventRows.find(
+        (candidate) =>
+          candidate.id !== event.id &&
+          candidate.startsOn === event.startsOn &&
+          slugSegment(proEventBaseName(candidate.name)) ===
+            slugSegment(proEventBaseName(event.name)) &&
+          normalizedProGender(candidate.genderCategory) !==
+            normalizedProGender(event.genderCategory),
+      );
+      const editorial = inheritProfessionalEventEditorial(
+        event.effective.editorial,
+        sibling?.effective.editorial,
+      );
+      const featuredMedia =
+        editorial.media.find((media) => media.featured) ?? editorial.media[0];
+      const posterUrl =
+        featuredMedia?.kind === "hero-video"
+          ? featuredMedia.posterUrl
+          : featuredMedia?.url;
+      const eventMatches = matchRows
+        .filter(
+          (match) =>
+            match.sourceId === event.sourceId &&
+            match.externalEventId === event.externalEventId,
+        )
+        .map((match) => {
+          const time = objectString(match.rawPayload, "time");
+          const timezone =
+            objectString(match.rawPayload, "timezone") ?? editorial.timezone;
+          const scheduledAt = professionalMatchScheduledAt({
+            playedAt: match.playedAt ?? undefined,
+            time,
+            timezone,
+          });
+          return {
+            roundLabel: match.roundLabel ?? "Match",
+            ...(match.playedAt
+              ? { playedAt: match.playedAt.toISOString() }
+              : {}),
+            ...(scheduledAt ? { scheduledAt: scheduledAt.toISOString() } : {}),
+            status: professionalMatchStatus({
+              winnerSide: match.winnerSide,
+              eventLive: event.live,
+              hasScore: match.sets.length > 0,
+              scheduledAt,
+              now,
+            }),
+          };
+        });
+      const liveMatchCount = eventMatches.filter(
+        (match) => match.status === "live",
+      ).length;
+      const completedMatchCount = eventMatches.filter(
+        (match) => match.status === "completed",
+      ).length;
+      const nextMatchAt = eventMatches
+        .flatMap((match) =>
+          match.status === "scheduled" &&
+          match.scheduledAt &&
+          Date.parse(match.scheduledAt) >= now.getTime() - 15 * 60_000
+            ? [match.scheduledAt]
+            : [],
+        )
+        .sort()[0];
+      return {
+        id: event.id,
+        externalEventId: event.externalEventId,
+        slug: professionalEventSlug(event),
+        name: event.effective.name,
+        location: event.effective.location,
+        category: event.effective.category,
+        genderCategory: event.genderCategory,
+        startsOn: event.effective.startsOn,
+        endsOn: event.effective.endsOn,
+        status: event.status,
+        live: event.live,
+        teamCount: event.teamCount,
+        matchCount: Math.max(event.matchCount, eventMatches.length),
+        completedMatchCount,
+        liveMatchCount,
+        currentRound: professionalEventCurrentRound(eventMatches, now),
+        ...(nextMatchAt ? { nextMatchAt } : {}),
+        ...(posterUrl && featuredMedia
+          ? {
+              poster: {
+                url: posterUrl,
+                alt: featuredMedia.alt,
+                kind: featuredMedia.kind,
+              },
+            }
+          : {}),
+        lastSyncedAt: event.lastSyncedAt.toISOString(),
+        source:
+          event.sourceSlug === "avp-league"
+            ? ("avp" as const)
+            : ("fivb" as const),
+        tour: professionalTour(event.sourceSlug, event.effective.category),
+      };
+    }),
     matches: matchRows.map((match) => {
       const event = eventRows.find(
         (candidate) =>
@@ -3852,20 +3937,33 @@ export async function loadPublicProCoverage() {
       const matchSlug = slugSegment(`${team("A")}-vs-${team("B")}`) || "match";
       const teamA = coverageTeam(match.participants, "A");
       const teamB = coverageTeam(match.participants, "B");
+      const time = objectString(match.rawPayload, "time");
+      const timezone =
+        objectString(match.rawPayload, "timezone") ??
+        event?.effective.editorial.timezone;
+      const scheduledAt = professionalMatchScheduledAt({
+        playedAt: match.playedAt ?? undefined,
+        time,
+        timezone,
+      });
       return {
         ...match,
         playedAt: match.playedAt?.toISOString(),
+        ...(scheduledAt ? { scheduledAt: scheduledAt.toISOString() } : {}),
+        ...(time ? { time } : {}),
         teamA,
         teamB,
         ...(event
           ? {
               canonicalPath: `/events/${professionalEventSlug(event)}/match/${matchSlug}/${match.id}`,
               source: professionalSource(event.sourceSlug),
-              status: match.winnerSide
-                ? ("completed" as const)
-                : event.live
-                  ? ("live" as const)
-                  : ("scheduled" as const),
+              status: professionalMatchStatus({
+                winnerSide: match.winnerSide,
+                eventLive: event.live,
+                hasScore: match.sets.length > 0,
+                scheduledAt,
+                now,
+              }),
               tour: professionalTour(
                 event.sourceSlug,
                 event.effective.category,
@@ -3957,6 +4055,8 @@ type ProTeam = {
   readonly label: string;
   readonly players: readonly ProParticipant[];
   readonly averageRating?: number;
+  readonly seed?: number;
+  readonly countryCode?: string;
 };
 
 type PublicProMatch = {
@@ -3964,6 +4064,7 @@ type PublicProMatch = {
   readonly externalMatchId: string;
   readonly roundLabel: string;
   readonly playedAt?: string;
+  readonly scheduledAt?: string;
   readonly sourceUrl?: string;
   readonly time?: string;
   readonly court?: string;
@@ -3983,6 +4084,21 @@ type PublicProMatch = {
     readonly favorite: "A" | "B" | "even";
     readonly basis: "SandRating" | "Even prior";
     readonly outcome?: "predicted" | "upset" | "even";
+  };
+  readonly communityPrediction: {
+    readonly total: number;
+    readonly teamACount: number;
+    readonly teamBCount: number;
+    readonly teamA: number;
+    readonly teamB: number;
+    readonly viewerAuthenticated: boolean;
+    readonly viewerSide?: "A" | "B";
+    readonly viewerHistory: readonly {
+      readonly previousSide?: "A" | "B";
+      readonly newSide: "A" | "B";
+      readonly changedAt: string;
+    }[];
+    readonly closed: boolean;
   };
   readonly watchOptions: readonly PublicWatchOption[];
 };
@@ -5796,6 +5912,127 @@ function objectString(
       : undefined;
 }
 
+function normalizedMatchClock(value?: string): string | undefined {
+  if (!value) return undefined;
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})(?:\s*([ap])\.?m\.?)?$/i);
+  if (!match) return undefined;
+  let hour = Number.parseInt(match[1] ?? "0", 10);
+  const minute = Number.parseInt(match[2] ?? "0", 10);
+  if (hour > 23 || minute > 59) return undefined;
+  const meridiem = match[3]?.toLowerCase();
+  if (meridiem) {
+    if (hour < 1 || hour > 12) return undefined;
+    if (meridiem === "p" && hour !== 12) hour += 12;
+    if (meridiem === "a" && hour === 12) hour = 0;
+  }
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+export function professionalMatchScheduledAt(input: {
+  readonly playedAt?: Date;
+  readonly time?: string;
+  readonly timezone?: string;
+}): Date | undefined {
+  const time = normalizedMatchClock(input.time);
+  if (!input.playedAt || !time) return undefined;
+  const day = input.playedAt.toISOString().slice(0, 10);
+  try {
+    return venueWallTimeToUtc(
+      `${day}T${time}`,
+      validatedTimeZone(input.timezone) ?? "UTC",
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+export function professionalMatchStatus(input: {
+  readonly winnerSide?: string | null;
+  readonly eventLive: boolean;
+  readonly hasScore?: boolean;
+  readonly scheduledAt?: Date;
+  readonly now?: Date;
+}): "scheduled" | "live" | "completed" {
+  if (input.winnerSide === "A" || input.winnerSide === "B") {
+    return "completed";
+  }
+  if (input.eventLive && input.hasScore) return "live";
+  if (!input.eventLive || !input.scheduledAt) return "scheduled";
+  const now = (input.now ?? new Date()).getTime();
+  const start = input.scheduledAt.getTime();
+  return now >= start - 5 * 60_000 && now <= start + 3 * 60 * 60_000
+    ? "live"
+    : "scheduled";
+}
+
+export function professionalMatchPredictionClosed(input: {
+  readonly status: "scheduled" | "live" | "completed";
+  readonly eventStatus?: string;
+  readonly scheduledAt?: Date;
+  readonly now?: Date;
+}): boolean {
+  if (input.status !== "scheduled" || input.eventStatus === "completed") {
+    return true;
+  }
+  return Boolean(
+    input.scheduledAt &&
+    input.scheduledAt.getTime() <= (input.now ?? new Date()).getTime(),
+  );
+}
+
+function roundImportance(roundLabel: string): number {
+  return bracketRound(roundLabel)?.order ?? (poolName(roundLabel) ? 0 : -1);
+}
+
+function cleanRoundLabel(roundLabel: string): string {
+  return roundLabel.replace(/\s*\(standings\)\s*$/i, "").trim() || "Match";
+}
+
+export function professionalEventCurrentRound(
+  matches: readonly {
+    readonly roundLabel: string;
+    readonly status: "scheduled" | "live" | "completed";
+    readonly scheduledAt?: string;
+    readonly playedAt?: string;
+  }[],
+  now = new Date(),
+): string | undefined {
+  const live = matches
+    .filter((match) => match.status === "live")
+    .sort(
+      (a, b) =>
+        roundImportance(b.roundLabel) - roundImportance(a.roundLabel) ||
+        (a.scheduledAt ?? "").localeCompare(b.scheduledAt ?? ""),
+    );
+  if (live[0]) return cleanRoundLabel(live[0].roundLabel);
+
+  const next = matches
+    .filter(
+      (match) =>
+        match.status === "scheduled" &&
+        (!match.scheduledAt ||
+          Date.parse(match.scheduledAt) >= now.getTime() - 15 * 60_000),
+    )
+    .sort((a, b) => {
+      const left = a.scheduledAt ? Date.parse(a.scheduledAt) : Infinity;
+      const right = b.scheduledAt ? Date.parse(b.scheduledAt) : Infinity;
+      return (
+        left - right ||
+        roundImportance(b.roundLabel) - roundImportance(a.roundLabel)
+      );
+    });
+  if (next[0]) return cleanRoundLabel(next[0].roundLabel);
+
+  const latest = matches
+    .filter((match) => match.status === "completed")
+    .sort(
+      (a, b) =>
+        roundImportance(b.roundLabel) - roundImportance(a.roundLabel) ||
+        (b.playedAt ?? "").localeCompare(a.playedAt ?? ""),
+    );
+  return latest[0] ? cleanRoundLabel(latest[0].roundLabel) : undefined;
+}
+
 function poolName(roundLabel: string): string | undefined {
   const match = roundLabel.match(/\b(?:pool|group)\s*([a-z0-9]+)\b/i);
   return match?.[1] ? `Pool ${match[1].toUpperCase()}` : undefined;
@@ -5834,6 +6071,18 @@ function bracketRound(roundLabel: string):
   return undefined;
 }
 
+function isKnownProfessionalTeam(team: ProTeam): boolean {
+  const placeholder = /\b(?:bye|loser|tbd|to be determined|unknown|winner)\b/i;
+  return (
+    team.players.length >= 2 &&
+    !placeholder.test(team.label) &&
+    team.players.every(
+      (player) =>
+        player.name.trim().length > 1 && !placeholder.test(player.name),
+    )
+  );
+}
+
 function standingRows(
   matches: readonly PublicProMatch[],
 ): readonly TeamStanding[] {
@@ -5867,6 +6116,12 @@ function standingRows(
     return next;
   };
   for (const match of matches) {
+    if (
+      !isKnownProfessionalTeam(match.teamA) ||
+      !isKnownProfessionalTeam(match.teamB)
+    ) {
+      continue;
+    }
     const a = ensure(match.teamA);
     const b = ensure(match.teamB);
     if (match.sets.length === 0) continue;
@@ -5899,8 +6154,102 @@ function standingRows(
       a.losses - b.losses ||
       b.setsFor - b.setsAgainst - (a.setsFor - a.setsAgainst) ||
       b.pointsFor - b.pointsAgainst - (a.pointsFor - a.pointsAgainst) ||
+      (a.team.seed ?? Number.MAX_SAFE_INTEGER) -
+        (b.team.seed ?? Number.MAX_SAFE_INTEGER) ||
       a.team.label.localeCompare(b.team.label),
   );
+}
+
+function liveStandingRows(matches: readonly PublicProMatch[]) {
+  const base = standingRows(matches);
+  const progress = new Map<
+    string,
+    {
+      stage: number;
+      stageLabel: string;
+      active: boolean;
+      lostAtStage: number;
+    }
+  >();
+  const ensure = (team: ProTeam) => {
+    const existing = progress.get(team.key);
+    if (existing) return existing;
+    const next = {
+      stage: -1,
+      stageLabel: "Entry list",
+      active: false,
+      lostAtStage: -1,
+    };
+    progress.set(team.key, next);
+    return next;
+  };
+  for (const match of matches) {
+    if (
+      !isKnownProfessionalTeam(match.teamA) ||
+      !isKnownProfessionalTeam(match.teamB)
+    ) {
+      continue;
+    }
+    const stage = roundImportance(match.roundLabel);
+    for (const team of [match.teamA, match.teamB]) {
+      const row = ensure(team);
+      if (stage >= row.stage) {
+        row.stage = stage;
+        row.stageLabel = cleanRoundLabel(match.roundLabel);
+      }
+      if (match.status !== "completed" && stage >= row.stage) row.active = true;
+    }
+    if (match.status === "completed" && stage > 0 && match.winnerSide) {
+      const loser = match.winnerSide === "A" ? match.teamB : match.teamA;
+      const row = ensure(loser);
+      row.lostAtStage = Math.max(row.lostAtStage, stage);
+    }
+  }
+  const podium = podiumFromMatches(matches);
+  const medalByKey = new Map<string, 1 | 2 | 3>();
+  if (podium.champion) medalByKey.set(podium.champion.key, 1);
+  if (podium.runnerUp) medalByKey.set(podium.runnerUp.key, 2);
+  if (podium.thirdPlace) medalByKey.set(podium.thirdPlace.key, 3);
+  return base
+    .map((standing) => {
+      const tournament = progress.get(standing.team.key) ?? {
+        stage: -1,
+        stageLabel: "Entry list",
+        active: false,
+        lostAtStage: -1,
+      };
+      const medal = medalByKey.get(standing.team.key);
+      return {
+        ...standing,
+        stageLabel: tournament.stageLabel,
+        state: medal
+          ? ("placed" as const)
+          : tournament.active
+            ? ("active" as const)
+            : tournament.lostAtStage === tournament.stage &&
+                tournament.stage > 0
+              ? ("eliminated" as const)
+              : ("waiting" as const),
+        ...(medal ? { medal } : {}),
+        stageOrder: tournament.stage,
+      };
+    })
+    .sort((a, b) => {
+      if (a.medal || b.medal) {
+        return (a.medal ?? 99) - (b.medal ?? 99);
+      }
+      return (
+        b.stageOrder - a.stageOrder ||
+        Number(b.state === "active") - Number(a.state === "active") ||
+        b.wins - a.wins ||
+        a.losses - b.losses ||
+        b.setsFor - b.setsAgainst - (a.setsFor - a.setsAgainst) ||
+        b.pointsFor - b.pointsAgainst - (a.pointsFor - a.pointsAgainst) ||
+        (a.team.seed ?? Number.MAX_SAFE_INTEGER) -
+          (b.team.seed ?? Number.MAX_SAFE_INTEGER) ||
+        a.team.label.localeCompare(b.team.label)
+      );
+    });
 }
 
 function podiumFromMatches(matches: readonly PublicProMatch[]) {
@@ -5929,7 +6278,11 @@ function podiumFromMatches(matches: readonly PublicProMatch[]) {
   };
 }
 
-export async function loadPublicProEvent(slug: string) {
+export async function loadPublicProEvent(
+  slug: string,
+  viewerPersonId?: string,
+  now = new Date(),
+) {
   requireDatabase();
   const database = getDatabase();
   const eventRows = await database
@@ -6140,26 +6493,37 @@ export async function loadPublicProEvent(slug: string) {
     participants: (typeof matchRows)[number]["participants"],
     side: "A" | "B",
   ): ProTeam => {
-    const players = participants
-      .filter((participant) => participant.side === side)
-      .map((participant) => {
-        const person = participant.personId
-          ? personById.get(participant.personId)
-          : undefined;
-        const rating = participant.personId
-          ? ratingByPersonId.get(participant.personId)
-          : undefined;
-        return {
-          name: person?.displayName ?? participant.name,
-          ...(participant.personId ? { personId: participant.personId } : {}),
-          ...(person?.handle ? { handle: person.handle } : {}),
-          ...(person?.publicPath ? { publicPath: person.publicPath } : {}),
-          ...(person?.avatarUrl ? { avatarUrl: person.avatarUrl } : {}),
-          ...(rating !== undefined ? { rating } : {}),
-        };
-      });
+    const sideParticipants = participants.filter(
+      (participant) => participant.side === side,
+    );
+    const players = sideParticipants.map((participant) => {
+      const person = participant.personId
+        ? personById.get(participant.personId)
+        : undefined;
+      const rating = participant.personId
+        ? ratingByPersonId.get(participant.personId)
+        : undefined;
+      return {
+        name: person?.displayName ?? participant.name,
+        ...(participant.personId ? { personId: participant.personId } : {}),
+        ...(person?.handle ? { handle: person.handle } : {}),
+        ...(person?.publicPath ? { publicPath: person.publicPath } : {}),
+        ...(person?.avatarUrl ? { avatarUrl: person.avatarUrl } : {}),
+        ...(rating !== undefined ? { rating } : {}),
+      };
+    });
     const rated = players.flatMap((player) =>
       player.rating !== undefined ? [player.rating] : [],
+    );
+    const participantExternalIds = sideParticipants
+      .map((participant) => participant.externalPersonId)
+      .sort();
+    const entry = rawTeamEntries.find(
+      (candidate) =>
+        candidate.players
+          .map((player) => player.externalPersonId)
+          .sort()
+          .join(":") === participantExternalIds.join(":"),
     );
     return {
       key:
@@ -6175,85 +6539,349 @@ export async function loadPublicProEvent(slug: string) {
               rated.reduce((sum, rating) => sum + rating, 0) / rated.length,
           }
         : {}),
+      ...(entry?.seed !== undefined ? { seed: entry.seed } : {}),
+      ...(entry?.countryCode ? { countryCode: entry.countryCode } : {}),
     };
   };
-  const publicMatches: readonly PublicProMatch[] = matchRows.map((match) => {
-    const teamA = toTeam(match.participants, "A");
-    const teamB = toTeam(match.participants, "B");
-    const hasRatings =
-      teamA.averageRating !== undefined && teamB.averageRating !== undefined;
-    const teamAChance = hasRatings
-      ? Math.round(
-          (100 /
-            (1 +
-              10 **
-                (((teamB.averageRating ?? 0) - (teamA.averageRating ?? 0)) /
-                  1.5))) *
-            10,
-        ) / 10
-      : 50;
-    const matchSlug =
-      slugSegment(`${teamA.label}-vs-${teamB.label}`) || "match";
-    const winnerSide =
-      match.winnerSide === "A" || match.winnerSide === "B"
-        ? match.winnerSide
-        : undefined;
-    const favorite =
-      teamAChance > 50 ? "A" : teamAChance < 50 ? "B" : ("even" as const);
-    const matchWatchOptions = watchOptionsFromPayload(match.rawPayload);
-    return {
-      id: match.id,
-      externalMatchId: match.externalMatchId,
-      roundLabel: match.roundLabel ?? "Match",
-      ...(match.playedAt ? { playedAt: match.playedAt.toISOString() } : {}),
-      ...(match.sourceUrl ? { sourceUrl: match.sourceUrl } : {}),
-      ...(objectString(match.rawPayload, "time")
-        ? { time: objectString(match.rawPayload, "time") }
-        : {}),
-      ...(objectString(match.rawPayload, "court")
-        ? { court: objectString(match.rawPayload, "court") }
-        : {}),
-      ...((objectString(match.rawPayload, "timezone") ??
-      effective.editorial.timezone)
-        ? {
-            timezone:
-              objectString(match.rawPayload, "timezone") ??
-              effective.editorial.timezone,
-          }
-        : {}),
-      ...(objectString(match.rawPayload, "teamAName")
-        ? { leagueTeamAName: objectString(match.rawPayload, "teamAName") }
-        : {}),
-      ...(objectString(match.rawPayload, "teamBName")
-        ? { leagueTeamBName: objectString(match.rawPayload, "teamBName") }
-        : {}),
-      teamA,
-      teamB,
-      sets: match.sets,
-      ...(winnerSide ? { winnerSide } : {}),
-      status: winnerSide ? "completed" : event.live ? "live" : "scheduled",
-      slug: matchSlug,
-      canonicalPath: `/events/${eventSlug}/match/${matchSlug}/${match.id}`,
-      prediction: {
-        teamA: teamAChance,
-        teamB: Math.round((100 - teamAChance) * 10) / 10,
-        favorite,
-        basis: hasRatings ? "SandRating" : "Even prior",
-        ...(winnerSide
-          ? {
-              outcome:
-                favorite === "even"
-                  ? ("even" as const)
-                  : winnerSide === favorite
-                    ? ("predicted" as const)
-                    : ("upset" as const),
-            }
+  const basePublicMatches: readonly PublicProMatch[] = matchRows.map(
+    (match) => {
+      const teamA = toTeam(match.participants, "A");
+      const teamB = toTeam(match.participants, "B");
+      const hasRatings =
+        teamA.averageRating !== undefined && teamB.averageRating !== undefined;
+      const teamAChance = hasRatings
+        ? Math.round(
+            (100 /
+              (1 +
+                10 **
+                  (((teamB.averageRating ?? 0) - (teamA.averageRating ?? 0)) /
+                    1.5))) *
+              10,
+          ) / 10
+        : 50;
+      const matchSlug =
+        slugSegment(`${teamA.label}-vs-${teamB.label}`) || "match";
+      const winnerSide =
+        match.winnerSide === "A" || match.winnerSide === "B"
+          ? match.winnerSide
+          : undefined;
+      const time = objectString(match.rawPayload, "time");
+      const timezone =
+        objectString(match.rawPayload, "timezone") ??
+        effective.editorial.timezone;
+      const scheduledAt = professionalMatchScheduledAt({
+        playedAt: match.playedAt ?? undefined,
+        time,
+        timezone,
+      });
+      const status = professionalMatchStatus({
+        winnerSide,
+        eventLive: event.live,
+        hasScore: match.sets.length > 0,
+        scheduledAt,
+        now,
+      });
+      const predictionClosed = professionalMatchPredictionClosed({
+        status,
+        eventStatus: event.status,
+        scheduledAt,
+        now,
+      });
+      const favorite =
+        teamAChance > 50 ? "A" : teamAChance < 50 ? "B" : ("even" as const);
+      const matchWatchOptions = watchOptionsFromPayload(match.rawPayload);
+      return {
+        id: match.id,
+        externalMatchId: match.externalMatchId,
+        roundLabel: match.roundLabel ?? "Match",
+        ...(match.playedAt ? { playedAt: match.playedAt.toISOString() } : {}),
+        ...(scheduledAt ? { scheduledAt: scheduledAt.toISOString() } : {}),
+        ...(match.sourceUrl ? { sourceUrl: match.sourceUrl } : {}),
+        ...(time ? { time } : {}),
+        ...(objectString(match.rawPayload, "court")
+          ? { court: objectString(match.rawPayload, "court") }
           : {}),
-      },
-      watchOptions:
-        matchWatchOptions.length > 0 ? matchWatchOptions : eventWatchOptions,
+        ...(timezone ? { timezone } : {}),
+        ...(objectString(match.rawPayload, "teamAName")
+          ? { leagueTeamAName: objectString(match.rawPayload, "teamAName") }
+          : {}),
+        ...(objectString(match.rawPayload, "teamBName")
+          ? { leagueTeamBName: objectString(match.rawPayload, "teamBName") }
+          : {}),
+        teamA,
+        teamB,
+        sets: match.sets,
+        ...(winnerSide ? { winnerSide } : {}),
+        status,
+        slug: matchSlug,
+        canonicalPath: `/events/${eventSlug}/match/${matchSlug}/${match.id}`,
+        prediction: {
+          teamA: teamAChance,
+          teamB: Math.round((100 - teamAChance) * 10) / 10,
+          favorite,
+          basis: hasRatings ? "SandRating" : "Even prior",
+          ...(winnerSide
+            ? {
+                outcome:
+                  favorite === "even"
+                    ? ("even" as const)
+                    : winnerSide === favorite
+                      ? ("predicted" as const)
+                      : ("upset" as const),
+              }
+            : {}),
+        },
+        communityPrediction: {
+          total: 0,
+          teamACount: 0,
+          teamBCount: 0,
+          teamA: 50,
+          teamB: 50,
+          viewerAuthenticated: Boolean(viewerPersonId),
+          viewerHistory: [],
+          closed: predictionClosed,
+        },
+        watchOptions:
+          matchWatchOptions.length > 0 ? matchWatchOptions : eventWatchOptions,
+      };
+    },
+  );
+  const primaryWinnerEntries = publicTeamEntries.filter(
+    (entry) => entry.list === "main-draw" || entry.list === "league",
+  );
+  const winnerEntries =
+    primaryWinnerEntries.length > 0
+      ? primaryWinnerEntries
+      : publicTeamEntries.filter((entry) => entry.list === "qualification");
+  const matchIds = basePublicMatches.map((match) => match.id);
+  const [
+    eventPredictionCounts,
+    matchPredictionCounts,
+    viewerEventPrediction,
+    viewerEventHistory,
+    viewerMatchPredictions,
+    viewerMatchHistory,
+  ] = await Promise.all([
+    database
+      .select({
+        externalTeamId: professionalEventPredictions.externalTeamId,
+        count: count(),
+      })
+      .from(professionalEventPredictions)
+      .where(eq(professionalEventPredictions.eventId, event.id))
+      .groupBy(professionalEventPredictions.externalTeamId),
+    matchIds.length > 0
+      ? database
+          .select({
+            importedMatchId: professionalMatchPredictions.importedMatchId,
+            predictedSide: professionalMatchPredictions.predictedSide,
+            count: count(),
+          })
+          .from(professionalMatchPredictions)
+          .where(
+            inArray(professionalMatchPredictions.importedMatchId, matchIds),
+          )
+          .groupBy(
+            professionalMatchPredictions.importedMatchId,
+            professionalMatchPredictions.predictedSide,
+          )
+      : Promise.resolve([]),
+    viewerPersonId
+      ? database.query.professionalEventPredictions.findFirst({
+          where: and(
+            eq(professionalEventPredictions.eventId, event.id),
+            eq(professionalEventPredictions.personId, viewerPersonId),
+          ),
+        })
+      : Promise.resolve(undefined),
+    viewerPersonId
+      ? database
+          .select({
+            previousExternalTeamId:
+              professionalEventPredictionHistory.previousExternalTeamId,
+            newExternalTeamId:
+              professionalEventPredictionHistory.newExternalTeamId,
+            changedAt: professionalEventPredictionHistory.changedAt,
+          })
+          .from(professionalEventPredictionHistory)
+          .where(
+            and(
+              eq(professionalEventPredictionHistory.eventId, event.id),
+              eq(professionalEventPredictionHistory.personId, viewerPersonId),
+            ),
+          )
+          .orderBy(desc(professionalEventPredictionHistory.changedAt))
+          .limit(20)
+      : Promise.resolve([]),
+    viewerPersonId && matchIds.length > 0
+      ? database
+          .select({
+            importedMatchId: professionalMatchPredictions.importedMatchId,
+            predictedSide: professionalMatchPredictions.predictedSide,
+          })
+          .from(professionalMatchPredictions)
+          .where(
+            and(
+              inArray(professionalMatchPredictions.importedMatchId, matchIds),
+              eq(professionalMatchPredictions.personId, viewerPersonId),
+            ),
+          )
+      : Promise.resolve([]),
+    viewerPersonId && matchIds.length > 0
+      ? database
+          .select({
+            importedMatchId: professionalMatchPredictionHistory.importedMatchId,
+            previousSide: professionalMatchPredictionHistory.previousSide,
+            newSide: professionalMatchPredictionHistory.newSide,
+            changedAt: professionalMatchPredictionHistory.changedAt,
+          })
+          .from(professionalMatchPredictionHistory)
+          .where(
+            and(
+              inArray(
+                professionalMatchPredictionHistory.importedMatchId,
+                matchIds,
+              ),
+              eq(professionalMatchPredictionHistory.personId, viewerPersonId),
+            ),
+          )
+          .orderBy(desc(professionalMatchPredictionHistory.changedAt))
+          .limit(500)
+      : Promise.resolve([]),
+  ]);
+  const matchCountById = new Map<string, { A: number; B: number }>();
+  for (const prediction of matchPredictionCounts) {
+    const counts = matchCountById.get(prediction.importedMatchId) ?? {
+      A: 0,
+      B: 0,
     };
-  });
+    if (prediction.predictedSide === "A") counts.A = Number(prediction.count);
+    if (prediction.predictedSide === "B") counts.B = Number(prediction.count);
+    matchCountById.set(prediction.importedMatchId, counts);
+  }
+  const viewerMatchById = new Map(
+    viewerMatchPredictions.flatMap((prediction) =>
+      prediction.predictedSide === "A" || prediction.predictedSide === "B"
+        ? [[prediction.importedMatchId, prediction.predictedSide] as const]
+        : [],
+    ),
+  );
+  const viewerMatchHistoryById = new Map<
+    string,
+    {
+      previousSide?: "A" | "B";
+      newSide: "A" | "B";
+      changedAt: string;
+    }[]
+  >();
+  for (const history of viewerMatchHistory) {
+    if (history.newSide !== "A" && history.newSide !== "B") continue;
+    const rows = viewerMatchHistoryById.get(history.importedMatchId) ?? [];
+    rows.push({
+      ...(history.previousSide === "A" || history.previousSide === "B"
+        ? { previousSide: history.previousSide }
+        : {}),
+      newSide: history.newSide,
+      changedAt: history.changedAt.toISOString(),
+    });
+    viewerMatchHistoryById.set(history.importedMatchId, rows);
+  }
+  const publicMatches: readonly PublicProMatch[] = basePublicMatches.map(
+    (match) => {
+      const counts = matchCountById.get(match.id) ?? { A: 0, B: 0 };
+      const total = counts.A + counts.B;
+      const teamA = total > 0 ? Math.round((counts.A / total) * 100) : 50;
+      return {
+        ...match,
+        communityPrediction: {
+          total,
+          teamACount: counts.A,
+          teamBCount: counts.B,
+          teamA,
+          teamB: 100 - teamA,
+          viewerAuthenticated: Boolean(viewerPersonId),
+          ...(viewerMatchById.get(match.id)
+            ? { viewerSide: viewerMatchById.get(match.id) }
+            : {}),
+          viewerHistory: viewerMatchHistoryById.get(match.id) ?? [],
+          closed: match.communityPrediction.closed,
+        },
+      };
+    },
+  );
+  const eventPredictionCountByTeam = new Map(
+    eventPredictionCounts.map((prediction) => [
+      prediction.externalTeamId,
+      Number(prediction.count),
+    ]),
+  );
+  const totalEventPredictions = [...eventPredictionCountByTeam.values()].reduce(
+    (sum, value) => sum + value,
+    0,
+  );
+  const systemPick = [...winnerEntries].sort((a, b) => {
+    const average = (entry: (typeof winnerEntries)[number]) => {
+      const values = entry.players.flatMap((player) =>
+        player.rating !== undefined ? [player.rating] : [],
+      );
+      return values.length > 0
+        ? values.reduce((sum, value) => sum + value, 0) / values.length
+        : undefined;
+    };
+    const ratingA = average(a);
+    const ratingB = average(b);
+    if (ratingA !== undefined || ratingB !== undefined) {
+      return (ratingB ?? -Infinity) - (ratingA ?? -Infinity);
+    }
+    return (
+      (a.seed ?? Number.MAX_SAFE_INTEGER) - (b.seed ?? Number.MAX_SAFE_INTEGER)
+    );
+  })[0];
+  const winnerPrediction = {
+    total: totalEventPredictions,
+    closed: event.status === "completed",
+    viewerAuthenticated: Boolean(viewerPersonId),
+    ...(viewerEventPrediction
+      ? { viewerExternalTeamId: viewerEventPrediction.externalTeamId }
+      : {}),
+    systemPickExternalTeamId: systemPick?.externalTeamId,
+    entries: winnerEntries.map((entry) => {
+      const predictionCount =
+        eventPredictionCountByTeam.get(entry.externalTeamId) ?? 0;
+      const rated = entry.players.flatMap((player) =>
+        player.rating !== undefined ? [player.rating] : [],
+      );
+      return {
+        externalTeamId: entry.externalTeamId,
+        label: entry.label,
+        countryCode: entry.countryCode,
+        seed: entry.seed,
+        averageRating:
+          rated.length > 0
+            ? rated.reduce((sum, rating) => sum + rating, 0) / rated.length
+            : undefined,
+        predictionCount,
+        percentage:
+          totalEventPredictions > 0
+            ? Math.round((predictionCount / totalEventPredictions) * 100)
+            : 0,
+      };
+    }),
+    history: viewerEventHistory.map((history) => ({
+      previousExternalTeamId: history.previousExternalTeamId ?? undefined,
+      newExternalTeamId: history.newExternalTeamId,
+      previousLabel: history.previousExternalTeamId
+        ? winnerEntries.find(
+            (entry) => entry.externalTeamId === history.previousExternalTeamId,
+          )?.label
+        : undefined,
+      newLabel:
+        winnerEntries.find(
+          (entry) => entry.externalTeamId === history.newExternalTeamId,
+        )?.label ?? history.newExternalTeamId,
+      changedAt: history.changedAt.toISOString(),
+    })),
+  };
   const poolMap = new Map<string, PublicProMatch[]>();
   const bracketMap = new Map<
     string,
@@ -6301,6 +6929,12 @@ export async function loadPublicProEvent(slug: string) {
         ? avpLeague.overall.length
         : event.teamCount,
     matchCount: Math.max(event.matchCount, publicMatches.length),
+    completedMatchCount: publicMatches.filter(
+      (match) => match.status === "completed",
+    ).length,
+    liveMatchCount: publicMatches.filter((match) => match.status === "live")
+      .length,
+    currentRound: professionalEventCurrentRound(publicMatches, now),
     sourceUrl: event.sourceUrl,
     lastSyncedAt: event.lastSyncedAt.toISOString(),
     teamEntries: publicTeamEntries,
@@ -6315,6 +6949,7 @@ export async function loadPublicProEvent(slug: string) {
       media: publicEditorial.media,
     },
     watchOptions: eventWatchOptions,
+    winnerPrediction,
     sibling: sibling
       ? {
           name: sibling.name,
@@ -6335,7 +6970,7 @@ export async function loadPublicProEvent(slug: string) {
         standings: standingRows(poolMatches),
         matches: poolMatches,
       })),
-    liveStandings: standingRows(publicMatches),
+    liveStandings: liveStandingRows(publicMatches),
     bracket: [...bracketMap.entries()]
       .sort(([, a], [, b]) => a.order - b.order)
       .map(([key, round]) => ({
@@ -6347,11 +6982,387 @@ export async function loadPublicProEvent(slug: string) {
   };
 }
 
-export async function loadPublicProMatch(eventSlug: string, matchId: string) {
-  const event = await loadPublicProEvent(eventSlug);
+async function storedProfessionalEventBySlug(slug: string) {
+  const rows = await getDatabase()
+    .select()
+    .from(professionalEvents)
+    .orderBy(desc(professionalEvents.startsOn))
+    .limit(500);
+  return rows.find((event) => professionalEventSlug(event) === slug);
+}
+
+export async function saveProfessionalEventPrediction(input: {
+  readonly actor: ApiActor;
+  readonly eventSlug: string;
+  readonly externalTeamId: string;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  const database = getDatabase();
+  const now = input.now ?? new Date();
+  const event = await storedProfessionalEventBySlug(input.eventSlug);
+  if (!event) {
+    throw new SandDataServiceError(
+      "MATCH_NOT_FOUND",
+      "The event was not found.",
+    );
+  }
+  if (event.status === "completed") {
+    throw new SandDataServiceError(
+      "INVALID_PROFESSIONAL_EVENT",
+      "Tournament winner picks are closed after the event is complete.",
+    );
+  }
+  const entries = rawProfessionalTeamEntries(event.rawPayload);
+  const primary = entries.filter(
+    (entry) => entry.list === "main-draw" || entry.list === "league",
+  );
+  const eligible =
+    primary.length > 0
+      ? primary
+      : entries.filter((entry) => entry.list === "qualification");
+  const team = eligible.find(
+    (entry) => entry.externalTeamId === input.externalTeamId,
+  );
+  if (!team) {
+    throw new SandDataServiceError(
+      "INVALID_PROFESSIONAL_EVENT",
+      "Choose a team in this tournament's active draw.",
+    );
+  }
+  return database.transaction(async (transaction) => {
+    const [existing] = await transaction
+      .select()
+      .from(professionalEventPredictions)
+      .where(
+        and(
+          eq(professionalEventPredictions.eventId, event.id),
+          eq(professionalEventPredictions.personId, input.actor.personId),
+        ),
+      )
+      .limit(1);
+    if (existing?.externalTeamId === team.externalTeamId) {
+      return {
+        eventId: event.id,
+        externalTeamId: team.externalTeamId,
+        changed: false as const,
+        updatedAt: existing.updatedAt.toISOString(),
+      };
+    }
+    await transaction.insert(professionalEventPredictionHistory).values({
+      eventId: event.id,
+      personId: input.actor.personId,
+      previousExternalTeamId: existing?.externalTeamId,
+      newExternalTeamId: team.externalTeamId,
+      changedAt: now,
+    });
+    const [saved] = await transaction
+      .insert(professionalEventPredictions)
+      .values({
+        eventId: event.id,
+        personId: input.actor.personId,
+        externalTeamId: team.externalTeamId,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          professionalEventPredictions.eventId,
+          professionalEventPredictions.personId,
+        ],
+        set: { externalTeamId: team.externalTeamId, updatedAt: now },
+      })
+      .returning();
+    if (!saved) throw new Error("Duna could not save the tournament pick.");
+    return {
+      eventId: event.id,
+      externalTeamId: saved.externalTeamId,
+      changed: true as const,
+      updatedAt: saved.updatedAt.toISOString(),
+    };
+  });
+}
+
+export async function saveProfessionalMatchPrediction(input: {
+  readonly actor: ApiActor;
+  readonly eventSlug: string;
+  readonly matchId: string;
+  readonly predictedSide: "A" | "B";
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  const database = getDatabase();
+  const now = input.now ?? new Date();
+  const event = await storedProfessionalEventBySlug(input.eventSlug);
+  if (!event) {
+    throw new SandDataServiceError(
+      "MATCH_NOT_FOUND",
+      "The event was not found.",
+    );
+  }
+  const match = await database.query.importedMatches.findFirst({
+    where: and(
+      eq(importedMatches.id, input.matchId),
+      eq(importedMatches.sourceId, event.sourceId),
+      eq(importedMatches.externalEventId, event.externalEventId),
+    ),
+  });
+  if (!match) {
+    throw new SandDataServiceError(
+      "MATCH_NOT_FOUND",
+      "The match was not found.",
+    );
+  }
+  const editorial = effectiveProfessionalEvent(event).editorial;
+  const scheduledAt = professionalMatchScheduledAt({
+    playedAt: match.playedAt ?? undefined,
+    time: objectString(match.rawPayload, "time"),
+    timezone: objectString(match.rawPayload, "timezone") ?? editorial.timezone,
+  });
+  const status = professionalMatchStatus({
+    winnerSide: match.winnerSide,
+    eventLive: event.live,
+    hasScore: match.sets.length > 0,
+    scheduledAt,
+    now,
+  });
+  if (
+    professionalMatchPredictionClosed({
+      status,
+      eventStatus: event.status,
+      scheduledAt,
+      now,
+    })
+  ) {
+    throw new SandDataServiceError(
+      "MATCH_NOT_READY",
+      "Match picks close when the match begins.",
+    );
+  }
+  return database.transaction(async (transaction) => {
+    const [existing] = await transaction
+      .select()
+      .from(professionalMatchPredictions)
+      .where(
+        and(
+          eq(professionalMatchPredictions.importedMatchId, match.id),
+          eq(professionalMatchPredictions.personId, input.actor.personId),
+        ),
+      )
+      .limit(1);
+    if (existing?.predictedSide === input.predictedSide) {
+      return {
+        matchId: match.id,
+        predictedSide: input.predictedSide,
+        changed: false as const,
+        updatedAt: existing.updatedAt.toISOString(),
+      };
+    }
+    await transaction.insert(professionalMatchPredictionHistory).values({
+      importedMatchId: match.id,
+      personId: input.actor.personId,
+      previousSide: existing?.predictedSide,
+      newSide: input.predictedSide,
+      changedAt: now,
+    });
+    const [saved] = await transaction
+      .insert(professionalMatchPredictions)
+      .values({
+        importedMatchId: match.id,
+        personId: input.actor.personId,
+        predictedSide: input.predictedSide,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          professionalMatchPredictions.importedMatchId,
+          professionalMatchPredictions.personId,
+        ],
+        set: { predictedSide: input.predictedSide, updatedAt: now },
+      })
+      .returning();
+    if (!saved) throw new Error("Duna could not save the match pick.");
+    return {
+      matchId: match.id,
+      predictedSide:
+        saved.predictedSide === "B" ? ("B" as const) : ("A" as const),
+      changed: true as const,
+      updatedAt: saved.updatedAt.toISOString(),
+    };
+  });
+}
+
+function teamIdentity(
+  players: readonly { readonly personId?: string; readonly name: string }[],
+  usePersonIds: boolean,
+): string {
+  return (
+    usePersonIds
+      ? players.map((player) => player.personId ?? "")
+      : players.map((player) => normalizePersonName(player.name))
+  )
+    .sort()
+    .join(":");
+}
+
+async function loadProfessionalHeadToHead(
+  match: PublicProMatch,
+  event: Awaited<ReturnType<typeof loadPublicProEvent>>,
+) {
+  if (!event) {
+    return { total: 0, teamAWins: 0, teamBWins: 0, meetings: [] as const };
+  }
+  const database = getDatabase();
+  const currentRow = await database.query.importedMatches.findFirst({
+    where: eq(importedMatches.id, match.id),
+  });
+  if (!currentRow) {
+    return { total: 0, teamAWins: 0, teamBWins: 0, meetings: [] as const };
+  }
+  const currentPlayers = [...match.teamA.players, ...match.teamB.players];
+  const usePersonIds =
+    currentPlayers.length === 4 &&
+    currentPlayers.every((player) => Boolean(player.personId));
+  const personIds = usePersonIds
+    ? currentPlayers.flatMap((player) =>
+        player.personId ? [player.personId] : [],
+      )
+    : [];
+  const containment = personIds.map(
+    (personId) =>
+      sql`${importedMatches.participants} @> ${JSON.stringify([{ personId }])}::jsonb`,
+  );
+  const candidates = await database
+    .select({ match: importedMatches, sourceSlug: importSources.slug })
+    .from(importedMatches)
+    .innerJoin(importSources, eq(importedMatches.sourceId, importSources.id))
+    .where(
+      and(
+        ne(importedMatches.id, match.id),
+        isNotNull(importedMatches.winnerSide),
+        ...(match.playedAt
+          ? [lte(importedMatches.playedAt, new Date(match.playedAt))]
+          : []),
+        ...containment,
+      ),
+    )
+    .orderBy(desc(importedMatches.playedAt))
+    .limit(usePersonIds ? 100 : 2_000);
+  const eventRows = await database
+    .select({ event: professionalEvents, sourceSlug: importSources.slug })
+    .from(professionalEvents)
+    .innerJoin(importSources, eq(professionalEvents.sourceId, importSources.id))
+    .orderBy(desc(professionalEvents.startsOn))
+    .limit(500);
+  const teamAKey = teamIdentity(match.teamA.players, usePersonIds);
+  const teamBKey = teamIdentity(match.teamB.players, usePersonIds);
+  const sourcePriority: Readonly<Record<string, number>> = {
+    "fivb-12ndr": 0,
+    "avp-league": 1,
+    "volleyball-world": 2,
+    bvbinfo: 3,
+    "volleyball-life": 4,
+    sandrating: 5,
+  };
+  candidates.sort(
+    (a, b) =>
+      (b.match.playedAt?.getTime() ?? 0) - (a.match.playedAt?.getTime() ?? 0) ||
+      (sourcePriority[a.sourceSlug] ?? 99) -
+        (sourcePriority[b.sourceSlug] ?? 99),
+  );
+  const seen = new Set<string>([currentRow.crossSourceFingerprint]);
+  const meetings: {
+    id: string;
+    eventName: string;
+    roundLabel?: string;
+    playedAt?: string;
+    teamALabel: string;
+    teamBLabel: string;
+    sets: readonly { a: number; b: number }[];
+    winnerSide: "A" | "B";
+    source: string;
+    sourceUrl?: string;
+    canonicalPath?: string;
+  }[] = [];
+  for (const candidate of candidates) {
+    if (seen.has(candidate.match.crossSourceFingerprint)) continue;
+    const sideA = candidate.match.participants.filter(
+      (participant) => participant.side === "A",
+    );
+    const sideB = candidate.match.participants.filter(
+      (participant) => participant.side === "B",
+    );
+    const candidateAKey = teamIdentity(sideA, usePersonIds);
+    const candidateBKey = teamIdentity(sideB, usePersonIds);
+    const direct = candidateAKey === teamAKey && candidateBKey === teamBKey;
+    const reversed = candidateAKey === teamBKey && candidateBKey === teamAKey;
+    if (!direct && !reversed) continue;
+    const winnerSide =
+      candidate.match.winnerSide === (reversed ? "B" : "A") ? "A" : "B";
+    const sets = reversed
+      ? candidate.match.sets.map((set) => ({ a: set.b, b: set.a }))
+      : candidate.match.sets;
+    const pastEvent = eventRows.find(
+      (row) =>
+        row.event.sourceId === candidate.match.sourceId &&
+        row.event.externalEventId === candidate.match.externalEventId,
+    );
+    const pastTeamA = direct ? sideA : sideB;
+    const pastTeamB = direct ? sideB : sideA;
+    const teamALabel = pastTeamA.map((player) => player.name).join(" / ");
+    const teamBLabel = pastTeamB.map((player) => player.name).join(" / ");
+    const pastMatchSlug =
+      slugSegment(`${teamALabel}-vs-${teamBLabel}`) || "match";
+    seen.add(candidate.match.crossSourceFingerprint);
+    meetings.push({
+      id: candidate.match.id,
+      eventName: pastEvent?.event.name ?? candidate.match.title,
+      ...(candidate.match.roundLabel
+        ? { roundLabel: candidate.match.roundLabel }
+        : {}),
+      ...(candidate.match.playedAt
+        ? { playedAt: candidate.match.playedAt.toISOString() }
+        : {}),
+      teamALabel,
+      teamBLabel,
+      sets,
+      winnerSide,
+      source: candidate.sourceSlug,
+      ...(candidate.match.sourceUrl
+        ? { sourceUrl: candidate.match.sourceUrl }
+        : {}),
+      ...(pastEvent
+        ? {
+            canonicalPath: `/events/${professionalEventSlug(pastEvent.event)}/match/${pastMatchSlug}/${candidate.match.id}`,
+          }
+        : {}),
+    });
+    if (meetings.length >= 12) break;
+  }
+  return {
+    total: meetings.length,
+    teamAWins: meetings.filter((meeting) => meeting.winnerSide === "A").length,
+    teamBWins: meetings.filter((meeting) => meeting.winnerSide === "B").length,
+    meetings,
+  };
+}
+
+export async function loadPublicProMatch(
+  eventSlug: string,
+  matchId: string,
+  viewerPersonId?: string,
+  now = new Date(),
+) {
+  const event = await loadPublicProEvent(eventSlug, viewerPersonId, now);
   if (!event) return undefined;
   const match = event.matches.find((candidate) => candidate.id === matchId);
-  return match ? { event, match } : undefined;
+  if (!match) return undefined;
+  return {
+    event,
+    match,
+    headToHead: await loadProfessionalHeadToHead(match, event),
+  };
 }
 
 export async function loadPublicPlayerPerformance(personId: string) {

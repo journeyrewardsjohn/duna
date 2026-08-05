@@ -1,9 +1,10 @@
 import type { PublicProCoverage } from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
-import { Activity, CalendarDays, Globe2, Radio, Trophy } from "lucide-react";
+import { Activity, Globe2, Radio } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { DatePillFilter } from "@/components/date-pill-filter";
+import { ProEventCard } from "@/components/pro-event-card";
 import { ProfessionalMatchCard } from "@/components/professional-match-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -100,32 +101,6 @@ function overlaps(
   );
 }
 
-function EventCard({ event }: { readonly event: ProEvent }) {
-  return (
-    <Link className="pro-event-card" href={`/events/${event.slug}`}>
-      <div>
-        <Badge tone={event.live ? "danger" : "neutral"}>
-          {event.live ? "Live" : event.status}
-        </Badge>
-        <span>{event.genderCategory}</span>
-      </div>
-      <div className="pro-event-card__brand">
-        <TourBrandMark brand={event.source} />
-        <Trophy aria-hidden size={22} />
-      </div>
-      <h3>{event.name}</h3>
-      <p>{event.category ?? "Professional beach volleyball"}</p>
-      <footer>
-        <span>
-          <CalendarDays aria-hidden size={14} />
-          {event.startsOn ?? "Date pending"}
-        </span>
-        <span>{event.location ?? "Location pending"}</span>
-      </footer>
-    </Link>
-  );
-}
-
 function EventShelf({
   eyebrow,
   title,
@@ -153,7 +128,7 @@ function EventShelf({
       </header>
       <div className="pro-event-grid">
         {events.map((event) => (
-          <EventCard event={event} key={event.id} />
+          <ProEventCard event={event} key={event.id} />
         ))}
       </div>
     </section>

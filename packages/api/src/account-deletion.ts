@@ -32,6 +32,10 @@ import {
   organizations,
   people,
   playerSourceConnections,
+  professionalEventPredictionHistory,
+  professionalEventPredictions,
+  professionalMatchPredictionHistory,
+  professionalMatchPredictions,
   posts,
   privacyRequests,
   ratingEvents,
@@ -417,6 +421,18 @@ export async function permanentlyDeleteAccount(input: {
     database
       .delete(playerSourceConnections)
       .where(eq(playerSourceConnections.personId, input.personId)),
+    database
+      .delete(professionalEventPredictionHistory)
+      .where(eq(professionalEventPredictionHistory.personId, input.personId)),
+    database
+      .delete(professionalEventPredictions)
+      .where(eq(professionalEventPredictions.personId, input.personId)),
+    database
+      .delete(professionalMatchPredictionHistory)
+      .where(eq(professionalMatchPredictionHistory.personId, input.personId)),
+    database
+      .delete(professionalMatchPredictions)
+      .where(eq(professionalMatchPredictions.personId, input.personId)),
     database
       .delete(calendarConnections)
       .where(eq(calendarConnections.personId, input.personId)),

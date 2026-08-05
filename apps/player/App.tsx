@@ -4,6 +4,8 @@ import {
   formatVenueTime,
   type EventDivisionSummary,
   type PersonSummary,
+  googleMapsSearchUrl,
+  nativeMapUrl,
 } from "@duna/core";
 import {
   demoBookings,
@@ -14,6 +16,7 @@ import {
   demoWalletEntries,
 } from "@duna/core/demo";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Clipboard from "expo-clipboard";
 import * as Contacts from "expo-contacts";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
@@ -32,6 +35,7 @@ import {
   Easing,
   Image,
   ImageBackground,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -2774,6 +2778,7 @@ function ProTourModal({
   const [posterFailed, setPosterFailed] = useState(false);
   const [followedMatchId, setFollowedMatchId] = useState<string>();
   const [followNotice, setFollowNotice] = useState<string>();
+  const [copiedAddress, setCopiedAddress] = useState(false);
   const events = proCoverage?.events ?? [];
   const orderedEvents = useMemo(() => sortProEvents(events), [events]);
   const filteredEvents = useMemo(
@@ -2791,8 +2796,15 @@ function ProTourModal({
       setSearch("");
       setError(undefined);
       setFollowNotice(undefined);
+      setCopiedAddress(false);
     }
   }, [visible]);
+
+  useEffect(() => {
+    if (!copiedAddress) return;
+    const resetCopyState = setTimeout(() => setCopiedAddress(false), 2400);
+    return () => clearTimeout(resetCopyState);
+  }, [copiedAddress]);
 
   useEffect(() => {
     if (!visible || !selectedSlug) return;
@@ -2865,6 +2877,7 @@ function ProTourModal({
     setEvent(undefined);
     setError(undefined);
     setFollowNotice(undefined);
+    setCopiedAddress(false);
     setSelectedSlug(slug);
   };
 
@@ -2874,6 +2887,7 @@ function ProTourModal({
     setEvent(undefined);
     setError(undefined);
     setActiveSection("overview");
+    setCopiedAddress(false);
   };
 
   const handleClose = () => {
@@ -2950,13 +2964,34 @@ function ProTourModal({
       event.editorial.venueAddress ??
       [
         event.editorial.venue?.addressLine1,
+        event.editorial.venue?.addressLine2,
         event.editorial.venue?.locality,
         event.editorial.venue?.administrativeArea,
         event.editorial.venue?.postalCode,
+        event.editorial.venue?.countryCode,
       ]
         .filter(Boolean)
         .join(", "))
     : undefined;
+  const venueName = event
+    ? (event.editorial.venueName ?? event.location ?? venueAddress)
+    : undefined;
+  const venueMapHref =
+    event && venueAddress
+      ? googleMapsSearchUrl({
+          address: venueAddress,
+          googlePlaceId: event.editorial.venue?.googlePlaceId,
+        })
+      : undefined;
+  const venueMapImageUrl =
+    event && venueAddress
+      ? `${dunaWebUrl}/api/places/map?${
+          event.editorial.venue?.latitude !== undefined &&
+          event.editorial.venue.longitude !== undefined
+            ? `latitude=${encodeURIComponent(String(event.editorial.venue.latitude))}&longitude=${encodeURIComponent(String(event.editorial.venue.longitude))}`
+            : `address=${encodeURIComponent(venueAddress)}`
+        }`
+      : undefined;
   const watchOptions = event
     ? [
         ...event.watchOptions,
@@ -2975,6 +3010,39 @@ function ProTourModal({
       <Text style={styles.proMobileEmptyBody}>{body}</Text>
     </View>
   );
+
+  const openVenueMap = async () => {
+    if (!event || !venueAddress || !venueMapHref) return;
+    const platform =
+      Platform.OS === "ios"
+        ? "ios"
+        : Platform.OS === "android"
+          ? "android"
+          : "web";
+    const destination = nativeMapUrl({
+      address: venueAddress,
+      label: venueName,
+      latitude: event.editorial.venue?.latitude,
+      longitude: event.editorial.venue?.longitude,
+      platform,
+    });
+    try {
+      if (platform === "web") {
+        await WebBrowser.openBrowserAsync(venueMapHref);
+      } else {
+        await Linking.openURL(destination);
+      }
+    } catch {
+      await WebBrowser.openBrowserAsync(venueMapHref);
+    }
+  };
+
+  const copyVenueAddress = async () => {
+    if (!venueAddress) return;
+    await Clipboard.setStringAsync(venueAddress);
+    setCopiedAddress(true);
+    successHaptic();
+  };
 
   const renderOverview = () => {
     if (!event) return null;
@@ -3030,20 +3098,70 @@ function ProTourModal({
           </>
         )}
 
-        {(event.editorial.venueName || event.location || venueAddress) && (
-          <View style={styles.proMobileInfoCard}>
-            <Text style={styles.proMobileInfoEyebrow}>EVENT LOCATION</Text>
-            <Text style={styles.proMobileInfoTitle}>
-              {event.editorial.venueName ?? event.location}
-            </Text>
-            {venueAddress && (
-              <Text style={styles.proMobileInfoBody}>{venueAddress}</Text>
-            )}
-            {event.editorial.timezone && (
-              <Text style={styles.proMobileInfoFootnote}>
-                Schedule shown in {event.editorial.timezone}
-              </Text>
-            )}
+        {venueName && venueAddress && venueMapHref && (
+          <View style={styles.proMobileLocationCard}>
+            <Pressable
+              accessibilityHint="Opens this location in your maps app"
+              accessibilityLabel={`Open map for ${venueName}`}
+              accessibilityRole="button"
+              onPress={() => void openVenueMap()}
+              style={({ pressed }) => [
+                styles.proMobileLocationMap,
+                pressed && styles.proMobileLocationMapPressed,
+              ]}
+            >
+              {venueMapImageUrl && (
+                <Image
+                  accessibilityIgnoresInvertColors
+                  source={{ uri: venueMapImageUrl }}
+                  style={styles.proMobileLocationMapImage}
+                />
+              )}
+              <View style={styles.proMobileLocationMapLabel}>
+                <Text style={styles.proMobileLocationMapLabelText}>
+                  OPEN MAP ↗
+                </Text>
+              </View>
+            </Pressable>
+            <View style={styles.proMobileLocationDetails}>
+              <Text style={styles.proMobileInfoEyebrow}>EVENT LOCATION</Text>
+              <Text style={styles.proMobileInfoTitle}>{venueName}</Text>
+              <Pressable
+                accessibilityHint="Opens this address in your maps app"
+                accessibilityLabel={`Open ${venueAddress} in maps`}
+                accessibilityRole="link"
+                onPress={() => void openVenueMap()}
+              >
+                <Text style={styles.proMobileLocationAddress}>
+                  {venueAddress} ↗
+                </Text>
+              </Pressable>
+              {event.editorial.timezone && (
+                <Text style={styles.proMobileInfoFootnote}>
+                  Schedule shown in {event.editorial.timezone}
+                </Text>
+              )}
+              <View style={styles.proMobileLocationActions}>
+                <Pressable
+                  accessibilityLabel={`Copy address: ${venueAddress}`}
+                  accessibilityRole="button"
+                  onPress={() => void copyVenueAddress()}
+                  style={styles.proMobileLocationCopy}
+                >
+                  <Text style={styles.proMobileLocationCopyText}>
+                    {copiedAddress ? "✓ Copied" : "Copy address"}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityLabel={`Open ${venueAddress} in maps`}
+                  accessibilityRole="link"
+                  onPress={() => void openVenueMap()}
+                  style={styles.proMobileLocationOpen}
+                >
+                  <Text style={styles.proMobileLocationOpenText}>Maps ↗</Text>
+                </Pressable>
+              </View>
+            </View>
           </View>
         )}
 
@@ -8915,6 +9033,93 @@ function createStyles(palette: Palette) {
       borderWidth: 1,
       marginTop: 12,
       padding: 16,
+    },
+    proMobileLocationCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      marginTop: 12,
+      minHeight: 178,
+      overflow: "hidden",
+    },
+    proMobileLocationMap: {
+      backgroundColor: colors.navyLift,
+      justifyContent: "flex-end",
+      minHeight: 178,
+      overflow: "hidden",
+      width: 116,
+    },
+    proMobileLocationMapPressed: { opacity: 0.82 },
+    proMobileLocationMapImage: {
+      bottom: 0,
+      height: "100%",
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: 0,
+      width: "100%",
+    },
+    proMobileLocationMapLabel: {
+      alignSelf: "flex-start",
+      backgroundColor: rgba(colors.inkRgb, 0.82),
+      borderRadius: 999,
+      margin: 9,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    proMobileLocationMapLabelText: {
+      color: "#ffffff",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.3,
+    },
+    proMobileLocationDetails: {
+      flex: 1,
+      justifyContent: "center",
+      minWidth: 0,
+      padding: 14,
+    },
+    proMobileLocationAddress: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "700",
+      lineHeight: 17,
+      marginTop: 6,
+    },
+    proMobileLocationActions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+      marginTop: 11,
+    },
+    proMobileLocationCopy: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.14),
+      borderRadius: 999,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 34,
+      paddingHorizontal: 10,
+    },
+    proMobileLocationCopyText: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    proMobileLocationOpen: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      justifyContent: "center",
+      minHeight: 34,
+      paddingHorizontal: 10,
+    },
+    proMobileLocationOpenText: {
+      color: colors.onAccent,
+      fontSize: 10,
+      fontWeight: "900",
     },
     proMobileInfoEyebrow: {
       color: colors.aqua,

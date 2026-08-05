@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   CalendarDays,
   ExternalLink,
+  History,
   MapPin,
   Radio,
   Sparkles,
@@ -14,6 +15,7 @@ import {
 import Link from "next/link";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
 import { ProfessionalMatchCard } from "@/components/professional-match-card";
+import { ProMatchCommunityPicker } from "@/components/pro-prediction-picker";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { professionalMatchJsonLd, serializeJsonLd } from "@/lib/pro-seo";
@@ -231,6 +233,103 @@ export function ProMatchDetail({
                   ? "Probability is derived from the latest mapped Duna Sand Ratings. It is a forecast, not a guarantee."
                   : "Both teams currently have an even prior because mapped rating data is incomplete."}
           </p>
+          <ProMatchCommunityPicker eventSlug={event.slug} match={match} />
+        </section>
+
+        <section className="pro-match-panel pro-head-to-head">
+          <header>
+            <div>
+              <span className="page-eyebrow">Historical matchup</span>
+              <h2>Head-to-head</h2>
+            </div>
+            <History aria-hidden size={22} />
+          </header>
+          {detail.headToHead.total > 0 ? (
+            <>
+              <div className="pro-head-to-head__score">
+                <div>
+                  <strong>{detail.headToHead.teamAWins}</strong>
+                  <span>{match.teamA.label} wins</span>
+                </div>
+                <i>vs</i>
+                <div>
+                  <strong>{detail.headToHead.teamBWins}</strong>
+                  <span>{match.teamB.label} wins</span>
+                </div>
+              </div>
+              <div className="pro-head-to-head__meetings">
+                {detail.headToHead.meetings.map((meeting) => {
+                  const content = (
+                    <>
+                      <div>
+                        <small>
+                          {meeting.eventName}
+                          {meeting.roundLabel ? ` · ${meeting.roundLabel}` : ""}
+                          {meeting.playedAt
+                            ? ` · ${new Intl.DateTimeFormat("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                                timeZone: "UTC",
+                              }).format(new Date(meeting.playedAt))}`
+                            : ""}
+                        </small>
+                        <strong>
+                          <span
+                            className={
+                              meeting.winnerSide === "A"
+                                ? "is-winner"
+                                : undefined
+                            }
+                          >
+                            {meeting.teamALabel}
+                          </span>
+                          <i>vs</i>
+                          <span
+                            className={
+                              meeting.winnerSide === "B"
+                                ? "is-winner"
+                                : undefined
+                            }
+                          >
+                            {meeting.teamBLabel}
+                          </span>
+                        </strong>
+                      </div>
+                      <span className="pro-head-to-head__sets">
+                        {meeting.sets.length > 0
+                          ? meeting.sets
+                              .map((set) => `${set.a}–${set.b}`)
+                              .join(", ")
+                          : "Result recorded"}
+                      </span>
+                      <ExternalLink aria-hidden size={13} />
+                    </>
+                  );
+                  return meeting.canonicalPath ? (
+                    <Link href={meeting.canonicalPath} key={meeting.id}>
+                      {content}
+                    </Link>
+                  ) : meeting.sourceUrl ? (
+                    <a
+                      href={meeting.sourceUrl}
+                      key={meeting.id}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {content}
+                    </a>
+                  ) : (
+                    <article key={meeting.id}>{content}</article>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <p className="pro-head-to-head__empty">
+              No prior verified meetings between these exact teams yet.
+            </p>
+          )}
         </section>
 
         <section className="pro-match-panel pro-watch">
