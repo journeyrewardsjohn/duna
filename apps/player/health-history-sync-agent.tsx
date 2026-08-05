@@ -10,10 +10,12 @@ import {
 import type { PlayerRuntime } from "./runtime";
 
 const HISTORY_RESUME_INTERVAL_MS = 60_000;
-// The Health endpoint replenishes 15 requests per minute. Keeping unattended
-// work to the same budget makes a years-long import steady instead of repeatedly
-// running into rate limits after its initial foreground burst.
-const BACKGROUND_PAGE_BUDGET = 15;
+const INITIAL_RESUME_DELAY_MS = 12_000;
+const FOREGROUND_RESUME_DELAY_MS = 3_000;
+// Health history is durable and resumable, so interactive app work wins over
+// throughput. Three bounded pages per minute keeps a large backfill moving
+// without monopolizing the phone radio or the shared API connection.
+const BACKGROUND_PAGE_BUDGET = 3;
 
 export function HealthHistorySyncAgent({
   paused,
@@ -29,6 +31,7 @@ export function HealthHistorySyncAgent({
     const client = runtime.client;
     let cancelled = false;
     let stopMonitoring: (() => void) | undefined;
+    let resumeTimer: ReturnType<typeof setTimeout> | undefined;
 
     async function resumeHistory(forceIncrementalCheck = false) {
       if (
@@ -59,6 +62,15 @@ export function HealthHistorySyncAgent({
       }
     }
 
+    function scheduleResume(forceIncrementalCheck: boolean, delay: number) {
+      if (cancelled) return;
+      if (resumeTimer) clearTimeout(resumeTimer);
+      resumeTimer = setTimeout(() => {
+        resumeTimer = undefined;
+        void resumeHistory(forceIncrementalCheck);
+      }, delay);
+    }
+
     void (async () => {
       const state = await getAppleHealthSyncState();
       if (state?.categories.length && !cancelled) {
@@ -66,19 +78,22 @@ export function HealthHistorySyncAgent({
         if (cancelled) cleanup?.();
         else stopMonitoring = cleanup;
       }
-      await resumeHistory(true);
+      scheduleResume(true, INITIAL_RESUME_DELAY_MS);
     })();
 
     const interval = setInterval(() => {
-      void resumeHistory();
+      scheduleResume(false, 0);
     }, HISTORY_RESUME_INTERVAL_MS);
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") void resumeHistory(true);
+      if (state === "active") {
+        scheduleResume(true, FOREGROUND_RESUME_DELAY_MS);
+      }
     });
 
     return () => {
       cancelled = true;
       clearInterval(interval);
+      if (resumeTimer) clearTimeout(resumeTimer);
       subscription.remove();
       stopMonitoring?.();
     };

@@ -55,6 +55,7 @@ describe("Duna Health encryption", () => {
       source,
     });
 
+    expect(encrypted.encryptedPayload).toMatch(/^z1:/);
     expect(encrypted.encryptedPayload).not.toContain("WHOOP");
     expect(decryptHealthPayload(encrypted)).toEqual({
       value: 51,

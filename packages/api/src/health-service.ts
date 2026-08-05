@@ -7,6 +7,7 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
+import { deflateRawSync, inflateRawSync } from "node:zlib";
 import {
   auditLog,
   follows,
@@ -91,6 +92,23 @@ const METRIC_CATEGORY: Readonly<Record<HealthMetric, HealthCategory>> = {
   "lean-body-mass": "body",
 };
 
+const ALL_HEALTH_METRICS = Object.keys(METRIC_CATEGORY) as HealthMetric[];
+const HEALTH_TIMELINE_ROW_LIMIT = 500;
+// HealthKit can produce tens of thousands of heart-rate samples for one
+// player. Profile views need a representative recent window for summaries,
+// not a bulk export. Per-metric caps prevent a high-volume metric from both
+// starving lower-volume recovery data and forcing a serverless request to
+// decrypt an unbounded history.
+const HEALTH_PROFILE_METRIC_LIMITS = [
+  ["heart-rate", 2_048],
+  ["resting-heart-rate", 64],
+  ["heart-rate-variability", 64],
+  ["sleep", 256],
+  ["active-energy", 512],
+  ["steps", 128],
+  ["weight", 64],
+] as const satisfies readonly (readonly [HealthMetric, number])[];
+
 type HealthPayload = Pick<
   HealthSampleInput,
   "value" | "unit" | "categoryValue" | "source" | "workout"
@@ -102,6 +120,8 @@ type EncryptedHealthPayload = {
   readonly authTag: string;
   readonly keyVersion: number;
 };
+
+const COMPRESSED_HEALTH_PAYLOAD_PREFIX = "z1:";
 
 type HealthAccess = {
   readonly owner: boolean;
@@ -227,12 +247,17 @@ export function encryptHealthPayload(
 ): EncryptedHealthPayload {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", derivedKey("payload"), iv);
+  const cleartext = Buffer.from(JSON.stringify(payload), "utf8");
+  const compressed = deflateRawSync(cleartext);
+  const useCompression =
+    compressed.length + COMPRESSED_HEALTH_PAYLOAD_PREFIX.length <
+    cleartext.length;
   const encrypted = Buffer.concat([
-    cipher.update(JSON.stringify(payload), "utf8"),
+    cipher.update(useCompression ? compressed : cleartext),
     cipher.final(),
   ]);
   return {
-    encryptedPayload: encrypted.toString("base64"),
+    encryptedPayload: `${useCompression ? COMPRESSED_HEALTH_PAYLOAD_PREFIX : ""}${encrypted.toString("base64")}`,
     encryptionIv: iv.toString("base64"),
     authTag: cipher.getAuthTag().toString("base64"),
     keyVersion: 1,
@@ -254,10 +279,19 @@ export function decryptHealthPayload(
     Buffer.from(encrypted.encryptionIv, "base64"),
   );
   decipher.setAuthTag(Buffer.from(encrypted.authTag, "base64"));
-  const cleartext = Buffer.concat([
-    decipher.update(Buffer.from(encrypted.encryptedPayload, "base64")),
+  const compressed = encrypted.encryptedPayload.startsWith(
+    COMPRESSED_HEALTH_PAYLOAD_PREFIX,
+  );
+  const ciphertext = compressed
+    ? encrypted.encryptedPayload.slice(COMPRESSED_HEALTH_PAYLOAD_PREFIX.length)
+    : encrypted.encryptedPayload;
+  const decoded = Buffer.concat([
+    decipher.update(Buffer.from(ciphertext, "base64")),
     decipher.final(),
-  ]).toString("utf8");
+  ]);
+  const cleartext = (compressed ? inflateRawSync(decoded) : decoded).toString(
+    "utf8",
+  );
   return JSON.parse(cleartext) as HealthPayload;
 }
 
@@ -1174,6 +1208,54 @@ function decryptRows(
   });
 }
 
+async function loadBoundedProfileSampleRows(input: {
+  readonly personId: string;
+  readonly categories: readonly HealthCategory[];
+}): Promise<(typeof healthSamples.$inferSelect)[]> {
+  const allowedMetrics = ALL_HEALTH_METRICS.filter((metric) =>
+    input.categories.includes(metricCategory(metric)),
+  );
+  if (allowedMetrics.length === 0) return [];
+
+  const database = getDatabase();
+  const metricQueries = HEALTH_PROFILE_METRIC_LIMITS.filter(([metric]) =>
+    allowedMetrics.includes(metric),
+  ).map(([metric, limit]) =>
+    database
+      .select()
+      .from(healthSamples)
+      .where(
+        and(
+          eq(healthSamples.personId, input.personId),
+          eq(healthSamples.metric, metric),
+        ),
+      )
+      .orderBy(desc(healthSamples.startedAt))
+      .limit(limit),
+  );
+  const [timelineRows, ...summaryRows] = await Promise.all([
+    database
+      .select()
+      .from(healthSamples)
+      .where(
+        and(
+          eq(healthSamples.personId, input.personId),
+          inArray(healthSamples.metric, allowedMetrics),
+        ),
+      )
+      .orderBy(desc(healthSamples.startedAt))
+      .limit(HEALTH_TIMELINE_ROW_LIMIT),
+    ...metricQueries,
+  ]);
+
+  const uniqueRows = new Map(
+    [...timelineRows, ...summaryRows.flat()].map((row) => [row.id, row]),
+  );
+  return [...uniqueRows.values()].sort(
+    (left, right) => right.startedAt.getTime() - left.startedAt.getTime(),
+  );
+}
+
 function buildDaily(
   samples: readonly HealthTimelineEntry[],
   timezone: string,
@@ -1377,12 +1459,10 @@ async function buildProfile(input: {
       .from(healthConnections)
       .where(eq(healthConnections.personId, input.subjectPersonId))
       .limit(1),
-    database
-      .select()
-      .from(healthSamples)
-      .where(eq(healthSamples.personId, input.subjectPersonId))
-      .orderBy(desc(healthSamples.startedAt))
-      .limit(10_000),
+    loadBoundedProfileSampleRows({
+      personId: input.subjectPersonId,
+      categories: access.categories,
+    }),
   ]);
   if (!subject[0]) {
     throw new HealthServiceError("HEALTH_NOT_FOUND", "Player not found.");
