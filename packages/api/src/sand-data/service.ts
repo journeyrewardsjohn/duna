@@ -242,17 +242,24 @@ export function shouldCreateUnclaimedSourceProfile(input: {
   readonly source: SandDataSource;
   readonly displayName: string;
   readonly candidateCount: number;
+  readonly bestCandidateScoreBps?: number;
+  readonly isProfessional?: boolean;
 }): boolean {
-  if (input.source === "volleyball-world" || input.candidateCount > 0) {
+  if (input.source === "volleyball-world") return false;
+  const hasFullName =
+    normalizePersonName(input.displayName).split(" ").length >= 2;
+  if (input.source === "avp-league" && !hasFullName) {
     return false;
   }
-  if (
-    input.source === "avp-league" &&
-    normalizePersonName(input.displayName).split(" ").length < 2
-  ) {
-    return false;
-  }
-  return true;
+  if (input.candidateCount === 0) return true;
+  return (
+    input.isProfessional === true &&
+    hasFullName &&
+    ["bvbinfo", "volleyball-life", "fivb-12ndr", "sandrating"].includes(
+      input.source,
+    ) &&
+    (input.bestCandidateScoreBps ?? 10_000) < 8_500
+  );
 }
 
 export function shouldAutoLinkProfessionalSource(input: {
@@ -265,7 +272,9 @@ export function shouldAutoLinkProfessionalSource(input: {
   readonly isProfessional: boolean;
 }): boolean {
   return (
-    (input.source === "bvbinfo" || input.source === "volleyball-life") &&
+    ["bvbinfo", "volleyball-life", "fivb-12ndr", "sandrating"].includes(
+      input.source,
+    ) &&
     input.isProfessional &&
     !input.tied &&
     input.scoreBps === 9_500 &&
@@ -577,6 +586,13 @@ async function persistExternalPlayers(input: {
           .length > 1;
       const createClaimableRankingSeed =
         input.source === "sandrating" && external.raw.rankingSeed === true;
+      const createUnclaimedSourceProfile = shouldCreateUnclaimedSourceProfile({
+        source: input.source,
+        displayName: external.displayName,
+        candidateCount: candidates.length,
+        bestCandidateScoreBps: best?.score,
+        isProfessional: external.isProfessional,
+      });
       if (
         best &&
         shouldAutoLinkProfessionalSource({
@@ -621,7 +637,12 @@ async function persistExternalPlayers(input: {
           candidateDisplayName: best.candidate.displayName,
         };
         linked += 1;
-      } else if (best && !tied && !createClaimableRankingSeed) {
+      } else if (
+        best &&
+        !tied &&
+        !createClaimableRankingSeed &&
+        !createUnclaimedSourceProfile
+      ) {
         mappingState = "suggested";
         mappingScoreBps = best.score;
         evidence = {
@@ -631,7 +652,11 @@ async function persistExternalPlayers(input: {
           candidateDisplayName: best.candidate.displayName,
         };
         suggested += 1;
-      } else if (tied && !createClaimableRankingSeed) {
+      } else if (
+        tied &&
+        !createClaimableRankingSeed &&
+        !createUnclaimedSourceProfile
+      ) {
         evidence = {
           method: "ambiguous-name",
           candidates: candidates.slice(0, 5).map(({ candidate, score }) => ({
@@ -641,14 +666,7 @@ async function persistExternalPlayers(input: {
             scoreBps: score,
           })),
         };
-      } else if (
-        createClaimableRankingSeed ||
-        shouldCreateUnclaimedSourceProfile({
-          source: input.source,
-          displayName: external.displayName,
-          candidateCount: candidates.length,
-        })
-      ) {
+      } else if (createClaimableRankingSeed || createUnclaimedSourceProfile) {
         const handle = safeExternalHandle(
           input.source,
           external.externalPersonId,

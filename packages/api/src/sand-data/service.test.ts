@@ -134,6 +134,27 @@ describe("source identity inference", () => {
     ).toBe(true);
   });
 
+  it("creates a full-name pro when the only candidate is a weak surname match", () => {
+    expect(
+      shouldCreateUnclaimedSourceProfile({
+        source: "bvbinfo",
+        displayName: "Taylor Crabb",
+        candidateCount: 1,
+        bestCandidateScoreBps: 7_000,
+        isProfessional: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldCreateUnclaimedSourceProfile({
+        source: "bvbinfo",
+        displayName: "Taylor Crabb",
+        candidateCount: 1,
+        bestCandidateScoreBps: 9_500,
+        isProfessional: true,
+      }),
+    ).toBe(false);
+  });
+
   it("auto-links only an exact, unique professional source to an unclaimed player", () => {
     expect(
       shouldAutoLinkProfessionalSource({
@@ -168,6 +189,17 @@ describe("source identity inference", () => {
         isProfessional: true,
       }),
     ).toBe(false);
+    expect(
+      shouldAutoLinkProfessionalSource({
+        source: "fivb-12ndr",
+        externalName: "Taylor Crabb",
+        candidateName: "Taylor Crabb",
+        candidateClaimStatus: "unclaimed",
+        scoreBps: 9_500,
+        tied: false,
+        isProfessional: true,
+      }),
+    ).toBe(true);
   });
 });
 
