@@ -23,6 +23,7 @@
     "@mux/mux-player-react": "3.13.2",
     "@trpc/client": "11.18.0",
     "@trpc/server": "^11.18.0",
+    "@vercel/blob": "^2.6.1",
     "@workos-inc/authkit-nextjs": "4.3.1",
     "@workos-inc/node": "10.9.0",
     "inngest": "4.13.0",

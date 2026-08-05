@@ -91,7 +91,7 @@ const publicTools: readonly ToolDefinition[] = [
     name: "get_player",
     title: "Get a public player profile",
     description:
-      "Load a public player, rating history, prior match predictions, official ranking, partner history inputs, and connected sources.",
+      "Load a public player, reviewed biography and artwork, rating history, prior match predictions, official ranking, upcoming registrations, broadcast options, partner history inputs, news, videos, and connected sources.",
     inputSchema: objectSchema(
       { handle: { type: "string", minLength: 2, maxLength: 48 } },
       ["handle"],
@@ -417,13 +417,17 @@ async function callTool(input: {
     }
     case "get_player": {
       const handle = stringArgument(input.args, "handle")!;
-      const [player, performance] = await Promise.all([
+      const [player, performance, intelligence, videos] = await Promise.all([
         caller.public.playerProfile({ handle }),
         caller.public.playerPerformance({ handle }),
+        caller.public.playerIntelligence({ handle }),
+        caller.public.videos({ ownerHandle: handle }),
       ]);
       return {
         player,
         performance,
+        intelligence,
+        videos,
         profileUrl: `${origin}/players/${player.handle}`,
         claimUrl: `${origin}/app/onboarding?claimProfile=${encodeURIComponent(player.handle)}`,
       };

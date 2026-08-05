@@ -15,6 +15,8 @@ export * from "./identity";
 export * from "./identity-verification";
 export * from "./family-wallet";
 export * from "./profile-onboarding";
+export * from "./player-intelligence";
+export * from "./player-research";
 export * from "./membership";
 export * from "./match-service";
 export * from "./operator-service";

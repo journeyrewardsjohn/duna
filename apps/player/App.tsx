@@ -79,6 +79,13 @@ type MobileCoach = NonNullable<PlayerRuntime["coaches"]>[number];
 type OrganizationWallet = NonNullable<
   PlayerRuntime["organizationWallets"]
 >[number];
+type MobilePlayerIntelligence = Awaited<
+  ReturnType<DunaApiClient["public"]["playerIntelligence"]["query"]>
+>;
+type MobilePlayerPerformance = Awaited<
+  ReturnType<DunaApiClient["public"]["playerPerformance"]["query"]>
+>;
+type MobilePerformanceMatch = MobilePlayerPerformance["history"][number];
 
 const lightColors = {
   canvas: "#f8f7f3",
@@ -96,6 +103,7 @@ const lightColors = {
   warning: "#a86f18",
   danger: "#b84444",
   onAccent: "#ffffff",
+  white: "#ffffff",
   overlayRgb: "23,58,103",
   accentRgb: "35,90,150",
   warningRgb: "168,111,24",
@@ -104,6 +112,9 @@ const lightColors = {
   flareRgb: "222,104,66",
   inkRgb: "16,24,40",
   depthRgb: "255,255,255",
+  navyRgb: "241,236,226",
+  boneRgb: "16,24,40",
+  whiteRgb: "255,255,255",
 } as const;
 
 type Palette = {
@@ -126,6 +137,7 @@ const darkColors: Palette = {
   warning: "#f7c86b",
   danger: "#f27878",
   onAccent: "#070b0d",
+  white: "#ffffff",
   overlayRgb: "255,255,255",
   accentRgb: "99,227,219",
   warningRgb: "247,200,107",
@@ -134,6 +146,9 @@ const darkColors: Palette = {
   flareRgb: "255,106,61",
   inkRgb: "7,11,13",
   depthRgb: "12,20,24",
+  navyRgb: "16,36,43",
+  boneRgb: "243,239,229",
+  whiteRgb: "255,255,255",
 };
 
 type ThemeName = "light" | "dark";
@@ -4219,195 +4234,601 @@ function WalletScreen() {
   );
 }
 
+function matchSides(match: MobilePerformanceMatch, personId: string) {
+  const ownSide = match.participants.find(
+    (participant) => participant.personId === personId,
+  )?.side;
+  const names = (side: "A" | "B") =>
+    match.participants
+      .filter((participant) => participant.side === side)
+      .map((participant) => participant.name)
+      .join(" / ");
+  return {
+    own: ownSide ? names(ownSide) : "Duna player",
+    opponent: ownSide ? names(ownSide === "A" ? "B" : "A") : match.matchTitle,
+  };
+}
+
+function MobileResultCard({
+  match,
+  personId,
+}: {
+  readonly match: MobilePerformanceMatch;
+  readonly personId: string;
+}) {
+  const result = match.actualResult >= 0.5 ? "W" : "L";
+  const sides = matchSides(match, personId);
+  const expected = Math.round(match.expectedWinProbability * 100);
+  return (
+    <Pressable
+      onPress={() =>
+        void WebBrowser.openBrowserAsync(
+          `${dunaWebUrl}/app/matches/${match.matchId}`,
+        )
+      }
+      style={styles.athleteResultCard}
+    >
+      <View
+        style={[
+          styles.athleteResultMark,
+          result === "W"
+            ? styles.athleteResultMarkWin
+            : styles.athleteResultMarkLoss,
+        ]}
+      >
+        <Text style={styles.athleteResultMarkText}>{result}</Text>
+      </View>
+      <View style={styles.flex}>
+        <Text numberOfLines={1} style={styles.athleteResultOpponent}>
+          vs. {sides.opponent || "opponent pending"}
+        </Text>
+        <Text numberOfLines={1} style={styles.athleteResultMeta}>
+          {new Intl.DateTimeFormat("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }).format(new Date(match.occurredAt))}
+          {match.sets.length
+            ? ` · ${match.sets.map((set) => `${set.a}–${set.b}`).join(", ")}`
+            : ""}
+        </Text>
+      </View>
+      <View style={styles.athleteResultDelta}>
+        <Text
+          style={[
+            styles.athleteResultDeltaValue,
+            match.delta >= 0 ? styles.positiveText : styles.negativeText,
+          ]}
+        >
+          {match.delta >= 0 ? "+" : ""}
+          {match.delta.toFixed(2)}
+        </Text>
+        <Text style={styles.athleteResultExpected}>{expected}% expected</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 function ProfileScreen({ onHealth }: { readonly onHealth: () => void }) {
-  const { dashboard, mode, settings, signOut } = usePlayerRuntime();
+  const { client, dashboard, mode, settings, signOut } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
-  const matches = dashboard?.recentMatches ?? demoMatches;
-  const profileMetrics = dashboard?.metrics.slice(0, 4) ?? [
-    { label: "Current band", value: "A" },
-    { label: "Home market", value: player.homeMarket },
-    { label: "Matches", value: String(matches.length) },
-    { label: "Confidence", value: player.rating.confidence },
+  const fallbackMatches = dashboard?.recentMatches ?? demoMatches;
+  const [intelligence, setIntelligence] = useState<MobilePlayerIntelligence>();
+  const [performance, setPerformance] = useState<MobilePlayerPerformance>();
+
+  useEffect(() => {
+    if (!client || mode === "preview") return;
+    let active = true;
+    void Promise.all([
+      client.public.playerIntelligence
+        .query({ handle: player.handle })
+        .catch(() => undefined),
+      client.public.playerPerformance
+        .query({ handle: player.handle })
+        .catch(() => undefined),
+    ]).then(([nextIntelligence, nextPerformance]) => {
+      if (!active) return;
+      setIntelligence(nextIntelligence);
+      setPerformance(nextPerformance);
+    });
+    return () => {
+      active = false;
+    };
+  }, [client, mode, player.handle]);
+
+  const profile = intelligence?.profile;
+  const history = performance?.history ?? [];
+  const chronological = [...history].reverse();
+  const recentForm = history.slice(0, 10);
+  const wins = history.filter((match) => match.actualResult >= 0.5).length;
+  const losses = Math.max(0, history.length - wins);
+  const winRate = history.length
+    ? Math.round((wins / history.length) * 100)
+    : 0;
+  const lastTenWins = recentForm.filter(
+    (match) => match.actualResult >= 0.5,
+  ).length;
+  const startRating = chronological[0]?.beforeDisplay;
+  const currentRating =
+    chronological.at(-1)?.afterDisplay ?? player.rating.display;
+  const netMovement =
+    startRating === undefined
+      ? (player.rating.delta ?? 0)
+      : currentRating - startRating;
+  const biggestUpset = history
+    .filter((match) => match.actualResult >= 0.5)
+    .sort(
+      (left, right) =>
+        left.expectedWinProbability - right.expectedWinProbability,
+    )[0];
+  const toughestLoss = history
+    .filter((match) => match.actualResult < 0.5)
+    .sort(
+      (left, right) =>
+        right.expectedWinProbability - left.expectedWinProbability,
+    )[0];
+  const chartMatches = chronological.slice(-18);
+  const ratingValues = chartMatches.flatMap((match) => [
+    match.beforeDisplay,
+    match.afterDisplay,
+  ]);
+  const minimumRating = ratingValues.length
+    ? Math.min(...ratingValues)
+    : currentRating - 0.12;
+  const maximumRating = ratingValues.length
+    ? Math.max(...ratingValues)
+    : currentRating + 0.12;
+  const worldRank = performance?.worldRanking;
+  const worldMovement = worldRank?.previousRank
+    ? worldRank.previousRank - worldRank.rank
+    : undefined;
+  const fallbackProfileMetrics = [
+    {
+      label: "Record",
+      value: history.length ? `${wins}–${losses}` : `${fallbackMatches.length}`,
+    },
+    { label: "Win rate", value: history.length ? `${winRate}%` : "Pending" },
+    {
+      label: "Last 10",
+      value: recentForm.length
+        ? `${lastTenWins}–${recentForm.length - lastTenWins}`
+        : "Pending",
+    },
+    {
+      label: "World rank",
+      value: worldRank ? `#${worldRank.rank}` : "—",
+    },
   ];
+  const heroSource = profile?.heroImageUrl
+    ? { uri: profile.heroImageUrl }
+    : dunaCampaignRally;
+
   return (
     <ScrollView
       contentContainerStyle={styles.screenContent}
       showsVerticalScrollIndicator={false}
     >
-      <AppHeader eyebrow="YOUR PUBLIC PLAYER IDENTITY" />
-      <View style={styles.profileHero}>
-        <View style={styles.profileIdentity}>
-          <View style={styles.profileAvatar}>
-            <Text style={styles.profileAvatarText}>{player.initials}</Text>
-          </View>
-          <View>
-            <Pill tone={settings?.membership ? "positive" : "neutral"}>
-              {settings?.membership?.tierName ?? "Player"}
+      <AppHeader eyebrow="YOUR PLAYER STORY" />
+      <ImageBackground
+        imageStyle={styles.athleteHeroImage}
+        source={heroSource}
+        style={styles.athleteHero}
+      >
+        <View style={styles.athleteHeroWash} />
+        <View style={styles.athleteHeroGeometry} />
+        <View style={styles.athleteHeroContent}>
+          <View style={styles.athleteHeroPills}>
+            <Pill
+              tone={player.roles.includes("player") ? "positive" : "neutral"}
+            >
+              {player.roles.includes("player") ? "Player" : "Member"}
             </Pill>
-            {settings?.dunaPlus.kind === "complimentary" && (
-              <Pill tone="positive">Complimentary Duna+</Pill>
+            {worldRank && (
+              <Pill tone="warning">{`World #${worldRank.rank}`}</Pill>
             )}
-            <Text style={styles.profileName}>{player.displayName}</Text>
-            <Text style={styles.profileHandle}>
-              @{player.handle} · {player.homeMarket}
+          </View>
+          <Text style={styles.athleteHeroName}>{player.displayName}</Text>
+          <Text style={styles.athleteHeroMeta}>
+            {profile?.countryCode ? `${profile.countryCode} · ` : ""}
+            {profile?.playingRole ? `${profile.playingRole} · ` : ""}@
+            {player.handle}
+          </Text>
+          <View style={styles.athleteHeroActions}>
+            <Pressable
+              onPress={() =>
+                void WebBrowser.openBrowserAsync(
+                  `${dunaWebUrl}/players/${player.handle}`,
+                )
+              }
+              style={styles.athleteHeroPrimaryAction}
+            >
+              <Text style={styles.athleteHeroPrimaryActionText}>
+                View public page
+              </Text>
+            </Pressable>
+            <Pressable
+              disabled={mode === "preview"}
+              onPress={() =>
+                void WebBrowser.openBrowserAsync(
+                  `${dunaWebUrl}/app/settings#player-artwork`,
+                )
+              }
+              style={styles.athleteHeroSecondaryAction}
+            >
+              <Text style={styles.athleteHeroSecondaryActionText}>
+                Create artwork
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+        {profile?.cutoutImageUrl && (
+          <Image
+            accessibilityLabel={profile.imageAlt ?? player.displayName}
+            resizeMode="contain"
+            source={{ uri: profile.cutoutImageUrl }}
+            style={styles.athleteHeroCutout}
+          />
+        )}
+        <View style={styles.athleteHeroRating}>
+          <Text style={styles.athleteHeroRatingLabel}>SAND RATING</Text>
+          <Text style={styles.athleteHeroRatingValue}>
+            {currentRating.toFixed(2)}
+          </Text>
+          <Text style={styles.athleteHeroRatingMeta}>
+            {player.rating.confidence}
+          </Text>
+        </View>
+      </ImageBackground>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.horizontalBleed}
+      >
+        <View style={styles.athleteMetricRow}>
+          {fallbackProfileMetrics.map((metric, index) => (
+            <View
+              key={metric.label}
+              style={[
+                styles.athleteMetricCard,
+                index === 0 && styles.athleteMetricCardAccent,
+              ]}
+            >
+              <Text style={styles.athleteMetricLabel}>{metric.label}</Text>
+              <Text style={styles.athleteMetricValue}>{metric.value}</Text>
+              {metric.label === "World rank" && worldMovement !== undefined ? (
+                <Text
+                  style={[
+                    styles.athleteMetricChange,
+                    worldMovement >= 0
+                      ? styles.positiveText
+                      : styles.negativeText,
+                  ]}
+                >
+                  {worldMovement >= 0 ? "↑" : "↓"} {Math.abs(worldMovement)}{" "}
+                  places
+                </Text>
+              ) : (
+                <Text style={styles.athleteMetricChange}>
+                  {metric.label === "Record"
+                    ? `${history.length} rated matches`
+                    : metric.label === "Last 10"
+                      ? "Current form"
+                      : metric.label === "Win rate"
+                        ? "Verified results"
+                        : "Official signal"}
+                </Text>
+              )}
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+
+      <View style={styles.athleteNarrativeCard}>
+        <View style={styles.athleteNarrativeHeading}>
+          <View style={styles.athleteNarrativeMark}>
+            <Text style={styles.athleteNarrativeMarkText}>✦</Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.eyebrow}>DUNA FORM REPORT</Text>
+            <Text style={styles.athleteNarrativeTitle}>
+              The story in the results.
             </Text>
           </View>
         </View>
-        <RatingOrbit compact />
+        <Text style={styles.athleteNarrativeBody}>
+          {profile?.shortBio ??
+            (history.length
+              ? `${player.displayName} is ${wins}–${losses} across ${history.length} verified matches, with a ${currentRating.toFixed(2)} Sand Rating and ${lastTenWins} wins in the last ${recentForm.length}.`
+              : `${player.displayName}'s verified performance story will sharpen as connected results arrive.`)}
+        </Text>
+        {profile?.sourceLabel && (
+          <Text style={styles.athleteNarrativeSource}>
+            {profile.sourceLabel} · {profile.evidenceCount} evidence sources
+          </Text>
+        )}
       </View>
+
+      <View style={styles.athleteChartCard}>
+        <View style={styles.cardTitleRow}>
+          <View>
+            <Text style={styles.eyebrow}>RATING HISTORY</Text>
+            <Text style={styles.athleteChartTitle}>Form over time.</Text>
+          </View>
+          <Pill tone={netMovement >= 0 ? "positive" : "warning"}>
+            {`${netMovement >= 0 ? "+" : ""}${netMovement.toFixed(2)}`}
+          </Pill>
+        </View>
+        <View style={styles.athleteChartSummary}>
+          <View>
+            <Text style={styles.athleteChartSummaryValue}>
+              {startRating?.toFixed(2) ?? "—"}
+            </Text>
+            <Text style={styles.athleteChartSummaryLabel}>First connected</Text>
+          </View>
+          <Text style={styles.athleteChartArrow}>→</Text>
+          <View>
+            <Text style={styles.athleteChartSummaryValue}>
+              {currentRating.toFixed(2)}
+            </Text>
+            <Text style={styles.athleteChartSummaryLabel}>Current</Text>
+          </View>
+          <View style={styles.athleteChartRange}>
+            <Text style={styles.athleteChartSummaryValue}>
+              {(maximumRating - minimumRating).toFixed(2)}
+            </Text>
+            <Text style={styles.athleteChartSummaryLabel}>Range</Text>
+          </View>
+        </View>
+        {chartMatches.length ? (
+          <View style={styles.athleteWaveChart}>
+            {chartMatches.map((match) => {
+              const range = Math.max(0.01, maximumRating - minimumRating);
+              const height =
+                28 + ((match.afterDisplay - minimumRating) / range) * 88;
+              return (
+                <View key={match.id} style={styles.athleteWaveColumn}>
+                  <View
+                    style={[
+                      styles.athleteWaveBar,
+                      {
+                        height,
+                        backgroundColor:
+                          match.actualResult >= 0.5
+                            ? colors.aqua
+                            : rgba(colors.dangerRgb, 0.65),
+                      },
+                    ]}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <View style={styles.athleteChartEmpty}>
+            <Text style={styles.athleteChartEmptyMark}>↗</Text>
+            <Text style={styles.athleteChartEmptyText}>
+              Connect verified match sources to unlock the rating waveform.
+            </Text>
+          </View>
+        )}
+        <View style={styles.athleteChartLegend}>
+          <Text>● Win</Text>
+          <Text style={styles.athleteChartLegendLoss}>● Loss</Text>
+          <Text>{chartMatches.length} recent rated results</Text>
+        </View>
+      </View>
+
+      {(biggestUpset || toughestLoss) && (
+        <>
+          <SectionHeader
+            eyebrow="MATCH INTELLIGENCE"
+            title="Results that moved the story."
+          />
+          <View style={styles.athleteMomentGrid}>
+            {biggestUpset && (
+              <View style={styles.athleteMomentCard}>
+                <Text style={styles.athleteMomentEyebrow}>BIGGEST UPSET</Text>
+                <Text style={styles.athleteMomentValue}>
+                  {Math.round(biggestUpset.expectedWinProbability * 100)}%
+                </Text>
+                <Text numberOfLines={2} style={styles.athleteMomentTitle}>
+                  vs. {matchSides(biggestUpset, player.id).opponent}
+                </Text>
+                <Text style={styles.athleteMomentMeta}>
+                  Won from the lower pre-match probability
+                </Text>
+              </View>
+            )}
+            {toughestLoss && (
+              <View
+                style={[
+                  styles.athleteMomentCard,
+                  styles.athleteMomentCardMuted,
+                ]}
+              >
+                <Text style={styles.athleteMomentEyebrow}>TOUGHEST LOSS</Text>
+                <Text style={styles.athleteMomentValue}>
+                  {Math.round(toughestLoss.expectedWinProbability * 100)}%
+                </Text>
+                <Text numberOfLines={2} style={styles.athleteMomentTitle}>
+                  vs. {matchSides(toughestLoss, player.id).opponent}
+                </Text>
+                <Text style={styles.athleteMomentMeta}>
+                  Favored before the opening serve
+                </Text>
+              </View>
+            )}
+          </View>
+        </>
+      )}
+
+      {intelligence?.upcomingEvents.length ? (
+        <>
+          <SectionHeader eyebrow="NEXT ON TOUR" title="Where to watch." />
+          <View style={styles.athleteUpcomingList}>
+            {intelligence.upcomingEvents.map((event) => (
+              <Pressable
+                key={event.id}
+                onPress={() =>
+                  void WebBrowser.openBrowserAsync(
+                    `${dunaWebUrl}/events/${event.slug}`,
+                  )
+                }
+                style={styles.athleteUpcomingCard}
+              >
+                <View style={styles.athleteUpcomingDate}>
+                  <Text style={styles.athleteUpcomingMonth}>
+                    {event.startsOn
+                      ? new Intl.DateTimeFormat("en-US", { month: "short" })
+                          .format(new Date(`${event.startsOn}T12:00:00`))
+                          .toUpperCase()
+                      : "TBD"}
+                  </Text>
+                  <Text style={styles.athleteUpcomingDay}>
+                    {event.startsOn
+                      ? new Intl.DateTimeFormat("en-US", {
+                          day: "numeric",
+                        }).format(new Date(`${event.startsOn}T12:00:00`))
+                      : "—"}
+                  </Text>
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.athleteUpcomingName}>{event.name}</Text>
+                  <Text style={styles.athleteUpcomingMeta}>
+                    {[event.location, event.countryCode]
+                      .filter(Boolean)
+                      .join(", ") || "Location pending"}
+                  </Text>
+                  <Text style={styles.athleteUpcomingWatch}>
+                    {event.watchOptions.length
+                      ? `Watch on ${event.watchOptions.map((option) => option.label).join(" + ")}`
+                      : "Broadcast details coming soon"}
+                  </Text>
+                </View>
+                <Text style={styles.chevron}>›</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : null}
+
+      {history.length ? (
+        <>
+          <SectionHeader
+            eyebrow="FULL BREAKDOWN"
+            title="Recent rated matches."
+          />
+          <View style={styles.athleteResultsList}>
+            {history.slice(0, 8).map((match) => (
+              <MobileResultCard
+                key={match.id}
+                match={match}
+                personId={player.id}
+              />
+            ))}
+          </View>
+          <Pressable
+            onPress={() =>
+              void WebBrowser.openBrowserAsync(
+                `${dunaWebUrl}/players/${player.handle}#matches`,
+              )
+            }
+            style={styles.athleteFullHistoryButton}
+          >
+            <Text style={styles.athleteFullHistoryButtonText}>
+              Open full match history
+            </Text>
+            <Text style={styles.athleteFullHistoryButtonText}>↗</Text>
+          </Pressable>
+        </>
+      ) : null}
+
+      {(profile?.biography || profile?.collegeName || profile?.hometown) && (
+        <View style={styles.athleteBioCard}>
+          <Text style={styles.eyebrow}>PLAYER BIO</Text>
+          <Text style={styles.athleteBioTitle}>Beyond the rating.</Text>
+          {profile.biography && (
+            <Text style={styles.athleteBioBody}>{profile.biography}</Text>
+          )}
+          <View style={styles.athleteBioFacts}>
+            {profile.hometown && (
+              <View>
+                <Text style={styles.athleteBioFactLabel}>Hometown</Text>
+                <Text style={styles.athleteBioFactValue}>
+                  {profile.hometown}
+                </Text>
+              </View>
+            )}
+            {profile.collegeName && (
+              <View>
+                <Text style={styles.athleteBioFactLabel}>College</Text>
+                <Text style={styles.athleteBioFactValue}>
+                  {profile.collegeName}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+
       <View style={styles.profileSetupCard}>
         <View style={styles.profileSetupTop}>
           <View style={styles.profileSetupMark}>
             <Text style={styles.profileSetupMarkText}>✦</Text>
           </View>
           <View style={styles.flex}>
-            <Text style={styles.eyebrow}>PRIVATE PLAYER SETUP</Text>
+            <Text style={styles.eyebrow}>YOUR PROFILE STUDIO</Text>
             <Text style={styles.cardTitle}>
               {settings?.profile.onboardingStatus === "complete"
-                ? "Your playing profile is ready."
+                ? "Keep your story and artwork current."
                 : "Tell Duna how you play."}
             </Text>
           </View>
-          <Pill
-            tone={
-              settings?.profile.onboardingStatus === "complete"
-                ? "positive"
-                : "warning"
-            }
-          >
-            {settings?.profile.onboardingStatus.replaceAll("-", " ") ??
-              "not started"}
-          </Pill>
         </View>
         <Text style={styles.bodyText}>
-          Use guided voice or the editable form for legal identity, playing
-          experience, height, and VolleyballLife or BVBInfo history.
+          Add playing details, connect match sources, and submit one action
+          photo plus two or three portraits for your reviewable Duna artwork
+          package.
         </Text>
         <View style={styles.profileSetupStatus}>
           <Text style={styles.rowMeta}>
-            Stripe Identity:{" "}
-            {settings?.identityVerification.status.replaceAll("-", " ") ??
+            Profile:{" "}
+            {settings?.profile.onboardingStatus.replaceAll("-", " ") ??
               "not started"}
           </Text>
           <Text style={styles.rowMeta}>
-            Match sources: {settings?.sourceConnections.length ?? 0}
+            Sources: {settings?.sourceConnections.length ?? 0}
           </Text>
         </View>
-        <Pressable
-          disabled={mode === "preview"}
-          onPress={() =>
-            void WebBrowser.openBrowserAsync(
-              settings?.profile.onboardingStatus === "complete"
-                ? `${dunaWebUrl}/app/settings#playing-profile`
-                : `${dunaWebUrl}/app/onboarding`,
-            )
-          }
-          style={styles.primaryButton}
-        >
-          <Text style={styles.primaryButtonText}>
-            {settings?.profile.onboardingStatus === "complete"
-              ? "Review player details"
-              : "Start guided setup"}
-          </Text>
-        </Pressable>
-      </View>
-      <View style={styles.metricStrip}>
-        {profileMetrics.map((metric) => (
-          <View key={metric.label}>
-            <Text style={styles.metricNumber}>{metric.value}</Text>
-            <Text style={styles.metricLabel}>{metric.label}</Text>
-          </View>
-        ))}
-      </View>
-      <View style={styles.progressCard}>
-        <View style={styles.cardTitleRow}>
-          <View>
-            <Text style={styles.eyebrow}>LAST 12 MONTHS</Text>
-            <Text style={styles.cardTitle}>Rating progression</Text>
-          </View>
-          <Pill tone="positive">
-            {player.rating.delta
-              ? `${player.rating.delta > 0 ? "+" : ""}${player.rating.delta.toFixed(2)}`
-              : player.rating.confidence}
-          </Pill>
-        </View>
-        {mode === "preview" ? (
-          <>
-            <View style={styles.mobileChart}>
-              <View
-                style={[styles.chartPoint, { left: "3%", bottom: "18%" }]}
-              />
-              <View
-                style={[styles.chartPoint, { left: "26%", bottom: "31%" }]}
-              />
-              <View
-                style={[styles.chartPoint, { left: "49%", bottom: "45%" }]}
-              />
-              <View
-                style={[styles.chartPoint, { left: "72%", bottom: "61%" }]}
-              />
-              <View
-                style={[styles.chartPoint, { left: "94%", bottom: "79%" }]}
-              />
-              <View style={styles.chartLine} />
-            </View>
-            <View style={styles.chartLabels}>
-              <Text>Aug</Text>
-              <Text>Nov</Text>
-              <Text>Feb</Text>
-              <Text>May</Text>
-              <Text>Jul</Text>
-            </View>
-          </>
-        ) : (
-          <Text style={styles.bodyText}>
-            Duna will chart your verified rating history here as connected match
-            results accumulate.
-          </Text>
-        )}
-      </View>
-      {mode === "preview" && (
-        <>
-          <View style={styles.chemistryCard}>
-            <Text style={styles.eyebrow}>PARTNER CHEMISTRY</Text>
-            <Text style={styles.sectionTitle}>You make each other better.</Text>
-            <View style={styles.chemistryPartner}>
-              <View style={styles.miniAvatar}>
-                <Text style={styles.miniAvatarText}>TP</Text>
-              </View>
-              <View style={styles.flex}>
-                <Text style={styles.rowTitle}>Theo Park</Text>
-                <Text style={styles.rowMeta}>
-                  27 shared matches · 68% win rate
-                </Text>
-              </View>
-              <Text style={[styles.statValue, { color: colors.positive }]}>
-                +0.14
-              </Text>
-            </View>
-          </View>
-          <SectionHeader eyebrow="EARNED ON SAND" title="Moments." />
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.horizontalBleed}
+        <View style={styles.athleteStudioActions}>
+          <Pressable
+            disabled={mode === "preview"}
+            onPress={() =>
+              void WebBrowser.openBrowserAsync(
+                settings?.profile.onboardingStatus === "complete"
+                  ? `${dunaWebUrl}/app/settings#playing-profile`
+                  : `${dunaWebUrl}/app/onboarding`,
+              )
+            }
+            style={[styles.primaryButton, styles.flex]}
           >
-            <View style={styles.achievementRow}>
-              {[
-                ["◇", "Summer Open winner", "Jul 2026"],
-                ["✦", "Reliable → Locked", "Rating milestone"],
-                ["◎", "Pickup regular", "25 runs"],
-              ].map((item) => (
-                <View style={styles.achievementCard} key={item[1]}>
-                  <Text style={styles.achievementIcon}>{item[0]}</Text>
-                  <Text style={styles.rowTitle}>{item[1]}</Text>
-                  <Text style={styles.rowMeta}>{item[2]}</Text>
-                </View>
-              ))}
-            </View>
-          </ScrollView>
-        </>
-      )}
+            <Text style={styles.primaryButtonText}>Edit player details</Text>
+          </Pressable>
+          <Pressable
+            disabled={mode === "preview"}
+            onPress={() =>
+              void WebBrowser.openBrowserAsync(
+                `${dunaWebUrl}/app/settings#player-artwork`,
+              )
+            }
+            style={styles.athleteStudioSecondary}
+          >
+            <Text style={styles.athleteStudioSecondaryText}>Artwork</Text>
+          </Pressable>
+        </View>
+      </View>
+
       <Pressable
         accessibilityHint="Opens your private Apple Health performance timeline"
         accessibilityLabel="Open Duna Health"
@@ -4428,26 +4849,18 @@ function ProfileScreen({ onHealth }: { readonly onHealth: () => void }) {
           <Text style={styles.chevron}>›</Text>
         </View>
         <Text style={styles.bodyText}>
-          Connect selected Apple Health signals, compare recovery with your
-          matches, and align heart rate with Duna Vision.
+          Compare private recovery context with your matches and Duna Vision
+          without exposing health data on your public profile.
         </Text>
-        <View style={styles.healthProfileSignals}>
-          <Text style={styles.healthProfileSignal}>☾ SLEEP</Text>
-          <Text style={styles.healthProfileSignal}>♥ HEART</Text>
-          <Text style={styles.healthProfileSignal}>↗ LOAD</Text>
-          <Text style={styles.healthProfileSignal}>◇ PRIVATE</Text>
-        </View>
       </Pressable>
+
       <View style={styles.profileMenu}>
         {[
           ["Player details + identity", "#playing-profile"],
-          ["Household + guardians", "#household"],
-          ["Family wallets", "#family-wallets"],
+          ["Player artwork", "#player-artwork"],
           ["Notifications", "#notifications"],
           ["Privacy + safety", "#privacy"],
-          ["Language + units", "#profile"],
           ["Manage Duna+", "#membership"],
-          ["Delete my account", "#privacy"],
         ].map(([item, anchor]) => (
           <Pressable
             disabled={mode === "preview"}
@@ -4459,14 +4872,7 @@ function ProfileScreen({ onHealth }: { readonly onHealth: () => void }) {
             }
             style={styles.profileMenuRow}
           >
-            <Text
-              style={[
-                styles.rowTitle,
-                item === "Delete my account" && { color: colors.danger },
-              ]}
-            >
-              {item}
-            </Text>
+            <Text style={styles.rowTitle}>{item}</Text>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
         ))}
@@ -8416,6 +8822,500 @@ function createStyles(palette: Palette) {
       padding: 12,
     },
     trustIcon: { color: colors.aqua, fontSize: 17 },
+    athleteHero: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 28,
+      borderWidth: 1,
+      minHeight: 470,
+      marginTop: 4,
+      overflow: "hidden",
+      position: "relative",
+    },
+    athleteHeroImage: { opacity: 0.74 },
+    athleteHeroWash: {
+      backgroundColor: rgba(colors.navyRgb, 0.48),
+      bottom: 0,
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
+    athleteHeroGeometry: {
+      borderColor: rgba(colors.accentRgb, 0.24),
+      borderRadius: 220,
+      borderWidth: 1,
+      height: 400,
+      position: "absolute",
+      right: -178,
+      top: -82,
+      width: 400,
+    },
+    athleteHeroContent: {
+      bottom: 28,
+      left: 20,
+      maxWidth: "72%",
+      position: "absolute",
+      zIndex: 4,
+    },
+    athleteHeroPills: {
+      alignItems: "center",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+      marginBottom: 10,
+    },
+    athleteHeroName: {
+      color: colors.white,
+      fontSize: 43,
+      fontWeight: "900",
+      letterSpacing: -2.6,
+      lineHeight: 43,
+      textShadowColor: rgba(colors.inkRgb, 0.45),
+      textShadowOffset: { height: 2, width: 0 },
+      textShadowRadius: 12,
+    },
+    athleteHeroMeta: {
+      color: rgba(colors.whiteRgb, 0.78),
+      fontSize: 12,
+      fontWeight: "700",
+      marginTop: 8,
+      textTransform: "capitalize",
+    },
+    athleteHeroActions: {
+      alignItems: "center",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 18,
+    },
+    athleteHeroPrimaryAction: {
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      paddingHorizontal: 15,
+      paddingVertical: 11,
+    },
+    athleteHeroPrimaryActionText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    athleteHeroSecondaryAction: {
+      backgroundColor: rgba(colors.whiteRgb, 0.08),
+      borderColor: rgba(colors.whiteRgb, 0.2),
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 15,
+      paddingVertical: 10,
+    },
+    athleteHeroSecondaryActionText: {
+      color: colors.white,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    athleteHeroCutout: {
+      height: "90%",
+      position: "absolute",
+      right: -46,
+      top: 14,
+      width: "78%",
+      zIndex: 2,
+    },
+    athleteHeroRating: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.navyRgb, 0.68),
+      borderColor: rgba(colors.accentRgb, 0.38),
+      borderRadius: 52,
+      borderWidth: 2,
+      height: 94,
+      justifyContent: "center",
+      position: "absolute",
+      right: 18,
+      top: 18,
+      width: 94,
+      zIndex: 5,
+    },
+    athleteHeroRatingLabel: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    athleteHeroRatingValue: {
+      color: colors.white,
+      fontSize: 27,
+      fontWeight: "900",
+      letterSpacing: -1.4,
+      lineHeight: 30,
+    },
+    athleteHeroRatingMeta: {
+      color: rgba(colors.whiteRgb, 0.65),
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    athleteMetricRow: {
+      flexDirection: "row",
+      gap: 9,
+      paddingRight: 38,
+    },
+    athleteMetricCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      minHeight: 132,
+      padding: 14,
+      width: 148,
+    },
+    athleteMetricCardAccent: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.accentRgb, 0.2),
+    },
+    athleteMetricLabel: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    athleteMetricValue: {
+      color: colors.bone,
+      fontSize: 31,
+      fontWeight: "900",
+      letterSpacing: -1.4,
+      marginTop: 14,
+    },
+    athleteMetricChange: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "600",
+      marginTop: 5,
+    },
+    positiveText: { color: colors.positive },
+    negativeText: { color: colors.danger },
+    athleteNarrativeCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.accentRgb, 0.13),
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 12,
+      padding: 17,
+    },
+    athleteNarrativeHeading: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 11,
+    },
+    athleteNarrativeMark: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderRadius: 15,
+      height: 46,
+      justifyContent: "center",
+      width: 46,
+    },
+    athleteNarrativeMarkText: {
+      color: colors.aqua,
+      fontSize: 19,
+      fontWeight: "900",
+    },
+    athleteNarrativeTitle: {
+      color: colors.bone,
+      fontSize: 22,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+    },
+    athleteNarrativeBody: {
+      color: colors.bone,
+      fontSize: 14,
+      lineHeight: 21,
+      marginTop: 15,
+    },
+    athleteNarrativeSource: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "600",
+      marginTop: 11,
+    },
+    athleteChartCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 12,
+      padding: 16,
+    },
+    athleteChartTitle: {
+      color: colors.bone,
+      fontSize: 27,
+      fontWeight: "900",
+      letterSpacing: -1.1,
+    },
+    athleteChartSummary: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 16,
+      paddingBottom: 14,
+    },
+    athleteChartSummaryValue: {
+      color: colors.bone,
+      fontSize: 20,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+    },
+    athleteChartSummaryLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "600",
+      marginTop: 2,
+    },
+    athleteChartArrow: { color: colors.aqua, fontSize: 19, fontWeight: "800" },
+    athleteChartRange: {
+      borderLeftColor: rgba(colors.overlayRgb, 0.1),
+      borderLeftWidth: 1,
+      marginLeft: "auto",
+      paddingLeft: 14,
+    },
+    athleteWaveChart: {
+      alignItems: "flex-end",
+      backgroundColor: rgba(colors.overlayRgb, 0.02),
+      borderRadius: 15,
+      flexDirection: "row",
+      gap: 5,
+      height: 165,
+      marginTop: 14,
+      overflow: "hidden",
+      paddingHorizontal: 9,
+      paddingTop: 12,
+    },
+    athleteWaveColumn: {
+      alignItems: "center",
+      flex: 1,
+      height: "100%",
+      justifyContent: "flex-end",
+      minWidth: 5,
+    },
+    athleteWaveBar: { borderRadius: 999, minHeight: 12, width: "72%" },
+    athleteChartEmpty: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.025),
+      borderRadius: 15,
+      gap: 8,
+      height: 155,
+      justifyContent: "center",
+      marginTop: 14,
+      padding: 18,
+    },
+    athleteChartEmptyMark: {
+      color: colors.aqua,
+      fontSize: 28,
+      fontWeight: "900",
+    },
+    athleteChartEmptyText: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      textAlign: "center",
+    },
+    athleteChartLegend: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 10,
+    },
+    athleteChartLegendLoss: { color: colors.danger },
+    athleteMomentGrid: { flexDirection: "row", gap: 9 },
+    athleteMomentCard: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.accentRgb, 0.18),
+      borderRadius: 19,
+      borderWidth: 1,
+      flex: 1,
+      minHeight: 190,
+      padding: 14,
+    },
+    athleteMomentCardMuted: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+    },
+    athleteMomentEyebrow: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    athleteMomentValue: {
+      color: colors.bone,
+      fontSize: 34,
+      fontWeight: "900",
+      letterSpacing: -1.4,
+      marginTop: 15,
+    },
+    athleteMomentTitle: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "800",
+      lineHeight: 18,
+      marginTop: 8,
+    },
+    athleteMomentMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: "auto",
+    },
+    athleteUpcomingList: { gap: 8 },
+    athleteUpcomingCard: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      padding: 12,
+    },
+    athleteUpcomingDate: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderRadius: 14,
+      height: 58,
+      justifyContent: "center",
+      width: 58,
+    },
+    athleteUpcomingMonth: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    athleteUpcomingDay: {
+      color: colors.white,
+      fontSize: 22,
+      fontWeight: "900",
+      lineHeight: 24,
+    },
+    athleteUpcomingName: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    athleteUpcomingMeta: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    athleteUpcomingWatch: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "700",
+      marginTop: 5,
+    },
+    athleteResultsList: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 19,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    athleteResultCard: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 78,
+      padding: 11,
+    },
+    athleteResultMark: {
+      alignItems: "center",
+      borderRadius: 13,
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    athleteResultMarkWin: { backgroundColor: rgba(colors.positiveRgb, 0.14) },
+    athleteResultMarkLoss: { backgroundColor: rgba(colors.dangerRgb, 0.12) },
+    athleteResultMarkText: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    athleteResultOpponent: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    athleteResultMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
+    athleteResultDelta: { alignItems: "flex-end" },
+    athleteResultDeltaValue: { fontSize: 13, fontWeight: "900" },
+    athleteResultExpected: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    athleteFullHistoryButton: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.11),
+      borderRadius: 999,
+      borderWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 9,
+      paddingHorizontal: 15,
+      paddingVertical: 12,
+    },
+    athleteFullHistoryButtonText: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    athleteBioCard: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.accentRgb, 0.14),
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 14,
+      padding: 17,
+    },
+    athleteBioTitle: {
+      color: colors.bone,
+      fontSize: 25,
+      fontWeight: "900",
+      letterSpacing: -0.9,
+      marginTop: 4,
+    },
+    athleteBioBody: {
+      color: rgba(colors.boneRgb, 0.84),
+      fontSize: 13,
+      lineHeight: 20,
+      marginTop: 12,
+    },
+    athleteBioFacts: {
+      borderTopColor: rgba(colors.overlayRgb, 0.09),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 24,
+      marginTop: 16,
+      paddingTop: 14,
+    },
+    athleteBioFactLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    athleteBioFactValue: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "800",
+      marginTop: 4,
+    },
+    athleteStudioActions: { flexDirection: "row", gap: 8, marginTop: 14 },
+    athleteStudioSecondary: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.11),
+      borderRadius: 999,
+      borderWidth: 1,
+      justifyContent: "center",
+      paddingHorizontal: 18,
+    },
+    athleteStudioSecondaryText: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "800",
+    },
     profileHero: {
       backgroundColor: colors.navy,
       borderColor: rgba(colors.overlayRgb, 0.07),
