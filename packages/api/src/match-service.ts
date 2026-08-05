@@ -19,6 +19,7 @@ import {
   teamMembers,
   teams,
   venues,
+  worldRankings,
 } from "@duna/db";
 import {
   foldScore,
@@ -30,6 +31,7 @@ import {
 } from "@duna/league-engine";
 import {
   createInitialRating,
+  professionalSeed,
   rateDoublesPerformance,
   rateDoublesMatch,
   type RatingState,
@@ -1787,19 +1789,77 @@ export async function rebuildSandRatingProjection(input: {
 }) {
   requireDatabase();
   const database = getDatabase();
-  const historicalMatches = await database
+  const occurredAtFor = (match: {
+    readonly completedAt: Date | null;
+    readonly scheduledAt: Date | null;
+    readonly ratingAppliedAt: Date | null;
+  }): Date =>
+    match.completedAt ??
+    match.scheduledAt ??
+    match.ratingAppliedAt ??
+    input.now;
+  const historicalMatches = (
+    await database
+      .select({
+        id: matches.id,
+        teamAId: matches.teamAId,
+        teamBId: matches.teamBId,
+        ratingEligible: matches.ratingEligible,
+        ratingEvidence: matches.ratingEvidence,
+        verificationWeightBps: matches.verificationWeightBps,
+        completedAt: matches.completedAt,
+        scheduledAt: matches.scheduledAt,
+        ratingAppliedAt: matches.ratingAppliedAt,
+      })
+      .from(matches)
+      .where(isNotNull(matches.ratingAppliedAt))
+  ).sort(
+    (left, right) =>
+      occurredAtFor(left).getTime() - occurredAtFor(right).getTime() ||
+      left.id.localeCompare(right.id),
+  );
+  const rankingCandidates = await database
     .select({
-      id: matches.id,
-      teamAId: matches.teamAId,
-      teamBId: matches.teamBId,
-      ratingEligible: matches.ratingEligible,
-      ratingEvidence: matches.ratingEvidence,
-      verificationWeightBps: matches.verificationWeightBps,
-      ratingAppliedAt: matches.ratingAppliedAt,
+      rankingDate: worldRankings.rankingDate,
+      genderCategory: worldRankings.genderCategory,
+      rank: worldRankings.rank,
+      personId: worldRankings.personId,
     })
-    .from(matches)
-    .where(isNotNull(matches.ratingAppliedAt))
-    .orderBy(asc(matches.ratingAppliedAt), asc(matches.id));
+    .from(worldRankings)
+    .where(
+      and(
+        isNotNull(worldRankings.personId),
+        inArray(worldRankings.genderCategory, ["men", "women"]),
+      ),
+    );
+  const professionalSeedIds: string[] = [];
+  for (const gender of ["men", "women"] as const) {
+    const latestDate = rankingCandidates
+      .filter((ranking) => ranking.genderCategory === gender)
+      .reduce(
+        (latest, ranking) =>
+          ranking.rankingDate > latest ? ranking.rankingDate : latest,
+        "",
+      );
+    const seen = new Set<string>();
+    for (const ranking of rankingCandidates
+      .filter(
+        (candidate) =>
+          candidate.genderCategory === gender &&
+          candidate.rankingDate === latestDate &&
+          candidate.personId,
+      )
+      .sort(
+        (left, right) =>
+          left.rank - right.rank ||
+          (left.personId ?? "").localeCompare(right.personId ?? ""),
+      )) {
+      if (!ranking.personId || seen.has(ranking.personId)) continue;
+      seen.add(ranking.personId);
+      professionalSeedIds.push(ranking.personId);
+      if (seen.size >= 200) break;
+    }
+  }
   const matchIds = historicalMatches.map((match) => match.id);
   const teamIds = [
     ...new Set(
@@ -1858,6 +1918,19 @@ export async function rebuildSandRatingProjection(input: {
     readonly evidence: Record<string, unknown>;
   }[] = [];
   let skipped = 0;
+
+  const seedWindowStart = historicalMatches[0]
+    ? occurredAtFor(historicalMatches[0])
+    : input.now;
+  for (const personId of new Set(professionalSeedIds)) {
+    const state = professionalSeed({ playerId: personId, source: "fivb" });
+    projection.set(personId, {
+      state,
+      windowStart: seedWindowStart,
+      peak: state.display,
+      sequence: 0,
+    });
+  }
 
   const stateAt = (personId: string, occurredAt: Date): ProjectionState => {
     const existing = projection.get(personId);
@@ -1949,11 +2022,12 @@ export async function rebuildSandRatingProjection(input: {
       evidenceBackfills.push({ matchId: match.id, evidence });
     }
     if (!match.ratingEligible) continue;
+    const occurredAt = occurredAtFor(match);
     const teamAState = teamAIds.map((personId) =>
-      stateAt(personId, match.ratingAppliedAt!),
+      stateAt(personId, occurredAt),
     ) as [ProjectionState, ProjectionState];
     const teamBState = teamBIds.map((personId) =>
-      stateAt(personId, match.ratingAppliedAt!),
+      stateAt(personId, occurredAt),
     ) as [ProjectionState, ProjectionState];
     const teamA = [
       { state: teamAState[0].state },
@@ -2012,7 +2086,7 @@ export async function rebuildSandRatingProjection(input: {
           match.verificationWeightBps ??
           priorTeamAEvent?.verificationWeightBps ??
           10_000,
-        createdAt: match.ratingAppliedAt,
+        createdAt: occurredAt,
       });
     }
   }
@@ -2031,6 +2105,22 @@ export async function rebuildSandRatingProjection(input: {
     weeklyGainWindowStart: entry.windowStart,
     updatedAt: input.now,
   }));
+  const projectedRatingStatements = [];
+  for (let offset = 0; offset < projectedRatings.length; offset += 500) {
+    projectedRatingStatements.push(
+      database
+        .insert(ratings)
+        .values(projectedRatings.slice(offset, offset + 500)),
+    );
+  }
+  const replayedEventStatements = [];
+  for (let offset = 0; offset < replayedEvents.length; offset += 500) {
+    replayedEventStatements.push(
+      database
+        .insert(ratingEvents)
+        .values(replayedEvents.slice(offset, offset + 500)),
+    );
+  }
   await database.batch([
     database
       .delete(ratingEvents)
@@ -2042,12 +2132,8 @@ export async function rebuildSandRatingProjection(input: {
         .set({ ratingEvidence: backfill.evidence })
         .where(eq(matches.id, backfill.matchId)),
     ),
-    ...(projectedRatings.length
-      ? [database.insert(ratings).values(projectedRatings)]
-      : []),
-    ...(replayedEvents.length
-      ? [database.insert(ratingEvents).values(replayedEvents)]
-      : []),
+    ...projectedRatingStatements,
+    ...replayedEventStatements,
     database.insert(auditLog).values({
       actorPersonId: input.actor.personId,
       actorType: "person",
@@ -2059,6 +2145,7 @@ export async function rebuildSandRatingProjection(input: {
           .length,
         events: replayedEvents.length,
         players: projectedRatings.length,
+        professionalSeeds: new Set(professionalSeedIds).size,
         skipped,
       }),
       reason: input.reason,
@@ -2071,6 +2158,7 @@ export async function rebuildSandRatingProjection(input: {
     matches: new Set(replayedEvents.map((event) => event.matchId)).size,
     players: projectedRatings.length,
     events: replayedEvents.length,
+    professionalSeeds: new Set(professionalSeedIds).size,
     skipped,
   };
 }

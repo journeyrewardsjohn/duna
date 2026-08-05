@@ -25,6 +25,7 @@ import {
 import {
   defaultRatingConfig,
   evaluatePredictions,
+  performanceEvidenceFromSetScores,
   worldRankingSignal,
 } from "@duna/rating";
 import { and, asc, desc, eq, inArray, lte, ne, sql } from "drizzle-orm";
@@ -32,9 +33,13 @@ import { stableHash } from "../canonical";
 import { scopesForRoles, type ApiActor } from "../context";
 import { venueWallTimeToUtc } from "../court-checkout";
 import { publishImportedProfessionalActivities } from "../live-activities";
-import { applyApprovedImportedMatchRating } from "../match-service";
+import {
+  applyApprovedImportedMatchRating,
+  rebuildSandRatingProjection,
+} from "../match-service";
 import { assertProfileSubjectAuthority } from "../profile-onboarding";
 import { avpExternalPlayerId, importAvpLeague } from "./avp";
+import { importSandRatingNetwork } from "./sandrating";
 import {
   crossSourceMatchFingerprint,
   matchMappingConfidence,
@@ -62,6 +67,7 @@ const sourceNames: Readonly<Record<SandDataSource, string>> = {
   "avp-league": "AVP League",
   bvbinfo: "BVBInfo",
   "fivb-12ndr": "FIVB via fivb.12ndr",
+  sandrating: "SandRating",
   "volleyball-life": "VolleyballLife",
   "volleyball-world": "Volleyball World Rankings",
 };
@@ -296,6 +302,33 @@ function storedCountryCode(value: string | undefined): string | undefined {
   return code && /^[A-Z]{2,3}$/.test(code) ? code : undefined;
 }
 
+type PartnerIdentityReference = {
+  readonly source: "bvbinfo" | "volleyball-life";
+  readonly externalPersonId: string;
+};
+
+function partnerIdentityReferences(
+  raw: Readonly<Record<string, unknown>>,
+): readonly PartnerIdentityReference[] {
+  const references: PartnerIdentityReference[] = [];
+  const bvbInfoUrl = optionalSnapshotString(raw.bvbInfoUrl);
+  const bvbInfoId = bvbInfoUrl?.match(/[?&]id=0*(\d+)/i)?.[1];
+  if (bvbInfoId) {
+    references.push({ source: "bvbinfo", externalPersonId: bvbInfoId });
+  }
+  const volleyballLifeUrl = optionalSnapshotString(raw.volleyballLifeUrl);
+  const volleyballLifeId = volleyballLifeUrl?.match(
+    /\/(?:player|playerprofile)\/0*(\d+)/i,
+  )?.[1];
+  if (volleyballLifeId) {
+    references.push({
+      source: "volleyball-life",
+      externalPersonId: volleyballLifeId,
+    });
+  }
+  return references;
+}
+
 async function persistExternalPlayers(input: {
   readonly source: SandDataSource;
   readonly sourceId: string;
@@ -307,37 +340,54 @@ async function persistExternalPlayers(input: {
   readonly suggested: number;
 }> {
   const database = getDatabase();
-  const [personRows, existingLinks, historicalProfiles] = await Promise.all([
-    database
-      .select({
-        id: people.id,
-        displayName: people.displayName,
-        handle: people.handle,
-        profileClaimStatus: people.profileClaimStatus,
-        isProfessional: people.isProfessional,
-      })
-      .from(people)
-      .where(ne(people.status, "deleted")),
-    database
-      .select()
-      .from(importLinks)
-      .where(eq(importLinks.sourceId, input.sourceId)),
-    database
-      .select({
-        normalizedName: externalPlayerProfiles.normalizedName,
-        personId: externalPlayerProfiles.personId,
-      })
-      .from(externalPlayerProfiles)
-      .innerJoin(people, eq(externalPlayerProfiles.personId, people.id))
-      .where(
-        and(
-          eq(externalPlayerProfiles.sourceId, input.sourceId),
-          eq(externalPlayerProfiles.mappingState, "linked"),
-          ne(people.status, "deleted"),
-          sql`${externalPlayerProfiles.personId} IS NOT NULL`,
+  const [personRows, existingLinks, historicalProfiles, partnerIdentityLinks] =
+    await Promise.all([
+      database
+        .select({
+          id: people.id,
+          displayName: people.displayName,
+          handle: people.handle,
+          profileClaimStatus: people.profileClaimStatus,
+          isProfessional: people.isProfessional,
+          genderCategory: people.genderCategory,
+        })
+        .from(people)
+        .where(ne(people.status, "deleted")),
+      database
+        .select()
+        .from(importLinks)
+        .where(eq(importLinks.sourceId, input.sourceId)),
+      database
+        .select({
+          normalizedName: externalPlayerProfiles.normalizedName,
+          personId: externalPlayerProfiles.personId,
+        })
+        .from(externalPlayerProfiles)
+        .innerJoin(people, eq(externalPlayerProfiles.personId, people.id))
+        .where(
+          and(
+            eq(externalPlayerProfiles.sourceId, input.sourceId),
+            eq(externalPlayerProfiles.mappingState, "linked"),
+            ne(people.status, "deleted"),
+            sql`${externalPlayerProfiles.personId} IS NOT NULL`,
+          ),
         ),
-      ),
-  ]);
+      database
+        .select({
+          source: importSources.slug,
+          externalPersonId: importLinks.externalPersonId,
+          personId: importLinks.personId,
+        })
+        .from(importLinks)
+        .innerJoin(importSources, eq(importLinks.sourceId, importSources.id))
+        .where(
+          and(
+            inArray(importSources.slug, ["bvbinfo", "volleyball-life"]),
+            eq(importLinks.resolutionState, "linked"),
+            sql`${importLinks.personId} IS NOT NULL`,
+          ),
+        ),
+    ]);
   const reusableHistoricalProfiles = historicalProfiles.flatMap((profile) =>
     profile.personId
       ? [
@@ -351,9 +401,23 @@ async function persistExternalPlayers(input: {
   const linkByExternalId = new Map(
     existingLinks.map((link) => [link.externalPersonId, link] as const),
   );
+  const partnerPersonByExternalId = new Map(
+    partnerIdentityLinks.flatMap((link) =>
+      link.personId
+        ? [[`${link.source}:${link.externalPersonId}`, link.personId] as const]
+        : [],
+    ),
+  );
   let inserted = 0;
   let linked = 0;
   let suggested = 0;
+  const newPeople: (typeof people.$inferInsert)[] = [];
+  const unclaimedPeopleUpdates: {
+    readonly personId: string;
+    readonly external: ExternalPlayerRecord;
+  }[] = [];
+  const externalProfiles: (typeof externalPlayerProfiles.$inferInsert)[] = [];
+  const sourceLinks: (typeof importLinks.$inferInsert)[] = [];
 
   for (const external of input.players) {
     if (!external.externalPersonId || !external.displayName) continue;
@@ -367,8 +431,67 @@ async function persistExternalPlayers(input: {
     let evidence: Record<string, unknown> = personId
       ? { method: "existing-source-id" }
       : {};
+    let partnerIdentityConflict = false;
 
-    if (!personId) {
+    if (
+      personId &&
+      input.source === "sandrating" &&
+      external.raw.rankingStub === true &&
+      external.genderCategory
+    ) {
+      const existingPerson = personRows.find(
+        (candidate) => candidate.id === personId,
+      );
+      if (
+        existingPerson?.profileClaimStatus === "unclaimed" &&
+        existingPerson.genderCategory &&
+        existingPerson.genderCategory !== external.genderCategory
+      ) {
+        personId = undefined;
+        mappingState = "unresolved";
+        mappingScoreBps = undefined;
+        evidence = {
+          method: "detached-cross-division-ranking-stub",
+          previousPersonId: existingPerson.id,
+          previousGenderCategory: existingPerson.genderCategory,
+          incomingGenderCategory: external.genderCategory,
+        };
+      }
+    }
+
+    if (!personId && input.source === "sandrating") {
+      const references = partnerIdentityReferences(external.raw);
+      const partnerPersonIds = new Set(
+        references.flatMap((reference) => {
+          const candidate = partnerPersonByExternalId.get(
+            `${reference.source}:${reference.externalPersonId}`,
+          );
+          return candidate ? [candidate] : [];
+        }),
+      );
+      if (partnerPersonIds.size === 1) {
+        personId = [...partnerPersonIds][0];
+        mappingState = "linked";
+        mappingScoreBps = 9_980;
+        evidence = {
+          method: "partner-source-id",
+          references,
+        };
+      } else if (partnerPersonIds.size > 1) {
+        partnerIdentityConflict = true;
+        evidence = {
+          method: "conflicting-partner-source-ids",
+          references,
+          candidatePersonIds: [...partnerPersonIds],
+        };
+      }
+    }
+
+    if (
+      !personId &&
+      !partnerIdentityConflict &&
+      external.raw.rankingStub !== true
+    ) {
       const historicalPersonId = inferHistoricalPersonId({
         displayName: external.displayName,
         previous: reusableHistoricalProfiles,
@@ -384,7 +507,7 @@ async function persistExternalPlayers(input: {
       }
     }
 
-    if (!personId) {
+    if (!personId && !partnerIdentityConflict) {
       const candidates = personRows
         .map((candidate) => ({
           candidate,
@@ -401,7 +524,30 @@ async function persistExternalPlayers(input: {
         best &&
         candidates.filter((candidate) => candidate.score === best.score)
           .length > 1;
-      if (best && !tied) {
+      const createClaimableRankingSeed =
+        input.source === "sandrating" && external.raw.rankingSeed === true;
+      if (
+        best &&
+        !tied &&
+        input.source === "sandrating" &&
+        best.score === 9_500 &&
+        best.candidate.profileClaimStatus === "unclaimed" &&
+        external.raw.rankingStub !== true &&
+        (!external.genderCategory ||
+          !best.candidate.genderCategory ||
+          external.genderCategory === best.candidate.genderCategory)
+      ) {
+        personId = best.candidate.id;
+        mappingState = "linked";
+        mappingScoreBps = 9_700;
+        evidence = {
+          method: "partner-exact-name-unclaimed",
+          candidatePersonId: best.candidate.id,
+          candidateHandle: best.candidate.handle,
+          candidateDisplayName: best.candidate.displayName,
+        };
+        linked += 1;
+      } else if (best && !tied && !createClaimableRankingSeed) {
         mappingState = "suggested";
         mappingScoreBps = best.score;
         evidence = {
@@ -411,7 +557,7 @@ async function persistExternalPlayers(input: {
           candidateDisplayName: best.candidate.displayName,
         };
         suggested += 1;
-      } else if (tied) {
+      } else if (tied && !createClaimableRankingSeed) {
         evidence = {
           method: "ambiguous-name",
           candidates: candidates.slice(0, 5).map(({ candidate, score }) => ({
@@ -422,6 +568,7 @@ async function persistExternalPlayers(input: {
           })),
         };
       } else if (
+        createClaimableRankingSeed ||
         shouldCreateUnclaimedSourceProfile({
           source: input.source,
           displayName: external.displayName,
@@ -432,46 +579,50 @@ async function persistExternalPlayers(input: {
           input.source,
           external.externalPersonId,
         );
-        const insertedRows = await database
-          .insert(people)
-          .values({
-            displayName: external.displayName,
-            handle,
-            avatarUrl: external.avatarUrl,
-            profileClaimStatus: "unclaimed",
-            isProfessional: external.isProfessional ?? false,
-            professionalDefinition: external.isProfessional
-              ? `Imported verified professional competition identity from ${sourceNames[input.source]}.`
-              : undefined,
-            genderCategory: undefined,
-            birthDate: external.birthDate,
-            homeMarket: external.hometown,
-            profileVisibility: external.isProfessional ? "public" : "private",
-            ageBand: "unknown",
-            isMinor: false,
-            status: "active",
-            createdAt: input.now,
-            updatedAt: input.now,
-          })
-          .onConflictDoNothing()
-          .returning({ id: people.id });
-        personId =
-          insertedRows[0]?.id ??
-          (
-            await database.query.people.findFirst({
-              where: eq(people.handle, handle),
-            })
-          )?.id;
+        personId = crypto.randomUUID();
+        newPeople.push({
+          id: personId,
+          displayName: external.displayName,
+          handle,
+          avatarUrl: external.avatarUrl,
+          profileClaimStatus: "unclaimed",
+          isProfessional: external.isProfessional ?? false,
+          professionalDefinition: external.isProfessional
+            ? `Imported verified professional competition identity from ${sourceNames[input.source]}.`
+            : undefined,
+          genderCategory: external.genderCategory,
+          birthDate: external.birthDate,
+          homeMarket: external.hometown,
+          profileVisibility: external.isProfessional ? "public" : "private",
+          ageBand: "unknown",
+          isMinor: false,
+          status: "active",
+          createdAt: input.now,
+          updatedAt: input.now,
+        });
         if (personId) {
           mappingState = "linked";
           mappingScoreBps = 10_000;
-          evidence = { method: "created-unclaimed-source-profile" };
+          evidence = createClaimableRankingSeed
+            ? {
+                method: "created-unclaimed-ranking-seed",
+                reviewCandidates: candidates
+                  .slice(0, 5)
+                  .map(({ candidate, score }) => ({
+                    personId: candidate.id,
+                    displayName: candidate.displayName,
+                    handle: candidate.handle,
+                    scoreBps: score,
+                  })),
+              }
+            : { method: "created-unclaimed-source-profile" };
           personRows.push({
             id: personId,
             displayName: external.displayName,
             handle,
             profileClaimStatus: "unclaimed",
             isProfessional: external.isProfessional ?? false,
+            genderCategory: external.genderCategory ?? null,
           });
           inserted += 1;
           linked += 1;
@@ -482,7 +633,7 @@ async function persistExternalPlayers(input: {
           searchQuery: external.displayName,
         };
       }
-    } else {
+    } else if (personId) {
       linked += 1;
     }
 
@@ -490,104 +641,140 @@ async function persistExternalPlayers(input: {
       ? personRows.find((person) => person.id === personId)
       : undefined;
     if (personId && linkedPerson?.profileClaimStatus === "unclaimed") {
-      await database
-        .update(people)
-        .set({
-          displayName: external.displayName,
-          ...(external.avatarUrl ? { avatarUrl: external.avatarUrl } : {}),
-          ...(external.birthDate ? { birthDate: external.birthDate } : {}),
-          ...(external.hometown ? { homeMarket: external.hometown } : {}),
-          ...(external.isProfessional
-            ? {
-                isProfessional: true,
-                profileVisibility: "public" as const,
-                professionalDefinition: `Imported verified professional competition identity from ${sourceNames[input.source]}.`,
-              }
-            : {}),
-          updatedAt: input.now,
-        })
-        .where(eq(people.id, personId));
+      unclaimedPeopleUpdates.push({ personId, external });
+      if (external.genderCategory) {
+        linkedPerson.genderCategory = external.genderCategory;
+      }
     }
 
+    externalProfiles.push({
+      sourceId: input.sourceId,
+      externalPersonId: external.externalPersonId,
+      personId,
+      displayName: external.displayName,
+      normalizedName: normalizePersonName(external.displayName),
+      profileUrl: external.profileUrl,
+      hometown: external.hometown,
+      countryCode: storedCountryCode(external.countryCode),
+      birthDate: external.birthDate,
+      avatarUrl: external.avatarUrl,
+      mappingState,
+      mappingScoreBps,
+      mappingEvidence: evidence,
+      isProfessional: external.isProfessional ?? false,
+      externalRating: external.externalRating,
+      externalRatingConfidence: normalizeExternalConfidence(
+        external.externalRatingConfidence,
+      ),
+      externalMatchCount: external.externalMatchCount,
+      rawProfile: external.raw,
+      lastSeenAt: input.now,
+      lastImportedAt: input.now,
+      createdAt: input.now,
+      updatedAt: input.now,
+    });
+    sourceLinks.push({
+      sourceId: input.sourceId,
+      externalPersonId: external.externalPersonId,
+      personId,
+      resolutionScoreBps: mappingScoreBps,
+      resolutionState: mappingState,
+      evidence,
+      createdAt: input.now,
+      updatedAt: input.now,
+    });
+  }
+
+  for (let offset = 0; offset < newPeople.length; offset += 250) {
     await database
-      .insert(externalPlayerProfiles)
-      .values({
-        sourceId: input.sourceId,
-        externalPersonId: external.externalPersonId,
-        personId,
-        displayName: external.displayName,
-        normalizedName: normalizePersonName(external.displayName),
-        profileUrl: external.profileUrl,
-        hometown: external.hometown,
-        countryCode: storedCountryCode(external.countryCode),
-        birthDate: external.birthDate,
-        avatarUrl: external.avatarUrl,
-        mappingState,
-        mappingScoreBps,
-        mappingEvidence: evidence,
-        isProfessional: external.isProfessional ?? false,
-        externalRating: external.externalRating,
-        externalRatingConfidence: normalizeExternalConfidence(
-          external.externalRatingConfidence,
-        ),
-        externalMatchCount: external.externalMatchCount,
-        rawProfile: external.raw,
-        lastSeenAt: input.now,
-        lastImportedAt: input.now,
-        createdAt: input.now,
-        updatedAt: input.now,
-      })
-      .onConflictDoUpdate({
-        target: [
-          externalPlayerProfiles.sourceId,
-          externalPlayerProfiles.externalPersonId,
-        ],
-        set: {
-          personId,
-          displayName: external.displayName,
-          normalizedName: normalizePersonName(external.displayName),
-          profileUrl: external.profileUrl,
-          hometown: external.hometown,
-          countryCode: storedCountryCode(external.countryCode),
-          birthDate: external.birthDate,
-          avatarUrl: external.avatarUrl,
-          mappingState,
-          mappingScoreBps,
-          mappingEvidence: evidence,
-          isProfessional: external.isProfessional ?? false,
-          externalRating: external.externalRating,
-          externalRatingConfidence: normalizeExternalConfidence(
-            external.externalRatingConfidence,
-          ),
-          externalMatchCount: external.externalMatchCount,
-          rawProfile: external.raw,
-          lastSeenAt: input.now,
-          lastImportedAt: input.now,
-          updatedAt: input.now,
-        },
-      });
-    await database
-      .insert(importLinks)
-      .values({
-        sourceId: input.sourceId,
-        externalPersonId: external.externalPersonId,
-        personId,
-        resolutionScoreBps: mappingScoreBps,
-        resolutionState: mappingState,
-        evidence,
-        createdAt: input.now,
-        updatedAt: input.now,
-      })
-      .onConflictDoUpdate({
-        target: [importLinks.sourceId, importLinks.externalPersonId],
-        set: {
-          personId,
-          resolutionScoreBps: mappingScoreBps,
-          resolutionState: mappingState,
-          evidence,
-          updatedAt: input.now,
-        },
-      });
+      .insert(people)
+      .values(newPeople.slice(offset, offset + 250))
+      .onConflictDoNothing();
+  }
+  for (let offset = 0; offset < unclaimedPeopleUpdates.length; offset += 50) {
+    const statements = unclaimedPeopleUpdates
+      .slice(offset, offset + 50)
+      .map(({ personId, external }) =>
+        database
+          .update(people)
+          .set({
+            displayName: external.displayName,
+            ...(external.avatarUrl ? { avatarUrl: external.avatarUrl } : {}),
+            ...(external.birthDate ? { birthDate: external.birthDate } : {}),
+            ...(external.hometown ? { homeMarket: external.hometown } : {}),
+            ...(external.genderCategory
+              ? { genderCategory: external.genderCategory }
+              : {}),
+            ...(external.isProfessional
+              ? {
+                  isProfessional: true,
+                  profileVisibility: "public" as const,
+                  professionalDefinition: `Imported verified professional competition identity from ${sourceNames[input.source]}.`,
+                }
+              : {}),
+            updatedAt: input.now,
+          })
+          .where(eq(people.id, personId)),
+      );
+    const [first, ...rest] = statements;
+    if (first) await database.batch([first, ...rest]);
+  }
+  for (let offset = 0; offset < externalProfiles.length; offset += 50) {
+    const statements = externalProfiles
+      .slice(offset, offset + 50)
+      .map((profile) =>
+        database
+          .insert(externalPlayerProfiles)
+          .values(profile)
+          .onConflictDoUpdate({
+            target: [
+              externalPlayerProfiles.sourceId,
+              externalPlayerProfiles.externalPersonId,
+            ],
+            set: {
+              personId: profile.personId,
+              displayName: profile.displayName,
+              normalizedName: profile.normalizedName,
+              profileUrl: profile.profileUrl,
+              hometown: profile.hometown,
+              countryCode: profile.countryCode,
+              birthDate: profile.birthDate,
+              avatarUrl: profile.avatarUrl,
+              mappingState: profile.mappingState,
+              mappingScoreBps: profile.mappingScoreBps,
+              mappingEvidence: profile.mappingEvidence,
+              isProfessional: profile.isProfessional,
+              externalRating: profile.externalRating,
+              externalRatingConfidence: profile.externalRatingConfidence,
+              externalMatchCount: profile.externalMatchCount,
+              rawProfile: profile.rawProfile,
+              lastSeenAt: profile.lastSeenAt,
+              lastImportedAt: profile.lastImportedAt,
+              updatedAt: input.now,
+            },
+          }),
+      );
+    const [first, ...rest] = statements;
+    if (first) await database.batch([first, ...rest]);
+  }
+  for (let offset = 0; offset < sourceLinks.length; offset += 50) {
+    const statements = sourceLinks.slice(offset, offset + 50).map((link) =>
+      database
+        .insert(importLinks)
+        .values(link)
+        .onConflictDoUpdate({
+          target: [importLinks.sourceId, importLinks.externalPersonId],
+          set: {
+            personId: link.personId,
+            resolutionScoreBps: link.resolutionScoreBps,
+            resolutionState: link.resolutionState,
+            evidence: link.evidence,
+            updatedAt: input.now,
+          },
+        }),
+    );
+    const [first, ...rest] = statements;
+    if (first) await database.batch([first, ...rest]);
   }
   return { inserted, linked, suggested };
 }
@@ -612,6 +799,21 @@ async function resolvedPeopleByExternalId(
   );
 }
 
+function hasDecisiveImportedScore(
+  sets: readonly { readonly a: number; readonly b: number }[],
+  winnerSide: string | null | undefined,
+): boolean {
+  if (sets.length === 0 || (winnerSide !== "A" && winnerSide !== "B")) {
+    return false;
+  }
+  try {
+    const evidence = performanceEvidenceFromSetScores(sets);
+    return (evidence.actualTeamA > 0.5 ? "A" : "B") === winnerSide;
+  } catch {
+    return false;
+  }
+}
+
 async function persistImportedMatches(input: {
   readonly result: SourceImportResult;
   readonly sourceId: string;
@@ -622,6 +824,7 @@ async function persistImportedMatches(input: {
   readonly ready: number;
   readonly needsMapping: number;
   readonly duplicates: number;
+  readonly approved: number;
 }> {
   const database = getDatabase();
   const peopleByExternalId = await resolvedPeopleByExternalId(input.sourceId);
@@ -629,6 +832,34 @@ async function persistImportedMatches(input: {
   let ready = 0;
   let needsMapping = 0;
   let duplicates = 0;
+  let approved = 0;
+  const storedMatches = await database.select().from(importedMatches);
+  const existingByExternalId = new Map(
+    storedMatches
+      .filter((match) => match.sourceId === input.sourceId)
+      .map((match) => [match.externalMatchId, match] as const),
+  );
+  const matchesByCrossFingerprint = new Map<
+    string,
+    (typeof storedMatches)[number][]
+  >();
+  for (const match of storedMatches) {
+    const rows =
+      matchesByCrossFingerprint.get(match.crossSourceFingerprint) ?? [];
+    rows.push(match);
+    matchesByCrossFingerprint.set(match.crossSourceFingerprint, rows);
+  }
+  const incomingByCrossFingerprint = new Map<
+    string,
+    {
+      readonly id: string;
+      readonly sourceId: string;
+      readonly externalMatchId: string;
+      readonly canonicalMatchId: null;
+      readonly importState: string;
+    }
+  >();
+  const pendingMatches: (typeof importedMatches.$inferInsert)[] = [];
   const avpRosterOverrides =
     input.result.source === "avp-league"
       ? [
@@ -735,88 +966,132 @@ async function persistImportedMatches(input: {
       match,
     );
     const crossFingerprint = crossSourceMatchFingerprint(match);
-    const [duplicate, existing] = await Promise.all([
-      database.query.importedMatches.findFirst({
-        where: and(
-          eq(importedMatches.crossSourceFingerprint, crossFingerprint),
-          ne(importedMatches.sourceId, input.sourceId),
+    const existing = existingByExternalId.get(match.externalMatchId);
+    const crossCandidates = [
+      ...(matchesByCrossFingerprint.get(crossFingerprint) ?? []),
+      ...(() => {
+        const incoming = incomingByCrossFingerprint.get(crossFingerprint);
+        return incoming ? [incoming] : [];
+      })(),
+    ];
+    const sameSourceCandidates = crossCandidates.filter(
+      (candidate) =>
+        candidate.sourceId === input.sourceId &&
+        candidate.externalMatchId !== match.externalMatchId,
+    );
+    const duplicateWinnerExternalId = [
+      match.externalMatchId,
+      ...sameSourceCandidates.map((candidate) => candidate.externalMatchId),
+    ].sort((left, right) => {
+      const leftNumber = Number(left);
+      const rightNumber = Number(right);
+      return Number.isSafeInteger(leftNumber) &&
+        Number.isSafeInteger(rightNumber)
+        ? leftNumber - rightNumber
+        : left.localeCompare(right);
+    })[0];
+    const sameSourceDuplicate =
+      duplicateWinnerExternalId === match.externalMatchId
+        ? undefined
+        : sameSourceCandidates.find(
+            (candidate) =>
+              candidate.externalMatchId === duplicateWinnerExternalId,
+          );
+    const approvedCrossSourceDuplicate = crossCandidates.find(
+      (candidate) =>
+        candidate.sourceId !== input.sourceId &&
+        Boolean(
+          candidate.canonicalMatchId || candidate.importState === "approved",
         ),
-      }),
-      database.query.importedMatches.findFirst({
-        where: and(
-          eq(importedMatches.sourceId, input.sourceId),
-          eq(importedMatches.externalMatchId, match.externalMatchId),
-        ),
-      }),
-    ]);
+    );
+    const distinctDuplicate =
+      sameSourceDuplicate ?? approvedCrossSourceDuplicate;
+    const shouldMarkDuplicate = Boolean(distinctDuplicate);
     const participants = match.participants.map((participant) => ({
       ...participant,
       personId: peopleByExternalId.get(participant.externalPersonId),
     }));
     const allMapped = participants.every((participant) => participant.personId);
-    const complete = Boolean(match.winnerSide && match.sets.length > 0);
+    const complete = hasDecisiveImportedScore(match.sets, match.winnerSide);
     const importState =
       existing?.importState === "approved"
         ? "approved"
-        : duplicate?.canonicalMatchId || duplicate?.importState === "approved"
+        : shouldMarkDuplicate
           ? "duplicate"
           : complete && allMapped
             ? "ready"
             : complete
               ? "needs-mapping"
               : "staged";
-    await database
-      .insert(importedMatches)
-      .values({
-        sourceId: input.sourceId,
-        ingestionRunId: input.runId,
-        externalMatchId: match.externalMatchId,
-        externalEventId: match.externalEventId,
-        sourceUrl: match.sourceUrl,
-        sourceFingerprint,
-        crossSourceFingerprint: crossFingerprint,
-        title: match.title,
-        roundLabel: match.roundLabel,
-        location: match.location,
-        genderCategory: match.genderCategory,
-        playedAt: match.playedAt ? new Date(match.playedAt) : undefined,
-        participants,
-        sets: match.sets,
-        winnerSide: match.winnerSide,
-        importState,
-        possibleDuplicateOfId: duplicate?.id,
-        rawPayload: preserveEditorialPayload(match.raw, existing?.rawPayload),
-        createdAt: input.now,
-        updatedAt: input.now,
-      })
-      .onConflictDoUpdate({
-        target: [importedMatches.sourceId, importedMatches.externalMatchId],
-        set: {
-          ingestionRunId: input.runId,
-          externalEventId: match.externalEventId,
-          sourceUrl: match.sourceUrl,
-          sourceFingerprint,
-          crossSourceFingerprint: crossFingerprint,
-          title: match.title,
-          roundLabel: match.roundLabel,
-          location: match.location,
-          genderCategory: match.genderCategory,
-          playedAt: match.playedAt ? new Date(match.playedAt) : undefined,
-          participants,
-          sets: match.sets,
-          winnerSide: match.winnerSide,
-          importState,
-          possibleDuplicateOfId: duplicate?.id,
-          rawPayload: preserveEditorialPayload(match.raw, existing?.rawPayload),
-          updatedAt: input.now,
-        },
-      });
-    if (importState === "ready") ready += 1;
+    const storedMatch = {
+      id: existing?.id ?? crypto.randomUUID(),
+      sourceId: input.sourceId,
+      ingestionRunId: input.runId,
+      externalMatchId: match.externalMatchId,
+      externalEventId: match.externalEventId,
+      sourceUrl: match.sourceUrl,
+      sourceFingerprint,
+      crossSourceFingerprint: crossFingerprint,
+      title: match.title,
+      roundLabel: match.roundLabel,
+      location: match.location,
+      genderCategory: match.genderCategory,
+      playedAt: match.playedAt ? new Date(match.playedAt) : undefined,
+      participants,
+      sets: match.sets,
+      winnerSide: match.winnerSide,
+      importState,
+      possibleDuplicateOfId: distinctDuplicate?.id,
+      rawPayload: preserveEditorialPayload(match.raw, existing?.rawPayload),
+      createdAt: input.now,
+      updatedAt: input.now,
+    } satisfies typeof importedMatches.$inferInsert;
+    pendingMatches.push(storedMatch);
+    incomingByCrossFingerprint.set(crossFingerprint, {
+      id: storedMatch.id!,
+      sourceId: input.sourceId,
+      externalMatchId: match.externalMatchId,
+      canonicalMatchId: null,
+      importState,
+    });
+    if (importState === "approved") approved += 1;
+    else if (importState === "ready") ready += 1;
     else if (importState === "needs-mapping") needsMapping += 1;
     else if (importState === "duplicate") duplicates += 1;
     else staged += 1;
   }
-  return { staged, ready, needsMapping, duplicates };
+  for (let offset = 0; offset < pendingMatches.length; offset += 50) {
+    const statements = pendingMatches.slice(offset, offset + 50).map((match) =>
+      database
+        .insert(importedMatches)
+        .values(match)
+        .onConflictDoUpdate({
+          target: [importedMatches.sourceId, importedMatches.externalMatchId],
+          set: {
+            ingestionRunId: match.ingestionRunId,
+            externalEventId: match.externalEventId,
+            sourceUrl: match.sourceUrl,
+            sourceFingerprint: match.sourceFingerprint,
+            crossSourceFingerprint: match.crossSourceFingerprint,
+            title: match.title,
+            roundLabel: match.roundLabel,
+            location: match.location,
+            genderCategory: match.genderCategory,
+            playedAt: match.playedAt,
+            participants: match.participants,
+            sets: match.sets,
+            winnerSide: match.winnerSide,
+            importState: match.importState,
+            possibleDuplicateOfId: match.possibleDuplicateOfId,
+            rawPayload: match.rawPayload,
+            updatedAt: input.now,
+          },
+        }),
+    );
+    const [first, ...rest] = statements;
+    if (first) await database.batch([first, ...rest]);
+  }
+  return { staged, ready, needsMapping, duplicates, approved };
 }
 
 async function persistProfessionalEvents(input: {
@@ -907,42 +1182,61 @@ async function persistWorldRankings(input: {
 }): Promise<number> {
   const database = getDatabase();
   const peopleByExternalId = await resolvedPeopleByExternalId(input.sourceId);
-  for (const ranking of input.result.rankings ?? []) {
-    await database
-      .insert(worldRankings)
-      .values({
-        sourceId: input.sourceId,
+  const rankingByIdentity = new Map(
+    (input.result.rankings ?? []).map((ranking) => [
+      `${ranking.rankingDate}:${ranking.genderCategory}:${ranking.externalPersonId}`,
+      ranking,
+    ]),
+  );
+  const rankingRows = [...rankingByIdentity.values()].map((ranking) => ({
+    sourceId: input.sourceId,
+    rankingDate: ranking.rankingDate,
+    genderCategory: ranking.genderCategory,
+    rank: ranking.rank,
+    points: ranking.points,
+    externalPersonId: ranking.externalPersonId,
+    displayName: ranking.displayName,
+    countryCode: storedCountryCode(ranking.countryCode),
+    personId: peopleByExternalId.get(ranking.externalPersonId),
+    previousRank: ranking.previousRank,
+    rawPayload: ranking.raw,
+    createdAt: input.now,
+  }));
+  if (rankingRows.length === 0) return 0;
+  const snapshotKeys = new Map(
+    rankingRows.map((ranking) => [
+      `${ranking.rankingDate}:${ranking.genderCategory}`,
+      {
         rankingDate: ranking.rankingDate,
         genderCategory: ranking.genderCategory,
-        rank: ranking.rank,
-        points: ranking.points,
-        externalPersonId: ranking.externalPersonId,
-        displayName: ranking.displayName,
-        countryCode: storedCountryCode(ranking.countryCode),
-        personId: peopleByExternalId.get(ranking.externalPersonId),
-        previousRank: ranking.previousRank,
-        rawPayload: ranking.raw,
-        createdAt: input.now,
-      })
-      .onConflictDoUpdate({
-        target: [
-          worldRankings.sourceId,
-          worldRankings.rankingDate,
-          worldRankings.genderCategory,
-          worldRankings.externalPersonId,
-        ],
-        set: {
-          rank: ranking.rank,
-          points: ranking.points,
-          displayName: ranking.displayName,
-          countryCode: storedCountryCode(ranking.countryCode),
-          personId: peopleByExternalId.get(ranking.externalPersonId),
-          previousRank: ranking.previousRank,
-          rawPayload: ranking.raw,
-        },
-      });
+      },
+    ]),
+  );
+  const insertStatements = [];
+  for (let offset = 0; offset < rankingRows.length; offset += 250) {
+    insertStatements.push(
+      database
+        .insert(worldRankings)
+        .values(rankingRows.slice(offset, offset + 250)),
+    );
   }
-  return input.result.rankings?.length ?? 0;
+  const statements = [
+    ...[...snapshotKeys.values()].map((snapshot) =>
+      database
+        .delete(worldRankings)
+        .where(
+          and(
+            eq(worldRankings.sourceId, input.sourceId),
+            eq(worldRankings.rankingDate, snapshot.rankingDate),
+            eq(worldRankings.genderCategory, snapshot.genderCategory),
+          ),
+        ),
+    ),
+    ...insertStatements,
+  ];
+  const [first, ...rest] = statements;
+  if (first) await database.batch([first, ...rest]);
+  return rankingRows.length;
 }
 
 async function executeImport(input: {
@@ -966,6 +1260,7 @@ async function executeImport(input: {
         input.source === "avp-league"
           ? "firecrawl"
           : input.source === "volleyball-life" ||
+              input.source === "sandrating" ||
               input.source === "volleyball-world"
             ? "native"
             : process.env.FIRECRAWL_API_KEY || process.env.FIRECRAWL_API
@@ -980,31 +1275,30 @@ async function executeImport(input: {
 
   try {
     const result = await input.loader();
-    const [playerCounts, matchCounts, eventCount, rankingCount] =
-      await Promise.all([
-        persistExternalPlayers({
-          source: input.source,
-          sourceId: source.id,
-          players: result.players,
-          now: input.now,
-        }),
-        persistImportedMatches({
-          result,
-          sourceId: source.id,
-          runId: run.id,
-          now: input.now,
-        }),
-        persistProfessionalEvents({
-          result,
-          sourceId: source.id,
-          now: input.now,
-        }),
-        persistWorldRankings({
-          result,
-          sourceId: source.id,
-          now: input.now,
-        }),
-      ]);
+    const playerCounts = await persistExternalPlayers({
+      source: input.source,
+      sourceId: source.id,
+      players: result.players,
+      now: input.now,
+    });
+    const [matchCounts, eventCount, rankingCount] = await Promise.all([
+      persistImportedMatches({
+        result,
+        sourceId: source.id,
+        runId: run.id,
+        now: input.now,
+      }),
+      persistProfessionalEvents({
+        result,
+        sourceId: source.id,
+        now: input.now,
+      }),
+      persistWorldRankings({
+        result,
+        sourceId: source.id,
+        now: input.now,
+      }),
+    ]);
     const counters = {
       players: result.players.length,
       playerProfilesCreated: playerCounts.inserted,
@@ -1015,6 +1309,7 @@ async function executeImport(input: {
       ready: matchCounts.ready,
       needsMapping: matchCounts.needsMapping,
       duplicates: matchCounts.duplicates,
+      approved: matchCounts.approved,
       events: eventCount,
       rankings: rankingCount,
     };
@@ -1160,6 +1455,35 @@ export function refreshWorldRankings(input: {
     actor: input.actor,
     now,
     loader: () => importWorldRankings(),
+  });
+}
+
+export function refreshSandRatingNetwork(input: {
+  readonly maxDepth?: number;
+  readonly topPlayersPerGender?: number;
+  readonly actor?: ApiActor;
+  readonly now?: Date;
+  readonly onProgress?: (
+    progress: SourceImportProgress,
+  ) => void | Promise<void>;
+}) {
+  const now = input.now ?? new Date();
+  const maxDepth = Math.min(4, Math.max(1, Math.floor(input.maxDepth ?? 4)));
+  const topPlayersPerGender = Math.min(
+    500,
+    Math.max(1, Math.floor(input.topPlayersPerGender ?? 200)),
+  );
+  return executeImport({
+    source: "sandrating",
+    mode: "network-snapshot",
+    requestedExternalId: `top-${topPlayersPerGender}:depth-${maxDepth}`,
+    actor: input.actor,
+    now,
+    loader: () =>
+      importSandRatingNetwork(
+        { maxDepth, topPlayersPerGender },
+        input.onProgress,
+      ),
   });
 }
 
@@ -1860,7 +2184,7 @@ async function refreshMatchMappingStates(
       ...participant,
       personId: peopleByExternalId.get(participant.externalPersonId),
     }));
-    const complete = Boolean(row.winnerSide && row.sets.length > 0);
+    const complete = hasDecisiveImportedScore(row.sets, row.winnerSide);
     const importState =
       complete && participants.every((participant) => participant.personId)
         ? "ready"
@@ -1929,6 +2253,7 @@ export async function approveImportedMatch(input: {
   const professional =
     source?.slug === "bvbinfo" ||
     source?.slug === "fivb-12ndr" ||
+    source?.slug === "sandrating" ||
     source?.slug === "avp-league";
   const teamAId = crypto.randomUUID();
   const teamBId = crypto.randomUUID();
@@ -2034,6 +2359,213 @@ export async function approveImportedMatch(input: {
     importedMatchId: imported.id,
     canonicalMatchId: matchId,
     status: "approved" as const,
+  };
+}
+
+export async function approveReadySandRatingMatches(input: {
+  readonly actor: ApiActor;
+  readonly reason: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly limit?: number;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  if (!input.actor.roles.includes("super-admin")) {
+    throw new SandDataServiceError(
+      "SUPER_ADMIN_REQUIRED",
+      "Only a super administrator can approve a partner match backfill.",
+    );
+  }
+  const now = input.now ?? new Date();
+  const database = getDatabase();
+  const source = await database.query.importSources.findFirst({
+    where: eq(importSources.slug, "sandrating"),
+  });
+  if (!source) {
+    throw new SandDataServiceError(
+      "SOURCE_UNAVAILABLE",
+      "Import a SandRating network snapshot before approving its matches.",
+    );
+  }
+  const limit = Math.min(5_000, Math.max(1, Math.floor(input.limit ?? 5_000)));
+  const readyMatches = await database
+    .select()
+    .from(importedMatches)
+    .where(
+      and(
+        eq(importedMatches.sourceId, source.id),
+        eq(importedMatches.importState, "ready"),
+      ),
+    )
+    .orderBy(asc(importedMatches.playedAt), asc(importedMatches.id))
+    .limit(limit);
+  const prepared: {
+    readonly importedMatchId: string;
+    readonly canonicalMatchId: string;
+    readonly teamRows: readonly (typeof teams.$inferInsert)[];
+    readonly memberRows: readonly (typeof teamMembers.$inferInsert)[];
+    readonly matchRow: typeof matches.$inferInsert;
+  }[] = [];
+  let skipped = 0;
+
+  for (const imported of readyMatches) {
+    const peopleA = imported.participants
+      .filter((participant) => participant.side === "A")
+      .flatMap((participant) =>
+        participant.personId ? [participant.personId] : [],
+      );
+    const peopleB = imported.participants
+      .filter((participant) => participant.side === "B")
+      .flatMap((participant) =>
+        participant.personId ? [participant.personId] : [],
+      );
+    if (
+      peopleA.length !== 2 ||
+      peopleB.length !== 2 ||
+      new Set([...peopleA, ...peopleB]).size !== 4 ||
+      imported.sets.length === 0 ||
+      (imported.winnerSide !== "A" && imported.winnerSide !== "B")
+    ) {
+      skipped += 1;
+      continue;
+    }
+    let performanceEvidence: ReturnType<
+      typeof performanceEvidenceFromSetScores
+    >;
+    try {
+      performanceEvidence = performanceEvidenceFromSetScores(imported.sets);
+    } catch {
+      skipped += 1;
+      continue;
+    }
+    const teamAId = crypto.randomUUID();
+    const teamBId = crypto.randomUUID();
+    const canonicalMatchId = crypto.randomUUID();
+    const teamName = (side: "A" | "B") =>
+      imported.participants
+        .filter((participant) => participant.side === side)
+        .map((participant) => participant.name.split(/\s+/)[0])
+        .join(" / ");
+    prepared.push({
+      importedMatchId: imported.id,
+      canonicalMatchId,
+      teamRows: [
+        {
+          id: teamAId,
+          name: teamName("A"),
+          status: "active",
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: teamBId,
+          name: teamName("B"),
+          status: "active",
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+      memberRows: [
+        ...peopleA.map((personId) => ({
+          teamId: teamAId,
+          personId,
+          role: "player" as const,
+          joinedAt: now,
+        })),
+        ...peopleB.map((personId) => ({
+          teamId: teamBId,
+          personId,
+          role: "player" as const,
+          joinedAt: now,
+        })),
+      ],
+      matchRow: {
+        id: canonicalMatchId,
+        teamAId,
+        teamBId,
+        createdByPersonId: input.actor.personId,
+        status: "verified",
+        scheduledAt: imported.playedAt,
+        startedAt: imported.playedAt,
+        completedAt: imported.playedAt,
+        format: {
+          sport: "beach-volleyball",
+          teamSize: 2,
+          scoringSystem: "rally",
+          bestOf: imported.sets.length,
+          source: source.slug,
+          sourceUrl: imported.sourceUrl,
+          importedMatchId: imported.id,
+          sets: imported.sets,
+        },
+        verification: "imported-professional",
+        verificationWeightBps: 10_000,
+        winnerTeamId: imported.winnerSide === "A" ? teamAId : teamBId,
+        ratingEligible: true,
+        ratingEvidence: {
+          setScores: imported.sets,
+          ...performanceEvidence,
+        },
+        ratingAppliedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+  }
+
+  for (let offset = 0; offset < prepared.length; offset += 40) {
+    const chunk = prepared.slice(offset, offset + 40);
+    await database.batch([
+      database.insert(teams).values(chunk.flatMap((match) => match.teamRows)),
+      database
+        .insert(teamMembers)
+        .values(chunk.flatMap((match) => match.memberRows)),
+      database.insert(matches).values(chunk.map((match) => match.matchRow)),
+      ...chunk.map((match) =>
+        database
+          .update(importedMatches)
+          .set({
+            importState: "approved",
+            canonicalMatchId: match.canonicalMatchId,
+            approvedByPersonId: input.actor.personId,
+            approvedAt: now,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(importedMatches.id, match.importedMatchId),
+              eq(importedMatches.importState, "ready"),
+            ),
+          ),
+      ),
+    ]);
+  }
+
+  const replay = await rebuildSandRatingProjection({
+    actor: input.actor,
+    reason:
+      "Partner-authorized SandRating match history was approved and replayed in chronological order.",
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+    now,
+  });
+  await database.insert(auditLog).values({
+    actorPersonId: input.actor.personId,
+    actorType: "person",
+    action: "sand-data.sandrating-backfill.approved",
+    entityType: "import-source",
+    entityId: source.id,
+    afterHash: stableHash({ approved: prepared.length, skipped, replay }),
+    reason: input.reason,
+    traceId: input.requestId,
+    ipAddress: input.ipAddress,
+    createdAt: now,
+  });
+  return {
+    approved: prepared.length,
+    skipped,
+    replay,
   };
 }
 

@@ -7,6 +7,7 @@ const sourceSpacingMs: Readonly<Record<SandDataSource, number>> = {
   "avp-league": 3_000,
   bvbinfo: 2_000,
   "fivb-12ndr": 3_000,
+  sandrating: 1_000,
   "volleyball-life": 1_000,
   "volleyball-world": 1_000,
 };
@@ -25,6 +26,7 @@ export function scrapeEngine(source: SandDataSource): ScrapeEngine {
   if (source === "avp-league") return "firecrawl";
   if (
     source === "volleyball-life" ||
+    source === "sandrating" ||
     source === "volleyball-world" ||
     process.env.SAND_SCRAPER_ENGINE === "native"
   ) {
