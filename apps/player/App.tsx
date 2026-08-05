@@ -7,6 +7,7 @@ import {
   googleMapsSearchUrl,
   nativeMapUrl,
 } from "@duna/core";
+import type { DiscoveryMapItem } from "@duna/api";
 import {
   demoBookings,
   demoEvents,
@@ -20,6 +21,7 @@ import * as Clipboard from "expo-clipboard";
 import * as Contacts from "expo-contacts";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
+import * as Location from "expo-location";
 import { StatusBar } from "expo-status-bar";
 import * as WebBrowser from "expo-web-browser";
 import {
@@ -68,6 +70,11 @@ import { VideoStudioScreen } from "./video-studio";
 import { HealthScreen } from "./health-screen";
 import { HealthHistorySyncAgent } from "./health-history-sync-agent";
 import {
+  DiscoveryMapModal,
+  DiscoveryMapPreview,
+  DiscoverySearchModal,
+} from "./discovery-map";
+import {
   proEventFeaturedMedia,
   proEventMediaUrl,
   proEventSections,
@@ -93,6 +100,28 @@ type PlayerCoachingNote = NonNullable<PlayerRuntime["coachingNotes"]>[number];
 type TeammateSearchResult = Awaited<
   ReturnType<DunaApiClient["player"]["teammateSearch"]["query"]>
 >[number];
+type DiscoveryCoordinates = {
+  readonly latitude: number;
+  readonly longitude: number;
+};
+
+function discoveryDistance(
+  origin: DiscoveryCoordinates | undefined,
+  item: Pick<DiscoveryMapItem, "latitude" | "longitude">,
+) {
+  if (!origin || item.latitude === undefined || item.longitude === undefined) {
+    return Number.POSITIVE_INFINITY;
+  }
+  const radians = (value: number) => (value * Math.PI) / 180;
+  const latitudeDelta = radians(item.latitude - origin.latitude);
+  const longitudeDelta = radians(item.longitude - origin.longitude);
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(radians(origin.latitude)) *
+      Math.cos(radians(item.latitude)) *
+      Math.sin(longitudeDelta / 2) ** 2;
+  return 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 interface RegistrationParticipant {
   readonly person: PersonSummary;
@@ -1216,10 +1245,12 @@ function SectionHeader({
   eyebrow,
   title,
   action,
+  onAction,
 }: {
   readonly eyebrow: string;
   readonly title: string;
   readonly action?: string;
+  readonly onAction?: () => void;
 }) {
   return (
     <View style={styles.sectionHeader}>
@@ -1228,7 +1259,7 @@ function SectionHeader({
         <Text style={styles.sectionTitle}>{title}</Text>
       </View>
       {action && (
-        <Pressable>
+        <Pressable onPress={onAction}>
           <Text style={styles.sectionAction}>{action} →</Text>
         </Pressable>
       )}
@@ -4538,10 +4569,40 @@ function DiscoverScreen({
   const [bookingVenueId, setBookingVenueId] = useState<string>();
   const [selectedCoach, setSelectedCoach] = useState<MobileCoach>();
   const [showProTour, setShowProTour] = useState(false);
-  const { coaches, dashboard, organizationWallets, proCoverage, venues } =
-    usePlayerRuntime();
+  const [showDiscoveryMap, setShowDiscoveryMap] = useState(false);
+  const [showDiscoverySearch, setShowDiscoverySearch] = useState(false);
+  const [discoverLocation, setDiscoverLocation] =
+    useState<DiscoveryCoordinates>();
+  const {
+    coaches,
+    dashboard,
+    discoveryMap,
+    organizationWallets,
+    proCoverage,
+    venues,
+  } = usePlayerRuntime();
   const events = dashboard?.events ?? demoEvents;
   const query = search.trim().toLowerCase();
+  useEffect(() => {
+    let mounted = true;
+    const loadLocation = async () => {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) return;
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      if (mounted) {
+        setDiscoverLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+      }
+    };
+    void loadLocation().catch(() => undefined);
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const homeOrganization =
     organizationWallets?.find(
       (organization) =>
@@ -4558,7 +4619,15 @@ function DiscoverScreen({
       (event.organizationId === homeOrganization.organizationId ||
         event.organizationSlug === homeOrganization.organizationSlug),
     );
-  const filteredEvents = events
+  const discoverableEvents = useMemo(
+    () =>
+      events.filter((event) => {
+        const timestamp = Date.parse(event.endsAt);
+        return Number.isNaN(timestamp) || timestamp >= Date.now();
+      }),
+    [events],
+  );
+  const filteredEvents = discoverableEvents
     .filter((event) => {
       if (
         query &&
@@ -4596,9 +4665,6 @@ function DiscoverScreen({
         Number(isHomeOrganizationEvent(left)),
     );
   const homeEvents = filteredEvents.filter(isHomeOrganizationEvent);
-  const networkEvents = homeOrganization
-    ? filteredEvents.filter((event) => !isHomeOrganizationEvent(event))
-    : filteredEvents;
   const matchingCoaches = (coaches ?? [])
     .filter((coach) => {
       if (!query) return true;
@@ -4627,6 +4693,198 @@ function DiscoverScreen({
       )
     : matchingCoaches;
   const resultCount = filteredEvents.length;
+  const discoveryItems = useMemo<readonly DiscoveryMapItem[]>(() => {
+    if (discoveryMap?.items.length) return discoveryMap.items;
+    const venueItems: DiscoveryMapItem[] = (venues ?? []).map((venue) => ({
+      id: `venue:${venue.id}`,
+      entityType: "venue",
+      kind: "court-booking",
+      title: venue.name,
+      subtitle: `${venue.city}, ${venue.region}`,
+      href: `/app/venues/${venue.id}`,
+      latitude: venue.latitude,
+      longitude: venue.longitude,
+      organizationId: venue.organizationId,
+      imageUrl: venue.imageUrl,
+      openNow: venue.openNow,
+      courtCount: venue.courtCount,
+      tags: ["venue", "courts", venue.city, venue.region, ...venue.tags],
+    }));
+    const eventItems: DiscoveryMapItem[] = discoverableEvents.map((event) => {
+      const venue = (venues ?? []).find(
+        (candidate) =>
+          candidate.organizationId === event.organizationId ||
+          candidate.name === event.venueName,
+      );
+      return {
+        id: `event:${event.id}`,
+        entityType: "event",
+        kind: event.kind,
+        title: event.title,
+        subtitle: event.venueName,
+        href: `/events/${event.slug}`,
+        latitude: event.location?.latitude ?? venue?.latitude,
+        longitude: event.location?.longitude ?? venue?.longitude,
+        organizationId: event.organizationId,
+        startsAt: event.startsAt,
+        endsAt: event.endsAt,
+        imageUrl: event.imageUrl,
+        live: event.live,
+        price: event.price,
+        tags: [
+          event.kind,
+          event.organizationName,
+          event.venueName,
+          ...event.tags,
+        ],
+      };
+    });
+    const coachItems: DiscoveryMapItem[] = (coaches ?? []).map((coach) => {
+      const venue = (venues ?? []).find(
+        (candidate) => candidate.organizationId === coach.organizationId,
+      );
+      return {
+        id: `coach:${coach.organizationId}:${coach.personId}`,
+        entityType: "coach",
+        kind: "coach",
+        title: coach.displayName,
+        subtitle: coach.homeMarket ?? coach.organizationName,
+        href: `/coaches/${coach.handle}?organization=${coach.organizationSlug}`,
+        latitude: venue?.latitude,
+        longitude: venue?.longitude,
+        organizationId: coach.organizationId,
+        imageUrl: coach.avatarUrl,
+        tags: ["coach", coach.handle, coach.organizationName],
+      };
+    });
+    const proItems = (proCoverage?.events ?? [])
+      .map<DiscoveryMapItem>((event) => ({
+        id: `pro-tour:${event.id}`,
+        entityType: "pro-tour",
+        kind: event.tour,
+        title: event.name,
+        subtitle: event.venueName ?? event.location ?? event.tour,
+        href: `/events/${event.slug}`,
+        latitude: event.venue?.latitude,
+        longitude: event.venue?.longitude,
+        startsAt: event.startsOn
+          ? `${event.startsOn}T12:00:00.000Z`
+          : undefined,
+        endsAt: event.endsOn ? `${event.endsOn}T23:59:59.999Z` : undefined,
+        live: event.live,
+        tags: ["pro tour", event.tour, event.source, event.location ?? ""],
+      }))
+      .filter((event) => {
+        if (!event.endsAt) return true;
+        const timestamp = Date.parse(event.endsAt);
+        return Number.isNaN(timestamp) || timestamp >= Date.now();
+      });
+    return [...venueItems, ...eventItems, ...coachItems, ...proItems];
+  }, [
+    coaches,
+    discoveryMap?.items,
+    discoverableEvents,
+    proCoverage?.events,
+    venues,
+  ]);
+  const locationSortedDiscoveryItems = useMemo(
+    () =>
+      [...discoveryItems].sort(
+        (left, right) =>
+          discoveryDistance(discoverLocation, left) -
+          discoveryDistance(discoverLocation, right),
+      ),
+    [discoverLocation, discoveryItems],
+  );
+  const visibleDiscoveryItems = locationSortedDiscoveryItems.filter((item) => {
+    if (
+      query &&
+      ![item.title, item.subtitle, item.kind, item.entityType, ...item.tags]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    ) {
+      return false;
+    }
+    if (filter === "Today") {
+      return Boolean(
+        item.startsAt &&
+        new Date(item.startsAt).toDateString() === new Date().toDateString(),
+      );
+    }
+    if (filter === "Tournaments") {
+      return item.kind === "tournament" || item.entityType === "pro-tour";
+    }
+    if (filter === "Training") {
+      return (
+        item.entityType === "coach" ||
+        ["clinic", "private-lesson"].includes(item.kind)
+      );
+    }
+    if (filter === "Open play") {
+      return ["open-play", "pickup"].includes(item.kind);
+    }
+    if (filter === "Free") return item.price?.amountMinor === 0;
+    return true;
+  });
+  const autocompleteItems = query ? visibleDiscoveryItems.slice(0, 5) : [];
+  const tournamentEvents = filteredEvents
+    .filter(
+      (event) =>
+        event.kind === "tournament" &&
+        new Date(event.endsAt).getTime() >= new Date().setHours(0, 0, 0, 0),
+    )
+    .sort((left, right) => left.startsAt.localeCompare(right.startsAt));
+  const nearbyVenues = [...(venues ?? [])].sort(
+    (left, right) =>
+      discoveryDistance(discoverLocation, left) -
+      discoveryDistance(discoverLocation, right),
+  );
+  const nearbyEvents = [...filteredEvents].sort((left, right) => {
+    const leftItem = discoveryItems.find(
+      (item) => item.id === `event:${left.id}`,
+    );
+    const rightItem = discoveryItems.find(
+      (item) => item.id === `event:${right.id}`,
+    );
+    return (
+      discoveryDistance(discoverLocation, leftItem ?? {}) -
+      discoveryDistance(discoverLocation, rightItem ?? {})
+    );
+  });
+
+  const openDiscoveryItem = (item: DiscoveryMapItem) => {
+    selectionHaptic();
+    setShowDiscoveryMap(false);
+    setShowDiscoverySearch(false);
+    if (item.entityType === "venue") {
+      setBookingVenueId(item.id.replace(/^venue:/, ""));
+      return;
+    }
+    if (item.entityType === "coach") {
+      const coach = (coaches ?? []).find(
+        (candidate) =>
+          item.id === `coach:${candidate.organizationId}:${candidate.personId}`,
+      );
+      if (coach) {
+        setSelectedCoach(coach);
+        return;
+      }
+    }
+    if (item.entityType === "pro-tour") {
+      setShowProTour(true);
+      return;
+    }
+    if (item.entityType === "event") {
+      const eventId = item.id.replace(/^event:/, "");
+      const eventIndex = events.findIndex((event) => event.id === eventId);
+      if (eventIndex >= 0) {
+        onBook(eventIndex);
+        return;
+      }
+    }
+    void WebBrowser.openBrowserAsync(`${dunaWebUrl}${item.href}`);
+  };
   return (
     <>
       <ScrollView
@@ -4671,12 +4929,58 @@ function DiscoverScreen({
           <Text style={styles.searchIcon}>⌕</Text>
           <TextInput
             onChangeText={setSearch}
+            onSubmitEditing={() => setShowDiscoverySearch(true)}
             placeholder="Events, programs, clubs, coaches…"
             placeholderTextColor={colors.muted}
             style={styles.searchInput}
             value={search}
           />
+          <Pressable onPress={() => setShowDiscoverySearch(true)}>
+            <Text style={styles.searchAllText}>All</Text>
+          </Pressable>
         </View>
+        {autocompleteItems.length > 0 && (
+          <View style={styles.searchSuggestions}>
+            {autocompleteItems.map((item) => (
+              <Pressable
+                key={item.id}
+                onPress={() => openDiscoveryItem(item)}
+                style={styles.searchSuggestionRow}
+              >
+                <View
+                  style={[
+                    styles.searchSuggestionDot,
+                    {
+                      backgroundColor:
+                        item.entityType === "venue"
+                          ? colors.aqua
+                          : item.entityType === "coach"
+                            ? colors.flare
+                            : item.entityType === "pro-tour"
+                              ? "#d5a13d"
+                              : colors.aqua,
+                    },
+                  ]}
+                />
+                <View style={styles.flex}>
+                  <Text style={styles.searchSuggestionTitle}>{item.title}</Text>
+                  <Text style={styles.searchSuggestionMeta}>
+                    {item.subtitle} · {item.entityType.replace("-", " ")}
+                  </Text>
+                </View>
+                <Text style={styles.chevron}>›</Text>
+              </Pressable>
+            ))}
+            <Pressable
+              onPress={() => setShowDiscoverySearch(true)}
+              style={styles.searchSuggestionAll}
+            >
+              <Text style={styles.searchSuggestionAllText}>
+                View all {visibleDiscoveryItems.length} results →
+              </Text>
+            </Pressable>
+          </View>
+        )}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -4763,7 +5067,7 @@ function DiscoverScreen({
         {venues && venues.length > 0 && (
           <>
             <SectionHeader
-              eyebrow="LIVE COURT INVENTORY"
+              eyebrow="LIVE COURT INVENTORY · NEARBY"
               title="Book a court."
               action={`${venues.length} venues`}
             />
@@ -4773,7 +5077,7 @@ function DiscoverScreen({
               style={styles.horizontalBleed}
             >
               <View style={styles.bookingVenueRow}>
-                {venues.map((venue) => (
+                {nearbyVenues.map((venue) => (
                   <Pressable
                     key={venue.id}
                     onPress={() => setBookingVenueId(venue.id)}
@@ -4797,64 +5101,75 @@ function DiscoverScreen({
             </ScrollView>
           </>
         )}
-        <View style={styles.mapCard}>
-          <View style={styles.mapWater} />
-          <View style={styles.mapShore} />
-          {[
-            ["14%", "28%", "5"],
-            ["52%", "46%", "3"],
-            ["72%", "64%", "14"],
-            ["40%", "73%", "8"],
-          ].map((pin) => (
-            <View
-              key={pin[0]}
-              style={[
-                styles.mapPin,
-                { left: pin[0] as `${number}%`, top: pin[1] as `${number}%` },
-              ]}
+        {tournamentEvents.length > 0 && (
+          <>
+            <SectionHeader
+              action="View all"
+              eyebrow="NEXT ON THE SAND"
+              onAction={() => setShowDiscoverySearch(true)}
+              title="Tournaments coming up."
+            />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.horizontalBleed}
             >
-              <Text style={styles.mapPinText}>{pin[2]}</Text>
-            </View>
-          ))}
-          <View style={styles.mapLabel}>
-            <Text style={styles.mapLabelTitle}>
-              {resultCount} {resultCount === 1 ? "thing" : "things"} to do
+              {tournamentEvents.map((event) => (
+                <EventCard
+                  eventIndex={events.findIndex(
+                    (candidate) => candidate.id === event.id,
+                  )}
+                  key={event.id}
+                  onPress={onBook}
+                />
+              ))}
+            </ScrollView>
+          </>
+        )}
+        <DiscoveryMapPreview
+          items={visibleDiscoveryItems}
+          onOpen={() => setShowDiscoveryMap(true)}
+        />
+        <SectionHeader
+          action="View all"
+          eyebrow={
+            discoverLocation
+              ? `${filter.toUpperCase()} · NEAREST TO YOU`
+              : `${filter.toUpperCase()} · ${resultCount} RESULTS`
+          }
+          onAction={() => setShowDiscoverySearch(true)}
+          title="Around you."
+        />
+        {nearbyEvents.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.horizontalBleed}
+          >
+            {nearbyEvents.map((event) => {
+              const eventIndex = events.findIndex(
+                (candidate) => candidate.id === event.id,
+              );
+              return (
+                <EventCard
+                  eventIndex={eventIndex}
+                  key={event.id}
+                  onPress={onBook}
+                />
+              );
+            })}
+          </ScrollView>
+        ) : (
+          <View style={styles.coachEmptyCard}>
+            <Text style={styles.coachServiceTitle}>
+              Nothing nearby matches yet.
             </Text>
-            <Text style={styles.mapLabelText}>
-              across {venues?.length ?? 0} published venues
+            <Text style={styles.coachServiceBody}>
+              Try a broader search or move the globe to explore a different
+              market.
             </Text>
           </View>
-        </View>
-        <SectionHeader
-          eyebrow={`${filter.toUpperCase()} · ${networkEvents.length} RESULTS`}
-          title={homeOrganization ? "Explore beyond your club." : "Around you."}
-          action="Map"
-        />
-        <View style={styles.eventGrid}>
-          {networkEvents.map((event) => {
-            const eventIndex = events.findIndex(
-              (candidate) => candidate.id === event.id,
-            );
-            return (
-              <EventCard
-                eventIndex={eventIndex}
-                key={event.id}
-                onPress={onBook}
-              />
-            );
-          })}
-          {networkEvents.length === 0 && (
-            <View style={styles.coachEmptyCard}>
-              <Text style={styles.coachServiceTitle}>
-                Nothing else matches yet.
-              </Text>
-              <Text style={styles.coachServiceBody}>
-                Your club results stay above. Try a broader search to explore
-                the wider Duna network.
-              </Text>
-            </View>
-          )}
-        </View>
+        )}
         {networkCoaches.length > 0 && (
           <>
             <SectionHeader
@@ -4880,6 +5195,22 @@ function DiscoverScreen({
           </>
         )}
       </ScrollView>
+      <DiscoveryMapModal
+        items={locationSortedDiscoveryItems}
+        onClose={() => setShowDiscoveryMap(false)}
+        onSearch={() => {
+          setShowDiscoveryMap(false);
+          setShowDiscoverySearch(true);
+        }}
+        onSelect={openDiscoveryItem}
+        visible={showDiscoveryMap}
+      />
+      <DiscoverySearchModal
+        items={locationSortedDiscoveryItems}
+        onClose={() => setShowDiscoverySearch(false)}
+        onSelect={openDiscoveryItem}
+        visible={showDiscoverySearch}
+      />
       <VenueBookingModal
         onClose={() => setBookingVenueId(undefined)}
         venueId={bookingVenueId}
@@ -10724,6 +11055,57 @@ function createStyles(palette: Palette) {
     },
     searchIcon: { color: colors.muted, fontSize: 20 },
     searchInput: { color: colors.bone, flex: 1, fontSize: 11, height: 46 },
+    searchAllText: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      paddingHorizontal: 4,
+      paddingVertical: 10,
+    },
+    searchSuggestions: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      marginTop: 8,
+      overflow: "hidden",
+    },
+    searchSuggestionRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 56,
+      paddingHorizontal: 13,
+      paddingVertical: 9,
+    },
+    searchSuggestionDot: {
+      borderRadius: 5,
+      height: 10,
+      width: 10,
+    },
+    searchSuggestionTitle: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    searchSuggestionMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 3,
+      textTransform: "capitalize",
+    },
+    searchSuggestionAll: {
+      alignItems: "center",
+      paddingHorizontal: 13,
+      paddingVertical: 13,
+    },
+    searchSuggestionAllText: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+    },
     filterRow: {
       flexDirection: "row",
       gap: 7,

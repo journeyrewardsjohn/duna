@@ -7,6 +7,7 @@ export * from "./checkout";
 export * from "./catalog-service";
 export * from "./catalog-checkout";
 export * from "./court-checkout";
+export * from "./discovery-service";
 export * from "./commerce";
 export * from "./feature-flags";
 export * from "./forms-service";

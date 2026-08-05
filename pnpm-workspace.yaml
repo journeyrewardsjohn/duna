@@ -50,3 +50,4 @@ minimumReleaseAgeExclude:
   - expo-auth-session@57.0.6
   - expo-linking@57.0.5
   - expo-widgets@57.0.8
+  - mapbox-gl@3.28.0

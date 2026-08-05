@@ -38,7 +38,7 @@ test("marketing and player discovery stay usable", async ({ page }) => {
 
   await page.goto("/app/discover");
   await expect(
-    page.getByRole("heading", { name: "Find your next game." }),
+    page.getByRole("heading", { name: "The whole world of sand." }),
   ).toBeVisible();
   await expect(page.getByLabel("Search Duna")).toBeVisible();
   await expectNoHorizontalOverflow(page);
