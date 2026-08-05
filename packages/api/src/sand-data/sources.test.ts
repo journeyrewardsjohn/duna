@@ -1,11 +1,49 @@
 import { describe, expect, it } from "vitest";
 import {
+  discoverBvbInfoHistoryPages,
+  parseBvbInfoCareerSummary,
   parseFivbEventIndexHtml,
   parseFivbPagePlayers,
   parseFivbTeamEntries,
   parseVolleyballLifeMatchFeed,
   selectVolleyballLifeDivisionData,
 } from "./sources";
+
+describe("BVBInfo career history parsing", () => {
+  it("discovers every year-range history page from the player selector", () => {
+    expect(
+      discoverBvbInfoHistoryPages(`
+        <select>
+          <option value="1">Career</option>
+          <option value="2">Victories</option>
+          <option value="5">2011-19</option>
+          <option value="6">2020-26</option>
+        </select>
+      `),
+    ).toEqual([5, 6]);
+  });
+
+  it("extracts overall events, podiums, and earnings from the career table", () => {
+    expect(
+      parseBvbInfoCareerSummary(`
+        <td colspan="99"><B>Overall</B></td>
+        <tr class="clsPlayerDataTotal" align="center" valign="top">
+          <td>Total<br>(Rank)</td><td>&nbsp;</td><td>139<br>(140th)</td>
+          <td>21<br>(34th)</td><td>16</td><td>24</td><td>3</td>
+          <td>22</td><td>2</td><td>22</td>
+          <td>$540,875.00<br>(77th)</td>
+        </tr>
+      `),
+    ).toEqual({
+      events: 139,
+      wins: 21,
+      secondPlaceFinishes: 16,
+      thirdPlaceFinishes: 24,
+      earningsMinor: 54_087_500,
+      earningsCurrency: "USD",
+    });
+  });
+});
 
 describe("FIVB event index parsing", () => {
   it("keeps a country name as a location instead of treating it as a code", () => {

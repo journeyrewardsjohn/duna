@@ -1,5 +1,6 @@
 import {
   auditLog,
+  externalPlayerProfiles,
   follows,
   getDatabase,
   importedMatches,
@@ -27,12 +28,14 @@ import {
 } from "./player-research";
 import {
   effectiveProfessionalEvent,
+  importSandSource,
   professionalEventSlug,
   professionalSource,
   professionalTour,
   rawProfessionalTeamEntries,
   watchOptionsFromPayload,
 } from "./sand-data/service";
+import { dedupeWorldRankingRows } from "./sand-data/rankings";
 
 export class PlayerIntelligenceError extends Error {
   constructor(
@@ -771,7 +774,7 @@ export async function loadPlayerIntelligenceAdmin(input: {
       }),
     ),
   );
-  const rows = (
+  const rows = dedupeWorldRankingRows(
     await Promise.all(
       genders.map(async (gender) => {
         const date = latestDates[gender];
@@ -782,6 +785,7 @@ export async function loadPlayerIntelligenceAdmin(input: {
             rankingDate: worldRankings.rankingDate,
             rank: worldRankings.rank,
             points: worldRankings.points,
+            externalPersonId: worldRankings.externalPersonId,
             countryCode: worldRankings.countryCode,
             displayName: worldRankings.displayName,
             personId: worldRankings.personId,
@@ -810,8 +814,8 @@ export async function loadPlayerIntelligenceAdmin(input: {
           )
           .orderBy(asc(worldRankings.rank));
       }),
-    )
-  ).flat();
+    ).then((values) => values.flat()),
+  );
   const query = input.query?.trim().toLowerCase();
   const status = input.status ?? "all";
   const filtered = rows.filter((row) => {
@@ -1009,6 +1013,35 @@ export async function researchPlayerProfile(input: {
       },
       { now },
     );
+    const sourceEnrichment: {
+      readonly source: "bvbinfo" | "volleyball-life";
+      readonly externalId: string;
+      readonly status: "succeeded" | "partial" | "failed";
+      readonly matches?: number;
+      readonly message?: string;
+    }[] = [];
+    for (const sourceProfile of proposal.sourceProfiles) {
+      try {
+        const imported = await importSandSource({
+          source: sourceProfile.source,
+          externalId: sourceProfile.externalId,
+          now,
+        });
+        sourceEnrichment.push({
+          source: sourceProfile.source,
+          externalId: sourceProfile.externalId,
+          status: imported.status,
+          matches: imported.counters.matches,
+        });
+      } catch (error) {
+        sourceEnrichment.push({
+          source: sourceProfile.source,
+          externalId: sourceProfile.externalId,
+          status: "failed",
+          message: error instanceof Error ? error.message : "Import failed",
+        });
+      }
+    }
     await database.batch([
       database
         .update(playerPublicProfiles)
@@ -1032,14 +1065,15 @@ export async function researchPlayerProfile(input: {
           proposalId: proposal.id,
           evidence: proposal.evidence.map((item) => item.url),
           model: proposal.model,
+          sourceEnrichment,
         }),
         reason:
-          "Duna researched a ranked player through Firecrawl and Vercel AI Gateway; all proposed facts remain pending human review.",
+          "Duna researched a ranked player through Firecrawl and Vercel AI Gateway, then staged exact discovered source histories; proposed facts remain pending human review.",
         traceId: proposal.id,
         createdAt: now,
       }),
     ]);
-    return proposal;
+    return { ...proposal, sourceEnrichment };
   } catch (error) {
     await database
       .update(playerPublicProfiles)
@@ -1047,6 +1081,111 @@ export async function researchPlayerProfile(input: {
       .where(eq(playerPublicProfiles.personId, person.id));
     throw error;
   }
+}
+
+export async function refreshRankedPlayerHistories(input: {
+  readonly limit?: number;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  const now = input.now ?? new Date();
+  const overviews = await Promise.all(
+    (["men", "women"] as const).map((gender) =>
+      loadPlayerIntelligenceAdmin({
+        page: 1,
+        pageSize: 50,
+        gender,
+        status: "all",
+      }),
+    ),
+  );
+  const rankedPersonIds = [
+    ...new Set(
+      overviews.flatMap((overview) =>
+        overview.items.flatMap((item) =>
+          item.personId ? [item.personId] : [],
+        ),
+      ),
+    ),
+  ];
+  if (rankedPersonIds.length === 0) {
+    return { attempted: 0, succeeded: 0, partial: 0, results: [] };
+  }
+  const sourceRows = await getDatabase()
+    .select({
+      source: importSources.slug,
+      externalId: externalPlayerProfiles.externalPersonId,
+      lastImportedAt: externalPlayerProfiles.lastImportedAt,
+    })
+    .from(externalPlayerProfiles)
+    .innerJoin(
+      importSources,
+      eq(externalPlayerProfiles.sourceId, importSources.id),
+    )
+    .where(
+      and(
+        inArray(externalPlayerProfiles.personId, rankedPersonIds),
+        eq(externalPlayerProfiles.mappingState, "linked"),
+        inArray(importSources.slug, ["bvbinfo", "volleyball-life"]),
+      ),
+    );
+  const staleBefore = now.getTime() - 12 * 60 * 60 * 1_000;
+  const candidates = [
+    ...new Map(
+      sourceRows
+        .filter(
+          (row) =>
+            !row.lastImportedAt || row.lastImportedAt.getTime() < staleBefore,
+        )
+        .sort(
+          (left, right) =>
+            (left.lastImportedAt?.getTime() ?? 0) -
+            (right.lastImportedAt?.getTime() ?? 0),
+        )
+        .map((row) => [`${row.source}:${row.externalId}`, row] as const),
+    ).values(),
+  ].slice(0, Math.min(10, Math.max(1, input.limit ?? 2)));
+  const results: {
+    readonly source: "bvbinfo" | "volleyball-life";
+    readonly externalId: string;
+    readonly status: "succeeded" | "partial" | "failed";
+    readonly matches?: number;
+    readonly message?: string;
+  }[] = [];
+  for (const candidate of candidates) {
+    if (
+      candidate.source !== "bvbinfo" &&
+      candidate.source !== "volleyball-life"
+    ) {
+      continue;
+    }
+    try {
+      const imported = await importSandSource({
+        source: candidate.source,
+        externalId: candidate.externalId,
+        now,
+      });
+      results.push({
+        source: candidate.source,
+        externalId: candidate.externalId,
+        status: imported.status,
+        matches: imported.counters.matches,
+      });
+    } catch (error) {
+      results.push({
+        source: candidate.source,
+        externalId: candidate.externalId,
+        status: "failed",
+        message: error instanceof Error ? error.message : "Refresh failed",
+      });
+    }
+  }
+  return {
+    attempted: results.length,
+    succeeded: results.filter((result) => result.status === "succeeded").length,
+    partial: results.filter((result) => result.status === "partial").length,
+    results,
+  };
 }
 
 export async function researchRankedPlayers(input: {

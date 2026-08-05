@@ -12,6 +12,7 @@ import {
   professionalMatchPredictionClosed,
   professionalMatchStatus,
   selectFivbRefreshCandidates,
+  shouldAutoLinkProfessionalSource,
   shouldCreateUnclaimedSourceProfile,
 } from "./service";
 
@@ -131,6 +132,42 @@ describe("source identity inference", () => {
         candidateCount: 0,
       }),
     ).toBe(true);
+  });
+
+  it("auto-links only an exact, unique professional source to an unclaimed player", () => {
+    expect(
+      shouldAutoLinkProfessionalSource({
+        source: "bvbinfo",
+        externalName: "Taylor Crabb",
+        candidateName: "Taylor Crabb",
+        candidateClaimStatus: "unclaimed",
+        scoreBps: 9_500,
+        tied: false,
+        isProfessional: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldAutoLinkProfessionalSource({
+        source: "bvbinfo",
+        externalName: "Crabb",
+        candidateName: "Taylor Crabb",
+        candidateClaimStatus: "unclaimed",
+        scoreBps: 7_000,
+        tied: false,
+        isProfessional: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoLinkProfessionalSource({
+        source: "volleyball-life",
+        externalName: "Taylor Crabb",
+        candidateName: "Taylor Crabb",
+        candidateClaimStatus: "claimed",
+        scoreBps: 9_500,
+        tied: false,
+        isProfessional: true,
+      }),
+    ).toBe(false);
   });
 });
 
