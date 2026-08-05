@@ -655,6 +655,14 @@ export async function loadOperatorMemberProfile(input: {
             grantedAt: healthGrant.createdAt.toISOString(),
             observedAt: healthConnection?.lastSyncedAt?.toISOString(),
             metrics: {
+              readinessScore: healthProfile.intelligence.readiness.score,
+              readinessLabel: healthProfile.intelligence.readiness.label,
+              readinessConfidence:
+                healthProfile.intelligence.readiness.confidence,
+              readinessSummary: healthProfile.intelligence.readiness.summary,
+              strainScore: healthProfile.intelligence.strain.score,
+              sleepContinuityPercent:
+                healthProfile.intelligence.sleep?.efficiencyPercent,
               restingHeartRate: healthProfile.summary.restingHeartRate,
               heartRateVariabilityMs:
                 healthProfile.summary.heartRateVariabilityMs,

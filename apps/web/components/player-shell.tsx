@@ -7,11 +7,11 @@ import {
   CalendarDays,
   Compass,
   House,
+  HeartPulse,
   Menu,
   MessageCircle,
   Plus,
   Trophy,
-  UserRound,
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
@@ -25,6 +25,7 @@ const navigation = [
   { label: "Discover", href: "/app/discover", icon: Compass },
   { label: "Play", href: "/app/play", icon: CalendarDays },
   { label: "Matches", href: "/app/matches", icon: Trophy },
+  { label: "Health", href: "/app/health", icon: HeartPulse },
   { label: "Wallet", href: "/app/wallet", icon: WalletCards },
 ] as const;
 
@@ -143,7 +144,7 @@ export function PlayerShell({
             aria-label="Mobile player navigation"
             className="player-bottom-nav"
           >
-            {navigation.slice(0, 4).map(({ label, href, icon: Icon }) => {
+            {navigation.slice(0, 5).map(({ label, href, icon: Icon }) => {
               const active =
                 href === "/app" ? pathname === href : pathname.startsWith(href);
               return (
@@ -157,15 +158,6 @@ export function PlayerShell({
                 </Link>
               );
             })}
-            <Link
-              className={
-                pathname.startsWith("/app/profile") ? "active" : undefined
-              }
-              href="/app/profile"
-            >
-              <UserRound aria-hidden size={20} />
-              <span>Profile</span>
-            </Link>
           </nav>
           <AskDuna />
         </>

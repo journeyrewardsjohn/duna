@@ -5,9 +5,12 @@ import {
   decryptHealthPayload,
   encryptHealthPayload,
   healthAccessAllows,
+  healthCheckInContextAllowed,
   healthGrantAllows,
   metricCategory,
+  redactHealthIntelligenceForViewer,
 } from "./health-service";
+import { buildHealthIntelligence } from "./health-intelligence";
 
 const previousKey = process.env.HEALTH_DATA_ENCRYPTION_KEY;
 
@@ -103,6 +106,38 @@ describe("Duna Health authorization", () => {
         "video-overlay",
       ),
     ).toBe(true);
+  });
+
+  it("keeps private check-ins behind recovery consent and redacts raw ratings", () => {
+    expect(
+      healthCheckInContextAllowed({
+        owner: false,
+        categories: ["heart"],
+        scopes: ["summary"],
+      }),
+    ).toBe(false);
+    const intelligence = buildHealthIntelligence({
+      samples: [],
+      checkIns: [
+        {
+          date: "2026-08-04",
+          perceivedRecovery: 2,
+          energy: 2,
+          stress: 5,
+          soreness: 4,
+          note: "Private travel detail",
+          updatedAt: "2026-08-04T12:00:00.000Z",
+        },
+      ],
+      timezone: "UTC",
+      now: new Date("2026-08-04T12:00:00.000Z"),
+    });
+    const redacted = redactHealthIntelligenceForViewer(intelligence, false);
+    const selfReport = redacted.readiness.factors.find(
+      (factor) => factor.id === "self-report",
+    );
+    expect(selfReport?.summary).not.toContain("Energy 2/5");
+    expect(JSON.stringify(redacted)).not.toContain("Private travel detail");
   });
 });
 

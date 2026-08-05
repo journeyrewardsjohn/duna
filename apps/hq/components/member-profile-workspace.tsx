@@ -671,6 +671,21 @@ export function MemberProfileWorkspace({
           <>
             <div className="member-health-metrics">
               <article>
+                <ShieldCheck aria-hidden size={19} />
+                <strong>
+                  {profile.health.metrics?.readinessScore?.toFixed(1) ?? "—"} /
+                  10
+                </strong>
+                <small>Duna readiness</small>
+              </article>
+              <article>
+                <Dumbbell aria-hidden size={19} />
+                <strong>
+                  {profile.health.metrics?.strainScore?.toFixed(1) ?? "—"} / 10
+                </strong>
+                <small>Duna strain</small>
+              </article>
+              <article>
                 <HeartPulse aria-hidden size={19} />
                 <strong>
                   {metricValue(profile.health.metrics?.restingHeartRate)}
@@ -700,6 +715,13 @@ export function MemberProfileWorkspace({
                 <small>steps</small>
               </article>
             </div>
+            {profile.health.metrics?.readinessSummary && (
+              <p className="member-health-consent">
+                <Activity aria-hidden size={18} />
+                {profile.health.metrics.readinessSummary} Confidence:{" "}
+                {profile.health.metrics.readinessConfidence ?? "low"}.
+              </p>
+            )}
             <p className="member-health-consent">
               <ShieldCheck aria-hidden size={18} />
               The player chose {profile.health.scopes.join(", ")} for this
