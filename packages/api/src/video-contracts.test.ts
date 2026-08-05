@@ -4,9 +4,13 @@ import {
   courtCalibrationSchema,
   dunaPlusEntitlementSchema,
   videoPlaybackSchema,
+  videoAssociationOptionSchema,
   videoUsageSchema,
+  visionSessionSettingsSchema,
+  visionTimelineEventSchema,
 } from "./contracts";
 import {
+  buildMuxLiveStreamInput,
   isMuxSignedPlaybackConfigured,
   isMuxVideoConfigured,
   isR2VideoConfigured,
@@ -62,6 +66,36 @@ describe("Duna Video contracts", () => {
       kind: "complimentary",
       plan: "premium-plus",
       label: "Complimentary Premium+",
+    });
+  });
+
+  it("carries match venue and camera defaults into the mobile setup", () => {
+    const option = videoAssociationOptionSchema.parse({
+      type: "match",
+      id: crypto.randomUUID(),
+      eventId: crypto.randomUUID(),
+      title: "Duna Blue vs Duna Gold",
+      subtitle: "Championship · scheduled",
+      associated: true,
+      venue: {
+        venueId: crypto.randomUUID(),
+        name: "Manhattan Beach Pier",
+        googlePlaceId: "google-place-id",
+        latitude: 33.8847,
+        longitude: -118.4109,
+      },
+      captureDefaults: {
+        courtWidthMeters: 8,
+        courtLengthMeters: 16,
+        netHeightMeters: 2.24,
+        orientation: "landscape",
+      },
+    });
+
+    expect(option).toMatchObject({
+      associated: true,
+      venue: { name: "Manhattan Beach Pier" },
+      captureDefaults: { netHeightMeters: 2.24, orientation: "landscape" },
     });
   });
 
@@ -137,6 +171,76 @@ describe("Duna Video contracts", () => {
     ).toThrow();
   });
 
+  it("keeps remote calibration normalized and explicitly controls score overlays", () => {
+    const settings = visionSessionSettingsSchema.parse({
+      courtWidthMeters: 8,
+      courtLengthMeters: 16,
+      netHeightMeters: 2.43,
+      cameraHeightMeters: 2.1,
+      overlayScoreboard: true,
+      teamA: "Duna Blue",
+      teamB: "Duna Sand",
+      corners: [
+        { x: 0.08, y: 0.89 },
+        { x: 0.92, y: 0.89 },
+        { x: 0.72, y: 0.22 },
+        { x: 0.28, y: 0.22 },
+      ],
+    });
+    expect(settings).toMatchObject({
+      overlayScoreboard: true,
+      cameraHeightMeters: 2.1,
+    });
+    expect(() =>
+      visionSessionSettingsSchema.parse({
+        ...settings,
+        corners: settings.corners?.map((corner, index) =>
+          index === 0 ? { x: -0.1, y: corner.y } : corner,
+        ),
+      }),
+    ).toThrow();
+  });
+
+  it("accepts append-only Watch moments with an overlay-ready score snapshot", () => {
+    const sessionId = crypto.randomUUID();
+    const event = visionTimelineEventSchema.parse({
+      id: crypto.randomUUID(),
+      sessionId,
+      source: "apple-watch",
+      type: "rally-won",
+      winnerSide: "A",
+      elapsedMs: 84_000,
+      occurredAt: "2026-08-04T18:01:24.000Z",
+      score: {
+        setIndex: 0,
+        sets: [{ a: 8, b: 6 }],
+        serving: "A",
+        status: "live",
+      },
+    });
+    expect(event).toMatchObject({
+      sessionId,
+      type: "rally-won",
+      elapsedMs: 84_000,
+      score: { sets: [{ a: 8, b: 6 }] },
+    });
+    expect(() =>
+      visionTimelineEventSchema.parse({
+        ...event,
+        id: crypto.randomUUID(),
+        type: "undo",
+        targetEventId: undefined,
+      }),
+    ).toThrow();
+    expect(() =>
+      visionTimelineEventSchema.parse({
+        ...event,
+        id: crypto.randomUUID(),
+        score: { ...event.score, setIndex: 4 },
+      }),
+    ).toThrow();
+  });
+
   it("keeps the Super Admin video overview typed and management-scoped", () => {
     const overview = adminVideoOverviewSchema.parse({
       canManage: true,
@@ -198,6 +302,27 @@ describe("Duna Video provider readiness", () => {
     vi.stubEnv("CF_ACCESS_KEY_ID", "r2-access-key");
     vi.stubEnv("CE_SECRET_ACCESS_KEY", "r2-secret-key");
     expect(isR2VideoConfigured()).toBe(true);
-    expect(R2_VIDEO_PART_SIZE_BYTES).toBe(64 * 1024 * 1024);
+    expect(R2_VIDEO_PART_SIZE_BYTES).toBe(16 * 1024 * 1024);
+  });
+
+  it("places Duna passthrough on the live stream for inherited asset metadata", () => {
+    const videoId = crypto.randomUUID();
+    const built = buildMuxLiveStreamInput({
+      videoId,
+      title: "Championship match",
+      liveVisibility: "public",
+      recordingVisibility: "private",
+      maximumDurationSeconds: 14_400,
+    });
+
+    expect(built.request).toMatchObject({
+      passthrough: videoId,
+      playback_policies: ["public"],
+      new_asset_settings: {
+        playback_policies: ["signed"],
+        meta: { external_id: videoId },
+      },
+    });
+    expect(built.request.new_asset_settings).not.toHaveProperty("passthrough");
   });
 });

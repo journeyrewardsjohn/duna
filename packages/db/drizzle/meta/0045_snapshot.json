@@ -1,5 +1,5 @@
 {
-  "id": "4e56a16f-a5bf-43e7-a23b-be129f3546b4",
+  "id": "4da1a053-c98d-4ea3-95a5-cc2c30226378",
   "prevId": "4432632a-d1e6-47da-bb5d-5fe9db36a28c",
   "version": "7",
   "dialect": "postgresql",
@@ -4320,7 +4320,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'Complimentary Premium+'"
+          "default": "'Complimentary Duna+'"
         },
         "granted_by_person_id": {
           "name": "granted_by_person_id",
@@ -19354,14 +19354,14 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": 28800
+          "default": 14400
         },
         "monthly_upload_seconds": {
           "name": "monthly_upload_seconds",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": 108000
+          "default": 86400
         },
         "enforce_live_limit": {
           "name": "enforce_live_limit",
@@ -19375,7 +19375,7 @@
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": true
+          "default": false
         },
         "updated_by_person_id": {
           "name": "updated_by_person_id",
@@ -20275,6 +20275,383 @@
         "video_coordinates_pair": {
           "name": "video_coordinates_pair",
           "value": "(\"videos\".\"latitude\" IS NULL AND \"videos\".\"longitude\" IS NULL) OR (\"videos\".\"latitude\" IS NOT NULL AND \"videos\".\"longitude\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.vision_sessions": {
+      "name": "vision_sessions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "owner_person_id": {
+          "name": "owner_person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "video_id": {
+          "name": "video_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "match_id": {
+          "name": "match_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(24)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'setup'"
+        },
+        "remote_token_hash": {
+          "name": "remote_token_hash",
+          "type": "varchar(128)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "remote_expires_at": {
+          "name": "remote_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "settings": {
+          "name": "settings",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "control_version": {
+          "name": "control_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "preview_jpeg_base64": {
+          "name": "preview_jpeg_base64",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "preview_captured_at": {
+          "name": "preview_captured_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recording_started_at": {
+          "name": "recording_started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recording_ended_at": {
+          "name": "recording_ended_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_remote_seen_at": {
+          "name": "last_remote_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "vision_session_owner_created_idx": {
+          "name": "vision_session_owner_created_idx",
+          "columns": [
+            {
+              "expression": "owner_person_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "vision_session_match_status_idx": {
+          "name": "vision_session_match_status_idx",
+          "columns": [
+            {
+              "expression": "match_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "vision_sessions_owner_person_id_people_id_fk": {
+          "name": "vision_sessions_owner_person_id_people_id_fk",
+          "tableFrom": "vision_sessions",
+          "tableTo": "people",
+          "columnsFrom": ["owner_person_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "vision_sessions_video_id_videos_id_fk": {
+          "name": "vision_sessions_video_id_videos_id_fk",
+          "tableFrom": "vision_sessions",
+          "tableTo": "videos",
+          "columnsFrom": ["video_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "vision_sessions_match_id_matches_id_fk": {
+          "name": "vision_sessions_match_id_matches_id_fk",
+          "tableFrom": "vision_sessions",
+          "tableTo": "matches",
+          "columnsFrom": ["match_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "vision_sessions_video_id_unique": {
+          "name": "vision_sessions_video_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["video_id"]
+        },
+        "vision_sessions_remote_token_hash_unique": {
+          "name": "vision_sessions_remote_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": ["remote_token_hash"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "vision_session_status_valid": {
+          "name": "vision_session_status_valid",
+          "value": "\"vision_sessions\".\"status\" IN ('setup', 'ready', 'recording', 'ended', 'expired')"
+        },
+        "vision_session_control_version_positive": {
+          "name": "vision_session_control_version_positive",
+          "value": "\"vision_sessions\".\"control_version\" > 0"
+        },
+        "vision_session_remote_window_valid": {
+          "name": "vision_session_remote_window_valid",
+          "value": "\"vision_sessions\".\"remote_expires_at\" > \"vision_sessions\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.vision_timeline_events": {
+      "name": "vision_timeline_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "varchar(24)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "winner_side": {
+          "name": "winner_side",
+          "type": "varchar(1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target_event_id": {
+          "name": "target_event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "elapsed_ms": {
+          "name": "elapsed_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "score_state": {
+          "name": "score_state",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "label": {
+          "name": "label",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "vision_timeline_session_elapsed_idx": {
+          "name": "vision_timeline_session_elapsed_idx",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "elapsed_ms",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "vision_timeline_session_occurred_idx": {
+          "name": "vision_timeline_session_occurred_idx",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "vision_timeline_events_session_id_vision_sessions_id_fk": {
+          "name": "vision_timeline_events_session_id_vision_sessions_id_fk",
+          "tableFrom": "vision_timeline_events",
+          "tableTo": "vision_sessions",
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "vision_timeline_source_valid": {
+          "name": "vision_timeline_source_valid",
+          "value": "\"vision_timeline_events\".\"source\" IN ('apple-watch', 'iphone', 'remote', 'match')"
+        },
+        "vision_timeline_type_valid": {
+          "name": "vision_timeline_type_valid",
+          "value": "\"vision_timeline_events\".\"type\" IN ('recording-started', 'rally-won', 'favorite', 'undo', 'side-change', 'recording-stopped', 'calibration-updated')"
+        },
+        "vision_timeline_winner_valid": {
+          "name": "vision_timeline_winner_valid",
+          "value": "\"vision_timeline_events\".\"winner_side\" IS NULL OR \"vision_timeline_events\".\"winner_side\" IN ('A', 'B')"
+        },
+        "vision_timeline_elapsed_valid": {
+          "name": "vision_timeline_elapsed_valid",
+          "value": "\"vision_timeline_events\".\"elapsed_ms\" BETWEEN 0 AND 43200000"
         }
       },
       "isRLSEnabled": false

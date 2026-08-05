@@ -34,7 +34,8 @@
     "verify:operator-workflows": "tsx scripts/verify-operator-workflows.ts",
     "verify:feature-flags": "tsx scripts/verify-feature-flags.ts",
     "verify:mobile-runtime": "tsx scripts/verify-mobile-runtime.ts",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm verify:mobile-runtime && pnpm build && pnpm test:e2e"
+    "verify:readable-type": "tsx scripts/verify-readable-type.ts",
+    "verify": "pnpm format:check && pnpm verify:readable-type && pnpm lint && pnpm typecheck && pnpm test && pnpm verify:mobile-runtime && pnpm build && pnpm test:e2e"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -19,10 +19,10 @@ import {
   ImageBackground,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import { createDunaApiClient, type DunaApiClient } from "./mobile-api";
+import { FellixText as Text } from "./fellix-text";
 
 type PlayerDashboard = Awaited<
   ReturnType<DunaApiClient["player"]["dashboard"]["query"]>
@@ -55,6 +55,7 @@ type OrganizationWallets = Awaited<
 export interface PlayerRuntime {
   readonly mode: "preview" | "live";
   readonly client?: DunaApiClient;
+  readonly publicClient?: DunaApiClient;
   readonly dashboard?: PlayerDashboard;
   readonly wallet?: PlayerWallet;
   readonly settings?: PlayerSettings;
@@ -71,7 +72,9 @@ export interface PlayerRuntime {
 const RuntimeContext = createContext<PlayerRuntime | undefined>(undefined);
 const workosClientId = process.env.EXPO_PUBLIC_WORKOS_CLIENT_ID?.trim();
 const authBaseUrl = (
-  process.env.EXPO_PUBLIC_DUNA_WEB_URL?.trim() || "https://duna-web.vercel.app"
+  process.env.EXPO_PUBLIC_DUNA_AUTH_URL?.trim() ||
+  process.env.EXPO_PUBLIC_DUNA_WEB_URL?.trim() ||
+  "https://duna.coach"
 ).replace(/\/+$/, "");
 const previewEnabled = process.env.EXPO_PUBLIC_DUNA_PREVIEW === "true";
 // Metro requires static module references so both hero assets ship in the native bundle.
@@ -339,6 +342,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       value={{
         mode: "live",
         client,
+        publicClient: client,
         dashboard,
         wallet,
         settings,
@@ -358,12 +362,28 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
 }
 
 function PreviewRuntime({ children }: { readonly children: ReactNode }) {
+  const publicClient = useMemo(() => createDunaApiClient(async () => null), []);
+  const [proCoverage, setProCoverage] = useState<PublicProCoverage>();
+  useEffect(() => {
+    let active = true;
+    void publicClient.public.proCoverage
+      .query()
+      .then((coverage) => {
+        if (active) setProCoverage(coverage);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [publicClient]);
   const value = useMemo<PlayerRuntime>(
     () => ({
       mode: "preview",
+      publicClient,
+      proCoverage,
       refresh: async () => undefined,
     }),
-    [],
+    [proCoverage],
   );
   return (
     <RuntimeContext.Provider value={value}>{children}</RuntimeContext.Provider>

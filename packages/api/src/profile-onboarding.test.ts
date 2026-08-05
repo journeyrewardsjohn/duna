@@ -1,5 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { inferPlayingExperienceNarrative } from "./profile-onboarding";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  inferPlayingExperienceNarrative,
+  synthesizePlayingExperienceNarrative,
+} from "./profile-onboarding";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
 
 describe("inferPlayingExperienceNarrative", () => {
   it("extracts a structured collegiate indoor history without inventing fields", () => {
@@ -50,5 +58,51 @@ describe("inferPlayingExperienceNarrative", () => {
     expect(inferred.yearsPlaying).toBeUndefined();
     expect(inferred.heightMillimeters).toBeUndefined();
     expect(inferred.confidence).toBe("low");
+  });
+
+  it("routes OpenAI profile synthesis through Vercel AI Gateway", async () => {
+    vi.stubEnv("AI_GATEWAY_API_KEY", "gateway-key");
+    vi.stubEnv("VERCEL_OIDC_TOKEN", "");
+    vi.stubEnv("AI_GATEWAY_PROFILE_MODEL", "openai/test-profile-model");
+    const fetchMock = vi.fn(async (...args: Parameters<typeof fetch>) => {
+      void args;
+      return new Response(
+        JSON.stringify({
+          output_text: JSON.stringify({
+            playingExperience: "collegiate",
+            playedIndoorPrior: true,
+            yearsPlaying: 4,
+            heightMillimeters: null,
+            collegeName: "Duke University",
+            summary: "Four years of collegiate indoor experience.",
+            learnedFacts: ["Played indoor at Duke University"],
+            missingFields: ["heightMillimeters"],
+            confidence: "high",
+          }),
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await synthesizePlayingExperienceNarrative(
+      "I played indoor at Duke University for four years.",
+    );
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, request] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe("https://ai-gateway.vercel.sh/v1/responses");
+    expect(request?.headers).toMatchObject({
+      authorization: "Bearer gateway-key",
+    });
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      model: "openai/test-profile-model",
+      store: false,
+    });
+    expect(result).toMatchObject({
+      playingExperience: "collegiate",
+      collegeName: "Duke University",
+      modelUsed: "openai",
+    });
   });
 });

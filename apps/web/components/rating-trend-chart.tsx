@@ -9,6 +9,8 @@ export interface RatingTrendPoint {
   readonly occurredAt: string;
   readonly rating: number;
   readonly before?: number;
+  readonly delta?: number;
+  readonly result?: "win" | "loss" | "unknown";
 }
 
 function formatRating(value: number) {
@@ -31,7 +33,7 @@ export function RatingTrendChart({
   readonly matches?: readonly MatchSummary[];
   readonly points?: readonly RatingTrendPoint[];
 }) {
-  const matchPoints = matches
+  const matchPoints: RatingTrendPoint[] = matches
     .filter(
       (
         match,
@@ -45,6 +47,10 @@ export function RatingTrendChart({
       occurredAt: match.playedAt,
       rating: match.ratingAfter,
       before: match.ratingBefore,
+      delta:
+        typeof match.ratingBefore === "number"
+          ? match.ratingAfter - match.ratingBefore
+          : undefined,
     }));
   const history = (suppliedPoints ?? matchPoints)
     .map((point) => ({
@@ -115,18 +121,39 @@ export function RatingTrendChart({
     (maximumRating + minimumRating) / 2,
     minimumRating,
   ];
+  const startingRating = first.before ?? first.rating;
+  const change = last.rating - startingRating;
+  const high = Math.max(...rawRatings);
+  const low = Math.min(...rawRatings);
+  const largestMovement = Math.max(
+    ...history.map((point) => Math.abs(point.delta ?? 0)),
+    0.01,
+  );
+  const gradientId = `rating-area-${first.id.replace(/[^a-z0-9]/gi, "")}`;
 
   return (
     <div className="rating-trend-chart">
       <div className="rating-trend-chart__summary">
         <span>
-          <strong>{formatRating(first.before ?? first.rating)}</strong>
-          <small>{formatDate(first.occurredAt)}</small>
+          <small>Starting</small>
+          <strong>{formatRating(startingRating)}</strong>
         </span>
-        <span aria-hidden>→</span>
         <span>
+          <small>Current</small>
           <strong>{formatRating(last.rating)}</strong>
-          <small>{formatDate(last.occurredAt)}</small>
+        </span>
+        <span data-direction={change >= 0 ? "up" : "down"}>
+          <small>Net movement</small>
+          <strong>
+            {change >= 0 ? "+" : ""}
+            {formatRating(change)}
+          </strong>
+        </span>
+        <span>
+          <small>Range</small>
+          <strong>
+            {formatRating(low)}–{formatRating(high)}
+          </strong>
         </span>
       </div>
       <svg
@@ -139,7 +166,7 @@ export function RatingTrendChart({
           Sand Rating movement ordered by the date each match was played.
         </desc>
         <defs>
-          <linearGradient id="rating-area" x1="0" x2="0" y1="0" y2="1">
+          <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
             <stop
               offset="0%"
               stopColor="var(--color-aqua)"
@@ -170,7 +197,11 @@ export function RatingTrendChart({
             </g>
           );
         })}
-        <path className="rating-trend-chart__area" d={areaPath} />
+        <path
+          className="rating-trend-chart__area"
+          d={areaPath}
+          style={{ fill: `url(#${gradientId})` }}
+        />
         <path className="rating-trend-chart__line" d={path} />
         {points.map((point) => (
           <g key={point.id}>
@@ -202,7 +233,28 @@ export function RatingTrendChart({
           {formatDate(last.occurredAt)}
         </text>
       </svg>
-      <p>Played dates · {history.length} rated results</p>
+      <div
+        aria-label="Rating movement by match"
+        className="rating-trend-chart__momentum"
+      >
+        {history.map((point) => {
+          const delta = point.delta ?? 0;
+          return (
+            <span
+              data-result={point.result ?? "unknown"}
+              key={`${point.id}-movement`}
+              style={{
+                height: `${Math.max(14, (Math.abs(delta) / largestMovement) * 100)}%`,
+              }}
+              title={`${formatDate(point.occurredAt)}: ${delta >= 0 ? "+" : ""}${formatRating(delta)}`}
+            />
+          );
+        })}
+      </div>
+      <p>
+        {formatDate(first.occurredAt)}–{formatDate(last.occurredAt)} ·{" "}
+        {history.length} rated results
+      </p>
     </div>
   );
 }

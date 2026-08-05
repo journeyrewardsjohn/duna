@@ -1298,7 +1298,7 @@ const styles = StyleSheet.create({
   },
   draftPillText: {
     color: "#fff",
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.7,
   },

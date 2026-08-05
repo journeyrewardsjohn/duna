@@ -37,13 +37,12 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   useWindowDimensions,
   View,
   type ViewStyle,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { SvgUri } from "react-native-svg";
 import {
   startDunaLiveActivity,
   updateDunaLiveActivity,
@@ -62,6 +61,21 @@ import {
   type WatchScoreDraft,
 } from "./watch-scoring";
 import { VideoStudioScreen } from "./video-studio";
+import { HealthScreen } from "./health-screen";
+import { HealthHistorySyncAgent } from "./health-history-sync-agent";
+import {
+  proEventFeaturedMedia,
+  proEventMediaUrl,
+  proEventSections,
+  searchProEvents,
+  sortProEvents,
+  type ProTourSection,
+} from "./pro-tour";
+import {
+  FellixText as Text,
+  FellixTextInput as TextInput,
+  useFellixFonts,
+} from "./fellix-text";
 
 // Metro requires a static module reference so the campaign image ships in the native bundle.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -94,13 +108,19 @@ function registrationParticipantEligibility(
     return { eligible: false, reason: "Guardian verification required" };
   }
   const rating = participant.person.rating.display;
-  if (division?.ratingMinimum !== undefined && rating < division.ratingMinimum) {
+  if (
+    division?.ratingMinimum !== undefined &&
+    rating < division.ratingMinimum
+  ) {
     return {
       eligible: false,
       reason: `Rating must be ${division.ratingMinimum.toFixed(2)}+`,
     };
   }
-  if (division?.ratingMaximum !== undefined && rating > division.ratingMaximum) {
+  if (
+    division?.ratingMaximum !== undefined &&
+    rating > division.ratingMaximum
+  ) {
     return {
       eligible: false,
       reason: `Rating must be ${division.ratingMaximum.toFixed(2)} or below`,
@@ -176,6 +196,13 @@ function registrationParticipantAge(
     ? participant.ageBand.replace("under-13", "Under 13")
     : "Age not set";
 }
+type MobilePlayerIntelligence = Awaited<
+  ReturnType<DunaApiClient["public"]["playerIntelligence"]["query"]>
+>;
+type MobilePlayerPerformance = Awaited<
+  ReturnType<DunaApiClient["public"]["playerPerformance"]["query"]>
+>;
+type MobilePerformanceMatch = MobilePlayerPerformance["history"][number];
 
 const lightColors = {
   canvas: "#f8f7f3",
@@ -193,6 +220,7 @@ const lightColors = {
   warning: "#a86f18",
   danger: "#b84444",
   onAccent: "#ffffff",
+  white: "#ffffff",
   overlayRgb: "23,58,103",
   accentRgb: "35,90,150",
   warningRgb: "168,111,24",
@@ -201,6 +229,9 @@ const lightColors = {
   flareRgb: "222,104,66",
   inkRgb: "16,24,40",
   depthRgb: "255,255,255",
+  navyRgb: "241,236,226",
+  boneRgb: "16,24,40",
+  whiteRgb: "255,255,255",
 } as const;
 
 type Palette = {
@@ -223,6 +254,7 @@ const darkColors: Palette = {
   warning: "#f7c86b",
   danger: "#f27878",
   onAccent: "#070b0d",
+  white: "#ffffff",
   overlayRgb: "255,255,255",
   accentRgb: "99,227,219",
   warningRgb: "247,200,107",
@@ -231,6 +263,9 @@ const darkColors: Palette = {
   flareRgb: "255,106,61",
   inkRgb: "7,11,13",
   depthRgb: "12,20,24",
+  navyRgb: "16,36,43",
+  boneRgb: "243,239,229",
+  whiteRgb: "255,255,255",
 };
 
 type ThemeName = "light" | "dark";
@@ -269,7 +304,7 @@ function ThemeButton() {
   );
 }
 
-type Tab = "home" | "discover" | "play" | "video" | "wallet" | "you";
+type Tab = "home" | "discover" | "play" | "video" | "wallet" | "you" | "health";
 
 type CourtInventory = Awaited<
   ReturnType<DunaApiClient["public"]["courtBookingInventory"]["query"]>
@@ -2445,6 +2480,279 @@ function VenueBookingModal({
   );
 }
 
+type ProCoverageEvent = NonNullable<
+  PlayerRuntime["proCoverage"]
+>["events"][number];
+type ResolvedProEvent = NonNullable<ProEventDetail>;
+type ProMatch = ResolvedProEvent["matches"][number];
+
+const proTourSectionLabels: Record<ProTourSection, string> = {
+  overview: "Overview",
+  live: "Live",
+  schedule: "Schedule",
+  draw: "Draw",
+  teams: "Teams",
+  watch: "Watch",
+};
+
+function formatProEventDay(value?: string | null): string {
+  if (!value) return "Date pending";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T12:00:00Z`));
+}
+
+function formatProEventDates(start?: string | null, end?: string | null) {
+  if (!start && !end) return "Dates to be announced";
+  if (!start || !end || start === end) return formatProEventDay(start ?? end);
+  return `${formatProEventDay(start)} – ${formatProEventDay(end)}`;
+}
+
+function countryFlag(code?: string | null): string {
+  const normalized = code?.trim().toUpperCase();
+  if (!normalized || normalized.length !== 2) return "";
+  return String.fromCodePoint(
+    ...[...normalized].map((letter) => 127397 + letter.charCodeAt(0)),
+  );
+}
+
+function ProTourBrandMark({
+  source,
+  compact = false,
+}: {
+  readonly source: "fivb" | "avp";
+  readonly compact?: boolean;
+}) {
+  const [logoFailed, setLogoFailed] = useState(false);
+  useEffect(() => setLogoFailed(false), [source]);
+  const label = source === "avp" ? "AVP" : "BEACH PRO TOUR";
+  const asset = source === "avp" ? "avp.svg" : "beach-pro-tour.svg";
+  return (
+    <View
+      accessibilityLabel={
+        source === "avp" ? "AVP" : "Volleyball World Beach Pro Tour"
+      }
+      style={[
+        styles.proMobileBrandMark,
+        compact && styles.proMobileBrandMarkCompact,
+      ]}
+    >
+      {logoFailed ? (
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.proMobileBrandFallback,
+            source === "avp" && styles.proMobileBrandFallbackAvp,
+          ]}
+        >
+          {label}
+        </Text>
+      ) : (
+        <SvgUri
+          height={compact ? 26 : 36}
+          onError={() => setLogoFailed(true)}
+          uri={`${dunaWebUrl}/media/tours/${asset}`}
+          width={compact ? 58 : 84}
+        />
+      )}
+    </View>
+  );
+}
+
+function ProTourEventCard({
+  event,
+  onPress,
+}: {
+  readonly event: ProCoverageEvent;
+  readonly onPress: () => void;
+}) {
+  const live = event.live;
+  return (
+    <Pressable
+      accessibilityLabel={`Open ${event.name}${live ? ", live now" : ""}`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.proMobileEventCard,
+        live && styles.proMobileEventCardLive,
+        pressed && styles.proMobilePressed,
+      ]}
+    >
+      <ProTourBrandMark compact source={event.source} />
+      <View style={styles.proMobileEventCardBody}>
+        <View style={styles.proMobileEventKickerRow}>
+          <Text
+            style={[
+              styles.proMobileEventStatus,
+              live && styles.proMobileEventStatusLive,
+            ]}
+          >
+            {live ? "● LIVE NOW" : event.status.toUpperCase()}
+          </Text>
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.proMobileEventDivision,
+              live && styles.proMobileEventDivisionLive,
+            ]}
+          >
+            {event.genderCategory}
+          </Text>
+        </View>
+        <Text
+          numberOfLines={2}
+          style={[
+            styles.proMobileEventName,
+            live && styles.proMobileEventNameLive,
+          ]}
+        >
+          {event.name}
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.proMobileEventMeta,
+            live && styles.proMobileEventMetaLive,
+          ]}
+        >
+          {formatProEventDates(event.startsOn, event.endsOn)} ·{" "}
+          {event.location ?? "Location pending"}
+        </Text>
+      </View>
+      <Text
+        aria-hidden
+        style={[
+          styles.proMobileEventArrow,
+          live && styles.proMobileEventArrowLive,
+        ]}
+      >
+        ›
+      </Text>
+    </Pressable>
+  );
+}
+
+function ProTourMatchCard({
+  match,
+  followed,
+  onFollow,
+}: {
+  readonly match: ProMatch;
+  readonly followed: boolean;
+  readonly onFollow?: () => void;
+}) {
+  const live = match.status === "live";
+  const time =
+    match.time ??
+    (match.playedAt
+      ? new Intl.DateTimeFormat("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(new Date(match.playedAt))
+      : "Time pending");
+  const scores = (side: "a" | "b") =>
+    match.sets.map((set) => set[side]).join("  ") || "—";
+  return (
+    <View
+      style={[styles.proMobileMatchCard, live && styles.proMobileMatchCardLive]}
+    >
+      <View style={styles.proMobileMatchHeader}>
+        <Text
+          style={[
+            styles.proMobileMatchStatus,
+            live && styles.proMobileMatchStatusLive,
+          ]}
+        >
+          {live
+            ? "● LIVE"
+            : match.status === "completed"
+              ? "FINAL"
+              : "UPCOMING"}
+        </Text>
+        <Text numberOfLines={1} style={styles.proMobileMatchMeta}>
+          {match.roundLabel} · {time}
+          {match.court ? ` · ${match.court}` : ""}
+        </Text>
+      </View>
+      <View style={styles.proMobileMatchTeamRow}>
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.proMobileMatchTeam,
+            match.winnerSide === "A" && styles.proMobileMatchWinner,
+          ]}
+        >
+          {match.teamA.label}
+        </Text>
+        <Text style={styles.proMobileMatchScore}>{scores("a")}</Text>
+      </View>
+      <View style={styles.proMobileMatchTeamRow}>
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.proMobileMatchTeam,
+            match.winnerSide === "B" && styles.proMobileMatchWinner,
+          ]}
+        >
+          {match.teamB.label}
+        </Text>
+        <Text style={styles.proMobileMatchScore}>{scores("b")}</Text>
+      </View>
+      <View style={styles.proMobileMatchFooter}>
+        <Text style={styles.proMobileMatchPrediction}>
+          {match.prediction.basis === "SandRating"
+            ? `${match.prediction.teamA.toFixed(0)}% · ${match.prediction.teamB.toFixed(0)}% Sand Rating`
+            : "Even matchup"}
+        </Text>
+        {onFollow && (
+          <Pressable
+            accessibilityLabel={
+              followed ? "Following match on Lock Screen" : "Follow match"
+            }
+            onPress={onFollow}
+            style={[
+              styles.proMobileFollowButton,
+              followed && styles.proMobileFollowButtonActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.proMobileFollowButtonText,
+                followed && styles.proMobileFollowButtonTextActive,
+              ]}
+            >
+              {followed ? "Following" : live ? "Follow live" : "Follow"}
+            </Text>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function ProTourSectionTitle({
+  eyebrow,
+  title,
+  trailing,
+}: {
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly trailing?: string;
+}) {
+  return (
+    <View style={styles.proMobileSectionTitleRow}>
+      <View style={styles.proMobileSectionTitleCopy}>
+        <Text style={styles.proMobileSectionEyebrow}>{eyebrow}</Text>
+        <Text style={styles.proMobileSectionTitle}>{title}</Text>
+      </View>
+      {trailing && <Text style={styles.proMobileSectionCount}>{trailing}</Text>}
+    </View>
+  );
+}
+
 function ProTourModal({
   visible,
   onClose,
@@ -2452,31 +2760,61 @@ function ProTourModal({
   readonly visible: boolean;
   readonly onClose: () => void;
 }) {
-  const { client, proCoverage } = usePlayerRuntime();
+  const { width } = useWindowDimensions();
+  const { client, publicClient, proCoverage } = usePlayerRuntime();
+  const coverageClient = publicClient ?? client;
   const [selectedSlug, setSelectedSlug] = useState<string>();
   const [event, setEvent] = useState<ProEventDetail>();
+  const [activeSection, setActiveSection] =
+    useState<ProTourSection>("overview");
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
+  const [reloadKey, setReloadKey] = useState(0);
+  const [posterFailed, setPosterFailed] = useState(false);
   const [followedMatchId, setFollowedMatchId] = useState<string>();
   const [followNotice, setFollowNotice] = useState<string>();
   const events = proCoverage?.events ?? [];
+  const orderedEvents = useMemo(() => sortProEvents(events), [events]);
+  const filteredEvents = useMemo(
+    () => searchProEvents(orderedEvents, search),
+    [orderedEvents, search],
+  );
+  const liveEvents = orderedEvents.filter((candidate) => candidate.live);
+  const otherEvents = orderedEvents.filter((candidate) => !candidate.live);
 
   useEffect(() => {
-    if (!visible || selectedSlug || events.length === 0) return;
-    setSelectedSlug(
-      events.find((candidate) => candidate.live)?.slug ?? events[0]?.slug,
-    );
-  }, [events, selectedSlug, visible]);
+    if (!visible) {
+      setSelectedSlug(undefined);
+      setEvent(undefined);
+      setActiveSection("overview");
+      setSearch("");
+      setError(undefined);
+      setFollowNotice(undefined);
+    }
+  }, [visible]);
 
   useEffect(() => {
-    if (!visible || !selectedSlug || !client) return;
+    if (!visible || !selectedSlug) return;
+    if (!coverageClient) {
+      setLoading(false);
+      setError("Live event data is unavailable. Please try again in a moment.");
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(undefined);
-    void client.public.proEvent
+    setPosterFailed(false);
+    void coverageClient.public.proEvent
       .query({ slug: selectedSlug })
       .then((nextEvent) => {
-        if (!cancelled) setEvent(nextEvent);
+        if (cancelled) return;
+        if (!nextEvent) {
+          setError("This event is not available yet.");
+          return;
+        }
+        setEvent(nextEvent);
+        setActiveSection("overview");
       })
       .catch((reason) => {
         if (!cancelled) setError(displayError(reason));
@@ -2487,7 +2825,7 @@ function ProTourModal({
     return () => {
       cancelled = true;
     };
-  }, [client, selectedSlug, visible]);
+  }, [coverageClient, reloadKey, selectedSlug, visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -2522,7 +2860,30 @@ function ProTourModal({
     }).catch(() => undefined);
   }, [event, followedMatchId]);
 
-  const followMatch = async (match: ProEventDetail["matches"][number]) => {
+  const openEvent = (slug: string) => {
+    selectionHaptic();
+    setEvent(undefined);
+    setError(undefined);
+    setFollowNotice(undefined);
+    setSelectedSlug(slug);
+  };
+
+  const backToEvents = () => {
+    selectionHaptic();
+    setSelectedSlug(undefined);
+    setEvent(undefined);
+    setError(undefined);
+    setActiveSection("overview");
+  };
+
+  const handleClose = () => {
+    setSelectedSlug(undefined);
+    setEvent(undefined);
+    setSearch("");
+    onClose();
+  };
+
+  const followMatch = async (match: ProMatch) => {
     const latestSet = match.sets.at(-1);
     await startDunaLiveActivity(
       {
@@ -2558,253 +2919,765 @@ function ProTourModal({
     successHaptic();
   };
 
+  const followAction = (match: ProMatch) =>
+    Platform.OS === "ios" && match.status !== "completed"
+      ? () => {
+          selectionHaptic();
+          void followMatch(match).catch((reason) =>
+            setFollowNotice(displayError(reason)),
+          );
+        }
+      : undefined;
+
   if (!visible) return null;
+
+  const selectedSummary = selectedSlug
+    ? events.find((candidate) => candidate.slug === selectedSlug)
+    : undefined;
+  const sections = event ? proEventSections(event) : (["overview"] as const);
+  const featuredMedia = event ? proEventFeaturedMedia(event) : undefined;
+  const posterUrl = event ? proEventMediaUrl(event) : undefined;
+  const posterIsPortrait = featuredMedia?.kind === "poster";
+  const heroHeight = posterIsPortrait
+    ? Math.min(390, Math.max(300, width * 0.96))
+    : Math.min(310, Math.max(250, width * 0.72));
+  const liveMatches =
+    event?.matches.filter((match) => match.status === "live") ?? [];
+  const completedMatches =
+    event?.matches.filter((match) => match.status === "completed").length ?? 0;
+  const venueAddress = event
+    ? (event.editorial.venue?.formattedAddress ??
+      event.editorial.venueAddress ??
+      [
+        event.editorial.venue?.addressLine1,
+        event.editorial.venue?.locality,
+        event.editorial.venue?.administrativeArea,
+        event.editorial.venue?.postalCode,
+      ]
+        .filter(Boolean)
+        .join(", "))
+    : undefined;
+  const watchOptions = event
+    ? [
+        ...event.watchOptions,
+        ...event.matches.flatMap((match) => match.watchOptions),
+      ].filter(
+        (option, index, options) =>
+          options.findIndex((candidate) => candidate.id === option.id) ===
+          index,
+      )
+    : [];
+
+  const renderEmpty = (title: string, body: string) => (
+    <View style={styles.proMobileEmptyCard}>
+      <Text style={styles.proMobileEmptyIcon}>◌</Text>
+      <Text style={styles.proMobileEmptyTitle}>{title}</Text>
+      <Text style={styles.proMobileEmptyBody}>{body}</Text>
+    </View>
+  );
+
+  const renderOverview = () => {
+    if (!event) return null;
+    return (
+      <>
+        <View style={styles.proMobileStatGrid}>
+          <View style={styles.proMobileStatCard}>
+            <Text style={styles.proMobileStatValue}>{event.teamCount}</Text>
+            <Text style={styles.proMobileStatLabel}>Teams</Text>
+          </View>
+          <View style={styles.proMobileStatCard}>
+            <Text style={styles.proMobileStatValue}>
+              {completedMatches}/{event.matchCount}
+            </Text>
+            <Text style={styles.proMobileStatLabel}>Matches</Text>
+          </View>
+          <View style={styles.proMobileStatCard}>
+            <Text style={styles.proMobileStatValue}>
+              {event.bracket.length || event.pools.length || "—"}
+            </Text>
+            <Text style={styles.proMobileStatLabel}>
+              {event.bracket.length ? "Rounds" : "Pools"}
+            </Text>
+          </View>
+        </View>
+
+        {event.editorial.summary && (
+          <View style={styles.proMobileInfoCard}>
+            <Text style={styles.proMobileInfoEyebrow}>EVENT OVERVIEW</Text>
+            <Text style={styles.proMobileSummary}>
+              {event.editorial.summary}
+            </Text>
+          </View>
+        )}
+
+        {liveMatches.length > 0 && (
+          <>
+            <ProTourSectionTitle
+              eyebrow="UPDATING LIVE"
+              title="On court now"
+              trailing={`${liveMatches.length}`}
+            />
+            <View style={styles.proMobileCardStack}>
+              {liveMatches.slice(0, 3).map((match) => (
+                <ProTourMatchCard
+                  followed={followedMatchId === match.id}
+                  key={match.id}
+                  match={match}
+                  onFollow={followAction(match)}
+                />
+              ))}
+            </View>
+          </>
+        )}
+
+        {(event.editorial.venueName || event.location || venueAddress) && (
+          <View style={styles.proMobileInfoCard}>
+            <Text style={styles.proMobileInfoEyebrow}>EVENT LOCATION</Text>
+            <Text style={styles.proMobileInfoTitle}>
+              {event.editorial.venueName ?? event.location}
+            </Text>
+            {venueAddress && (
+              <Text style={styles.proMobileInfoBody}>{venueAddress}</Text>
+            )}
+            {event.editorial.timezone && (
+              <Text style={styles.proMobileInfoFootnote}>
+                Schedule shown in {event.editorial.timezone}
+              </Text>
+            )}
+          </View>
+        )}
+
+        <View style={styles.proMobileActionRow}>
+          {event.editorial.ticketUrl && (
+            <Pressable
+              onPress={() =>
+                void WebBrowser.openBrowserAsync(event.editorial.ticketUrl!)
+              }
+              style={styles.proMobilePrimaryAction}
+            >
+              <Text style={styles.proMobilePrimaryActionText}>Tickets ↗</Text>
+            </Pressable>
+          )}
+          <Pressable
+            onPress={() => void WebBrowser.openBrowserAsync(event.sourceUrl)}
+            style={styles.proMobileSecondaryAction}
+          >
+            <Text style={styles.proMobileSecondaryActionText}>
+              Official source ↗
+            </Text>
+          </Pressable>
+        </View>
+
+        {event.sibling && (
+          <Pressable
+            onPress={() => openEvent(event.sibling!.slug)}
+            style={styles.proMobileSiblingCard}
+          >
+            <View>
+              <Text style={styles.proMobileInfoEyebrow}>OTHER DIVISION</Text>
+              <Text style={styles.proMobileSiblingTitle}>
+                {event.sibling.name}
+              </Text>
+            </View>
+            <Text style={styles.proMobileSiblingArrow}>›</Text>
+          </Pressable>
+        )}
+      </>
+    );
+  };
+
+  const renderLive = () => {
+    if (!event) return null;
+    return (
+      <>
+        <ProTourSectionTitle
+          eyebrow="LIVE TOURNAMENT DESK"
+          title="On court now"
+          trailing={`${liveMatches.length} live`}
+        />
+        {liveMatches.length > 0 ? (
+          <View style={styles.proMobileCardStack}>
+            {liveMatches.map((match) => (
+              <ProTourMatchCard
+                followed={followedMatchId === match.id}
+                key={match.id}
+                match={match}
+                onFollow={followAction(match)}
+              />
+            ))}
+          </View>
+        ) : (
+          renderEmpty(
+            "No match is live right now",
+            "The tournament desk will surface live scores here as soon as play begins.",
+          )
+        )}
+      </>
+    );
+  };
+
+  const renderSchedule = () => {
+    if (!event) return null;
+    return (
+      <>
+        <ProTourSectionTitle
+          eyebrow="SCORES + SCHEDULE"
+          title="Every match"
+          trailing={`${event.matches.length}`}
+        />
+        {event.matches.length > 0 ? (
+          <View style={styles.proMobileCardStack}>
+            {event.matches.slice(0, 60).map((match) => (
+              <ProTourMatchCard
+                followed={followedMatchId === match.id}
+                key={match.id}
+                match={match}
+                onFollow={followAction(match)}
+              />
+            ))}
+            {event.matches.length > 60 && (
+              <Text style={styles.proMobileListNote}>
+                Showing the latest 60 of {event.matches.length} matches.
+              </Text>
+            )}
+          </View>
+        ) : (
+          renderEmpty(
+            "Schedule coming soon",
+            "Matches will appear here when the official event feed publishes them.",
+          )
+        )}
+      </>
+    );
+  };
+
+  const renderDraw = () => {
+    if (!event) return null;
+    return (
+      <>
+        {event.bracket.length > 0 && (
+          <>
+            <ProTourSectionTitle
+              eyebrow="CHAMPIONSHIP DRAW"
+              title="Bracket"
+              trailing={`${event.bracket.length} rounds`}
+            />
+            <View style={styles.proMobileDrawStack}>
+              {event.bracket.map((round) => (
+                <View key={round.key} style={styles.proMobileDrawRound}>
+                  <Text style={styles.proMobileDrawRoundTitle}>
+                    {round.label}
+                  </Text>
+                  <View style={styles.proMobileCardStack}>
+                    {round.matches.map((match) => (
+                      <ProTourMatchCard
+                        followed={followedMatchId === match.id}
+                        key={match.id}
+                        match={match}
+                        onFollow={followAction(match)}
+                      />
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+        {event.pools.length > 0 && (
+          <>
+            <ProTourSectionTitle
+              eyebrow="POOL PLAY"
+              title="Standings"
+              trailing={`${event.pools.length} pools`}
+            />
+            <View style={styles.proMobileCardStack}>
+              {event.pools.map((pool) => (
+                <View key={pool.name} style={styles.proMobilePoolCard}>
+                  <View style={styles.proMobilePoolHeader}>
+                    <Text style={styles.proMobilePoolTitle}>{pool.name}</Text>
+                    <Text style={styles.proMobilePoolProgress}>
+                      {pool.completedMatches}/{pool.matchCount} played
+                    </Text>
+                  </View>
+                  {pool.standings.map((standing, index) => (
+                    <View
+                      key={standing.team.key}
+                      style={styles.proMobileStandingRow}
+                    >
+                      <Text style={styles.proMobileStandingRank}>
+                        {index + 1}
+                      </Text>
+                      <Text
+                        numberOfLines={1}
+                        style={styles.proMobileStandingTeam}
+                      >
+                        {standing.team.label}
+                      </Text>
+                      <Text style={styles.proMobileStandingRecord}>
+                        {standing.wins}–{standing.losses}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+        {event.bracket.length === 0 &&
+          event.pools.length === 0 &&
+          renderEmpty(
+            "Draw coming soon",
+            "Pool standings and bracket rounds will appear as the official feed reports them.",
+          )}
+      </>
+    );
+  };
+
+  const renderTeams = () => {
+    if (!event) return null;
+    return (
+      <>
+        <ProTourSectionTitle
+          eyebrow="FIELD + STANDINGS"
+          title="Teams"
+          trailing={`${event.teamCount || event.teamEntries.length}`}
+        />
+        {event.liveStandings.length > 0 && (
+          <View style={styles.proMobileStandingsCard}>
+            {event.liveStandings.slice(0, 24).map((standing, index) => (
+              <View key={standing.team.key} style={styles.proMobileStandingRow}>
+                <Text style={styles.proMobileStandingRank}>{index + 1}</Text>
+                <Text numberOfLines={1} style={styles.proMobileStandingTeam}>
+                  {standing.team.label}
+                </Text>
+                <Text style={styles.proMobileStandingRecord}>
+                  {standing.wins}–{standing.losses}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+        {event.teamEntries.length > 0 && (
+          <View style={styles.proMobileTeamGrid}>
+            {event.teamEntries.slice(0, 64).map((team) => (
+              <View key={team.externalTeamId} style={styles.proMobileTeamCard}>
+                <View style={styles.proMobileTeamCardTop}>
+                  <Text style={styles.proMobileTeamSeed}>
+                    {team.seed ? `#${team.seed}` : "TEAM"}
+                  </Text>
+                  <Text style={styles.proMobileTeamCountry}>
+                    {countryFlag(team.countryCode)}
+                  </Text>
+                </View>
+                <Text numberOfLines={2} style={styles.proMobileTeamName}>
+                  {team.label}
+                </Text>
+                <Text numberOfLines={2} style={styles.proMobileTeamPlayers}>
+                  {team.players.map((player) => player.name).join(" / ")}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+        {event.liveStandings.length === 0 &&
+          event.teamEntries.length === 0 &&
+          renderEmpty(
+            "Teams coming soon",
+            "The entry list will appear here when it is confirmed by the tour.",
+          )}
+      </>
+    );
+  };
+
+  const renderWatch = () => {
+    if (!event) return null;
+    return (
+      <>
+        <ProTourSectionTitle
+          eyebrow="BROADCAST GUIDE"
+          title="Where to watch"
+          trailing={`${watchOptions.length}`}
+        />
+        {watchOptions.length > 0 ? (
+          <View style={styles.proMobileCardStack}>
+            {watchOptions.map((option) => (
+              <Pressable
+                disabled={!option.url}
+                key={option.id}
+                onPress={() =>
+                  option.url
+                    ? void WebBrowser.openBrowserAsync(option.url)
+                    : undefined
+                }
+                style={({ pressed }) => [
+                  styles.proMobileWatchCard,
+                  pressed && styles.proMobilePressed,
+                ]}
+              >
+                <View style={styles.proMobileWatchIcon}>
+                  <Text style={styles.proMobileWatchIconText}>
+                    {option.kind === "youtube" ? "▶" : "◉"}
+                  </Text>
+                </View>
+                <View style={styles.proMobileWatchCopy}>
+                  <Text style={styles.proMobileWatchTitle}>{option.label}</Text>
+                  <Text style={styles.proMobileWatchMeta}>
+                    {option.channelName ??
+                      (option.url ? "Open stream" : "Broadcast confirmed")}
+                  </Text>
+                </View>
+                {option.url && (
+                  <Text style={styles.proMobileWatchArrow}>↗</Text>
+                )}
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          renderEmpty(
+            "Broadcast details pending",
+            "Verified streaming and television options will appear here when announced.",
+          )
+        )}
+      </>
+    );
+  };
+
+  const renderActiveSection = () => {
+    switch (activeSection) {
+      case "live":
+        return renderLive();
+      case "schedule":
+        return renderSchedule();
+      case "draw":
+        return renderDraw();
+      case "teams":
+        return renderTeams();
+      case "watch":
+        return renderWatch();
+      default:
+        return renderOverview();
+    }
+  };
+
   return (
     <Modal
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
       presentationStyle="pageSheet"
       visible={visible}
     >
       <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
-        <View style={styles.proTourHeader}>
-          <View>
-            <Text style={styles.eyebrow}>FIVB + BEACH PRO TOUR</Text>
-            <Text style={styles.proTourTitle}>Pro Tour</Text>
-          </View>
-          <Pressable
-            accessibilityLabel="Close Pro Tour"
-            onPress={onClose}
-            style={styles.proTourClose}
-          >
-            <Text style={styles.closeText}>×</Text>
-          </Pressable>
-        </View>
-        <ScrollView
-          contentContainerStyle={styles.proTourContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.horizontalBleed}
-          >
-            <View style={styles.proEventPicker}>
-              {events.map((candidate) => (
-                <Pressable
-                  key={candidate.id}
-                  onPress={() => {
-                    selectionHaptic();
-                    setEvent(undefined);
-                    setSelectedSlug(candidate.slug);
-                  }}
-                  style={[
-                    styles.proEventPickerCard,
-                    candidate.slug === selectedSlug &&
-                      styles.proEventPickerCardActive,
-                  ]}
+        {selectedSlug ? (
+          <>
+            <View style={styles.proMobileDetailHeader}>
+              <Pressable
+                accessibilityLabel="Back to Pro Tour events"
+                onPress={backToEvents}
+                style={styles.proMobileHeaderButton}
+              >
+                <Text style={styles.proMobileHeaderButtonText}>‹</Text>
+              </Pressable>
+              <View style={styles.proMobileDetailHeaderCopy}>
+                <Text style={styles.proMobileDetailHeaderEyebrow}>
+                  {event?.live || selectedSummary?.live
+                    ? "● LIVE EVENT"
+                    : "PRO EVENT"}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={styles.proMobileDetailHeaderTitle}
                 >
-                  <Text
+                  {event?.name ?? selectedSummary?.name ?? "Event"}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Close Pro Tour"
+                onPress={handleClose}
+                style={styles.proMobileHeaderButton}
+              >
+                <Text style={styles.proMobileHeaderCloseText}>×</Text>
+              </Pressable>
+            </View>
+
+            {event && (
+              <ScrollView
+                contentContainerStyle={styles.proMobileSectionNavContent}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.proMobileSectionNav}
+              >
+                {sections.map((section) => (
+                  <Pressable
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: activeSection === section }}
+                    key={section}
+                    onPress={() => {
+                      selectionHaptic();
+                      setActiveSection(section);
+                    }}
                     style={[
-                      styles.proEventPickerStatus,
-                      candidate.live && styles.proLiveText,
+                      styles.proMobileSectionTab,
+                      activeSection === section &&
+                        styles.proMobileSectionTabActive,
                     ]}
                   >
-                    {candidate.live ? "● LIVE" : candidate.status.toUpperCase()}
-                  </Text>
-                  <Text numberOfLines={2} style={styles.proEventPickerName}>
-                    {candidate.name}
-                  </Text>
-                  <Text style={styles.rowMeta}>
-                    {candidate.location ?? "Location pending"} ·{" "}
-                    {candidate.genderCategory}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
-          {loading && !event && (
-            <Text style={styles.bookingEmpty}>
-              Loading live tournament desk…
-            </Text>
-          )}
-          {error && <Text style={styles.formError}>{error}</Text>}
-          {event && (
-            <>
-              <View style={styles.proEventHero}>
-                <View style={styles.eventBadges}>
-                  <Pill tone={event.live ? "live" : "neutral"}>
-                    {event.live ? "Live now" : event.status}
-                  </Pill>
-                  <Pill>{event.category ?? "FIVB"}</Pill>
+                    <Text
+                      style={[
+                        styles.proMobileSectionTabText,
+                        activeSection === section &&
+                          styles.proMobileSectionTabTextActive,
+                      ]}
+                    >
+                      {proTourSectionLabels[section]}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+
+            {loading && !event ? (
+              <View style={styles.proMobileLoadingState}>
+                <View style={styles.proMobileLoadingMark}>
+                  <Text style={styles.proMobileLoadingMarkText}>D</Text>
                 </View>
-                <Text style={styles.proEventHeroTitle}>{event.name}</Text>
-                <Text style={styles.proEventHeroMeta}>
-                  {event.location ?? "Location pending"} · {event.teamCount}{" "}
-                  teams · {event.matches.length}/{event.matchCount} matches
+                <Text style={styles.proMobileLoadingTitle}>
+                  Opening the tournament desk
                 </Text>
-                <Text style={styles.proEventUpdated}>
-                  Updated{" "}
-                  {new Date(event.lastSyncedAt).toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
+                <Text style={styles.proMobileLoadingBody}>
+                  Bringing in live scores, teams, and event media…
                 </Text>
+              </View>
+            ) : error && !event ? (
+              <View style={styles.proMobileLoadingState}>
+                <Text style={styles.proMobileEmptyIcon}>!</Text>
+                <Text style={styles.proMobileLoadingTitle}>
+                  Event could not load
+                </Text>
+                <Text style={styles.proMobileLoadingBody}>{error}</Text>
+                <Pressable
+                  onPress={() => setReloadKey((value) => value + 1)}
+                  style={styles.proMobileRetryButton}
+                >
+                  <Text style={styles.proMobileRetryButtonText}>Try again</Text>
+                </Pressable>
+              </View>
+            ) : event ? (
+              <ScrollView
+                contentContainerStyle={styles.proMobileDetailContent}
+                key={activeSection}
+                showsVerticalScrollIndicator={false}
+              >
+                {activeSection === "overview" && (
+                  <View style={[styles.proMobileHero, { height: heroHeight }]}>
+                    {posterUrl && !posterFailed ? (
+                      <Image
+                        accessibilityLabel={featuredMedia?.alt ?? event.name}
+                        onError={() => setPosterFailed(true)}
+                        resizeMode={posterIsPortrait ? "contain" : "cover"}
+                        source={{ uri: posterUrl }}
+                        style={styles.proMobileHeroImage}
+                      />
+                    ) : (
+                      <View style={styles.proMobileHeroFallback}>
+                        <View style={styles.proMobileCourtOutline} />
+                        <View style={styles.proMobileCourtNet} />
+                      </View>
+                    )}
+                    <View style={styles.proMobileHeroScrim} />
+                    <View style={styles.proMobileHeroTop}>
+                      <View style={styles.proMobileHeroBadges}>
+                        <View
+                          style={[
+                            styles.proMobileHeroBadge,
+                            event.live && styles.proMobileHeroBadgeLive,
+                          ]}
+                        >
+                          <Text style={styles.proMobileHeroBadgeText}>
+                            {event.live
+                              ? "● LIVE NOW"
+                              : event.status.toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={styles.proMobileHeroBadge}>
+                          <Text style={styles.proMobileHeroBadgeText}>
+                            {event.genderCategory.toUpperCase()}
+                          </Text>
+                        </View>
+                      </View>
+                      <ProTourBrandMark compact source={event.source} />
+                    </View>
+                    <View style={styles.proMobileHeroCopy}>
+                      <Text style={styles.proMobileHeroCategory}>
+                        {event.category ?? "Professional beach volleyball"}
+                      </Text>
+                      <Text style={styles.proMobileHeroTitle}>
+                        {event.name}
+                      </Text>
+                      <Text style={styles.proMobileHeroMeta}>
+                        {countryFlag(event.countryCode)}{" "}
+                        {formatProEventDates(event.startsOn, event.endsOn)} ·{" "}
+                        {event.editorial.venueName ??
+                          event.location ??
+                          "Location pending"}
+                      </Text>
+                    </View>
+                  </View>
+                )}
                 {followNotice && (
-                  <Text style={styles.liveActivityNotice}>{followNotice}</Text>
+                  <View style={styles.proMobileNotice}>
+                    <Text style={styles.proMobileNoticeText}>
+                      {followNotice}
+                    </Text>
+                  </View>
+                )}
+                {error && event && (
+                  <Text style={styles.formError}>{error}</Text>
+                )}
+                {renderActiveSection()}
+              </ScrollView>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <View style={styles.proMobileHubHeader}>
+              <View>
+                <Text style={styles.proMobileHubEyebrow}>
+                  PROFESSIONAL BEACH VOLLEYBALL
+                </Text>
+                <Text style={styles.proMobileHubTitle}>Pro Tour</Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Close Pro Tour"
+                onPress={handleClose}
+                style={styles.proMobileHeaderButton}
+              >
+                <Text style={styles.proMobileHeaderCloseText}>×</Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              contentContainerStyle={styles.proMobileHubContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.proMobileIntro}>
+                <View style={styles.proMobileIntroCopy}>
+                  <Text style={styles.proMobileIntroKicker}>
+                    {liveEvents.length > 0
+                      ? `● ${liveEvents.length} LIVE NOW`
+                      : "WORLD TOUR COVERAGE"}
+                  </Text>
+                  <Text style={styles.proMobileIntroTitle}>
+                    The world’s game, live in Duna.
+                  </Text>
+                  <Text style={styles.proMobileIntroBody}>
+                    Scores, draws, teams, schedules, and broadcasts in one
+                    mobile tournament desk.
+                  </Text>
+                </View>
+                <View style={styles.proMobileIntroBrands}>
+                  <ProTourBrandMark source="fivb" />
+                  <ProTourBrandMark source="avp" />
+                </View>
+              </View>
+
+              <View style={styles.proMobileSearchBar}>
+                <Text aria-hidden style={styles.proMobileSearchIcon}>
+                  ⌕
+                </Text>
+                <TextInput
+                  accessibilityLabel="Search Pro Tour events"
+                  autoCapitalize="none"
+                  onChangeText={setSearch}
+                  placeholder="Search events, cities, or tours"
+                  placeholderTextColor={colors.muted}
+                  returnKeyType="search"
+                  style={styles.proMobileSearchInput}
+                  value={search}
+                />
+                {search.length > 0 && (
+                  <Pressable
+                    accessibilityLabel="Clear event search"
+                    onPress={() => setSearch("")}
+                    style={styles.proMobileSearchClear}
+                  >
+                    <Text style={styles.proMobileSearchClearText}>×</Text>
+                  </Pressable>
                 )}
               </View>
 
-              <SectionHeader
-                eyebrow={`${event.bracket.length} ROUNDS`}
-                title="Championship bracket."
-              />
-              {event.bracket.length > 0 ? (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.horizontalBleed}
-                >
-                  <View style={styles.proBracket}>
-                    {event.bracket.map((round) => (
-                      <View key={round.key} style={styles.proBracketRound}>
-                        <Text style={styles.proBracketRoundTitle}>
-                          {round.label.toUpperCase()}
-                        </Text>
-                        <View style={styles.proBracketRoundMatches}>
-                          {round.matches.map((match) => (
-                            <View key={match.id} style={styles.proBracketMatch}>
-                              <View style={styles.proBracketTeam}>
-                                <Text
-                                  numberOfLines={1}
-                                  style={[
-                                    styles.proBracketTeamName,
-                                    match.winnerSide === "A" &&
-                                      styles.proBracketWinner,
-                                  ]}
-                                >
-                                  {match.teamA.label}
-                                </Text>
-                                <Text style={styles.proBracketScore}>
-                                  {match.sets.map((set) => set.a).join(" · ") ||
-                                    "—"}
-                                </Text>
-                              </View>
-                              <View style={styles.proBracketTeam}>
-                                <Text
-                                  numberOfLines={1}
-                                  style={[
-                                    styles.proBracketTeamName,
-                                    match.winnerSide === "B" &&
-                                      styles.proBracketWinner,
-                                  ]}
-                                >
-                                  {match.teamB.label}
-                                </Text>
-                                <Text style={styles.proBracketScore}>
-                                  {match.sets.map((set) => set.b).join(" · ") ||
-                                    "—"}
-                                </Text>
-                              </View>
-                              <Text style={styles.proBracketPrediction}>
-                                {match.status === "live"
-                                  ? "● LIVE"
-                                  : `${match.prediction.teamA.toFixed(0)}% · ${
-                                      match.prediction.basis
-                                    }`}
-                              </Text>
-                              {Platform.OS === "ios" &&
-                                match.status !== "completed" && (
-                                  <Pressable
-                                    onPress={() => {
-                                      selectionHaptic();
-                                      void followMatch(match).catch((reason) =>
-                                        setFollowNotice(displayError(reason)),
-                                      );
-                                    }}
-                                    style={[
-                                      styles.proFollowButton,
-                                      followedMatchId === match.id &&
-                                        styles.proFollowButtonActive,
-                                    ]}
-                                  >
-                                    <Text
-                                      style={[
-                                        styles.proFollowButtonText,
-                                        followedMatchId === match.id &&
-                                          styles.proFollowButtonTextActive,
-                                      ]}
-                                    >
-                                      {followedMatchId === match.id
-                                        ? "Following on Lock Screen"
-                                        : match.status === "live"
-                                          ? "Follow live"
-                                          : "Notify + follow"}
-                                    </Text>
-                                  </Pressable>
-                                )}
-                            </View>
-                          ))}
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                </ScrollView>
-              ) : (
-                <View style={styles.bookingEmptyCard}>
-                  <Text style={styles.rowTitle}>
-                    Bracket seeds are still taking shape.
-                  </Text>
-                  <Text style={styles.bodyText}>
-                    Pool standings and completed matches update here as the
-                    official feed reports them.
-                  </Text>
-                </View>
-              )}
-
-              {event.pools.length > 0 && (
+              {search.trim() ? (
                 <>
-                  <SectionHeader
-                    eyebrow={`${event.pools.length} POOLS`}
-                    title="Pool standings."
+                  <ProTourSectionTitle
+                    eyebrow="SEARCH RESULTS"
+                    title="Events"
+                    trailing={`${filteredEvents.length}`}
                   />
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.horizontalBleed}
-                  >
-                    <View style={styles.proPoolRow}>
-                      {event.pools.map((pool) => (
-                        <View key={pool.name} style={styles.proPoolCard}>
-                          <Text style={styles.proPoolTitle}>{pool.name}</Text>
-                          {pool.standings.slice(0, 5).map((standing, index) => (
-                            <View
-                              key={standing.team.key}
-                              style={styles.proPoolStanding}
-                            >
-                              <Text style={styles.proPoolPlace}>
-                                {index + 1}
-                              </Text>
-                              <Text
-                                numberOfLines={1}
-                                style={styles.proPoolTeam}
-                              >
-                                {standing.team.label}
-                              </Text>
-                              <Text style={styles.proPoolRecord}>
-                                {standing.wins}–{standing.losses}
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
+                  {filteredEvents.length > 0 ? (
+                    <View style={styles.proMobileCardStack}>
+                      {filteredEvents.map((candidate) => (
+                        <ProTourEventCard
+                          event={candidate}
+                          key={candidate.id}
+                          onPress={() => openEvent(candidate.slug)}
+                        />
                       ))}
                     </View>
-                  </ScrollView>
+                  ) : (
+                    renderEmpty(
+                      "No matching events",
+                      "Try a city, event name, category, or tour.",
+                    )
+                  )}
+                </>
+              ) : (
+                <>
+                  {liveEvents.length > 0 && (
+                    <>
+                      <ProTourSectionTitle
+                        eyebrow="UPDATING FREQUENTLY"
+                        title="Live now"
+                        trailing={`${liveEvents.length}`}
+                      />
+                      <View style={styles.proMobileCardStack}>
+                        {liveEvents.slice(0, 6).map((candidate) => (
+                          <ProTourEventCard
+                            event={candidate}
+                            key={candidate.id}
+                            onPress={() => openEvent(candidate.slug)}
+                          />
+                        ))}
+                      </View>
+                    </>
+                  )}
+
+                  <ProTourSectionTitle
+                    eyebrow={liveEvents.length > 0 ? "EXPLORE MORE" : "NEXT UP"}
+                    title={
+                      liveEvents.length > 0 ? "Other events" : "Tour calendar"
+                    }
+                    trailing={`${otherEvents.length}`}
+                  />
+                  {otherEvents.length > 0 ? (
+                    <View style={styles.proMobileCardStack}>
+                      {otherEvents.slice(0, 20).map((candidate) => (
+                        <ProTourEventCard
+                          event={candidate}
+                          key={candidate.id}
+                          onPress={() => openEvent(candidate.slug)}
+                        />
+                      ))}
+                    </View>
+                  ) : events.length === 0 ? (
+                    renderEmpty(
+                      "Tour calendar is syncing",
+                      "Live and upcoming professional events will appear here shortly.",
+                    )
+                  ) : null}
                 </>
               )}
-            </>
-          )}
-        </ScrollView>
+            </ScrollView>
+          </>
+        )}
       </SafeAreaView>
     </Modal>
   );
@@ -3521,204 +4394,637 @@ function WalletScreen() {
   );
 }
 
-function ProfileScreen() {
-  const { dashboard, mode, settings, signOut } = usePlayerRuntime();
+function matchSides(match: MobilePerformanceMatch, personId: string) {
+  const ownSide = match.participants.find(
+    (participant) => participant.personId === personId,
+  )?.side;
+  const names = (side: "A" | "B") =>
+    match.participants
+      .filter((participant) => participant.side === side)
+      .map((participant) => participant.name)
+      .join(" / ");
+  return {
+    own: ownSide ? names(ownSide) : "Duna player",
+    opponent: ownSide ? names(ownSide === "A" ? "B" : "A") : match.matchTitle,
+  };
+}
+
+function MobileResultCard({
+  match,
+  personId,
+}: {
+  readonly match: MobilePerformanceMatch;
+  readonly personId: string;
+}) {
+  const result = match.actualResult >= 0.5 ? "W" : "L";
+  const sides = matchSides(match, personId);
+  const expected = Math.round(match.expectedWinProbability * 100);
+  return (
+    <Pressable
+      onPress={() =>
+        void WebBrowser.openBrowserAsync(
+          `${dunaWebUrl}/app/matches/${match.matchId}`,
+        )
+      }
+      style={styles.athleteResultCard}
+    >
+      <View
+        style={[
+          styles.athleteResultMark,
+          result === "W"
+            ? styles.athleteResultMarkWin
+            : styles.athleteResultMarkLoss,
+        ]}
+      >
+        <Text style={styles.athleteResultMarkText}>{result}</Text>
+      </View>
+      <View style={styles.flex}>
+        <Text numberOfLines={1} style={styles.athleteResultOpponent}>
+          vs. {sides.opponent || "opponent pending"}
+        </Text>
+        <Text numberOfLines={1} style={styles.athleteResultMeta}>
+          {new Intl.DateTimeFormat("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }).format(new Date(match.occurredAt))}
+          {match.sets.length
+            ? ` · ${match.sets.map((set) => `${set.a}–${set.b}`).join(", ")}`
+            : ""}
+        </Text>
+      </View>
+      <View style={styles.athleteResultDelta}>
+        <Text
+          style={[
+            styles.athleteResultDeltaValue,
+            match.delta >= 0 ? styles.positiveText : styles.negativeText,
+          ]}
+        >
+          {match.delta >= 0 ? "+" : ""}
+          {match.delta.toFixed(2)}
+        </Text>
+        <Text style={styles.athleteResultExpected}>{expected}% expected</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function ProfileScreen({ onHealth }: { readonly onHealth: () => void }) {
+  const { client, dashboard, mode, settings, signOut } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
-  const matches = dashboard?.recentMatches ?? demoMatches;
-  const profileMetrics = dashboard?.metrics.slice(0, 4) ?? [
-    { label: "Current band", value: "A" },
-    { label: "Home market", value: player.homeMarket },
-    { label: "Matches", value: String(matches.length) },
-    { label: "Confidence", value: player.rating.confidence },
+  const fallbackMatches = dashboard?.recentMatches ?? demoMatches;
+  const [intelligence, setIntelligence] = useState<MobilePlayerIntelligence>();
+  const [performance, setPerformance] = useState<MobilePlayerPerformance>();
+
+  useEffect(() => {
+    if (!client || mode === "preview") return;
+    let active = true;
+    void Promise.all([
+      client.public.playerIntelligence
+        .query({ handle: player.handle })
+        .catch(() => undefined),
+      client.public.playerPerformance
+        .query({ handle: player.handle })
+        .catch(() => undefined),
+    ]).then(([nextIntelligence, nextPerformance]) => {
+      if (!active) return;
+      setIntelligence(nextIntelligence);
+      setPerformance(nextPerformance);
+    });
+    return () => {
+      active = false;
+    };
+  }, [client, mode, player.handle]);
+
+  const profile = intelligence?.profile;
+  const history = performance?.history ?? [];
+  const chronological = [...history].reverse();
+  const recentForm = history.slice(0, 10);
+  const wins = history.filter((match) => match.actualResult >= 0.5).length;
+  const losses = Math.max(0, history.length - wins);
+  const winRate = history.length
+    ? Math.round((wins / history.length) * 100)
+    : 0;
+  const lastTenWins = recentForm.filter(
+    (match) => match.actualResult >= 0.5,
+  ).length;
+  const startRating = chronological[0]?.beforeDisplay;
+  const currentRating =
+    chronological.at(-1)?.afterDisplay ?? player.rating.display;
+  const netMovement =
+    startRating === undefined
+      ? (player.rating.delta ?? 0)
+      : currentRating - startRating;
+  const biggestUpset = history
+    .filter((match) => match.actualResult >= 0.5)
+    .sort(
+      (left, right) =>
+        left.expectedWinProbability - right.expectedWinProbability,
+    )[0];
+  const toughestLoss = history
+    .filter((match) => match.actualResult < 0.5)
+    .sort(
+      (left, right) =>
+        right.expectedWinProbability - left.expectedWinProbability,
+    )[0];
+  const chartMatches = chronological.slice(-18);
+  const ratingValues = chartMatches.flatMap((match) => [
+    match.beforeDisplay,
+    match.afterDisplay,
+  ]);
+  const minimumRating = ratingValues.length
+    ? Math.min(...ratingValues)
+    : currentRating - 0.12;
+  const maximumRating = ratingValues.length
+    ? Math.max(...ratingValues)
+    : currentRating + 0.12;
+  const worldRank = performance?.worldRanking;
+  const worldMovement = worldRank?.previousRank
+    ? worldRank.previousRank - worldRank.rank
+    : undefined;
+  const fallbackProfileMetrics = [
+    {
+      label: "Record",
+      value: history.length ? `${wins}–${losses}` : `${fallbackMatches.length}`,
+    },
+    { label: "Win rate", value: history.length ? `${winRate}%` : "Pending" },
+    {
+      label: "Last 10",
+      value: recentForm.length
+        ? `${lastTenWins}–${recentForm.length - lastTenWins}`
+        : "Pending",
+    },
+    {
+      label: "World rank",
+      value: worldRank ? `#${worldRank.rank}` : "—",
+    },
   ];
+  const heroSource = profile?.heroImageUrl
+    ? { uri: profile.heroImageUrl }
+    : dunaCampaignRally;
+
   return (
     <ScrollView
       contentContainerStyle={styles.screenContent}
       showsVerticalScrollIndicator={false}
     >
-      <AppHeader eyebrow="YOUR PUBLIC PLAYER IDENTITY" />
-      <View style={styles.profileHero}>
-        <View style={styles.profileIdentity}>
-          <View style={styles.profileAvatar}>
-            <Text style={styles.profileAvatarText}>{player.initials}</Text>
-          </View>
-          <View>
-            <Pill tone={settings?.membership ? "positive" : "neutral"}>
-              {settings?.membership?.tierName ?? "Player"}
+      <AppHeader eyebrow="YOUR PLAYER STORY" />
+      <ImageBackground
+        imageStyle={styles.athleteHeroImage}
+        source={heroSource}
+        style={styles.athleteHero}
+      >
+        <View style={styles.athleteHeroWash} />
+        <View style={styles.athleteHeroGeometry} />
+        <View style={styles.athleteHeroContent}>
+          <View style={styles.athleteHeroPills}>
+            <Pill
+              tone={player.roles.includes("player") ? "positive" : "neutral"}
+            >
+              {player.roles.includes("player") ? "Player" : "Member"}
             </Pill>
             {settings?.dunaPlus.kind === "complimentary" && (
               <Pill tone="positive">Complimentary Premium+</Pill>
             )}
-            <Text style={styles.profileName}>{player.displayName}</Text>
-            <Text style={styles.profileHandle}>
-              @{player.handle} · {player.homeMarket}
+            {worldRank && (
+              <Pill tone="warning">{`World #${worldRank.rank}`}</Pill>
+            )}
+          </View>
+          <Text style={styles.athleteHeroName}>{player.displayName}</Text>
+          <Text style={styles.athleteHeroMeta}>
+            {profile?.countryCode ? `${profile.countryCode} · ` : ""}
+            {profile?.playingRole ? `${profile.playingRole} · ` : ""}@
+            {player.handle}
+          </Text>
+          <View style={styles.athleteHeroActions}>
+            <Pressable
+              onPress={() =>
+                void WebBrowser.openBrowserAsync(
+                  `${dunaWebUrl}/players/${player.handle}`,
+                )
+              }
+              style={styles.athleteHeroPrimaryAction}
+            >
+              <Text style={styles.athleteHeroPrimaryActionText}>
+                View public page
+              </Text>
+            </Pressable>
+            <Pressable
+              disabled={mode === "preview"}
+              onPress={() =>
+                void WebBrowser.openBrowserAsync(
+                  `${dunaWebUrl}/app/settings#player-artwork`,
+                )
+              }
+              style={styles.athleteHeroSecondaryAction}
+            >
+              <Text style={styles.athleteHeroSecondaryActionText}>
+                Create artwork
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+        {profile?.cutoutImageUrl && (
+          <Image
+            accessibilityLabel={profile.imageAlt ?? player.displayName}
+            resizeMode="contain"
+            source={{ uri: profile.cutoutImageUrl }}
+            style={styles.athleteHeroCutout}
+          />
+        )}
+        <View style={styles.athleteHeroRating}>
+          <Text style={styles.athleteHeroRatingLabel}>SAND RATING</Text>
+          <Text style={styles.athleteHeroRatingValue}>
+            {currentRating.toFixed(2)}
+          </Text>
+          <Text style={styles.athleteHeroRatingMeta}>
+            {player.rating.confidence}
+          </Text>
+        </View>
+      </ImageBackground>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.horizontalBleed}
+      >
+        <View style={styles.athleteMetricRow}>
+          {fallbackProfileMetrics.map((metric, index) => (
+            <View
+              key={metric.label}
+              style={[
+                styles.athleteMetricCard,
+                index === 0 && styles.athleteMetricCardAccent,
+              ]}
+            >
+              <Text style={styles.athleteMetricLabel}>{metric.label}</Text>
+              <Text style={styles.athleteMetricValue}>{metric.value}</Text>
+              {metric.label === "World rank" && worldMovement !== undefined ? (
+                <Text
+                  style={[
+                    styles.athleteMetricChange,
+                    worldMovement >= 0
+                      ? styles.positiveText
+                      : styles.negativeText,
+                  ]}
+                >
+                  {worldMovement >= 0 ? "↑" : "↓"} {Math.abs(worldMovement)}{" "}
+                  places
+                </Text>
+              ) : (
+                <Text style={styles.athleteMetricChange}>
+                  {metric.label === "Record"
+                    ? `${history.length} rated matches`
+                    : metric.label === "Last 10"
+                      ? "Current form"
+                      : metric.label === "Win rate"
+                        ? "Verified results"
+                        : "Official signal"}
+                </Text>
+              )}
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+
+      <View style={styles.athleteNarrativeCard}>
+        <View style={styles.athleteNarrativeHeading}>
+          <View style={styles.athleteNarrativeMark}>
+            <Text style={styles.athleteNarrativeMarkText}>✦</Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.eyebrow}>DUNA FORM REPORT</Text>
+            <Text style={styles.athleteNarrativeTitle}>
+              The story in the results.
             </Text>
           </View>
         </View>
-        <RatingOrbit compact />
+        <Text style={styles.athleteNarrativeBody}>
+          {profile?.shortBio ??
+            (history.length
+              ? `${player.displayName} is ${wins}–${losses} across ${history.length} verified matches, with a ${currentRating.toFixed(2)} Sand Rating and ${lastTenWins} wins in the last ${recentForm.length}.`
+              : `${player.displayName}'s verified performance story will sharpen as connected results arrive.`)}
+        </Text>
+        {profile?.sourceLabel && (
+          <Text style={styles.athleteNarrativeSource}>
+            {profile.sourceLabel} · {profile.evidenceCount} evidence sources
+          </Text>
+        )}
       </View>
+
+      <View style={styles.athleteChartCard}>
+        <View style={styles.cardTitleRow}>
+          <View>
+            <Text style={styles.eyebrow}>RATING HISTORY</Text>
+            <Text style={styles.athleteChartTitle}>Form over time.</Text>
+          </View>
+          <Pill tone={netMovement >= 0 ? "positive" : "warning"}>
+            {`${netMovement >= 0 ? "+" : ""}${netMovement.toFixed(2)}`}
+          </Pill>
+        </View>
+        <View style={styles.athleteChartSummary}>
+          <View>
+            <Text style={styles.athleteChartSummaryValue}>
+              {startRating?.toFixed(2) ?? "—"}
+            </Text>
+            <Text style={styles.athleteChartSummaryLabel}>First connected</Text>
+          </View>
+          <Text style={styles.athleteChartArrow}>→</Text>
+          <View>
+            <Text style={styles.athleteChartSummaryValue}>
+              {currentRating.toFixed(2)}
+            </Text>
+            <Text style={styles.athleteChartSummaryLabel}>Current</Text>
+          </View>
+          <View style={styles.athleteChartRange}>
+            <Text style={styles.athleteChartSummaryValue}>
+              {(maximumRating - minimumRating).toFixed(2)}
+            </Text>
+            <Text style={styles.athleteChartSummaryLabel}>Range</Text>
+          </View>
+        </View>
+        {chartMatches.length ? (
+          <View style={styles.athleteWaveChart}>
+            {chartMatches.map((match) => {
+              const range = Math.max(0.01, maximumRating - minimumRating);
+              const height =
+                28 + ((match.afterDisplay - minimumRating) / range) * 88;
+              return (
+                <View key={match.id} style={styles.athleteWaveColumn}>
+                  <View
+                    style={[
+                      styles.athleteWaveBar,
+                      {
+                        height,
+                        backgroundColor:
+                          match.actualResult >= 0.5
+                            ? colors.aqua
+                            : rgba(colors.dangerRgb, 0.65),
+                      },
+                    ]}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <View style={styles.athleteChartEmpty}>
+            <Text style={styles.athleteChartEmptyMark}>↗</Text>
+            <Text style={styles.athleteChartEmptyText}>
+              Connect verified match sources to unlock the rating waveform.
+            </Text>
+          </View>
+        )}
+        <View style={styles.athleteChartLegend}>
+          <Text>● Win</Text>
+          <Text style={styles.athleteChartLegendLoss}>● Loss</Text>
+          <Text>{chartMatches.length} recent rated results</Text>
+        </View>
+      </View>
+
+      {(biggestUpset || toughestLoss) && (
+        <>
+          <SectionHeader
+            eyebrow="MATCH INTELLIGENCE"
+            title="Results that moved the story."
+          />
+          <View style={styles.athleteMomentGrid}>
+            {biggestUpset && (
+              <View style={styles.athleteMomentCard}>
+                <Text style={styles.athleteMomentEyebrow}>BIGGEST UPSET</Text>
+                <Text style={styles.athleteMomentValue}>
+                  {Math.round(biggestUpset.expectedWinProbability * 100)}%
+                </Text>
+                <Text numberOfLines={2} style={styles.athleteMomentTitle}>
+                  vs. {matchSides(biggestUpset, player.id).opponent}
+                </Text>
+                <Text style={styles.athleteMomentMeta}>
+                  Won from the lower pre-match probability
+                </Text>
+              </View>
+            )}
+            {toughestLoss && (
+              <View
+                style={[
+                  styles.athleteMomentCard,
+                  styles.athleteMomentCardMuted,
+                ]}
+              >
+                <Text style={styles.athleteMomentEyebrow}>TOUGHEST LOSS</Text>
+                <Text style={styles.athleteMomentValue}>
+                  {Math.round(toughestLoss.expectedWinProbability * 100)}%
+                </Text>
+                <Text numberOfLines={2} style={styles.athleteMomentTitle}>
+                  vs. {matchSides(toughestLoss, player.id).opponent}
+                </Text>
+                <Text style={styles.athleteMomentMeta}>
+                  Favored before the opening serve
+                </Text>
+              </View>
+            )}
+          </View>
+        </>
+      )}
+
+      {intelligence?.upcomingEvents.length ? (
+        <>
+          <SectionHeader eyebrow="NEXT ON TOUR" title="Where to watch." />
+          <View style={styles.athleteUpcomingList}>
+            {intelligence.upcomingEvents.map((event) => (
+              <Pressable
+                key={event.id}
+                onPress={() =>
+                  void WebBrowser.openBrowserAsync(
+                    `${dunaWebUrl}/events/${event.slug}`,
+                  )
+                }
+                style={styles.athleteUpcomingCard}
+              >
+                <View style={styles.athleteUpcomingDate}>
+                  <Text style={styles.athleteUpcomingMonth}>
+                    {event.startsOn
+                      ? new Intl.DateTimeFormat("en-US", { month: "short" })
+                          .format(new Date(`${event.startsOn}T12:00:00`))
+                          .toUpperCase()
+                      : "TBD"}
+                  </Text>
+                  <Text style={styles.athleteUpcomingDay}>
+                    {event.startsOn
+                      ? new Intl.DateTimeFormat("en-US", {
+                          day: "numeric",
+                        }).format(new Date(`${event.startsOn}T12:00:00`))
+                      : "—"}
+                  </Text>
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.athleteUpcomingName}>{event.name}</Text>
+                  <Text style={styles.athleteUpcomingMeta}>
+                    {[event.location, event.countryCode]
+                      .filter(Boolean)
+                      .join(", ") || "Location pending"}
+                  </Text>
+                  <Text style={styles.athleteUpcomingWatch}>
+                    {event.watchOptions.length
+                      ? `Watch on ${event.watchOptions.map((option) => option.label).join(" + ")}`
+                      : "Broadcast details coming soon"}
+                  </Text>
+                </View>
+                <Text style={styles.chevron}>›</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : null}
+
+      {history.length ? (
+        <>
+          <SectionHeader
+            eyebrow="FULL BREAKDOWN"
+            title="Recent rated matches."
+          />
+          <View style={styles.athleteResultsList}>
+            {history.slice(0, 8).map((match) => (
+              <MobileResultCard
+                key={match.id}
+                match={match}
+                personId={player.id}
+              />
+            ))}
+          </View>
+          <Pressable
+            onPress={() =>
+              void WebBrowser.openBrowserAsync(
+                `${dunaWebUrl}/players/${player.handle}#matches`,
+              )
+            }
+            style={styles.athleteFullHistoryButton}
+          >
+            <Text style={styles.athleteFullHistoryButtonText}>
+              Open full match history
+            </Text>
+            <Text style={styles.athleteFullHistoryButtonText}>↗</Text>
+          </Pressable>
+        </>
+      ) : null}
+
+      {(profile?.biography || profile?.collegeName || profile?.hometown) && (
+        <View style={styles.athleteBioCard}>
+          <Text style={styles.eyebrow}>PLAYER BIO</Text>
+          <Text style={styles.athleteBioTitle}>Beyond the rating.</Text>
+          {profile.biography && (
+            <Text style={styles.athleteBioBody}>{profile.biography}</Text>
+          )}
+          <View style={styles.athleteBioFacts}>
+            {profile.hometown && (
+              <View>
+                <Text style={styles.athleteBioFactLabel}>Hometown</Text>
+                <Text style={styles.athleteBioFactValue}>
+                  {profile.hometown}
+                </Text>
+              </View>
+            )}
+            {profile.collegeName && (
+              <View>
+                <Text style={styles.athleteBioFactLabel}>College</Text>
+                <Text style={styles.athleteBioFactValue}>
+                  {profile.collegeName}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+
       <View style={styles.profileSetupCard}>
         <View style={styles.profileSetupTop}>
           <View style={styles.profileSetupMark}>
             <Text style={styles.profileSetupMarkText}>✦</Text>
           </View>
           <View style={styles.flex}>
-            <Text style={styles.eyebrow}>PRIVATE PLAYER SETUP</Text>
+            <Text style={styles.eyebrow}>YOUR PROFILE STUDIO</Text>
             <Text style={styles.cardTitle}>
               {settings?.profile.onboardingStatus === "complete"
-                ? "Your playing profile is ready."
+                ? "Keep your story and artwork current."
                 : "Tell Duna how you play."}
             </Text>
           </View>
-          <Pill
-            tone={
-              settings?.profile.onboardingStatus === "complete"
-                ? "positive"
-                : "warning"
-            }
-          >
-            {settings?.profile.onboardingStatus.replaceAll("-", " ") ??
-              "not started"}
-          </Pill>
         </View>
         <Text style={styles.bodyText}>
-          Use guided voice or the editable form for legal identity, playing
-          experience, height, and VolleyballLife or BVBInfo history.
+          Add playing details, connect match sources, and submit one action
+          photo plus two or three portraits for your reviewable Duna artwork
+          package.
         </Text>
         <View style={styles.profileSetupStatus}>
           <Text style={styles.rowMeta}>
-            Stripe Identity:{" "}
-            {settings?.identityVerification.status.replaceAll("-", " ") ??
+            Profile:{" "}
+            {settings?.profile.onboardingStatus.replaceAll("-", " ") ??
               "not started"}
           </Text>
           <Text style={styles.rowMeta}>
-            Match sources: {settings?.sourceConnections.length ?? 0}
+            Sources: {settings?.sourceConnections.length ?? 0}
           </Text>
         </View>
-        <Pressable
-          disabled={mode === "preview"}
-          onPress={() =>
-            void WebBrowser.openBrowserAsync(
-              settings?.profile.onboardingStatus === "complete"
-                ? `${dunaWebUrl}/app/settings#playing-profile`
-                : `${dunaWebUrl}/app/onboarding`,
-            )
-          }
-          style={styles.primaryButton}
-        >
-          <Text style={styles.primaryButtonText}>
-            {settings?.profile.onboardingStatus === "complete"
-              ? "Review player details"
-              : "Start guided setup"}
-          </Text>
-        </Pressable>
-      </View>
-      <View style={styles.metricStrip}>
-        {profileMetrics.map((metric) => (
-          <View key={metric.label}>
-            <Text style={styles.metricNumber}>{metric.value}</Text>
-            <Text style={styles.metricLabel}>{metric.label}</Text>
-          </View>
-        ))}
-      </View>
-      <View style={styles.progressCard}>
-        <View style={styles.cardTitleRow}>
-          <View>
-            <Text style={styles.eyebrow}>LAST 12 MONTHS</Text>
-            <Text style={styles.cardTitle}>Rating progression</Text>
-          </View>
-          <Pill tone="positive">
-            {player.rating.delta
-              ? `${player.rating.delta > 0 ? "+" : ""}${player.rating.delta.toFixed(2)}`
-              : player.rating.confidence}
-          </Pill>
-        </View>
-        {mode === "preview" ? (
-          <>
-            <View style={styles.mobileChart}>
-              <View
-                style={[styles.chartPoint, { left: "3%", bottom: "18%" }]}
-              />
-              <View
-                style={[styles.chartPoint, { left: "26%", bottom: "31%" }]}
-              />
-              <View
-                style={[styles.chartPoint, { left: "49%", bottom: "45%" }]}
-              />
-              <View
-                style={[styles.chartPoint, { left: "72%", bottom: "61%" }]}
-              />
-              <View
-                style={[styles.chartPoint, { left: "94%", bottom: "79%" }]}
-              />
-              <View style={styles.chartLine} />
-            </View>
-            <View style={styles.chartLabels}>
-              <Text>Aug</Text>
-              <Text>Nov</Text>
-              <Text>Feb</Text>
-              <Text>May</Text>
-              <Text>Jul</Text>
-            </View>
-          </>
-        ) : (
-          <Text style={styles.bodyText}>
-            Duna will chart your verified rating history here as connected match
-            results accumulate.
-          </Text>
-        )}
-      </View>
-      {mode === "preview" && (
-        <>
-          <View style={styles.chemistryCard}>
-            <Text style={styles.eyebrow}>PARTNER CHEMISTRY</Text>
-            <Text style={styles.sectionTitle}>You make each other better.</Text>
-            <View style={styles.chemistryPartner}>
-              <View style={styles.miniAvatar}>
-                <Text style={styles.miniAvatarText}>TP</Text>
-              </View>
-              <View style={styles.flex}>
-                <Text style={styles.rowTitle}>Theo Park</Text>
-                <Text style={styles.rowMeta}>
-                  27 shared matches · 68% win rate
-                </Text>
-              </View>
-              <Text style={[styles.statValue, { color: colors.positive }]}>
-                +0.14
-              </Text>
-            </View>
-          </View>
-          <SectionHeader eyebrow="EARNED ON SAND" title="Moments." />
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.horizontalBleed}
+        <View style={styles.athleteStudioActions}>
+          <Pressable
+            disabled={mode === "preview"}
+            onPress={() =>
+              void WebBrowser.openBrowserAsync(
+                settings?.profile.onboardingStatus === "complete"
+                  ? `${dunaWebUrl}/app/settings#playing-profile`
+                  : `${dunaWebUrl}/app/onboarding`,
+              )
+            }
+            style={[styles.primaryButton, styles.flex]}
           >
-            <View style={styles.achievementRow}>
-              {[
-                ["◇", "Summer Open winner", "Jul 2026"],
-                ["✦", "Reliable → Locked", "Rating milestone"],
-                ["◎", "Pickup regular", "25 runs"],
-              ].map((item) => (
-                <View style={styles.achievementCard} key={item[1]}>
-                  <Text style={styles.achievementIcon}>{item[0]}</Text>
-                  <Text style={styles.rowTitle}>{item[1]}</Text>
-                  <Text style={styles.rowMeta}>{item[2]}</Text>
-                </View>
-              ))}
-            </View>
-          </ScrollView>
-        </>
-      )}
+            <Text style={styles.primaryButtonText}>Edit player details</Text>
+          </Pressable>
+          <Pressable
+            disabled={mode === "preview"}
+            onPress={() =>
+              void WebBrowser.openBrowserAsync(
+                `${dunaWebUrl}/app/settings#player-artwork`,
+              )
+            }
+            style={styles.athleteStudioSecondary}
+          >
+            <Text style={styles.athleteStudioSecondaryText}>Artwork</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <Pressable
+        accessibilityHint="Opens your private Apple Health performance timeline"
+        accessibilityLabel="Open Duna Health"
+        onPress={() => {
+          selectionHaptic();
+          onHealth();
+        }}
+        style={styles.healthProfileCard}
+      >
+        <View style={styles.healthProfileTop}>
+          <View style={styles.healthProfileMark}>
+            <Text style={styles.healthProfileMarkText}>♥</Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.eyebrow}>PRIVATE PERFORMANCE CONTEXT</Text>
+            <Text style={styles.healthProfileTitle}>Health</Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </View>
+        <Text style={styles.bodyText}>
+          Compare private recovery context with your matches and Duna Vision
+          without exposing health data on your public profile.
+        </Text>
+      </Pressable>
+
       <View style={styles.profileMenu}>
         {[
           ["Player details + identity", "#playing-profile"],
-          ["Household + guardians", "#household"],
-          ["Family wallets", "#family-wallets"],
+          ["Player artwork", "#player-artwork"],
           ["Notifications", "#notifications"],
           ["Privacy + safety", "#privacy"],
           ["Language + units", "#profile"],
-          ["Manage Premium", "#membership"],
+          ["Manage Duna+", "#membership"],
           ["Delete my account", "#privacy"],
         ].map(([item, anchor]) => (
           <Pressable
@@ -3731,14 +5037,7 @@ function ProfileScreen() {
             }
             style={styles.profileMenuRow}
           >
-            <Text
-              style={[
-                styles.rowTitle,
-                item === "Delete my account" && { color: colors.danger },
-              ]}
-            >
-              {item}
-            </Text>
+            <Text style={styles.rowTitle}>{item}</Text>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
         ))}
@@ -5259,12 +6558,13 @@ function TabBar({
   readonly active: Tab;
   readonly onChange: (tab: Tab) => void;
 }) {
+  const selectedTab = active === "health" ? "you" : active;
   return (
     <View style={styles.tabBar}>
       {tabs.map((tab) => (
         <Pressable
           accessibilityRole="tab"
-          accessibilityState={{ selected: active === tab.key }}
+          accessibilityState={{ selected: selectedTab === tab.key }}
           key={tab.key}
           onPress={() => {
             selectionHaptic();
@@ -5273,16 +6573,22 @@ function TabBar({
           style={styles.tabItem}
         >
           <Text
-            style={[styles.tabIcon, active === tab.key && styles.tabActive]}
+            style={[
+              styles.tabIcon,
+              selectedTab === tab.key && styles.tabActive,
+            ]}
           >
             {tab.icon}
           </Text>
           <Text
-            style={[styles.tabLabel, active === tab.key && styles.tabActive]}
+            style={[
+              styles.tabLabel,
+              selectedTab === tab.key && styles.tabActive,
+            ]}
           >
             {tab.label}
           </Text>
-          {active === tab.key && <View style={styles.tabIndicator} />}
+          {selectedTab === tab.key && <View style={styles.tabIndicator} />}
         </Pressable>
       ))}
     </View>
@@ -5415,6 +6721,7 @@ function DunaApp() {
         },
       }}
     >
+      <HealthHistorySyncAgent paused={tab === "health"} runtime={runtime} />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <StatusBar style={theme === "dark" ? "light" : "dark"} />
         <View style={styles.app}>
@@ -5440,7 +6747,12 @@ function DunaApp() {
             {tab === "play" && <PlayScreen />}
             {tab === "video" && <VideoStudioScreen runtime={runtime} />}
             {tab === "wallet" && <WalletScreen />}
-            {tab === "you" && <ProfileScreen />}
+            {tab === "you" && (
+              <ProfileScreen onHealth={() => setTab("health")} />
+            )}
+            {tab === "health" && (
+              <HealthScreen onBack={() => setTab("you")} theme={theme} />
+            )}
           </Animated.View>
           <TabBar active={tab} onChange={setTab} />
           <BookingModal
@@ -5455,6 +6767,11 @@ function DunaApp() {
 }
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFellixFonts();
+
+  if (fontError) throw fontError;
+  if (!fontsLoaded) return null;
+
   return (
     <SafeAreaProvider>
       <PlayerRuntimeProvider>
@@ -5517,7 +6834,7 @@ function createStyles(palette: Palette) {
     },
     bookingVenueEyebrow: {
       color: colors.aqua,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "800",
       letterSpacing: 0.7,
     },
@@ -5531,7 +6848,7 @@ function createStyles(palette: Palette) {
     },
     bookingVenueAction: {
       color: colors.bone,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "800",
     },
     bookingVenueName: {
@@ -5550,7 +6867,7 @@ function createStyles(palette: Palette) {
     },
     bookingDateToolbarLabel: {
       color: colors.aqua,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -5598,7 +6915,7 @@ function createStyles(palette: Palette) {
     },
     bookingDateCalendarText: {
       color: colors.bone,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "800",
     },
     bookingDateRow: {
@@ -5625,7 +6942,7 @@ function createStyles(palette: Palette) {
     bookingDateUnavailable: { opacity: 0.32 },
     bookingDateDay: {
       color: colors.muted,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "800",
     },
     bookingDateNumber: {
@@ -5637,7 +6954,7 @@ function createStyles(palette: Palette) {
     },
     bookingDateMonth: {
       color: colors.muted,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "800",
       marginTop: 1,
     },
@@ -5668,7 +6985,7 @@ function createStyles(palette: Palette) {
     },
     bookingCalendarEyebrow: {
       color: colors.sand,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -5753,7 +7070,7 @@ function createStyles(palette: Palette) {
     bookingCalendarWeekday: {
       color: colors.muted,
       flex: 1,
-      fontSize: 6,
+      fontSize: 10,
       fontWeight: "900",
       paddingBottom: 7,
       textAlign: "center",
@@ -5787,7 +7104,7 @@ function createStyles(palette: Palette) {
     bookingCalendarDayDisabled: { opacity: 0.28 },
     bookingCalendarDayText: {
       color: colors.bone,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "900",
     },
     bookingCalendarDayTextSelected: { color: "#ffffff" },
@@ -5818,7 +7135,7 @@ function createStyles(palette: Palette) {
     },
     bookingCalendarLegendText: {
       color: colors.muted,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "700",
     },
     bookingDurationRow: {
@@ -5860,7 +7177,7 @@ function createStyles(palette: Palette) {
     bookingWeatherIcon: { fontSize: 24 },
     bookingWeatherUpdated: {
       color: colors.muted,
-      fontSize: 6,
+      fontSize: 10,
       textAlign: "right",
     },
     bookingSlotGrid: {
@@ -5884,17 +7201,17 @@ function createStyles(palette: Palette) {
     },
     bookingSlotCourt: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       marginTop: 5,
     },
     bookingSlotWeather: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       marginTop: 4,
     },
     bookingSlotPrice: {
       color: colors.aqua,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "800",
       marginTop: 5,
     },
@@ -5913,7 +7230,7 @@ function createStyles(palette: Palette) {
     },
     bookingDaylightNote: {
       color: colors.muted,
-      fontSize: 8,
+      fontSize: 10,
       lineHeight: 13,
       marginTop: 10,
     },
@@ -5974,7 +7291,7 @@ function createStyles(palette: Palette) {
     },
     bookingPartnerName: {
       color: colors.bone,
-      fontSize: 7,
+      fontSize: 10,
       textAlign: "center",
       width: 58,
     },
@@ -6014,14 +7331,14 @@ function createStyles(palette: Palette) {
       borderRadius: 12,
       borderWidth: 1,
       color: colors.positive,
-      fontSize: 9,
+      fontSize: 10,
       lineHeight: 14,
       marginTop: 12,
       padding: 11,
     },
     formSectionLabel: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "800",
       letterSpacing: 1,
       marginTop: 8,
@@ -6069,7 +7386,7 @@ function createStyles(palette: Palette) {
     },
     previewBannerText: {
       color: colors.warning,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "800",
       letterSpacing: 0.8,
       textAlign: "center",
@@ -6145,7 +7462,7 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.warningRgb, 0.12),
       borderRadius: 6,
       color: colors.warning,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "800",
       letterSpacing: 1,
       overflow: "hidden",
@@ -6154,7 +7471,7 @@ function createStyles(palette: Palette) {
     },
     headerEyebrow: {
       color: colors.muted,
-      fontSize: 8,
+      fontSize: 10,
       letterSpacing: 1.2,
       marginTop: 5,
     },
@@ -6343,7 +7660,7 @@ function createStyles(palette: Palette) {
     },
     coachingNoteEyebrow: {
       color: colors.aqua,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 1.2,
     },
@@ -6638,7 +7955,7 @@ function createStyles(palette: Palette) {
     },
     eyebrow: {
       color: colors.aqua,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "700",
       letterSpacing: 1.15,
     },
@@ -6661,7 +7978,7 @@ function createStyles(palette: Palette) {
     },
     pillText: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "800",
       letterSpacing: 0.7,
     },
@@ -6694,7 +8011,7 @@ function createStyles(palette: Palette) {
     ratingOrbitInnerCompact: { borderRadius: 55, height: 110, width: 110 },
     ratingLabel: {
       color: colors.muted,
-      fontSize: 6,
+      fontSize: 10,
       letterSpacing: 0.9,
       transform: [{ rotate: "12deg" }],
     },
@@ -6709,7 +8026,7 @@ function createStyles(palette: Palette) {
     ratingValueCompact: { fontSize: 34, lineHeight: 36 },
     ratingDelta: {
       color: colors.positive,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "700",
       transform: [{ rotate: "12deg" }],
     },
@@ -6723,7 +8040,7 @@ function createStyles(palette: Palette) {
     },
     lockedText: {
       color: colors.onAccent,
-      fontSize: 6,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -6735,10 +8052,10 @@ function createStyles(palette: Palette) {
       paddingTop: 14,
     },
     statValue: { color: colors.bone, fontSize: 15, fontWeight: "800" },
-    statLabel: { color: colors.muted, fontSize: 8, marginTop: 3 },
+    statLabel: { color: colors.muted, fontSize: 10, marginTop: 3 },
     nextDate: {
       color: colors.aqua,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "800",
       letterSpacing: 1.2,
       marginTop: 26,
@@ -6769,7 +8086,7 @@ function createStyles(palette: Palette) {
       marginLeft: -5,
       width: 34,
     },
-    miniAvatarText: { color: colors.bone, fontSize: 8, fontWeight: "800" },
+    miniAvatarText: { color: colors.bone, fontSize: 10, fontWeight: "800" },
     cardLink: {
       borderTopColor: rgba(colors.overlayRgb, 0.07),
       borderTopWidth: 1,
@@ -6787,12 +8104,12 @@ function createStyles(palette: Palette) {
     },
     liveActivityButtonText: {
       color: colors.onAccent,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "900",
     },
     liveActivityNotice: {
       color: colors.positive,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "700",
       marginTop: 8,
     },
@@ -6814,7 +8131,7 @@ function createStyles(palette: Palette) {
     },
     metricLabel: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       marginTop: 4,
       textAlign: "center",
     },
@@ -6833,7 +8150,7 @@ function createStyles(palette: Palette) {
       lineHeight: 28,
       marginTop: 4,
     },
-    sectionAction: { color: colors.aqua, fontSize: 9, fontWeight: "700" },
+    sectionAction: { color: colors.aqua, fontSize: 10, fontWeight: "700" },
     horizontalBleed: { marginHorizontal: -18, paddingHorizontal: 18 },
     eventCard: {
       backgroundColor: colors.depth,
@@ -6881,7 +8198,7 @@ function createStyles(palette: Palette) {
     eventBody: { padding: 12 },
     eventTime: {
       color: colors.aqua,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "700",
       letterSpacing: 0.6,
       textTransform: "uppercase",
@@ -6894,10 +8211,10 @@ function createStyles(palette: Palette) {
       marginTop: 6,
       minHeight: 39,
     },
-    eventMeta: { color: colors.muted, fontSize: 8, marginTop: 5 },
+    eventMeta: { color: colors.muted, fontSize: 10, marginTop: 5 },
     eventWeather: {
       color: colors.aqua,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "700",
       marginTop: 5,
     },
@@ -6911,7 +8228,7 @@ function createStyles(palette: Palette) {
       paddingTop: 9,
     },
     eventPrice: { color: colors.bone, fontSize: 10, fontWeight: "800" },
-    eventSpots: { color: colors.muted, fontSize: 8 },
+    eventSpots: { color: colors.muted, fontSize: 10 },
     proTourEntry: {
       alignItems: "center",
       backgroundColor: colors.aquaDeep,
@@ -6926,7 +8243,7 @@ function createStyles(palette: Palette) {
     },
     proTourEntryEyebrow: {
       color: "#9de9ff",
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.9,
     },
@@ -6940,7 +8257,7 @@ function createStyles(palette: Palette) {
     },
     proTourEntryMeta: {
       color: "rgba(255,255,255,.7)",
-      fontSize: 8,
+      fontSize: 10,
       marginTop: 7,
     },
     proTourEntryArrow: {
@@ -6993,7 +8310,7 @@ function createStyles(palette: Palette) {
     },
     proEventPickerStatus: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.6,
     },
@@ -7021,13 +8338,13 @@ function createStyles(palette: Palette) {
     },
     proEventHeroMeta: {
       color: "rgba(255,255,255,.74)",
-      fontSize: 9,
+      fontSize: 10,
       lineHeight: 14,
       marginTop: 10,
     },
     proEventUpdated: {
       color: "rgba(255,255,255,.56)",
-      fontSize: 7,
+      fontSize: 10,
       marginTop: 12,
     },
     proBracket: {
@@ -7040,7 +8357,7 @@ function createStyles(palette: Palette) {
     proBracketRound: { minWidth: 240, width: 240 },
     proBracketRoundTitle: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.7,
       marginBottom: 9,
@@ -7070,18 +8387,18 @@ function createStyles(palette: Palette) {
     proBracketTeamName: {
       color: colors.muted,
       flex: 1,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "700",
     },
     proBracketWinner: { color: colors.bone, fontWeight: "900" },
     proBracketScore: {
       color: colors.aqua,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "900",
     },
     proBracketPrediction: {
       color: colors.muted,
-      fontSize: 6,
+      fontSize: 10,
       marginTop: 7,
       textTransform: "uppercase",
     },
@@ -7097,7 +8414,7 @@ function createStyles(palette: Palette) {
     proFollowButtonActive: { backgroundColor: colors.aqua },
     proFollowButtonText: {
       color: colors.aqua,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "900",
     },
     proFollowButtonTextActive: { color: colors.onAccent },
@@ -7129,9 +8446,853 @@ function createStyles(palette: Palette) {
       gap: 8,
       minHeight: 32,
     },
-    proPoolPlace: { color: colors.aqua, fontSize: 8, width: 15 },
-    proPoolTeam: { color: colors.bone, flex: 1, fontSize: 8 },
-    proPoolRecord: { color: colors.muted, fontSize: 8 },
+    proPoolPlace: { color: colors.aqua, fontSize: 10, width: 15 },
+    proPoolTeam: { color: colors.bone, flex: 1, fontSize: 10 },
+    proPoolRecord: { color: colors.muted, fontSize: 10 },
+    proMobilePressed: { opacity: 0.82 },
+    proMobileBrandMark: {
+      alignItems: "center",
+      backgroundColor: "#ffffff",
+      borderColor: rgba(colors.inkRgb, 0.08),
+      borderRadius: 12,
+      borderWidth: 1,
+      height: 48,
+      justifyContent: "center",
+      overflow: "hidden",
+      paddingHorizontal: 7,
+      width: 96,
+    },
+    proMobileBrandMarkCompact: {
+      borderRadius: 10,
+      height: 38,
+      paddingHorizontal: 5,
+      width: 70,
+    },
+    proMobileBrandFallback: {
+      color: "#102340",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: -0.2,
+      textAlign: "center",
+    },
+    proMobileBrandFallbackAvp: {
+      color: "#df2d3a",
+      fontSize: 18,
+      fontStyle: "italic",
+      letterSpacing: -1,
+    },
+    proMobileHubHeader: {
+      alignItems: "center",
+      backgroundColor: colors.canvas,
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: 82,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+    },
+    proMobileHubEyebrow: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
+    proMobileHubTitle: {
+      color: colors.bone,
+      fontSize: 30,
+      fontWeight: "900",
+      letterSpacing: -1.5,
+      lineHeight: 34,
+      marginTop: 2,
+    },
+    proMobileHeaderButton: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 21,
+      borderWidth: 1,
+      height: 42,
+      justifyContent: "center",
+      width: 42,
+    },
+    proMobileHeaderButtonText: {
+      color: colors.bone,
+      fontSize: 32,
+      fontWeight: "500",
+      lineHeight: 34,
+      marginTop: -2,
+    },
+    proMobileHeaderCloseText: {
+      color: colors.bone,
+      fontSize: 27,
+      fontWeight: "500",
+      lineHeight: 29,
+    },
+    proMobileHubContent: {
+      paddingBottom: 58,
+      paddingHorizontal: 18,
+    },
+    proMobileIntro: {
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 22,
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 18,
+      minHeight: 180,
+      overflow: "hidden",
+      padding: 18,
+    },
+    proMobileIntroCopy: {
+      flex: 1,
+      justifyContent: "center",
+      minWidth: 0,
+    },
+    proMobileIntroKicker: {
+      color: "#ff9d81",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.9,
+    },
+    proMobileIntroTitle: {
+      color: "#ffffff",
+      fontSize: 25,
+      fontWeight: "900",
+      letterSpacing: -1.1,
+      lineHeight: 27,
+      marginTop: 10,
+    },
+    proMobileIntroBody: {
+      color: "rgba(255,255,255,.72)",
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 9,
+    },
+    proMobileIntroBrands: {
+      gap: 8,
+      justifyContent: "center",
+    },
+    proMobileSearchBar: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 15,
+      borderWidth: 1,
+      flexDirection: "row",
+      height: 48,
+      marginTop: 14,
+      paddingHorizontal: 12,
+    },
+    proMobileSearchIcon: {
+      color: colors.aqua,
+      fontSize: 22,
+      fontWeight: "700",
+      marginRight: 7,
+    },
+    proMobileSearchInput: {
+      color: colors.bone,
+      flex: 1,
+      fontSize: 12,
+      fontWeight: "600",
+      height: 46,
+      paddingVertical: 0,
+    },
+    proMobileSearchClear: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 12,
+      height: 24,
+      justifyContent: "center",
+      width: 24,
+    },
+    proMobileSearchClearText: {
+      color: colors.muted,
+      fontSize: 18,
+      lineHeight: 20,
+    },
+    proMobileSectionTitleRow: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 11,
+      marginTop: 28,
+    },
+    proMobileSectionTitleCopy: { flex: 1, minWidth: 0 },
+    proMobileSectionEyebrow: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.9,
+    },
+    proMobileSectionTitle: {
+      color: colors.bone,
+      fontSize: 23,
+      fontWeight: "900",
+      letterSpacing: -0.9,
+      lineHeight: 27,
+      marginTop: 3,
+    },
+    proMobileSectionCount: {
+      backgroundColor: colors.navyLift,
+      borderRadius: 999,
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+      marginLeft: 10,
+      overflow: "hidden",
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+    },
+    proMobileCardStack: { gap: 9 },
+    proMobileEventCard: {
+      alignItems: "center",
+      alignSelf: "stretch",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      minHeight: 104,
+      padding: 12,
+    },
+    proMobileEventCardLive: {
+      backgroundColor: colors.aquaDeep,
+      borderColor: rgba(colors.flareRgb, 0.5),
+    },
+    proMobileEventCardBody: { flex: 1, minWidth: 0 },
+    proMobileEventKickerRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "space-between",
+    },
+    proMobileEventStatus: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.55,
+    },
+    proMobileEventStatusLive: { color: "#ff9d81" },
+    proMobileEventDivision: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700",
+      textTransform: "capitalize",
+    },
+    proMobileEventDivisionLive: { color: "rgba(255,255,255,.62)" },
+    proMobileEventName: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+      letterSpacing: -0.45,
+      lineHeight: 19,
+      marginTop: 6,
+    },
+    proMobileEventNameLive: { color: "#ffffff" },
+    proMobileEventMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 6,
+    },
+    proMobileEventMetaLive: { color: "rgba(255,255,255,.68)" },
+    proMobileEventArrow: {
+      color: colors.aqua,
+      fontSize: 25,
+      fontWeight: "600",
+      marginLeft: 1,
+    },
+    proMobileEventArrowLive: { color: "#ffffff" },
+    proMobileDetailHeader: {
+      alignItems: "center",
+      backgroundColor: colors.canvas,
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 66,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    proMobileDetailHeaderCopy: { flex: 1, minWidth: 0 },
+    proMobileDetailHeaderEyebrow: {
+      color: colors.danger,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+    proMobileDetailHeaderTitle: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+      letterSpacing: -0.4,
+      marginTop: 2,
+    },
+    proMobileSectionNav: {
+      backgroundColor: colors.canvas,
+      borderBottomColor: rgba(colors.overlayRgb, 0.08),
+      borderBottomWidth: 1,
+      flexGrow: 0,
+      maxHeight: 55,
+    },
+    proMobileSectionNavContent: {
+      alignItems: "center",
+      gap: 7,
+      minHeight: 54,
+      paddingHorizontal: 12,
+    },
+    proMobileSectionTab: {
+      alignItems: "center",
+      borderRadius: 999,
+      justifyContent: "center",
+      minHeight: 34,
+      paddingHorizontal: 13,
+    },
+    proMobileSectionTabActive: { backgroundColor: colors.aquaDeep },
+    proMobileSectionTabText: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    proMobileSectionTabTextActive: { color: "#ffffff" },
+    proMobileDetailContent: {
+      paddingBottom: 60,
+      paddingHorizontal: 18,
+    },
+    proMobileHero: {
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 22,
+      marginTop: 16,
+      overflow: "hidden",
+      position: "relative",
+    },
+    proMobileHeroImage: {
+      backgroundColor: colors.aquaDeep,
+      bottom: 0,
+      height: "100%",
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: 0,
+      width: "100%",
+    },
+    proMobileHeroFallback: {
+      backgroundColor: colors.aquaDeep,
+      bottom: 0,
+      left: 0,
+      overflow: "hidden",
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
+    proMobileCourtOutline: {
+      borderColor: "rgba(255,255,255,.32)",
+      borderWidth: 2,
+      bottom: -35,
+      left: 50,
+      position: "absolute",
+      right: 50,
+      top: 95,
+      transform: [{ perspective: 300 }, { rotateX: "52deg" }],
+    },
+    proMobileCourtNet: {
+      backgroundColor: "rgba(255,255,255,.36)",
+      height: 2,
+      left: 24,
+      position: "absolute",
+      right: 24,
+      top: "50%",
+    },
+    proMobileHeroScrim: {
+      backgroundColor: "rgba(5,16,30,.34)",
+      bottom: 0,
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
+    proMobileHeroTop: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      left: 14,
+      position: "absolute",
+      right: 14,
+      top: 14,
+    },
+    proMobileHeroBadges: { flexDirection: "row", gap: 6 },
+    proMobileHeroBadge: {
+      backgroundColor: "rgba(5,16,30,.72)",
+      borderColor: "rgba(255,255,255,.18)",
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 9,
+      paddingVertical: 6,
+    },
+    proMobileHeroBadgeLive: { backgroundColor: "rgba(184,68,68,.9)" },
+    proMobileHeroBadgeText: {
+      color: "#ffffff",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.45,
+    },
+    proMobileHeroCopy: {
+      backgroundColor: "rgba(5,16,30,.76)",
+      bottom: 0,
+      left: 0,
+      padding: 18,
+      position: "absolute",
+      right: 0,
+    },
+    proMobileHeroCategory: {
+      color: "#a7d7ff",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+      textTransform: "uppercase",
+    },
+    proMobileHeroTitle: {
+      color: "#ffffff",
+      fontSize: 29,
+      fontWeight: "900",
+      letterSpacing: -1.3,
+      lineHeight: 31,
+      marginTop: 7,
+    },
+    proMobileHeroMeta: {
+      color: "rgba(255,255,255,.74)",
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 9,
+    },
+    proMobileNotice: {
+      backgroundColor: rgba(colors.positiveRgb, 0.12),
+      borderColor: rgba(colors.positiveRgb, 0.24),
+      borderRadius: 13,
+      borderWidth: 1,
+      marginTop: 12,
+      padding: 11,
+    },
+    proMobileNoticeText: {
+      color: colors.positive,
+      fontSize: 11,
+      fontWeight: "700",
+      lineHeight: 15,
+    },
+    proMobileStatGrid: {
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 12,
+    },
+    proMobileStatCard: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 15,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 78,
+      padding: 9,
+    },
+    proMobileStatValue: {
+      color: colors.bone,
+      fontSize: 20,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+    },
+    proMobileStatLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700",
+      marginTop: 3,
+    },
+    proMobileInfoCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      marginTop: 12,
+      padding: 16,
+    },
+    proMobileInfoEyebrow: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    proMobileSummary: {
+      color: colors.bone,
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 8,
+    },
+    proMobileInfoTitle: {
+      color: colors.bone,
+      fontSize: 18,
+      fontWeight: "900",
+      letterSpacing: -0.5,
+      marginTop: 7,
+    },
+    proMobileInfoBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 5,
+    },
+    proMobileInfoFootnote: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "700",
+      marginTop: 9,
+    },
+    proMobileActionRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 12,
+    },
+    proMobilePrimaryAction: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      justifyContent: "center",
+      minHeight: 42,
+      paddingHorizontal: 15,
+    },
+    proMobilePrimaryActionText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    proMobileSecondaryAction: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 999,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 42,
+      paddingHorizontal: 15,
+    },
+    proMobileSecondaryActionText: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    proMobileSiblingCard: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 17,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 12,
+      padding: 15,
+    },
+    proMobileSiblingTitle: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "900",
+      marginTop: 4,
+    },
+    proMobileSiblingArrow: { color: colors.aqua, fontSize: 26 },
+    proMobileMatchCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 16,
+      borderWidth: 1,
+      overflow: "hidden",
+      padding: 13,
+    },
+    proMobileMatchCardLive: {
+      borderColor: rgba(colors.dangerRgb, 0.45),
+      borderLeftColor: colors.danger,
+      borderLeftWidth: 3,
+    },
+    proMobileMatchHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "space-between",
+      marginBottom: 8,
+    },
+    proMobileMatchStatus: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.6,
+    },
+    proMobileMatchStatusLive: { color: colors.danger },
+    proMobileMatchMeta: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 10,
+      textAlign: "right",
+    },
+    proMobileMatchTeamRow: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.06),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 34,
+    },
+    proMobileMatchTeam: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    proMobileMatchWinner: { color: colors.bone, fontWeight: "900" },
+    proMobileMatchScore: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
+    proMobileMatchFooter: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "space-between",
+      marginTop: 9,
+    },
+    proMobileMatchPrediction: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 10,
+    },
+    proMobileFollowButton: {
+      borderColor: colors.aqua,
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    proMobileFollowButtonActive: { backgroundColor: colors.aqua },
+    proMobileFollowButtonText: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    proMobileFollowButtonTextActive: { color: colors.onAccent },
+    proMobileEmptyCard: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      marginTop: 8,
+      padding: 24,
+    },
+    proMobileEmptyIcon: {
+      color: colors.aqua,
+      fontSize: 25,
+      fontWeight: "900",
+    },
+    proMobileEmptyTitle: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+      marginTop: 7,
+      textAlign: "center",
+    },
+    proMobileEmptyBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 6,
+      textAlign: "center",
+    },
+    proMobileListNote: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 6,
+      textAlign: "center",
+    },
+    proMobileDrawStack: { gap: 18 },
+    proMobileDrawRound: { gap: 8 },
+    proMobileDrawRoundTitle: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.5,
+      textTransform: "uppercase",
+    },
+    proMobilePoolCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 16,
+      borderWidth: 1,
+      overflow: "hidden",
+      padding: 13,
+    },
+    proMobilePoolHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingBottom: 8,
+    },
+    proMobilePoolTitle: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    proMobilePoolProgress: { color: colors.muted, fontSize: 10 },
+    proMobileStandingRow: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.07),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      minHeight: 42,
+    },
+    proMobileStandingRank: {
+      color: colors.aqua,
+      fontSize: 11,
+      fontWeight: "900",
+      textAlign: "center",
+      width: 22,
+    },
+    proMobileStandingTeam: {
+      color: colors.bone,
+      flex: 1,
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    proMobileStandingRecord: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    proMobileStandingsCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 16,
+      borderWidth: 1,
+      overflow: "hidden",
+      paddingHorizontal: 13,
+    },
+    proMobileTeamGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 10,
+    },
+    proMobileTeamCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 15,
+      borderWidth: 1,
+      minHeight: 112,
+      padding: 12,
+      width: "48.5%",
+    },
+    proMobileTeamCardTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    proMobileTeamSeed: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.6,
+    },
+    proMobileTeamCountry: { fontSize: 16 },
+    proMobileTeamName: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
+      lineHeight: 16,
+      marginTop: 9,
+    },
+    proMobileTeamPlayers: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 6,
+    },
+    proMobileWatchCard: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 76,
+      padding: 13,
+    },
+    proMobileWatchIcon: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 14,
+      height: 46,
+      justifyContent: "center",
+      width: 46,
+    },
+    proMobileWatchIconText: {
+      color: colors.aqua,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    proMobileWatchCopy: { flex: 1, minWidth: 0 },
+    proMobileWatchTitle: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    proMobileWatchMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
+    proMobileWatchArrow: { color: colors.aqua, fontSize: 19 },
+    proMobileLoadingState: {
+      alignItems: "center",
+      flex: 1,
+      justifyContent: "center",
+      paddingHorizontal: 34,
+      paddingVertical: 48,
+    },
+    proMobileLoadingMark: {
+      alignItems: "center",
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 28,
+      height: 56,
+      justifyContent: "center",
+      width: 56,
+    },
+    proMobileLoadingMarkText: {
+      color: "#ffffff",
+      fontSize: 24,
+      fontWeight: "900",
+    },
+    proMobileLoadingTitle: {
+      color: colors.bone,
+      fontSize: 19,
+      fontWeight: "900",
+      letterSpacing: -0.5,
+      marginTop: 15,
+      textAlign: "center",
+    },
+    proMobileLoadingBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 17,
+      marginTop: 7,
+      textAlign: "center",
+    },
+    proMobileRetryButton: {
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      marginTop: 16,
+      paddingHorizontal: 18,
+      paddingVertical: 11,
+    },
+    proMobileRetryButtonText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
     listCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.07),
@@ -7157,7 +9318,7 @@ function createStyles(palette: Palette) {
     },
     resultText: { color: colors.onAccent, fontSize: 12, fontWeight: "900" },
     rowTitle: { color: colors.bone, fontSize: 11, fontWeight: "700" },
-    rowMeta: { color: colors.muted, fontSize: 8, marginTop: 3 },
+    rowMeta: { color: colors.muted, fontSize: 10, marginTop: 3 },
     matchScore: { alignItems: "flex-end" },
     aiInsight: {
       backgroundColor: colors.navy,
@@ -7185,7 +9346,7 @@ function createStyles(palette: Palette) {
       letterSpacing: -0.4,
       marginTop: 6,
     },
-    aiBody: { color: colors.muted, fontSize: 9, lineHeight: 14, marginTop: 5 },
+    aiBody: { color: colors.muted, fontSize: 10, lineHeight: 14, marginTop: 5 },
     searchField: {
       alignItems: "center",
       backgroundColor: colors.depth,
@@ -7217,7 +9378,7 @@ function createStyles(palette: Palette) {
       backgroundColor: colors.aqua,
       borderColor: colors.aqua,
     },
-    filterText: { color: colors.muted, fontSize: 9, fontWeight: "600" },
+    filterText: { color: colors.muted, fontSize: 10, fontWeight: "600" },
     filterTextActive: { color: colors.onAccent, fontWeight: "800" },
     mapCard: {
       backgroundColor: colors.navy,
@@ -7257,7 +9418,7 @@ function createStyles(palette: Palette) {
       position: "absolute",
       width: 32,
     },
-    mapPinText: { color: colors.onAccent, fontSize: 8, fontWeight: "900" },
+    mapPinText: { color: colors.onAccent, fontSize: 10, fontWeight: "900" },
     mapLabel: {
       backgroundColor: rgba(colors.inkRgb, 0.82),
       borderRadius: 10,
@@ -7267,7 +9428,7 @@ function createStyles(palette: Palette) {
       position: "absolute",
     },
     mapLabelTitle: { color: colors.bone, fontSize: 11, fontWeight: "800" },
-    mapLabelText: { color: colors.muted, fontSize: 8, marginTop: 2 },
+    mapLabelText: { color: colors.muted, fontSize: 10, marginTop: 2 },
     eventGrid: { gap: 10 },
     successBanner: {
       alignItems: "center",
@@ -7303,7 +9464,7 @@ function createStyles(palette: Palette) {
       width: 38,
     },
     weekDayActive: { backgroundColor: colors.aqua },
-    weekDayLabel: { color: colors.muted, fontSize: 7 },
+    weekDayLabel: { color: colors.muted, fontSize: 10 },
     weekDayNumber: {
       color: colors.bone,
       fontSize: 11,
@@ -7330,7 +9491,7 @@ function createStyles(palette: Palette) {
     },
     bookingTime: { width: 35 },
     bookingTimeMain: { color: colors.bone, fontSize: 10, fontWeight: "700" },
-    bookingTimeSuffix: { color: colors.muted, fontSize: 6 },
+    bookingTimeSuffix: { color: colors.muted, fontSize: 10 },
     bookingAccent: { borderRadius: 2, height: 35, width: 3 },
     pickupRow: {
       alignItems: "center",
@@ -7348,7 +9509,7 @@ function createStyles(palette: Palette) {
       padding: 6,
       width: 38,
     },
-    pickupDay: { color: colors.aqua, fontSize: 6, fontWeight: "800" },
+    pickupDay: { color: colors.aqua, fontSize: 10, fontWeight: "800" },
     pickupNumber: { color: colors.bone, fontSize: 15, fontWeight: "900" },
     pickupSpots: {
       color: colors.aqua,
@@ -7379,7 +9540,7 @@ function createStyles(palette: Palette) {
     hostMarkText: { color: colors.aqua, fontSize: 22 },
     bodyText: {
       color: colors.muted,
-      fontSize: 9,
+      fontSize: 10,
       lineHeight: 14,
       marginTop: 5,
     },
@@ -7414,7 +9575,7 @@ function createStyles(palette: Palette) {
     },
     walletLabel: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       letterSpacing: 1.2,
       marginTop: 40,
     },
@@ -7425,13 +9586,13 @@ function createStyles(palette: Palette) {
       letterSpacing: -3,
       marginTop: 5,
     },
-    walletMeta: { color: colors.muted, fontSize: 8, marginTop: 4 },
+    walletMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
     walletActions: { flexDirection: "row", gap: 8, marginTop: 25 },
     walletActionText: {
       backgroundColor: rgba(colors.overlayRgb, 0.08),
       borderRadius: 18,
       color: colors.bone,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "700",
       overflow: "hidden",
       paddingHorizontal: 12,
@@ -7481,6 +9642,500 @@ function createStyles(palette: Palette) {
       padding: 12,
     },
     trustIcon: { color: colors.aqua, fontSize: 17 },
+    athleteHero: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 28,
+      borderWidth: 1,
+      minHeight: 470,
+      marginTop: 4,
+      overflow: "hidden",
+      position: "relative",
+    },
+    athleteHeroImage: { opacity: 0.74 },
+    athleteHeroWash: {
+      backgroundColor: rgba(colors.navyRgb, 0.48),
+      bottom: 0,
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
+    athleteHeroGeometry: {
+      borderColor: rgba(colors.accentRgb, 0.24),
+      borderRadius: 220,
+      borderWidth: 1,
+      height: 400,
+      position: "absolute",
+      right: -178,
+      top: -82,
+      width: 400,
+    },
+    athleteHeroContent: {
+      bottom: 28,
+      left: 20,
+      maxWidth: "72%",
+      position: "absolute",
+      zIndex: 4,
+    },
+    athleteHeroPills: {
+      alignItems: "center",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+      marginBottom: 10,
+    },
+    athleteHeroName: {
+      color: colors.white,
+      fontSize: 43,
+      fontWeight: "900",
+      letterSpacing: -2.6,
+      lineHeight: 43,
+      textShadowColor: rgba(colors.inkRgb, 0.45),
+      textShadowOffset: { height: 2, width: 0 },
+      textShadowRadius: 12,
+    },
+    athleteHeroMeta: {
+      color: rgba(colors.whiteRgb, 0.78),
+      fontSize: 12,
+      fontWeight: "700",
+      marginTop: 8,
+      textTransform: "capitalize",
+    },
+    athleteHeroActions: {
+      alignItems: "center",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 18,
+    },
+    athleteHeroPrimaryAction: {
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      paddingHorizontal: 15,
+      paddingVertical: 11,
+    },
+    athleteHeroPrimaryActionText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    athleteHeroSecondaryAction: {
+      backgroundColor: rgba(colors.whiteRgb, 0.08),
+      borderColor: rgba(colors.whiteRgb, 0.2),
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 15,
+      paddingVertical: 10,
+    },
+    athleteHeroSecondaryActionText: {
+      color: colors.white,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    athleteHeroCutout: {
+      height: "90%",
+      position: "absolute",
+      right: -46,
+      top: 14,
+      width: "78%",
+      zIndex: 2,
+    },
+    athleteHeroRating: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.navyRgb, 0.68),
+      borderColor: rgba(colors.accentRgb, 0.38),
+      borderRadius: 52,
+      borderWidth: 2,
+      height: 94,
+      justifyContent: "center",
+      position: "absolute",
+      right: 18,
+      top: 18,
+      width: 94,
+      zIndex: 5,
+    },
+    athleteHeroRatingLabel: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    athleteHeroRatingValue: {
+      color: colors.white,
+      fontSize: 27,
+      fontWeight: "900",
+      letterSpacing: -1.4,
+      lineHeight: 30,
+    },
+    athleteHeroRatingMeta: {
+      color: rgba(colors.whiteRgb, 0.65),
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    athleteMetricRow: {
+      flexDirection: "row",
+      gap: 9,
+      paddingRight: 38,
+    },
+    athleteMetricCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      minHeight: 132,
+      padding: 14,
+      width: 148,
+    },
+    athleteMetricCardAccent: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.accentRgb, 0.2),
+    },
+    athleteMetricLabel: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    athleteMetricValue: {
+      color: colors.bone,
+      fontSize: 31,
+      fontWeight: "900",
+      letterSpacing: -1.4,
+      marginTop: 14,
+    },
+    athleteMetricChange: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "600",
+      marginTop: 5,
+    },
+    positiveText: { color: colors.positive },
+    negativeText: { color: colors.danger },
+    athleteNarrativeCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.accentRgb, 0.13),
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 12,
+      padding: 17,
+    },
+    athleteNarrativeHeading: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 11,
+    },
+    athleteNarrativeMark: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderRadius: 15,
+      height: 46,
+      justifyContent: "center",
+      width: 46,
+    },
+    athleteNarrativeMarkText: {
+      color: colors.aqua,
+      fontSize: 19,
+      fontWeight: "900",
+    },
+    athleteNarrativeTitle: {
+      color: colors.bone,
+      fontSize: 22,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+    },
+    athleteNarrativeBody: {
+      color: colors.bone,
+      fontSize: 14,
+      lineHeight: 21,
+      marginTop: 15,
+    },
+    athleteNarrativeSource: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "600",
+      marginTop: 11,
+    },
+    athleteChartCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 12,
+      padding: 16,
+    },
+    athleteChartTitle: {
+      color: colors.bone,
+      fontSize: 27,
+      fontWeight: "900",
+      letterSpacing: -1.1,
+    },
+    athleteChartSummary: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 16,
+      paddingBottom: 14,
+    },
+    athleteChartSummaryValue: {
+      color: colors.bone,
+      fontSize: 20,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+    },
+    athleteChartSummaryLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "600",
+      marginTop: 2,
+    },
+    athleteChartArrow: { color: colors.aqua, fontSize: 19, fontWeight: "800" },
+    athleteChartRange: {
+      borderLeftColor: rgba(colors.overlayRgb, 0.1),
+      borderLeftWidth: 1,
+      marginLeft: "auto",
+      paddingLeft: 14,
+    },
+    athleteWaveChart: {
+      alignItems: "flex-end",
+      backgroundColor: rgba(colors.overlayRgb, 0.02),
+      borderRadius: 15,
+      flexDirection: "row",
+      gap: 5,
+      height: 165,
+      marginTop: 14,
+      overflow: "hidden",
+      paddingHorizontal: 9,
+      paddingTop: 12,
+    },
+    athleteWaveColumn: {
+      alignItems: "center",
+      flex: 1,
+      height: "100%",
+      justifyContent: "flex-end",
+      minWidth: 5,
+    },
+    athleteWaveBar: { borderRadius: 999, minHeight: 12, width: "72%" },
+    athleteChartEmpty: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.025),
+      borderRadius: 15,
+      gap: 8,
+      height: 155,
+      justifyContent: "center",
+      marginTop: 14,
+      padding: 18,
+    },
+    athleteChartEmptyMark: {
+      color: colors.aqua,
+      fontSize: 28,
+      fontWeight: "900",
+    },
+    athleteChartEmptyText: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      textAlign: "center",
+    },
+    athleteChartLegend: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 10,
+    },
+    athleteChartLegendLoss: { color: colors.danger },
+    athleteMomentGrid: { flexDirection: "row", gap: 9 },
+    athleteMomentCard: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.accentRgb, 0.18),
+      borderRadius: 19,
+      borderWidth: 1,
+      flex: 1,
+      minHeight: 190,
+      padding: 14,
+    },
+    athleteMomentCardMuted: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+    },
+    athleteMomentEyebrow: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    athleteMomentValue: {
+      color: colors.bone,
+      fontSize: 34,
+      fontWeight: "900",
+      letterSpacing: -1.4,
+      marginTop: 15,
+    },
+    athleteMomentTitle: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "800",
+      lineHeight: 18,
+      marginTop: 8,
+    },
+    athleteMomentMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: "auto",
+    },
+    athleteUpcomingList: { gap: 8 },
+    athleteUpcomingCard: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      padding: 12,
+    },
+    athleteUpcomingDate: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderRadius: 14,
+      height: 58,
+      justifyContent: "center",
+      width: 58,
+    },
+    athleteUpcomingMonth: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    athleteUpcomingDay: {
+      color: colors.white,
+      fontSize: 22,
+      fontWeight: "900",
+      lineHeight: 24,
+    },
+    athleteUpcomingName: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    athleteUpcomingMeta: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    athleteUpcomingWatch: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "700",
+      marginTop: 5,
+    },
+    athleteResultsList: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 19,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    athleteResultCard: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 78,
+      padding: 11,
+    },
+    athleteResultMark: {
+      alignItems: "center",
+      borderRadius: 13,
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    athleteResultMarkWin: { backgroundColor: rgba(colors.positiveRgb, 0.14) },
+    athleteResultMarkLoss: { backgroundColor: rgba(colors.dangerRgb, 0.12) },
+    athleteResultMarkText: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    athleteResultOpponent: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    athleteResultMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
+    athleteResultDelta: { alignItems: "flex-end" },
+    athleteResultDeltaValue: { fontSize: 13, fontWeight: "900" },
+    athleteResultExpected: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    athleteFullHistoryButton: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.11),
+      borderRadius: 999,
+      borderWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 9,
+      paddingHorizontal: 15,
+      paddingVertical: 12,
+    },
+    athleteFullHistoryButtonText: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    athleteBioCard: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.accentRgb, 0.14),
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 14,
+      padding: 17,
+    },
+    athleteBioTitle: {
+      color: colors.bone,
+      fontSize: 25,
+      fontWeight: "900",
+      letterSpacing: -0.9,
+      marginTop: 4,
+    },
+    athleteBioBody: {
+      color: rgba(colors.boneRgb, 0.84),
+      fontSize: 13,
+      lineHeight: 20,
+      marginTop: 12,
+    },
+    athleteBioFacts: {
+      borderTopColor: rgba(colors.overlayRgb, 0.09),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 24,
+      marginTop: 16,
+      paddingTop: 14,
+    },
+    athleteBioFactLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    athleteBioFactValue: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "800",
+      marginTop: 4,
+    },
+    athleteStudioActions: { flexDirection: "row", gap: 8, marginTop: 14 },
+    athleteStudioSecondary: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.11),
+      borderRadius: 999,
+      borderWidth: 1,
+      justifyContent: "center",
+      paddingHorizontal: 18,
+    },
+    athleteStudioSecondaryText: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "800",
+    },
     profileHero: {
       backgroundColor: colors.navy,
       borderColor: rgba(colors.overlayRgb, 0.07),
@@ -7512,7 +10167,7 @@ function createStyles(palette: Palette) {
       letterSpacing: -1,
       marginTop: 7,
     },
-    profileHandle: { color: colors.muted, fontSize: 8, marginTop: 2 },
+    profileHandle: { color: colors.muted, fontSize: 10, marginTop: 2 },
     profileSetupCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.accentRgb, 0.14),
@@ -7606,6 +10261,55 @@ function createStyles(palette: Palette) {
       width: 155,
     },
     achievementIcon: { color: colors.aqua, fontSize: 22, marginBottom: 20 },
+    healthProfileCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.accentRgb, 0.2),
+      borderRadius: 20,
+      borderWidth: 1,
+      gap: 12,
+      marginTop: 14,
+      padding: 16,
+    },
+    healthProfileTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+    },
+    healthProfileMark: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.dangerRgb, 0.1),
+      borderRadius: 16,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    healthProfileMarkText: {
+      color: colors.danger,
+      fontSize: 22,
+      fontWeight: "900",
+    },
+    healthProfileTitle: {
+      color: colors.bone,
+      fontSize: 24,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+    },
+    healthProfileSignals: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+    },
+    healthProfileSignal: {
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderRadius: 10,
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+      overflow: "hidden",
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
     profileMenu: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.07),
@@ -7643,7 +10347,7 @@ function createStyles(palette: Palette) {
       position: "relative",
     },
     tabIcon: { color: colors.muted, fontSize: 19 },
-    tabLabel: { color: colors.muted, fontSize: 7, fontWeight: "600" },
+    tabLabel: { color: colors.muted, fontSize: 10, fontWeight: "600" },
     tabActive: { color: colors.aqua },
     tabIndicator: {
       backgroundColor: colors.aqua,
@@ -7749,7 +10453,7 @@ function createStyles(palette: Palette) {
       letterSpacing: -1.4,
       marginTop: 18,
     },
-    checkoutMeta: { color: colors.muted, fontSize: 9, marginTop: 5 },
+    checkoutMeta: { color: colors.muted, fontSize: 10, marginTop: 5 },
     checkoutSummaryText: {
       color: colors.muted,
       fontSize: 11,
@@ -7932,9 +10636,9 @@ function createStyles(palette: Palette) {
       marginTop: 9,
       textAlign: "center",
     },
-    mobileParticipantMeta: { color: colors.muted, fontSize: 9, marginTop: 3 },
+    mobileParticipantMeta: { color: colors.muted, fontSize: 10, marginTop: 3 },
     mobileParticipantEligibility: {
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "800",
       marginTop: 7,
     },
@@ -7954,13 +10658,13 @@ function createStyles(palette: Palette) {
     mobileRosterPlayer: { alignItems: "center", flex: 1, minWidth: 0 },
     mobileRosterName: {
       color: colors.bone,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "800",
       marginTop: 5,
       maxWidth: 72,
     },
-    mobileRosterStatus: { color: colors.muted, fontSize: 8, marginTop: 2 },
-    mobileRosterRemove: { color: colors.danger, fontSize: 8, marginTop: 2 },
+    mobileRosterStatus: { color: colors.muted, fontSize: 10, marginTop: 2 },
+    mobileRosterRemove: { color: colors.danger, fontSize: 10, marginTop: 2 },
     mobileRosterOpen: {
       alignItems: "center",
       backgroundColor: rgba(colors.overlayRgb, 0.03),
@@ -8020,7 +10724,7 @@ function createStyles(palette: Palette) {
       marginTop: 8,
       maxWidth: 140,
     },
-    mobileSuggestionMeta: { color: colors.muted, fontSize: 8, marginTop: 3 },
+    mobileSuggestionMeta: { color: colors.muted, fontSize: 10, marginTop: 3 },
     mobileSuggestionAdd: {
       alignItems: "center",
       backgroundColor: colors.aqua,
@@ -8101,7 +10805,7 @@ function createStyles(palette: Palette) {
     mobileGuestInitials: { color: colors.ink, fontSize: 25, fontWeight: "900" },
     mobileGuestLabel: {
       color: colors.aqua,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -8113,13 +10817,13 @@ function createStyles(palette: Palette) {
     },
     mobileGuestMeta: {
       color: colors.muted,
-      fontSize: 8,
+      fontSize: 10,
       marginBottom: 5,
       marginTop: 3,
     },
     mobileGuestLink: {
       color: colors.aqua,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "800",
       marginTop: 5,
     },
@@ -8137,7 +10841,11 @@ function createStyles(palette: Palette) {
       gap: 8,
       justifyContent: "space-between",
     },
-    mobilePolicyKind: { color: colors.warning, fontSize: 8, fontWeight: "900" },
+    mobilePolicyKind: {
+      color: colors.warning,
+      fontSize: 10,
+      fontWeight: "900",
+    },
     mobilePolicyDocument: { marginTop: 9, maxHeight: 145 },
     mobilePolicyDocumentText: {
       color: colors.muted,
@@ -8241,7 +10949,7 @@ function createStyles(palette: Palette) {
     payButtonText: { color: colors.onAccent, fontSize: 12, fontWeight: "900" },
     paymentTrust: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       marginTop: 9,
       textAlign: "center",
     },

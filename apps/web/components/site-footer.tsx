@@ -27,6 +27,7 @@ export function SiteFooter() {
             <strong>Duna</strong>
             <Link href="/about">About</Link>
             <Link href="/safety">Safety</Link>
+            <Link href="/rankings">World rankings</Link>
             <Link href="/methodology">Rating methodology</Link>
           </div>
           <div>

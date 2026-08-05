@@ -484,3 +484,31 @@ export async function recordMarketingConsentAction(
     };
   }
 }
+
+export async function createPlayerMediaWorkflowAction(input: {
+  readonly referenceImages: readonly {
+    readonly url: string;
+    readonly kind: "action" | "portrait";
+  }[];
+  readonly brief?: string;
+  readonly rightsConfirmed: true;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.createPlayerMediaWorkflow({
+      ...input,
+      referenceImages: input.referenceImages.map((image) => ({ ...image })),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/app/settings");
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The athlete media brief could not be created.",
+    };
+  }
+}

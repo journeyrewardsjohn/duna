@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   eventBroadcastCoverage,
   filterProfessionalEvents,
+  professionalEventDivisionLabel,
   professionalEventTour,
   type ProfessionalEvent,
 } from "./pro-tour-admin-helpers";
@@ -12,7 +13,9 @@ function event(
 ): ProfessionalEvent {
   return {
     category: "Elite16",
+    countryCode: undefined,
     endsOn: "2026-08-09",
+    editorial: { overrides: {}, media: [] },
     externalEventId: overrides.id,
     genderCategory: "men",
     lastSyncedAt: "2026-08-04T12:00:00.000Z",
@@ -21,9 +24,18 @@ function event(
     matchCount: 0,
     matches: [],
     publicPath: `/events/${overrides.id}`,
+    research: { history: [] },
     sourceName: "FIVB",
     sourceSlug: "fivb-12ndr",
     sourceUrl: "https://example.com",
+    scraped: {
+      name: overrides.name,
+      location: undefined,
+      category: "Elite16",
+      startsOn: "2026-08-05",
+      endsOn: "2026-08-09",
+    },
+    avpSeason: undefined,
     startsOn: "2026-08-05",
     status: "upcoming",
     teamCount: 0,
@@ -39,6 +51,19 @@ describe("professional event administration filters", () => {
         event({ id: "avp", name: "AVP Dallas", sourceSlug: "avp-league" }),
       ),
     ).toBe("avp");
+  });
+
+  it("labels event divisions clearly in duplicated tour stops", () => {
+    expect(
+      professionalEventDivisionLabel(
+        event({ id: "women", name: "Hamburg", genderCategory: "women" }),
+      ),
+    ).toBe("Women");
+    expect(
+      professionalEventDivisionLabel(
+        event({ id: "men", name: "Hamburg", genderCategory: "men" }),
+      ),
+    ).toBe("Men");
   });
 
   it("keeps live events first and finds events by source context", () => {
@@ -67,9 +92,15 @@ describe("professional event administration filters", () => {
       matches: [
         {
           id: "match",
+          court: undefined,
+          gender: "men",
           label: "A / B",
           playedAt: undefined,
           roundLabel: undefined,
+          teamAName: "A",
+          teamBName: "B",
+          time: undefined,
+          timezone: undefined,
           watchOptions: [
             {
               id: "center",

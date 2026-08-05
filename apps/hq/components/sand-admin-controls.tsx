@@ -18,20 +18,24 @@ import {
   ShieldCheck,
   TriangleAlert,
   Trash2,
+  Trophy,
   Tv,
   UsersRound,
   Waves,
 } from "lucide-react";
 import { useActionState, useMemo, useState } from "react";
 import {
+  approveSandRatingBackfillAction,
   approveSandMatchAction,
   evaluateRatingAction,
   importSandSourceAction,
   linkSandPlayerAction,
   mergeSandProfilesAction,
   refreshFivbIndexAction,
+  refreshSandRatingNetworkAction,
   refreshWorldRankingsAction,
   removeProfessionalWatchOptionAction,
+  reviewProfileClaimAction,
   reviewMatchHistoryDisputeAction,
   reviewSandMatchAction,
   saveAvpRosterAssignmentAction,
@@ -42,6 +46,9 @@ import {
 import { PlayerCombobox, type PlayerComboboxOption } from "./player-combobox";
 
 const initialState: SandActionState = { status: "idle", message: "" };
+const consumerOrigin =
+  process.env.NEXT_PUBLIC_DUNA_WEB_URL?.replace(/\/$/, "") ??
+  "https://duna.coach";
 
 function playerComboboxOptions(
   players: readonly PersonSummary[],
@@ -142,6 +149,53 @@ function RefreshRankingsForm() {
       </button>
       <ActionFeedback state={state} />
     </form>
+  );
+}
+
+function SandRatingNetworkForm() {
+  const [refreshState, refresh, refreshing] = useActionState(
+    refreshSandRatingNetworkAction,
+    initialState,
+  );
+  const [approvalState, approve, approving] = useActionState(
+    approveSandRatingBackfillAction,
+    initialState,
+  );
+  return (
+    <div className="sandrating-network-actions">
+      <form action={refresh} className="sand-mini-action">
+        <input
+          aria-label="Ranked players per division"
+          defaultValue={200}
+          max={500}
+          min={50}
+          name="topPlayersPerGender"
+          type="number"
+        />
+        <select aria-label="Network degrees" defaultValue="4" name="maxDepth">
+          <option value="3">3 degrees</option>
+          <option value="4">4 degrees</option>
+        </select>
+        <button disabled={refreshing}>
+          <RefreshCw className={refreshing ? "spin" : undefined} size={15} />
+          Stage SandRating network
+        </button>
+        <ActionFeedback state={refreshState} />
+      </form>
+      <form action={approve} className="sand-mini-action">
+        <input name="limit" type="hidden" value="5000" />
+        <input
+          aria-label="Backfill approval basis"
+          name="reason"
+          placeholder="Partner authorization and evidence reviewed"
+          required
+        />
+        <button disabled={approving}>
+          <ShieldCheck size={15} /> Approve ready history + rebuild
+        </button>
+        <ActionFeedback state={approvalState} />
+      </form>
+    </div>
   );
 }
 
@@ -471,6 +525,7 @@ export function SandDataPanel({ data }: { readonly data: SandDataOverview }) {
           <RefreshFivbForm />
           <RefreshRankingsForm />
         </div>
+        <SandRatingNetworkForm />
       </section>
 
       <BroadcastConfiguration events={data.events} />
@@ -1029,6 +1084,110 @@ function LinkedMappingHistory({
   );
 }
 
+function ProfileClaimReview({
+  claim,
+}: {
+  readonly claim: SandDataOverview["profileClaimReviews"][number];
+}) {
+  const [state, action, pending] = useActionState(
+    reviewProfileClaimAction,
+    initialState,
+  );
+  return (
+    <article className="profile-claim-review">
+      <header>
+        <span>
+          <Badge tone={claim.professionalClaim ? "warning" : "neutral"}>
+            {claim.professionalClaim ? "professional claim" : "profile claim"}
+          </Badge>
+          <small>{claim.verificationTier}</small>
+        </span>
+        <time>
+          {new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(
+            new Date(claim.createdAt),
+          )}
+        </time>
+      </header>
+      <div className="profile-claim-review__identities">
+        <span>
+          <small>Signed-in identity</small>
+          <strong>{claim.subject.displayName}</strong>
+          <em>@{claim.subject.handle}</em>
+        </span>
+        <ArrowRight aria-hidden size={17} />
+        <span>
+          <small>Public profile requested</small>
+          <strong>{claim.target.displayName}</strong>
+          <em>@{claim.target.handle}</em>
+        </span>
+      </div>
+      <div className="profile-claim-review__checks">
+        <span className={claim.nameMatched ? "is-pass" : undefined}>
+          <CheckCircle2 aria-hidden size={13} /> Exact legal name
+        </span>
+        {claim.birthDateMatched ? (
+          <span className="is-pass">
+            <CheckCircle2 aria-hidden size={13} /> Birth date matched
+          </span>
+        ) : (
+          <span>
+            <TriangleAlert aria-hidden size={13} /> Partner birth date
+            unavailable
+          </span>
+        )}
+        {claim.worldRanking ? (
+          <span className="is-pass">
+            <Trophy aria-hidden size={13} /> World #{claim.worldRanking.rank}
+          </span>
+        ) : null}
+      </div>
+      <div className="profile-claim-review__sources">
+        {claim.officialSourceProfiles.map((source) => (
+          <a
+            href={source.profileUrl}
+            key={`${source.sourceName}:${source.profileUrl}`}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <span>
+              <strong>{source.sourceName}</strong>
+              <small>{source.displayName}</small>
+            </span>
+            <Link2 aria-hidden size={14} />
+          </a>
+        ))}
+      </div>
+      <form action={action}>
+        <input name="jobId" type="hidden" value={claim.jobId} />
+        <select defaultValue="approved" name="decision">
+          <option value="approved">Approve + consolidate history</option>
+          <option value="rejected">Reject + reopen profile</option>
+        </select>
+        <label>
+          <input name="officialProfileMatched" type="checkbox" />
+          <span>
+            I compared the official profile page to the signed-in identity
+          </span>
+        </label>
+        <input
+          name="reason"
+          placeholder="Evidence reviewed and why this decision is safe"
+          required
+        />
+        <button disabled={pending}>
+          {pending ? (
+            <LoaderCircle className="spin" size={14} />
+          ) : (
+            <ShieldCheck size={14} />
+          )}
+          Save reviewed decision
+        </button>
+        <ActionFeedback state={state} />
+      </form>
+    </article>
+  );
+}
+
 export function PlayerMappingPanel({
   data,
   players,
@@ -1038,6 +1197,21 @@ export function PlayerMappingPanel({
   readonly players: readonly PersonSummary[];
   readonly query?: string;
 }) {
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string>();
+  const selectedPlayer =
+    players.find((player) => player.id === selectedPlayerId) ?? players[0];
+  const connectedMappings = selectedPlayer
+    ? data.linkedMappings.filter(
+        (mapping) => mapping.personId === selectedPlayer.id,
+      )
+    : [];
+  const possibleIssues = selectedPlayer
+    ? data.mappings.filter(
+        (mapping) =>
+          mapping.displayName.trim().toLowerCase() ===
+          selectedPlayer.displayName.trim().toLowerCase(),
+      )
+    : [];
   return (
     <div className="player-mapping-workspace">
       <section className="hq-card player-directory-search">
@@ -1061,46 +1235,179 @@ export function PlayerMappingPanel({
             Search players
           </button>
         </form>
-        <div className="player-directory-results">
-          {players.map((player) => (
-            <article key={player.id}>
-              <span className="player-directory-results__avatar">
-                {player.avatarUrl ? (
-                  <img alt="" src={player.avatarUrl} />
-                ) : (
-                  player.initials
-                )}
-              </span>
-              <div>
-                <strong>{player.displayName}</strong>
-                <small>
-                  @{player.handle} · {player.homeMarket}
-                </small>
+        <div className="player-directory-browser">
+          <div className="player-directory-results">
+            {players.map((player) => (
+              <article
+                className={
+                  player.id === selectedPlayer?.id ? "is-selected" : undefined
+                }
+                key={player.id}
+              >
+                <span className="player-directory-results__avatar">
+                  {player.avatarUrl ? (
+                    <img alt="" src={player.avatarUrl} />
+                  ) : (
+                    player.initials
+                  )}
+                </span>
+                <div>
+                  <strong>{player.displayName}</strong>
+                  <small>
+                    @{player.handle} · {player.homeMarket}
+                  </small>
+                </div>
+                <span>
+                  <strong>{player.rating.display.toFixed(2)}</strong>
+                  <small>{player.rating.confidence}</small>
+                </span>
+                <Badge tone={player.isProfessional ? "positive" : "neutral"}>
+                  {player.isProfessional
+                    ? "pro"
+                    : (player.profileClaimStatus ?? "player")}
+                </Badge>
+                <button
+                  aria-label={`Inspect ${player.displayName}`}
+                  onClick={() => setSelectedPlayerId(player.id)}
+                  type="button"
+                >
+                  Inspect <ArrowRight aria-hidden size={14} />
+                </button>
+              </article>
+            ))}
+            {players.length === 0 && (
+              <p className="hq-empty">
+                No Duna players match “{query}”. Try a broader name or handle.
+              </p>
+            )}
+          </div>
+          {selectedPlayer ? (
+            <aside className="player-directory-inspector">
+              <header>
+                <span className="player-directory-results__avatar">
+                  {selectedPlayer.avatarUrl ? (
+                    <img alt="" src={selectedPlayer.avatarUrl} />
+                  ) : (
+                    selectedPlayer.initials
+                  )}
+                </span>
+                <div>
+                  <small>Canonical Duna identity</small>
+                  <h3>{selectedPlayer.displayName}</h3>
+                  <span>@{selectedPlayer.handle}</span>
+                </div>
+              </header>
+              <dl>
+                <div>
+                  <dt>Sand Rating</dt>
+                  <dd>{selectedPlayer.rating.display.toFixed(2)}</dd>
+                </div>
+                <div>
+                  <dt>Claim</dt>
+                  <dd>{selectedPlayer.profileClaimStatus ?? "claimed"}</dd>
+                </div>
+                <div>
+                  <dt>Sources</dt>
+                  <dd>{connectedMappings.length}</dd>
+                </div>
+                <div>
+                  <dt>Open identity leads</dt>
+                  <dd>{possibleIssues.length}</dd>
+                </div>
+              </dl>
+              <div className="player-directory-inspector__actions">
+                <a
+                  href={`${consumerOrigin}/players/${selectedPlayer.handle}`}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <Link2 aria-hidden size={14} /> Public profile
+                </a>
+                <button
+                  onClick={() =>
+                    void navigator.clipboard.writeText(selectedPlayer.id)
+                  }
+                  type="button"
+                >
+                  Copy person ID
+                </button>
               </div>
-              <span>
-                <strong>{player.rating.display.toFixed(2)}</strong>
-                <small>{player.rating.confidence}</small>
-              </span>
-              <Badge tone={player.isProfessional ? "positive" : "neutral"}>
-                {player.isProfessional
-                  ? "pro"
-                  : (player.profileClaimStatus ?? "player")}
-              </Badge>
-            </article>
-          ))}
-          {players.length === 0 && (
-            <p className="hq-empty">
-              No Duna players match “{query}”. Try a broader name or handle.
-            </p>
-          )}
+              <section>
+                <h4>Connected records</h4>
+                {connectedMappings.map((mapping) =>
+                  mapping.profileUrl ? (
+                    <a
+                      href={mapping.profileUrl}
+                      key={mapping.id}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <span>
+                        <strong>{mapping.source}</strong>
+                        <small>{mapping.displayName}</small>
+                      </span>
+                      <ArrowRight aria-hidden size={13} />
+                    </a>
+                  ) : (
+                    <span key={mapping.id}>
+                      <strong>{mapping.source}</strong>
+                      <small>{mapping.displayName}</small>
+                    </span>
+                  ),
+                )}
+                {connectedMappings.length === 0 ? (
+                  <p>No source profile is connected yet.</p>
+                ) : null}
+              </section>
+              {possibleIssues.length > 0 ? (
+                <a
+                  className="player-directory-inspector__issue"
+                  href="#external-player-mapping"
+                >
+                  <TriangleAlert aria-hidden size={14} />
+                  Review {possibleIssues.length} unresolved record
+                  {possibleIssues.length === 1 ? "" : "s"} with this name
+                </a>
+              ) : null}
+            </aside>
+          ) : null}
         </div>
+      </section>
+
+      <section className="hq-card profile-claim-queue">
+        <header className="hq-card-heading">
+          <div>
+            <span className="hq-eyebrow">Identity ownership</span>
+            <h2>Profile claims requiring review</h2>
+          </div>
+          <Badge
+            tone={data.profileClaimReviews.length ? "warning" : "positive"}
+          >
+            {data.profileClaimReviews.length}
+          </Badge>
+        </header>
+        <p>
+          Professional claims require exact identity data plus a manual
+          comparison against an official partner or tour profile. Approval
+          consolidates match history and replays ratings when necessary.
+        </p>
+        <div>
+          {data.profileClaimReviews.map((claim) => (
+            <ProfileClaimReview claim={claim} key={claim.jobId} />
+          ))}
+        </div>
+        {data.profileClaimReviews.length === 0 ? (
+          <p className="hq-empty">No profile claims are waiting.</p>
+        ) : null}
       </section>
 
       <AvpRosterAssignment data={data} players={players} />
 
-      <LinkedMappingHistory data={data} players={players} />
+      <div id="linked-player-mappings">
+        <LinkedMappingHistory data={data} players={players} />
+      </div>
 
-      <section className="hq-card mapping-queue">
+      <section className="hq-card mapping-queue" id="external-player-mapping">
         <header className="hq-card-heading">
           <div>
             <span className="hq-eyebrow">One player, one identity</span>
@@ -1140,7 +1447,7 @@ function RatingEvaluationForm() {
   return (
     <form action={action}>
       <button className="hq-button hq-button--primary" disabled={pending}>
-        <Activity size={16} /> Run evaluation
+        <Activity size={16} /> Run walk-forward backtest
       </button>
       <ActionFeedback state={state} />
     </form>
@@ -1203,19 +1510,36 @@ function RatingConfigurationForm() {
 
 export function RatingsLabPanel({ data }: { readonly data: SandDataOverview }) {
   const latest = data.evaluations[0];
+  const latestBacktest = data.backtests[0];
+  const champion = latestBacktest?.modelSummaries.find(
+    (model) => model.modelId === latestBacktest.championModelId,
+  );
   return (
     <div className="ratings-lab">
       <section className="ratings-lab__metrics">
         <article>
           <small>Prediction accuracy</small>
           <Numeric>
-            {latest ? `${(latest.predictionAccuracy * 100).toFixed(1)}%` : "—"}
+            {champion
+              ? `${(champion.accuracy * 100).toFixed(1)}%`
+              : latest
+                ? `${(latest.predictionAccuracy * 100).toFixed(1)}%`
+                : "—"}
           </Numeric>
-          <span>{latest?.sampleSize ?? 0} outcomes</span>
+          <span>
+            {latestBacktest?.matchesProcessed ?? latest?.sampleSize ?? 0}{" "}
+            pre-match forecasts
+          </span>
         </article>
         <article>
           <small>Brier score</small>
-          <Numeric>{latest ? latest.brierScore.toFixed(3) : "—"}</Numeric>
+          <Numeric>
+            {champion
+              ? champion.brierScore.toFixed(4)
+              : latest
+                ? latest.brierScore.toFixed(3)
+                : "—"}
+          </Numeric>
           <span>lower is better</span>
         </article>
         <article>
@@ -1227,9 +1551,9 @@ export function RatingsLabPanel({ data }: { readonly data: SandDataOverview }) {
           <span>active version</span>
         </article>
         <article>
-          <small>Evidence events</small>
-          <Numeric>{latest?.sampleSize ?? 0}</Numeric>
-          <span>replayable history</span>
+          <small>Players replayed</small>
+          <Numeric>{latestBacktest?.playersProcessed ?? 0}</Numeric>
+          <span>{latestBacktest?.methodologyVersion ?? "run pending"}</span>
         </article>
         <article>
           <small>TruVolley correlation</small>
@@ -1293,16 +1617,61 @@ export function RatingsLabPanel({ data }: { readonly data: SandDataOverview }) {
         <header className="hq-card-heading">
           <div>
             <span className="hq-eyebrow">Prediction quality</span>
-            <h2>Evaluate the current model</h2>
+            <h2>Chronological model challenge</h2>
           </div>
           <Activity size={20} />
         </header>
         <p>
-          Accuracy, Brier score, and ten calibration buckets are calculated from
-          immutable rating events.
+          Every probability is captured before its match is learned. Baselines,
+          Elo variants, Duna ablations, and the online ensemble are scored on
+          identical history without future-result leakage.
         </p>
         <RatingEvaluationForm />
-        {latest && (
+        {latestBacktest ? (
+          <div className="rating-backtest-admin-table">
+            <header>
+              <span>Model</span>
+              <span>Accuracy</span>
+              <span>Brier</span>
+              <span>Log loss</span>
+              <span>AUC</span>
+            </header>
+            {latestBacktest.modelSummaries.map((model) => (
+              <article
+                className={
+                  model.modelId === latestBacktest.championModelId
+                    ? "is-champion"
+                    : undefined
+                }
+                key={model.modelId}
+              >
+                <span>
+                  <strong>{model.label}</strong>
+                  <small>{model.family}</small>
+                </span>
+                <Numeric>{(model.accuracy * 100).toFixed(1)}%</Numeric>
+                <Numeric>{model.brierScore.toFixed(4)}</Numeric>
+                <Numeric>{model.logLoss.toFixed(4)}</Numeric>
+                <Numeric>{model.areaUnderRocCurve.toFixed(3)}</Numeric>
+              </article>
+            ))}
+            <footer>
+              {latestBacktest.matchesProcessed.toLocaleString()} matches ·{" "}
+              {latestBacktest.playersProcessed.toLocaleString()} players ·{" "}
+              {latestBacktest.dateFrom
+                ? new Intl.DateTimeFormat("en-US", {
+                    dateStyle: "medium",
+                  }).format(new Date(latestBacktest.dateFrom))
+                : "start unknown"}{" "}
+              through{" "}
+              {latestBacktest.dateTo
+                ? new Intl.DateTimeFormat("en-US", {
+                    dateStyle: "medium",
+                  }).format(new Date(latestBacktest.dateTo))
+                : "end unknown"}
+            </footer>
+          </div>
+        ) : latest ? (
           <div className="calibration-bars">
             {latest.calibration.map((bucket) => (
               <div key={`${bucket.lowerBound}-${bucket.upperBound}`}>
@@ -1319,7 +1688,7 @@ export function RatingsLabPanel({ data }: { readonly data: SandDataOverview }) {
               </div>
             ))}
           </div>
-        )}
+        ) : null}
       </section>
       <section className="hq-card ratings-config-card">
         <header className="hq-card-heading">

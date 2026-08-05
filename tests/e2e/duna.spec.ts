@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const hqBaseUrl = process.env.PLAYWRIGHT_HQ_BASE_URL ?? "http://127.0.0.1:3001";
+const hqBaseUrl =
+  process.env.PLAYWRIGHT_HQ_BASE_URL ??
+  `http://127.0.0.1:${process.env.PLAYWRIGHT_HQ_PORT ?? "3001"}`;
 
 async function expectNoHorizontalOverflow(page: Page) {
   const dimensions = await page.evaluate(() => ({
@@ -56,6 +58,42 @@ test("public coach profiles stay bookable and responsive", async ({ page }) => {
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "South Bay Volleyball Club" }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test("public rankings and rating evidence stay open and responsive", async ({
+  page,
+}) => {
+  await page.goto("/rankings?view=world&gender=women");
+  await expect(
+    page.getByRole("heading", {
+      name: "The players shaping beach volleyball now.",
+    }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "Ranking system" })
+      .getByRole("link", { name: "World ranking", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(
+    page
+      .getByRole("navigation", { name: "Ranking system" })
+      .getByRole("link", { name: /Duna Sand Rating/ }),
+  ).toHaveAttribute("href", "/rankings?view=duna&gender=women");
+  await expectNoHorizontalOverflow(page);
+
+  await page.goto("/methodology");
+  await expect(
+    page.getByRole("heading", {
+      name: "Predict first. Learn second. Prove every gain.",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "No look-ahead" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Governed promotion" }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });

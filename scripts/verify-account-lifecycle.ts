@@ -1,4 +1,5 @@
 import { loadEnvFile } from "node:process";
+import { randomBytes } from "node:crypto";
 import { and, eq, inArray, or } from "drizzle-orm";
 import type Stripe from "stripe";
 import {
@@ -6,10 +7,13 @@ import {
   getDatabase,
   guardianConsents,
   guardianships,
+  healthConnections,
+  healthSamples,
   memberships,
   membershipTiers,
   people,
   privacyRequests,
+  videos,
   webhookEvents,
   workflowJobs,
 } from "../packages/db/src";
@@ -22,6 +26,7 @@ import {
   recordOwnBirthDate,
   requestAccountDeletion,
   scopesForRoles,
+  syncHealthSamples,
   updateOwnProfile,
   type ApiActor,
 } from "../packages/api/src";
@@ -59,6 +64,7 @@ async function main() {
   const now = new Date();
   const personId = crypto.randomUUID();
   let dependentPersonId: string | undefined;
+  const privacyRequestIds: string[] = [];
   const suffix = crypto.randomUUID();
   const subscriptionId = `sub_duna_verify_${suffix}`;
   const eventIds = {
@@ -236,6 +242,43 @@ async function main() {
       cancelled.id === firstRequest.id && cancelled.status === "cancelled",
       "Deletion request was not cancelled",
     );
+    privacyRequestIds.push(firstRequest.id);
+
+    process.env.HEALTH_DATA_ENCRYPTION_KEY ??=
+      randomBytes(32).toString("base64");
+    await syncHealthSamples({
+      actor,
+      categories: ["heart"],
+      timezone: "America/New_York",
+      samples: [
+        {
+          externalId: `health-${suffix}`,
+          metric: "heart-rate",
+          kind: "quantity",
+          startedAt: now.toISOString(),
+          endedAt: new Date(now.getTime() + 10_000).toISOString(),
+          value: 132,
+          unit: "count/min",
+        },
+      ],
+      deletedExternalIds: [],
+      syncedAt: new Date(now.getTime() + 1_500),
+      requestId: crypto.randomUUID(),
+    });
+    const videoId = crypto.randomUUID();
+    await database.insert(videos).values({
+      id: videoId,
+      ownerPersonId: personId,
+      source: "upload",
+      category: "practice",
+      title: "Account deletion verification video",
+      status: "ready",
+      liveVisibility: "public",
+      recordingVisibility: "public",
+      publishedToProfile: true,
+      createdAt: now,
+      updatedAt: now,
+    });
 
     await projectEvent(
       event(
@@ -329,6 +372,88 @@ async function main() {
       "Deleted subscription did not close the Premium membership",
     );
 
+    const finalRequest = await requestAccountDeletion({
+      actor,
+      reason: "Verify permanent sensitive-data deletion",
+      forfeitOrganizationCredits: false,
+      requestId: crypto.randomUUID(),
+      now: new Date(now.getTime() + 6_000),
+    });
+    privacyRequestIds.push(finalRequest.id);
+    const [containedHealth, containedVideo] = await Promise.all([
+      database.query.healthConnections.findFirst({
+        where: eq(healthConnections.personId, personId),
+      }),
+      database.query.videos.findFirst({ where: eq(videos.id, videoId) }),
+    ]);
+    assert(
+      containedHealth?.status === "revoked" &&
+        containedVideo?.recordingVisibility === "private" &&
+        !containedVideo.publishedToProfile,
+      "Deletion request did not immediately contain Health and video access",
+    );
+    const [containmentJob, deletionJob] = await Promise.all([
+      database.query.workflowJobs.findFirst({
+        where: and(
+          eq(workflowJobs.kind, "privacy.account-containment"),
+          eq(workflowJobs.idempotencyKey, finalRequest.id),
+        ),
+      }),
+      database.query.workflowJobs.findFirst({
+        where: and(
+          eq(workflowJobs.kind, "privacy.account-deletion"),
+          eq(workflowJobs.idempotencyKey, finalRequest.id),
+        ),
+      }),
+    ]);
+    assert(containmentJob && deletionJob, "Privacy workflows were not queued");
+    const contained = await processWorkflowJobById(
+      containmentJob.id,
+      new Date(now.getTime() + 7_000),
+    );
+    assert(contained?.status === "succeeded", "Containment workflow failed");
+    const early = await processWorkflowJobById(
+      deletionJob.id,
+      new Date(now.getTime() + 24 * 60 * 60 * 1_000),
+    );
+    assert(
+      early?.status === "queued" && early.attempts === 0,
+      "Permanent deletion ran before the seven-day recovery window",
+    );
+    const deleted = await processWorkflowJobById(
+      deletionJob.id,
+      new Date(now.getTime() + 8 * 24 * 60 * 60 * 1_000),
+    );
+    assert(
+      deleted?.status === "succeeded",
+      "Permanent deletion workflow failed",
+    );
+    const [deletedPerson, deletedRequest, healthRows, deletedVideo] =
+      await Promise.all([
+        database.query.people.findFirst({ where: eq(people.id, personId) }),
+        database.query.privacyRequests.findFirst({
+          where: eq(privacyRequests.id, finalRequest.id),
+        }),
+        database
+          .select({ id: healthSamples.id })
+          .from(healthSamples)
+          .where(eq(healthSamples.personId, personId)),
+        database.query.videos.findFirst({ where: eq(videos.id, videoId) }),
+      ]);
+    assert(
+      deletedPerson?.status === "deleted" &&
+        deletedPerson.email === null &&
+        deletedPerson.birthDate === null &&
+        deletedPerson.displayName === "Deleted Duna Player",
+      "Player identity was not de-identified",
+    );
+    assert(
+      deletedRequest?.status === "completed" &&
+        healthRows.length === 0 &&
+        !deletedVideo,
+      "Sensitive Health or video data survived permanent deletion",
+    );
+
     console.log(
       JSON.stringify(
         {
@@ -337,11 +462,13 @@ async function main() {
           profileLifecycle: "age recorded -> profile updated",
           guardianLifecycle:
             "private dependent -> consent recorded -> relationship pending",
-          deletionLifecycle: "queued -> cancelled",
+          deletionLifecycle:
+            "queued -> cancelled -> immediate containment -> seven-day hold -> provider purge -> de-identification",
           deletionRequestReused: firstRequest.id === repeatedRequest.id,
           membershipLifecycle:
             "active -> paused projection -> past_due -> canceled",
           duplicateWebhookRejected: duplicate.duplicate,
+          sensitiveDataDeleted: healthRows.length === 0 && !deletedVideo,
         },
         null,
         2,
@@ -354,7 +481,12 @@ async function main() {
         or(
           eq(auditLog.actorPersonId, personId),
           inArray(auditLog.traceId, allEventIds),
-          eq(auditLog.entityId, subscriptionId),
+          inArray(auditLog.entityId, [
+            subscriptionId,
+            personId,
+            ...(dependentPersonId ? [dependentPersonId] : []),
+            ...privacyRequestIds,
+          ]),
         ),
       );
     await database
@@ -365,7 +497,12 @@ async function main() {
       .where(eq(memberships.personId, personId));
     await database
       .delete(workflowJobs)
-      .where(inArray(workflowJobs.traceId, allEventIds));
+      .where(
+        or(
+          inArray(workflowJobs.traceId, allEventIds),
+          inArray(workflowJobs.idempotencyKey, privacyRequestIds),
+        ),
+      );
     await database
       .delete(webhookEvents)
       .where(inArray(webhookEvents.providerEventId, allEventIds));

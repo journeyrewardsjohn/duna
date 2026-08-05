@@ -6,6 +6,7 @@ import {
   displayFromMu,
   evaluatePredictions,
   muFromDisplay,
+  performanceEvidenceFromSetScores,
   professionalSeed,
   rateDoublesPerformance,
   rateDoublesMatch,
@@ -36,6 +37,20 @@ describe("Sand Rating engine", () => {
       verificationWeight: 0.85,
     };
     expect(rateDoublesMatch(input)).toEqual(rateDoublesMatch(input));
+  });
+
+  it("derives replayable performance evidence from a verified score", () => {
+    expect(
+      performanceEvidenceFromSetScores([
+        { a: 21, b: 17 },
+        { a: 18, b: 21 },
+        { a: 15, b: 12 },
+      ]),
+    ).toEqual({
+      actualTeamA: 0.90384615,
+      pointShareTeamA: 0.51923077,
+      marginMultiplier: 1.01346154,
+    });
   });
 
   it("replays stored performance evidence to the identical projection", () => {

@@ -1,5 +1,5 @@
-export const LEGAL_VERSION = "2026-08-02";
-export const LEGAL_EFFECTIVE_DATE = "August 2, 2026";
+export const LEGAL_VERSION = "2026-08-04";
+export const LEGAL_EFFECTIVE_DATE = "August 4, 2026";
 
 export interface LegalSection {
   readonly title: string;
@@ -119,7 +119,8 @@ export const legalDocuments: readonly LegalDocument[] = [
         title: "14. Suspension, termination, and account deletion",
         paragraphs: [
           "You may stop using Duna and may initiate account deletion from Account Settings. Before deletion, you must resolve withdrawable or pending money, active subscriptions, disputes, and ownership of any organization. If eligible organization credits remain, Duna will show the amount and require express acknowledgement of any permitted forfeiture.",
-          "Deletion removes or de-identifies account data except information reasonably retained for taxes, accounting, fraud prevention, safety, disputes, legal obligations, consent evidence, and transaction integrity. Duna may suspend or terminate access for material breach, risk, or legal necessity, with notice when reasonably possible.",
+          "When an eligible request is accepted, Duna immediately revokes Health sharing, remote-control sessions, public video visibility, share links, and live updates. Permanent deletion is scheduled seven days later so you can cancel from Account Settings. Cancellation does not automatically recreate grants, links, or public visibility that were revoked for safety.",
+          "After the recovery window, Duna deletes the authentication identity, imported Health records, Duna-hosted videos and provider copies, posts, messages, forms, connected-account credentials, and other sensitive service data. Financial, tax, consent, fraud-prevention, safety, dispute, security, and transaction-integrity records may be retained only as reasonably required and are de-identified or access-restricted where possible. Duna may suspend or terminate access for material breach, risk, or legal necessity, with notice when reasonably possible.",
         ],
       },
       {
@@ -166,6 +167,7 @@ export const legalDocuments: readonly LegalDocument[] = [
           "Organization records: business, venue and court addresses, staff roles, schedules, compensation configuration, customer records, waivers, policies, inventory, campaign settings, and performance data.",
           "Device and usage: IP address, device and browser details, app version, logs, diagnostics, approximate or precise location when permitted, cookies, feature interactions, and security events.",
           "Content and communications: messages, forms, waivers, support requests, campaign engagement, uploaded media, voice or typed onboarding responses, and AI-derived profile suggestions.",
+          "Optional Apple Health information: the performance categories you select, which may include heart rate and variability, sleep, respiratory and oxygen signals, body temperature, activity, energy, steps, distance, workouts, weight, body-fat percentage, and lean body mass. Duna does not write data to Apple Health.",
         ],
       },
       {
@@ -203,53 +205,62 @@ export const legalDocuments: readonly LegalDocument[] = [
         ],
       },
       {
-        title: "8. How we disclose information",
+        title: "8. Apple Health and performance context",
+        paragraphs: [
+          "Duna imports Apple Health information only after you choose categories and complete Apple's system permission flow. We use imported information to build your private Health timeline, provide descriptive recovery and match context, and—when separately authorized—align heart rate with your Duna Vision recordings. These features are for fitness and performance context, not diagnosis, treatment, or medical advice.",
+          "Imported Health values are encrypted before database storage and are not used for advertising, marketing profiles, eligibility, credit, insurance, employment, or sale. Public profile or video visibility never makes Health information public. Duna shares Health information with another player, a coach, or authorized club staff only when you create a specific, expiring Duna grant identifying the recipient, categories, and allowed view. Current relationships and the grant are rechecked when information is viewed, and non-owner access is audited.",
+          "You can revoke a Duna sharing grant immediately or disconnect Duna Health to delete imported samples and revoke all grants. Apple separately controls source permission in Health and Settings; changing a Duna display grant does not change Apple's permission, and changing Apple's permission may limit future imports. Duna does not store Health data in iCloud.",
+        ],
+      },
+      {
+        title: "9. How we disclose information",
         paragraphs: [
           "We disclose information to the organization, coach, facility, event host, teammate, parent, guardian, or user involved in a transaction or activity; to vendors that provide cloud hosting, payments, identity, messaging, maps, analytics, customer support, app distribution, and security; and to authorities or counterparties when reasonably necessary for law, safety, fraud, disputes, or corporate transactions.",
           "We do not sell personal information for money and do not share it for cross-context behavioral advertising. If that practice changes, we will update this policy and provide legally required choices before the change applies.",
         ],
       },
       {
-        title: "9. Public visibility and search",
+        title: "10. Public visibility and search",
         paragraphs: [
           "Public profiles, ratings, event pages, rosters, professional results, and public match pages may be visible to search engines and AI answer systems. Private account fields, exact birth dates, payment details, guardian records, private messages, and protected forms are not intended for public display. Use visibility controls and contact us if a public field is inaccurate.",
         ],
       },
       {
-        title: "10. Communications and choices",
+        title: "11. Communications and choices",
         paragraphs: [
           "Transactional messages include receipts, security alerts, booking changes, invitations, waitlist notices, guardian actions, and service notices. You cannot opt out of messages necessary to provide a requested service. Marketing email, SMS, WhatsApp, RCS, and push notifications use the consent and unsubscribe controls shown in Duna or the message.",
         ],
       },
       {
-        title: "11. Cookies, analytics, and location",
+        title: "12. Cookies, analytics, and location",
         paragraphs: [
           "We use essential storage for authentication, security, preferences, and transactions and may use limited analytics to understand reliability and feature use. Where required, optional cookies or similar technologies are presented through a consent choice. Location is used only with permission or from an address you provide to support maps, nearby discovery, taxes, availability, and safety.",
         ],
       },
       {
-        title: "12. Retention and deletion",
+        title: "13. Retention and deletion",
         paragraphs: [
           "We retain information only as long as reasonably necessary for the purpose collected, the life of your account, an organization instruction, and applicable tax, accounting, consumer-protection, employment, safeguarding, fraud, dispute, and legal obligations. Retention periods differ by record type.",
-          "Account deletion removes or de-identifies profile and service data after balances, subscriptions, organization ownership, disputes, and legal holds are resolved. Ledger, payment, tax, consent, moderation, and security records may be retained in restricted form for their required period. Backups age out under standard schedules.",
+          "An eligible account-deletion request immediately revokes Health sharing, remote-control sessions, public video visibility, share links, and live updates. Permanent deletion is scheduled seven days later and can be cancelled before that deadline. Cancellation does not automatically restore previously revoked sharing or public access.",
+          "After the recovery window, we delete the authentication identity, imported Health records, Duna-hosted videos and provider copies, posts, messages, forms, connected-account credentials, and other sensitive service data. Ledger, payment, tax, consent, moderation, dispute, fraud-prevention, and security records may be retained in restricted, de-identified form for their required period. Backups age out under controlled schedules and are not restored to production except for disaster recovery.",
         ],
       },
       {
-        title: "13. Your privacy rights",
+        title: "14. Your privacy rights",
         paragraphs: [
           "Depending on where you live, you may request access, correction, deletion, restriction, portability, or objection; withdraw consent; opt out of certain marketing or automated processing; or appeal a denied request. You may also submit a complaint to your local privacy regulator.",
           "Use Account Settings to edit profile fields, export data, manage communications, or initiate deletion, or email privacy@duna.coach. We verify requests and may deny or limit them when permitted by law, such as to protect another person, preserve transaction integrity, or comply with retention duties. Authorized agents must provide proof of authority.",
         ],
       },
       {
-        title: "14. Security and international transfers",
+        title: "15. Security and international transfers",
         paragraphs: [
           "We use administrative, technical, and organizational safeguards appropriate to the sensitivity of the information, including scoped access, encryption in transit, audit trails, tenant isolation, and incident procedures. No system is perfectly secure.",
           "Duna and its providers may process information in the United States and other countries. Where required, we use recognized transfer mechanisms and contractual safeguards.",
         ],
       },
       {
-        title: "15. Changes and contact",
+        title: "16. Changes and contact",
         paragraphs: [
           "We may update this policy to reflect new features, providers, or laws. Material changes will be highlighted and renewed consent will be requested when required.",
           "Contact the privacy team at privacy@duna.coach or Beach Elite LLC d/b/a Duna, United States. Organization-specific questions may also be directed to the relevant club, coach, facility, or event organizer.",

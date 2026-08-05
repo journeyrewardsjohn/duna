@@ -6,12 +6,14 @@ private Cloudflare R2 bucket.
 
 ## Product surfaces
 
-| Surface     | Capability                                                                                                                                                    |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Duna iOS    | Go Live, guided camera setup, native recording, library upload, live/on-demand playback, private archive, publishing controls, share links, and owner metrics |
-| Public web  | Mux/R2 playback on player, event, and match pages; multiple stream angles for the same match; link-only playback                                              |
-| Duna Pro    | Associated match video and live angles                                                                                                                        |
-| Super Admin | Provider readiness, safety ceilings, current streams, usage, storage, watch time, and Complimentary Premium+ grants                                           |
+| Surface     | Capability                                                                                                                                                                                                 |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Duna iOS    | Go Live, guided camera setup, native Duna Vision recording, Watch scoring and moment tags, remote setup QR, live score overlay, library upload, playback, privacy controls, share links, and owner metrics |
+| Apple Watch | Large live scoreboard, four-direction gesture scoring, favorite/undo/side-change tags, haptics, and a low-frame-rate camera alignment check                                                                |
+| Public web  | Mux/R2 playback on player, event, and match pages; multiple stream angles for the same match; link-only playback; timestamped score overlay                                                                |
+| Duna Pro    | Cleaner live scorer with a persistent exit, associated match video, and live angles                                                                                                                        |
+| Remote web  | Time-limited QR control for team/court setup, draggable court corners, camera and net heights, camera preview, and record/stop controls                                                                    |
+| Super Admin | Provider readiness, safety ceilings, current streams, usage, storage, watch time, and Complimentary Duna+ grants                                                                                           |
 
 Android capture is intentionally unavailable in this release. Public playback
 continues to work on supported browsers and inside the app.
@@ -95,18 +97,27 @@ already exists and otherwise remains email-bound until the account is resolved.
 
 ## Guided iOS capture
 
-The local Expo module combines AVFoundation, Apple Vision, Core Motion, and
-HaishinKit:
+The local Expo module combines ARKit, AVFoundation, Apple Vision, Core Motion,
+and HaishinKit:
 
+- Before capture, ARKit finds a horizontal ground plane and projects the known
+  court geometry from the usual position behind an end line. On supported
+  devices, LiDAR scene depth and mesh reconstruction improve the ground lock.
+  Non-LiDAR phones use ARKit plane detection and then Vision/Core Motion.
 - AVFoundation owns camera, microphone, focus/exposure, local recording, and
   capture buffers.
 - Vision checks the frame for court-like rectangular geometry and human body
-  poses.
+  poses. A ground plane alone is not enough to award a Good grade; Duna also
+  looks for boundary evidence so an indoor floor is not labeled as a court.
 - Core Motion checks device stability and records attitude.
-- The overlay shows four outside corners, net line, center, horizon, and safe
-  margins.
+- The overlay continuously projects four outside corners, net line, center,
+  horizon, and safe margins as the camera moves.
 - Guidance covers framing, distance, rotation, stability, player scale, and low
-  light.
+  light. Suggestions are stabilized before changing so the user can make small,
+  gradual adjustments.
+- Setup asks for Landscape or Portrait. The camera guide detects the physical
+  orientation, asks the user to rotate when needed, and locks the selected
+  capture orientation once recording begins.
 - Acceptable calibration locks focus, exposure, lens, and zoom, then stores the
   calibration with the video.
 
@@ -120,6 +131,82 @@ junior height varies by age and competition rules.
 Court homography supports high-confidence ground-plane positions. Monocular
 ball height and apex remain estimates with a confidence interval. Product copy
 must not present arbitrary single-camera height as centimeter-perfect.
+
+## Duna Vision sessions
+
+Every Duna Vision capture creates a server-owned session before recording. A
+session can be linked to a match and later attached to either a live video or a
+completed upload. It stores normalized court corners, court and camera
+dimensions, team labels, score-overlay preference, and a monotonically
+increasing control version.
+
+The timeline is append-only. Each Watch, iPhone, remote, or match event carries
+its own UUID, source, wall-clock time, recording-relative elapsed time, and the
+score snapshot after the action when relevant. Event UUIDs make retries
+idempotent. Undo events target prior event IDs rather than deleting history.
+This preserves the raw material needed to rebuild a replay accurately and to
+add later computer-vision observations without rewriting human input.
+
+### Apple Watch controls
+
+While a Vision session is active, the Watch uses four full-screen gestures:
+
+- Swipe up: Side A point.
+- Swipe down: Side B point.
+- Swipe right: favorite the current moment.
+- Swipe left: undo the previous scoring action.
+
+The Watch also exposes explicit favorite, undo, and side-change controls. It
+queues events locally and removes them only after iPhone and server
+acknowledgement, so a brief connectivity interruption does not silently lose a
+tag. The final Watch score remains a draft until the official match scorer
+accepts it; when an authorized live scorer is linked, accepted point and undo
+events also enter the existing official match event stream.
+
+The camera check is deliberately a low-resolution, low-frame-rate preview for
+alignment, not a second video stream. Real-device battery, thermal, reachability,
+and background-behavior testing is required before release.
+
+### Connect Remote Device
+
+The iPhone displays a QR code containing a random, time-limited control URL.
+The server stores only a hash of that token. The remote page is excluded from
+search indexing and can be revoked by the recording owner.
+
+The remote can view the throttled alignment preview, drag the four court
+corners, select court and net presets, set camera height and team labels, toggle
+the score overlay, and request start or stop. Optimistic version checks prevent
+two controllers from silently overwriting each other. The QR grants control of
+that Vision session only; it does not grant a Duna account or general match
+administration.
+
+### Score overlays and future computer vision
+
+If a video is linked to an officially scored match, the current match score is
+authoritative during a live stream. Recorded playback reconstructs the
+bottom-right score from timestamped Vision events. A live score is never
+replaced by an older Watch snapshot.
+
+Court geometry, camera height, event timestamps, and side-change tags establish
+the coordinate and time foundation for future player heatmaps, automatic side
+change detection, and other computer-vision outputs. Those inferred analytics
+are not part of this release and should be confidence-scored, reviewable, and
+stored separately from human-authored scoring events.
+
+### Private Health overlay
+
+When the recording owner has connected the Heart category, Duna can align
+HealthKit heart-rate samples to the video's recording start. Native and web
+players render the current value at the bottom left while the linked scoreboard
+remains at the bottom right.
+
+Health authorization is independent of video authorization. A public video or
+valid video share link never grants access to Health data. The API returns
+heart-rate points only to the Health owner or to an authenticated recipient
+with an active, unexpired grant that includes both the Heart category and the
+`video-overlay` scope; the underlying player, coach, or organization
+relationship is rechecked on every request. See `docs/HEALTH_PRIVACY.md` for
+the full boundary.
 
 ## Playback and measurement
 
@@ -148,6 +235,7 @@ Production:
 
 ```text
 DATABASE_URL
+HEALTH_DATA_ENCRYPTION_KEY
 GOOGLE_PLACES_API_KEY
 CLOUDFLARE_ACCOUNT_ID
 R2_BUCKET_NAME=duna
@@ -186,18 +274,26 @@ models.
 ## Release sequence
 
 1. Apply forward-only database migrations through
-   `0045_equal_skullbuster.sql`.
+   the latest checked-in migration. Migration `0045` adds Duna Vision sessions
+   and append-only timeline events; migration `0046` adds encrypted Duna Health
+   storage and sharing controls.
 2. Add R2 credentials to Duna Web. The existing sensitive Duna HQ values cannot
    be exported or copied by Vercel CLI.
+   Add `GOOGLE_PLACES_API_KEY` to Duna Web as well; the mobile venue picker calls
+   the server-side Duna Web Places proxy.
 3. Install/approve Mux in the account, create API and signing keys, set the
    webhook secret, and add all Mux values to both server projects.
 4. Create a fresh iOS build. Expo Go cannot load the local native capture
    module.
 5. Validate one Public and one Link-only live stream, a private recording, a
    public recording, two angles on one match, and an R2 upload.
-6. Confirm the `john@beachelite.org` profile displays Complimentary Premium+ after
+6. On physical iPhone and Watch hardware, validate all four gestures, offline
+   event recovery, favorite timestamps, score overlay timing, live score
+   authority, QR expiry/revocation, remote version conflicts, camera preview,
+   and remote start/stop.
+7. Confirm the `john@beachelite.org` profile displays Complimentary Duna+ after
    migration.
-7. Run `pnpm verify`, the connected repository smoke, and an iOS physical-device
+8. Run `pnpm verify`, the connected repository smoke, and an iOS physical-device
    stream before production promotion.
 
 Mux marketplace terms, production credentials, database migration, App Store

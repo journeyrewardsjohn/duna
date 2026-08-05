@@ -1331,7 +1331,7 @@ const styles = StyleSheet.create({
   },
   goalEyebrow: {
     color: "#d9bd82",
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
   },
@@ -1391,7 +1391,7 @@ const styles = StyleSheet.create({
   goalPeriodOn: { backgroundColor: "#fff" },
   goalPeriodText: {
     color: "rgba(255,255,255,.7)",
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "900",
     textTransform: "capitalize",
   },
@@ -1407,7 +1407,7 @@ const styles = StyleSheet.create({
   inlineError: { color: "#ffd0d0", fontSize: 10, lineHeight: 15 },
   sectionLabel: {
     color: "#667085",
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
     marginTop: 34,
@@ -1436,7 +1436,7 @@ const styles = StyleSheet.create({
   historyTitle: { color: "#101828", fontSize: 12, fontWeight: "900" },
   historyMeta: {
     color: "#667085",
-    fontSize: 9,
+    fontSize: 10,
     marginTop: 3,
     textTransform: "capitalize",
   },
@@ -1518,7 +1518,7 @@ const styles = StyleSheet.create({
   referenceTitle: { color: "#101828", fontSize: 13, fontWeight: "900" },
   referenceMeta: {
     color: "#667085",
-    fontSize: 9,
+    fontSize: 10,
     lineHeight: 13,
     marginTop: 4,
   },
@@ -1559,7 +1559,7 @@ const styles = StyleSheet.create({
   },
   tenderIconText: { color: "#63e3db", fontSize: 17, fontWeight: "900" },
   tenderTitle: { color: "#101828", fontSize: 14, fontWeight: "900" },
-  tenderMeta: { color: "#667085", fontSize: 9, lineHeight: 13, marginTop: 4 },
+  tenderMeta: { color: "#667085", fontSize: 10, lineHeight: 13, marginTop: 4 },
   disabled: { opacity: 0.45 },
   netCard: {
     backgroundColor: "#eef5f1",
@@ -1569,7 +1569,7 @@ const styles = StyleSheet.create({
   },
   netLabel: {
     color: "#3d7d66",
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.9,
   },
@@ -1579,7 +1579,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginTop: 5,
   },
-  netMeta: { color: "#587466", fontSize: 9, lineHeight: 14, marginTop: 5 },
+  netMeta: { color: "#587466", fontSize: 10, lineHeight: 14, marginTop: 5 },
   paymentError: {
     backgroundColor: "#fff0f0",
     borderRadius: 13,
@@ -1739,7 +1739,7 @@ const styles = StyleSheet.create({
   resultActions: { gap: 9, marginTop: 18 },
   loggedTrust: {
     color: "#667085",
-    fontSize: 9,
+    fontSize: 10,
     lineHeight: 14,
     marginTop: 15,
     textAlign: "center",

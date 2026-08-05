@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   inferHistoricalPersonId,
+  inheritProfessionalEventEditorial,
   mergeProfessionalEventPayload,
   parseAvpLeagueEventPayload,
   parsePlayerSourceProfile,
@@ -19,6 +20,13 @@ describe("FIVB event detail refresh", () => {
           detailLevel: "tournament",
           detailSyncedAt: "2026-08-03T12:00:00.000Z",
           teamEntries: [{ label: "Crabb / Benesh" }],
+          professionalEditorial: {
+            overrides: { startsOn: "2026-08-07" },
+            media: [{ id: "dallas-poster", kind: "poster" }],
+          },
+          professionalResearch: {
+            latest: { id: "research-proposal", status: "review" },
+          },
           watchOptions: [{ id: "vbtv" }],
         },
         syncedAt,
@@ -28,6 +36,13 @@ describe("FIVB event detail refresh", () => {
       detailLevel: "tournament",
       detailSyncedAt: "2026-08-03T12:00:00.000Z",
       teamEntries: [{ label: "Crabb / Benesh" }],
+      professionalEditorial: {
+        overrides: { startsOn: "2026-08-07" },
+        media: [{ id: "dallas-poster", kind: "poster" }],
+      },
+      professionalResearch: {
+        latest: { id: "research-proposal", status: "review" },
+      },
       watchOptions: [{ id: "vbtv" }],
     });
   });
@@ -133,6 +148,65 @@ describe("professionalEventSlug", () => {
         startsOn: "2026-08-20",
       }),
     ).toBe("elite-16-montreal-womens-2026-08-20");
+  });
+});
+
+describe("professional event division details", () => {
+  it("uses event-wide sibling details only when this division is missing them", () => {
+    expect(
+      inheritProfessionalEventEditorial(
+        {
+          overrides: {},
+          media: [],
+          summary: "Men's division summary",
+        },
+        {
+          overrides: { location: "Hamburg, Germany" },
+          media: [
+            {
+              id: "hamburg-poster",
+              kind: "poster",
+              url: "https://example.com/hamburg.jpg",
+              alt: "Hamburg event poster",
+              featured: true,
+            },
+          ],
+          summary: "Shared event summary",
+          venueName: "Hamburg-Horn racecourse",
+          venueAddress: "Rennbahnstraße 96, Hamburg",
+          timezone: "Europe/Berlin",
+        },
+      ),
+    ).toMatchObject({
+      overrides: {},
+      summary: "Men's division summary",
+      venueName: "Hamburg-Horn racecourse",
+      venueAddress: "Rennbahnstraße 96, Hamburg",
+      timezone: "Europe/Berlin",
+      media: [{ id: "hamburg-poster" }],
+    });
+  });
+
+  it("keeps division-specific details when both divisions are configured", () => {
+    expect(
+      inheritProfessionalEventEditorial(
+        {
+          overrides: {},
+          media: [],
+          venueName: "Men's venue",
+          timezone: "America/Chicago",
+        },
+        {
+          overrides: {},
+          media: [],
+          venueName: "Women's venue",
+          timezone: "Europe/Berlin",
+        },
+      ),
+    ).toMatchObject({
+      venueName: "Men's venue",
+      timezone: "America/Chicago",
+    });
   });
 });
 

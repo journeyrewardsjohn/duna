@@ -2,6 +2,7 @@ import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   S3Client,
   UploadPartCommand,
@@ -9,7 +10,9 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import Mux from "@mux/mux-node";
 
-export const R2_VIDEO_PART_SIZE_BYTES = 64 * 1024 * 1024;
+// Keep each in-app upload comfortably below iOS memory pressure while still
+// clearing S3's 5 MiB minimum for every non-final multipart segment.
+export const R2_VIDEO_PART_SIZE_BYTES = 16 * 1024 * 1024;
 const R2_URL_EXPIRATION_SECONDS = 60 * 30;
 const VIDEO_PLAYBACK_TOKEN_MINIMUM_SECONDS = 2 * 60 * 60;
 
@@ -157,6 +160,16 @@ export async function abortR2VideoUpload(input: {
   );
 }
 
+export async function deleteR2VideoObject(objectKey: string): Promise<void> {
+  const { client, configuration } = getR2Client();
+  await client.send(
+    new DeleteObjectCommand({
+      Bucket: configuration.bucket,
+      Key: objectKey,
+    }),
+  );
+}
+
 export async function presignR2VideoPlayback(input: {
   readonly objectKey: string;
   readonly contentType?: string;
@@ -247,6 +260,50 @@ export function muxDataEnvironmentKey(): string | undefined {
   return process.env.MUX_DATA_ENV_KEY?.trim() || undefined;
 }
 
+export function buildMuxLiveStreamInput(input: {
+  readonly videoId: string;
+  readonly title: string;
+  readonly liveVisibility: "public" | "link-only";
+  readonly recordingVisibility: "public" | "private";
+  readonly maximumDurationSeconds: number;
+}) {
+  const playbackPolicy =
+    input.liveVisibility === "public"
+      ? ("public" as const)
+      : ("signed" as const);
+  const recordingPolicy =
+    input.recordingVisibility === "public"
+      ? ("public" as const)
+      : ("signed" as const);
+
+  return {
+    playbackPolicy,
+    recordingPolicy,
+    request: {
+      playback_policies: [playbackPolicy],
+      latency_mode: "low" as const,
+      reconnect_window: 60,
+      max_continuous_duration: Math.min(
+        12 * 60 * 60,
+        Math.max(60, input.maximumDurationSeconds),
+      ),
+      // Mux now carries the live-stream passthrough value to every asset it
+      // creates. Sending it inside new_asset_settings is rejected by the API.
+      passthrough: input.videoId,
+      meta: {
+        title: input.title,
+      },
+      new_asset_settings: {
+        playback_policies: [recordingPolicy],
+        meta: {
+          title: input.title,
+          external_id: input.videoId,
+        },
+      },
+    },
+  };
+}
+
 export async function createMuxLiveVideo(input: {
   readonly videoId: string;
   readonly title: string;
@@ -263,40 +320,17 @@ export async function createMuxLiveVideo(input: {
   if (!isMuxVideoConfigured()) {
     throw new Error("Mux Video credentials are not configured.");
   }
-  const playbackPolicy =
-    input.liveVisibility === "public" ? "public" : "signed";
-  const recordingPolicy =
-    input.recordingVisibility === "public" ? "public" : "signed";
+  const { playbackPolicy, recordingPolicy, request } =
+    buildMuxLiveStreamInput(input);
   if (
     (playbackPolicy === "signed" || recordingPolicy === "signed") &&
     !isMuxSignedPlaybackConfigured()
   ) {
     throw new Error("Mux signed-playback credentials are not configured.");
   }
-  const liveStream = await getMuxClient().video.liveStreams.create(
-    {
-      playback_policies: [playbackPolicy],
-      latency_mode: "low",
-      reconnect_window: 60,
-      max_continuous_duration: Math.min(
-        12 * 60 * 60,
-        Math.max(60, input.maximumDurationSeconds),
-      ),
-      meta: {
-        title: input.title,
-      },
-      new_asset_settings: {
-        passthrough: input.videoId,
-        playback_policies: [recordingPolicy],
-        meta: {
-          title: input.title,
-        },
-      },
-    },
-    {
-      headers: { "Idempotency-Key": input.idempotencyKey },
-    },
-  );
+  const liveStream = await getMuxClient().video.liveStreams.create(request, {
+    headers: { "Idempotency-Key": input.idempotencyKey },
+  });
   const playback = liveStream.playback_ids?.find(
     (candidate) => candidate.policy === playbackPolicy,
   );
@@ -315,6 +349,36 @@ export async function completeMuxLiveVideo(
   liveStreamId: string,
 ): Promise<void> {
   await getMuxClient().video.liveStreams.complete(liveStreamId);
+}
+
+function providerResourceMissing(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as {
+    readonly status?: number;
+    readonly statusCode?: number;
+    readonly response?: { readonly status?: number };
+  };
+  return (
+    candidate.status === 404 ||
+    candidate.statusCode === 404 ||
+    candidate.response?.status === 404
+  );
+}
+
+export async function deleteMuxLiveVideo(liveStreamId: string): Promise<void> {
+  try {
+    await getMuxClient().video.liveStreams.delete(liveStreamId);
+  } catch (error) {
+    if (!providerResourceMissing(error)) throw error;
+  }
+}
+
+export async function deleteMuxVideoAsset(assetId: string): Promise<void> {
+  try {
+    await getMuxClient().video.assets.delete(assetId);
+  } catch (error) {
+    if (!providerResourceMissing(error)) throw error;
+  }
 }
 
 export async function replaceMuxLivePlaybackPolicy(input: {

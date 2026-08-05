@@ -53,7 +53,9 @@ it is not a production-complete claim.
 - WorkOS production environment, verified domain, and final redirect/logout
   promotion (staging AuthKit is connected to the live Duna surfaces)
 - Inngest event/signing keys
-- Licensed VolleyballLife and BVBInfo datasets
+- Provider authorization, retention terms, and credentials for any new player
+  dataset beyond the operator-authorized SandRating, VolleyballLife, BVBInfo,
+  and FIVB feeds
 - Wallet, minors, privacy, escheatment, and tax counsel review
 - Apple Tap to Pay development and distribution entitlements
 - App Store and Play Store organization enrollment and review

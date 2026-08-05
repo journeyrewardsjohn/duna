@@ -86,7 +86,7 @@ function TeamResultRow({
         </div>
       ) : (
         <span className="professional-match-card__pending">
-          {status === "live" ? "Score updating" : "Scheduled"}
+          {status === "live" ? "Waiting for first point" : "Not started"}
         </span>
       )}
       <span className="professional-match-card__total">

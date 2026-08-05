@@ -4,16 +4,14 @@ import {
   eventTypes,
   getDatabase,
   guardianships,
-  healthMetricSnapshots,
+  healthConnections,
+  healthSharingGrants,
   membershipTiers,
   memberships,
   messages,
   orderItems,
   orders,
   organizationCreditGrants,
-  organizationHealthDataGrants,
-  organizationMemberships,
-  organizationParticipants,
   organizations,
   organizationWallets,
   people,
@@ -29,7 +27,7 @@ import {
   venues,
   videos,
 } from "@duna/db";
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import type {
   OperatorMemberProfile,
@@ -39,6 +37,7 @@ import type {
   OperatorWorkspace,
 } from "./contracts";
 import type { ApiActor } from "./context";
+import { loadHealthProfile } from "./health-service";
 import {
   loadDemoOperatorWorkspace,
   loadOperatorWorkspace,
@@ -327,11 +326,16 @@ async function loadSessionNotes(input: {
   }));
 }
 
-export async function loadOperatorMemberProfile(
-  organizationId: string,
-  personId: string,
-): Promise<OperatorMemberProfile> {
+export async function loadOperatorMemberProfile(input: {
+  readonly actor: ApiActor;
+  readonly organizationId: string;
+  readonly personId: string;
+  readonly now: Date;
+  readonly requestId?: string;
+  readonly ipAddress?: string;
+}): Promise<OperatorMemberProfile> {
   requireDatabase();
+  const { organizationId, personId } = input;
   const { relationship, workspace } = await assertRelationship(
     organizationId,
     personId,
@@ -418,18 +422,22 @@ export async function loadOperatorMemberProfile(
       )
       .orderBy(desc(videos.createdAt))
       .limit(24),
-    database.query.organizationHealthDataGrants.findFirst({
+    database.query.healthSharingGrants.findFirst({
       where: and(
-        eq(organizationHealthDataGrants.organizationId, organizationId),
-        eq(organizationHealthDataGrants.personId, personId),
-        eq(organizationHealthDataGrants.status, "active"),
+        eq(healthSharingGrants.ownerPersonId, personId),
+        eq(healthSharingGrants.audienceKind, "organization"),
+        eq(healthSharingGrants.organizationId, organizationId),
+        isNull(healthSharingGrants.revokedAt),
+        gte(healthSharingGrants.expiresAt, input.now),
+        sql`${healthSharingGrants.scopes} @> ARRAY['summary']::text[]`,
       ),
+      orderBy: [desc(healthSharingGrants.createdAt)],
     }),
   ]);
 
   const orderIds = orderRows.map((order) => order.id);
-  const [itemRows, refundRows, notes, latestHealthSnapshot] = await Promise.all(
-    [
+  const [itemRows, refundRows, notes, healthProfile, healthConnection] =
+    await Promise.all([
       orderIds.length
         ? database
             .select()
@@ -450,17 +458,20 @@ export async function loadOperatorMemberProfile(
         : Promise.resolve([]),
       loadSessionNotes({ organizationId, personId }),
       healthGrant
-        ? database.query.healthMetricSnapshots.findFirst({
-            where: and(
-              eq(healthMetricSnapshots.grantId, healthGrant.id),
-              eq(healthMetricSnapshots.organizationId, organizationId),
-              eq(healthMetricSnapshots.personId, personId),
-            ),
-            orderBy: [desc(healthMetricSnapshots.observedAt)],
+        ? loadHealthProfile({
+            actor: input.actor,
+            subjectPersonId: personId,
+            now: input.now,
+            requestId: input.requestId,
+            ipAddress: input.ipAddress,
           })
         : Promise.resolve(undefined),
-    ],
-  );
+      healthGrant
+        ? database.query.healthConnections.findFirst({
+            where: eq(healthConnections.personId, personId),
+          })
+        : Promise.resolve(undefined),
+    ]);
   const noteCountBySession = new Map<string, number>();
   for (const note of notes) {
     noteCountBySession.set(
@@ -636,15 +647,31 @@ export async function loadOperatorMemberProfile(
     purchases,
     notes,
     videos: mappedVideos,
-    health: healthGrant
-      ? {
-          source: "apple-healthkit",
-          scopes: healthGrant.scopes,
-          grantedAt: healthGrant.grantedAt.toISOString(),
-          observedAt: latestHealthSnapshot?.observedAt.toISOString(),
-          metrics: latestHealthSnapshot?.metrics,
-        }
-      : undefined,
+    health:
+      healthGrant && healthProfile
+        ? {
+            source: "apple-healthkit",
+            scopes: healthGrant.categories,
+            grantedAt: healthGrant.createdAt.toISOString(),
+            observedAt: healthConnection?.lastSyncedAt?.toISOString(),
+            metrics: {
+              restingHeartRate: healthProfile.summary.restingHeartRate,
+              heartRateVariabilityMs:
+                healthProfile.summary.heartRateVariabilityMs,
+              sleepHours: healthProfile.summary.lastSleepHours,
+              steps:
+                healthProfile.daily[0]?.steps === undefined
+                  ? undefined
+                  : Math.round(healthProfile.daily[0].steps),
+              activeEnergyKcal:
+                healthProfile.daily[0]?.activeEnergyKcal ??
+                healthProfile.summary.sevenDayActiveEnergyKcal,
+              latestWorkoutAt: healthProfile.timeline.find(
+                (entry) => entry.metric === "workout",
+              )?.startedAt,
+            },
+          }
+        : undefined,
     timeline,
   };
 }
@@ -1788,175 +1815,4 @@ export async function updateOperatorMemberProfile(input: {
     }),
   ]);
   return { id: input.personId, entity: "member-profile", status: "updated" };
-}
-
-async function assertPersonOrganizationRelationship(
-  organizationId: string,
-  personId: string,
-): Promise<void> {
-  const database = getDatabase();
-  const row = await database
-    .select({ personId: people.id })
-    .from(people)
-    .leftJoin(
-      organizationParticipants,
-      and(
-        eq(organizationParticipants.personId, people.id),
-        eq(organizationParticipants.organizationId, organizationId),
-      ),
-    )
-    .leftJoin(
-      organizationMemberships,
-      and(
-        eq(organizationMemberships.personId, people.id),
-        eq(organizationMemberships.organizationId, organizationId),
-        eq(organizationMemberships.active, true),
-      ),
-    )
-    .where(
-      and(
-        eq(people.id, personId),
-        or(
-          sql`${organizationParticipants.id} IS NOT NULL`,
-          sql`${organizationMemberships.id} IS NOT NULL`,
-        ),
-      ),
-    )
-    .limit(1);
-  if (!row[0]) throw new Error("You are not connected to this organization.");
-}
-
-export async function shareOrganizationHealthSnapshot(input: {
-  readonly actor: ApiActor;
-  readonly organizationId: string;
-  readonly scopes: readonly string[];
-  readonly disclosureText: string;
-  readonly metrics: {
-    readonly restingHeartRate?: number;
-    readonly heartRateVariabilityMs?: number;
-    readonly sleepHours?: number;
-    readonly steps?: number;
-    readonly activeEnergyKcal?: number;
-    readonly exerciseMinutes?: number;
-    readonly latestWorkoutAt?: string;
-  };
-  readonly observedAt: Date;
-  readonly requestId: string;
-  readonly ipAddress?: string;
-  readonly now: Date;
-}): Promise<OperatorMutationResult> {
-  requireDatabase();
-  await assertPersonOrganizationRelationship(
-    input.organizationId,
-    input.actor.personId,
-  );
-  const allowedScopes = new Set([
-    "activity",
-    "heart-rate",
-    "sleep",
-    "workouts",
-  ]);
-  const scopes = [
-    ...new Set(input.scopes.filter((scope) => allowedScopes.has(scope))),
-  ];
-  if (scopes.length === 0)
-    throw new Error("Choose at least one health summary.");
-  const database = getDatabase();
-  const grantId = crypto.randomUUID();
-  const grant = await database
-    .insert(organizationHealthDataGrants)
-    .values({
-      id: grantId,
-      organizationId: input.organizationId,
-      personId: input.actor.personId,
-      scopes,
-      disclosureText: input.disclosureText.trim(),
-      disclosureTextHash: stableHash({ text: input.disclosureText.trim() }),
-      status: "active",
-      grantedAt: input.now,
-    })
-    .onConflictDoUpdate({
-      target: [
-        organizationHealthDataGrants.organizationId,
-        organizationHealthDataGrants.personId,
-      ],
-      set: {
-        scopes,
-        status: "active",
-        disclosureText: input.disclosureText.trim(),
-        disclosureTextHash: stableHash({ text: input.disclosureText.trim() }),
-        grantedAt: input.now,
-        revokedAt: null,
-        updatedAt: input.now,
-      },
-    })
-    .returning({ id: organizationHealthDataGrants.id })
-    .then((rows) => rows[0]);
-  if (!grant) throw new Error("Health sharing permission could not be saved.");
-  const snapshotId = crypto.randomUUID();
-  await database.batch([
-    database.insert(healthMetricSnapshots).values({
-      id: snapshotId,
-      grantId: grant.id,
-      organizationId: input.organizationId,
-      personId: input.actor.personId,
-      metrics: input.metrics,
-      observedAt: input.observedAt,
-    }),
-    database.insert(auditLog).values({
-      organizationId: input.organizationId,
-      actorPersonId: input.actor.personId,
-      actorType: "person",
-      action: "health.summary_shared",
-      entityType: "health-share",
-      entityId: grant.id,
-      afterHash: stableHash({ scopes, observedAt: input.observedAt }),
-      reason:
-        "Player consented to share selected HealthKit summary categories with this organization.",
-      traceId: input.requestId,
-      ipAddress: input.ipAddress,
-      createdAt: input.now,
-    }),
-  ]);
-  return { id: snapshotId, entity: "health-snapshot", status: "shared" };
-}
-
-export async function revokeOrganizationHealthShare(input: {
-  readonly actor: ApiActor;
-  readonly organizationId: string;
-  readonly requestId: string;
-  readonly ipAddress?: string;
-  readonly now: Date;
-}): Promise<OperatorMutationResult> {
-  requireDatabase();
-  const database = getDatabase();
-  const grant = await database.query.organizationHealthDataGrants.findFirst({
-    where: and(
-      eq(organizationHealthDataGrants.organizationId, input.organizationId),
-      eq(organizationHealthDataGrants.personId, input.actor.personId),
-      eq(organizationHealthDataGrants.status, "active"),
-    ),
-  });
-  if (!grant) throw new Error("No active health share was found.");
-  await database.batch([
-    database
-      .update(organizationHealthDataGrants)
-      .set({ status: "revoked", revokedAt: input.now, updatedAt: input.now })
-      .where(eq(organizationHealthDataGrants.id, grant.id)),
-    database.insert(auditLog).values({
-      organizationId: input.organizationId,
-      actorPersonId: input.actor.personId,
-      actorType: "person",
-      action: "health.summary_share_revoked",
-      entityType: "health-share",
-      entityId: grant.id,
-      beforeHash: stableHash({ status: grant.status, scopes: grant.scopes }),
-      afterHash: stableHash({ status: "revoked" }),
-      reason: "Player revoked organization access to HealthKit summaries.",
-      traceId: input.requestId,
-      ipAddress: input.ipAddress,
-      createdAt: input.now,
-    }),
-  ]);
-  return { id: grant.id, entity: "health-share", status: "revoked" };
 }

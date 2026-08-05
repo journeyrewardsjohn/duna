@@ -369,6 +369,184 @@ export const people = pgTable(
   ],
 );
 
+export const playerPublicProfiles = pgTable(
+  "player_public_profiles",
+  {
+    personId: uuid("person_id")
+      .primaryKey()
+      .references(() => people.id, { onDelete: "cascade" }),
+    publicationStatus: varchar("publication_status", { length: 24 })
+      .notNull()
+      .default("draft"),
+    shortBio: text("short_bio"),
+    biography: text("biography"),
+    countryCode: varchar("country_code", { length: 3 }),
+    hometown: text("hometown"),
+    collegeName: text("college_name"),
+    collegeLogoUrl: text("college_logo_url"),
+    playingRole: varchar("playing_role", { length: 48 }),
+    cutoutImageUrl: text("cutout_image_url"),
+    heroImageUrl: text("hero_image_url"),
+    heroVideoUrl: text("hero_video_url"),
+    imageAlt: text("image_alt"),
+    careerStats: jsonb("career_stats")
+      .notNull()
+      .$type<{
+        readonly events?: number;
+        readonly wins?: number;
+        readonly podiums?: number;
+        readonly gold?: number;
+        readonly silver?: number;
+        readonly bronze?: number;
+        readonly earningsMinor?: number;
+        readonly earningsCurrency?: string;
+      }>()
+      .default({}),
+    links: jsonb("links")
+      .notNull()
+      .$type<
+        readonly {
+          readonly label: string;
+          readonly url: string;
+          readonly kind: "website" | "instagram" | "youtube" | "news";
+        }[]
+      >()
+      .default([]),
+    news: jsonb("news")
+      .notNull()
+      .$type<
+        readonly {
+          readonly title: string;
+          readonly url: string;
+          readonly publisher?: string;
+          readonly publishedAt?: string;
+        }[]
+      >()
+      .default([]),
+    researchStatus: varchar("research_status", { length: 24 })
+      .notNull()
+      .default("not-started"),
+    researchProposal: jsonb("research_proposal")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    researchEvidence: jsonb("research_evidence")
+      .notNull()
+      .$type<
+        readonly {
+          readonly title: string;
+          readonly url: string;
+          readonly description?: string;
+        }[]
+      >()
+      .default([]),
+    researchModel: varchar("research_model", { length: 160 }),
+    researchedAt: timestamp("researched_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    reviewedByPersonId: uuid("reviewed_by_person_id").references(
+      () => people.id,
+    ),
+    reviewedAt: timestamp("reviewed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    publishedAt: timestamp("published_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("player_public_profile_status_idx").on(
+      table.publicationStatus,
+      table.updatedAt,
+    ),
+    index("player_public_profile_research_idx").on(
+      table.researchStatus,
+      table.researchedAt,
+    ),
+    check(
+      "player_public_profile_publication_status_valid",
+      sql`${table.publicationStatus} IN ('draft', 'review', 'published')`,
+    ),
+    check(
+      "player_public_profile_research_status_valid",
+      sql`${table.researchStatus} IN ('not-started', 'queued', 'researching', 'review', 'published', 'failed')`,
+    ),
+  ],
+);
+
+export const playerMediaWorkflows = pgTable(
+  "player_media_workflows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    requestedByPersonId: uuid("requested_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    status: varchar("status", { length: 24 }).notNull().default("draft"),
+    referenceImages: jsonb("reference_images")
+      .notNull()
+      .$type<
+        readonly {
+          readonly url: string;
+          readonly kind: "action" | "portrait";
+          readonly uploadedAt: string;
+        }[]
+      >()
+      .default([]),
+    brief: text("brief"),
+    generationPrompt: text("generation_prompt"),
+    models: jsonb("models")
+      .notNull()
+      .$type<{
+        readonly cutout?: string;
+        readonly poster?: string;
+      }>()
+      .default({}),
+    outputImages: jsonb("output_images")
+      .notNull()
+      .$type<
+        readonly {
+          readonly url: string;
+          readonly kind: "cutout" | "poster" | "background";
+          readonly jobId?: string;
+        }[]
+      >()
+      .default([]),
+    rightsConfirmedAt: timestamp("rights_confirmed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    reviewedByPersonId: uuid("reviewed_by_person_id").references(
+      () => people.id,
+    ),
+    reviewedAt: timestamp("reviewed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    failureReason: text("failure_reason"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("player_media_workflow_person_idx").on(
+      table.personId,
+      table.createdAt,
+    ),
+    index("player_media_workflow_queue_idx").on(table.status, table.createdAt),
+    check(
+      "player_media_workflow_status_valid",
+      sql`${table.status} IN ('draft', 'ready', 'generating', 'review', 'published', 'failed', 'rejected')`,
+    ),
+  ],
+);
+
 export const guardianships = pgTable(
   "guardianships",
   {
@@ -3023,6 +3201,329 @@ export const videos = pgTable(
   ],
 );
 
+export const visionSessions = pgTable(
+  "vision_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerPersonId: uuid("owner_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    videoId: uuid("video_id")
+      .unique()
+      .references(() => videos.id, { onDelete: "set null" }),
+    matchId: uuid("match_id").references(() => matches.id, {
+      onDelete: "set null",
+    }),
+    title: text("title").notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("setup"),
+    remoteTokenHash: varchar("remote_token_hash", { length: 128 })
+      .notNull()
+      .unique(),
+    remoteExpiresAt: timestamp("remote_expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    settings: jsonb("settings")
+      .$type<{
+        readonly courtWidthMeters: number;
+        readonly courtLengthMeters: number;
+        readonly netHeightMeters: number;
+        readonly cameraHeightMeters?: number;
+        readonly overlayScoreboard: boolean;
+        readonly teamA: string;
+        readonly teamB: string;
+        readonly corners?: readonly {
+          readonly x: number;
+          readonly y: number;
+        }[];
+      }>()
+      .notNull(),
+    controlVersion: integer("control_version").notNull().default(1),
+    previewJpegBase64: text("preview_jpeg_base64"),
+    previewCapturedAt: timestamp("preview_captured_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    recordingStartedAt: timestamp("recording_started_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    recordingEndedAt: timestamp("recording_ended_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    lastRemoteSeenAt: timestamp("last_remote_seen_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    revokedAt: timestamp("revoked_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("vision_session_owner_created_idx").on(
+      table.ownerPersonId,
+      table.createdAt,
+    ),
+    index("vision_session_match_status_idx").on(table.matchId, table.status),
+    check(
+      "vision_session_status_valid",
+      sql`${table.status} IN ('setup', 'ready', 'recording', 'ended', 'expired')`,
+    ),
+    check(
+      "vision_session_control_version_positive",
+      sql`${table.controlVersion} > 0`,
+    ),
+    check(
+      "vision_session_remote_window_valid",
+      sql`${table.remoteExpiresAt} > ${table.createdAt}`,
+    ),
+  ],
+);
+
+export const visionTimelineEvents = pgTable(
+  "vision_timeline_events",
+  {
+    id: uuid("id").primaryKey(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => visionSessions.id, { onDelete: "cascade" }),
+    source: varchar("source", { length: 24 }).notNull(),
+    type: varchar("type", { length: 32 }).notNull(),
+    winnerSide: varchar("winner_side", { length: 1 }),
+    targetEventId: uuid("target_event_id"),
+    elapsedMs: integer("elapsed_ms").notNull(),
+    occurredAt: timestamp("occurred_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    scoreState: jsonb("score_state").$type<{
+      readonly setIndex: number;
+      readonly sets: readonly { readonly a: number; readonly b: number }[];
+      readonly serving?: "A" | "B";
+      readonly status: "not-started" | "live" | "complete" | "forfeit";
+    }>(),
+    label: varchar("label", { length: 160 }),
+    payload: jsonb("payload").$type<Record<string, unknown>>(),
+    createdAt,
+  },
+  (table) => [
+    index("vision_timeline_session_elapsed_idx").on(
+      table.sessionId,
+      table.elapsedMs,
+    ),
+    index("vision_timeline_session_occurred_idx").on(
+      table.sessionId,
+      table.occurredAt,
+    ),
+    check(
+      "vision_timeline_source_valid",
+      sql`${table.source} IN ('apple-watch', 'iphone', 'remote', 'match')`,
+    ),
+    check(
+      "vision_timeline_type_valid",
+      sql`${table.type} IN ('recording-started', 'rally-won', 'favorite', 'undo', 'side-change', 'set-ended', 'recording-stopped', 'calibration-updated')`,
+    ),
+    check(
+      "vision_timeline_winner_valid",
+      sql`${table.winnerSide} IS NULL OR ${table.winnerSide} IN ('A', 'B')`,
+    ),
+    check(
+      "vision_timeline_elapsed_valid",
+      sql`${table.elapsedMs} BETWEEN 0 AND 43200000`,
+    ),
+  ],
+);
+
+// Apple Health imports are intentionally separated from general profile data.
+// Query metadata stays indexable; sensitive values are encrypted by the API.
+export const healthConnections = pgTable(
+  "health_connections",
+  {
+    personId: uuid("person_id")
+      .primaryKey()
+      .references(() => people.id, { onDelete: "cascade" }),
+    provider: varchar("provider", { length: 24 })
+      .notNull()
+      .default("apple-health"),
+    status: varchar("status", { length: 16 }).notNull().default("active"),
+    consentVersion: varchar("consent_version", { length: 64 }).notNull(),
+    enabledCategories: text("enabled_categories")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    timezone: varchar("timezone", { length: 64 }).notNull(),
+    earliestAuthorizedAt: timestamp("earliest_authorized_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    lastSyncedAt: timestamp("last_synced_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    revokedAt: timestamp("revoked_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    check(
+      "health_connection_provider_valid",
+      sql`${table.provider} = 'apple-health'`,
+    ),
+    check(
+      "health_connection_status_valid",
+      sql`${table.status} IN ('active', 'paused', 'revoked')`,
+    ),
+    check(
+      "health_connection_categories_valid",
+      sql`${table.enabledCategories} <@ ARRAY['heart', 'recovery', 'activity', 'body']::text[]`,
+    ),
+  ],
+);
+
+export const healthSamples = pgTable(
+  "health_samples",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    externalIdHash: varchar("external_id_hash", { length: 64 }).notNull(),
+    metric: varchar("metric", { length: 48 }).notNull(),
+    sampleKind: varchar("sample_kind", { length: 16 }).notNull(),
+    startedAt: timestamp("started_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    endedAt: timestamp("ended_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    encryptedPayload: text("encrypted_payload").notNull(),
+    encryptionIv: varchar("encryption_iv", { length: 32 }).notNull(),
+    authTag: varchar("auth_tag", { length: 32 }).notNull(),
+    keyVersion: integer("key_version").notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("health_sample_person_external_unique").on(
+      table.personId,
+      table.externalIdHash,
+    ),
+    index("health_sample_person_started_idx").on(
+      table.personId,
+      table.startedAt,
+    ),
+    index("health_sample_person_metric_started_idx").on(
+      table.personId,
+      table.metric,
+      table.startedAt,
+    ),
+    check(
+      "health_sample_metric_valid",
+      sql`${table.metric} IN ('heart-rate', 'resting-heart-rate', 'heart-rate-variability', 'walking-heart-rate', 'vo2-max', 'respiratory-rate', 'oxygen-saturation', 'body-temperature', 'sleep', 'active-energy', 'basal-energy', 'steps', 'distance', 'exercise-minutes', 'stand-minutes', 'workout', 'weight', 'body-fat', 'lean-body-mass')`,
+    ),
+    check(
+      "health_sample_kind_valid",
+      sql`${table.sampleKind} IN ('quantity', 'category', 'workout')`,
+    ),
+    check(
+      "health_sample_time_valid",
+      sql`${table.endedAt} >= ${table.startedAt}`,
+    ),
+    check("health_sample_key_version_valid", sql`${table.keyVersion} > 0`),
+  ],
+);
+
+export const healthSharingGrants = pgTable(
+  "health_sharing_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerPersonId: uuid("owner_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    audienceKind: varchar("audience_kind", { length: 24 }).notNull(),
+    audiencePersonId: uuid("audience_person_id").references(() => people.id, {
+      onDelete: "cascade",
+    }),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    categories: text("categories")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    scopes: text("scopes")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    consentVersion: varchar("consent_version", { length: 64 }).notNull(),
+    consentTextHash: varchar("consent_text_hash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    revokedAt: timestamp("revoked_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("health_grant_owner_idx").on(table.ownerPersonId, table.createdAt),
+    index("health_grant_person_audience_idx").on(
+      table.audiencePersonId,
+      table.expiresAt,
+    ),
+    index("health_grant_org_audience_idx").on(
+      table.organizationId,
+      table.expiresAt,
+    ),
+    uniqueIndex("health_grant_active_person_unique")
+      .on(table.ownerPersonId, table.audienceKind, table.audiencePersonId)
+      .where(
+        sql`${table.audiencePersonId} IS NOT NULL AND ${table.revokedAt} IS NULL`,
+      ),
+    uniqueIndex("health_grant_active_org_unique")
+      .on(table.ownerPersonId, table.audienceKind, table.organizationId)
+      .where(
+        sql`${table.organizationId} IS NOT NULL AND ${table.revokedAt} IS NULL`,
+      ),
+    check(
+      "health_grant_audience_kind_valid",
+      sql`${table.audienceKind} IN ('player', 'coach', 'organization')`,
+    ),
+    check(
+      "health_grant_audience_shape_valid",
+      sql`(${table.audienceKind} IN ('player', 'coach') AND ${table.audiencePersonId} IS NOT NULL AND ${table.organizationId} IS NULL) OR (${table.audienceKind} = 'organization' AND ${table.audiencePersonId} IS NULL AND ${table.organizationId} IS NOT NULL)`,
+    ),
+    check(
+      "health_grant_categories_valid",
+      sql`cardinality(${table.categories}) > 0 AND ${table.categories} <@ ARRAY['heart', 'recovery', 'activity', 'body']::text[]`,
+    ),
+    check(
+      "health_grant_scopes_valid",
+      sql`cardinality(${table.scopes}) > 0 AND ${table.scopes} <@ ARRAY['summary', 'timeline', 'video-overlay']::text[]`,
+    ),
+    check(
+      "health_grant_video_overlay_heart",
+      sql`NOT ('video-overlay' = ANY(${table.scopes})) OR 'heart' = ANY(${table.categories})`,
+    ),
+    check(
+      "health_grant_window_valid",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+  ],
+);
+
 export const videoShareLinks = pgTable(
   "video_share_links",
   {
@@ -3715,6 +4216,124 @@ export const ratingEvaluations = pgTable(
     index("rating_evaluation_configuration_idx").on(
       table.configurationId,
       table.createdAt,
+    ),
+  ],
+);
+
+export const ratingBacktestRuns = pgTable(
+  "rating_backtest_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    configurationId: uuid("configuration_id")
+      .notNull()
+      .references(() => ratingConfigurations.id),
+    methodologyVersion: varchar("methodology_version", {
+      length: 48,
+    }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("running"),
+    matchesProcessed: integer("matches_processed").notNull().default(0),
+    playersProcessed: integer("players_processed").notNull().default(0),
+    dateFrom: timestamp("date_from", { withTimezone: true, mode: "date" }),
+    dateTo: timestamp("date_to", { withTimezone: true, mode: "date" }),
+    championModelId: varchar("champion_model_id", { length: 48 }),
+    modelSummaries: jsonb("model_summaries")
+      .notNull()
+      .$type<
+        readonly {
+          readonly modelId: string;
+          readonly label: string;
+          readonly family: string;
+          readonly sampleSize: number;
+          readonly accuracy: number;
+          readonly accuracyInterval95: readonly [number, number];
+          readonly brierScore: number;
+          readonly logLoss: number;
+          readonly expectedCalibrationError: number;
+          readonly areaUnderRocCurve: number;
+          readonly calibration: readonly {
+            readonly lowerBound: number;
+            readonly upperBound: number;
+            readonly predictions: number;
+            readonly averageExpected: number;
+            readonly observedWinRate: number;
+          }[];
+          readonly curve: readonly {
+            readonly matches: number;
+            readonly brierScore: number;
+            readonly logLoss: number;
+          }[];
+        }[]
+      >()
+      .default([]),
+    failureReason: text("failure_reason"),
+    createdByPersonId: uuid("created_by_person_id").references(() => people.id),
+    startedAt: timestamp("started_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("rating_backtest_status_completed_idx").on(
+      table.status,
+      table.completedAt,
+    ),
+    index("rating_backtest_configuration_idx").on(
+      table.configurationId,
+      table.createdAt,
+    ),
+    check(
+      "rating_backtest_status_valid",
+      sql`${table.status} IN ('running', 'completed', 'failed')`,
+    ),
+  ],
+);
+
+export const ratingBacktestPredictions = pgTable(
+  "rating_backtest_predictions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => ratingBacktestRuns.id, { onDelete: "cascade" }),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id),
+    occurredAt: timestamp("occurred_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    actualTeamA: integer("actual_team_a").notNull(),
+    probabilities: jsonb("probabilities")
+      .notNull()
+      .$type<Readonly<Record<string, number>>>(),
+    ensembleWeights: jsonb("ensemble_weights")
+      .notNull()
+      .$type<Readonly<Record<string, number>>>(),
+    preMatchRatings: jsonb("pre_match_ratings").notNull().$type<{
+      readonly teamA: readonly [number, number];
+      readonly teamB: readonly [number, number];
+      readonly players: Readonly<Record<string, number>>;
+    }>(),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("rating_backtest_prediction_run_match_unique").on(
+      table.runId,
+      table.matchId,
+    ),
+    index("rating_backtest_prediction_match_idx").on(table.matchId),
+    index("rating_backtest_prediction_run_time_idx").on(
+      table.runId,
+      table.occurredAt,
+    ),
+    check(
+      "rating_backtest_prediction_actual_valid",
+      sql`${table.actualTeamA} IN (0, 1)`,
     ),
   ],
 );
@@ -5427,116 +6046,6 @@ export const consents = pgTable(
   ],
 );
 
-// Health sharing is organization-scoped and revocable. Snapshots intentionally
-// store a small wellness summary rather than an unrestricted HealthKit export.
-export const organizationHealthDataGrants = pgTable(
-  "organization_health_data_grants",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    organizationId: uuid("organization_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
-    personId: uuid("person_id")
-      .notNull()
-      .references(() => people.id, { onDelete: "cascade" }),
-    consentId: uuid("consent_id").references(() => consents.id, {
-      onDelete: "set null",
-    }),
-    source: varchar("source", { length: 24 })
-      .notNull()
-      .default("apple-healthkit"),
-    scopes: text("scopes")
-      .array()
-      .notNull()
-      .default(sql`'{}'::text[]`),
-    status: varchar("status", { length: 24 }).notNull().default("active"),
-    disclosureText: text("disclosure_text").notNull(),
-    disclosureTextHash: varchar("disclosure_text_hash", {
-      length: 128,
-    }).notNull(),
-    grantedAt: timestamp("granted_at", {
-      withTimezone: true,
-      mode: "date",
-    })
-      .notNull()
-      .defaultNow(),
-    revokedAt: timestamp("revoked_at", {
-      withTimezone: true,
-      mode: "date",
-    }),
-    createdAt,
-    updatedAt,
-  },
-  (table) => [
-    uniqueIndex("organization_health_grant_person_unique").on(
-      table.organizationId,
-      table.personId,
-    ),
-    index("organization_health_grant_status_idx").on(
-      table.organizationId,
-      table.status,
-    ),
-    check(
-      "organization_health_grant_source_valid",
-      sql`${table.source} IN ('apple-healthkit')`,
-    ),
-    check(
-      "organization_health_grant_status_valid",
-      sql`${table.status} IN ('active', 'revoked')`,
-    ),
-    check(
-      "organization_health_grant_revocation_pair_valid",
-      sql`(${table.status} = 'revoked' AND ${table.revokedAt} IS NOT NULL) OR (${table.status} = 'active' AND ${table.revokedAt} IS NULL)`,
-    ),
-  ],
-);
-
-export const healthMetricSnapshots = pgTable(
-  "health_metric_snapshots",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    grantId: uuid("grant_id")
-      .notNull()
-      .references(() => organizationHealthDataGrants.id, {
-        onDelete: "cascade",
-      }),
-    organizationId: uuid("organization_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
-    personId: uuid("person_id")
-      .notNull()
-      .references(() => people.id, { onDelete: "cascade" }),
-    source: varchar("source", { length: 24 })
-      .notNull()
-      .default("apple-healthkit"),
-    metrics: jsonb("metrics").notNull().$type<{
-      readonly restingHeartRate?: number;
-      readonly heartRateVariabilityMs?: number;
-      readonly sleepHours?: number;
-      readonly steps?: number;
-      readonly activeEnergyKcal?: number;
-      readonly exerciseMinutes?: number;
-      readonly latestWorkoutAt?: string;
-    }>(),
-    observedAt: timestamp("observed_at", {
-      withTimezone: true,
-      mode: "date",
-    }).notNull(),
-    createdAt,
-  },
-  (table) => [
-    index("health_metric_snapshot_person_observed_idx").on(
-      table.organizationId,
-      table.personId,
-      table.observedAt,
-    ),
-    check(
-      "health_metric_snapshot_source_valid",
-      sql`${table.source} IN ('apple-healthkit')`,
-    ),
-  ],
-);
-
 export const legalAcceptances = pgTable(
   "legal_acceptances",
   {
@@ -5832,6 +6341,74 @@ export const follows = pgTable(
     primaryKey({
       columns: [table.followerPersonId, table.entityType, table.entityId],
     }),
+  ],
+);
+
+export const playerFollowPreferences = pgTable(
+  "player_follow_preferences",
+  {
+    followerPersonId: uuid("follower_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    playerPersonId: uuid("player_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    notifyRegistrations: boolean("notify_registrations")
+      .notNull()
+      .default(true),
+    notifyWatch: boolean("notify_watch").notNull().default(true),
+    notifyResults: boolean("notify_results").notNull().default(false),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.followerPersonId, table.playerPersonId],
+    }),
+    index("player_follow_preferences_player_idx").on(table.playerPersonId),
+    check(
+      "player_follow_preferences_not_self",
+      sql`${table.followerPersonId} <> ${table.playerPersonId}`,
+    ),
+  ],
+);
+
+export const playerFollowDeliveries = pgTable(
+  "player_follow_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    followerPersonId: uuid("follower_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    playerPersonId: uuid("player_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    entityKey: varchar("entity_key", { length: 192 }).notNull(),
+    messageId: uuid("message_id").references(() => messages.id, {
+      onDelete: "set null",
+    }),
+    payload: jsonb("payload")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("player_follow_delivery_unique").on(
+      table.followerPersonId,
+      table.playerPersonId,
+      table.kind,
+      table.entityKey,
+    ),
+    index("player_follow_delivery_player_idx").on(
+      table.playerPersonId,
+      table.createdAt,
+    ),
+    check(
+      "player_follow_delivery_kind_valid",
+      sql`${table.kind} IN ('registration', 'watch', 'result')`,
+    ),
   ],
 );
 

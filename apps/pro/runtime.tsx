@@ -11,13 +11,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import {
   createSessionNoteRoom,
   createDunaApiClient,
@@ -26,6 +20,7 @@ import {
   type SessionNoteRoom,
   type UploadedProductImage,
 } from "./mobile-api";
+import { FellixText as Text } from "./fellix-text";
 
 type OperatorDashboard = Awaited<
   ReturnType<DunaApiClient["operator"]["dashboard"]["query"]>
@@ -334,7 +329,7 @@ const runtimeStyles = StyleSheet.create({
     backgroundColor: "rgba(247,200,107,.12)",
     borderRadius: 6,
     color: "#2367a8",
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
     overflow: "hidden",

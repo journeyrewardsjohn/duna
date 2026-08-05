@@ -7,6 +7,7 @@ import { HouseholdSettings } from "@/components/household-settings";
 import { MembershipSettings } from "@/components/membership-settings";
 import { NotificationSettings } from "@/components/notification-settings";
 import { PlayingProfileSettings } from "@/components/playing-profile-settings";
+import { PlayerMediaStudio } from "@/components/player-media-studio";
 import { PrivacySettings } from "@/components/privacy-settings";
 import { ProfileSettings } from "@/components/profile-settings";
 import { SettingsSectionNav } from "@/components/settings-section-nav";
@@ -22,13 +23,15 @@ export default async function SettingsPage({
 }) {
   const query = await searchParams;
   const caller = await getServerCaller();
-  const [settings, familyWallets, deletionReadiness] = await Promise.all([
-    caller.player.settings(),
-    caller.player.familyWallets(),
-    caller.player
-      .accountDeletionReadiness()
-      .catch(() => unavailableAccountDeletionReadiness),
-  ]);
+  const [settings, familyWallets, deletionReadiness, playerMediaStudio] =
+    await Promise.all([
+      caller.player.settings(),
+      caller.player.familyWallets(),
+      caller.player
+        .accountDeletionReadiness()
+        .catch(() => unavailableAccountDeletionReadiness),
+      caller.player.playerMediaStudio().catch(() => undefined),
+    ]);
   const membershipNotice =
     query.membership === "success"
       ? "Payment was accepted. Premium access will appear here as soon as the secure confirmation synchronizes."
@@ -59,6 +62,9 @@ export default async function SettingsPage({
           />
           <ProfileSettings profile={settings.profile} />
           <PlayingProfileSettings settings={settings} />
+          {playerMediaStudio && (
+            <PlayerMediaStudio studio={playerMediaStudio} />
+          )}
           <HouseholdSettings
             ageBand={settings.profile.ageBand}
             consentDisclosure={GUARDIAN_CONSENT_DISCLOSURE}

@@ -8,6 +8,15 @@ interface PackageManifest {
   readonly version?: string;
 }
 
+interface ExpoAppManifest {
+  readonly expo?: {
+    readonly ios?: {
+      readonly entitlements?: Readonly<Record<string, unknown>>;
+      readonly infoPlist?: Readonly<Record<string, unknown>>;
+    };
+  };
+}
+
 interface RuntimeResolution {
   readonly app: string;
   readonly reactVersion: string;
@@ -98,11 +107,47 @@ function verifyApp(
   return resolution;
 }
 
+function verifyPlayerHealthPrivacy(): {
+  readonly healthKitEnabled: boolean;
+  readonly readPurposeConfigured: boolean;
+  readonly updatePurposeConfigured: boolean;
+} {
+  const appManifest = JSON.parse(
+    readFileSync(resolve(workspaceRoot, "apps/player/app.json"), "utf8"),
+  ) as ExpoAppManifest;
+  const entitlements = appManifest.expo?.ios?.entitlements;
+  const infoPlist = appManifest.expo?.ios?.infoPlist;
+  const readPurpose = infoPlist?.NSHealthShareUsageDescription;
+  const updatePurpose = infoPlist?.NSHealthUpdateUsageDescription;
+
+  assert(
+    entitlements?.["com.apple.developer.healthkit"] === true,
+    "apps/player must enable the HealthKit entitlement",
+  );
+  assert(
+    typeof readPurpose === "string" && readPurpose.length >= 40,
+    "apps/player must explain why it reads Apple Health data",
+  );
+  assert(
+    typeof updatePurpose === "string" &&
+      updatePurpose.length >= 40 &&
+      updatePurpose.includes("does not write"),
+    "apps/player must include an honest HealthKit update purpose string for App Store validation",
+  );
+
+  return {
+    healthKitEnabled: true,
+    readPurposeConfigured: true,
+    updatePurposeConfigured: true,
+  };
+}
+
 console.log(
   JSON.stringify(
     {
       status: "ok",
       runtimes: [verifyApp("apps/player"), verifyApp("apps/pro")],
+      healthPrivacy: verifyPlayerHealthPrivacy(),
     },
     null,
     2,
