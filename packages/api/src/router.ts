@@ -368,6 +368,7 @@ import {
   reviewPlayerMediaWorkflow,
   savePlayerPublicProfile,
   setPlayerFollow,
+  updatePlayerIdentity,
 } from "./player-intelligence";
 import {
   approveImportedMatch,
@@ -1028,11 +1029,13 @@ function throwDomainError(error: unknown): never {
     const code =
       error.code === "PLAYER_NOT_FOUND" || error.code === "WORKFLOW_NOT_FOUND"
         ? "NOT_FOUND"
-        : error.code === "FOLLOW_SELF"
+        : error.code === "HANDLE_UNAVAILABLE"
           ? "CONFLICT"
-          : error.code === "DATABASE_REQUIRED"
-            ? "INTERNAL_SERVER_ERROR"
-            : "PRECONDITION_FAILED";
+          : error.code === "FOLLOW_SELF"
+            ? "CONFLICT"
+            : error.code === "DATABASE_REQUIRED"
+              ? "INTERNAL_SERVER_ERROR"
+              : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
   if (error instanceof IdentityError) {
@@ -8506,6 +8509,50 @@ const adminRouter = router({
             return await researchPlayerProfile({
               actor: ctx.actor!,
               personId: input.personId,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  updatePlayerIdentity: superAdminProcedure
+    .input(
+      z.object({
+        personId: z.string().uuid(),
+        displayName: z.string().trim().min(2).max(120),
+        handle: z
+          .string()
+          .trim()
+          .toLowerCase()
+          .min(3)
+          .max(48)
+          .regex(
+            /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+            "Handle can use lowercase letters, numbers, and single hyphens.",
+          ),
+        givenName: z.string().trim().max(80).optional(),
+        familyName: z.string().trim().max(80).optional(),
+        homeMarket: z.string().trim().max(120).optional(),
+        heightMillimeters: z.number().int().min(600).max(2_600).optional(),
+        reason: z.string().trim().min(10).max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.updatePlayerIdentity",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updatePlayerIdentity({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
               now: ctx.now,
             });
           } catch (error) {

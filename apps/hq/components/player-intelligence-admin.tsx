@@ -26,6 +26,7 @@ import {
   researchPlayerProfileAction,
   researchRankedPlayersAction,
   reviewPlayerMediaWorkflowAction,
+  savePlayerIdentityAction,
   savePlayerPublicProfileAction,
   type PlayerIntelligenceActionState,
 } from "@/app/admin/player-intelligence-actions";
@@ -232,6 +233,9 @@ function PlayerQueue({
                 <small>
                   {player.genderCategory} · {player.points.toLocaleString()} pts
                   · {player.countryCode ?? "country pending"}
+                  {player.sourceDisplayName
+                    ? ` · Source: ${player.sourceDisplayName}`
+                    : ""}
                 </small>
               </span>
               <span className="player-intelligence-status">
@@ -321,6 +325,196 @@ function newsAsText(detail: PlayerIntelligenceDetail) {
         .join(" | "),
     )
     .join("\n");
+}
+
+function CanonicalIdentityEditor({
+  detail,
+}: {
+  readonly detail: PlayerIntelligenceDetail;
+}) {
+  const [state, action, pending] = useActionState(
+    savePlayerIdentityAction,
+    initialState,
+  );
+  const proposedHeight = detail.profile?.proposal?.heightMillimeters;
+  const heightMillimeters =
+    detail.person.heightMillimeters ?? proposedHeight ?? undefined;
+  return (
+    <form
+      action={action}
+      className="hq-card player-intelligence-editor player-intelligence-identity"
+    >
+      <input name="personId" type="hidden" value={detail.person.id} />
+      <header className="hq-card-heading">
+        <div>
+          <span className="hq-eyebrow">Duna-wide source of truth</span>
+          <h2>Canonical player identity</h2>
+        </div>
+        <Badge>{detail.person.profileClaimStatus.replaceAll("-", " ")}</Badge>
+      </header>
+      <p className="player-intelligence-identity-note">
+        Used by rankings, research prompts, public pages, and player alerts.
+        Identity changes take effect across Duna as soon as they are saved.
+      </p>
+      <section className="player-intelligence-identity-sources">
+        {detail.ranking && (
+          <div>
+            <span>
+              <strong>Imported ranking identity</strong>
+              <small>
+                World #{detail.ranking.rank} ·{" "}
+                {detail.ranking.points.toLocaleString()} pts ·{" "}
+                {detail.ranking.countryCode ?? "country pending"}
+              </small>
+              {detail.ranking.sourceTeamKey && (
+                <small>
+                  Source team:{" "}
+                  {detail.ranking.sourceTeamKey
+                    .replace(/^[a-z]+:/i, "")
+                    .replaceAll("__", " / ")
+                    .replaceAll("-", " ")}
+                </small>
+              )}
+            </span>
+            <span>
+              {detail.ranking.sourcePlayerName ??
+                detail.ranking.sourceDisplayName}
+            </span>
+          </div>
+        )}
+        {detail.sourceProfiles.map((source) => (
+          <div key={`${source.source}-${source.externalPersonId}`}>
+            <span>
+              <strong>{source.sourceName}</strong>
+              <small>
+                {source.externalPersonId}
+                {source.lastImportedAt
+                  ? ` · refreshed ${new Date(source.lastImportedAt).toLocaleDateString()}`
+                  : ""}
+              </small>
+            </span>
+            {source.profileUrl ? (
+              <a href={source.profileUrl} rel="noreferrer" target="_blank">
+                {source.displayName} <ExternalLink size={14} />
+              </a>
+            ) : (
+              <span>{source.displayName}</span>
+            )}
+          </div>
+        ))}
+      </section>
+      {detail.possibleCanonicalMatches.length > 0 && (
+        <aside className="player-intelligence-identity-warning">
+          <TriangleAlert aria-hidden size={20} />
+          <span>
+            <strong>Possible existing canonical profiles</strong>
+            <small>
+              If this record is a duplicate, merge it instead of giving two
+              players the same identity.
+            </small>
+          </span>
+          <div>
+            {detail.possibleCanonicalMatches.map((match) => (
+              <Link
+                href={`/admin/player-mapping?q=${encodeURIComponent(match.displayName)}`}
+                key={match.id}
+              >
+                {match.displayName} · @{match.handle}
+              </Link>
+            ))}
+          </div>
+          <Link
+            className="hq-button hq-button--secondary"
+            href="/admin/profile-merge"
+          >
+            Review merge
+          </Link>
+        </aside>
+      )}
+      <div className="player-intelligence-form-grid">
+        <label>
+          <span>Player name</span>
+          <input
+            defaultValue={detail.person.displayName}
+            maxLength={120}
+            name="displayName"
+            required
+          />
+        </label>
+        <label>
+          <span>Duna handle</span>
+          <input
+            defaultValue={detail.person.handle}
+            maxLength={48}
+            name="handle"
+            pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+            required
+          />
+          <small>Claimed profiles use this in their public URL.</small>
+        </label>
+        <label>
+          <span>Given name</span>
+          <input
+            defaultValue={detail.person.givenName ?? ""}
+            maxLength={80}
+            name="givenName"
+          />
+        </label>
+        <label>
+          <span>Family name</span>
+          <input
+            defaultValue={detail.person.familyName ?? ""}
+            maxLength={80}
+            name="familyName"
+          />
+        </label>
+        <label>
+          <span>Home market</span>
+          <input
+            defaultValue={detail.person.homeMarket ?? ""}
+            maxLength={120}
+            name="homeMarket"
+            placeholder="Honolulu, Hawaii"
+          />
+        </label>
+        <label>
+          <span>Height, centimeters</span>
+          <input
+            defaultValue={
+              heightMillimeters ? heightMillimeters / 10 : undefined
+            }
+            max={260}
+            min={60}
+            name="heightCentimeters"
+            step="0.1"
+            type="number"
+          />
+        </label>
+      </div>
+      <footer className="player-intelligence-editor-footer">
+        <label>
+          <span>Identity verification note</span>
+          <input
+            minLength={10}
+            name="reason"
+            placeholder="Official source used to verify this identity"
+            required
+          />
+        </label>
+        <div>
+          <button className="hq-button hq-button--primary" disabled={pending}>
+            {pending ? (
+              <LoaderCircle className="spin" size={16} />
+            ) : (
+              <ShieldCheck size={16} />
+            )}
+            {pending ? "Saving identity…" : "Save canonical identity"}
+          </button>
+        </div>
+        <ActionFeedback state={state} />
+      </footer>
+    </form>
+  );
 }
 
 function ProfileEditor({
@@ -771,7 +965,9 @@ function PlayerDetail({
             <h2>{detail.person.displayName}</h2>
             <p>
               @{detail.person.handle} ·{" "}
-              {detail.person.homeMarket ?? "Home market pending"}
+              {detail.profile?.hometown ??
+                detail.person.homeMarket ??
+                "Home market pending"}
             </p>
           </span>
         </div>
@@ -779,7 +975,7 @@ function PlayerDetail({
           <ResearchPlayer personId={detail.person.id} />
           <a
             className="hq-button hq-button--secondary"
-            href={`${consumerOrigin}/players/${detail.person.handle}`}
+            href={`${consumerOrigin}${detail.publicPath}`}
             rel="noreferrer"
             target="_blank"
           >
@@ -787,6 +983,7 @@ function PlayerDetail({
           </a>
         </nav>
       </header>
+      <CanonicalIdentityEditor detail={detail} />
       <div className="player-intelligence-review-layout">
         <ProfileEditor detail={detail} />
         <EvidencePanel detail={detail} />

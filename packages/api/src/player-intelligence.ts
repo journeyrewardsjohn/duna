@@ -17,7 +17,19 @@ import {
   worldRankings,
 } from "@duna/db";
 import { playerIdFromPublicIdentifier, publicPlayerPath } from "@duna/core";
-import { and, asc, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { stableHash } from "./canonical";
 import type { ApiActor } from "./context";
 import { assertProfileSubjectAuthority } from "./profile-onboarding";
@@ -42,6 +54,7 @@ export class PlayerIntelligenceError extends Error {
     readonly code:
       | "DATABASE_REQUIRED"
       | "PLAYER_NOT_FOUND"
+      | "HANDLE_UNAVAILABLE"
       | "FOLLOW_SELF"
       | "MEDIA_RIGHTS_REQUIRED"
       | "MEDIA_REFERENCES_INVALID"
@@ -789,6 +802,7 @@ export async function loadPlayerIntelligenceAdmin(input: {
             countryCode: worldRankings.countryCode,
             displayName: worldRankings.displayName,
             personId: worldRankings.personId,
+            personDisplayName: people.displayName,
             handle: people.handle,
             avatarUrl: people.avatarUrl,
             publicationStatus: playerPublicProfiles.publicationStatus,
@@ -821,8 +835,10 @@ export async function loadPlayerIntelligenceAdmin(input: {
   const status = input.status ?? "all";
   const filtered = rows.filter((row) => {
     const rowStatus = row.researchStatus ?? "not-started";
+    const displayName = row.personDisplayName ?? row.displayName;
     return (
       (!query ||
+        displayName.toLowerCase().includes(query) ||
         row.displayName.toLowerCase().includes(query) ||
         row.handle?.toLowerCase().includes(query)) &&
       (status === "all" || rowStatus === status)
@@ -874,6 +890,15 @@ export async function loadPlayerIntelligenceAdmin(input: {
     latestDates,
     items: items.map((row) => ({
       ...row,
+      sourceDisplayName:
+        row.personDisplayName &&
+        row.personDisplayName.localeCompare(row.displayName, undefined, {
+          sensitivity: "base",
+        }) !== 0
+          ? row.displayName
+          : undefined,
+      displayName: row.personDisplayName ?? row.displayName,
+      personDisplayName: undefined,
       personId: row.personId ?? undefined,
       handle: row.handle ?? undefined,
       avatarUrl: row.avatarUrl ?? undefined,
@@ -904,33 +929,106 @@ export async function loadPlayerIntelligenceDetail(personId: string) {
       "The player intelligence record was not found.",
     );
   }
-  const [ranking, profile, workflows] = await Promise.all([
-    database
-      .select()
-      .from(worldRankings)
-      .where(eq(worldRankings.personId, personId))
-      .orderBy(desc(worldRankings.rankingDate), asc(worldRankings.rank))
-      .limit(1)
-      .then((rows) => rows[0]),
-    database.query.playerPublicProfiles.findFirst({
-      where: eq(playerPublicProfiles.personId, personId),
-    }),
-    database.query.playerMediaWorkflows.findMany({
-      where: eq(playerMediaWorkflows.personId, personId),
-      orderBy: [desc(playerMediaWorkflows.createdAt)],
-      limit: 10,
-    }),
-  ]);
+  const identityToken =
+    person.displayName.trim().split(/\s+/).filter(Boolean).at(-1) ??
+    person.displayName.trim();
+  const [ranking, profile, workflows, sourceProfiles, possibleMatches] =
+    await Promise.all([
+      database
+        .select()
+        .from(worldRankings)
+        .where(eq(worldRankings.personId, personId))
+        .orderBy(desc(worldRankings.rankingDate), asc(worldRankings.rank))
+        .limit(1)
+        .then((rows) => rows[0]),
+      database.query.playerPublicProfiles.findFirst({
+        where: eq(playerPublicProfiles.personId, personId),
+      }),
+      database.query.playerMediaWorkflows.findMany({
+        where: eq(playerMediaWorkflows.personId, personId),
+        orderBy: [desc(playerMediaWorkflows.createdAt)],
+        limit: 10,
+      }),
+      database
+        .select({
+          source: importSources.slug,
+          sourceName: importSources.name,
+          externalPersonId: externalPlayerProfiles.externalPersonId,
+          displayName: externalPlayerProfiles.displayName,
+          profileUrl: externalPlayerProfiles.profileUrl,
+          countryCode: externalPlayerProfiles.countryCode,
+          lastImportedAt: externalPlayerProfiles.lastImportedAt,
+        })
+        .from(externalPlayerProfiles)
+        .innerJoin(
+          importSources,
+          eq(externalPlayerProfiles.sourceId, importSources.id),
+        )
+        .where(
+          and(
+            eq(externalPlayerProfiles.personId, personId),
+            eq(externalPlayerProfiles.mappingState, "linked"),
+          ),
+        )
+        .orderBy(desc(externalPlayerProfiles.lastImportedAt)),
+      database
+        .select({
+          id: people.id,
+          displayName: people.displayName,
+          handle: people.handle,
+          profileClaimStatus: people.profileClaimStatus,
+          homeMarket: people.homeMarket,
+        })
+        .from(people)
+        .where(
+          and(
+            ne(people.id, personId),
+            eq(people.status, "active"),
+            eq(people.isProfessional, true),
+            ne(people.profileClaimStatus, "merged"),
+            ilike(people.displayName, `%${identityToken}%`),
+          ),
+        )
+        .orderBy(asc(people.displayName))
+        .limit(6),
+    ]);
+  const sourcePlayerName =
+    ranking?.rawPayload &&
+    typeof ranking.rawPayload === "object" &&
+    "sourcePlayerName" in ranking.rawPayload &&
+    typeof ranking.rawPayload.sourcePlayerName === "string"
+      ? ranking.rawPayload.sourcePlayerName.trim() || undefined
+      : undefined;
+  const sourceTeamKey =
+    ranking?.rawPayload &&
+    typeof ranking.rawPayload === "object" &&
+    "teamKey" in ranking.rawPayload &&
+    typeof ranking.rawPayload.teamKey === "string"
+      ? ranking.rawPayload.teamKey.trim() || undefined
+      : undefined;
   return {
     person: {
       id: person.id,
       displayName: person.displayName,
       handle: person.handle,
+      givenName: person.givenName ?? undefined,
+      familyName: person.familyName ?? undefined,
+      profileClaimStatus: person.profileClaimStatus as
+        "claimed" | "unclaimed" | "claim-pending" | "merged",
       avatarUrl: person.avatarUrl ?? undefined,
       heightMillimeters: person.heightMillimeters ?? undefined,
       homeMarket: person.homeMarket ?? undefined,
       collegeName: person.collegeName ?? undefined,
     },
+    publicPath: publicPlayerPath({
+      id: person.id,
+      displayName: person.displayName,
+      handle: person.handle,
+      homeMarket: profile?.hometown ?? person.homeMarket,
+      countryCode: profile?.countryCode ?? ranking?.countryCode,
+      profileClaimStatus: person.profileClaimStatus as
+        "claimed" | "unclaimed" | "claim-pending" | "merged",
+    }),
     ranking: ranking
       ? {
           rank: ranking.rank,
@@ -938,8 +1036,24 @@ export async function loadPlayerIntelligenceDetail(personId: string) {
           countryCode: ranking.countryCode ?? undefined,
           genderCategory: ranking.genderCategory,
           rankingDate: ranking.rankingDate,
+          externalPersonId: ranking.externalPersonId,
+          sourceDisplayName: ranking.displayName,
+          sourcePlayerName,
+          sourceTeamKey,
         }
       : undefined,
+    sourceProfiles: sourceProfiles.map((source) => ({
+      ...source,
+      profileUrl: source.profileUrl ?? undefined,
+      countryCode: source.countryCode ?? undefined,
+      lastImportedAt: source.lastImportedAt?.toISOString(),
+    })),
+    possibleCanonicalMatches: possibleMatches.map((match) => ({
+      ...match,
+      profileClaimStatus: match.profileClaimStatus as
+        "claimed" | "unclaimed" | "claim-pending" | "merged",
+      homeMarket: match.homeMarket ?? undefined,
+    })),
     profile: profile
       ? {
           ...profile,
@@ -965,6 +1079,78 @@ export async function loadPlayerIntelligenceDetail(personId: string) {
       createdAt: workflow.createdAt.toISOString(),
       updatedAt: workflow.updatedAt.toISOString(),
     })),
+  };
+}
+
+export async function updatePlayerIdentity(input: {
+  readonly actor: ApiActor;
+  readonly personId: string;
+  readonly displayName: string;
+  readonly handle: string;
+  readonly givenName?: string;
+  readonly familyName?: string;
+  readonly homeMarket?: string;
+  readonly heightMillimeters?: number;
+  readonly reason: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}) {
+  requireDatabase();
+  const database = getDatabase();
+  const person = await targetPlayer(input.personId);
+  const displayName = input.displayName.trim();
+  const handle = input.handle.trim().toLowerCase();
+  if (handle !== person.handle) {
+    const owner = await database.query.people.findFirst({
+      where: eq(people.handle, handle),
+      columns: { id: true },
+    });
+    if (owner) {
+      throw new PlayerIntelligenceError(
+        "HANDLE_UNAVAILABLE",
+        `@${handle} is already connected to another Duna player.`,
+      );
+    }
+  }
+  const before = {
+    displayName: person.displayName,
+    handle: person.handle,
+    givenName: person.givenName,
+    familyName: person.familyName,
+    homeMarket: person.homeMarket,
+    heightMillimeters: person.heightMillimeters,
+  };
+  const values = {
+    displayName,
+    handle,
+    givenName: input.givenName?.trim() || null,
+    familyName: input.familyName?.trim() || null,
+    homeMarket: input.homeMarket?.trim() || null,
+    heightMillimeters: input.heightMillimeters ?? null,
+    updatedAt: input.now,
+  } as const;
+  await database.batch([
+    database.update(people).set(values).where(eq(people.id, person.id)),
+    database.insert(auditLog).values({
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "player-intelligence.identity-updated",
+      entityType: "person",
+      entityId: person.id,
+      beforeHash: stableHash(before),
+      afterHash: stableHash(values),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return {
+    personId: person.id,
+    displayName,
+    handle,
+    status: "updated" as const,
   };
 }
 
