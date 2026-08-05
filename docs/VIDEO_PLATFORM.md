@@ -6,14 +6,14 @@ private Cloudflare R2 bucket.
 
 ## Product surfaces
 
-| Surface     | Capability                                                                                                                                                                                  |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Duna iOS    | Go Live, guided camera setup, Duna Vision recording, Watch scoring and moment tags, remote setup QR, live score overlay, upload, playback, privacy controls, share links, and owner metrics |
-| Apple Watch | Large live scoreboard, four-direction gesture scoring, favorite/undo/side-change tags, haptics, and a low-frame-rate camera alignment check                                                 |
-| Public web  | Mux/R2 playback on player, event, and match pages; multiple stream angles for the same match; link-only playback; timestamped score overlay                                                 |
-| Duna Pro    | Cleaner live scorer with a persistent exit, associated match video, and live angles                                                                                                         |
-| Remote web  | Time-limited QR control for team/court setup, draggable court corners, camera and net heights, camera preview, and record/stop controls                                                     |
-| Super Admin | Provider readiness, global allowances, current streams, usage, storage, watch time, and Complimentary Duna+ grants                                                                          |
+| Surface     | Capability                                                                                                                                                                                                 |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Duna iOS    | Go Live, guided camera setup, native Duna Vision recording, Watch scoring and moment tags, remote setup QR, live score overlay, library upload, playback, privacy controls, share links, and owner metrics |
+| Apple Watch | Large live scoreboard, four-direction gesture scoring, favorite/undo/side-change tags, haptics, and a low-frame-rate camera alignment check                                                                |
+| Public web  | Mux/R2 playback on player, event, and match pages; multiple stream angles for the same match; link-only playback; timestamped score overlay                                                                |
+| Duna Pro    | Cleaner live scorer with a persistent exit, associated match video, and live angles                                                                                                                        |
+| Remote web  | Time-limited QR control for team/court setup, draggable court corners, camera and net heights, camera preview, and record/stop controls                                                                    |
+| Super Admin | Provider readiness, safety ceilings, current streams, usage, storage, watch time, and Complimentary Duna+ grants                                                                                           |
 
 Android capture is intentionally unavailable in this release. Public playback
 continues to work on supported browsers and inside the app.
@@ -23,7 +23,7 @@ continues to work on supported browsers and inside the app.
 ### Live
 
 1. The authenticated iOS client asks Duna for a live session.
-2. Duna verifies Duna+, the enforced monthly allowance, association validity,
+2. Duna verifies Premium access, the enforced monthly allowance, association validity,
    and minor-account privacy rules.
 3. The server creates a Mux live stream and returns the RTMPS ingest information
    only to that player.
@@ -46,9 +46,9 @@ client analytics.
 5. Playback uses a short-lived signed R2 URL; the bucket does not need to be
    public.
 
-There is no application-level upload-duration block in the initial policy. The
-24-hour allowance is reported to the player and Super Admin until enforcement
-is deliberately enabled.
+The API checks the proposed upload duration against the player's remaining
+plan allowance before creating an R2 multipart upload. Upload and live meters
+are enforced independently.
 
 ## Privacy and association rules
 
@@ -68,23 +68,30 @@ is deliberately enabled.
 - Playback authorization is checked before issuing Mux tokens or R2 signed
   URLs. Share-link use is recorded.
 
-## Duna+ and allowances
+## Premium plans and allowances
 
-Live streaming requires an active paid or Complimentary Duna+ entitlement.
-Complimentary grants are local, audit-logged entitlements; they do not create a
-zero-dollar Stripe subscription.
+Live broadcasting requires an active paid Premium or Premium+ entitlement.
+Complimentary Premium+ grants are local, audit-logged entitlements; they do not
+create a zero-dollar Stripe subscription.
 
-The initial global policy is:
+The launch plan allowances are:
 
-- 4 hours of live streaming per calendar billing month, enforced.
-- 24 hours of uploaded video per calendar billing month, reported but not
-  enforced.
+- Free: 4 uploaded-video hours and no native live broadcasting.
+- Premium: 8 uploaded-video hours and 2 live-broadcast hours.
+- Premium+: 30 uploaded-video hours and 8 live-broadcast hours.
 
-Super Admin can change the global numbers and either enforcement state. A
-future person-specific policy can use the existing nullable-person quota model
-without changing the global setting.
+Organization-scoped capture uses a separate pooled meter tied to the effective
+Duna HQ plan: Coach & Organizer includes 4 upload / 2 live hours, Club 100 / 10,
+Facility 500 / 40, and Network 1,000 / 100. Videos created in an organization
+context carry the organization id and do not consume the individual player’s
+meter.
 
-Migration `0044_duna_video.sql` creates an indefinite Complimentary Duna+ grant
+Both meters reset at the beginning of each UTC calendar month and are enforced.
+Super Admin can set platform safety ceilings or a person-specific override. The
+default ceilings are 30 upload hours and 8 live hours so they do not reduce any
+launch plan.
+
+Migration `0044_duna_video.sql` creates an indefinite complimentary grant
 for `john@beachelite.org`. It attaches to the matching person when that identity
 already exists and otherwise remains email-bound until the account is resolved.
 
@@ -267,9 +274,9 @@ models.
 ## Release sequence
 
 1. Apply forward-only database migrations through
-   `0046_odd_korg.sql`. Migration `0045` adds Duna Vision sessions and
-   append-only timeline events; migration `0046` adds the rules-aware set-end
-   event and encrypted Duna Health storage and sharing controls.
+   the latest checked-in migration. Migration `0045` adds Duna Vision sessions
+   and append-only timeline events; migration `0046` adds encrypted Duna Health
+   storage and sharing controls.
 2. Add R2 credentials to Duna Web. The existing sensitive Duna HQ values cannot
    be exported or copied by Vercel CLI.
    Add `GOOGLE_PLACES_API_KEY` to Duna Web as well; the mobile venue picker calls

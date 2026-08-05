@@ -21,6 +21,7 @@ import {
   venues,
 } from "@duna/db";
 import {
+  calculateOrganizationCommissionFee,
   calculateOperatorProcessingFee,
   priceConsumerOrder,
   type CurrencyCode,
@@ -38,6 +39,7 @@ import { stableHash } from "./canonical";
 import { assertSubjectAuthority, createCourtHold } from "./commerce";
 import type { ApiActor } from "./context";
 import { hasActiveDunaPlusMembership } from "./membership";
+import { loadOrganizationCommissionPolicy } from "./organization-billing";
 import { createCourtCheckoutSession, isStripeConfigured } from "./payments";
 import { sendTemplateSms } from "./sent";
 import {
@@ -1310,6 +1312,17 @@ export async function startCourtCheckout(input: {
     currency: priced.currency,
     method: "online-card",
   });
+  const commissionPolicy = await loadOrganizationCommissionPolicy(
+    resource.organizationId,
+  );
+  const organizationCommissionFee = calculateOrganizationCommissionFee({
+    amountMinor: priced.subtotalMinor,
+    currency: priced.currency,
+    rateBps: commissionPolicy.rateBps,
+    organizationId: resource.organizationId,
+    plan: commissionPolicy.effectivePlan,
+    source: commissionPolicy.source,
+  });
   const organizerSubtotal =
     input.paymentMode === "split"
       ? Math.min(
@@ -1327,6 +1340,13 @@ export async function startCourtCheckout(input: {
             priced.totalMinor,
         )
       : operatorProcessingFee.amountMinor;
+  const organizerOrganizationCommission =
+    input.paymentMode === "split" && priced.subtotalMinor > 0
+      ? Math.round(
+          (organizationCommissionFee.amountMinor * organizerSubtotal) /
+            priced.subtotalMinor,
+        )
+      : organizationCommissionFee.amountMinor;
   pricing.payNowMinor = organizerShare;
   await database.batch([
     database.insert(orders).values({
@@ -1383,8 +1403,24 @@ export async function startCourtCheckout(input: {
                 }),
               ]
             : []),
+          ...(organizerOrganizationCommission > 0
+            ? [
+                database.insert(appliedFees).values({
+                  orderId: orderId!,
+                  ruleId: organizationCommissionFee.id,
+                  payer: organizationCommissionFee.payer,
+                  amountMinor: organizerOrganizationCommission,
+                  currency: organizationCommissionFee.currency,
+                  ruleInputs: {
+                    ...organizationCommissionFee.ruleInputs,
+                    bookingTotalMinor: priced.totalMinor,
+                    paymentMode: "split",
+                  },
+                }),
+              ]
+            : []),
         ]
-      : [...priced.fees, operatorProcessingFee]
+      : [...priced.fees, operatorProcessingFee, organizationCommissionFee]
           .filter((fee) => fee.amountMinor > 0)
           .map((fee) =>
             database.insert(appliedFees).values({
@@ -1424,8 +1460,12 @@ export async function startCourtCheckout(input: {
       currency: priced.currency,
       applicationFeeMinor: Math.min(
         organizerShare,
-        organizerConsumerFee + organizerOperatorFee,
+        organizerConsumerFee +
+          organizerOperatorFee +
+          organizerOrganizationCommission,
       ),
+      organizationCommissionMinor: organizerOrganizationCommission,
+      organizationCommissionRateBps: commissionPolicy.rateBps,
       connectedAccountId: resource.stripeAccountId!,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
@@ -1669,6 +1709,17 @@ export async function startParticipantShareCheckout(input: {
     currency: currencyCode(booking.currency) ?? resource.currency,
     method: "online-card",
   });
+  const commissionPolicy = await loadOrganizationCommissionPolicy(
+    booking.organizationId,
+  );
+  const organizationCommissionFee = calculateOrganizationCommissionFee({
+    amountMinor: subtotalMinor,
+    currency: currencyCode(booking.currency) ?? resource.currency,
+    rateBps: commissionPolicy.rateBps,
+    organizationId: booking.organizationId,
+    plan: commissionPolicy.effectivePlan,
+    source: commissionPolicy.source,
+  });
   const orderId = crypto.randomUUID();
   const checkoutExpiresAt = new Date(input.now.getTime() + 30 * 60_000);
   const policyHash = stableHash(policy.markdown);
@@ -1722,6 +1773,18 @@ export async function startParticipantShareCheckout(input: {
           }),
         ]
       : []),
+    ...(organizationCommissionFee.amountMinor > 0
+      ? [
+          database.insert(appliedFees).values({
+            orderId,
+            ruleId: organizationCommissionFee.id,
+            payer: organizationCommissionFee.payer,
+            amountMinor: organizationCommissionFee.amountMinor,
+            currency: organizationCommissionFee.currency,
+            ruleInputs: organizationCommissionFee.ruleInputs,
+          }),
+        ]
+      : []),
     database
       .update(courtBookingParticipants)
       .set({
@@ -1762,8 +1825,12 @@ export async function startParticipantShareCheckout(input: {
       currency: booking.currency,
       applicationFeeMinor: Math.min(
         shareAmountMinor,
-        feeTotalMinor + processingFee.amountMinor,
+        feeTotalMinor +
+          processingFee.amountMinor +
+          organizationCommissionFee.amountMinor,
       ),
+      organizationCommissionMinor: organizationCommissionFee.amountMinor,
+      organizationCommissionRateBps: commissionPolicy.rateBps,
       connectedAccountId: resource.stripeAccountId,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,

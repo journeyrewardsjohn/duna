@@ -52,18 +52,20 @@ describe("Duna Video contracts", () => {
     ).toThrow();
   });
 
-  it("keeps paid, complimentary, and inactive Duna+ states explicit", () => {
+  it("keeps paid, complimentary, and free membership states explicit", () => {
     expect(
       dunaPlusEntitlementSchema.parse({
         active: true,
         kind: "complimentary",
-        label: "Complimentary Duna+",
+        plan: "premium-plus",
+        label: "Complimentary Premium+",
         startsAt: "2026-08-04T18:00:00.000Z",
       }),
     ).toMatchObject({
       active: true,
       kind: "complimentary",
-      label: "Complimentary Duna+",
+      plan: "premium-plus",
+      label: "Complimentary Premium+",
     });
   });
 
@@ -97,28 +99,28 @@ describe("Duna Video contracts", () => {
     });
   });
 
-  it("represents enforced live usage separately from report-only uploads", () => {
+  it("represents live and uploaded-video limits separately", () => {
     const usage = videoUsageSchema.parse({
       periodStartsAt: "2026-08-01T00:00:00.000Z",
       periodEndsAt: "2026-09-01T00:00:00.000Z",
       live: {
         usedSeconds: 3_600,
-        limitSeconds: 14_400,
-        remainingSeconds: 10_800,
+        limitSeconds: 28_800,
+        remainingSeconds: 25_200,
         enforced: true,
       },
       uploads: {
         usedSeconds: 90_000,
-        limitSeconds: 86_400,
-        remainingSeconds: 0,
-        overageSeconds: 3_600,
-        enforced: false,
+        limitSeconds: 108_000,
+        remainingSeconds: 18_000,
+        overageSeconds: 0,
+        enforced: true,
       },
     });
     expect(usage.live.enforced).toBe(true);
     expect(usage.uploads).toMatchObject({
-      overageSeconds: 3_600,
-      enforced: false,
+      overageSeconds: 0,
+      enforced: true,
     });
   });
 
@@ -243,10 +245,10 @@ describe("Duna Video contracts", () => {
     const overview = adminVideoOverviewSchema.parse({
       canManage: true,
       settings: {
-        monthlyLiveSeconds: 14_400,
-        monthlyUploadSeconds: 86_400,
+        monthlyLiveSeconds: 28_800,
+        monthlyUploadSeconds: 108_000,
         enforceLiveLimit: true,
-        enforceUploadLimit: false,
+        enforceUploadLimit: true,
       },
       totals: {
         videos: 0,

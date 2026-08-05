@@ -12,7 +12,14 @@ import {
   type ReactNode,
 } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
-import { createDunaApiClient, type DunaApiClient } from "./mobile-api";
+import {
+  createSessionNoteRoom,
+  createDunaApiClient,
+  uploadProductImage,
+  type DunaApiClient,
+  type SessionNoteRoom,
+  type UploadedProductImage,
+} from "./mobile-api";
 import { FellixText as Text } from "./fellix-text";
 
 type OperatorDashboard = Awaited<
@@ -43,6 +50,14 @@ export interface ProRuntime {
   readonly events?: OperatorEvents;
   readonly matches?: OperatorMatches;
   readonly refresh: () => Promise<void>;
+  readonly uploadProductImage?: (input: {
+    readonly uri: string;
+    readonly name?: string;
+    readonly type?: string;
+  }) => Promise<UploadedProductImage>;
+  readonly createSessionNoteRoom?: (
+    sessionId: string,
+  ) => Promise<SessionNoteRoom>;
   readonly signOut?: () => Promise<void>;
 }
 
@@ -207,6 +222,9 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         events,
         matches,
         refresh,
+        createSessionNoteRoom: (sessionId) =>
+          createSessionNoteRoom(getToken, sessionId),
+        uploadProductImage: (input) => uploadProductImage(getToken, input),
         signOut,
       }}
     >

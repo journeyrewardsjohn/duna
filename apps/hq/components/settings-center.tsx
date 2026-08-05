@@ -1,6 +1,7 @@
 "use client";
 
 import type { OperatorWorkspace } from "@duna/api";
+import { ORGANIZATION_PLAN_IDS, ORGANIZATION_PLANS } from "@duna/core";
 import { Badge } from "@duna/ui";
 import {
   ArrowRight,
@@ -32,7 +33,9 @@ import {
   type ReactNode,
 } from "react";
 import {
+  openOrganizationBillingPortalAction,
   startStripeOnboardingAction,
+  startOrganizationPlanCheckoutAction,
   updateCommerceSettingsAction,
   updateOrganizationProfileAction,
   type OperatorActionState,
@@ -211,6 +214,14 @@ export function SettingsCenter({
   );
   const [stripeState, stripeAction, stripePending] = useActionState(
     startStripeOnboardingAction,
+    initialActionState,
+  );
+  const [planState, planAction, planPending] = useActionState(
+    startOrganizationPlanCheckoutAction,
+    initialActionState,
+  );
+  const [portalState, portalAction, portalPending] = useActionState(
+    openOrganizationBillingPortalAction,
     initialActionState,
   );
 
@@ -519,26 +530,130 @@ export function SettingsCenter({
 
               <aside className="hq-card settings-plan-card">
                 <span className="hq-eyebrow">Workspace plan</span>
-                <h3>{organization.plan.replaceAll("-", " ")}</h3>
+                <h3>{ORGANIZATION_PLANS[organization.effectivePlan].name}</h3>
                 <p>
-                  Your plan controls available business capabilities. A plan
-                  change never silently alters customer pricing.
+                  {organization.plan !== organization.effectivePlan
+                    ? `${ORGANIZATION_PLANS[organization.plan].name} is selected but activates only after billing succeeds.`
+                    : ORGANIZATION_PLANS[organization.effectivePlan].tagline}
                 </p>
                 <dl>
                   <div>
-                    <dt>Currency</dt>
-                    <dd>{organization.currency}</dd>
+                    <dt>Billing</dt>
+                    <dd>
+                      {organization.planSubscriptionStatus.replaceAll("_", " ")}
+                    </dd>
                   </div>
                   <div>
-                    <dt>Venues</dt>
-                    <dd>{workspace.venues.length}</dd>
+                    <dt>Organization fee</dt>
+                    <dd>{organization.commission.rateBps / 100}%</dd>
                   </div>
                 </dl>
-                <button onClick={() => setSection("money")} type="button">
-                  Review money setup <ArrowRight aria-hidden size={15} />
-                </button>
+                {organization.planCurrentPeriodEndsAt && (
+                  <small>
+                    {organization.planCancelAtPeriodEnd ? "Ends" : "Renews"}{" "}
+                    {new Intl.DateTimeFormat("en-US", {
+                      dateStyle: "medium",
+                    }).format(new Date(organization.planCurrentPeriodEndsAt))}
+                  </small>
+                )}
               </aside>
             </div>
+
+            <section className="hq-card organization-plan-settings">
+              <header>
+                <div>
+                  <span className="hq-eyebrow">Plans & pricing</span>
+                  <h3>Choose the operating plan that fits today.</h3>
+                  <p>
+                    Players without Duna Premium pay the same 7.5% consumer
+                    service fee on eligible bookings. The organization fee below
+                    is separate and comes out of connected payouts.
+                  </p>
+                </div>
+                <Badge tone="neutral">
+                  {organization.commission.source.replace("-", " ")}
+                </Badge>
+              </header>
+              <div className="organization-plan-settings__grid">
+                {ORGANIZATION_PLAN_IDS.map((planId) => {
+                  const plan = ORGANIZATION_PLANS[planId];
+                  const current = organization.effectivePlan === planId;
+                  return (
+                    <article
+                      className={current ? "current" : undefined}
+                      key={planId}
+                    >
+                      <div>
+                        <span>{plan.productName}</span>
+                        {current && <Badge tone="positive">Current</Badge>}
+                      </div>
+                      <strong>
+                        {plan.monthlyPriceMinor === 0
+                          ? "$0"
+                          : `$${(plan.monthlyPriceMinor / 100).toLocaleString("en-US")}`}
+                        <small>
+                          {plan.monthlyPriceMinor === 0 ? "" : " / month"}
+                        </small>
+                      </strong>
+                      <p>{plan.tagline}</p>
+                      <ul>
+                        {plan.features.slice(0, 4).map((feature) => (
+                          <li key={feature}>
+                            <Check aria-hidden size={14} /> {feature}
+                          </li>
+                        ))}
+                      </ul>
+                      {planId !== "coach" &&
+                        !organization.billingPortalAvailable && (
+                          <form action={planAction}>
+                            <input name="plan" type="hidden" value={planId} />
+                            <button
+                              disabled={planPending}
+                              name="interval"
+                              type="submit"
+                              value="month"
+                            >
+                              Monthly
+                            </button>
+                            <button
+                              disabled={planPending}
+                              name="interval"
+                              type="submit"
+                              value="year"
+                            >
+                              Annual · save 2 months
+                            </button>
+                          </form>
+                        )}
+                    </article>
+                  );
+                })}
+              </div>
+              <footer>
+                <div>
+                  <ActionNotice state={planState} />
+                  <ActionNotice state={portalState} />
+                  {(planState.onboardingUrl || portalState.onboardingUrl) && (
+                    <a
+                      className="hq-button hq-button--primary"
+                      href={
+                        planState.onboardingUrl ?? portalState.onboardingUrl
+                      }
+                    >
+                      Continue securely with Stripe
+                      <ExternalLink aria-hidden size={15} />
+                    </a>
+                  )}
+                </div>
+                {organization.billingPortalAvailable && (
+                  <form action={portalAction}>
+                    <SubmitButton pending={portalPending}>
+                      Manage plan in Stripe
+                    </SubmitButton>
+                  </form>
+                )}
+              </footer>
+            </section>
           </section>
         )}
 

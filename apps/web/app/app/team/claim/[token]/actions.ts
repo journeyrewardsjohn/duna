@@ -1,11 +1,51 @@
 "use server";
 
+import { headers } from "next/headers";
 import { getServerCaller } from "@/lib/api";
+
+function applicationOrigin(headersValue: Headers): string {
+  const protocol = headersValue.get("x-forwarded-proto") ?? "https";
+  const host =
+    headersValue.get("x-forwarded-host") ??
+    headersValue.get("host") ??
+    "localhost:3000";
+  return `${protocol}://${host}`;
+}
 
 export interface TeamClaimActionState {
   readonly status: "idle" | "success" | "error";
   readonly message: string;
   readonly paymentRequired?: boolean;
+}
+
+export async function updateTeamRosterAction(input: {
+  readonly claimToken: string;
+  readonly roster: readonly {
+    readonly personId?: string;
+    readonly inviteTarget?: string;
+    readonly displayName?: string;
+  }[];
+}) {
+  try {
+    const incoming = await headers();
+    const origin = applicationOrigin(new Headers(incoming));
+    const caller = await getServerCaller();
+    const claim = await caller.player.updateTeamEntryRoster({
+      claimToken: input.claimToken,
+      roster: [...input.roster],
+      applicationOrigin: origin,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    return { ok: true as const, claim };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The roster could not be updated.",
+    };
+  }
 }
 
 export async function claimTeamAction(

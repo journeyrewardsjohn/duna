@@ -85,11 +85,14 @@ async function main() {
 
   const tier = await database.query.membershipTiers.findFirst({
     where: and(
-      eq(membershipTiers.code, "duna-plus-monthly"),
+      inArray(membershipTiers.code, [
+        "duna-premium-monthly",
+        "duna-plus-monthly",
+      ]),
       eq(membershipTiers.active, true),
     ),
   });
-  assert(tier?.stripePriceId, "Configured Duna+ monthly tier is required");
+  assert(tier?.stripePriceId, "Configured Premium monthly tier is required");
 
   const periodStart = Math.floor(now.getTime() / 1_000);
   const periodEnd = periodStart + 30 * 24 * 60 * 60;
@@ -301,7 +304,7 @@ async function main() {
     assert(
       activeMembership?.status === "active" &&
         activeMembership.tierId === tier.id,
-      "Created subscription did not activate the mapped Duna+ tier",
+      "Created subscription did not activate the mapped Premium tier",
     );
 
     const resumesAt = periodStart + 14 * 24 * 60 * 60;
@@ -366,7 +369,7 @@ async function main() {
     assert(
       cancelledMembership?.status === "canceled" &&
         cancelledMembership.cancelAtPeriodEnd,
-      "Deleted subscription did not close the Duna+ membership",
+      "Deleted subscription did not close the Premium membership",
     );
 
     const finalRequest = await requestAccountDeletion({

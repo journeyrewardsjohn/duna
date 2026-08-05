@@ -3,12 +3,14 @@ import type {
   BookingSummary,
   EventSummary,
   MatchSummary,
+  MembershipPlanId,
   Metric,
   OrganizationSummary,
   PersonSummary,
   VenueSummary,
   WalletEntry,
 } from "@duna/core";
+import type { OrganizationCommissionPolicy } from "./organization-billing";
 import type {
   CurrencyCode,
   OrderPricing,
@@ -106,6 +108,7 @@ export interface PlayerSettings {
     readonly ageBand: "unknown" | "under-13" | "teen" | "adult";
     readonly ageVerified: boolean;
     readonly birthDate?: string;
+    readonly genderCategory?: string;
     readonly parentalConsentRecorded: boolean;
     readonly legalGivenName?: string;
     readonly legalMiddleName?: string;
@@ -177,6 +180,9 @@ export interface PlayerSettings {
     readonly verified: boolean;
     readonly emergencyContact: boolean;
     readonly canApproveSpending: boolean;
+    readonly birthDate?: string;
+    readonly ageBand?: "unknown" | "under-13" | "teen" | "adult";
+    readonly genderCategory?: string;
     readonly onboardingStatus:
       "not-started" | "in-progress" | "guardian-required" | "complete";
   }[];
@@ -196,15 +202,22 @@ export interface PlayerSettings {
   readonly dunaPlus: {
     readonly active: boolean;
     readonly kind: "paid" | "complimentary" | "none";
+    readonly plan: MembershipPlanId;
     readonly label: string;
     readonly startsAt?: string;
     readonly endsAt?: string;
   };
   readonly dunaPlusPlans: readonly {
+    readonly plan: "premium" | "premium-plus";
+    readonly name: string;
+    readonly tagline: string;
     readonly interval: "month" | "year";
     readonly priceMinor: number;
     readonly currency: CurrencyCode;
     readonly configured: boolean;
+    readonly monthlyUploadSeconds: number;
+    readonly monthlyLiveSeconds: number;
+    readonly benefits: readonly string[];
   }[];
   readonly consents: readonly {
     readonly scope:
@@ -309,11 +322,21 @@ export interface AdminOverview {
 
 export interface AdminOrganizationDetail {
   readonly organization: OrganizationSummary;
+  readonly canManageCommission: boolean;
   readonly metrics: readonly Metric[];
   readonly people: readonly PersonSummary[];
   readonly venues: readonly VenueSummary[];
   readonly events: readonly EventSummary[];
   readonly audit: readonly AuditEvent[];
+  readonly billing: {
+    readonly configuredPlan: OrganizationSummary["plan"];
+    readonly effectivePlan: OrganizationSummary["plan"];
+    readonly subscriptionStatus: string;
+    readonly interval?: "month" | "year";
+    readonly currentPeriodEndsAt?: string;
+    readonly cancelAtPeriodEnd: boolean;
+    readonly commission: OrganizationCommissionPolicy;
+  };
   readonly commerce: {
     readonly paidOrders: number;
     readonly pendingOrders: number;

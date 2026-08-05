@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { connectAccountMoneyReady, retryDelayMilliseconds } from "./workflows";
+import {
+  connectAccountMoneyReady,
+  retryDelayMilliseconds,
+  stripeSubscriptionItemPriceId,
+} from "./workflows";
 
 describe("durable workflow retry policy", () => {
   it("backs off exponentially and caps at fifteen minutes", () => {
@@ -74,5 +78,16 @@ describe("connected-account money readiness", () => {
         },
       }),
     ).toBe(false);
+  });
+});
+
+describe("Stripe subscription item mapping", () => {
+  it("reads both expanded and unexpanded price references", () => {
+    expect(stripeSubscriptionItemPriceId({ price: "price_membership" })).toBe(
+      "price_membership",
+    );
+    expect(
+      stripeSubscriptionItemPriceId({ price: { id: "price_service_fee" } }),
+    ).toBe("price_service_fee");
   });
 });

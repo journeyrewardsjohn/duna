@@ -1,4 +1,5 @@
 import muxReactNativeVideo from "@mux/mux-data-react-native-video";
+import { MEMBERSHIP_PLANS } from "@duna/core";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
@@ -2481,10 +2482,16 @@ export function VideoStudioScreen({
 
   const isIos = Platform.OS === "ios";
   const entitlement = studio?.entitlement ?? runtime.settings?.dunaPlus;
+  const plan = MEMBERSHIP_PLANS[entitlement?.plan ?? "free"];
+  const canBroadcast = Boolean(
+    studio?.canBroadcast ??
+    (entitlement?.active && plan.monthlyLiveSeconds > 0),
+  );
   const liveUsed = studio?.usage.live.usedSeconds ?? 0;
-  const liveLimit = studio?.usage.live.limitSeconds ?? 4 * 60 * 60;
+  const liveLimit = studio?.usage.live.limitSeconds ?? plan.monthlyLiveSeconds;
   const uploadUsed = studio?.usage.uploads.usedSeconds ?? 0;
-  const uploadLimit = studio?.usage.uploads.limitSeconds ?? 24 * 60 * 60;
+  const uploadLimit =
+    studio?.usage.uploads.limitSeconds ?? plan.monthlyUploadSeconds;
   const livePercent = Math.min(1, liveUsed / Math.max(1, liveLimit));
   const uploadPercent = Math.min(1, uploadUsed / Math.max(1, uploadLimit));
 
@@ -2513,7 +2520,7 @@ export function VideoStudioScreen({
           {entitlement?.kind === "complimentary" && (
             <View style={styles.complimentaryBadge}>
               <Text style={styles.complimentaryText}>
-                ✦ Complimentary Duna+
+                ✦ Complimentary Premium+
               </Text>
             </View>
           )}
@@ -2525,16 +2532,16 @@ export function VideoStudioScreen({
           )}
           <View style={styles.heroActions}>
             <Pressable
-              disabled={!isIos || !client || !entitlement?.active}
+              disabled={!isIos || !client || !canBroadcast}
               onPress={openLive}
               style={[
                 styles.goLiveButton,
-                (!isIos || !client || !entitlement?.active) && styles.disabled,
+                (!isIos || !client || !canBroadcast) && styles.disabled,
               ]}
             >
               <View style={styles.liveButtonDot} />
               <Text style={styles.goLiveText}>
-                {entitlement?.active ? "Go Live" : "Duna+ to go live"}
+                {canBroadcast ? "Go Live" : "Plan required to go live"}
               </Text>
             </Pressable>
             <Pressable
@@ -2571,7 +2578,7 @@ export function VideoStudioScreen({
               <Text style={styles.sectionTitle}>Video allowance</Text>
             </View>
             <Text style={styles.usagePlan}>
-              {entitlement?.label ?? "Duna Player"}
+              {studio?.quotaScope.label ?? entitlement?.label ?? "Duna Player"}
             </Text>
           </View>
           <View style={styles.usageRow}>
@@ -2606,8 +2613,8 @@ export function VideoStudioScreen({
               />
             </View>
             <Text style={styles.usageFootnote}>
-              Upload usage is reported now; it is not blocked unless a Super
-              Admin enables enforcement.
+              Upload and live allowances reset monthly. Existing videos remain
+              in your cloud library.
             </Text>
           </View>
         </View>

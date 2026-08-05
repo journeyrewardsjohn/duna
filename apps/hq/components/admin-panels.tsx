@@ -37,6 +37,7 @@ import Link from "next/link";
 import type { AdminModule } from "./navigation";
 import { FeatureFlagControls } from "./feature-flag-controls";
 import { GuardianReviewCard } from "./guardian-review-card";
+import { OrganizationCommissionControls } from "./organization-commission-controls";
 import {
   PlayerMappingPanel,
   ProfileMergePanel,
@@ -128,7 +129,7 @@ const copy: Record<
   },
   video: {
     eyebrow: "Live, uploaded, and governed",
-    title: "Video + Duna+",
+    title: "Video + Premium",
     description:
       "Mux live streams, R2 uploads, player usage, complimentary entitlements, and global allowances.",
   },
@@ -256,7 +257,8 @@ function OrganizationsList({
             <strong>{organization.name}</strong>
             <small>
               {organization.plan} · {organization.memberCount} people ·{" "}
-              {organization.venueCount} venues
+              {organization.venueCount} venues ·{" "}
+              {(organization.operatorCommissionBps ?? 0) / 100}% org fee
             </small>
           </div>
           <Badge tone={toneForStatus(organization.stripeStatus)}>
@@ -420,6 +422,11 @@ export function AdminOrganizationDetailView({
           </dl>
         </section>
       </section>
+
+      <OrganizationCommissionControls
+        billing={detail.billing}
+        canManage={detail.canManageCommission}
+      />
 
       <section className="admin-org-data-grid">
         <section className="hq-card admin-org-panel">

@@ -1,4 +1,3 @@
-import { Badge } from "@duna/ui";
 import {
   ArrowLeft,
   Check,
@@ -11,6 +10,7 @@ import {
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CatalogCheckoutPanel } from "@/components/catalog-checkout-panel";
+import { CatalogMediaGallery } from "@/components/catalog-media-gallery";
 import { MarkdownContent } from "@/components/markdown-content";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -31,9 +31,10 @@ export default async function CatalogProductPage({
     searchParams,
   ]);
   const caller = await getServerCaller();
-  const [storefront, wallets] = await Promise.all([
+  const [storefront, wallets, playerSettings] = await Promise.all([
     caller.public.organizationStorefront({ slug }).catch(() => undefined),
     caller.player.organizationWallets().catch(() => []),
+    caller.player.settings().catch(() => undefined),
   ]);
   const item = storefront?.catalog.find(
     (candidate) => candidate.slug === productSlug,
@@ -53,7 +54,6 @@ export default async function CatalogProductPage({
   const isMember =
     organizationBenefits?.membershipStatus === "active" ||
     organizationBenefits?.membershipStatus === "trialing";
-  const media = item.media[0];
   const benefits = Array.isArray(item.configuration.benefits)
     ? item.configuration.benefits.filter(
         (benefit): benefit is string => typeof benefit === "string",
@@ -75,17 +75,12 @@ export default async function CatalogProductPage({
         </Link>
         <section className="catalog-product-layout">
           <div className="catalog-product-main">
-            <div
-              className="catalog-product-hero"
-              style={
-                media?.kind === "image"
-                  ? { backgroundImage: `url("${media.url}")` }
-                  : undefined
-              }
-            >
-              {!media && <span>{item.title.slice(0, 2).toUpperCase()}</span>}
-              <Badge>{item.subtype.replaceAll("-", " ")}</Badge>
-            </div>
+            <CatalogMediaGallery
+              media={item.media}
+              subtype={item.subtype}
+              title={item.title}
+              variants={item.variants}
+            />
             <div className="catalog-product-copy">
               <span className="section__eyebrow">{item.type}</span>
               <h1>{item.title}</h1>
@@ -164,7 +159,8 @@ export default async function CatalogProductPage({
                   )}
                   <span>
                     <strong>
-                      {item.type === "good"
+                      {item.type === "good" &&
+                      item.configuration.inventoryTracked !== false
                         ? "Inventory reserved at checkout"
                         : "Fulfillment tracked"}
                     </strong>
@@ -204,6 +200,7 @@ export default async function CatalogProductPage({
             isMember={isMember}
             membershipIncluded={offerEligibility.included}
             membershipRemainingBookings={offerEligibility.remainingBookings}
+            dunaServiceFeeWaived={playerSettings?.dunaPlus.active ?? false}
             walletCredits={walletCredits}
           />
         </section>

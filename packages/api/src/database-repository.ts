@@ -60,7 +60,10 @@ import {
   type TournamentFormat,
   type MatchSummary,
   type Metric,
+  MEMBERSHIP_PLANS,
   type OrganizationSummary,
+  PLATFORM_MEMBERSHIP_TIER_CODES,
+  membershipPlanForTierCode,
   type PersonRole,
   type PersonSummary,
   type VenueSummary,
@@ -77,7 +80,18 @@ import {
   type CurrencyCode,
   type PricedOrderItem,
 } from "@duna/pricing";
-import { and, asc, desc, eq, gte, ilike, inArray, ne, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  ne,
+  or,
+} from "drizzle-orm";
 import type {
   AdminOrganizationDetail,
   AdminQueue,
@@ -89,7 +103,8 @@ import type {
 } from "./repository-contract";
 import { loadGuardianReviewQueue } from "./identity";
 import { loadIdentityVerification } from "./identity-verification";
-import { getDunaPlusEntitlement } from "./membership";
+import { getDunaPlusEntitlement, membershipPlanOffers } from "./membership";
+import { resolveOrganizationCommissionPolicy } from "./organization-billing";
 
 const publicSessionStatuses = [
   "published",
@@ -764,6 +779,8 @@ interface StoredDivisionSettings {
   readonly tournamentFormat?: TournamentFormat;
   readonly poolPlay?: EventPoolPlay;
   readonly seeding?: EventSeedingMethod;
+  readonly teamEntryFeeMinor?: number;
+  readonly playerEntryFeeMinor?: number;
 }
 
 async function loadEvents(input?: {
@@ -969,12 +986,17 @@ async function loadEvents(input?: {
         inArray(tickets.status, ["held", "issued", "transferred", "scanned"]),
       ),
   ]);
+  const featurePersonIds = blueprintRows.flatMap((blueprint) =>
+    (blueprint.features as unknown as readonly EventFeature[])
+      .map((feature) => feature.personId)
+      .filter((id): id is string => Boolean(id)),
+  );
   const attendeeIds = [
-    ...new Set(
-      [...registrationAttendeeRows, ...pickupAttendeeRows].map(
-        (row) => row.personId,
-      ),
-    ),
+    ...new Set([
+      ...registrationAttendeeRows.map((row) => row.personId),
+      ...pickupAttendeeRows.map((row) => row.personId),
+      ...featurePersonIds,
+    ]),
   ];
   const attendeePeople = await loadPeople(attendeeIds);
   const attendeeById = new Map(
@@ -1082,6 +1104,21 @@ async function loadEvents(input?: {
       .filter((division) => division.sessionId === row.id)
       .map((division) => {
         const settings = division.settings as unknown as StoredDivisionSettings;
+        const teamSize = Math.max(1, division.teamSize);
+        const teamEntryFeeMinor =
+          Number.isSafeInteger(settings.teamEntryFeeMinor) &&
+          (settings.teamEntryFeeMinor ?? -1) >= 0
+            ? settings.teamEntryFeeMinor!
+            : division.priceBasis === "per-person"
+              ? division.entryFeeMinor * teamSize
+              : division.entryFeeMinor;
+        const playerEntryFeeMinor =
+          Number.isSafeInteger(settings.playerEntryFeeMinor) &&
+          (settings.playerEntryFeeMinor ?? -1) >= 0
+            ? settings.playerEntryFeeMinor!
+            : division.priceBasis === "per-person"
+              ? division.entryFeeMinor
+              : Math.ceil(division.entryFeeMinor / teamSize);
         return {
           id: division.id,
           name: division.name,
@@ -1090,6 +1127,14 @@ async function loadEvents(input?: {
           ratingBasis: division.ratingBasis,
           price: {
             amountMinor: division.entryFeeMinor,
+            currency: currency(division.currency),
+          },
+          teamPrice: {
+            amountMinor: teamEntryFeeMinor,
+            currency: currency(division.currency),
+          },
+          playerPrice: {
+            amountMinor: playerEntryFeeMinor,
             currency: currency(division.currency),
           },
           spotsRemaining: Math.max(
@@ -1138,10 +1183,18 @@ async function loadEvents(input?: {
         availableOnline: ticket.availableOnline,
         availableInPerson: ticket.availableInPerson,
       }));
-    const optionPrices = [
-      ...eventDivisions.map((division) => division.price.amountMinor),
-      ...eventTickets.map((ticket) => ticket.price.amountMinor),
-    ];
+    // A spectator ticket is not a player entry. Prefer division pricing for
+    // the event's primary callout and only fall back to tickets for events
+    // without a playable division.
+    const optionPrices =
+      eventDivisions.length > 0
+        ? eventDivisions.map((division) =>
+            Math.min(
+              division.teamPrice.amountMinor,
+              division.playerPrice.amountMinor,
+            ),
+          )
+        : eventTickets.map((ticket) => ticket.price.amountMinor);
     const startingPrice =
       optionPrices.length > 0
         ? Math.min(...optionPrices)
@@ -1198,7 +1251,24 @@ async function loadEvents(input?: {
           : undefined,
         features:
           blueprint && blueprint.features.length > 0
-            ? (blueprint.features as unknown as readonly EventFeature[])
+            ? (blueprint.features as unknown as readonly EventFeature[]).map(
+                (feature) => {
+                  const person = feature.personId
+                    ? attendeeById.get(feature.personId)
+                    : undefined;
+                  return person
+                    ? {
+                        ...feature,
+                        personHandle: person.handle,
+                        personInitials: person.initials,
+                        personName: person.displayName,
+                        personHomeMarket: person.homeMarket,
+                        personRating: person.rating.display,
+                        imageUrl: feature.imageUrl ?? person.avatarUrl,
+                      }
+                    : feature;
+                },
+              )
             : undefined,
         policies:
           blueprint && blueprint.policies.length > 0
@@ -1389,6 +1459,7 @@ async function loadOrganizations(
       .where(inArray(venues.organizationId, ids)),
   ]);
   return organizationRows.map((row) => {
+    const commission = resolveOrganizationCommissionPolicy(row);
     const memberIds = new Set(
       membershipRows
         .filter((membership) => membership.organizationId === row.id)
@@ -1421,6 +1492,10 @@ async function loadOrganizations(
         : row.stripeAccountId
           ? "restricted"
           : "pending",
+      effectivePlan: commission.effectivePlan,
+      operatorCommissionBps: commission.rateBps,
+      commissionSource: commission.source,
+      stripeFeeMetadataStatus: commission.stripeSyncStatus,
     };
   });
 }
@@ -1551,6 +1626,12 @@ function profileOnboardingStatus(
     : "not-started";
 }
 
+function settingsAgeBand(value?: string): PlayerSettings["profile"]["ageBand"] {
+  return ["under-13", "teen", "adult"].includes(value ?? "")
+    ? (value as PlayerSettings["profile"]["ageBand"])
+    : "unknown";
+}
+
 function guardianInvitationStatus(
   value: string,
 ): NonNullable<PlayerSettings["guardianInvitation"]>["status"] {
@@ -1592,6 +1673,7 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
         pausedUntil: memberships.pausedUntil,
         pauseMonthsUsed: memberships.pauseMonthsUsed,
         cancelAtPeriodEnd: memberships.cancelAtPeriodEnd,
+        tierCode: membershipTiers.code,
         tierName: membershipTiers.name,
         interval: membershipTiers.interval,
         priceMinor: membershipTiers.priceMinor,
@@ -1600,7 +1682,20 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
       })
       .from(memberships)
       .innerJoin(membershipTiers, eq(memberships.tierId, membershipTiers.id))
-      .where(eq(memberships.personId, personId))
+      .where(
+        and(
+          eq(memberships.personId, personId),
+          inArray(memberships.status, [
+            "active",
+            "trialing",
+            "past_due",
+            "unpaid",
+            "incomplete",
+          ]),
+          isNull(membershipTiers.organizationId),
+          inArray(membershipTiers.code, [...PLATFORM_MEMBERSHIP_TIER_CODES]),
+        ),
+      )
       .orderBy(desc(memberships.updatedAt))
       .limit(1),
     database
@@ -1646,21 +1741,25 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
       entry,
     ]),
   );
-  const householdOnboarding = new Map(
+  const householdMetadata = new Map(
     (householdIds.length > 0
       ? await database
           .select({
             id: people.id,
             status: people.profileOnboardingStatus,
+            birthDate: people.birthDate,
+            ageBand: people.ageBand,
+            genderCategory: people.genderCategory,
           })
           .from(people)
           .where(inArray(people.id, [...new Set(householdIds)]))
       : []
-    ).map((entry) => [entry.id, entry.status] as const),
+    ).map((entry) => [entry.id, entry] as const),
   );
   const household: PlayerSettings["household"] = [
     ...guardianRows.flatMap((row) => {
       const householdPerson = householdPeople.get(row.guardianId);
+      const metadata = householdMetadata.get(row.guardianId);
       return householdPerson
         ? [
             {
@@ -1670,15 +1769,17 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
               verified: row.verified,
               emergencyContact: row.emergencyContact,
               canApproveSpending: row.canApproveSpending,
-              onboardingStatus: profileOnboardingStatus(
-                householdOnboarding.get(row.guardianId),
-              ),
+              birthDate: metadata?.birthDate ?? undefined,
+              ageBand: settingsAgeBand(metadata?.ageBand),
+              genderCategory: metadata?.genderCategory ?? undefined,
+              onboardingStatus: profileOnboardingStatus(metadata?.status),
             },
           ]
         : [];
     }),
     ...dependentRows.flatMap((row) => {
       const householdPerson = householdPeople.get(row.minorId);
+      const metadata = householdMetadata.get(row.minorId);
       return householdPerson
         ? [
             {
@@ -1688,9 +1789,10 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
               verified: row.verified,
               emergencyContact: row.emergencyContact,
               canApproveSpending: row.canApproveSpending,
-              onboardingStatus: profileOnboardingStatus(
-                householdOnboarding.get(row.minorId),
-              ),
+              birthDate: metadata?.birthDate ?? undefined,
+              ageBand: settingsAgeBand(metadata?.ageBand),
+              genderCategory: metadata?.genderCategory ?? undefined,
+              onboardingStatus: profileOnboardingStatus(metadata?.status),
             },
           ]
         : [];
@@ -1714,6 +1816,9 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
     membership?.interval === "month" || membership?.interval === "year"
       ? membership.interval
       : undefined;
+  const membershipPlan = membership
+    ? membershipPlanForTierCode(membership.tierCode)
+    : undefined;
   const visibility =
     person.profileVisibility === "public" ||
     person.profileVisibility === "members"
@@ -1738,6 +1843,7 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
       ageBand,
       ageVerified: person.ageVerifiedAt !== null,
       birthDate: person.birthDate ?? undefined,
+      genderCategory: person.genderCategory ?? undefined,
       parentalConsentRecorded: person.parentalConsentAt !== null,
       legalGivenName: person.legalGivenName ?? undefined,
       legalMiddleName: person.legalMiddleName ?? undefined,
@@ -1819,35 +1925,22 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
     household,
     dunaPlus,
     membership:
-      membership && interval
+      membership && membershipPlan && interval
         ? {
             id: membership.id,
             status: membership.status,
-            tierName: membership.tierName,
+            tierName: MEMBERSHIP_PLANS[membershipPlan].name,
             interval,
             priceMinor: membership.priceMinor,
             currency: settingsCurrency(membership.currency),
-            benefits: membership.benefits,
+            benefits: MEMBERSHIP_PLANS[membershipPlan].benefits,
             currentPeriodEndsAt: membership.currentPeriodEndsAt?.toISOString(),
             pausedUntil: membership.pausedUntil?.toISOString(),
             pauseMonthsUsed: membership.pauseMonthsUsed,
             cancelAtPeriodEnd: membership.cancelAtPeriodEnd,
           }
         : undefined,
-    dunaPlusPlans: [
-      {
-        interval: "month",
-        priceMinor: 799,
-        currency: "USD",
-        configured: Boolean(process.env.STRIPE_DUNA_PLUS_MONTHLY_PRICE_ID),
-      },
-      {
-        interval: "year",
-        priceMinor: 5_900,
-        currency: "USD",
-        configured: Boolean(process.env.STRIPE_DUNA_PLUS_ANNUAL_PRICE_ID),
-      },
-    ],
+    dunaPlusPlans: membershipPlanOffers(),
     consents: [...latestConsentByScope.values()],
     privacyRequests: privacyRequestRows.flatMap((request) => {
       if (
@@ -1953,6 +2046,11 @@ async function loadAdminOrganization(
   const database = getDatabase();
   const organization = (await loadOrganizations(organizationId))[0];
   if (!organization) return undefined;
+  const organizationRecord = await database.query.organizations.findFirst({
+    where: eq(organizations.id, organizationId),
+  });
+  if (!organizationRecord) return undefined;
+  const commission = resolveOrganizationCommissionPolicy(organizationRecord);
 
   const [membershipRows, organizationVenues, scopedEvents, orderRows, audit] =
     await Promise.all([
@@ -2006,6 +2104,7 @@ async function loadAdminOrganization(
 
   return {
     organization,
+    canManageCommission: false,
     metrics: [
       {
         label: "Gross volume",
@@ -2032,6 +2131,20 @@ async function loadAdminOrganization(
     venues: organizationVenues,
     events: scopedEvents,
     audit,
+    billing: {
+      configuredPlan: commission.configuredPlan,
+      effectivePlan: commission.effectivePlan,
+      subscriptionStatus: commission.subscriptionStatus,
+      interval:
+        organizationRecord.planBillingInterval === "month" ||
+        organizationRecord.planBillingInterval === "year"
+          ? organizationRecord.planBillingInterval
+          : undefined,
+      currentPeriodEndsAt:
+        organizationRecord.planCurrentPeriodEndsAt?.toISOString(),
+      cancelAtPeriodEnd: organizationRecord.planCancelAtPeriodEnd,
+      commission,
+    },
     commerce: {
       paidOrders: paidOrders.length,
       pendingOrders: orderRows.filter((row) => row.status === "pending").length,

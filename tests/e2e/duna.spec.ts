@@ -44,6 +44,24 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 });
 
+test("public coach profiles stay bookable and responsive", async ({ page }) => {
+  await page.goto("/coaches/theopark");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Theo Park" }),
+  ).toBeVisible();
+  await expect(page.getByText("Duna coach")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Ways to work together." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Find a time that fits." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "South Bay Volleyball Club" }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
 test("public rankings and rating evidence stay open and responsive", async ({
   page,
 }) => {
@@ -130,7 +148,7 @@ test("paid checkout exposes a secure payment handoff and honest wallet state", a
   await expect(
     page.getByRole("button", { name: /Continue to payment/ }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "View Duna+" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "View Premium" })).toBeVisible();
   await expect(page.getByText("Card details never touch Duna.")).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
@@ -143,7 +161,8 @@ test("public event creation carries a clean starter into guided HQ", async ({
     page.getByRole("heading", { name: "Put your event on Duna." }),
   ).toBeVisible();
   await expect(page.getByText("$0")).toBeVisible();
-  await expect(page.getByText("15%")).toBeVisible();
+  await expect(page.getByText("5%", { exact: true })).toBeVisible();
+  await expect(page.getByText(/separate 7.5% service fee/)).toBeVisible();
   await page.getByRole("button", { name: /League/ }).click();
   await page.getByLabel("Name").fill("Hermosa Moonlight League");
   await page
@@ -183,7 +202,7 @@ test("tournament pages and checkout expose divisions, tickets, teams, and waiver
     page.getByRole("heading", { name: "Sunset Open — Qualifier" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Find your division." }),
+    page.getByRole("heading", { name: "Find your best fit." }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Open", exact: true }),
@@ -206,7 +225,12 @@ test("tournament pages and checkout expose divisions, tickets, teams, and waiver
     page.getByRole("heading", { name: "Complete your team" }),
   ).toBeVisible();
   const partner = page.getByLabel("Search Duna players");
-  await partner.selectOption({ index: 1 });
+  await partner.fill("Theo Park");
+  await page
+    .locator(".checkout-team-suggestions article")
+    .filter({ hasText: "Theo Park" })
+    .getByRole("button", { name: "Add" })
+    .click();
   const weatherAgreement = page
     .locator(".checkout-agreement-list article")
     .filter({ hasText: "Weather and event policy" });

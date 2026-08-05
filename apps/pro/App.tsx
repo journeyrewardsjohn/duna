@@ -24,6 +24,7 @@ import {
 import {
   Animated,
   Easing,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -35,6 +36,9 @@ import {
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { dunaHqUrl } from "./mobile-api";
+import { GetPaidScreen } from "./get-paid";
+import { OperatorCreateScreen } from "./operator-create";
+import { SessionNotesScreen } from "./session-notes";
 import {
   ProRuntimeProvider,
   useProRuntime,
@@ -488,302 +492,411 @@ const schedule = [
 
 function TodayScreen({
   onCalendar,
+  onCreate,
+  onGetPaid,
+  onRecordNotes,
 }: {
   readonly onCalendar: (entryId?: string) => void;
+  readonly onCreate: () => void;
+  readonly onGetPaid: () => void;
+  readonly onRecordNotes: (sessionId: string) => void;
 }) {
   const { dashboard, mode, workspace } = useProRuntime();
   const organization = dashboard?.organization ?? demoOrganization;
-  const metrics = dashboard?.metrics.slice(0, 4) ?? [
-    { label: "Today’s sales", value: "$8,420", change: "↗ 18.4%" },
-    { label: "Check-ins", value: "146 / 168", change: "87% arrived" },
-    { label: "Court use", value: "82%" },
-    { label: "Next payout", value: "$61,884", change: "Friday" },
-  ];
-  const scheduleItems =
-    dashboard?.schedule ??
-    schedule.map((item) => ({
-      time: `${item[0]} ${item[1]}`,
+  const timezone =
+    workspace?.organization.timezone ??
+    organization.timezone ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const now = new Date();
+  const nowMs = now.getTime();
+  const todayKey = calendarDateKey(now, timezone);
+  const previewEntries = schedule.slice(0, 3).map((item, index) => {
+    const startsAt = new Date(now);
+    startsAt.setHours(9 + index * 2, 0, 0, 0);
+    const endsAt = new Date(startsAt.getTime() + 75 * 60_000);
+    return {
+      id: `preview-today-${index}`,
+      sourceType: "session" as const,
       title: item[2],
-      court: item[3],
-      detail: `${item[4]} roster`,
-      state: item[5],
-    }));
-  const alerts = dashboard?.alerts ?? [
-    {
-      id: "preview-waivers",
-      title: "2 waivers expire before Saturday",
-      detail: "U14 roster · guardians can renew in one tap",
-      action: "Review",
-      tone: "warning",
-    },
-    {
-      id: "preview-renewals",
-      title: "3 failed membership renewals",
-      detail: "$474.00 at risk · recovery is running",
-      action: "Open",
-      tone: "danger",
-    },
-    {
-      id: "preview-replies",
-      title: "4 conversations need a reply",
-      detail: "Oldest waiting 2h 18m",
-      action: "Reply",
-      tone: "default",
-    },
-  ];
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+      timezone,
+      status: index === 0 ? "live" : "scheduled",
+      kind: index === 1 ? "clinic" : "open-play",
+      venueName: index === 0 ? "Manhattan Beach" : "Hermosa Beach",
+      courtName: item[3],
+      participantCount: Number(item[4].split(" / ")[0]),
+      capacity: Number(item[4].split(" / ")[1]),
+      color: index === 0 ? colors.flare : colors.aqua,
+      draggable: true,
+      attendees: [],
+      equipment: [],
+    };
+  });
+  const todayEntries = (workspace?.calendar.entries ?? previewEntries)
+    .filter(
+      (entry) =>
+        entry.sourceType === "session" &&
+        calendarDateKey(new Date(entry.startsAt), timezone) === todayKey,
+    )
+    .slice()
+    .sort(
+      (left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt),
+    );
+  const currentEntry = todayEntries.find(
+    (entry) =>
+      Date.parse(entry.startsAt) <= nowMs && Date.parse(entry.endsAt) > nowMs,
+  );
+  const justEndedEntry = [...todayEntries]
+    .reverse()
+    .find(
+      (entry) =>
+        Date.parse(entry.endsAt) <= nowMs &&
+        nowMs - Date.parse(entry.endsAt) < 2 * 60 * 60_000,
+    );
+  const nextEntry = todayEntries.find(
+    (entry) => Date.parse(entry.startsAt) > nowMs,
+  );
+  const focusEntry = justEndedEntry ?? currentEntry ?? nextEntry;
+  const focusRegistrations = focusEntry
+    ? (workspace?.eventRegistrations.filter(
+        (registration) => registration.sessionId === focusEntry.id,
+      ) ?? [])
+    : [];
+  const todaySessionIds = new Set(todayEntries.map((entry) => entry.id));
+  const todayRegistrations =
+    workspace?.eventRegistrations.filter((registration) =>
+      todaySessionIds.has(registration.sessionId),
+    ) ?? [];
+  const cancellationCount = todayRegistrations.filter((registration) =>
+    ["cancelled", "refunded"].includes(registration.status),
+  ).length;
+  const checkedInCount = todayRegistrations.filter(
+    (registration) => registration.status === "checked-in",
+  ).length;
   const today = new Intl.DateTimeFormat("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
   })
-    .format(new Date())
+    .format(now)
     .replace(", ", " · ")
     .toUpperCase();
   const primaryVenue = workspace?.venues.find((venue) => venue.weather);
   const todayForecast = primaryVenue?.weather?.days[0];
+
+  const openGroupMessage = async () => {
+    if (!focusEntry) return;
+    const phones = focusRegistrations.flatMap((registration) =>
+      registration.phoneE164 ? [registration.phoneE164] : [],
+    );
+    const emails = focusRegistrations.flatMap((registration) =>
+      registration.email ? [registration.email] : [],
+    );
+    const body = encodeURIComponent(
+      `Hi everyone — a quick update about ${focusEntry.title} from ${organization.name}.`,
+    );
+    if (phones.length > 0) {
+      const separator = Platform.OS === "android" ? ";" : ",";
+      await Linking.openURL(`sms:${phones.join(separator)}?body=${body}`);
+      return;
+    }
+    if (emails.length > 0) {
+      await Linking.openURL(
+        `mailto:${emails.join(",")}?subject=${encodeURIComponent(focusEntry.title)}`,
+      );
+    }
+  };
+
+  const nextAction = justEndedEntry
+    ? {
+        eyebrow: "SESSION JUST ENDED",
+        title: "Capture the coaching while it’s fresh.",
+        body: `${justEndedEntry.title} ended ${formatVenueTime(
+          justEndedEntry.endsAt,
+          timezone,
+          "en-US",
+          { hour: "numeric", minute: "2-digit" },
+        )}. Record one note for yourself or prepare feedback for individual players.`,
+        action: "Record session notes",
+        secondary: "Message roster",
+        tone: "notes" as const,
+      }
+    : currentEntry
+      ? {
+          eyebrow: "HAPPENING NOW",
+          title: currentEntry.title,
+          body: `${currentEntry.participantCount} of ${currentEntry.capacity} expected · ${currentEntry.venueName ?? "Location pending"}${currentEntry.courtName ? ` · ${currentEntry.courtName}` : ""}.`,
+          action: "Open live session",
+          secondary: "Message roster",
+          tone: "live" as const,
+        }
+      : nextEntry
+        ? {
+            eyebrow: "UP NEXT",
+            title: nextEntry.title,
+            body: `${formatVenueTime(nextEntry.startsAt, timezone, "en-US", {
+              hour: "numeric",
+              minute: "2-digit",
+            })} · ${nextEntry.participantCount} of ${nextEntry.capacity} expected · ${nextEntry.venueName ?? "Location pending"}.`,
+            action: "Prepare the session",
+            secondary: "Message roster",
+            tone: "next" as const,
+          }
+        : {
+            eyebrow: "DAY COMPLETE",
+            title: "Your sessions are wrapped.",
+            body: `${todayEntries.length} sessions · ${checkedInCount} check-ins · ${cancellationCount} player cancellations today.`,
+            action: "Review today",
+            secondary: "Open People",
+            tone: "done" as const,
+          };
+
   return (
     <ScrollView
-      contentContainerStyle={styles.content}
+      contentContainerStyle={styles.todayContent}
       showsVerticalScrollIndicator={false}
     >
       <Header context={organization.name.toUpperCase()} />
       <PageTitle
-        action="Create"
-        eyebrow={today}
-        onAction={() =>
-          void WebBrowser.openBrowserAsync(`${dunaHqUrl}/events/create`)
-        }
-        title={mode === "preview" ? "Good morning, Sam." : "Good morning."}
-      />
-      <Text style={styles.subhead}>
-        {organization.name} has{" "}
-        <Text style={styles.subheadStrong}>
-          {organization.memberCount} active people
-        </Text>{" "}
-        and {scheduleItems.length} scheduled items in this workspace.
-      </Text>
-      {primaryVenue?.weather && todayForecast && (
-        <View style={styles.weatherOperationsCard}>
-          <Text style={styles.weatherOperationsIcon}>
-            {weatherSymbol(todayForecast.icon)}
-          </Text>
-          <View style={styles.flex}>
-            <Text style={styles.rowTitle}>
-              {todayForecast.condition} ·{" "}
-              {fahrenheit(todayForecast.temperatureHighC)} high
-            </Text>
-            <Text style={styles.metaText}>
-              {primaryVenue.name} · sunrise{" "}
-              {todayForecast.sunriseAt
-                ? formatVenueTime(
-                    todayForecast.sunriseAt,
-                    primaryVenue.timezone,
-                    "en-US",
-                    { hour: "numeric", minute: "2-digit" },
-                  )
-                : "pending"}{" "}
-              · sunset{" "}
-              {todayForecast.sunsetAt
-                ? formatVenueTime(
-                    todayForecast.sunsetAt,
-                    primaryVenue.timezone,
-                    "en-US",
-                    { hour: "numeric", minute: "2-digit" },
-                  )
-                : "pending"}
-            </Text>
-          </View>
-          <Text style={styles.weatherOperationsUpdated}>
-            Updated{" "}
-            {formatVenueTime(
-              primaryVenue.weather.updatedAt,
-              primaryVenue.timezone,
-              "en-US",
-              { hour: "numeric", minute: "2-digit" },
-            )}
-          </Text>
-        </View>
-      )}
-      <View style={styles.createEventCard}>
-        <View style={styles.createEventHeader}>
-          <View style={styles.createEventMark}>
-            <Text style={styles.createEventMarkText}>＋</Text>
-          </View>
-          <View style={styles.flex}>
-            <Text style={styles.rowTitle}>Create from the field</Text>
-            <Text style={styles.metaText}>
-              Start a private draft now. Publishing stays locked until Money is
-              connected in HQ.
-            </Text>
-          </View>
-        </View>
-        <View style={styles.createEventActions}>
-          <Pressable
-            onPress={() =>
-              void WebBrowser.openBrowserAsync(
-                `${dunaHqUrl}/events/create?type=tournament`,
-              )
-            }
-            style={styles.createEventPrimary}
-          >
-            <Text style={styles.createEventPrimaryText}>Tournament</Text>
-          </Pressable>
-          <Pressable
-            onPress={() =>
-              void WebBrowser.openBrowserAsync(
-                `${dunaHqUrl}/events/create?type=league`,
-              )
-            }
-            style={styles.createEventSecondary}
-          >
-            <Text style={styles.createEventSecondaryText}>League</Text>
-          </Pressable>
-        </View>
-      </View>
-      <View style={styles.metricGrid}>
-        {metrics.map((metric) => (
-          <View key={metric.label} style={styles.metricCard}>
-            <Text style={styles.metricLabel}>{metric.label.toUpperCase()}</Text>
-            <Text style={styles.metricValue}>{metric.value}</Text>
-            {metric.change && (
-              <Text
-                style={
-                  metric.trend === "down"
-                    ? styles.metaText
-                    : styles.positiveText
-                }
-              >
-                {metric.change}
-              </Text>
-            )}
-          </View>
-        ))}
-      </View>
-      <SectionTitle
-        eyebrow="LIVE OPERATIONS"
-        title="Today on sand"
         action="Calendar"
+        eyebrow={today}
         onAction={() => onCalendar()}
+        title={mode === "preview" ? "Good morning, Sam." : "Your day."}
       />
-      <View style={styles.scheduleCard}>
-        {scheduleItems.map((item, index) => {
-          const calendarEntry = workspace?.calendar.entries.find(
-            (entry) => entry.title === item.title,
-          );
-          const venue = workspace?.venues.find(
-            (candidate) => candidate.name === calendarEntry?.venueName,
-          );
-          const point = calendarEntry
-            ? venue?.weather?.hourly
-                .slice()
-                .sort(
-                  (left, right) =>
-                    Math.abs(
-                      Date.parse(left.startsAt) -
-                        Date.parse(calendarEntry.startsAt),
-                    ) -
-                    Math.abs(
-                      Date.parse(right.startsAt) -
-                        Date.parse(calendarEntry.startsAt),
-                    ),
-                )[0]
-            : undefined;
+      <View
+        style={[
+          styles.nowCard,
+          nextAction.tone === "live" && styles.nowCardLive,
+          nextAction.tone === "notes" && styles.nowCardNotes,
+        ]}
+      >
+        <View style={styles.nowCardTopline}>
+          <Text style={styles.nowCardEyebrow}>{nextAction.eyebrow}</Text>
+          {primaryVenue?.weather && todayForecast && (
+            <Text style={styles.nowCardWeather}>
+              {weatherSymbol(todayForecast.icon)}{" "}
+              {fahrenheit(todayForecast.temperatureHighC)} · {primaryVenue.name}
+            </Text>
+          )}
+        </View>
+        <Text style={styles.nowCardTitle}>{nextAction.title}</Text>
+        <Text style={styles.nowCardBody}>{nextAction.body}</Text>
+        <View style={styles.nowCardActions}>
+          <Pressable
+            onPress={() => {
+              selectionHaptic();
+              if (justEndedEntry) {
+                onRecordNotes(justEndedEntry.id);
+              } else if (focusEntry) {
+                onCalendar(focusEntry.id);
+              } else {
+                onCalendar();
+              }
+            }}
+            style={styles.nowCardPrimary}
+          >
+            <Text style={styles.nowCardPrimaryIcon}>
+              {justEndedEntry ? "●" : currentEntry ? "▶" : "→"}
+            </Text>
+            <Text style={styles.nowCardPrimaryText}>{nextAction.action}</Text>
+          </Pressable>
+          <Pressable
+            disabled={Boolean(focusEntry) && focusRegistrations.length === 0}
+            onPress={() => {
+              if (focusEntry) {
+                void openGroupMessage();
+              } else {
+                void WebBrowser.openBrowserAsync(`${dunaHqUrl}/members`);
+              }
+            }}
+            style={styles.nowCardSecondary}
+          >
+            <Text style={styles.nowCardSecondaryText}>
+              {nextAction.secondary}
+            </Text>
+          </Pressable>
+        </View>
+        <Text style={styles.nowCardTrust}>
+          {justEndedEntry
+            ? "Voice notes stay private until you review and choose who can see them."
+            : `${focusRegistrations.length} roster contacts available on this device.`}
+        </Text>
+      </View>
+
+      <View style={styles.todayJobs}>
+        <Pressable onPress={() => onCalendar()} style={styles.todayJob}>
+          <Text style={styles.todayJobIcon}>▦</Text>
+          <Text style={styles.todayJobTitle}>Schedule</Text>
+          <Text style={styles.todayJobMeta}>{todayEntries.length} today</Text>
+        </Pressable>
+        <Pressable
+          onPress={() =>
+            void WebBrowser.openBrowserAsync(`${dunaHqUrl}/members`)
+          }
+          style={styles.todayJob}
+        >
+          <Text style={styles.todayJobIcon}>◎</Text>
+          <Text style={styles.todayJobTitle}>People</Text>
+          <Text style={styles.todayJobMeta}>
+            {organization.memberCount} connected
+          </Text>
+        </Pressable>
+        <Pressable onPress={onCreate} style={styles.todayJob}>
+          <Text style={styles.todayJobIcon}>＋</Text>
+          <Text style={styles.todayJobTitle}>Create</Text>
+          <Text style={styles.todayJobMeta}>Session, service, good, plan</Text>
+        </Pressable>
+        <Pressable onPress={onGetPaid} style={styles.todayJob}>
+          <Text style={styles.todayJobIcon}>)))</Text>
+          <Text style={styles.todayJobTitle}>Get Paid</Text>
+          <Text style={styles.todayJobMeta}>Tap to Pay or wallet</Text>
+        </Pressable>
+      </View>
+
+      <SectionTitle
+        action="Full calendar"
+        eyebrow="TODAY"
+        onAction={() => onCalendar()}
+        title="Your schedule"
+      />
+      <View style={styles.todaySchedule}>
+        {todayEntries.map((entry) => {
+          const startsAt = Date.parse(entry.startsAt);
+          const endsAt = Date.parse(entry.endsAt);
+          const state =
+            startsAt <= nowMs && endsAt > nowMs
+              ? "NOW"
+              : endsAt <= nowMs
+                ? "DONE"
+                : "NEXT";
           return (
             <Pressable
-              key={`${item.time}-${item.title}`}
-              onPress={() => {
-                selectionHaptic();
-                onCalendar(calendarEntry?.id);
-              }}
-              style={styles.scheduleRow}
+              key={entry.id}
+              onPress={() => onCalendar(entry.id)}
+              style={styles.todayScheduleRow}
             >
-              <View style={styles.timeBlock}>
-                <Text style={styles.timeMain}>{item.time}</Text>
-                {point && (
-                  <Text style={styles.scheduleWeather}>
-                    {weatherSymbol(point.icon)} {fahrenheit(point.temperatureC)}
-                  </Text>
-                )}
+              <View style={styles.todayScheduleTime}>
+                <Text style={styles.todayScheduleTimeMain}>
+                  {formatVenueTime(entry.startsAt, timezone, "en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </Text>
+                <Text style={styles.todayScheduleDuration}>
+                  {Math.round((endsAt - startsAt) / 60_000)} min
+                </Text>
               </View>
               <View
                 style={[
-                  styles.statusLine,
-                  { backgroundColor: index === 0 ? colors.flare : colors.aqua },
+                  styles.todayScheduleLine,
+                  state === "NOW" && styles.todayScheduleLineLive,
                 ]}
               />
               <View style={styles.flex}>
-                <Text style={styles.rowTitle}>{item.title}</Text>
-                <Text style={styles.metaText}>{item.court}</Text>
+                <Text style={styles.todayScheduleTitle}>{entry.title}</Text>
+                <Text style={styles.todayScheduleMeta}>
+                  {entry.venueName ?? "Location pending"}
+                  {entry.courtName ? ` · ${entry.courtName}` : ""} ·{" "}
+                  {entry.participantCount}/{entry.capacity}
+                </Text>
               </View>
-              <View style={styles.rosterCount}>
-                <Text style={styles.rowTitle}>{item.detail}</Text>
-              </View>
-              <Pill
-                tone={item.state.toLowerCase() === "live" ? "live" : "neutral"}
+              <Text
+                style={[
+                  styles.todayScheduleState,
+                  state === "NOW" && styles.todayScheduleStateLive,
+                ]}
               >
-                {item.state}
-              </Pill>
+                {state}
+              </Text>
               <Text style={styles.chevron}>›</Text>
             </Pressable>
           );
         })}
-      </View>
-      <SectionTitle
-        eyebrow="ACTION QUEUE"
-        title="Needs attention"
-        action="View all"
-      />
-      <View style={styles.attentionCard}>
-        {alerts.map((item, index) => (
-          <View key={item.id} style={styles.attentionRow}>
-            <View
-              style={[
-                styles.attentionIcon,
-                index === 1 && { backgroundColor: rgba(colors.dangerRgb, 0.1) },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.attentionIconText,
-                  index === 1 && { color: colors.danger },
-                ]}
-              >
-                {item.tone === "danger"
-                  ? "$"
-                  : item.tone === "warning"
-                    ? "!"
-                    : "•"}
-              </Text>
-            </View>
-            <View style={styles.flex}>
-              <Text style={styles.rowTitle}>{item.title}</Text>
-              <Text style={styles.metaText}>{item.detail}</Text>
-            </View>
-            <Pressable
-              onPress={() =>
-                void WebBrowser.openBrowserAsync(`${dunaHqUrl}/dashboard`)
-              }
-            >
-              <Text style={styles.linkText}>{item.action}</Text>
-            </Pressable>
+        {todayEntries.length === 0 && (
+          <View style={styles.todayEmpty}>
+            <Text style={styles.todayEmptyTitle}>Nothing scheduled today.</Text>
+            <Text style={styles.todayEmptyBody}>
+              Use the time for follow-ups or create the next session.
+            </Text>
           </View>
-        ))}
+        )}
       </View>
-      {mode === "preview" && (
-        <View style={styles.aiBrief}>
-          <View style={styles.aiMark}>
-            <Text style={styles.aiMarkText}>✦</Text>
+
+      <SectionTitle eyebrow="CARE SIGNALS" title="What changed" />
+      <View style={styles.todaySignals}>
+        <Pressable
+          onPress={() =>
+            void WebBrowser.openBrowserAsync(`${dunaHqUrl}/events`)
+          }
+          style={styles.todaySignalRow}
+        >
+          <View
+            style={[
+              styles.todaySignalIcon,
+              cancellationCount > 0 && styles.todaySignalIconWarning,
+            ]}
+          >
+            <Text style={styles.todaySignalIconText}>↘</Text>
           </View>
           <View style={styles.flex}>
-            <Pill>Duna AI · read only</Pill>
-            <Text style={styles.aiTitle}>
-              Friday Lights will likely sell out by 2 PM tomorrow.
+            <Text style={styles.todaySignalTitle}>
+              {cancellationCount === 0
+                ? "No player cancellations today"
+                : `${cancellationCount} player cancellation${cancellationCount === 1 ? "" : "s"}`}
             </Text>
-            <Text style={styles.aiBody}>
-              Preview insight only. Connected recommendations remain read-only
-              until an operator asks Duna to prepare a draft.
+            <Text style={styles.todaySignalBody}>
+              {cancellationCount === 0
+                ? "Your active rosters have held steady."
+                : "Open session history to review refunds and fill available spots."}
             </Text>
           </View>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+        <Pressable
+          onPress={() =>
+            void WebBrowser.openBrowserAsync(`${dunaHqUrl}/members`)
+          }
+          style={styles.todaySignalRow}
+        >
+          <View style={styles.todaySignalIcon}>
+            <Text style={styles.todaySignalIconText}>◎</Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.todaySignalTitle}>People are one tap away</Text>
+            <Text style={styles.todaySignalBody}>
+              Search balances, plans, history, notes, videos, and player
+              profiles.
+            </Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+      </View>
+
+      {(now.getHours() >= 17 || !nextEntry) && todayEntries.length > 0 && (
+        <View style={styles.dayRecap}>
+          <Text style={styles.dayRecapEyebrow}>DAY RECAP</Text>
+          <Text style={styles.dayRecapTitle}>
+            You ran {todayEntries.length} sessions.
+          </Text>
+          <Text style={styles.dayRecapBody}>
+            {checkedInCount} check-ins · {cancellationCount} cancellations ·{" "}
+            {
+              todayEntries.filter((entry) => Date.parse(entry.endsAt) <= nowMs)
+                .length
+            }{" "}
+            completed.
+          </Text>
+          <Pressable
+            onPress={() =>
+              void WebBrowser.openBrowserAsync(`${dunaHqUrl}/events`)
+            }
+            style={styles.dayRecapButton}
+          >
+            <Text style={styles.dayRecapButtonText}>
+              Review session history →
+            </Text>
+          </Pressable>
         </View>
       )}
     </ScrollView>
@@ -818,9 +931,13 @@ function SectionTitle({
 
 function CalendarScreen({
   focusEntryId,
+  onCreate,
+  onRecordNotes,
   onScore,
 }: {
   readonly focusEntryId?: string;
+  readonly onCreate: () => void;
+  readonly onRecordNotes: (sessionId: string) => void;
   readonly onScore: () => void;
 }) {
   const { client, dashboard, mode, refresh, workspace } = useProRuntime();
@@ -1041,15 +1158,31 @@ function CalendarScreen({
     if (saved) closeSheet();
   };
 
-  const fullWorkspaceHref = selectedEntry
-    ? selectedEntry.kind === "league"
-      ? `${dunaHqUrl}/leagues`
-      : selectedEntry.kind === "court-rental"
-        ? `${dunaHqUrl}/facilities`
-        : selectedEntry.kind === "private-lesson"
-          ? `${dunaHqUrl}/products`
-          : `${dunaHqUrl}/events`
-    : `${dunaHqUrl}/calendar`;
+  const selectedRegistrations = selectedEntry
+    ? (workspace?.eventRegistrations.filter(
+        (registration) => registration.sessionId === selectedEntry.id,
+      ) ?? [])
+    : [];
+  const openSelectedRosterMessage = async () => {
+    if (!selectedEntry) return;
+    const phones = selectedRegistrations.flatMap((registration) =>
+      registration.phoneE164 ? [registration.phoneE164] : [],
+    );
+    const emails = selectedRegistrations.flatMap((registration) =>
+      registration.email ? [registration.email] : [],
+    );
+    const body = encodeURIComponent(
+      `Hi everyone — a quick update about ${selectedEntry.title} from ${dashboard?.organization.name ?? "your coach"}.`,
+    );
+    if (phones.length > 0) {
+      const separator = Platform.OS === "android" ? ";" : ",";
+      await Linking.openURL(`sms:${phones.join(separator)}?body=${body}`);
+    } else if (emails.length > 0) {
+      await Linking.openURL(
+        `mailto:${emails.join(",")}?subject=${encodeURIComponent(selectedEntry.title)}`,
+      );
+    }
+  };
 
   return (
     <>
@@ -1063,9 +1196,7 @@ function CalendarScreen({
         <PageTitle
           action="New"
           eyebrow="THE OPERATING HUB"
-          onAction={() =>
-            void WebBrowser.openBrowserAsync(`${dunaHqUrl}/events/create`)
-          }
+          onAction={onCreate}
           title="Calendar."
         />
         <Text style={styles.calendarIntro}>
@@ -1078,13 +1209,8 @@ function CalendarScreen({
             <Pressable onPress={openBlock} style={styles.calendarBlockButton}>
               <Text style={styles.calendarBlockButtonText}>▧ Block time</Text>
             </Pressable>
-            <Pressable
-              onPress={() =>
-                void WebBrowser.openBrowserAsync(`${dunaHqUrl}/events/create`)
-              }
-              style={styles.calendarNewButton}
-            >
-              <Text style={styles.calendarNewButtonText}>＋ Add event</Text>
+            <Pressable onPress={onCreate} style={styles.calendarNewButton}>
+              <Text style={styles.calendarNewButtonText}>＋ Add session</Text>
             </Pressable>
           </View>
           <Text style={styles.calendarTimezone}>{timezone}</Text>
@@ -1207,11 +1333,7 @@ function CalendarScreen({
                   </Text>
                 </Pressable>
                 <Pressable
-                  onPress={() =>
-                    void WebBrowser.openBrowserAsync(
-                      `${dunaHqUrl}/events/create`,
-                    )
-                  }
+                  onPress={onCreate}
                   style={styles.calendarEmptyPrimary}
                 >
                   <Text style={styles.calendarEmptyPrimaryText}>
@@ -1941,14 +2063,28 @@ function CalendarScreen({
                       </Text>
                     </Pressable>
                   )}
+                {selectedRegistrations.some(
+                  (registration) =>
+                    registration.phoneE164 || registration.email,
+                ) && (
+                  <Pressable
+                    onPress={() => void openSelectedRosterMessage()}
+                    style={styles.calendarSheetSecondary}
+                  >
+                    <Text style={styles.calendarSheetSecondaryText}>
+                      Message roster
+                    </Text>
+                  </Pressable>
+                )}
                 <Pressable
-                  onPress={() =>
-                    void WebBrowser.openBrowserAsync(fullWorkspaceHref)
-                  }
+                  onPress={() => {
+                    closeSheet();
+                    onRecordNotes(selectedEntry.id);
+                  }}
                   style={styles.calendarSheetPrimary}
                 >
                   <Text style={styles.calendarSheetPrimaryText}>
-                    Open full details
+                    Record notes
                   </Text>
                 </Pressable>
               </View>
@@ -1963,7 +2099,7 @@ function CalendarScreen({
 function PeopleScreen() {
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
-  const { dashboard, members } = useProRuntime();
+  const { dashboard, members, workspace } = useProRuntime();
   const people = members ?? demoPeople;
   const filteredPeople = people.filter((person) => {
     const query = search.trim().toLowerCase();
@@ -1976,9 +2112,14 @@ function PeopleScreen() {
     ) {
       return false;
     }
+    const relationship = workspace?.people.find(
+      (candidate) => candidate.personId === person.id,
+    );
     if (filter === "Players") return person.roles.includes("player");
-    if (filter === "Coaches") return person.roles.includes("coach");
-    if (filter === "Guardians") return person.roles.includes("guardian");
+    if (filter === "Upcoming") return (relationship?.upcomingCount ?? 0) > 0;
+    if (filter === "Credits") return (relationship?.creditBalance ?? 0) > 0;
+    if (filter === "Attention")
+      return Boolean(relationship && relationship.churnRisk.level !== "low");
     if (filter === "Minors") return Boolean(person.isMinor);
     return true;
   });
@@ -2018,25 +2159,27 @@ function PeopleScreen() {
         style={styles.filterBleed}
       >
         <View style={styles.filterRow}>
-          {["All", "Players", "Coaches", "Guardians", "Minors"].map((item) => (
-            <Pressable
-              key={item}
-              onPress={() => setFilter(item)}
-              style={[
-                styles.filterChip,
-                filter === item && styles.filterActive,
-              ]}
-            >
-              <Text
+          {["All", "Players", "Upcoming", "Credits", "Attention", "Minors"].map(
+            (item) => (
+              <Pressable
+                key={item}
+                onPress={() => setFilter(item)}
                 style={[
-                  styles.filterText,
-                  filter === item && styles.filterTextActive,
+                  styles.filterChip,
+                  filter === item && styles.filterActive,
                 ]}
               >
-                {item}
-              </Text>
-            </Pressable>
-          ))}
+                <Text
+                  style={[
+                    styles.filterText,
+                    filter === item && styles.filterTextActive,
+                  ]}
+                >
+                  {item}
+                </Text>
+              </Pressable>
+            ),
+          )}
         </View>
       </ScrollView>
       <View style={styles.peopleSummary}>
@@ -2054,33 +2197,63 @@ function PeopleScreen() {
         </View>
       </View>
       <View style={styles.peopleList}>
-        {filteredPeople.map((person) => (
-          <Pressable key={person.id} style={styles.personRow}>
-            <View style={styles.personAvatar}>
-              <Text style={styles.personAvatarText}>{person.initials}</Text>
-            </View>
-            <View style={styles.flex}>
-              <Text style={styles.rowTitle}>{person.displayName}</Text>
-              <Text style={styles.metaText}>
-                @{person.handle} · {person.roles.join(" + ")}
-              </Text>
-            </View>
-            <Pill tone={person.isMinor ? "warning" : "positive"}>
-              {person.isMinor
-                ? "Minor"
-                : person.roles.includes("guardian")
-                  ? "Guardian"
-                  : "Active"}
-            </Pill>
-            <View style={styles.personRating}>
-              <Text style={styles.ratingNumber}>
-                {person.rating.display.toFixed(2)}
-              </Text>
-              <Text style={styles.metaText}>{person.rating.confidence}</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-        ))}
+        {filteredPeople.map((person) => {
+          const relationship = workspace?.people.find(
+            (candidate) => candidate.personId === person.id,
+          );
+          return (
+            <Pressable
+              key={person.id}
+              onPress={() =>
+                void WebBrowser.openBrowserAsync(
+                  `${dunaHqUrl}/members/${person.id}`,
+                )
+              }
+              style={styles.personRow}
+            >
+              <View style={styles.personAvatar}>
+                <Text style={styles.personAvatarText}>{person.initials}</Text>
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.rowTitle}>{person.displayName}</Text>
+                <Text style={styles.metaText}>
+                  @{person.handle} · {person.roles.join(" + ")}
+                </Text>
+                {relationship && (
+                  <Text style={styles.personRelationshipMeta}>
+                    {relationship.membershipName ?? "No active plan"} ·{" "}
+                    {relationship.creditBalance} credits ·{" "}
+                    {relationship.upcomingCount} upcoming
+                  </Text>
+                )}
+              </View>
+              <Pill
+                tone={
+                  relationship?.churnRisk.level === "high"
+                    ? "warning"
+                    : person.isMinor
+                      ? "warning"
+                      : "positive"
+                }
+              >
+                {person.isMinor
+                  ? "Minor"
+                  : relationship?.churnRisk.level === "high"
+                    ? "Follow up"
+                    : person.roles.includes("guardian")
+                      ? "Guardian"
+                      : "Active"}
+              </Pill>
+              <View style={styles.personRating}>
+                <Text style={styles.ratingNumber}>
+                  {person.rating.display.toFixed(2)}
+                </Text>
+                <Text style={styles.metaText}>{person.rating.confidence}</Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          );
+        })}
       </View>
     </ScrollView>
   );
@@ -2808,7 +2981,15 @@ function ScorerScreen({ onExit }: { readonly onExit: () => void }) {
   );
 }
 
-function MoreScreen({ onCalendar }: { readonly onCalendar: () => void }) {
+function MoreScreen({
+  onCalendar,
+  onCreate,
+  onGetPaid,
+}: {
+  readonly onCalendar: () => void;
+  readonly onCreate: () => void;
+  readonly onGetPaid: () => void;
+}) {
   const { dashboard, mode, signOut, workspace } = useProRuntime();
   const organization = dashboard?.organization ?? demoOrganization;
   const organizationInitials = organization.name
@@ -2874,6 +3055,16 @@ function MoreScreen({ onCalendar }: { readonly onCalendar: () => void }) {
     >
       <Header context={organization.name.toUpperCase()} />
       <PageTitle eyebrow="EVERYTHING ELSE" title="More." />
+      <View style={styles.moreQuickActions}>
+        <Pressable onPress={onGetPaid} style={styles.moreQuickPrimary}>
+          <Text style={styles.moreQuickIcon}>)))</Text>
+          <Text style={styles.moreQuickPrimaryText}>Get Paid</Text>
+        </Pressable>
+        <Pressable onPress={onCreate} style={styles.moreQuickSecondary}>
+          <Text style={styles.moreQuickIconAlt}>＋</Text>
+          <Text style={styles.moreQuickSecondaryText}>Create</Text>
+        </Pressable>
+      </View>
       <View style={styles.organizationCard}>
         <View style={styles.orgAvatar}>
           <Text style={styles.orgAvatarText}>{organizationInitials}</Text>
@@ -2979,7 +3170,10 @@ function TabBar({
 }
 
 function ProApp() {
+  const { refresh } = useProRuntime();
   const [tab, setTab] = useState<Tab>("today");
+  const [surface, setSurface] = useState<"create" | "get-paid">();
+  const [sessionNotesId, setSessionNotesId] = useState<string>();
   const [calendarEntryId, setCalendarEntryId] = useState<string>();
   const [theme, setTheme] = useState<ThemeName>("light");
   const screenTransition = useRef(new Animated.Value(1)).current;
@@ -3024,40 +3218,76 @@ function ProApp() {
         },
       }}
     >
-      <SafeAreaView edges={["top"]} style={styles.safe}>
-        <StatusBar style={theme === "dark" ? "light" : "dark"} />
-        <View style={styles.app}>
-          {tab !== "score" && <PreviewBanner />}
-          <Animated.View
-            style={[
-              styles.animatedScreen,
-              {
-                opacity: screenTransition,
-                transform: [
-                  {
-                    translateY: screenTransition.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [8, 0],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            {tab === "today" && <TodayScreen onCalendar={openCalendar} />}
-            {tab === "calendar" && (
-              <CalendarScreen
-                focusEntryId={calendarEntryId}
-                onScore={() => setTab("score")}
-              />
-            )}
-            {tab === "people" && <PeopleScreen />}
-            {tab === "score" && <ScorerScreen onExit={() => setTab("today")} />}
-            {tab === "more" && <MoreScreen onCalendar={() => openCalendar()} />}
-          </Animated.View>
-          {tab !== "score" && <TabBar active={tab} onChange={changeTab} />}
-        </View>
-      </SafeAreaView>
+      {sessionNotesId ? (
+        <SessionNotesScreen
+          onClose={() => setSessionNotesId(undefined)}
+          onSaved={refresh}
+          sessionId={sessionNotesId}
+        />
+      ) : surface === "create" ? (
+        <OperatorCreateScreen
+          onClose={() => setSurface(undefined)}
+          onCreated={refresh}
+          onGetPaid={() => setSurface("get-paid")}
+        />
+      ) : surface === "get-paid" ? (
+        <GetPaidScreen
+          onClose={() => setSurface(undefined)}
+          onCreate={() => setSurface("create")}
+        />
+      ) : (
+        <SafeAreaView edges={["top"]} style={styles.safe}>
+          <StatusBar style={theme === "dark" ? "light" : "dark"} />
+          <View style={styles.app}>
+            {tab !== "score" && <PreviewBanner />}
+            <Animated.View
+              style={[
+                styles.animatedScreen,
+                {
+                  opacity: screenTransition,
+                  transform: [
+                    {
+                      translateY: screenTransition.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [8, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              {tab === "today" && (
+                <TodayScreen
+                  onCalendar={openCalendar}
+                  onCreate={() => setSurface("create")}
+                  onGetPaid={() => setSurface("get-paid")}
+                  onRecordNotes={setSessionNotesId}
+                />
+              )}
+              {tab === "calendar" && (
+                <CalendarScreen
+                  focusEntryId={calendarEntryId}
+                  onCreate={() => setSurface("create")}
+                  onRecordNotes={setSessionNotesId}
+                  onScore={() => setTab("score")}
+                />
+              )}
+              {tab === "people" && <PeopleScreen />}
+              {tab === "score" && (
+                <ScorerScreen onExit={() => setTab("today")} />
+              )}
+              {tab === "more" && (
+                <MoreScreen
+                  onCalendar={() => openCalendar()}
+                  onCreate={() => setSurface("create")}
+                  onGetPaid={() => setSurface("get-paid")}
+                />
+              )}
+            </Animated.View>
+            {tab !== "score" && <TabBar active={tab} onChange={changeTab} />}
+          </View>
+        </SafeAreaView>
+      )}
     </ThemeContext.Provider>
   );
 }
@@ -3149,6 +3379,331 @@ function createStyles(palette: Palette) {
     },
     signOutText: { color: colors.danger, fontSize: 10, fontWeight: "800" },
     content: { paddingBottom: 116, paddingHorizontal: 18 },
+    todayContent: { paddingBottom: 132, paddingHorizontal: 18 },
+    nowCard: {
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 24,
+      marginTop: 18,
+      overflow: "hidden",
+      padding: 18,
+    },
+    nowCardLive: {
+      backgroundColor: colors.aquaDeep,
+      borderColor: rgba(colors.flareRgb, 0.5),
+      borderWidth: 1,
+    },
+    nowCardNotes: {
+      backgroundColor: colors.aquaDeep,
+      borderColor: rgba(colors.warningRgb, 0.42),
+      borderWidth: 1,
+    },
+    nowCardTopline: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    nowCardEyebrow: {
+      color: colors.warning,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
+    nowCardWeather: {
+      color: rgba("255,255,255", 0.68),
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    nowCardTitle: {
+      color: colors.onAccent,
+      fontSize: 28,
+      fontWeight: "900",
+      letterSpacing: -1.2,
+      lineHeight: 31,
+      marginTop: 20,
+      maxWidth: 540,
+    },
+    nowCardBody: {
+      color: rgba("255,255,255", 0.7),
+      fontSize: 12,
+      lineHeight: 19,
+      marginTop: 9,
+      maxWidth: 560,
+    },
+    nowCardActions: {
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 22,
+    },
+    nowCardPrimary: {
+      alignItems: "center",
+      backgroundColor: colors.onAccent,
+      borderRadius: 15,
+      flex: 1.25,
+      flexDirection: "row",
+      gap: 7,
+      justifyContent: "center",
+      minHeight: 50,
+      paddingHorizontal: 12,
+    },
+    nowCardPrimaryIcon: {
+      color: colors.aquaDeep,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    nowCardPrimaryText: {
+      color: colors.aquaDeep,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    nowCardSecondary: {
+      alignItems: "center",
+      borderColor: rgba("255,255,255", 0.24),
+      borderRadius: 15,
+      borderWidth: 1,
+      flex: 0.75,
+      justifyContent: "center",
+      minHeight: 50,
+      paddingHorizontal: 10,
+    },
+    nowCardSecondaryText: {
+      color: colors.onAccent,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    nowCardTrust: {
+      color: rgba("255,255,255", 0.5),
+      fontSize: 10,
+      lineHeight: 12,
+      marginTop: 11,
+    },
+    todayJobs: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 12,
+    },
+    todayJob: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      flex: 1,
+      flexBasis: "46%",
+      minHeight: 112,
+      padding: 12,
+    },
+    moreQuickActions: {
+      flexDirection: "row",
+      gap: 9,
+      marginBottom: 14,
+    },
+    moreQuickPrimary: {
+      alignItems: "center",
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 17,
+      flex: 1,
+      flexDirection: "row",
+      gap: 9,
+      justifyContent: "center",
+      minHeight: 58,
+    },
+    moreQuickSecondary: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 17,
+      borderWidth: 1,
+      flex: 1,
+      flexDirection: "row",
+      gap: 9,
+      justifyContent: "center",
+      minHeight: 58,
+    },
+    moreQuickIcon: {
+      color: colors.onAccent,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    moreQuickIconAlt: {
+      color: colors.aqua,
+      fontSize: 20,
+      fontWeight: "900",
+    },
+    moreQuickPrimaryText: {
+      color: colors.onAccent,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    moreQuickSecondaryText: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    todayJobIcon: {
+      color: colors.aqua,
+      fontSize: 21,
+      fontWeight: "700",
+    },
+    todayJobTitle: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "900",
+      marginTop: "auto",
+    },
+    todayJobMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 3,
+    },
+    todaySchedule: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    todayScheduleRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 78,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    todayScheduleTime: { width: 60 },
+    todayScheduleTimeMain: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    todayScheduleDuration: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 3,
+    },
+    todayScheduleLine: {
+      alignSelf: "stretch",
+      backgroundColor: colors.aqua,
+      borderRadius: 4,
+      width: 4,
+    },
+    todayScheduleLineLive: { backgroundColor: colors.flare },
+    todayScheduleTitle: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    todayScheduleMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 12,
+      marginTop: 3,
+    },
+    todayScheduleState: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    todayScheduleStateLive: { color: colors.flare },
+    todayEmpty: { alignItems: "center", padding: 28 },
+    todayEmptyTitle: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    todayEmptyBody: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 5,
+      textAlign: "center",
+    },
+    todaySignals: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    todaySignalRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 76,
+      padding: 11,
+    },
+    todaySignalIcon: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.09),
+      borderRadius: 12,
+      height: 42,
+      justifyContent: "center",
+      width: 42,
+    },
+    todaySignalIconWarning: {
+      backgroundColor: rgba(colors.warningRgb, 0.12),
+    },
+    todaySignalIconText: {
+      color: colors.aqua,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    todaySignalTitle: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    todaySignalBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 12,
+      marginTop: 4,
+    },
+    dayRecap: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.warningRgb, 0.18),
+      borderRadius: 20,
+      borderWidth: 1,
+      marginTop: 24,
+      padding: 17,
+    },
+    dayRecapEyebrow: {
+      color: colors.warning,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1,
+    },
+    dayRecapTitle: {
+      color: colors.bone,
+      fontSize: 21,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+      marginTop: 8,
+    },
+    dayRecapBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 5,
+    },
+    dayRecapButton: {
+      alignItems: "center",
+      alignSelf: "flex-start",
+      backgroundColor: colors.warning,
+      borderRadius: 13,
+      marginTop: 14,
+      paddingHorizontal: 13,
+      paddingVertical: 10,
+    },
+    dayRecapButtonText: {
+      color: colors.onAccent,
+      fontSize: 10,
+      fontWeight: "900",
+    },
     calendarContent: { paddingBottom: 138, paddingHorizontal: 18 },
     calendarIntro: {
       color: colors.muted,
@@ -3835,6 +4390,7 @@ function createStyles(palette: Palette) {
       borderTopColor: rgba(colors.overlayRgb, 0.08),
       borderTopWidth: 1,
       flexDirection: "row",
+      flexWrap: "wrap",
       gap: 8,
       padding: 12,
       paddingBottom: Platform.OS === "ios" ? 26 : 12,
@@ -4316,6 +4872,12 @@ function createStyles(palette: Palette) {
       width: 34,
     },
     personAvatarText: { color: colors.bone, fontSize: 10, fontWeight: "900" },
+    personRelationshipMeta: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "700",
+      marginTop: 5,
+    },
     personRating: { alignItems: "flex-end", minWidth: 30 },
     ratingNumber: { color: colors.bone, fontSize: 10, fontWeight: "800" },
     scorer: { backgroundColor: colors.canvas, flex: 1 },

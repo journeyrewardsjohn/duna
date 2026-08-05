@@ -66,14 +66,21 @@ import {
   matchSummarySchema,
   matchScoringStateSchema,
   operatorDashboardSchema,
+  operatorMemberProfileSchema,
   operatorMutationResultSchema,
+  operatorPaymentCollectionSchema,
+  operatorPaymentStartSchema,
+  operatorPaymentWorkspaceSchema,
   operatorScorableMatchSchema,
+  operatorSessionDetailSchema,
   operatorWorkspaceSchema,
+  organizationCommissionPolicySchema,
   organizationWalletSummarySchema,
   organizationSummarySchema,
   personSummarySchema,
   playerInvitationClaimResultSchema,
   playerInvitationSchema,
+  playerCoachingNoteSchema,
   playerDashboardSchema,
   playerSettingsSchema,
   playerWalletSchema,
@@ -86,6 +93,7 @@ import {
   stripeOnboardingResultSchema,
   scoreEventSchema,
   teamClaimSummarySchema,
+  teammateSearchResultSchema,
   ticketApprovalResultSchema,
   ticketApprovalSummarySchema,
   ticketScanResultSchema,
@@ -106,6 +114,26 @@ import {
   visionTimelineEventSchema,
 } from "./contracts";
 import {
+  createOperatorTerminalConnectionToken,
+  finalizeOperatorPaymentCollection,
+  loadOperatorPaymentWorkspace,
+  OperatorPaymentError,
+  recordOperatorPaymentEvent,
+  setOperatorEarningsGoal,
+  startOperatorPaymentCollection,
+} from "./operator-payments";
+import {
+  createSessionNote,
+  loadDemoOperatorMemberProfile,
+  loadDemoOperatorSessionDetail,
+  loadOperatorMemberProfile,
+  loadOperatorSessionDetail,
+  loadPlayerCoachingNotes,
+  publishSessionNote,
+  recordSessionAttendance,
+  updateOperatorMemberProfile,
+} from "./people-service";
+import {
   getCatalogOfferEligibility,
   getCatalogCheckoutStatus,
   startCatalogCheckout,
@@ -117,7 +145,9 @@ import {
   getEventCheckoutStatus,
   loadPendingTicketApprovals,
   loadTeamClaim,
+  searchEventTeammates,
   startEventCheckout,
+  updateTeamEntryRoster,
 } from "./checkout";
 import {
   CourtCheckoutError,
@@ -129,6 +159,11 @@ import {
   startCourtCheckout,
   startParticipantShareCheckout,
 } from "./court-checkout";
+import {
+  openOrganizationBillingPortal,
+  startOrganizationPlanCheckout,
+  updateOrganizationCommissionOverride,
+} from "./organization-billing";
 import {
   CommerceError,
   createCourtHold,
@@ -153,6 +188,7 @@ import {
   createCalendarBlock,
   createCatalogItem,
   createInventoryStock,
+  enableInventoryGoodSales,
   issueOrganizationCredits,
   loadPlayerOrganizationWallets,
   loadPublicCoach,
@@ -986,6 +1022,20 @@ function throwDomainError(error: unknown): never {
               : "BAD_REQUEST";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
+  if (error instanceof OperatorPaymentError) {
+    const code =
+      error.code === "ORGANIZATION_NOT_FOUND" ||
+      error.code === "PAYER_NOT_FOUND" ||
+      error.code === "REFERENCE_NOT_FOUND" ||
+      error.code === "COLLECTION_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "DATABASE_REQUIRED"
+          ? "INTERNAL_SERVER_ERROR"
+          : error.code === "COLLECTION_CONFLICT"
+            ? "CONFLICT"
+            : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
   if (error instanceof OperatorServiceError) {
     const code =
       error.code === "RESOURCE_NOT_FOUND" ||
@@ -1451,6 +1501,23 @@ const publicRouter = router({
 });
 
 const playerRouter = router({
+  coachingNotes: protectedProcedure
+    .use(requireScope("profile:read"))
+    .input(
+      z.object({ subjectPersonId: z.string().uuid().optional() }).default({}),
+    )
+    .output(z.array(playerCoachingNoteSchema).readonly())
+    .query(async ({ input, ctx }) => {
+      if (ctx.actor!.isDemo && !process.env.DATABASE_URL) return [];
+      try {
+        return await loadPlayerCoachingNotes({
+          actor: ctx.actor!,
+          subjectPersonId: input.subjectPersonId,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   healthDashboard: adultProcedure
     .output(healthDashboardSchema)
     .query(async ({ ctx }) => {
@@ -1661,7 +1728,11 @@ const playerRouter = router({
     .output(videoStudioSchema)
     .query(async ({ ctx }) => {
       try {
-        return await loadVideoStudio(ctx.actor!.personId, ctx.now);
+        return await loadVideoStudio(
+          ctx.actor!.personId,
+          ctx.now,
+          ctx.actor!.organizationId,
+        );
       } catch (error) {
         return throwDomainError(error);
       }
@@ -4257,6 +4328,7 @@ const playerRouter = router({
         ticketTypeId: z.string().uuid().optional(),
         ticketQuantity: z.number().int().min(1).max(10).optional(),
         teamPaymentMode: z.enum(["self", "team"]).optional(),
+        teamClaimToken: z.string().uuid().optional(),
         teamRoster: z
           .array(
             z
@@ -4308,6 +4380,7 @@ const playerRouter = router({
               ticketTypeId: input.ticketTypeId,
               ticketQuantity: input.ticketQuantity,
               teamPaymentMode: input.teamPaymentMode,
+              teamClaimToken: input.teamClaimToken,
               teamRoster: input.teamRoster,
               subjectPersonId: input.subjectPersonId,
               acceptedPolicyIds: input.acceptedPolicyIds,
@@ -4334,6 +4407,35 @@ const playerRouter = router({
         return await getEventCheckoutStatus({
           actor: ctx.actor!,
           checkoutSessionId: input.checkoutSessionId,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  teammateSearch: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "event-teammate-search",
+        capacity: 40,
+        refillPerMinute: 30,
+      }),
+    )
+    .input(
+      z.object({
+        query: z.string().trim().max(80).optional(),
+        divisionId: z.string().uuid().optional(),
+        limit: z.number().int().min(1).max(20).default(12),
+      }),
+    )
+    .output(z.array(teammateSearchResultSchema).readonly())
+    .query(async ({ input, ctx }) => {
+      try {
+        return await searchEventTeammates({
+          actor: ctx.actor!,
+          query: input.query,
+          divisionId: input.divisionId,
+          limit: input.limit,
+          now: ctx.now,
         });
       } catch (error) {
         return throwDomainError(error);
@@ -4380,6 +4482,59 @@ const playerRouter = router({
             return await claimTeamEntry({
               actor: ctx.actor!,
               claimToken: input.claimToken,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  updateTeamEntryRoster: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "team-entry-roster-update",
+        capacity: 12,
+        refillPerMinute: 6,
+      }),
+    )
+    .input(
+      z.object({
+        claimToken: z.string().uuid(),
+        roster: z
+          .array(
+            z
+              .object({
+                personId: z.string().uuid().optional(),
+                inviteTarget: z.string().trim().min(3).max(320).optional(),
+                displayName: z.string().trim().min(1).max(120).optional(),
+              })
+              .refine(
+                (member) => Boolean(member.personId || member.inviteTarget),
+                "Each team member needs a Duna profile, email, or phone.",
+              ),
+          )
+          .max(5),
+        applicationOrigin: z.url(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(teamClaimSummarySchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.updateTeamEntryRoster",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateTeamEntryRoster({
+              actor: ctx.actor!,
+              claimToken: input.claimToken,
+              roster: input.roster,
+              applicationOrigin: input.applicationOrigin,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,
@@ -4504,6 +4659,7 @@ const playerRouter = router({
     )
     .input(
       z.object({
+        plan: z.enum(["premium", "premium-plus"]).default("premium"),
         interval: z.enum(["month", "year"]),
         successUrl: z.url(),
         cancelUrl: z.url(),
@@ -4527,7 +4683,7 @@ const playerRouter = router({
           if (!isStripeConfigured()) {
             throw new TRPCError({
               code: "INTERNAL_SERVER_ERROR",
-              message: "Duna+ checkout is not configured.",
+              message: "Premium checkout is not configured.",
             });
           }
           const settings = await getRepository().player.settings(
@@ -4541,13 +4697,15 @@ const playerRouter = router({
           ) {
             throw new TRPCError({
               code: "CONFLICT",
-              message: "A Duna+ membership already exists for this account.",
+              message:
+                "A Premium membership already exists. Use billing management to change plans.",
             });
           }
           return {
             ...(await createDunaPlusCheckout({
               personId: ctx.actor!.personId,
               email: settings.profile.email,
+              plan: input.plan,
               interval: input.interval,
               successUrl: input.successUrl,
               cancelUrl: input.cancelUrl,
@@ -4637,6 +4795,444 @@ const operatorRouter = router({
         ? loadDemoOperatorWorkspace(ctx.actor!.organizationId!)
         : loadOperatorWorkspace(ctx.actor!.organizationId!),
     ),
+  paymentWorkspace: organizationProcedure("payments:read")
+    .output(operatorPaymentWorkspaceSchema)
+    .query(async ({ ctx }) => {
+      try {
+        return await loadOperatorPaymentWorkspace({
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  terminalConnectionToken: organizationProcedure("payments:write")
+    .use(
+      rateLimitMiddleware({
+        id: "operator-terminal-token",
+        capacity: 20,
+        refillPerMinute: 10,
+        scope: "organization",
+      }),
+    )
+    .output(
+      z.object({
+        secret: z.string().min(1),
+        locationId: z.string().min(1),
+        merchantDisplayName: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx }) => {
+      try {
+        return await createOperatorTerminalConnectionToken({
+          actor: ctx.actor!,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  startPaymentCollection: organizationProcedure("payments:write")
+    .use(
+      rateLimitMiddleware({
+        id: "operator-payment-start",
+        capacity: 30,
+        refillPerMinute: 15,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z
+        .object({
+          amountMinor: z.number().int().positive().max(100_000_000),
+          payerPersonId: z.string().uuid(),
+          referenceType: z.enum(["session", "catalog-item", "custom"]),
+          referenceId: z.string().uuid().optional(),
+          referenceLabel: z.string().trim().min(2).max(160).optional(),
+          tender: z.enum([
+            "card-present",
+            "organization-credit",
+            "wallet-cash",
+          ]),
+          creditsApplied: z.number().int().positive().max(100_000).optional(),
+          idempotencyKey: z.string().uuid(),
+        })
+        .refine(
+          (value) =>
+            value.referenceType === "custom" || Boolean(value.referenceId),
+          {
+            message: "Choose the session or product for this payment.",
+            path: ["referenceId"],
+          },
+        )
+        .refine(
+          (value) =>
+            value.tender !== "organization-credit" ||
+            Boolean(value.creditsApplied),
+          {
+            message: "Choose the number of organization credits to redeem.",
+            path: ["creditsApplied"],
+          },
+        ),
+    )
+    .output(operatorPaymentStartSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await startOperatorPaymentCollection({
+          actor: ctx.actor!,
+          ...input,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  recordPaymentEvent: organizationProcedure("payments:write")
+    .use(
+      rateLimitMiddleware({
+        id: "operator-payment-event",
+        capacity: 120,
+        refillPerMinute: 60,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z.object({
+        collectionId: z.string().uuid(),
+        eventType: z.enum([
+          "reader.initialized",
+          "reader.discovered",
+          "reader.connected",
+          "reader.input",
+          "reader.message",
+          "payment.processing",
+          "terminal.declined",
+          "terminal.error",
+          "payment.cancelled",
+        ]),
+        status: z.enum([
+          "created",
+          "awaiting-reader",
+          "processing",
+          "succeeded",
+          "declined",
+          "failed",
+          "cancelled",
+        ]),
+        processorCode: z.string().trim().max(96).optional(),
+        message: z.string().trim().max(1_000).optional(),
+        details: z
+          .record(
+            z.string().max(64),
+            z.union([z.string().max(300), z.number(), z.boolean()]),
+          )
+          .default({}),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorPaymentCollectionSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await recordOperatorPaymentEvent({
+          actor: ctx.actor!,
+          ...input,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  finalizePaymentCollection: organizationProcedure("payments:write")
+    .use(
+      rateLimitMiddleware({
+        id: "operator-payment-finalize",
+        capacity: 30,
+        refillPerMinute: 15,
+        scope: "organization",
+      }),
+    )
+    .input(z.object({ collectionId: z.string().uuid() }))
+    .output(operatorPaymentCollectionSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await finalizeOperatorPaymentCollection({
+          actor: ctx.actor!,
+          collectionId: input.collectionId,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  setEarningsGoal: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        targetMinor: z.number().int().positive().max(1_000_000_000),
+        period: z.enum(["week", "month", "quarter", "year"]),
+      }),
+    )
+    .output(operatorPaymentWorkspaceSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await setOperatorEarningsGoal({
+          actor: ctx.actor!,
+          ...input,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  memberProfile: organizationProcedure("members:read")
+    .input(z.object({ personId: z.string().uuid() }))
+    .output(operatorMemberProfileSchema)
+    .query(({ input, ctx }) =>
+      ctx.actor!.isDemo && !process.env.DATABASE_URL
+        ? loadDemoOperatorMemberProfile(
+            ctx.actor!.organizationId!,
+            input.personId,
+          )
+        : loadOperatorMemberProfile({
+            actor: ctx.actor!,
+            organizationId: ctx.actor!.organizationId!,
+            personId: input.personId,
+            now: ctx.now,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+          }),
+    ),
+  sessionDetail: organizationProcedure("sessions:read")
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .output(operatorSessionDetailSchema)
+    .query(({ input, ctx }) =>
+      ctx.actor!.isDemo && !process.env.DATABASE_URL
+        ? loadDemoOperatorSessionDetail(
+            ctx.actor!.organizationId!,
+            input.sessionId,
+          )
+        : loadOperatorSessionDetail(
+            ctx.actor!.organizationId!,
+            input.sessionId,
+          ),
+    ),
+  createSessionNote: organizationProcedure("sessions:write")
+    .input(
+      z
+        .object({
+          sessionId: z.string().uuid(),
+          subject: z.string().trim().max(160).optional(),
+          visibility: z.enum(["private", "player"]),
+          source: z.enum(["typed", "livekit-voice"]),
+          transcript: z.string().trim().max(25_000).optional(),
+          summary: z.string().trim().max(5_000).optional(),
+          recipientPersonIds: z.array(z.string().uuid()).max(100).default([]),
+          idempotencyKey: z.string().uuid(),
+        })
+        .refine((value) => Boolean(value.transcript || value.summary), {
+          message: "Add a session note or record a voice note.",
+        }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createSessionNote",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createSessionNote({
+              actor: ctx.actor!,
+              sessionId: input.sessionId,
+              subject: input.subject,
+              visibility: input.visibility,
+              source: input.source,
+              transcript: input.transcript,
+              summary: input.summary,
+              recipientPersonIds: input.recipientPersonIds,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  publishSessionNote: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        noteId: z.string().uuid(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.publishSessionNote",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await publishSessionNote({
+              actor: ctx.actor!,
+              noteId: input.noteId,
+              confirmed: input.confirmed,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  recordSessionAttendance: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        registrationId: z.string().uuid(),
+        status: z.enum(["scheduled", "attended", "no-show", "cancelled"]),
+        note: z.string().trim().max(500).optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.recordSessionAttendance",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await recordSessionAttendance({
+              actor: ctx.actor!,
+              registrationId: input.registrationId,
+              status: input.status,
+              note: input.note,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  updateMemberProfile: organizationProcedure("members:write")
+    .input(
+      z.object({
+        personId: z.string().uuid(),
+        displayName: z.string().trim().min(2).max(120),
+        email: z.email().optional(),
+        phoneE164: z
+          .string()
+          .regex(/^\+[1-9]\d{7,14}$/)
+          .optional(),
+        homeMarket: z.string().trim().max(160).optional(),
+        experienceSummary: z.string().trim().max(2_000).optional(),
+        reason: z.string().trim().min(3).max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.updateMemberProfile",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateOperatorMemberProfile({
+              actor: ctx.actor!,
+              personId: input.personId,
+              displayName: input.displayName,
+              email: input.email,
+              phoneE164: input.phoneE164,
+              homeMarket: input.homeMarket,
+              experienceSummary: input.experienceSummary,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  startPlanCheckout: organizationProcedure("payments:write")
+    .use(
+      rateLimitMiddleware({
+        id: "organization-plan-checkout",
+        capacity: 8,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        plan: z.enum(["small-club", "club", "multi-venue"]),
+        interval: z.enum(["month", "year"]),
+        successUrl: z.url(),
+        cancelUrl: z.url(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(z.object({ id: z.string(), url: z.string().nullable() }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.startPlanCheckout",
+        request: input,
+        ctx,
+        execute: async () => {
+          if (!isStripeConfigured()) {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Organization plan checkout is not configured.",
+            });
+          }
+          return startOrganizationPlanCheckout({
+            ...input,
+            actor: ctx.actor!,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          });
+        },
+      }),
+    ),
+  openPlanBillingPortal: organizationProcedure("payments:write")
+    .use(
+      rateLimitMiddleware({
+        id: "organization-billing-portal",
+        capacity: 10,
+        refillPerMinute: 5,
+      }),
+    )
+    .input(z.object({ returnUrl: z.url() }))
+    .output(z.object({ url: z.url() }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await openOrganizationBillingPortal({
+          actor: ctx.actor!,
+          returnUrl: input.returnUrl,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   eventDraft: organizationProcedure("sessions:read")
     .input(z.object({ sessionId: z.string().uuid() }))
     .output(eventDraftEditorSchema)
@@ -4698,6 +5294,38 @@ const operatorRouter = router({
           )
           .max(12)
           .default([]),
+        media: z
+          .array(
+            z.object({
+              kind: z.enum(["image", "video"]),
+              url: z.url().max(2_000),
+              posterUrl: z.url().max(2_000).optional(),
+              alt: z.string().trim().max(240).optional(),
+              variantIndex: z.number().int().min(0).max(499).optional(),
+            }),
+          )
+          .max(24)
+          .default([]),
+        initialInventory: z
+          .object({
+            variantIndex: z.number().int().min(0).max(499),
+            inventoryLocationId: z.string().uuid().optional(),
+            locationName: z.string().trim().min(2).max(120).optional(),
+            purpose: z.enum(["sale", "rental", "coach-use", "operations"]),
+            trackingMode: z.enum(["quantity", "serialized"]),
+            quantity: z.number().int().positive().max(1_000_000),
+            unitCostMinor: z.number().int().min(0).max(100_000_000).optional(),
+            totalCostMinor: z
+              .number()
+              .int()
+              .min(0)
+              .max(100_000_000_000)
+              .optional(),
+            acquiredAt: z.iso.date().optional(),
+            vendorName: z.string().trim().max(160).optional(),
+            receiptUrl: z.url().max(2_000).optional(),
+          })
+          .optional(),
         configuration: z.record(z.string(), z.unknown()).default({}),
         confirmed: z.literal(true),
         idempotencyKey: z.string().uuid(),
@@ -4740,6 +5368,7 @@ const operatorRouter = router({
         assetTag: z.string().trim().max(128).optional(),
         condition: z.string().trim().min(2).max(48).default("new"),
         unitCostMinor: z.number().int().min(0).max(100_000_000).optional(),
+        totalCostMinor: z.number().int().min(0).max(100_000_000_000).optional(),
         acquiredAt: z.iso.date().optional(),
         vendorName: z.string().trim().max(160).optional(),
         vendorReference: z.string().trim().max(160).optional(),
@@ -4772,6 +5401,40 @@ const operatorRouter = router({
         execute: async () => {
           try {
             return await createInventoryStock({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  enableInventoryGoodSales: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        catalogItemId: z.string().uuid(),
+        priceMinor: z.number().int().positive().max(100_000_000),
+        allowCard: z.boolean(),
+        allowCash: z.boolean(),
+        taxable: z.boolean(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.enableInventoryGoodSales",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await enableInventoryGoodSales({
               actor: ctx.actor!,
               ...input,
               requestId: ctx.requestId,
@@ -7682,10 +8345,58 @@ const adminRouter = router({
   organization: adminProcedure
     .input(z.object({ organizationId: z.string().uuid() }))
     .output(adminOrganizationDetailSchema.nullable())
-    .query(
-      async ({ input }) =>
-        (await getRepository().admin.organization(input.organizationId)) ??
-        null,
+    .query(async ({ input, ctx }) => {
+      const detail = await getRepository().admin.organization(
+        input.organizationId,
+      );
+      return detail
+        ? {
+            ...detail,
+            canManageCommission:
+              ctx.actor?.roles.includes("super-admin") ?? false,
+          }
+        : null;
+    }),
+  updateOrganizationCommission: superAdminProcedure
+    .input(
+      z
+        .object({
+          organizationId: z.string().uuid(),
+          usePlanDefault: z.boolean(),
+          overrideRateBps: z.number().int().min(0).max(2_500).optional(),
+          reason: z.string().trim().min(10).max(500),
+          confirmed: z.literal(true),
+          idempotencyKey: z.string().uuid(),
+        })
+        .refine(
+          (value) =>
+            value.usePlanDefault || value.overrideRateBps !== undefined,
+          {
+            message: "A custom organization commission rate is required.",
+            path: ["overrideRateBps"],
+          },
+        ),
+    )
+    .output(organizationCommissionPolicySchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.updateOrganizationCommission",
+        request: input,
+        ctx,
+        execute: () =>
+          updateOrganizationCommissionOverride({
+            actor: ctx.actor!,
+            organizationId: input.organizationId,
+            overrideRateBps: input.usePlanDefault
+              ? undefined
+              : input.overrideRateBps,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
     ),
   players: adminProcedure
     .input(

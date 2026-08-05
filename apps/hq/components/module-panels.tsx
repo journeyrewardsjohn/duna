@@ -28,6 +28,8 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import type { OperatorModule } from "./navigation";
 import { ScheduleCalendar } from "./schedule-calendar";
+import { EventHistoryWorkspace } from "./event-history-workspace";
+import { PeopleWorkspace } from "./people-workspace";
 import { SessionDraftManager } from "./session-draft-manager";
 import { TicketApprovalQueue } from "./ticket-approval-queue";
 
@@ -236,12 +238,6 @@ function ProductCatalogPanel({
 }) {
   const groups = [
     {
-      type: "event" as const,
-      label: "Events",
-      detail: "Leagues, tournaments, clinics, camps, and open play.",
-      icon: Trophy,
-    },
-    {
       type: "service" as const,
       label: "Services",
       detail: "Private lessons, group lessons, and coaching programs.",
@@ -250,7 +246,7 @@ function ProductCatalogPanel({
     {
       type: "plan" as const,
       label: "Plans",
-      detail: "Memberships and organization-specific credit packs.",
+      detail: "Memberships, organization-specific credit packs, and bundles.",
       icon: CreditCard,
     },
     {
@@ -295,6 +291,32 @@ function ProductCatalogPanel({
       .filter((item) => item.uniqueCustomers > 0)
       .map((item) => item.catalogItemId),
   ).size;
+  const goodsPerformance = workspace.productPerformance.filter(
+    (performance) =>
+      workspace.catalog.find((item) => item.id === performance.catalogItemId)
+        ?.type === "good",
+  );
+  const goodsNetSalesMinor = goodsPerformance.reduce(
+    (total, item) => total + item.netSalesMinor,
+    0,
+  );
+  const goodsCogsMinor = goodsPerformance.reduce(
+    (total, item) => total + item.cogsMinor,
+    0,
+  );
+  const goodsGrossProfitMinor = goodsNetSalesMinor - goodsCogsMinor;
+  const inventoryCostOnHandMinor = workspace.inventory.reduce(
+    (total, receipt) =>
+      total + (receipt.unitCostMinor ?? 0) * receipt.quantityOnHand,
+    0,
+  );
+  const inventoryReceivedCostMinor = workspace.inventory.reduce(
+    (total, receipt) =>
+      total +
+      (receipt.totalCostMinor ??
+        (receipt.unitCostMinor ?? 0) * receipt.quantityReceived),
+    0,
+  );
   const topOffers = workspace.productPerformance
     .filter((item) => item.paidPurchases > 0)
     .toSorted((left, right) => right.grossBookedMinor - left.grossBookedMinor)
@@ -338,6 +360,35 @@ function ProductCatalogPanel({
               currently live
             </span>
           </article>
+          <article>
+            <small>Goods gross profit</small>
+            <Numeric>
+              {formatMoney(
+                goodsGrossProfitMinor,
+                workspace.organization.currency,
+              )}
+            </Numeric>
+            <span>
+              {formatMoney(goodsCogsMinor, workspace.organization.currency)}{" "}
+              connected COGS
+            </span>
+          </article>
+          <article>
+            <small>Inventory cost on hand</small>
+            <Numeric>
+              {formatMoney(
+                inventoryCostOnHandMinor,
+                workspace.organization.currency,
+              )}
+            </Numeric>
+            <span>
+              {formatMoney(
+                inventoryReceivedCostMinor,
+                workspace.organization.currency,
+              )}{" "}
+              received historically
+            </span>
+          </article>
         </div>
         {topOffers.length > 0 ? (
           <div className="product-performance-bars">
@@ -355,6 +406,10 @@ function ProductCatalogPanel({
                       {performance.paidPurchases === 1 ? "" : "s"} ·{" "}
                       {performance.uniqueCustomers} customer
                       {performance.uniqueCustomers === 1 ? "" : "s"}
+                      {item?.type === "good" &&
+                      performance.grossMarginBps !== undefined
+                        ? ` · ${(performance.grossMarginBps / 100).toFixed(1)}% margin`
+                        : ""}
                     </small>
                   </span>
                   <i
@@ -414,6 +469,22 @@ function ProductCatalogPanel({
             </article>
           );
         })}
+      </section>
+      <section className="hq-card product-event-builder-callout">
+        <span className="catalog-type-mark catalog-type-mark--event">
+          <Trophy aria-hidden size={18} />
+        </span>
+        <div>
+          <strong>Events have their own builder.</strong>
+          <p>
+            Leagues, tournaments, clinics, camps, pickup, and open play belong
+            in the event workflow with schedules, divisions, tickets, and
+            policies.
+          </p>
+        </div>
+        <Link href="/events/create">
+          Open event builder <ArrowRight aria-hidden size={15} />
+        </Link>
       </section>
       <section className="hq-card catalog-inventory-card">
         <header className="hq-card-heading">
@@ -519,7 +590,15 @@ function ProductCatalogPanel({
                 <Numeric>
                   {stock.quantityOnHand - stock.quantityReserved}
                 </Numeric>
-                <small>available</small>
+                <small>
+                  available from {stock.quantityReceived} received
+                  {stock.unitCostMinor !== undefined
+                    ? ` at ${formatMoney(
+                        stock.unitCostMinor,
+                        stock.currency ?? workspace.organization.currency,
+                      )} each`
+                    : ""}
+                </small>
               </article>
             ))}
           </div>
@@ -704,192 +783,6 @@ function VenuePortfolioPanel({
           )}
         </article>
       ))}
-    </div>
-  );
-}
-
-function MembersPanel({
-  workspace,
-}: {
-  readonly workspace: OperatorWorkspace;
-}) {
-  const roleCounts = workspace.people.reduce<Record<string, number>>(
-    (counts, person) => {
-      for (const role of person.roles) {
-        counts[role] = (counts[role] ?? 0) + 1;
-      }
-      return counts;
-    },
-    {},
-  );
-  return (
-    <div className="people-workspace">
-      <section className="people-summary-strip">
-        {[
-          { label: "Players", count: roleCounts.player ?? 0 },
-          { label: "Coaches", count: roleCounts.coach ?? 0 },
-          {
-            label: "Admins",
-            count:
-              (roleCounts.owner ?? 0) +
-              (roleCounts.manager ?? 0) +
-              (roleCounts["front-desk"] ?? 0) +
-              (roleCounts.accountant ?? 0),
-          },
-          { label: "Guardians", count: roleCounts.guardian ?? 0 },
-        ].map((group) => (
-          <article className="hq-card" key={group.label}>
-            <span className="hq-eyebrow">{group.label}</span>
-            <Numeric>{group.count}</Numeric>
-            <small>connected to this organization</small>
-          </article>
-        ))}
-      </section>
-      <section className="hq-card connected-table">
-        <header className="hq-card-heading">
-          <div>
-            <span className="hq-eyebrow">Organization relationships</span>
-            <h2>{workspace.people.length} people</h2>
-            <p>
-              Purchases, membership, credits, and upcoming activity are scoped
-              to this organization.
-            </p>
-          </div>
-          <Badge>
-            {workspace.people.filter((person) => person.isMinor).length} minors
-          </Badge>
-        </header>
-        <div className="people-relationship-table">
-          {workspace.people.map((person) => (
-            <article key={person.personId}>
-              <span className="avatar">
-                {person.avatarUrl ? (
-                  <img alt="" src={person.avatarUrl} />
-                ) : (
-                  person.displayName
-                    .split(/\s+/)
-                    .slice(0, 2)
-                    .map((part) => part[0])
-                    .join("")
-                    .toUpperCase()
-                )}
-              </span>
-              <span>
-                <strong>{person.displayName}</strong>
-                <small>
-                  {person.email ?? person.phoneE164 ?? "No contact method"}
-                </small>
-              </span>
-              <span className="people-role-list">
-                {person.roles.map((role) => (
-                  <Badge key={role}>{role}</Badge>
-                ))}
-              </span>
-              <span>
-                <strong>{person.membershipName ?? "No membership"}</strong>
-                <small>{person.membershipStatus ?? "not enrolled"}</small>
-              </span>
-              <span>
-                <Numeric>{person.creditBalance}</Numeric>
-                <small>organization credits</small>
-              </span>
-              <span>
-                <strong>
-                  {formatMoney(
-                    person.lifetimeSpendMinor,
-                    workspace.organization.currency,
-                  )}
-                </strong>
-                <small>{person.purchaseCount} purchases</small>
-              </span>
-              <span>
-                <Numeric>{person.upcomingCount}</Numeric>
-                <small>upcoming</small>
-              </span>
-              <span>
-                <Badge
-                  tone={
-                    person.churnRisk.level === "high"
-                      ? "warning"
-                      : person.churnRisk.level === "low"
-                        ? "positive"
-                        : "neutral"
-                  }
-                >
-                  {person.churnRisk.level === "high"
-                    ? "at risk"
-                    : person.churnRisk.level}
-                </Badge>
-                <small title={person.churnRisk.reasons.join(" · ")}>
-                  Duna signal · {person.churnRisk.score}/100
-                </small>
-              </span>
-            </article>
-          ))}
-          {workspace.people.length === 0 && (
-            <div className="hq-empty">
-              <strong>No organization relationships yet.</strong>
-              <span>Invite a player, coach, or administrator below.</span>
-            </div>
-          )}
-        </div>
-      </section>
-      <section className="hq-card connected-table">
-        <header className="hq-card-heading">
-          <div>
-            <span className="hq-eyebrow">Purchase history</span>
-            <h2>Recent organization purchases</h2>
-            <p>
-              The People workspace keeps purchases, membership, credits, and
-              service activity together.
-            </p>
-          </div>
-        </header>
-        <div className="people-purchase-list">
-          {workspace.people
-            .flatMap((person) =>
-              person.recentPurchases.map((purchase) => ({
-                ...purchase,
-                personName: person.displayName,
-              })),
-            )
-            .toSorted((left, right) =>
-              right.purchasedAt.localeCompare(left.purchasedAt),
-            )
-            .slice(0, 20)
-            .map((purchase) => (
-              <article key={purchase.orderId}>
-                <span>
-                  <strong>{purchase.description}</strong>
-                  <small>
-                    {purchase.personName} ·{" "}
-                    {new Intl.DateTimeFormat("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    }).format(new Date(purchase.purchasedAt))}
-                  </small>
-                </span>
-                <Badge
-                  tone={purchase.status === "paid" ? "positive" : "neutral"}
-                >
-                  {purchase.status.replaceAll("-", " ")}
-                </Badge>
-                <Numeric>
-                  {formatMoney(purchase.amountMinor, purchase.currency)}
-                </Numeric>
-              </article>
-            ))}
-          {!workspace.people.some(
-            (person) => person.recentPurchases.length > 0,
-          ) && (
-            <div className="hq-empty">
-              <strong>No paid organization purchases yet.</strong>
-              <span>Completed catalog orders will appear here.</span>
-            </div>
-          )}
-        </div>
-      </section>
     </div>
   );
 }
@@ -1515,7 +1408,7 @@ export function ModulePanel({
       ) : module === "locations" ? (
         <VenuePortfolioPanel workspace={workspace} />
       ) : module === "members" ? (
-        <MembersPanel workspace={workspace} />
+        <PeopleWorkspace workspace={workspace} />
       ) : module === "team" ? (
         <TeamPanel workspace={workspace} />
       ) : module === "products" ? (
@@ -1527,6 +1420,17 @@ export function ModulePanel({
             kinds={["tournament", "clinic", "open-play", "pickup"]}
             workspace={workspace}
           />
+          <EventHistoryWorkspace
+            kinds={[
+              "tournament",
+              "clinic",
+              "open-play",
+              "pickup",
+              "private-lesson",
+              "court-rental",
+            ]}
+            workspace={workspace}
+          />
           <EventInventory dashboard={dashboard} />
         </>
       ) : module === "leagues" ? (
@@ -1536,6 +1440,7 @@ export function ModulePanel({
             kinds={["league"]}
             workspace={workspace}
           />
+          <EventHistoryWorkspace kinds={["league"]} workspace={workspace} />
           <EventInventory dashboard={dashboard} kinds={["league"]} />
         </>
       ) : module === "payments" ? (

@@ -123,7 +123,11 @@ rewrite a live migration.
 
 ## Stripe delivery
 
-`pnpm stripe:bootstrap` idempotently provisions the Duna test catalog.
+`pnpm stripe:bootstrap` idempotently provisions the Duna test catalog, including
+monthly and annual Premium and Premium+ Prices, and prints the four environment
+variable mappings. Configure those Prices as switchable products in Stripe's
+Customer Portal so an existing subscriber can change plans without a second
+subscription.
 `pnpm stripe:smoke` validates subscription Checkout, PaymentIntents, and
 Terminal connection tokens. The webhook endpoint is
 `/api/stripe/webhook`; configure its signing secret only after a stable deployed
@@ -131,6 +135,44 @@ URL exists.
 
 Automatic Tax remains disabled until Beach Elite LLC’s verified head-office
 address is entered in Stripe. Do not invent that legal address.
+
+Organization-plan Checkout uses the six `STRIPE_HQ_*_PRICE_ID` variables for
+Club, Facility, and Network monthly/annual prices. `stripe-bootstrap.ts` creates
+the canonical catalog. Organization commission policy remains server-owned and
+is applied to each Connect payment; Accounts v2 metadata is a synchronized
+operational mirror, not the fee authority. See `docs/ORGANIZATION_PRICING.md`.
+
+### Duna Pro Get Paid
+
+Duna Pro card-present collections use a platform PaymentIntent with the
+organization's connected account as the destination. The server owns the
+amount, organization commission, processing estimate, order linkage, and
+idempotency key. The device only retrieves and processes that PaymentIntent;
+the server re-reads Stripe before posting the Duna payment ledger.
+
+Declines and reader errors remain attached to the original pending order and
+PaymentIntent so the coach can retry the same attempt. Every reader state,
+decline, failure, and approval is appended to `operator_payment_events`.
+Successful collections update the coach's net earnings and active goal.
+
+Tap to Pay requires a native Duna Pro build, a compatible physical device,
+Stripe Terminal production activation, and Apple's Tap to Pay entitlement and
+terms. It cannot be validated in Expo Go. Do not enable live collection based
+only on an emulator or JavaScript export.
+
+`DUNA_WALLET_CASH_ENABLED` defaults to `false`. Keep it disabled until the
+environment has completed custody, minors, escheatment, ledger, and support
+review. Organization-credit redemption remains available independently and is
+posted through the existing immutable organization-credit journals.
+
+### Native coach session notes
+
+Duna Pro and HQ both use short-lived, session-scoped LiveKit room tokens. The
+mobile app requires a native development or production build because LiveKit
+uses WebRTC native modules. A coach reviews the editable transcript, generated
+summary, detected roster names, and privacy mode before saving. Saving never
+publishes. Player-shareable notes require a second explicit confirmation;
+private notes never enter the player feed.
 
 ## Partner match-history backfill
 

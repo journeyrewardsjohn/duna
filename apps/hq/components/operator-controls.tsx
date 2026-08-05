@@ -2923,9 +2923,11 @@ function FacilitiesControls({
 }
 
 export function OperatorControls({
+  focusedCreate = false,
   module,
   workspace,
 }: {
+  readonly focusedCreate?: boolean;
   readonly module: OperatorModule;
   readonly workspace: OperatorWorkspace;
 }) {
@@ -2953,7 +2955,9 @@ export function OperatorControls({
     );
   }
   if (module === "products") {
-    return <ProductCatalogControls workspace={workspace} />;
+    return (
+      <ProductCatalogControls focused={focusedCreate} workspace={workspace} />
+    );
   }
   if (module === "payments") {
     return <StripeOnboarding workspace={workspace} />;

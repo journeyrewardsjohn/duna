@@ -22,6 +22,8 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
+import { EventDivisionExplorer } from "@/components/event-division-explorer";
+import { EventTicketSelector } from "@/components/event-ticket-selector";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { ProEventDetail } from "@/components/pro-event-detail";
@@ -41,15 +43,6 @@ function words(value: string | undefined, fallback = "Configured") {
         .replaceAll("-", " ")
         .replace(/\b\w/g, (letter) => letter.toUpperCase())
     : fallback;
-}
-
-function ratingLabel(minimum?: number, maximum?: number) {
-  if (minimum !== undefined && maximum !== undefined) {
-    return `${minimum.toFixed(2)}–${maximum.toFixed(2)}`;
-  }
-  if (minimum !== undefined) return `${minimum.toFixed(2)}+`;
-  if (maximum !== undefined) return `Up to ${maximum.toFixed(2)}`;
-  return "Open rating";
 }
 
 export async function generateMetadata({
@@ -177,6 +170,18 @@ export default async function EventPage({
     timeZoneName: "short",
   });
   const requiredPolicies = event.policies?.filter((policy) => policy.required);
+  const guestFeatures = event.features?.filter(
+    (feature) => feature.kind === "guest",
+  );
+  const supportingFeatures = event.features?.filter(
+    (feature) => feature.kind !== "guest",
+  );
+  const startingTeamPrice = event.divisions
+    ?.map((division) => division.teamPrice)
+    .sort((left, right) => left.amountMinor - right.amountMinor)[0];
+  const startingPlayerPrice = event.divisions
+    ?.map((division) => division.playerPrice)
+    .sort((left, right) => left.amountMinor - right.amountMinor)[0];
 
   return (
     <main className="event-public">
@@ -317,33 +322,84 @@ export default async function EventPage({
                 </div>
                 <Sparkles aria-hidden size={23} />
               </header>
-              <div className="event-feature-grid">
-                {event.features.map((feature) => (
-                  <article key={feature.id}>
-                    <span
-                      className={`event-feature-grid__icon event-feature-grid__icon--${feature.kind}`}
-                    >
-                      {feature.kind === "guest" ? (
-                        (feature.personInitials ?? (
-                          <Crown aria-hidden size={19} />
-                        ))
-                      ) : feature.kind === "activity" ? (
-                        <Footprints aria-hidden size={19} />
-                      ) : (
-                        <Sparkles aria-hidden size={19} />
-                      )}
-                    </span>
-                    <Badge>{words(feature.kind)}</Badge>
-                    <h3>{feature.title}</h3>
-                    <p>{feature.description}</p>
-                    {feature.personHandle && (
-                      <Link href={`/players/${feature.personHandle}`}>
-                        View Duna profile <ArrowRight aria-hidden size={14} />
-                      </Link>
-                    )}
-                  </article>
-                ))}
-              </div>
+              {guestFeatures && guestFeatures.length > 0 && (
+                <div className="event-guest-lineup">
+                  {guestFeatures.map((feature) => (
+                    <article key={feature.id}>
+                      <div className="event-guest-lineup__portrait">
+                        {feature.imageUrl ? (
+                          <img
+                            alt={`${feature.personName ?? feature.title}, featured guest`}
+                            src={feature.imageUrl}
+                          />
+                        ) : (
+                          <span>
+                            {feature.personInitials ?? (
+                              <Crown aria-hidden size={28} />
+                            )}
+                          </span>
+                        )}
+                        <Badge>Featured guest</Badge>
+                      </div>
+                      <div className="event-guest-lineup__copy">
+                        <small>Meet your host</small>
+                        <h3>{feature.personName ?? feature.title}</h3>
+                        {feature.personName &&
+                          feature.title !== feature.personName && (
+                            <strong>{feature.title}</strong>
+                          )}
+                        <p>
+                          {feature.description ??
+                            "Meet, learn from, and share the event with this featured Duna player."}
+                        </p>
+                        <div>
+                          {feature.personHomeMarket && (
+                            <span>
+                              <MapPin aria-hidden size={15} />
+                              {feature.personHomeMarket}
+                            </span>
+                          )}
+                          {feature.personRating !== undefined && (
+                            <span>
+                              <Medal aria-hidden size={15} />
+                              <Numeric>
+                                {feature.personRating.toFixed(2)}
+                              </Numeric>{" "}
+                              rating
+                            </span>
+                          )}
+                        </div>
+                        {feature.personHandle && (
+                          <Link href={`/players/${feature.personHandle}`}>
+                            View full profile{" "}
+                            <ArrowRight aria-hidden size={15} />
+                          </Link>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+              {supportingFeatures && supportingFeatures.length > 0 && (
+                <div className="event-feature-grid">
+                  {supportingFeatures.map((feature) => (
+                    <article key={feature.id}>
+                      <span
+                        className={`event-feature-grid__icon event-feature-grid__icon--${feature.kind}`}
+                      >
+                        {feature.kind === "activity" ? (
+                          <Footprints aria-hidden size={19} />
+                        ) : (
+                          <Sparkles aria-hidden size={19} />
+                        )}
+                      </span>
+                      <Badge>{words(feature.kind)}</Badge>
+                      <h3>{feature.title}</h3>
+                      <p>{feature.description}</p>
+                    </article>
+                  ))}
+                </div>
+              )}
             </section>
           )}
 
@@ -352,101 +408,18 @@ export default async function EventPage({
               <header>
                 <div>
                   <span className="section__eyebrow">Player entries</span>
-                  <h2>Find your division.</h2>
+                  <h2>Find your best fit.</h2>
                   <p>
-                    Every format, eligibility rule, price, and remaining spot is
-                    visible before checkout.
+                    Start with age or level, compare the eligible formats, then
+                    see team and individual prices together.
                   </p>
                 </div>
                 <Trophy aria-hidden size={23} />
               </header>
-              <div className="event-division-grid">
-                {event.divisions.map((division, index) => (
-                  <article key={division.id}>
-                    <div className="event-division-grid__topline">
-                      <Numeric>{String(index + 1).padStart(2, "0")}</Numeric>
-                      <Badge
-                        tone={
-                          division.spotsRemaining <= 4 ? "warning" : "neutral"
-                        }
-                      >
-                        {division.spotsRemaining} spots
-                      </Badge>
-                    </div>
-                    <h3>{division.name}</h3>
-                    <p>{division.description}</p>
-                    <dl>
-                      <div>
-                        <dt>Team</dt>
-                        <dd>
-                          {words(
-                            division.teamFormat,
-                            words(division.discipline),
-                          )}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Field</dt>
-                        <dd>
-                          {words(division.gender)} · {words(division.surface)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Rating</dt>
-                        <dd>
-                          <Numeric>
-                            {ratingLabel(
-                              division.ratingMinimum,
-                              division.ratingMaximum,
-                            )}
-                          </Numeric>
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Format</dt>
-                        <dd>{words(division.tournamentFormat)}</dd>
-                      </div>
-                      {division.poolPlay?.enabled && (
-                        <div>
-                          <dt>Pool play</dt>
-                          <dd>
-                            {division.poolPlay.teamsPerPool} teams ·{" "}
-                            {division.poolPlay.teamsAdvancing} advance
-                          </dd>
-                        </div>
-                      )}
-                      <div>
-                        <dt>Seeding</dt>
-                        <dd>
-                          {words(division.seeding ?? division.ratingBasis)}
-                        </dd>
-                      </div>
-                    </dl>
-                    <footer>
-                      <span>
-                        <small>
-                          {division.priceBasis === "per-person"
-                            ? "Per player"
-                            : "Per team"}
-                        </small>
-                        <Numeric>
-                          {division.price.amountMinor === 0
-                            ? "Free"
-                            : formatMoney(
-                                division.price.amountMinor,
-                                division.price.currency,
-                              )}
-                        </Numeric>
-                      </span>
-                      <Link
-                        href={`/app/checkout/${event.slug}?division=${division.id}`}
-                      >
-                        Join division <ArrowRight aria-hidden size={16} />
-                      </Link>
-                    </footer>
-                  </article>
-                ))}
-              </div>
+              <EventDivisionExplorer
+                divisions={event.divisions}
+                eventSlug={event.slug}
+              />
             </section>
           )}
 
@@ -562,41 +535,12 @@ export default async function EventPage({
                 </div>
                 <Ticket aria-hidden size={23} />
               </header>
-              <div className="event-ticket-grid">
-                {event.tickets
-                  .filter((ticketItem) => ticketItem.availableOnline)
-                  .map((ticketItem) => (
-                    <article key={ticketItem.id}>
-                      <span>
-                        <Ticket aria-hidden size={19} />
-                      </span>
-                      <div>
-                        <h3>{ticketItem.name}</h3>
-                        <p>{ticketItem.description}</p>
-                        <small>
-                          {ticketItem.approvalRequired
-                            ? "Host approval required"
-                            : ticketItem.waitlistEnabled
-                              ? "Waitlist available"
-                              : `${ticketItem.remaining ?? "Unlimited"} available`}
-                        </small>
-                      </div>
-                      <Numeric>
-                        {ticketItem.price.amountMinor === 0
-                          ? "Free"
-                          : formatMoney(
-                              ticketItem.price.amountMinor,
-                              ticketItem.price.currency,
-                            )}
-                      </Numeric>
-                      <Link
-                        href={`/app/checkout/${event.slug}?ticket=${ticketItem.id}`}
-                      >
-                        Choose <ArrowRight aria-hidden size={15} />
-                      </Link>
-                    </article>
-                  ))}
-              </div>
+              <EventTicketSelector
+                eventSlug={event.slug}
+                tickets={event.tickets.filter(
+                  (ticketItem) => ticketItem.availableOnline,
+                )}
+              />
             </section>
           )}
 
@@ -725,18 +669,49 @@ export default async function EventPage({
         <aside className="event-public__booking">
           <div className="event-public__booking-label">
             <CircleDollarSign aria-hidden size={18} />
-            <span>
-              <small>
-                {event.divisions && event.divisions.length > 1
-                  ? "Entries from"
-                  : "Player entry"}
-              </small>
-              <Numeric>
-                {event.price.amountMinor === 0
-                  ? "Free"
-                  : formatMoney(event.price.amountMinor, event.price.currency)}
-              </Numeric>
-            </span>
+            {startingTeamPrice && startingPlayerPrice ? (
+              <div>
+                <span>
+                  <small>
+                    Team entry{event.divisions!.length > 1 ? " from" : ""}
+                  </small>
+                  <Numeric>
+                    {startingTeamPrice.amountMinor === 0
+                      ? "Free"
+                      : formatMoney(
+                          startingTeamPrice.amountMinor,
+                          startingTeamPrice.currency,
+                        )}
+                  </Numeric>
+                </span>
+                <i aria-hidden />
+                <span>
+                  <small>
+                    Per player{event.divisions!.length > 1 ? " from" : ""}
+                  </small>
+                  <Numeric>
+                    {startingPlayerPrice.amountMinor === 0
+                      ? "Free"
+                      : formatMoney(
+                          startingPlayerPrice.amountMinor,
+                          startingPlayerPrice.currency,
+                        )}
+                  </Numeric>
+                </span>
+              </div>
+            ) : (
+              <span>
+                <small>Admission from</small>
+                <Numeric>
+                  {event.price.amountMinor === 0
+                    ? "Free"
+                    : formatMoney(
+                        event.price.amountMinor,
+                        event.price.currency,
+                      )}
+                </Numeric>
+              </span>
+            )}
           </div>
           <h2>Ready to play?</h2>
           <p>
@@ -764,8 +739,14 @@ export default async function EventPage({
               slug={event.slug}
             />
           ) : (
-            <Link href={`/app/checkout/${event.slug}`}>
-              Join this event <ArrowRight aria-hidden size={17} />
+            <Link
+              href={
+                event.divisions?.length === 1
+                  ? `/app/checkout/${event.slug}?division=${event.divisions[0]!.id}`
+                  : "#divisions"
+              }
+            >
+              Find my division <ArrowRight aria-hidden size={17} />
             </Link>
           )}
           {event.tickets && event.tickets.length > 0 && (

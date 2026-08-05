@@ -61,6 +61,11 @@ export interface OrganizationSummary {
   readonly venueCount: number;
   readonly timezone: string;
   readonly stripeStatus: "connected" | "pending" | "restricted";
+  readonly effectivePlan?: "coach" | "small-club" | "club" | "multi-venue";
+  readonly operatorCommissionBps?: number;
+  readonly commissionSource?: "plan-default" | "admin-override";
+  readonly stripeFeeMetadataStatus?:
+    "not-connected" | "pending" | "synced" | "failed";
 }
 
 export interface VenueSummary {
@@ -153,6 +158,9 @@ export interface EventFeature {
   readonly personId?: string;
   readonly personHandle?: string;
   readonly personInitials?: string;
+  readonly personName?: string;
+  readonly personHomeMarket?: string;
+  readonly personRating?: number;
   readonly imageUrl?: string;
 }
 
@@ -198,6 +206,10 @@ export interface EventDivisionSummary {
   readonly discipline: Discipline;
   readonly ratingBasis: string;
   readonly price: Money;
+  /** Full-roster entry price. Kept separate from price so both buying paths can be shown. */
+  readonly teamPrice: Money;
+  /** One player's share when teammates pay separately. */
+  readonly playerPrice: Money;
   readonly spotsRemaining: number;
   readonly capacity: number;
   readonly minimumTeams?: number;

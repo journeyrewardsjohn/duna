@@ -13,12 +13,16 @@ export default async function CheckoutPage({
     checkout?: string;
     division?: string;
     ticket?: string;
+    quantity?: string;
     team?: string;
     session_id?: string;
   }>;
 }) {
   const { slug } = await params;
   const query = await searchParams;
+  const requestedTicketQuantity = query.quantity
+    ? Number.parseInt(query.quantity, 10)
+    : undefined;
   const caller = await getServerCaller();
   const [event, dashboard, wallet, settings, searchablePlayers] =
     await Promise.all([
@@ -26,7 +30,7 @@ export default async function CheckoutPage({
       caller.player.dashboard(),
       caller.player.wallet(),
       caller.player.settings(),
-      caller.public.players({ limit: 24 }),
+      caller.public.players({ limit: 50 }),
     ]);
   if (!event) notFound();
   return (
@@ -35,6 +39,12 @@ export default async function CheckoutPage({
         event={event}
         initialDivisionId={query.division}
         initialTicketTypeId={query.ticket}
+        initialTicketQuantity={
+          Number.isSafeInteger(requestedTicketQuantity) &&
+          (requestedTicketQuantity ?? 0) > 0
+            ? requestedTicketQuantity
+            : undefined
+        }
         initialTeamClaimToken={query.team}
         isDunaPlus={Boolean(
           settings.membership &&
@@ -56,6 +66,13 @@ export default async function CheckoutPage({
             person: settings.profile.person,
             label: "You",
             available: settings.profile.ageBand === "adult",
+            birthDate: settings.profile.birthDate,
+            ageBand: settings.profile.ageBand,
+            genderCategory: settings.profile.genderCategory,
+            unavailableReason:
+              settings.profile.ageBand === "adult"
+                ? undefined
+                : "An adult guardian must complete registration",
           },
           ...settings.household
             .filter((member) => member.role === "dependent")
@@ -63,6 +80,12 @@ export default async function CheckoutPage({
               person: member.person,
               label: member.relationship,
               available: member.verified,
+              birthDate: member.birthDate,
+              ageBand: member.ageBand,
+              genderCategory: member.genderCategory,
+              unavailableReason: member.verified
+                ? undefined
+                : "Guardian verification is still pending",
             })),
         ]}
         walletAvailableMinor={wallet.availableMinor}

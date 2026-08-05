@@ -11,9 +11,18 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.duna.pro",
+      "entitlements": {
+        "com.apple.developer.proximity-reader.payment.acceptance": true
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "Duna Pro uses the camera for QR check-in and profile verification."
+        "NSCameraUsageDescription": "Duna Pro uses the camera to photograph products, scan check-ins, and support club operations.",
+        "NSMicrophoneUsageDescription": "Duna Pro uses the microphone only when a coach records a LiveKit session note.",
+        "NSPhotoLibraryUsageDescription": "Duna Pro uses selected photos for product and member media.",
+        "NSLocationWhenInUseUsageDescription": "Duna Pro uses location while connecting to secure in-person payment readers.",
+        "NSBluetoothAlwaysUsageDescription": "Duna Pro uses Bluetooth to connect to supported payment readers.",
+        "NSBluetoothPeripheralUsageDescription": "Duna Pro uses Bluetooth to connect to supported payment readers.",
+        "NSLocalNetworkUsageDescription": "Duna Pro uses the local network to connect to supported payment readers."
       }
     },
     "android": {
@@ -22,7 +31,15 @@
         "backgroundColor": "#F7F3EA"
       },
       "package": "com.duna.pro",
-      "permissions": ["CAMERA"]
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "NFC",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -30,12 +47,61 @@
     },
     "plugins": [
       [
+        "@livekit/react-native-expo-plugin",
+        {
+          "android": {
+            "audioType": "communication"
+          },
+          "ios": {
+            "enableMultitaskingCameraAccess": false
+          }
+        }
+      ],
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Duna Pro uses the camera to photograph products and support club operations.",
+          "microphonePermission": "Duna Pro uses the microphone only when a coach records a LiveKit session note."
+        }
+      ],
+      [
+        "@stripe/stripe-terminal-react-native",
+        {
+          "tapToPayCheck": true,
+          "appDelegate": true,
+          "locationWhenInUsePermission": "Duna Pro uses location while connecting to secure in-person payment readers.",
+          "bluetoothAlwaysUsagePermission": "Duna Pro uses Bluetooth to connect to supported payment readers.",
+          "bluetoothPeripheralPermission": "Duna Pro uses Bluetooth to connect to supported payment readers.",
+          "localNetworkUsagePermission": "Duna Pro uses the local network to connect to supported payment readers."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Duna Pro uses selected photos for product and member media.",
+          "cameraPermission": "Duna Pro uses the camera to photograph products and support club operations."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/splash.png",
           "imageWidth": 220,
           "resizeMode": "contain",
           "backgroundColor": "#F7F3EA"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4"
+          },
+          "android": {
+            "minSdkVersion": 26,
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35
+          }
         }
       ]
     ],

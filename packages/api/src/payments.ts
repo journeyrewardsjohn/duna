@@ -1,3 +1,11 @@
+import type {
+  MembershipBillingInterval,
+  OrganizationBillingInterval,
+  OrganizationPlanId,
+  PaidMembershipPlanId,
+  PaidOrganizationPlanId,
+} from "@duna/core";
+import { ORGANIZATION_FEE_POLICY_VERSION } from "@duna/core";
 import Stripe from "stripe";
 import {
   connectAccountMetadataEntityId,
@@ -23,21 +31,101 @@ export function getStripeClient(): Stripe {
   return stripeClient;
 }
 
+export function membershipPriceId(
+  plan: PaidMembershipPlanId,
+  interval: MembershipBillingInterval,
+): string | undefined {
+  if (plan === "premium-plus") {
+    return interval === "month"
+      ? process.env.STRIPE_DUNA_PREMIUM_PLUS_MONTHLY_PRICE_ID
+      : process.env.STRIPE_DUNA_PREMIUM_PLUS_ANNUAL_PRICE_ID;
+  }
+  return interval === "month"
+    ? (process.env.STRIPE_DUNA_PREMIUM_MONTHLY_PRICE_ID ??
+        process.env.STRIPE_DUNA_PLUS_MONTHLY_PRICE_ID)
+    : (process.env.STRIPE_DUNA_PREMIUM_ANNUAL_PRICE_ID ??
+        process.env.STRIPE_DUNA_PLUS_ANNUAL_PRICE_ID);
+}
+
+export function isMembershipPriceConfigured(
+  plan: PaidMembershipPlanId,
+  interval: MembershipBillingInterval,
+): boolean {
+  return Boolean(membershipPriceId(plan, interval));
+}
+
+export function organizationPlanPriceId(
+  plan: PaidOrganizationPlanId,
+  interval: OrganizationBillingInterval,
+): string | undefined {
+  if (plan === "small-club") {
+    return interval === "month"
+      ? (process.env.STRIPE_HQ_CLUB_MONTHLY_PRICE_ID ??
+          process.env.STRIPE_SMALL_CLUB_MONTHLY_PRICE_ID)
+      : (process.env.STRIPE_HQ_CLUB_ANNUAL_PRICE_ID ??
+          process.env.STRIPE_SMALL_CLUB_ANNUAL_PRICE_ID);
+  }
+  if (plan === "club") {
+    return interval === "month"
+      ? (process.env.STRIPE_HQ_FACILITY_MONTHLY_PRICE_ID ??
+          process.env.STRIPE_CLUB_MONTHLY_PRICE_ID)
+      : (process.env.STRIPE_HQ_FACILITY_ANNUAL_PRICE_ID ??
+          process.env.STRIPE_CLUB_ANNUAL_PRICE_ID);
+  }
+  return interval === "month"
+    ? process.env.STRIPE_HQ_NETWORK_MONTHLY_PRICE_ID
+    : process.env.STRIPE_HQ_NETWORK_ANNUAL_PRICE_ID;
+}
+
+export function isOrganizationPlanPriceConfigured(
+  plan: PaidOrganizationPlanId,
+  interval: OrganizationBillingInterval,
+): boolean {
+  return Boolean(organizationPlanPriceId(plan, interval));
+}
+
+export function organizationPlanForPriceId(priceId: string):
+  | {
+      readonly plan: PaidOrganizationPlanId;
+      readonly interval: OrganizationBillingInterval;
+    }
+  | undefined {
+  const plans: readonly PaidOrganizationPlanId[] = [
+    "small-club",
+    "club",
+    "multi-venue",
+  ];
+  const intervals: readonly OrganizationBillingInterval[] = ["month", "year"];
+  for (const plan of plans) {
+    for (const interval of intervals) {
+      if (organizationPlanPriceId(plan, interval) === priceId) {
+        return { plan, interval };
+      }
+    }
+  }
+  return undefined;
+}
+
 export async function createDunaPlusCheckout(input: {
   readonly personId: string;
   readonly email?: string;
-  readonly interval: "month" | "year";
+  readonly plan: PaidMembershipPlanId;
+  readonly interval: MembershipBillingInterval;
   readonly successUrl: string;
   readonly cancelUrl: string;
   readonly idempotencyKey: string;
 }): Promise<{ readonly id: string; readonly url: string | null }> {
-  const priceId =
-    input.interval === "month"
-      ? process.env.STRIPE_DUNA_PLUS_MONTHLY_PRICE_ID
-      : process.env.STRIPE_DUNA_PLUS_ANNUAL_PRICE_ID;
+  const priceId = membershipPriceId(input.plan, input.interval);
   if (!priceId) {
-    throw new Error(`Duna+ ${input.interval} price is not configured`);
+    throw new Error(
+      `${input.plan === "premium-plus" ? "Premium+" : "Premium"} ${input.interval} price is not configured`,
+    );
   }
+  const metadata = {
+    dunaPersonId: input.personId,
+    dunaPlan: input.plan,
+    product: "duna-membership",
+  };
   const session = await getStripeClient().checkout.sessions.create(
     {
       mode: "subscription",
@@ -53,9 +141,54 @@ export async function createDunaPlusCheckout(input: {
       },
       tax_id_collection: { enabled: true },
       subscription_data: {
-        metadata: { dunaPersonId: input.personId, product: "duna-plus" },
+        metadata,
       },
-      metadata: { dunaPersonId: input.personId, product: "duna-plus" },
+      metadata,
+    },
+    { idempotencyKey: input.idempotencyKey },
+  );
+  return { id: session.id, url: session.url };
+}
+
+export async function createOrganizationPlanCheckout(input: {
+  readonly organizationId: string;
+  readonly customerId?: string;
+  readonly email?: string;
+  readonly plan: PaidOrganizationPlanId;
+  readonly interval: OrganizationBillingInterval;
+  readonly successUrl: string;
+  readonly cancelUrl: string;
+  readonly idempotencyKey: string;
+}): Promise<{ readonly id: string; readonly url: string | null }> {
+  const priceId = organizationPlanPriceId(input.plan, input.interval);
+  if (!priceId) {
+    throw new Error(
+      `${input.plan} ${input.interval} organization price is not configured`,
+    );
+  }
+  const metadata = {
+    dunaOrganizationId: input.organizationId,
+    dunaPlan: input.plan,
+    product: "duna-hq",
+  };
+  const session = await getStripeClient().checkout.sessions.create(
+    {
+      mode: "subscription",
+      ...(input.customerId
+        ? { customer: input.customerId }
+        : { customer_email: input.email }),
+      client_reference_id: input.organizationId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: input.successUrl,
+      cancel_url: input.cancelUrl,
+      allow_promotion_codes: true,
+      billing_address_collection: "required",
+      automatic_tax: {
+        enabled: process.env.STRIPE_AUTOMATIC_TAX_ENABLED === "true",
+      },
+      tax_id_collection: { enabled: true },
+      subscription_data: { metadata },
+      metadata,
     },
     { idempotencyKey: input.idempotencyKey },
   );
@@ -71,6 +204,8 @@ export async function createEventCheckoutSession(input: {
   readonly amountMinor: number;
   readonly currency: string;
   readonly applicationFeeMinor: number;
+  readonly organizationCommissionMinor: number;
+  readonly organizationCommissionRateBps: number;
   readonly connectedAccountId: string;
   readonly successUrl: string;
   readonly cancelUrl: string;
@@ -122,6 +257,12 @@ export async function createEventCheckoutSession(input: {
           dunaOrderId: input.orderId,
           dunaEventId: input.eventId,
           dunaPersonId: input.personId,
+          dunaOrganizationCommissionMinor: String(
+            input.organizationCommissionMinor,
+          ),
+          dunaOrganizationCommissionRateBps: String(
+            input.organizationCommissionRateBps,
+          ),
         },
       },
       metadata: {
@@ -148,6 +289,8 @@ export async function createCourtCheckoutSession(input: {
   readonly amountMinor: number;
   readonly currency: string;
   readonly applicationFeeMinor: number;
+  readonly organizationCommissionMinor: number;
+  readonly organizationCommissionRateBps: number;
   readonly connectedAccountId: string;
   readonly successUrl: string;
   readonly cancelUrl: string;
@@ -199,6 +342,12 @@ export async function createCourtCheckoutSession(input: {
           dunaOrderId: input.orderId,
           dunaBookingId: input.bookingId,
           dunaPersonId: input.personId,
+          dunaOrganizationCommissionMinor: String(
+            input.organizationCommissionMinor,
+          ),
+          dunaOrganizationCommissionRateBps: String(
+            input.organizationCommissionRateBps,
+          ),
         },
       },
       metadata: {
@@ -225,10 +374,15 @@ export async function createCatalogCheckoutSession(input: {
   readonly catalogVariantId: string;
   readonly stripePriceId: string;
   readonly quantity: number;
-  readonly amountMinor: number;
+  readonly subtotalMinor: number;
+  readonly serviceFeeMinor: number;
+  readonly currency: string;
   readonly applicationFeeMinor: number;
+  readonly organizationCommissionMinor: number;
+  readonly organizationCommissionRateBps: number;
   readonly connectedAccountId: string;
-  readonly recurring: boolean;
+  readonly recurringInterval?: "week" | "month" | "year";
+  readonly recurringIntervalCount?: number;
   readonly automaticTaxEnabled: boolean;
   readonly collectShippingAddress: boolean;
   readonly successUrl: string;
@@ -243,18 +397,33 @@ export async function createCatalogCheckoutSession(input: {
   if (!Number.isSafeInteger(input.quantity) || input.quantity < 1) {
     throw new Error("Catalog checkout quantity must be a positive integer");
   }
-  if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
-    throw new Error("Catalog checkout amount must be positive");
+  if (!Number.isSafeInteger(input.subtotalMinor) || input.subtotalMinor <= 0) {
+    throw new Error("Catalog checkout subtotal must be positive");
   }
+  if (
+    !Number.isSafeInteger(input.serviceFeeMinor) ||
+    input.serviceFeeMinor < 0
+  ) {
+    throw new Error("Catalog checkout service fee is invalid");
+  }
+  const totalAmountMinor = input.subtotalMinor + input.serviceFeeMinor;
   if (
     !Number.isSafeInteger(input.applicationFeeMinor) ||
     input.applicationFeeMinor < 0 ||
-    input.applicationFeeMinor > input.amountMinor
+    input.applicationFeeMinor > totalAmountMinor
   ) {
     throw new Error("Catalog checkout application fee is invalid");
   }
-  if (input.recurring && input.quantity !== 1) {
+  const recurring = Boolean(input.recurringInterval);
+  if (recurring && input.quantity !== 1) {
     throw new Error("Recurring plans must be purchased one at a time");
+  }
+  if (
+    input.recurringIntervalCount !== undefined &&
+    (!Number.isSafeInteger(input.recurringIntervalCount) ||
+      input.recurringIntervalCount < 1)
+  ) {
+    throw new Error("Catalog checkout recurring interval count is invalid");
   }
   const metadata = {
     dunaOrderId: input.orderId,
@@ -263,15 +432,43 @@ export async function createCatalogCheckoutSession(input: {
     dunaCatalogItemId: input.catalogItemId,
     dunaCatalogVariantId: input.catalogVariantId,
     product: "organization-catalog",
+    dunaOrganizationCommissionMinor: String(input.organizationCommissionMinor),
+    dunaOrganizationCommissionRateBps: String(
+      input.organizationCommissionRateBps,
+    ),
   };
   const applicationFeePercent =
-    Math.round((input.applicationFeeMinor / input.amountMinor) * 10_000) / 100;
+    Math.round((input.applicationFeeMinor / totalAmountMinor) * 10_000) / 100;
+  const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
+    { price: input.stripePriceId, quantity: input.quantity },
+  ];
+  if (input.serviceFeeMinor > 0) {
+    lineItems.push({
+      quantity: 1,
+      price_data: {
+        currency: input.currency.toLowerCase(),
+        unit_amount: input.serviceFeeMinor,
+        product_data: {
+          name: "Duna service fee",
+          description:
+            "Platform service fee for this organization transaction.",
+          metadata: { dunaOrderId: input.orderId },
+        },
+        recurring: input.recurringInterval
+          ? {
+              interval: input.recurringInterval,
+              interval_count: input.recurringIntervalCount ?? 1,
+            }
+          : undefined,
+      },
+    });
+  }
   const session = await getStripeClient().checkout.sessions.create(
     {
-      mode: input.recurring ? "subscription" : "payment",
+      mode: recurring ? "subscription" : "payment",
       client_reference_id: input.personId,
       customer_email: input.customerEmail,
-      line_items: [{ price: input.stripePriceId, quantity: input.quantity }],
+      line_items: lineItems,
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,
       expires_at: Math.floor(input.expiresAt.getTime() / 1_000),
@@ -303,7 +500,7 @@ export async function createCatalogCheckoutSession(input: {
             }
           : undefined,
       },
-      payment_intent_data: input.recurring
+      payment_intent_data: recurring
         ? undefined
         : {
             application_fee_amount: input.applicationFeeMinor,
@@ -311,7 +508,7 @@ export async function createCatalogCheckoutSession(input: {
             transfer_data: { destination: input.connectedAccountId },
             metadata,
           },
-      subscription_data: input.recurring
+      subscription_data: recurring
         ? {
             application_fee_percent: applicationFeePercent,
             on_behalf_of: input.connectedAccountId,
@@ -382,6 +579,11 @@ export async function createConnectOnboarding(input: {
   readonly countryCode: string;
   readonly refreshUrl: string;
   readonly returnUrl: string;
+  readonly feePolicy?: {
+    readonly rateBps: number;
+    readonly source: "plan-default" | "admin-override";
+    readonly plan: OrganizationPlanId;
+  };
 }): Promise<{ readonly accountId: string; readonly url: string }> {
   const stripe = getStripeClient();
   const accountId =
@@ -413,9 +615,24 @@ export async function createConnectOnboarding(input: {
         metadata: {
           dunaEntityId: input.personOrOrganizationId,
           dunaPartyType: input.partyType,
+          ...(input.feePolicy
+            ? {
+                dunaOperatorCommissionBps: String(input.feePolicy.rateBps),
+                dunaOperatorCommissionSource: input.feePolicy.source,
+                dunaOrganizationPlan: input.feePolicy.plan,
+                dunaFeePolicyVersion: ORGANIZATION_FEE_POLICY_VERSION,
+              }
+            : {}),
         },
       })
     ).id;
+  if (input.accountId && input.feePolicy) {
+    await updateConnectAccountFeeMetadata({
+      accountId,
+      organizationId: input.personOrOrganizationId,
+      ...input.feePolicy,
+    });
+  }
   const link = await stripe.v2.core.accountLinks.create({
     account: accountId,
     use_case: {
@@ -432,6 +649,24 @@ export async function createConnectOnboarding(input: {
     },
   });
   return { accountId, url: link.url };
+}
+
+export async function updateConnectAccountFeeMetadata(input: {
+  readonly accountId: string;
+  readonly organizationId: string;
+  readonly rateBps: number;
+  readonly source: "plan-default" | "admin-override";
+  readonly plan: OrganizationPlanId;
+}): Promise<void> {
+  await getStripeClient().v2.core.accounts.update(input.accountId, {
+    metadata: {
+      dunaEntityId: input.organizationId,
+      dunaOperatorCommissionBps: String(input.rateBps),
+      dunaOperatorCommissionSource: input.source,
+      dunaOrganizationPlan: input.plan,
+      dunaFeePolicyVersion: ORGANIZATION_FEE_POLICY_VERSION,
+    },
+  });
 }
 
 export async function retrieveConnectAccountReadiness(
@@ -454,23 +689,58 @@ export async function retrieveConnectAccountReadiness(
   };
 }
 
-export async function createTerminalConnectionToken(
-  stripeConnectedAccount?: string,
-): Promise<{ readonly secret: string }> {
-  const token = await getStripeClient().terminal.connectionTokens.create(
-    {},
-    stripeConnectedAccount
-      ? { stripeAccount: stripeConnectedAccount }
-      : undefined,
+export async function createTerminalLocation(input: {
+  readonly organizationId: string;
+  readonly displayName: string;
+  readonly address: {
+    readonly line1: string;
+    readonly line2?: string;
+    readonly city: string;
+    readonly state?: string;
+    readonly postalCode: string;
+    readonly country: string;
+  };
+  readonly idempotencyKey: string;
+}): Promise<{ readonly id: string }> {
+  const location = await getStripeClient().terminal.locations.create(
+    {
+      display_name: input.displayName,
+      address: {
+        line1: input.address.line1,
+        line2: input.address.line2,
+        city: input.address.city,
+        state: input.address.state,
+        postal_code: input.address.postalCode,
+        country: input.address.country,
+      },
+      metadata: { dunaOrganizationId: input.organizationId },
+    },
+    { idempotencyKey: input.idempotencyKey },
   );
+  return { id: location.id };
+}
+
+export async function createTerminalConnectionToken(
+  locationId: string,
+): Promise<{ readonly secret: string }> {
+  const token = await getStripeClient().terminal.connectionTokens.create({
+    location: locationId,
+  });
   return { secret: token.secret };
 }
 
 export async function createTerminalPaymentIntent(input: {
   readonly orderId: string;
+  readonly collectionId: string;
+  readonly organizationId: string;
   readonly amountMinor: number;
   readonly currency: string;
-  readonly connectedAccountId?: string;
+  readonly connectedAccountId: string;
+  readonly applicationFeeMinor: number;
+  readonly payerPersonId: string;
+  readonly operatorPersonId: string;
+  readonly referenceType: string;
+  readonly referenceId?: string;
   readonly idempotencyKey: string;
 }): Promise<{
   readonly id: string;
@@ -485,17 +755,64 @@ export async function createTerminalPaymentIntent(input: {
       currency: input.currency.toLowerCase(),
       capture_method: "automatic",
       payment_method_types: ["card_present"],
+      application_fee_amount: input.applicationFeeMinor,
+      transfer_data: { destination: input.connectedAccountId },
       metadata: {
         dunaOrderId: input.orderId,
+        dunaCollectionId: input.collectionId,
+        dunaOrganizationId: input.organizationId,
+        dunaPayerPersonId: input.payerPersonId,
+        dunaOperatorPersonId: input.operatorPersonId,
+        dunaReferenceType: input.referenceType,
+        ...(input.referenceId ? { dunaReferenceId: input.referenceId } : {}),
         channel: "terminal",
       },
     },
-    {
-      idempotencyKey: input.idempotencyKey,
-      stripeAccount: input.connectedAccountId,
-    },
+    { idempotencyKey: input.idempotencyKey },
   );
   return { id: intent.id, clientSecret: intent.client_secret };
+}
+
+export async function retrieveTerminalPaymentIntent(
+  paymentIntentId: string,
+): Promise<{
+  readonly id: string;
+  readonly status: Stripe.PaymentIntent.Status;
+  readonly amountMinor: number;
+  readonly amountReceivedMinor: number;
+  readonly currency: string;
+  readonly orderId?: string;
+  readonly collectionId?: string;
+  readonly clientSecret?: string;
+  readonly chargeId?: string;
+  readonly receiptUrl?: string;
+  readonly failureCode?: string;
+  readonly declineCode?: string;
+  readonly failureMessage?: string;
+}> {
+  const intent = await getStripeClient().paymentIntents.retrieve(
+    paymentIntentId,
+    { expand: ["latest_charge"] },
+  );
+  const charge =
+    typeof intent.latest_charge === "object" && intent.latest_charge
+      ? intent.latest_charge
+      : undefined;
+  return {
+    id: intent.id,
+    status: intent.status,
+    amountMinor: intent.amount,
+    amountReceivedMinor: intent.amount_received,
+    currency: intent.currency.toUpperCase(),
+    orderId: intent.metadata.dunaOrderId,
+    collectionId: intent.metadata.dunaCollectionId,
+    clientSecret: intent.client_secret ?? undefined,
+    chargeId: charge?.id,
+    receiptUrl: charge?.receipt_url ?? undefined,
+    failureCode: intent.last_payment_error?.code,
+    declineCode: intent.last_payment_error?.decline_code ?? undefined,
+    failureMessage: intent.last_payment_error?.message,
+  };
 }
 
 export async function refundPayment(input: {

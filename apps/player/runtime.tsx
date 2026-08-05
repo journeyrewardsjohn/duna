@@ -33,6 +33,9 @@ type PlayerWallet = Awaited<
 type PlayerSettings = Awaited<
   ReturnType<DunaApiClient["player"]["settings"]["query"]>
 >;
+type PlayerCoachingNotes = Awaited<
+  ReturnType<DunaApiClient["player"]["coachingNotes"]["query"]>
+>;
 type PublicPeople = Awaited<
   ReturnType<DunaApiClient["public"]["players"]["query"]>
 >;
@@ -56,6 +59,7 @@ export interface PlayerRuntime {
   readonly dashboard?: PlayerDashboard;
   readonly wallet?: PlayerWallet;
   readonly settings?: PlayerSettings;
+  readonly coachingNotes?: PlayerCoachingNotes;
   readonly people?: PublicPeople;
   readonly venues?: PublicVenues;
   readonly proCoverage?: PublicProCoverage;
@@ -232,6 +236,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   const [dashboard, setDashboard] = useState<PlayerDashboard>();
   const [wallet, setWallet] = useState<PlayerWallet>();
   const [settings, setSettings] = useState<PlayerSettings>();
+  const [coachingNotes, setCoachingNotes] = useState<PlayerCoachingNotes>();
   const [people, setPeople] = useState<PublicPeople>();
   const [venues, setVenues] = useState<PublicVenues>();
   const [proCoverage, setProCoverage] = useState<PublicProCoverage>();
@@ -249,6 +254,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         nextDashboard,
         nextWallet,
         nextSettings,
+        nextCoachingNotes,
         nextPeople,
         nextVenues,
         nextProCoverage,
@@ -258,7 +264,8 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         client.player.dashboard.query(),
         client.player.wallet.query(),
         client.player.settings.query(),
-        client.public.players.query({ limit: 12 }),
+        client.player.coachingNotes.query().catch(() => []),
+        client.public.players.query({ limit: 50 }),
         client.public.venues.query(),
         client.public.proCoverage.query().catch(() => undefined),
         client.public.coaches.query(),
@@ -267,6 +274,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       setDashboard(nextDashboard);
       setWallet(nextWallet);
       setSettings(nextSettings);
+      setCoachingNotes(nextCoachingNotes);
       setPeople(nextPeople);
       setVenues(nextVenues);
       setProCoverage(nextProCoverage);
@@ -313,6 +321,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     !dashboard ||
     !wallet ||
     !settings ||
+    !coachingNotes ||
     !people ||
     !venues ||
     !coaches ||
@@ -337,6 +346,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         dashboard,
         wallet,
         settings,
+        coachingNotes,
         people,
         venues,
         proCoverage,

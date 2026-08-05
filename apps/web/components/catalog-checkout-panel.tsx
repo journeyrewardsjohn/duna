@@ -1,6 +1,7 @@
 "use client";
 
 import type { PublicCatalogItem } from "@duna/api";
+import { DUNA_SERVICE_FEE_BPS } from "@duna/core";
 import { Badge } from "@duna/ui";
 import {
   Banknote,
@@ -32,6 +33,7 @@ export function CatalogCheckoutPanel({
   walletCredits,
   membershipIncluded,
   membershipRemainingBookings,
+  dunaServiceFeeWaived,
   initialCheckoutSessionId,
   initialNotice,
 }: {
@@ -46,6 +48,7 @@ export function CatalogCheckoutPanel({
   readonly walletCredits: number;
   readonly membershipIncluded?: boolean;
   readonly membershipRemainingBookings?: number;
+  readonly dunaServiceFeeWaived: boolean;
   readonly initialCheckoutSessionId?: string;
   readonly initialNotice?: string;
 }) {
@@ -97,13 +100,22 @@ export function CatalogCheckoutPanel({
   const monetaryTotal = membershipIncluded
     ? 0
     : (price?.amountMinor ?? 0) * quantity;
+  const dunaServiceFeeEligible =
+    paymentMethod === "card" && item.type !== "good" && monetaryTotal > 0;
+  const dunaServiceFeeMinor =
+    dunaServiceFeeEligible && !dunaServiceFeeWaived
+      ? Math.round((monetaryTotal * DUNA_SERVICE_FEE_BPS) / 10_000)
+      : 0;
+  const checkoutTotal = monetaryTotal + dunaServiceFeeMinor;
   const creditTotal = membershipIncluded
     ? 0
     : (price?.creditAmount ?? 0) * quantity;
   const requiresMembership =
     item.membershipRequired || item.visibility === "members";
+  const tracksInventory =
+    item.type === "good" && item.configuration.inventoryTracked !== false;
   const available =
-    item.type !== "good" || (variant?.availableQuantity ?? 0) >= quantity;
+    !tracksInventory || (variant?.availableQuantity ?? 0) >= quantity;
   const canPurchase =
     Boolean(variant && price) &&
     available &&
@@ -324,7 +336,11 @@ export function CatalogCheckoutPanel({
         <div className="catalog-quantity">
           <span>
             <strong>Quantity</strong>
-            <small>{variant?.availableQuantity ?? 0} available</small>
+            <small>
+              {tracksInventory
+                ? `${variant?.availableQuantity ?? 0} available`
+                : "Prepared after purchase"}
+            </small>
           </span>
           <div>
             <button
@@ -339,7 +355,10 @@ export function CatalogCheckoutPanel({
             <button
               aria-label="Increase quantity"
               disabled={
-                quantity >= Math.min(50, variant?.availableQuantity ?? 0)
+                quantity >=
+                (tracksInventory
+                  ? Math.min(50, variant?.availableQuantity ?? 0)
+                  : 50)
               }
               onClick={() => setQuantity((current) => current + 1)}
               type="button"
@@ -350,13 +369,21 @@ export function CatalogCheckoutPanel({
         </div>
       )}
       <div className="catalog-checkout-total">
-        <span>{membershipIncluded ? "Member benefit" : "Total"}</span>
+        <span>
+          {membershipIncluded
+            ? "Member benefit"
+            : dunaServiceFeeEligible
+              ? dunaServiceFeeWaived
+                ? "Total · Premium fee waiver"
+                : "Total · includes 7.5% Duna fee"
+              : "Total"}
+        </span>
         <strong>
           {membershipIncluded
             ? "Included"
             : paymentMethod === "credit"
               ? `${creditTotal} credits`
-              : money(monetaryTotal, price?.currency ?? organization.currency)}
+              : money(checkoutTotal, price?.currency ?? organization.currency)}
         </strong>
       </div>
       {notice && (

@@ -1,3 +1,5 @@
+import { DUNA_SERVICE_FEE_BPS } from "@duna/core";
+
 export type CurrencyCode = "USD" | "CAD" | "AUD" | "BRL" | "EUR";
 
 export type OrderItemKind =
@@ -20,10 +22,12 @@ export interface PricedOrderItem {
 export interface AppliedFee {
   readonly id:
     | "consumer-platform-v2"
+    | "consumer-platform-v3"
     | "registration-service-v2"
     | "operator-online-v2"
     | "operator-present-v2"
     | "operator-ach-v2"
+    | "organization-commission-v1"
     | "coach-marketplace-v2";
   readonly label: string;
   readonly amountMinor: number;
@@ -40,9 +44,17 @@ export interface OrderPricing {
   readonly dunaPlusSavingsMinor: number;
 }
 
-const PLATFORM_RATE = 0.03;
-const PLATFORM_FLOOR_MINOR = 49;
-const PLATFORM_CAP_MINOR = 499;
+export const CONSUMER_FEE_ELIGIBLE_KINDS = [
+  "booking",
+  "registration",
+  "membership",
+  "package",
+  "ticket",
+] as const satisfies readonly OrderItemKind[];
+
+const consumerFeeEligibleKinds = new Set<OrderItemKind>(
+  CONSUMER_FEE_ELIGIBLE_KINDS,
+);
 
 function assertMinorAmount(value: number, field: string): void {
   if (!Number.isSafeInteger(value) || value < 0) {
@@ -53,65 +65,25 @@ function assertMinorAmount(value: number, field: string): void {
 }
 
 export function calculateConsumerPlatformFee(input: {
-  readonly bookingSubtotalMinor: number;
+  readonly eligibleSubtotalMinor: number;
   readonly currency: CurrencyCode;
   readonly isDunaPlus: boolean;
-  readonly hasRegistrationServiceFee: boolean;
 }): AppliedFee {
-  assertMinorAmount(input.bookingSubtotalMinor, "bookingSubtotalMinor");
-  const rawAmount =
-    input.bookingSubtotalMinor === 0
-      ? 0
-      : Math.min(
-          PLATFORM_CAP_MINOR,
-          Math.max(
-            PLATFORM_FLOOR_MINOR,
-            Math.round(input.bookingSubtotalMinor * PLATFORM_RATE),
-          ),
-        );
-  const amountMinor =
-    input.isDunaPlus || input.hasRegistrationServiceFee ? 0 : rawAmount;
+  assertMinorAmount(input.eligibleSubtotalMinor, "eligibleSubtotalMinor");
+  const rawAmount = Math.round(
+    (input.eligibleSubtotalMinor * DUNA_SERVICE_FEE_BPS) / 10_000,
+  );
+  const amountMinor = input.isDunaPlus ? 0 : rawAmount;
   return {
-    id: "consumer-platform-v2",
-    label: "Duna platform fee",
+    id: "consumer-platform-v3",
+    label: "Duna service fee",
     amountMinor,
     currency: input.currency,
     payer: "consumer",
     ruleInputs: {
-      bookingSubtotalMinor: input.bookingSubtotalMinor,
-      rateBps: 300,
-      floorMinor: PLATFORM_FLOOR_MINOR,
-      capMinor: PLATFORM_CAP_MINOR,
+      eligibleSubtotalMinor: input.eligibleSubtotalMinor,
+      rateBps: DUNA_SERVICE_FEE_BPS,
       isDunaPlus: input.isDunaPlus,
-      noDoubleFeeApplied: input.hasRegistrationServiceFee,
-    },
-  };
-}
-
-export function calculateRegistrationServiceFee(input: {
-  readonly registrations: number;
-  readonly feePerRegistrationMinor: number;
-  readonly currency: CurrencyCode;
-}): AppliedFee {
-  if (!Number.isSafeInteger(input.registrations) || input.registrations < 0) {
-    throw new Error("registrations must be a non-negative integer");
-  }
-  assertMinorAmount(input.feePerRegistrationMinor, "feePerRegistrationMinor");
-  if (
-    input.feePerRegistrationMinor !== 0 &&
-    (input.feePerRegistrationMinor < 200 || input.feePerRegistrationMinor > 400)
-  ) {
-    throw new Error("registration service fee must be between $2 and $4");
-  }
-  return {
-    id: "registration-service-v2",
-    label: "Registration service fee",
-    amountMinor: input.registrations * input.feePerRegistrationMinor,
-    currency: input.currency,
-    payer: "consumer",
-    ruleInputs: {
-      registrations: input.registrations,
-      feePerRegistrationMinor: input.feePerRegistrationMinor,
     },
   };
 }
@@ -156,35 +128,34 @@ export function calculateOperatorProcessingFee(input: {
   };
 }
 
-export function calculateCoachMarketplaceFee(input: {
+export function calculateOrganizationCommissionFee(input: {
   readonly amountMinor: number;
   readonly currency: CurrencyCode;
-  readonly originatedByDuna: boolean;
-  readonly relationshipAgeDays: number;
-  readonly takeRateBps?: number;
+  readonly rateBps: number;
+  readonly organizationId: string;
+  readonly plan: string;
+  readonly source: "plan-default" | "admin-override";
 }): AppliedFee {
   assertMinorAmount(input.amountMinor, "amountMinor");
-  const takeRateBps = input.takeRateBps ?? 1_500;
-  if (takeRateBps < 1_200 || takeRateBps > 1_500) {
-    throw new Error("marketplace take must be between 12% and 15%");
+  if (
+    !Number.isSafeInteger(input.rateBps) ||
+    input.rateBps < 0 ||
+    input.rateBps > 2_500
+  ) {
+    throw new Error("organization commission must be between 0% and 25%");
   }
-  const applies =
-    input.originatedByDuna &&
-    input.relationshipAgeDays >= 0 &&
-    input.relationshipAgeDays <= 365;
   return {
-    id: "coach-marketplace-v2",
-    label: "Duna marketplace lead fee",
-    amountMinor: applies
-      ? Math.round((input.amountMinor * takeRateBps) / 10_000)
-      : 0,
+    id: "organization-commission-v1",
+    label: "Duna organization transaction fee",
+    amountMinor: Math.round((input.amountMinor * input.rateBps) / 10_000),
     currency: input.currency,
-    payer: "coach",
+    payer: "operator",
     ruleInputs: {
       amountMinor: input.amountMinor,
-      originatedByDuna: input.originatedByDuna,
-      relationshipAgeDays: input.relationshipAgeDays,
-      takeRateBps,
+      rateBps: input.rateBps,
+      organizationId: input.organizationId,
+      plan: input.plan,
+      source: input.source,
     },
   };
 }
@@ -193,7 +164,6 @@ export function priceConsumerOrder(input: {
   readonly items: readonly PricedOrderItem[];
   readonly currency: CurrencyCode;
   readonly isDunaPlus: boolean;
-  readonly registrationFeePerEntryMinor?: number;
 }): OrderPricing {
   for (const item of input.items) {
     assertMinorAmount(item.unitAmountMinor, `${item.id}.unitAmountMinor`);
@@ -205,33 +175,20 @@ export function priceConsumerOrder(input: {
     (sum, item) => sum + item.quantity * item.unitAmountMinor,
     0,
   );
-  const bookingSubtotalMinor = input.items
-    .filter((item) => item.kind === "booking")
+  const eligibleSubtotalMinor = input.items
+    .filter((item) => consumerFeeEligibleKinds.has(item.kind))
     .reduce((sum, item) => sum + item.quantity * item.unitAmountMinor, 0);
-  const registrations = input.items
-    .filter((item) => item.kind === "registration")
-    .reduce((sum, item) => sum + item.quantity, 0);
-  const registrationFee = calculateRegistrationServiceFee({
-    registrations,
-    feePerRegistrationMinor:
-      registrations === 0 ? 0 : (input.registrationFeePerEntryMinor ?? 300),
-    currency: input.currency,
-  });
   const platformFee = calculateConsumerPlatformFee({
-    bookingSubtotalMinor,
+    eligibleSubtotalMinor,
     currency: input.currency,
     isDunaPlus: input.isDunaPlus,
-    hasRegistrationServiceFee: registrationFee.amountMinor > 0,
   });
-  const fees = [registrationFee, platformFee].filter(
-    (fee) => fee.amountMinor > 0,
-  );
+  const fees = [platformFee].filter((fee) => fee.amountMinor > 0);
   const dunaPlusSavingsMinor = input.isDunaPlus
     ? calculateConsumerPlatformFee({
-        bookingSubtotalMinor,
+        eligibleSubtotalMinor,
         currency: input.currency,
         isDunaPlus: false,
-        hasRegistrationServiceFee: registrationFee.amountMinor > 0,
       }).amountMinor
     : 0;
   return {

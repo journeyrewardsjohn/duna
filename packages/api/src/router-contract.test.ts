@@ -28,7 +28,7 @@ describe("tRPC contract surface", () => {
     });
     expect(quote).toMatchObject({
       subtotalMinor: 4_800,
-      totalMinor: 4_944,
+      totalMinor: 5_160,
       currency: "USD",
     });
   });

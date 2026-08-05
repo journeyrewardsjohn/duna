@@ -80,11 +80,12 @@ function QuotaPolicy({ overview }: { readonly overview: AdminVideoOverview }) {
     <section className="hq-card video-policy-card">
       <header className="hq-card-heading">
         <div>
-          <span className="hq-eyebrow">Global monthly policy</span>
-          <h2>Streaming + upload limits</h2>
+          <span className="hq-eyebrow">Platform safety ceilings</span>
+          <h2>Streaming + upload guardrails</h2>
           <p>
-            Live streaming begins at 4 hours and is enforced. Uploads begin at
-            24 hours as a reported allowance, with no hard stop.
+            Membership plans set each player&apos;s allowance. These ceilings
+            can cap every plan during launch; person-specific overrides still
+            take precedence.
           </p>
         </div>
         <Clock3 aria-hidden size={24} />
@@ -128,8 +129,8 @@ function QuotaPolicy({ overview }: { readonly overview: AdminVideoOverview }) {
               value="true"
             />
             <span>
-              <strong>Enforce live stream allowance</strong>
-              Prevent a new stream when the monthly allowance is exhausted.
+              <strong>Apply global live ceiling</strong>
+              Cap plan allowances at this live-broadcast maximum.
             </span>
           </label>
           <label className="operator-switch">
@@ -141,8 +142,8 @@ function QuotaPolicy({ overview }: { readonly overview: AdminVideoOverview }) {
               value="true"
             />
             <span>
-              <strong>Enforce upload allowance</strong>
-              Leave off to report usage and overage without blocking uploads.
+              <strong>Apply global upload ceiling</strong>
+              Cap plan allowances at this uploaded-video maximum.
             </span>
           </label>
         </div>
@@ -166,8 +167,8 @@ function QuotaPolicy({ overview }: { readonly overview: AdminVideoOverview }) {
           />
           <span>
             <strong>I reviewed both allowances and enforcement states.</strong>
-            This changes the default policy for every player without a
-            person-specific override.
+            This changes the platform ceiling for every player without a
+            person-specific override; plan limits remain enforced.
           </span>
         </label>
         <footer className="operator-form-footer">
@@ -195,7 +196,7 @@ function GrantComplimentary({ canManage }: { readonly canManage: boolean }) {
       <header className="hq-card-heading">
         <div>
           <span className="hq-eyebrow">Super Admin entitlement</span>
-          <h2>Grant Complimentary Duna+</h2>
+          <h2>Grant Complimentary Premium+</h2>
           <p>
             Grant by email before or after the person creates an account. Leave
             the end date empty for an indefinite entitlement.
@@ -225,7 +226,7 @@ function GrantComplimentary({ canManage }: { readonly canManage: boolean }) {
               disabled={!canManage}
               minLength={8}
               name="reason"
-              placeholder="Why this person receives Complimentary Duna+"
+              placeholder="Why this person receives Complimentary Premium+"
               required
             />
           </label>
@@ -240,8 +241,8 @@ function GrantComplimentary({ canManage }: { readonly canManage: boolean }) {
           />
           <span>
             <strong>I reviewed the person, duration, and reason.</strong>
-            This creates a local Duna+ entitlement; it does not create or alter
-            a Stripe subscription.
+            This creates a local Premium+ entitlement; it does not create or
+            alter a Stripe subscription.
           </span>
         </label>
         <footer className="operator-form-footer">
@@ -251,7 +252,7 @@ function GrantComplimentary({ canManage }: { readonly canManage: boolean }) {
             disabled={!canManage || pending}
             type="submit"
           >
-            {pending ? "Granting…" : "Grant Complimentary Duna+"}
+            {pending ? "Granting…" : "Grant Complimentary Premium+"}
           </button>
         </footer>
       </form>
@@ -292,7 +293,7 @@ function GrantRow({
         </div>
       </div>
       <Badge tone={active ? "positive" : "neutral"}>
-        {active ? "Complimentary Duna+" : expired ? "expired" : grant.status}
+        {active ? "Complimentary Premium+" : expired ? "expired" : grant.status}
       </Badge>
       {active && canManage ? (
         <form action={action} className="video-grant-revoke">
@@ -309,7 +310,7 @@ function GrantRow({
             Confirm
           </label>
           <button
-            aria-label={`Revoke Complimentary Duna+ for ${grant.email}`}
+            aria-label={`Revoke Complimentary Premium+ for ${grant.email}`}
             className="hq-button hq-button--secondary"
             disabled={pending}
             type="submit"
@@ -334,7 +335,7 @@ function EntitlementList({
       <header className="hq-card-heading">
         <div>
           <span className="hq-eyebrow">Entitlement register</span>
-          <h2>Complimentary Duna+ grants</h2>
+          <h2>Complimentary Premium+ grants</h2>
         </div>
         <Badge>{overview.grants.length}</Badge>
       </header>

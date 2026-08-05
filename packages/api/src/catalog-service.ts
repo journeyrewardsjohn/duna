@@ -42,6 +42,7 @@ import {
   resourceReservations,
   scheduleOverrides,
   schedules,
+  sessionOperations,
   sessions,
   venues,
   messages,
@@ -51,6 +52,7 @@ import {
   reverseLedgerPostings,
   type LedgerPosting,
 } from "@duna/core";
+import { demoOrganization, demoPeople } from "@duna/core/demo";
 import { and, asc, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import type {
@@ -220,7 +222,9 @@ function defaultFulfillment(type: CatalogItemType, subtype: string): string {
   if (type === "good") {
     return subtype === "rental" ? "rental" : "pickup-or-shipping";
   }
-  return subtype === "credit-pack" ? "credit-grant" : "membership";
+  if (subtype === "credit-pack") return "credit-grant";
+  if (subtype === "bundle") return "package";
+  return "membership";
 }
 
 function optionCode(value: string): string {
@@ -377,6 +381,7 @@ export async function loadOperatorCommerceWorkspace(
     priceRows,
     mediaRows,
     stockRows,
+    movementRows,
     locationRows,
     participantRows,
     staffRows,
@@ -390,6 +395,7 @@ export async function loadOperatorCommerceWorkspace(
     reconciliationRow,
     proposalRows,
     productOrderRows,
+    productRefundRows,
   ] = await Promise.all([
     database
       .select()
@@ -439,6 +445,12 @@ export async function loadOperatorCommerceWorkspace(
       .where(eq(inventoryStockItems.organizationId, organizationId))
       .orderBy(asc(catalogItems.title), asc(catalogVariants.title))
       .limit(10_000),
+    database
+      .select()
+      .from(inventoryMovements)
+      .where(eq(inventoryMovements.organizationId, organizationId))
+      .orderBy(asc(inventoryMovements.occurredAt))
+      .limit(100_000),
     database
       .select()
       .from(inventoryLocations)
@@ -599,12 +611,26 @@ export async function loadOperatorCommerceWorkspace(
         personId: orders.buyerPersonId,
         orderStatus: orders.status,
         totalMinor: orders.totalMinor,
+        subtotalMinor: orders.subtotalMinor,
         purchasedAt: orders.createdAt,
       })
       .from(catalogFulfillments)
       .innerJoin(orders, eq(catalogFulfillments.orderId, orders.id))
       .where(eq(catalogFulfillments.organizationId, organizationId))
       .orderBy(desc(orders.createdAt))
+      .limit(100_000),
+    database
+      .select({
+        orderId: refundRecords.orderId,
+        amountMinor: refundRecords.amountMinor,
+      })
+      .from(refundRecords)
+      .where(
+        and(
+          eq(refundRecords.organizationId, organizationId),
+          eq(refundRecords.status, "succeeded"),
+        ),
+      )
       .limit(100_000),
   ]);
 
@@ -615,6 +641,8 @@ export async function loadOperatorCommerceWorkspace(
     string,
     { readonly onHand: number; readonly reserved: number }
   >();
+  const catalogItemByStockId = new Map<string, string>();
+  const receiptByStockId = new Map<string, (typeof movementRows)[number]>();
   for (const variant of variantRows) {
     const rows = variantsByItem.get(variant.catalogItemId) ?? [];
     variantsByItem.set(variant.catalogItemId, [...rows, variant]);
@@ -629,6 +657,7 @@ export async function loadOperatorCommerceWorkspace(
     mediaByItem.set(media.catalogItemId, [...rows, media]);
   }
   for (const row of stockRows) {
+    catalogItemByStockId.set(row.stock.id, row.catalogItemId);
     const current = stockByItem.get(row.catalogItemId) ?? {
       onHand: 0,
       reserved: 0,
@@ -637,6 +666,14 @@ export async function loadOperatorCommerceWorkspace(
       onHand: current.onHand + row.stock.quantityOnHand,
       reserved: current.reserved + row.stock.quantityReserved,
     });
+  }
+  for (const movement of movementRows) {
+    if (
+      movement.kind === "receive" &&
+      !receiptByStockId.has(movement.inventoryStockItemId)
+    ) {
+      receiptByStockId.set(movement.inventoryStockItemId, movement);
+    }
   }
 
   const catalog: OperatorWorkspace["catalog"] = itemRows.map((item) => {
@@ -689,6 +726,7 @@ export async function loadOperatorCommerceWorkspace(
       })),
       media: (mediaByItem.get(item.id) ?? []).map((media) => ({
         id: media.id,
+        catalogVariantId: media.catalogVariantId ?? undefined,
         kind: media.kind === "video" ? "video" : "image",
         url: media.url,
         posterUrl: media.posterUrl ?? undefined,
@@ -708,6 +746,33 @@ export async function loadOperatorCommerceWorkspace(
       const paidOrders = connectedOrders.filter((row) =>
         ["paid", "partially-refunded", "refunded"].includes(row.orderStatus),
       );
+      const connectedOrderIds = new Set(paidOrders.map((row) => row.orderId));
+      const grossSalesMinor = paidOrders.reduce(
+        (total, row) => total + Math.max(0, row.subtotalMinor),
+        0,
+      );
+      const refundedSalesMinor = productRefundRows
+        .filter((refund) => connectedOrderIds.has(refund.orderId))
+        .reduce((total, refund) => total + refund.amountMinor, 0);
+      const netSalesMinor = Math.max(0, grossSalesMinor - refundedSalesMinor);
+      const cogsMinor = movementRows
+        .filter(
+          (movement) =>
+            movement.kind === "sale" &&
+            catalogItemByStockId.get(movement.inventoryStockItemId) === item.id,
+        )
+        .reduce(
+          (total, movement) =>
+            total +
+            Math.max(
+              0,
+              movement.totalCostMinor ??
+                Math.abs(movement.quantityDelta) *
+                  (movement.unitCostMinor ?? 0),
+            ),
+          0,
+        );
+      const grossProfitMinor = netSalesMinor - cogsMinor;
       return {
         catalogItemId: item.id,
         paidPurchases: new Set(paidOrders.map((row) => row.orderId)).size,
@@ -715,6 +780,13 @@ export async function loadOperatorCommerceWorkspace(
           (total, row) => total + Math.max(0, row.totalMinor),
           0,
         ),
+        netSalesMinor,
+        cogsMinor,
+        grossProfitMinor,
+        grossMarginBps:
+          netSalesMinor > 0
+            ? Math.round((grossProfitMinor / netSalesMinor) * 10_000)
+            : undefined,
         uniqueCustomers: new Set(paidOrders.map((row) => row.personId)).size,
         refundedOrders: new Set(
           paidOrders
@@ -725,41 +797,57 @@ export async function loadOperatorCommerceWorkspace(
       };
     });
 
-  const inventory: OperatorWorkspace["inventory"] = stockRows.map((row) => ({
-    id: row.stock.id,
-    catalogItemId: row.catalogItemId,
-    catalogVariantId: row.stock.catalogVariantId,
-    itemTitle: row.itemTitle,
-    variantTitle: row.variantTitle,
-    locationName: row.locationName,
-    purpose: row.stock.purpose,
-    trackingMode:
-      row.stock.trackingMode === "serialized" ? "serialized" : "quantity",
-    quantityOnHand: row.stock.quantityOnHand,
-    quantityReserved: row.stock.quantityReserved,
-    reorderPoint: row.stock.reorderPoint,
-    serialNumber: row.stock.serialNumber ?? undefined,
-    assetTag: row.stock.assetTag ?? undefined,
-    condition: row.stock.condition,
-    unitCostMinor: row.stock.unitCostMinor ?? undefined,
-    currency: row.stock.currency
-      ? (row.stock.currency as OperatorWorkspace["organization"]["currency"])
-      : undefined,
-    acquiredAt: row.stock.acquiredAt ?? undefined,
-    vendorName: row.stock.vendorName ?? undefined,
-    depreciationMethod: row.stock.depreciationMethod ?? undefined,
-    usefulLifeMonths: row.stock.usefulLifeMonths ?? undefined,
-    bookValueMinor: calculateBookValue({
-      unitCostMinor: row.stock.unitCostMinor ?? undefined,
+  const inventory: OperatorWorkspace["inventory"] = stockRows.map((row) => {
+    const receipt = receiptByStockId.get(row.stock.id);
+    return {
+      id: row.stock.id,
+      catalogItemId: row.catalogItemId,
+      catalogVariantId: row.stock.catalogVariantId,
+      itemTitle: row.itemTitle,
+      variantTitle: row.variantTitle,
+      locationName: row.locationName,
+      purpose: row.stock.purpose,
+      trackingMode:
+        row.stock.trackingMode === "serialized" ? "serialized" : "quantity",
       quantityOnHand: row.stock.quantityOnHand,
-      placedInServiceAt: row.stock.placedInServiceAt ?? undefined,
+      quantityReceived: Math.max(
+        1,
+        receipt?.quantityDelta ?? row.stock.quantityOnHand,
+      ),
+      quantityReserved: row.stock.quantityReserved,
+      reorderPoint: row.stock.reorderPoint,
+      serialNumber: row.stock.serialNumber ?? undefined,
+      assetTag: row.stock.assetTag ?? undefined,
+      condition: row.stock.condition,
+      unitCostMinor: row.stock.unitCostMinor ?? undefined,
+      totalCostMinor:
+        receipt?.totalCostMinor ??
+        (row.stock.unitCostMinor === null
+          ? undefined
+          : row.stock.unitCostMinor *
+            Math.max(1, receipt?.quantityDelta ?? row.stock.quantityOnHand)),
+      currency: row.stock.currency
+        ? (row.stock.currency as OperatorWorkspace["organization"]["currency"])
+        : undefined,
       acquiredAt: row.stock.acquiredAt ?? undefined,
+      vendorName: row.stock.vendorName ?? undefined,
+      vendorReference: row.stock.vendorReference ?? undefined,
+      receiptUrl: row.stock.receiptUrl ?? undefined,
+      receivedAt: (receipt?.occurredAt ?? row.stock.createdAt).toISOString(),
       depreciationMethod: row.stock.depreciationMethod ?? undefined,
       usefulLifeMonths: row.stock.usefulLifeMonths ?? undefined,
-      salvageValueMinor: row.stock.salvageValueMinor ?? undefined,
-      now,
-    }),
-  }));
+      bookValueMinor: calculateBookValue({
+        unitCostMinor: row.stock.unitCostMinor ?? undefined,
+        quantityOnHand: row.stock.quantityOnHand,
+        placedInServiceAt: row.stock.placedInServiceAt ?? undefined,
+        acquiredAt: row.stock.acquiredAt ?? undefined,
+        depreciationMethod: row.stock.depreciationMethod ?? undefined,
+        usefulLifeMonths: row.stock.usefulLifeMonths ?? undefined,
+        salvageValueMinor: row.stock.salvageValueMinor ?? undefined,
+        now,
+      }),
+    };
+  });
 
   const basePeople = new Map<
     string,
@@ -1686,12 +1774,13 @@ export async function loadPublicOrganizationStorefront(
           recurringIntervalCount: price.recurringIntervalCount ?? undefined,
         })),
         availableQuantity:
-          item.type === "good"
+          item.type === "good" && item.configuration.inventoryTracked !== false
             ? (availableByVariant.get(variant.id) ?? 0)
             : undefined,
       })),
       media: (mediaByItem.get(item.id) ?? []).map((media) => ({
         id: media.id,
+        catalogVariantId: media.catalogVariantId ?? undefined,
         kind: media.kind === "video" ? ("video" as const) : ("image" as const),
         url: media.url,
         posterUrl: media.posterUrl ?? undefined,
@@ -1723,6 +1812,37 @@ export async function loadPublicCoaches(
     readonly now?: Date;
   } = {},
 ): Promise<readonly PublicCoach[]> {
+  if (!process.env.DATABASE_URL) {
+    return demoPeople
+      .filter(
+        (person) =>
+          person.roles.includes("coach") &&
+          (!input.handle || person.handle === input.handle) &&
+          (!input.organizationSlug ||
+            input.organizationSlug === demoOrganization.slug),
+      )
+      .map(
+        (person) =>
+          ({
+            personId: person.id,
+            organizationId: demoOrganization.id,
+            organizationSlug: demoOrganization.slug,
+            organizationName: demoOrganization.name,
+            displayName: person.displayName,
+            handle: person.handle,
+            avatarUrl: person.avatarUrl,
+            homeMarket: person.homeMarket,
+            bio: `${person.displayName} coaches technical development, game decisions, and confident beach-volleyball habits for every level.`,
+            availability: [
+              { weekday: 2, startsAt: "16:00", endsAt: "20:00" },
+              { weekday: 4, startsAt: "16:00", endsAt: "20:00" },
+              { weekday: 6, startsAt: "08:00", endsAt: "13:00" },
+            ],
+            services: [],
+            upcomingSessions: [],
+          }) satisfies PublicCoach,
+      );
+  }
   requireDatabase();
   const database = getDatabase();
   const now = input.now ?? new Date();
@@ -2041,6 +2161,26 @@ export interface CreateCatalogItemInput {
     readonly name: string;
     readonly values: readonly string[];
   }[];
+  readonly media: readonly {
+    readonly kind: "image" | "video";
+    readonly url: string;
+    readonly posterUrl?: string;
+    readonly alt?: string;
+    readonly variantIndex?: number;
+  }[];
+  readonly initialInventory?: {
+    readonly variantIndex: number;
+    readonly inventoryLocationId?: string;
+    readonly locationName?: string;
+    readonly purpose: "sale" | "rental" | "coach-use" | "operations";
+    readonly trackingMode: "quantity" | "serialized";
+    readonly quantity: number;
+    readonly unitCostMinor?: number;
+    readonly totalCostMinor?: number;
+    readonly acquiredAt?: string;
+    readonly vendorName?: string;
+    readonly receiptUrl?: string;
+  };
   readonly configuration: Readonly<Record<string, unknown>>;
   readonly requestId: string;
   readonly ipAddress?: string;
@@ -2057,10 +2197,26 @@ export async function createCatalogItem(
     where: eq(organizations.id, organizationId),
   });
   if (!organization) throw new Error("Organization was not found.");
-  if (!input.allowCard && !input.allowCash && !input.allowCredits) {
+  if (
+    input.type === "good" &&
+    !input.media.some((media) => media.kind === "image")
+  ) {
+    throw new Error("Add at least one image before saving a good.");
+  }
+  const isInventoryOnlyGood =
+    input.type === "good" &&
+    input.configuration.inventoryTracked === true &&
+    input.configuration.saleEnabled === false;
+  if (
+    !isInventoryOnlyGood &&
+    !input.allowCard &&
+    !input.allowCash &&
+    !input.allowCredits
+  ) {
     throw new Error("Choose at least one way customers can pay.");
   }
   if (
+    !isInventoryOnlyGood &&
     (input.allowCard || input.allowCash) &&
     input.priceMinor === undefined &&
     input.memberPriceMinor === undefined &&
@@ -2201,6 +2357,51 @@ export async function createCatalogItem(
       );
     }
   }
+  const bundleConfiguration =
+    input.type === "plan" &&
+    input.subtype === "bundle" &&
+    input.configuration.bundle &&
+    typeof input.configuration.bundle === "object" &&
+    !Array.isArray(input.configuration.bundle)
+      ? (input.configuration.bundle as Readonly<Record<string, unknown>>)
+      : undefined;
+  const bundleIncludedItemIds = Array.isArray(
+    bundleConfiguration?.includedCatalogItemIds,
+  )
+    ? [
+        ...new Set(
+          bundleConfiguration.includedCatalogItemIds.filter(
+            (value): value is string => typeof value === "string",
+          ),
+        ),
+      ]
+    : [];
+  if (
+    input.type === "plan" &&
+    input.subtype === "bundle" &&
+    (bundleIncludedItemIds.length === 1 || bundleIncludedItemIds.length > 50)
+  ) {
+    throw new Error(
+      "A bundle can begin as an empty draft; once configured it needs between 2 and 50 offers.",
+    );
+  }
+  if (bundleIncludedItemIds.length > 0) {
+    const includedItems = await database
+      .select({ id: catalogItems.id })
+      .from(catalogItems)
+      .where(
+        and(
+          eq(catalogItems.organizationId, organizationId),
+          inArray(catalogItems.id, bundleIncludedItemIds),
+          inArray(catalogItems.type, ["event", "service", "good"]),
+        ),
+      );
+    if (includedItems.length !== bundleIncludedItemIds.length) {
+      throw new Error(
+        "Every bundle item must be an existing event, service, or good from this organization.",
+      );
+    }
+  }
   let normalizedConfiguration: Readonly<Record<string, unknown>> =
     input.configuration;
   if (input.type === "event" || input.type === "service") {
@@ -2299,6 +2500,89 @@ export async function createCatalogItem(
     optionCoordinates,
     status: "active" as const,
   }));
+  const mediaValues = input.media.map((media, sortOrder) => {
+    const variant =
+      media.variantIndex === undefined
+        ? undefined
+        : variantValues[media.variantIndex];
+    if (media.variantIndex !== undefined && !variant) {
+      throw new Error("Product media points to a variant that does not exist.");
+    }
+    return {
+      id: crypto.randomUUID(),
+      organizationId,
+      catalogItemId: itemId,
+      catalogVariantId: variant?.id,
+      kind: media.kind,
+      url: media.url.trim(),
+      posterUrl: media.posterUrl?.trim() || undefined,
+      alt: media.alt?.trim() || input.title.trim(),
+      sortOrder,
+    };
+  });
+  let initialInventoryLocationId: string | undefined;
+  let initialInventoryLocationValues:
+    | {
+        readonly id: string;
+        readonly organizationId: string;
+        readonly name: string;
+        readonly kind: "warehouse";
+      }
+    | undefined;
+  if (input.initialInventory) {
+    if (input.type !== "good") {
+      throw new Error("Only goods can receive inventory during creation.");
+    }
+    if (!variantValues[input.initialInventory.variantIndex]) {
+      throw new Error(
+        "Choose a valid variant for the first inventory receipt.",
+      );
+    }
+    if (input.initialInventory.trackingMode !== "quantity") {
+      throw new Error(
+        "Serialized assets must be received one at a time from inventory intake.",
+      );
+    }
+    if (input.initialInventory.inventoryLocationId) {
+      const location = await database.query.inventoryLocations.findFirst({
+        where: and(
+          eq(inventoryLocations.id, input.initialInventory.inventoryLocationId),
+          eq(inventoryLocations.organizationId, organizationId),
+        ),
+      });
+      if (!location) throw new Error("Inventory location was not found.");
+      initialInventoryLocationId = location.id;
+    } else {
+      const locationName =
+        input.initialInventory.locationName?.trim() || "Main inventory";
+      const existing = await database.query.inventoryLocations.findFirst({
+        where: and(
+          eq(inventoryLocations.organizationId, organizationId),
+          eq(inventoryLocations.name, locationName),
+        ),
+      });
+      initialInventoryLocationId = existing?.id ?? crypto.randomUUID();
+      if (!existing) {
+        initialInventoryLocationValues = {
+          id: initialInventoryLocationId,
+          organizationId,
+          name: locationName,
+          kind: "warehouse",
+        };
+      }
+    }
+  }
+  const initialInventoryStockId = input.initialInventory
+    ? crypto.randomUUID()
+    : undefined;
+  const initialInventoryUnitCostMinor = input.initialInventory
+    ? input.initialInventory.totalCostMinor !== undefined
+      ? Math.round(
+          input.initialInventory.totalCostMinor /
+            input.initialInventory.quantity,
+        )
+      : input.initialInventory.unitCostMinor
+    : undefined;
   const prices: {
     id: string;
     organizationId: string;
@@ -2460,6 +2744,25 @@ export async function createCatalogItem(
           })),
         ]
       : [];
+  const bundleEntitlementValues =
+    input.type === "plan" && input.subtype === "bundle"
+      ? bundleIncludedItemIds.map((targetCatalogItemId) => ({
+          id: crypto.randomUUID(),
+          organizationId,
+          planCatalogItemId: itemId,
+          kind: "included-item",
+          targetCatalogItemId,
+          quantity: 1,
+          configuration: {
+            cadence: "once",
+            fulfillment: "staff-reviewed-early-access",
+          },
+        }))
+      : [];
+  const planEntitlementValues = [
+    ...membershipEntitlementValues,
+    ...bundleEntitlementValues,
+  ];
   const values = {
     type: input.type,
     subtype: input.subtype,
@@ -2492,7 +2795,18 @@ export async function createCatalogItem(
           .set({ updatedAt: input.now })
           .where(sql`false`),
     database.insert(catalogVariants).values(variantValues),
-    database.insert(catalogPrices).values(prices),
+    prices.length > 0
+      ? database.insert(catalogPrices).values(prices)
+      : database
+          .update(catalogItems)
+          .set({ updatedAt: input.now })
+          .where(sql`false`),
+    mediaValues.length > 0
+      ? database.insert(catalogMedia).values(mediaValues)
+      : database
+          .update(catalogItems)
+          .set({ updatedAt: input.now })
+          .where(sql`false`),
     creditsGranted
       ? database.insert(catalogEntitlements).values({
           id: crypto.randomUUID(),
@@ -2509,8 +2823,73 @@ export async function createCatalogItem(
           .update(catalogItems)
           .set({ updatedAt: input.now })
           .where(sql`false`),
-    membershipEntitlementValues.length > 0
-      ? database.insert(catalogEntitlements).values(membershipEntitlementValues)
+    planEntitlementValues.length > 0
+      ? database.insert(catalogEntitlements).values(planEntitlementValues)
+      : database
+          .update(catalogItems)
+          .set({ updatedAt: input.now })
+          .where(sql`false`),
+    initialInventoryLocationValues
+      ? database
+          .insert(inventoryLocations)
+          .values(initialInventoryLocationValues)
+      : database
+          .update(catalogItems)
+          .set({ updatedAt: input.now })
+          .where(sql`false`),
+    input.initialInventory &&
+    initialInventoryStockId &&
+    initialInventoryLocationId
+      ? database.insert(inventoryStockItems).values({
+          id: initialInventoryStockId,
+          organizationId,
+          catalogVariantId:
+            variantValues[input.initialInventory.variantIndex]!.id,
+          inventoryLocationId: initialInventoryLocationId,
+          purpose: input.initialInventory.purpose,
+          trackingMode: input.initialInventory.trackingMode,
+          quantityOnHand: input.initialInventory.quantity,
+          quantityReserved: 0,
+          reorderPoint: 0,
+          condition: "new",
+          unitCostMinor: initialInventoryUnitCostMinor,
+          currency:
+            initialInventoryUnitCostMinor === undefined
+              ? undefined
+              : organization.currency,
+          acquiredAt: input.initialInventory.acquiredAt,
+          vendorName: input.initialInventory.vendorName?.trim() || undefined,
+          receiptUrl: input.initialInventory.receiptUrl?.trim() || undefined,
+        })
+      : database
+          .update(catalogItems)
+          .set({ updatedAt: input.now })
+          .where(sql`false`),
+    input.initialInventory && initialInventoryStockId
+      ? database.insert(inventoryMovements).values({
+          id: crypto.randomUUID(),
+          organizationId,
+          inventoryStockItemId: initialInventoryStockId,
+          kind: "receive",
+          quantityDelta: input.initialInventory.quantity,
+          unitCostMinor: initialInventoryUnitCostMinor,
+          totalCostMinor:
+            input.initialInventory.totalCostMinor ??
+            (initialInventoryUnitCostMinor === undefined
+              ? undefined
+              : initialInventoryUnitCostMinor *
+                input.initialInventory.quantity),
+          currency:
+            initialInventoryUnitCostMinor === undefined
+              ? undefined
+              : organization.currency,
+          sourceType: "product-creation",
+          sourceId: itemId,
+          idempotencyKey: `${input.requestId}:initial-receipt`,
+          actorPersonId: input.actor.personId,
+          reason: "Initial inventory receipt recorded during product creation.",
+          occurredAt: input.now,
+        })
       : database
           .update(catalogItems)
           .set({ updatedAt: input.now })
@@ -2527,6 +2906,8 @@ export async function createCatalogItem(
         options: optionValues,
         variants: variantValues,
         prices,
+        media: mediaValues,
+        initialInventory: input.initialInventory,
       }),
       reason: "Operator created a private catalog draft.",
       traceId: input.requestId,
@@ -2679,6 +3060,137 @@ export async function updateCatalogItem(input: {
     }),
   ]);
   return { id: item.id, entity: "catalog-item", status: item.status };
+}
+
+export async function enableInventoryGoodSales(input: {
+  readonly actor: ApiActor;
+  readonly catalogItemId: string;
+  readonly priceMinor: number;
+  readonly allowCard: boolean;
+  readonly allowCash: boolean;
+  readonly taxable: boolean;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const [organization, item, variants] = await Promise.all([
+    database.query.organizations.findFirst({
+      where: eq(organizations.id, organizationId),
+    }),
+    database.query.catalogItems.findFirst({
+      where: and(
+        eq(catalogItems.id, input.catalogItemId),
+        eq(catalogItems.organizationId, organizationId),
+      ),
+    }),
+    database
+      .select()
+      .from(catalogVariants)
+      .where(
+        and(
+          eq(catalogVariants.catalogItemId, input.catalogItemId),
+          eq(catalogVariants.organizationId, organizationId),
+          eq(catalogVariants.status, "active"),
+        ),
+      ),
+  ]);
+  if (!organization || !item || item.type !== "good") {
+    throw new Error("Inventory good was not found in this organization.");
+  }
+  if (item.configuration.saleEnabled !== false) {
+    throw new Error("This good is already configured for sale.");
+  }
+  if (!input.allowCard && !input.allowCash) {
+    throw new Error("Choose card, cash, or both before turning on sales.");
+  }
+  if (!Number.isSafeInteger(input.priceMinor) || input.priceMinor <= 0) {
+    throw new Error("Add a positive sale price.");
+  }
+  if (variants.length === 0) {
+    throw new Error("Add an active variant before turning on sales.");
+  }
+
+  const nextConfiguration = {
+    ...item.configuration,
+    inventoryTracked: true,
+    saleEnabled: true,
+  };
+  const paymentKinds = [
+    ...(input.allowCard ? (["card"] as const) : []),
+    ...(input.allowCash ? (["cash"] as const) : []),
+  ];
+  const prices = variants.flatMap((variant) =>
+    paymentKinds.map((paymentKind) => ({
+      id: crypto.randomUUID(),
+      organizationId,
+      catalogItemId: item.id,
+      catalogVariantId: variant.id,
+      audience: "everyone" as const,
+      paymentKind,
+      amountMinor: input.priceMinor,
+      currency: organization.currency,
+    })),
+  );
+  await database.batch([
+    database
+      .update(catalogPrices)
+      .set({ active: false, updatedAt: input.now })
+      .where(
+        and(
+          eq(catalogPrices.catalogItemId, item.id),
+          eq(catalogPrices.organizationId, organizationId),
+          eq(catalogPrices.active, true),
+        ),
+      ),
+    database.insert(catalogPrices).values(prices),
+    database
+      .update(catalogItems)
+      .set({
+        allowCard: input.allowCard,
+        allowCash: input.allowCash,
+        allowCredits: false,
+        taxable: input.taxable,
+        configuration: nextConfiguration,
+        status: "draft",
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(catalogItems.id, item.id),
+          eq(catalogItems.organizationId, organizationId),
+        ),
+      ),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "catalog.good_sales_enabled",
+      entityType: "catalog-item",
+      entityId: item.id,
+      beforeHash: stableHash({
+        allowCard: item.allowCard,
+        allowCash: item.allowCash,
+        taxable: item.taxable,
+        configuration: item.configuration,
+      }),
+      afterHash: stableHash({
+        allowCard: input.allowCard,
+        allowCash: input.allowCash,
+        taxable: input.taxable,
+        priceMinor: input.priceMinor,
+        configuration: nextConfiguration,
+      }),
+      reason:
+        "Operator converted an inventory-only good into a sellable draft.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return { id: item.id, entity: "catalog-item", status: "draft" };
 }
 
 async function ensureCatalogStripeResources(input: {
@@ -2882,6 +3394,11 @@ export async function setCatalogItemStatus(input: {
         .from(catalogEntitlements)
         .where(eq(catalogEntitlements.planCatalogItemId, item.id)),
     ]);
+    if (item.type === "good" && item.configuration.saleEnabled === false) {
+      throw new Error(
+        "Turn on sales and set a customer price before publishing this inventory item.",
+      );
+    }
     if (variants.length === 0 || prices.length === 0) {
       throw new Error("Add an active variant and price before publishing.");
     }
@@ -2951,6 +3468,17 @@ export async function setCatalogItemStatus(input: {
       )
     ) {
       throw new Error("Set how many organization credits this pack grants.");
+    }
+    if (
+      item.type === "plan" &&
+      item.subtype === "bundle" &&
+      entitlements.filter(
+        (entitlement) =>
+          entitlement.kind === "included-item" &&
+          Boolean(entitlement.targetCatalogItemId),
+      ).length < 2
+    ) {
+      throw new Error("Choose at least two included offers for this bundle.");
     }
     if (item.allowCard) {
       await ensureCatalogStripeResources({
@@ -3024,6 +3552,7 @@ export async function createInventoryStock(input: {
   readonly assetTag?: string;
   readonly condition: string;
   readonly unitCostMinor?: number;
+  readonly totalCostMinor?: number;
   readonly acquiredAt?: string;
   readonly vendorName?: string;
   readonly vendorReference?: string;
@@ -3099,6 +3628,10 @@ export async function createInventoryStock(input: {
   }
   const id = crypto.randomUUID();
   const movementId = crypto.randomUUID();
+  const receivedUnitCostMinor =
+    input.totalCostMinor === undefined
+      ? input.unitCostMinor
+      : Math.round(input.totalCostMinor / input.quantity);
   const values = {
     catalogVariantId: input.catalogVariantId,
     inventoryLocationId: locationId,
@@ -3110,9 +3643,9 @@ export async function createInventoryStock(input: {
     serialNumber: input.serialNumber?.trim() || undefined,
     assetTag: input.assetTag?.trim() || undefined,
     condition: input.condition.trim() || "good",
-    unitCostMinor: input.unitCostMinor,
+    unitCostMinor: receivedUnitCostMinor,
     currency:
-      input.unitCostMinor === undefined ? undefined : organization.currency,
+      receivedUnitCostMinor === undefined ? undefined : organization.currency,
     acquiredAt: input.acquiredAt,
     vendorName: input.vendorName?.trim() || undefined,
     vendorReference: input.vendorReference?.trim() || undefined,
@@ -3136,9 +3669,14 @@ export async function createInventoryStock(input: {
       inventoryStockItemId: id,
       kind: "receive",
       quantityDelta: input.quantity,
-      unitCostMinor: input.unitCostMinor,
+      unitCostMinor: receivedUnitCostMinor,
+      totalCostMinor:
+        input.totalCostMinor ??
+        (receivedUnitCostMinor === undefined
+          ? undefined
+          : receivedUnitCostMinor * input.quantity),
       currency:
-        input.unitCostMinor === undefined ? undefined : organization.currency,
+        receivedUnitCostMinor === undefined ? undefined : organization.currency,
       sourceType: "operator-intake",
       sourceId: id,
       idempotencyKey: input.requestId,
@@ -4228,6 +4766,12 @@ export async function cancelCalendarSession(input: {
       ),
     )
     .then((rows) => rows.map((row) => row.personId));
+  const cancellationKind =
+    calendarSession.session.coachPersonId === input.actor.personId
+      ? "coach"
+      : /weather|rain|storm|wind|lightning|heat|cold/i.test(input.reason)
+        ? "weather"
+        : "operator";
   await database.batch([
     database
       .update(sessions)
@@ -4255,6 +4799,26 @@ export async function cancelCalendarSession(input: {
           inArray(inventoryReservations.status, ["held", "confirmed"]),
         ),
       ),
+    database
+      .insert(sessionOperations)
+      .values({
+        sessionId: input.sessionId,
+        organizationId,
+        cancellationKind,
+        cancellationReason: input.reason,
+        cancelledByPersonId: input.actor.personId,
+        cancelledAt: input.now,
+      })
+      .onConflictDoUpdate({
+        target: sessionOperations.sessionId,
+        set: {
+          cancellationKind,
+          cancellationReason: input.reason,
+          cancelledByPersonId: input.actor.personId,
+          cancelledAt: input.now,
+          updatedAt: input.now,
+        },
+      }),
     database.insert(auditLog).values({
       organizationId,
       actorPersonId: input.actor.personId,
@@ -4265,7 +4829,7 @@ export async function cancelCalendarSession(input: {
       beforeHash: stableHash({
         status: calendarSession.session.status,
       }),
-      afterHash: stableHash({ status: "cancelled" }),
+      afterHash: stableHash({ status: "cancelled", cancellationKind }),
       reason: input.reason,
       traceId: input.requestId,
       ipAddress: input.ipAddress,

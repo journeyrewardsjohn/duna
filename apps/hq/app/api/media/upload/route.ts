@@ -5,6 +5,7 @@ import {
   assertBrandMediaPath,
   assertCourtMediaPath,
   assertEventMediaPath,
+  assertProductMediaPath,
   assertVenueMediaPath,
   validateEventMediaInput,
 } from "@/lib/media-storage";
@@ -14,7 +15,7 @@ interface MediaClientPayload {
   readonly fileName: string;
   readonly contentType: string;
   readonly size: number;
-  readonly purpose?: "brand" | "court" | "event" | "venue";
+  readonly purpose?: "brand" | "court" | "event" | "product" | "venue";
 }
 
 function parseClientPayload(value: string | null): MediaClientPayload {
@@ -36,11 +37,13 @@ function parseClientPayload(value: string | null): MediaClientPayload {
     purpose:
       parsed.purpose === "brand"
         ? "brand"
-        : parsed.purpose === "venue"
-          ? "venue"
-          : parsed.purpose === "court"
-            ? "court"
-            : "event",
+        : parsed.purpose === "product"
+          ? "product"
+          : parsed.purpose === "venue"
+            ? "venue"
+            : parsed.purpose === "court"
+              ? "court"
+              : "event",
   };
 }
 
@@ -55,11 +58,17 @@ export async function POST(request: Request) {
         const context = await caller.operator.eventMediaUploadContext();
         const payload = parseClientPayload(clientPayload);
         if (payload.organizationId !== context.organizationId) {
-          throw new Error("Event media must stay inside your organization.");
+          throw new Error("Media must stay inside your organization.");
         }
         const media = validateEventMediaInput(payload);
         if (payload.purpose === "brand") {
           assertBrandMediaPath(
+            pathname,
+            context.organizationId,
+            media.extension,
+          );
+        } else if (payload.purpose === "product") {
+          assertProductMediaPath(
             pathname,
             context.organizationId,
             media.extension,

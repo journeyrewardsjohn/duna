@@ -187,26 +187,27 @@ export default async function ProfilePage() {
 
       <section className="duna-plus-panel">
         <div>
-          <Badge>Duna+ preview</Badge>
+          <Badge>Premium preview</Badge>
           <h2>Depth without competitive advantage.</h2>
           <p>
             You get richer history, partner chemistry, insights, themes, and no
-            platform fees. Your rating, eligibility, and network stay exactly as
-            fair as everyone else’s.
+            Duna service fees. Your rating, eligibility, and network stay
+            exactly as fair as everyone else’s.
           </p>
         </div>
         <ul>
           <li>
-            <Check aria-hidden size={16} /> Capped booking fees can be waived
+            <Check aria-hidden size={16} /> Eligible Duna service fees are
+            waived
           </li>
           <li>
-            <Check aria-hidden size={16} /> Deeper private history and insights
+            <Check aria-hidden size={16} /> Upload and live-broadcast allowances
           </li>
           <li>
             <Check aria-hidden size={16} /> No rating or eligibility advantage
           </li>
         </ul>
-        <Link href="/app/settings">Manage Duna+</Link>
+        <Link href="/app/settings">Manage Premium</Link>
       </section>
     </main>
   );

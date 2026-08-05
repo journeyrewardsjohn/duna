@@ -22,11 +22,15 @@ async function origin(): Promise<string> {
   return applicationOrigin(requestHeaders);
 }
 
-export async function startDunaPlusAction(interval: "month" | "year") {
+export async function startDunaPlusAction(
+  plan: "premium" | "premium-plus",
+  interval: "month" | "year",
+) {
   try {
     const baseUrl = await origin();
     const caller = await getServerCaller();
     const checkout = await caller.player.startDunaPlusCheckout({
+      plan,
       interval,
       successUrl: `${baseUrl}/app/settings?membership=success`,
       cancelUrl: `${baseUrl}/app/settings?membership=cancelled`,
@@ -40,7 +44,7 @@ export async function startDunaPlusAction(interval: "month" | "year") {
       error:
         error instanceof Error
           ? error.message
-          : "Duna+ checkout could not start.",
+          : "Premium checkout could not start.",
     };
   }
 }

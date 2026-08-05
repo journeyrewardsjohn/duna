@@ -1,5 +1,6 @@
 "use client";
 
+import type { TeammateSearchResult } from "@duna/api";
 import type {
   EventDivisionSummary,
   EventSummary,
@@ -29,6 +30,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   checkoutStatusAction,
+  searchTeammatesAction,
   startEventCheckoutAction,
 } from "@/app/app/checkout/[slug]/actions";
 
@@ -65,10 +67,116 @@ function divisionMeta(division: EventDivisionSummary) {
     .join(" · ");
 }
 
+function participantEligibility(
+  participant: {
+    readonly person: PersonSummary;
+    readonly available: boolean;
+    readonly unavailableReason?: string;
+    readonly birthDate?: string;
+    readonly genderCategory?: string;
+  },
+  division?: EventDivisionSummary,
+  eligibilityDate?: string,
+) {
+  if (!participant.available) {
+    return {
+      eligible: false,
+      reason: participant.unavailableReason ?? "Guardian verification required",
+    };
+  }
+  if (
+    division?.ratingMinimum !== undefined &&
+    participant.person.rating.display < division.ratingMinimum
+  ) {
+    return {
+      eligible: false,
+      reason: `Rating must be ${division.ratingMinimum.toFixed(2)}+`,
+    };
+  }
+  if (
+    division?.ratingMaximum !== undefined &&
+    participant.person.rating.display > division.ratingMaximum
+  ) {
+    return {
+      eligible: false,
+      reason: `Rating must be ${division.ratingMaximum.toFixed(2)} or below`,
+    };
+  }
+  const age = participant.birthDate
+    ? Math.floor(
+        (new Date(eligibilityDate ?? Date.now()).getTime() -
+          new Date(`${participant.birthDate}T00:00:00Z`).getTime()) /
+          (365.2425 * 24 * 60 * 60_000),
+      )
+    : undefined;
+  if (
+    division?.ageMinimum !== undefined &&
+    (age === undefined || age < division.ageMinimum)
+  ) {
+    return {
+      eligible: false,
+      reason:
+        age === undefined
+          ? "Age verification is required"
+          : `Must be ${division.ageMinimum}+`,
+    };
+  }
+  if (
+    division?.ageMaximum !== undefined &&
+    (age === undefined || age > division.ageMaximum)
+  ) {
+    return {
+      eligible: false,
+      reason:
+        age === undefined
+          ? "Age verification is required"
+          : `Must be ${division.ageMaximum} or younger`,
+    };
+  }
+  const requiredGender = division?.gender?.toLowerCase() ?? "";
+  const participantGender = participant.genderCategory?.toLowerCase() ?? "";
+  const womenOnly = /women|woman|female|girls?/.test(requiredGender);
+  const menOnly =
+    !womenOnly && /(^|\W)(men|man|male|boys?)(\W|$)/.test(requiredGender);
+  if (womenOnly || menOnly) {
+    const matches = womenOnly
+      ? /women|woman|female|girls?/.test(participantGender)
+      : /(^|\W)(men|man|male|boys?)(\W|$)/.test(participantGender);
+    if (!matches) {
+      return {
+        eligible: false,
+        reason: participantGender
+          ? `Not eligible for this ${division?.gender} division`
+          : "Gender eligibility is not verified",
+      };
+    }
+  }
+  return { eligible: true, reason: "Eligible for this division" };
+}
+
+function participantAgeLabel(
+  birthDate: string | undefined,
+  ageBand: "unknown" | "under-13" | "teen" | "adult" | undefined,
+  eligibilityDate: string,
+) {
+  if (birthDate) {
+    const age = Math.floor(
+      (new Date(eligibilityDate).getTime() -
+        new Date(`${birthDate}T00:00:00Z`).getTime()) /
+        (365.2425 * 24 * 60 * 60_000),
+    );
+    return `Age ${Math.max(0, age)}`;
+  }
+  return ageBand && ageBand !== "unknown"
+    ? ageBand.replace("under-13", "Under 13")
+    : "Age not set";
+}
+
 export function CheckoutPanel({
   event,
   initialDivisionId,
   initialTicketTypeId,
+  initialTicketQuantity,
   initialTeamClaimToken,
   initialCheckoutSessionId,
   initialNotice,
@@ -81,6 +189,7 @@ export function CheckoutPanel({
   readonly event: EventSummary;
   readonly initialDivisionId?: string;
   readonly initialTicketTypeId?: string;
+  readonly initialTicketQuantity?: number;
   readonly initialTeamClaimToken?: string;
   readonly initialCheckoutSessionId?: string;
   readonly initialNotice?: string;
@@ -89,6 +198,10 @@ export function CheckoutPanel({
     readonly person: PersonSummary;
     readonly label: string;
     readonly available: boolean;
+    readonly unavailableReason?: string;
+    readonly birthDate?: string;
+    readonly ageBand?: "unknown" | "under-13" | "teen" | "adult";
+    readonly genderCategory?: string;
   }[];
   readonly player: PersonSummary;
   readonly searchablePlayers: readonly PersonSummary[];
@@ -107,7 +220,11 @@ export function CheckoutPanel({
   const [selectedTicketId, setSelectedTicketId] = useState(
     initialTicket?.id ?? event.tickets?.[0]?.id,
   );
-  const [ticketQuantity, setTicketQuantity] = useState(1);
+  const [ticketQuantity, setTicketQuantity] = useState(
+    Math.max(1, Math.min(10, initialTicketQuantity ?? 1)),
+  );
+  const [showDivisionChoices, setShowDivisionChoices] =
+    useState(!initialDivisionId);
   const firstAvailableParticipant =
     participants.find((participant) => participant.available) ??
     participants[0];
@@ -117,7 +234,24 @@ export function CheckoutPanel({
   const [teamPaymentMode, setTeamPaymentMode] = useState<"self" | "team">(
     "self",
   );
-  const [teamSlots, setTeamSlots] = useState<readonly TeamSlot[]>([]);
+  const [teamSlots, setTeamSlots] = useState<readonly TeamSlot[]>(() => {
+    const initialDivision =
+      event.divisions?.find((division) => division.id === initialDivisionId) ??
+      event.divisions?.[0];
+    return Array.from(
+      { length: Math.max(0, teamSize(initialDivision) - 1) },
+      (_, index) => ({
+        index,
+        mode: "duna" as const,
+        inviteTarget: "",
+      }),
+    );
+  });
+  const [teamSearch, setTeamSearch] = useState("");
+  const [remoteTeammates, setRemoteTeammates] =
+    useState<readonly TeammateSearchResult[]>();
+  const [searchingTeammates, setSearchingTeammates] = useState(false);
+  const [inviteTarget, setInviteTarget] = useState("");
   const [acceptedPolicyIds, setAcceptedPolicyIds] = useState<readonly string[]>(
     [],
   );
@@ -142,21 +276,28 @@ export function CheckoutPanel({
     participants.find(
       (participant) => participant.person.id === selectedParticipantId,
     ) ?? firstAvailableParticipant;
+  const selectedParticipantEligibility = selectedParticipant
+    ? participantEligibility(
+        selectedParticipant,
+        selectedDivision,
+        event.startsAt,
+      )
+    : { eligible: false, reason: "Choose a player" };
   const selectedTeamSize =
     purchaseKind === "entry" ? teamSize(selectedDivision) : 1;
   const teamEntry = purchaseKind === "entry" && selectedTeamSize > 1;
+  const organizingTeam = teamEntry && !initialTeamClaimToken;
   const price =
     purchaseKind === "ticket"
       ? (selectedTicket?.price ?? event.price)
-      : (selectedDivision?.price ?? event.price);
-  const purchaseQuantity =
-    purchaseKind === "ticket"
-      ? ticketQuantity
-      : teamEntry &&
-          teamPaymentMode === "team" &&
-          selectedDivision?.priceBasis === "per-person"
-        ? selectedTeamSize
-        : 1;
+      : teamEntry && teamPaymentMode === "team"
+        ? (selectedDivision?.teamPrice ??
+          selectedDivision?.price ??
+          event.price)
+        : (selectedDivision?.playerPrice ??
+          selectedDivision?.price ??
+          event.price);
+  const purchaseQuantity = purchaseKind === "ticket" ? ticketQuantity : 1;
   const pricing = useMemo(
     () =>
       priceConsumerOrder({
@@ -209,7 +350,7 @@ export function CheckoutPanel({
     acceptedPolicyIds.includes(policy.id),
   );
   const rosterComplete =
-    !teamEntry ||
+    !organizingTeam ||
     teamSlots.every(
       (slot) =>
         (slot.mode === "duna" && Boolean(slot.personId)) ||
@@ -219,7 +360,7 @@ export function CheckoutPanel({
     Boolean(
       purchaseKind === "ticket"
         ? selectedTicket
-        : selectedParticipant?.available,
+        : selectedParticipantEligibility.eligible,
     ) &&
     rosterComplete &&
     policiesAccepted;
@@ -238,17 +379,37 @@ export function CheckoutPanel({
         );
       }),
     );
-    setTeamPaymentMode(
-      selectedDivision?.priceBasis === "per-team" ? "team" : "self",
-    );
+    setTeamPaymentMode("self");
+    setTeamSearch("");
+    setInviteTarget("");
     idempotencyKey.current = crypto.randomUUID();
-  }, [selectedDivision?.id, selectedDivision?.priceBasis, selectedTeamSize]);
+  }, [selectedDivision?.id, selectedTeamSize]);
 
   useEffect(() => {
     setAcceptedPolicyIds([]);
     setReadPolicyIds([]);
     idempotencyKey.current = crypto.randomUUID();
   }, [purchaseKind]);
+
+  useEffect(() => {
+    if (!organizingTeam) return;
+    let cancelled = false;
+    const timeout = setTimeout(() => {
+      setSearchingTeammates(true);
+      void searchTeammatesAction({
+        query: teamSearch.trim() || undefined,
+        divisionId: selectedDivision?.id,
+      }).then((result) => {
+        if (cancelled) return;
+        if (result.ok) setRemoteTeammates(result.results);
+        setSearchingTeammates(false);
+      });
+    }, 220);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [organizingTeam, selectedDivision?.id, teamSearch]);
 
   useEffect(() => {
     if (!initialCheckoutSessionId) return;
@@ -309,6 +470,64 @@ export function CheckoutPanel({
       ),
     );
     idempotencyKey.current = crypto.randomUUID();
+  };
+
+  const usedTeamPersonIds = teamSlots
+    .map((slot) => slot.personId)
+    .filter((personId): personId is string => Boolean(personId));
+  const normalizedTeamSearch = teamSearch.trim().toLowerCase();
+  const remotePeople = remoteTeammates?.map((result) => result.person);
+  const suggestedPlayers = (
+    remotePeople && remotePeople.length > 0 ? remotePeople : searchablePlayers
+  )
+    .filter(
+      (candidate) =>
+        candidate.id !== selectedParticipantId &&
+        !usedTeamPersonIds.includes(candidate.id) &&
+        (normalizedTeamSearch.length === 0 ||
+          `${candidate.displayName} ${candidate.handle} ${candidate.homeMarket}`
+            .toLowerCase()
+            .includes(normalizedTeamSearch)),
+    )
+    .sort((left, right) => {
+      const selectedMarket = selectedParticipant?.person.homeMarket;
+      const leftLocal = left.homeMarket === selectedMarket ? 0 : 1;
+      const rightLocal = right.homeMarket === selectedMarket ? 0 : 1;
+      return (
+        leftLocal - rightLocal ||
+        left.displayName.localeCompare(right.displayName)
+      );
+    })
+    .slice(0, normalizedTeamSearch ? 8 : 6);
+  const searchMetadata = new Map(
+    remoteTeammates?.map((result) => [result.person.id, result] as const),
+  );
+
+  const addTeamPerson = (personId: string) => {
+    const openSlot = teamSlots.find(
+      (slot) => !slot.personId && slot.inviteTarget.trim().length === 0,
+    );
+    if (!openSlot) return;
+    updateTeamSlot(openSlot.index, {
+      mode: "duna",
+      personId,
+      inviteTarget: "",
+    });
+    setTeamSearch("");
+  };
+
+  const addTeamInvite = () => {
+    const target = inviteTarget.trim();
+    const openSlot = teamSlots.find(
+      (slot) => !slot.personId && slot.inviteTarget.trim().length === 0,
+    );
+    if (!openSlot || target.length < 3) return;
+    updateTeamSlot(openSlot.index, {
+      mode: "invite",
+      personId: undefined,
+      inviteTarget: target,
+    });
+    setInviteTarget("");
   };
 
   const inviteHref = teamClaimToken
@@ -458,9 +677,11 @@ export function CheckoutPanel({
             <h2>
               {purchaseKind === "ticket"
                 ? "Choose a ticket"
-                : "Choose a division"}
+                : selectedDivision && !showDivisionChoices
+                  ? "Your division"
+                  : "Choose a division"}
             </h2>
-            {isDunaPlus && <Badge tone="positive">Duna+ fee waiver</Badge>}
+            {isDunaPlus && <Badge tone="positive">Premium fee waiver</Badge>}
           </div>
 
           {purchaseKind === "ticket" ? (
@@ -543,6 +764,50 @@ export function CheckoutPanel({
                 </div>
               </div>
             </>
+          ) : event.divisions &&
+            event.divisions.length > 0 &&
+            selectedDivision &&
+            !showDivisionChoices ? (
+            <div className="checkout-division-current">
+              <span>
+                <Check aria-hidden size={18} />
+              </span>
+              <div>
+                <strong>{selectedDivision.name}</strong>
+                <small>
+                  {divisionMeta(selectedDivision)} ·{" "}
+                  <Numeric>{selectedDivision.spotsRemaining}</Numeric> spots
+                </small>
+              </div>
+              <div className="checkout-division-current__prices">
+                <span>
+                  <small>Team</small>
+                  <Numeric>
+                    {formatMoney(
+                      selectedDivision.teamPrice.amountMinor,
+                      selectedDivision.teamPrice.currency,
+                    )}
+                  </Numeric>
+                </span>
+                <span>
+                  <small>Player</small>
+                  <Numeric>
+                    {formatMoney(
+                      selectedDivision.playerPrice.amountMinor,
+                      selectedDivision.playerPrice.currency,
+                    )}
+                  </Numeric>
+                </span>
+              </div>
+              {event.divisions.length > 1 && (
+                <button
+                  onClick={() => setShowDivisionChoices(true)}
+                  type="button"
+                >
+                  Change
+                </button>
+              )}
+            </div>
           ) : event.divisions && event.divisions.length > 0 ? (
             <div className="checkout-division-grid">
               {event.divisions.map((division) => (
@@ -557,6 +822,7 @@ export function CheckoutPanel({
                     name="division"
                     onChange={() => {
                       setSelectedDivisionId(division.id);
+                      setShowDivisionChoices(false);
                       idempotencyKey.current = crypto.randomUUID();
                     }}
                     type="radio"
@@ -570,17 +836,20 @@ export function CheckoutPanel({
                   </span>
                   <span>
                     <Numeric>
-                      {division.price.amountMinor === 0
+                      {division.playerPrice.amountMinor === 0
                         ? "Free"
                         : formatMoney(
-                            division.price.amountMinor,
-                            division.price.currency,
+                            division.playerPrice.amountMinor,
+                            division.playerPrice.currency,
                           )}
                     </Numeric>
                     <small>
-                      {division.priceBasis === "per-team"
-                        ? "per team"
-                        : "per player"}
+                      per player ·{" "}
+                      {formatMoney(
+                        division.teamPrice.amountMinor,
+                        division.teamPrice.currency,
+                      )}{" "}
+                      team
                     </small>
                   </span>
                 </label>
@@ -614,60 +883,84 @@ export function CheckoutPanel({
               <h2>Who&apos;s playing</h2>
               <Badge>Guardian rules enforced</Badge>
             </div>
-            <div className="checkout-player">
-              <span className="avatar">
-                {selectedParticipant?.person.initials ?? player.initials}
-              </span>
-              <span>
-                <strong>
-                  {selectedParticipant?.person.displayName ??
-                    player.displayName}
-                </strong>
-                <small>
-                  Sand Rating{" "}
-                  {(
-                    selectedParticipant?.person.rating.display ??
-                    player.rating.display
-                  ).toFixed(2)}{" "}
-                  · eligibility checked on confirmation
-                </small>
-              </span>
-              {participants.length > 1 ? (
-                <select
-                  aria-label="Participant"
-                  onChange={(eventValue) => {
-                    setSelectedParticipantId(eventValue.target.value);
-                    idempotencyKey.current = crypto.randomUUID();
-                  }}
-                  value={selectedParticipantId}
-                >
-                  {participants.map((participant) => (
-                    <option
-                      disabled={!participant.available}
-                      key={participant.person.id}
-                      value={participant.person.id}
-                    >
-                      {participant.person.displayName} · {participant.label}
-                      {participant.available ? "" : " · verification pending"}
-                    </option>
-                  ))}
-                </select>
-              ) : selectedParticipant?.available ? (
-                <Check aria-hidden size={18} />
-              ) : (
-                <Badge tone="warning">Guardian required</Badge>
-              )}
+            <div
+              aria-label="Choose the player registering"
+              className="checkout-participant-grid"
+              role="radiogroup"
+            >
+              {participants.map((participant) => {
+                const eligibility = participantEligibility(
+                  participant,
+                  selectedDivision,
+                  event.startsAt,
+                );
+                const selected =
+                  participant.person.id === selectedParticipantId;
+                return (
+                  <button
+                    aria-checked={selected}
+                    className={`${selected ? "selected" : ""} ${eligibility.eligible ? "" : "ineligible"}`}
+                    disabled={!eligibility.eligible}
+                    key={participant.person.id}
+                    onClick={() => {
+                      setSelectedParticipantId(participant.person.id);
+                      idempotencyKey.current = crypto.randomUUID();
+                    }}
+                    role="radio"
+                    type="button"
+                  >
+                    <span className="avatar">
+                      {participant.person.avatarUrl ? (
+                        <img alt="" src={participant.person.avatarUrl} />
+                      ) : (
+                        participant.person.initials
+                      )}
+                    </span>
+                    <span>
+                      <strong>{participant.person.displayName}</strong>
+                      <small>
+                        {participant.label} ·{" "}
+                        {participantAgeLabel(
+                          participant.birthDate,
+                          participant.ageBand,
+                          event.startsAt,
+                        )}{" "}
+                        ·{" "}
+                        <Numeric>
+                          {participant.person.rating.display.toFixed(2)}
+                        </Numeric>
+                      </small>
+                      <em>{eligibility.reason}</em>
+                    </span>
+                    {selected && eligibility.eligible && (
+                      <Check aria-hidden size={17} />
+                    )}
+                  </button>
+                );
+              })}
             </div>
-            {!selectedParticipant?.available && (
+            {!selectedParticipantEligibility.eligible && (
               <p className="checkout-inline-warning">
-                A verified adult guardian must complete this participant flow.
-                Guardian review status is available in Settings.
+                {selectedParticipantEligibility.reason}. Choose another profile
+                or return to the event page for a matching division.
               </p>
+            )}
+            {initialTeamClaimToken && (
+              <div className="checkout-invited-team-note">
+                <Link2 aria-hidden size={18} />
+                <span>
+                  <strong>Your team spot is already claimed</strong>
+                  <small>
+                    This checkout covers only your player registration. The
+                    captain&apos;s roster remains connected automatically.
+                  </small>
+                </span>
+              </div>
             )}
           </article>
         )}
 
-        {teamEntry && (
+        {organizingTeam && (
           <article className="checkout-section checkout-team-section">
             <div className="checkout-section__heading">
               <span>
@@ -702,153 +995,211 @@ export function CheckoutPanel({
                 const selectedPerson = searchablePlayers.find(
                   (candidate) => candidate.id === slot.personId,
                 );
-                const usedIds = teamSlots
-                  .map((candidate) => candidate.personId)
-                  .filter(Boolean);
                 return (
-                  <article className="checkout-roster__slot" key={slot.index}>
-                    <header>
-                      <span>
-                        {selectedPerson ? (
-                          <span className="avatar">
-                            {selectedPerson.initials}
-                          </span>
-                        ) : (
-                          <UserPlus aria-hidden size={18} />
-                        )}
-                        <strong>Player {slot.index + 2}</strong>
-                      </span>
-                      <div>
-                        <button
-                          className={
-                            slot.mode === "duna" ? "active" : undefined
-                          }
-                          onClick={() =>
-                            updateTeamSlot(slot.index, {
-                              mode: "duna",
-                              inviteTarget: "",
-                            })
-                          }
-                          type="button"
-                        >
-                          <Search aria-hidden size={14} /> Duna
-                        </button>
-                        <button
-                          className={
-                            slot.mode === "invite" ? "active" : undefined
-                          }
-                          onClick={() =>
-                            updateTeamSlot(slot.index, {
-                              mode: "invite",
-                              personId: undefined,
-                            })
-                          }
-                          type="button"
-                        >
-                          <Mail aria-hidden size={14} /> Invite
-                        </button>
-                      </div>
-                    </header>
-                    {slot.mode === "duna" ? (
-                      <label>
-                        <span>Search Duna players</span>
-                        <select
-                          onChange={(selection) =>
-                            updateTeamSlot(slot.index, {
-                              personId: selection.target.value || undefined,
-                            })
-                          }
-                          value={slot.personId ?? ""}
-                        >
-                          <option value="">Choose a player</option>
-                          {searchablePlayers
-                            .filter(
-                              (candidate) =>
-                                candidate.id !== selectedParticipantId &&
-                                (!usedIds.includes(candidate.id) ||
-                                  candidate.id === slot.personId),
-                            )
-                            .map((candidate) => (
-                              <option key={candidate.id} value={candidate.id}>
-                                {candidate.displayName} ·{" "}
-                                {candidate.rating.display.toFixed(2)} ·{" "}
-                                {candidate.homeMarket.split(",")[0]}
-                              </option>
-                            ))}
-                        </select>
-                      </label>
-                    ) : (
-                      <label>
-                        <span>Phone or email</span>
-                        <input
-                          onChange={(entry) =>
-                            updateTeamSlot(slot.index, {
-                              inviteTarget: entry.target.value,
-                            })
-                          }
-                          placeholder="teammate@example.com or +1 310…"
-                          value={slot.inviteTarget}
-                        />
-                      </label>
+                  <article
+                    className={`checkout-roster__member ${selectedPerson || slot.inviteTarget ? "filled" : "open"}`}
+                    key={slot.index}
+                  >
+                    <span className="avatar">
+                      {selectedPerson?.avatarUrl ? (
+                        <img alt="" src={selectedPerson.avatarUrl} />
+                      ) : selectedPerson ? (
+                        selectedPerson.initials
+                      ) : slot.inviteTarget ? (
+                        <Mail aria-hidden size={18} />
+                      ) : (
+                        <UserPlus aria-hidden size={18} />
+                      )}
+                    </span>
+                    <span>
+                      <strong>
+                        {selectedPerson?.displayName ??
+                          (slot.inviteTarget || `Player ${slot.index + 2}`)}
+                      </strong>
+                      <small>
+                        {selectedPerson
+                          ? `${selectedPerson.homeMarket} · ${selectedPerson.rating.display.toFixed(2)}`
+                          : slot.inviteTarget
+                            ? "Invitation sends after checkout starts"
+                            : "Open teammate spot"}
+                      </small>
+                    </span>
+                    {(selectedPerson || slot.inviteTarget) && (
+                      <button
+                        aria-label={`Remove player ${slot.index + 2}`}
+                        onClick={() =>
+                          updateTeamSlot(slot.index, {
+                            mode: "duna",
+                            personId: undefined,
+                            inviteTarget: "",
+                          })
+                        }
+                        type="button"
+                      >
+                        <Minus aria-hidden size={16} />
+                      </button>
                     )}
                   </article>
                 );
               })}
             </div>
 
-            {selectedDivision?.priceBasis === "per-person" ? (
-              <div className="checkout-team-payment">
-                <button
-                  className={teamPaymentMode === "self" ? "active" : undefined}
-                  onClick={() => {
-                    setTeamPaymentMode("self");
-                    idempotencyKey.current = crypto.randomUUID();
-                  }}
-                  type="button"
-                >
-                  <span>
-                    <strong>Pay my entry</strong>
-                    <small>Teammates pay when they claim</small>
-                  </span>
-                  <Numeric>
-                    {formatMoney(price.amountMinor, price.currency)}
-                  </Numeric>
-                </button>
-                <button
-                  className={teamPaymentMode === "team" ? "active" : undefined}
-                  onClick={() => {
-                    setTeamPaymentMode("team");
-                    idempotencyKey.current = crypto.randomUUID();
-                  }}
-                  type="button"
-                >
-                  <span>
-                    <strong>Pay for the whole team</strong>
-                    <small>Profiles and waivers are still individual</small>
-                  </span>
-                  <Numeric>
-                    {formatMoney(
-                      price.amountMinor * selectedTeamSize,
-                      price.currency,
-                    )}
-                  </Numeric>
-                </button>
+            {teamSlots.some(
+              (slot) => !slot.personId && slot.inviteTarget.trim().length === 0,
+            ) && (
+              <div className="checkout-team-finder">
+                <label>
+                  <Search aria-hidden size={19} />
+                  <input
+                    aria-label="Search Duna players"
+                    onChange={(entry) => setTeamSearch(entry.target.value)}
+                    placeholder="Search by player, location, or rating"
+                    value={teamSearch}
+                  />
+                  {searchingTeammates && <small>Searching…</small>}
+                </label>
+                <div className="checkout-team-suggestions">
+                  {suggestedPlayers.map((candidate) => {
+                    const metadata = searchMetadata.get(candidate.id);
+                    const localEligibility = participantEligibility(
+                      { person: candidate, available: true },
+                      selectedDivision,
+                    );
+                    const eligibility = metadata
+                      ? {
+                          eligible: metadata.eligible,
+                          reason:
+                            metadata.eligibilityReasons[0] ??
+                            (metadata.relationship === "recent-partner"
+                              ? `${metadata.sharedTeams} shared ${metadata.sharedTeams === 1 ? "team" : "teams"}`
+                              : metadata.relationship === "nearby"
+                                ? "Plays near you"
+                                : "Eligible for this division"),
+                        }
+                      : localEligibility;
+                    return (
+                      <article
+                        className={
+                          eligibility.eligible ? undefined : "ineligible"
+                        }
+                        key={candidate.id}
+                      >
+                        <span className="avatar">
+                          {candidate.avatarUrl ? (
+                            <img alt="" src={candidate.avatarUrl} />
+                          ) : (
+                            candidate.initials
+                          )}
+                        </span>
+                        <strong>{candidate.displayName}</strong>
+                        <small>
+                          {candidate.homeMarket}
+                          {metadata
+                            ? ` · ${metadata.gender.replaceAll("-", " ")}`
+                            : ""}
+                        </small>
+                        <span>
+                          <em>{eligibility.reason}</em>
+                          <Numeric>
+                            {candidate.rating.display.toFixed(2)}
+                          </Numeric>
+                        </span>
+                        <button
+                          disabled={!eligibility.eligible}
+                          onClick={() => addTeamPerson(candidate.id)}
+                          type="button"
+                        >
+                          <Plus aria-hidden size={15} /> Add
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+                <div className="checkout-team-invite-row">
+                  <Mail aria-hidden size={18} />
+                  <input
+                    onChange={(entry) => setInviteTarget(entry.target.value)}
+                    placeholder="Invite with email or mobile number"
+                    value={inviteTarget}
+                  />
+                  <button
+                    disabled={inviteTarget.trim().length < 3}
+                    onClick={addTeamInvite}
+                    type="button"
+                  >
+                    Send after payment
+                  </button>
+                </div>
               </div>
-            ) : (
-              <div className="checkout-team-price-note">
-                <UsersRound aria-hidden size={18} />
+            )}
+
+            <div className="checkout-team-completion">
+              <span>
+                <strong>
+                  {1 +
+                    teamSlots.filter(
+                      (slot) => slot.personId || slot.inviteTarget,
+                    ).length}{" "}
+                  of {selectedTeamSize} players added
+                </strong>
+                <small>
+                  Registration becomes complete when at least {selectedTeamSize}{" "}
+                  players have claimed and paid their required share.
+                </small>
+              </span>
+              <div>
+                <i
+                  style={{
+                    width: `${((1 + teamSlots.filter((slot) => slot.personId || slot.inviteTarget).length) / selectedTeamSize) * 100}%`,
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="checkout-team-payment">
+              <button
+                className={teamPaymentMode === "self" ? "active" : undefined}
+                onClick={() => {
+                  setTeamPaymentMode("self");
+                  idempotencyKey.current = crypto.randomUUID();
+                }}
+                type="button"
+              >
                 <span>
-                  <strong>One team price</strong>
+                  <strong>Pay my registration</strong>
+                  <small>Each teammate gets a link to claim and pay</small>
+                </span>
+                <Numeric>
+                  {formatMoney(
+                    selectedDivision?.playerPrice.amountMinor ??
+                      price.amountMinor,
+                    selectedDivision?.playerPrice.currency ?? price.currency,
+                  )}
+                </Numeric>
+              </button>
+              <button
+                className={teamPaymentMode === "team" ? "active" : undefined}
+                onClick={() => {
+                  setTeamPaymentMode("team");
+                  idempotencyKey.current = crypto.randomUUID();
+                }}
+                type="button"
+              >
+                <span>
+                  <strong>Pay for the whole team</strong>
                   <small>
-                    The captain pays the configured team entry. Every player
-                    still claims their own Duna profile.
+                    You can edit invitations until registration closes
                   </small>
                 </span>
                 <Numeric>
-                  {formatMoney(price.amountMinor, price.currency)}
+                  {formatMoney(
+                    selectedDivision?.teamPrice.amountMinor ??
+                      price.amountMinor,
+                    selectedDivision?.teamPrice.currency ?? price.currency,
+                  )}
                 </Numeric>
-              </div>
-            )}
+              </button>
+            </div>
           </article>
         )}
 
@@ -857,7 +1208,7 @@ export function CheckoutPanel({
             <div className="checkout-section__heading">
               <span>
                 <Numeric>
-                  {teamEntry ? 4 : purchaseKind === "entry" ? 3 : 2}
+                  {organizingTeam ? 4 : purchaseKind === "entry" ? 3 : 2}
                 </Numeric>
               </span>
               <h2>Policies + waivers</h2>
@@ -946,12 +1297,12 @@ export function CheckoutPanel({
             <span>
               <Numeric>
                 {applicablePolicies.length
-                  ? teamEntry
+                  ? organizingTeam
                     ? 5
                     : purchaseKind === "entry"
                       ? 4
                       : 3
-                  : teamEntry
+                  : organizingTeam
                     ? 4
                     : purchaseKind === "entry"
                       ? 3
@@ -994,14 +1345,14 @@ export function CheckoutPanel({
           event.kind !== "league" && (
             <article className="checkout-plus">
               <div>
-                <Badge tone="positive">Duna+</Badge>
-                <h3>Make the platform fee disappear.</h3>
+                <Badge tone="positive">Premium</Badge>
+                <h3>Make the Duna service fee disappear.</h3>
                 <p>
-                  Start at $7.99/month. Pause any time, up to four months each
+                  Start at $9.99/month. Pause any time, up to four months each
                   year.
                 </p>
               </div>
-              <Link href="/app/settings">View Duna+</Link>
+              <Link href="/app/settings">View Premium</Link>
             </article>
           )}
       </section>
@@ -1028,11 +1379,11 @@ export function CheckoutPanel({
             <small>
               {purchaseKind === "ticket"
                 ? `${ticketQuantity} ticket${ticketQuantity === 1 ? "" : "s"}`
-                : teamEntry &&
-                    teamPaymentMode === "team" &&
-                    selectedDivision?.priceBasis === "per-person"
-                  ? `${selectedTeamSize} player entries`
-                  : "Registration"}
+                : organizingTeam && teamPaymentMode === "team"
+                  ? `Full ${selectedTeamSize}-player team entry`
+                  : organizingTeam
+                    ? "Your player registration"
+                    : "Registration"}
             </small>
             <Numeric>
               {formatMoney(pricing.subtotalMinor, price.currency)}
@@ -1046,7 +1397,7 @@ export function CheckoutPanel({
           ))}
           {isDunaPlus && (
             <span className="positive">
-              <small>Duna+ platform-fee waiver</small>
+              <small>Premium service-fee waiver</small>
               <Numeric>Included</Numeric>
             </span>
           )}
@@ -1066,7 +1417,7 @@ export function CheckoutPanel({
             </span>
           </div>
         )}
-        {teamEntry && (
+        {organizingTeam && (
           <div className="checkout-summary__team">
             <UsersRound aria-hidden size={17} />
             <span>
@@ -1078,7 +1429,9 @@ export function CheckoutPanel({
               </strong>
               <small>
                 {rosterComplete
-                  ? "Roster invitations are ready"
+                  ? teamPaymentMode === "team"
+                    ? "You are covering the team; every player still claims their profile"
+                    : "Invited teammates must claim and pay before the team is complete"
                   : "Complete every player slot"}
               </small>
             </span>
@@ -1120,8 +1473,9 @@ export function CheckoutPanel({
                   purchaseKind === "ticket" ? selectedTicket?.id : undefined,
                 ticketQuantity:
                   purchaseKind === "ticket" ? ticketQuantity : undefined,
-                teamPaymentMode: teamEntry ? teamPaymentMode : undefined,
-                teamRoster: teamEntry
+                teamPaymentMode: organizingTeam ? teamPaymentMode : undefined,
+                teamClaimToken: initialTeamClaimToken,
+                teamRoster: organizingTeam
                   ? teamSlots.map((slot) => {
                       const person = searchablePlayers.find(
                         (candidate) => candidate.id === slot.personId,

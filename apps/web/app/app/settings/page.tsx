@@ -34,9 +34,9 @@ export default async function SettingsPage({
     ]);
   const membershipNotice =
     query.membership === "success"
-      ? "Payment was accepted. Duna+ will appear here as soon as the secure confirmation synchronizes."
+      ? "Payment was accepted. Premium access will appear here as soon as the secure confirmation synchronizes."
       : query.membership === "cancelled"
-        ? "Duna+ checkout was cancelled. No membership change was made."
+        ? "Premium checkout was cancelled. No membership change was made."
         : undefined;
 
   return (

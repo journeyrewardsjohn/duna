@@ -1,6 +1,14 @@
 import { loadEnvFile } from "node:process";
 import { eq } from "drizzle-orm";
 import Stripe from "stripe";
+import {
+  MEMBERSHIP_PLANS,
+  ORGANIZATION_PLANS,
+  membershipTierCode,
+  type MembershipBillingInterval,
+  type PaidMembershipPlanId,
+  type PaidOrganizationPlanId,
+} from "../packages/core/src/index.ts";
 import { getDatabase, membershipTiers } from "../packages/db/src/index.ts";
 
 try {
@@ -25,77 +33,120 @@ const stripe = new Stripe(key, {
 
 type PriceDefinition = {
   readonly key: string;
+  readonly productKey: string;
   readonly productName: string;
   readonly productDescription: string;
   readonly amountMinor: number;
   readonly recurring?: "month" | "year";
+  readonly membership?: {
+    readonly plan: PaidMembershipPlanId;
+    readonly interval: MembershipBillingInterval;
+  };
+  readonly organization?: {
+    readonly plan: PaidOrganizationPlanId;
+    readonly interval: MembershipBillingInterval;
+  };
 };
 
 const definitions: readonly PriceDefinition[] = [
   {
-    key: "duna_plus_monthly",
-    productName: "Duna+",
+    key: "duna_premium_monthly",
+    productKey: "duna_premium",
+    productName: "Duna Premium",
     productDescription:
-      "No platform fees, deeper player insight, guest passes, and enhanced convenience.",
-    amountMinor: 799,
+      "No Duna service fees, 8 upload hours, and 2 live-broadcast hours each month.",
+    amountMinor: 999,
     recurring: "month",
+    membership: { plan: "premium", interval: "month" },
   },
   {
-    key: "duna_plus_annual",
-    productName: "Duna+",
+    key: "duna_premium_annual",
+    productKey: "duna_premium",
+    productName: "Duna Premium",
     productDescription:
-      "No platform fees, deeper player insight, guest passes, and enhanced convenience.",
-    amountMinor: 5900,
+      "No Duna service fees, 8 upload hours, and 2 live-broadcast hours each month.",
+    amountMinor: 9_900,
     recurring: "year",
+    membership: { plan: "premium", interval: "year" },
   },
   {
-    key: "operator_small_club_monthly",
-    productName: "Duna HQ — Small Club",
+    key: "duna_premium_plus_monthly",
+    productKey: "duna_premium_plus",
+    productName: "Duna Premium+",
     productDescription:
-      "Complete club operations for a growing program or single-location club.",
-    amountMinor: 19_900,
+      "No Duna service fees, 30 upload hours, 8 live-broadcast hours, and advanced video insights.",
+    amountMinor: 2_999,
     recurring: "month",
+    membership: { plan: "premium-plus", interval: "month" },
   },
   {
-    key: "operator_club_monthly",
-    productName: "Duna HQ — Club",
+    key: "duna_premium_plus_annual",
+    productKey: "duna_premium_plus",
+    productName: "Duna Premium+",
     productDescription:
-      "Full club and facility operating system with advanced reporting and controls.",
-    amountMinor: 49_900,
+      "No Duna service fees, 30 upload hours, 8 live-broadcast hours, and advanced video insights.",
+    amountMinor: 29_900,
+    recurring: "year",
+    membership: { plan: "premium-plus", interval: "year" },
+  },
+  {
+    key: "duna_hq_club_monthly",
+    productKey: "duna_hq_club",
+    productName: ORGANIZATION_PLANS["small-club"].productName,
+    productDescription: ORGANIZATION_PLANS["small-club"].tagline,
+    amountMinor: ORGANIZATION_PLANS["small-club"].monthlyPriceMinor,
     recurring: "month",
+    organization: { plan: "small-club", interval: "month" },
   },
   {
-    key: "registration_service_2",
-    productName: "Duna Registration Service",
-    productDescription:
-      "Organizer-side league or tournament registration service fee.",
-    amountMinor: 200,
+    key: "duna_hq_club_annual",
+    productKey: "duna_hq_club",
+    productName: ORGANIZATION_PLANS["small-club"].productName,
+    productDescription: ORGANIZATION_PLANS["small-club"].tagline,
+    amountMinor: ORGANIZATION_PLANS["small-club"].annualPriceMinor,
+    recurring: "year",
+    organization: { plan: "small-club", interval: "year" },
   },
   {
-    key: "registration_service_3",
-    productName: "Duna Registration Service",
-    productDescription:
-      "Organizer-side league or tournament registration service fee.",
-    amountMinor: 300,
+    key: "duna_hq_facility_monthly",
+    productKey: "duna_hq_facility",
+    productName: ORGANIZATION_PLANS.club.productName,
+    productDescription: ORGANIZATION_PLANS.club.tagline,
+    amountMinor: ORGANIZATION_PLANS.club.monthlyPriceMinor,
+    recurring: "month",
+    organization: { plan: "club", interval: "month" },
   },
   {
-    key: "registration_service_4",
-    productName: "Duna Registration Service",
-    productDescription:
-      "Organizer-side league or tournament registration service fee.",
-    amountMinor: 400,
+    key: "duna_hq_facility_annual",
+    productKey: "duna_hq_facility",
+    productName: ORGANIZATION_PLANS.club.productName,
+    productDescription: ORGANIZATION_PLANS.club.tagline,
+    amountMinor: ORGANIZATION_PLANS.club.annualPriceMinor,
+    recurring: "year",
+    organization: { plan: "club", interval: "year" },
+  },
+  {
+    key: "duna_hq_network_monthly",
+    productKey: "duna_hq_network",
+    productName: ORGANIZATION_PLANS["multi-venue"].productName,
+    productDescription: ORGANIZATION_PLANS["multi-venue"].tagline,
+    amountMinor: ORGANIZATION_PLANS["multi-venue"].monthlyPriceMinor,
+    recurring: "month",
+    organization: { plan: "multi-venue", interval: "month" },
+  },
+  {
+    key: "duna_hq_network_annual",
+    productKey: "duna_hq_network",
+    productName: ORGANIZATION_PLANS["multi-venue"].productName,
+    productDescription: ORGANIZATION_PLANS["multi-venue"].tagline,
+    amountMinor: ORGANIZATION_PLANS["multi-venue"].annualPriceMinor,
+    recurring: "year",
+    organization: { plan: "multi-venue", interval: "year" },
   },
 ];
 
 async function findOrCreateProduct(definition: PriceDefinition) {
-  const productKey =
-    definition.productName === "Duna+"
-      ? "duna_plus"
-      : definition.productName.includes("Small Club")
-        ? "operator_small_club"
-        : definition.productName === "Duna HQ — Club"
-          ? "operator_club"
-          : "registration_service";
+  const productKey = definition.productKey;
   const products = await stripe.products.list({
     active: true,
     limit: 100,
@@ -176,30 +227,25 @@ async function main() {
   if (process.env.DATABASE_URL) {
     const database = getDatabase();
     const membershipDefinitions = definitions.filter(
-      (definition) =>
-        definition.key === "duna_plus_monthly" ||
-        definition.key === "duna_plus_annual",
+      (definition) => definition.membership,
     );
     for (const definition of membershipDefinitions) {
-      const interval = definition.recurring;
-      if (interval !== "month" && interval !== "year") continue;
-      const code = `duna-plus-${interval === "month" ? "monthly" : "annual"}`;
+      const membership = definition.membership;
+      if (!membership) continue;
+      const { plan, interval } = membership;
+      const planDefinition = MEMBERSHIP_PLANS[plan];
+      const code = membershipTierCode(plan, interval);
       const existing = await database.query.membershipTiers.findFirst({
         where: eq(membershipTiers.code, code),
       });
       const values = {
         code,
-        name: `Duna+ ${interval === "month" ? "Monthly" : "Annual"}`,
+        name: `${planDefinition.name} ${interval === "month" ? "Monthly" : "Annual"}`,
         priceMinor: definition.amountMinor,
         currency: "USD",
         interval,
         stripePriceId: resources[definition.key],
-        benefits: [
-          "No platform fees",
-          "Full rating history",
-          "Partner chemistry",
-          "Two monthly guest passes",
-        ],
+        benefits: planDefinition.benefits,
         active: true,
         updatedAt: new Date(),
       };
@@ -234,6 +280,21 @@ async function main() {
         mode: "sandbox",
         account: account.id,
         resources,
+        environment: {
+          STRIPE_DUNA_PREMIUM_MONTHLY_PRICE_ID: resources.duna_premium_monthly,
+          STRIPE_DUNA_PREMIUM_ANNUAL_PRICE_ID: resources.duna_premium_annual,
+          STRIPE_DUNA_PREMIUM_PLUS_MONTHLY_PRICE_ID:
+            resources.duna_premium_plus_monthly,
+          STRIPE_DUNA_PREMIUM_PLUS_ANNUAL_PRICE_ID:
+            resources.duna_premium_plus_annual,
+          STRIPE_HQ_CLUB_MONTHLY_PRICE_ID: resources.duna_hq_club_monthly,
+          STRIPE_HQ_CLUB_ANNUAL_PRICE_ID: resources.duna_hq_club_annual,
+          STRIPE_HQ_FACILITY_MONTHLY_PRICE_ID:
+            resources.duna_hq_facility_monthly,
+          STRIPE_HQ_FACILITY_ANNUAL_PRICE_ID: resources.duna_hq_facility_annual,
+          STRIPE_HQ_NETWORK_MONTHLY_PRICE_ID: resources.duna_hq_network_monthly,
+          STRIPE_HQ_NETWORK_ANNUAL_PRICE_ID: resources.duna_hq_network_annual,
+        },
         testClock: testClock.id,
       },
       null,

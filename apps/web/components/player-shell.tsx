@@ -81,7 +81,7 @@ export function PlayerShell({
           </Link>
           <div className="player-sidebar__plus">
             <div>
-              <span>DUNA+</span>
+              <span>PREMIUM</span>
               <small>No fees · deeper stats</small>
             </div>
             <Link href="/app/settings">View plan</Link>

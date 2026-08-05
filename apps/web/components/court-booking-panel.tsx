@@ -349,7 +349,7 @@ export function CourtBookingPanel({
       }
       setNotice(
         response.result.premiumRequired
-          ? "Your free priority alert is already active. Duna+ unlocks unlimited alerts."
+          ? "Your free priority alert is already active. Premium unlocks unlimited alerts."
           : response.result.created
             ? "Priority alert created. We’ll notify you when a matching court opens."
             : "You already have this priority alert.",
@@ -976,7 +976,7 @@ export function CourtBookingPanel({
               </span>
               {isDunaPlus && (
                 <Badge tone="positive">
-                  <Sparkles aria-hidden size={13} /> Duna+ fee waived
+                  <Sparkles aria-hidden size={13} /> Premium fee waived
                 </Badge>
               )}
             </section>
