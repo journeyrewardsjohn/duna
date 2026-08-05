@@ -7,7 +7,10 @@ import {
   predictionOrderCostMicros,
   predictionOrderSharesMicros,
   predictionOrdersCross,
+  predictionSaleCostBasisMicros,
+  predictionShareOrdersCross,
   predictionSideCostMicros,
+  predictionSharesToMicros,
   predictionSettlementPayoutMicros,
 } from "./prediction-market";
 
@@ -95,5 +98,44 @@ describe("prediction market math", () => {
         sharesMicros: 12_500,
       }),
     ).toBe(0);
+  });
+
+  it("stores sell quantities with exact three-decimal share precision", () => {
+    expect(predictionSharesToMicros(12.345)).toBe(12_345);
+    expect(() => predictionSharesToMicros(1.2345)).toThrow(
+      "up to three decimal places",
+    );
+  });
+
+  it("only crosses a share sale when a buyer meets the asking price", () => {
+    expect(
+      predictionShareOrdersCross({
+        buyLimitPriceBps: 6_700,
+        sellLimitPriceBps: 6_500,
+      }),
+    ).toBe(true);
+    expect(
+      predictionShareOrdersCross({
+        buyLimitPriceBps: 6_400,
+        sellLimitPriceBps: 6_500,
+      }),
+    ).toBe(false);
+  });
+
+  it("removes proportional cost basis without leaving dust on a full sale", () => {
+    expect(
+      predictionSaleCostBasisMicros({
+        positionSharesMicros: 12_345,
+        positionCostMicros: 7_890,
+        soldSharesMicros: 2_000,
+      }),
+    ).toBe(1_278);
+    expect(
+      predictionSaleCostBasisMicros({
+        positionSharesMicros: 12_345,
+        positionCostMicros: 7_890,
+        soldSharesMicros: 12_345,
+      }),
+    ).toBe(7_890);
   });
 });

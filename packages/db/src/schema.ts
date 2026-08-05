@@ -4383,6 +4383,7 @@ export const predictionOrders = pgTable(
     personId: uuid("person_id")
       .notNull()
       .references(() => people.id, { onDelete: "cascade" }),
+    intent: varchar("intent", { length: 4 }).notNull().default("buy"),
     side: varchar("side", { length: 3 }).notNull(),
     limitPriceBps: integer("limit_price_bps").notNull(),
     sharesMicros: bigint("shares_micros", { mode: "number" }).notNull(),
@@ -4390,7 +4391,15 @@ export const predictionOrders = pgTable(
       mode: "number",
     }).notNull(),
     reservedMicros: bigint("reserved_micros", { mode: "number" }).notNull(),
+    reservedSharesMicros: bigint("reserved_shares_micros", {
+      mode: "number",
+    })
+      .notNull()
+      .default(0),
     spentMicros: bigint("spent_micros", { mode: "number" })
+      .notNull()
+      .default(0),
+    proceedsMicros: bigint("proceeds_micros", { mode: "number" })
       .notNull()
       .default(0),
     status: varchar("status", { length: 24 }).notNull().default("open"),
@@ -4407,6 +4416,10 @@ export const predictionOrders = pgTable(
       table.createdAt,
     ),
     index("prediction_order_person_idx").on(table.personId, table.createdAt),
+    check(
+      "prediction_order_intent_valid",
+      sql`${table.intent} IN ('buy', 'sell')`,
+    ),
     check("prediction_order_side_valid", sql`${table.side} IN ('yes', 'no')`),
     check(
       "prediction_order_price_valid",
@@ -4414,7 +4427,11 @@ export const predictionOrders = pgTable(
     ),
     check(
       "prediction_order_amounts_valid",
-      sql`${table.sharesMicros} > 0 AND ${table.remainingSharesMicros} >= 0 AND ${table.remainingSharesMicros} <= ${table.sharesMicros} AND ${table.reservedMicros} >= 0 AND ${table.spentMicros} >= 0`,
+      sql`${table.sharesMicros} > 0 AND ${table.remainingSharesMicros} >= 0 AND ${table.remainingSharesMicros} <= ${table.sharesMicros} AND ${table.reservedMicros} >= 0 AND ${table.reservedSharesMicros} >= 0 AND ${table.reservedSharesMicros} <= ${table.remainingSharesMicros} AND ${table.spentMicros} >= 0 AND ${table.proceedsMicros} >= 0`,
+    ),
+    check(
+      "prediction_order_reserve_type_valid",
+      sql`(${table.intent} = 'buy' AND ${table.reservedSharesMicros} = 0) OR (${table.intent} = 'sell' AND ${table.reservedMicros} = 0)`,
     ),
     check(
       "prediction_order_status_valid",
@@ -4489,6 +4506,11 @@ export const predictionPositions = pgTable(
     payoutMicros: bigint("payout_micros", { mode: "number" })
       .notNull()
       .default(0),
+    reservedSharesMicros: bigint("reserved_shares_micros", {
+      mode: "number",
+    })
+      .notNull()
+      .default(0),
     status: varchar("status", { length: 24 }).notNull().default("open"),
     createdAt,
     updatedAt,
@@ -4509,11 +4531,62 @@ export const predictionPositions = pgTable(
     ),
     check(
       "prediction_position_amounts_valid",
-      sql`${table.sharesMicros} >= 0 AND ${table.costMicros} >= 0 AND ${table.payoutMicros} >= 0`,
+      sql`${table.sharesMicros} >= 0 AND ${table.costMicros} >= 0 AND ${table.payoutMicros} >= 0 AND ${table.reservedSharesMicros} >= 0 AND ${table.reservedSharesMicros} <= ${table.sharesMicros}`,
     ),
     check(
       "prediction_position_status_valid",
       sql`${table.status} IN ('open', 'won', 'lost', 'void')`,
+    ),
+  ],
+);
+
+export const predictionShareTrades = pgTable(
+  "prediction_share_trades",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    marketId: uuid("market_id")
+      .notNull()
+      .references(() => predictionMarkets.id, { onDelete: "cascade" }),
+    side: varchar("side", { length: 3 }).notNull(),
+    buyOrderId: uuid("buy_order_id")
+      .notNull()
+      .references(() => predictionOrders.id),
+    sellOrderId: uuid("sell_order_id")
+      .notNull()
+      .references(() => predictionOrders.id),
+    sellerPositionId: uuid("seller_position_id")
+      .notNull()
+      .references(() => predictionPositions.id),
+    makerOrderId: uuid("maker_order_id")
+      .notNull()
+      .references(() => predictionOrders.id),
+    sharesMicros: bigint("shares_micros", { mode: "number" }).notNull(),
+    priceBps: integer("price_bps").notNull(),
+    costMicros: bigint("cost_micros", { mode: "number" }).notNull(),
+    executedAt: timestamp("executed_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    createdAt,
+  },
+  (table) => [
+    index("prediction_share_trade_market_time_idx").on(
+      table.marketId,
+      table.executedAt,
+    ),
+    check(
+      "prediction_share_trade_side_valid",
+      sql`${table.side} IN ('yes', 'no')`,
+    ),
+    check(
+      "prediction_share_trade_amounts_valid",
+      sql`${table.sharesMicros} > 0 AND ${table.costMicros} >= 0`,
+    ),
+    check(
+      "prediction_share_trade_price_valid",
+      sql`${table.priceBps} BETWEEN 100 AND 9900`,
     ),
   ],
 );
@@ -4578,6 +4651,20 @@ export const predictionCreditLedger = pgTable(
       .notNull()
       .$type<Record<string, unknown>>()
       .default({}),
+    chainSequence: bigint("chain_sequence", { mode: "number" })
+      .notNull()
+      .default(0),
+    previousHash: varchar("previous_hash", { length: 64 })
+      .notNull()
+      .default(
+        "0000000000000000000000000000000000000000000000000000000000000000",
+      ),
+    entryHash: varchar("entry_hash", { length: 64 })
+      .notNull()
+      .default(
+        "0000000000000000000000000000000000000000000000000000000000000000",
+      ),
+    hashVersion: integer("hash_version").notNull().default(1),
     occurredAt: timestamp("occurred_at", {
       withTimezone: true,
       mode: "date",
@@ -4592,13 +4679,24 @@ export const predictionCreditLedger = pgTable(
       table.occurredAt,
     ),
     index("prediction_credit_ledger_market_idx").on(table.marketId),
+    uniqueIndex("prediction_credit_ledger_account_sequence_unique").on(
+      table.accountId,
+      table.chainSequence,
+    ),
+    uniqueIndex("prediction_credit_ledger_entry_hash_unique").on(
+      table.entryHash,
+    ),
     check(
       "prediction_credit_ledger_delta_valid",
-      sql`${table.deltaMicros} <> 0`,
+      sql`${table.deltaMicros} <> 0 OR ${table.kind} IN ('sell-order', 'sell-release')`,
     ),
     check(
       "prediction_credit_ledger_kind_valid",
-      sql`${table.kind} IN ('initial-grant', 'monthly-grant', 'order-reserve', 'price-improvement-refund', 'settlement', 'void-refund', 'admin-adjustment')`,
+      sql`${table.kind} IN ('initial-grant', 'monthly-grant', 'order-reserve', 'sell-order', 'sell-release', 'sale-proceeds', 'price-improvement-refund', 'settlement', 'void-refund', 'admin-adjustment')`,
+    ),
+    check(
+      "prediction_credit_ledger_hash_valid",
+      sql`${table.hashVersion} = 1 AND char_length(${table.previousHash}) = 64 AND char_length(${table.entryHash}) = 64`,
     ),
   ],
 );

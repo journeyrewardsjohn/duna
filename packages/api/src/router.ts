@@ -418,6 +418,7 @@ import {
   loadPredictionMarket,
   loadPredictionWallet,
   placePredictionOrder,
+  placePredictionSellOrder,
   PredictionMarketError,
   settlePredictionMarket,
 } from "./prediction-market";
@@ -858,6 +859,7 @@ function throwDomainError(error: unknown): never {
         : error.code === "INVALID_ORDER"
           ? "BAD_REQUEST"
           : error.code === "INSUFFICIENT_CREDITS" ||
+              error.code === "INSUFFICIENT_SHARES" ||
               error.code === "MARKET_CLOSED"
             ? "PRECONDITION_FAILED"
             : error.code === "ALREADY_SETTLED"
@@ -1568,6 +1570,7 @@ const publicRouter = router({
         sourceSnapshot: {
           eventId: event.id,
           eventSlug: event.slug,
+          canonicalPath: match.canonicalPath,
           roundLabel: match.roundLabel,
           modelBasis: match.prediction.basis,
           modelTeamA: match.prediction.teamA,
@@ -1649,6 +1652,7 @@ const publicRouter = router({
             sourceSnapshot: {
               eventId: event.id,
               eventSlug: event.slug,
+              canonicalPath: match.canonicalPath,
               roundLabel: match.roundLabel,
               modelBasis: match.prediction.basis,
               modelTeamA: match.prediction.teamA,
@@ -2732,6 +2736,55 @@ const playerRouter = router({
     .query(({ ctx }) =>
       loadPredictionWallet({ personId: ctx.actor!.personId, now: ctx.now }),
     ),
+  placePredictionSellOrder: adultProcedure
+    .use(requireScope("wallet:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "prediction-sell-order",
+        capacity: 30,
+        refillPerMinute: 20,
+      }),
+    )
+    .input(
+      z.object({
+        marketId: z.string().uuid(),
+        side: z.enum(["yes", "no"]),
+        shares: z.number().positive().max(1_000_000_000),
+        limitPriceBps: z.number().int().min(100).max(9_900),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        orderId: z.string().uuid(),
+        marketId: z.string().uuid(),
+        status: z.enum(["open", "partially-filled", "filled"]),
+        filledShares: z.number().nonnegative(),
+        openShares: z.number().nonnegative(),
+        proceedsCredits: z.number().nonnegative(),
+        availableCredits: z.number().nonnegative(),
+        immutable: z.literal(true),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.placePredictionSellOrder",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await placePredictionSellOrder({
+              ...input,
+              personId: ctx.actor!.personId,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   placeMatchPredictionOrder: adultProcedure
     .use(requireScope("wallet:write"))
     .use(
@@ -2872,6 +2925,7 @@ const playerRouter = router({
                 sourceSnapshot: {
                   eventId: event.id,
                   eventSlug: event.slug,
+                  canonicalPath: match.canonicalPath,
                   roundLabel: match.roundLabel,
                   modelBasis: match.prediction.basis,
                   modelTeamA: match.prediction.teamA,

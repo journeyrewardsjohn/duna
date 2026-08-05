@@ -33169,3 +33169,956 @@ button.selected > .choice-radio {
     font-size: clamp(2.5rem, 11.5vw, 3.5rem);
   }
 }
+
+/* Prediction exchange clarity, ownership, and professional-event readability */
+
+.viewer-prediction-position {
+  background: color-mix(in srgb, #e7f5ef 82%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, #188267 38%, var(--color-line));
+  border-radius: 16px;
+  color: var(--color-bone);
+  display: grid;
+  gap: 0.7rem;
+  margin-bottom: 0.9rem;
+  padding: 0.85rem;
+}
+
+:root[data-theme="dark"] .viewer-prediction-position {
+  background: #12342d;
+  border-color: #256b5b;
+}
+
+.viewer-prediction-position > header {
+  align-items: center;
+  color: #08765d;
+  display: flex;
+  gap: 0.65rem;
+}
+
+:root[data-theme="dark"] .viewer-prediction-position > header {
+  color: #7bdec4;
+}
+
+.viewer-prediction-position > header > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.viewer-prediction-position > header small {
+  color: currentColor;
+  font-size: 0.875rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.viewer-prediction-position > header strong {
+  color: var(--color-bone);
+  font-size: 1rem;
+}
+
+.viewer-prediction-position > div {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.viewer-prediction-position p {
+  display: grid;
+  gap: 0.2rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: 0;
+}
+
+.viewer-prediction-position p > span {
+  font-size: 0.88rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-prediction-position p > strong {
+  color: #08765d;
+  font-size: 0.875rem;
+}
+
+.viewer-prediction-position p > small {
+  color: var(--color-bone-muted);
+  font-size: 0.875rem;
+  grid-column: 1 / -1;
+}
+
+.viewer-prediction-position--compact {
+  align-items: center;
+  gap: 0.8rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin: 0.8rem 0;
+  padding: 0.7rem 0.8rem;
+}
+
+.viewer-prediction-position--compact > div {
+  min-width: 0;
+}
+
+.viewer-prediction-position--compact p > small {
+  display: none;
+}
+
+.compact-prediction-market .viewer-prediction-position {
+  grid-column: 1 / -1;
+}
+
+.professional-match-card__market {
+  gap: 0.7rem;
+  padding: 1rem 0.95rem 0;
+}
+
+.professional-match-card__market span {
+  font-size: 0.875rem;
+}
+
+.professional-match-card__market strong {
+  font-size: 1.05rem;
+}
+
+.professional-match-card__market > small {
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.professional-match-card__market-position {
+  align-items: center;
+  background: #e7f5ef;
+  border: 1px solid #b9ded2;
+  border-radius: 10px;
+  color: #08765d;
+  display: flex;
+  font-size: 0.875rem !important;
+  gap: 0.35rem;
+  grid-column: 1 / -1;
+  padding: 0.55rem 0.65rem;
+}
+
+:root[data-theme="dark"] .professional-match-card__market-position {
+  background: #12342d;
+  border-color: #256b5b;
+  color: #7bdec4;
+}
+
+.prediction-market-detail__chart > header > span,
+.tournament-markets > header > span {
+  font-size: 0.875rem;
+  padding: 0.68rem 0.85rem;
+}
+
+.prediction-chart > header span,
+.prediction-chart > footer span {
+  font-size: 0.875rem;
+}
+
+.prediction-chart > header strong {
+  font-size: 1.1rem;
+}
+
+.prediction-chart > footer button {
+  font-size: 0.875rem;
+  min-height: 38px;
+  min-width: 38px;
+}
+
+.prediction-chart__tooltip small {
+  font-size: 0.875rem;
+}
+
+.prediction-ticket {
+  padding: 1.15rem;
+}
+
+.prediction-ticket > header {
+  margin-bottom: 1rem;
+  padding-bottom: 0.9rem;
+}
+
+.prediction-ticket > header span,
+.prediction-ticket label > span {
+  font-size: 0.9rem;
+}
+
+.prediction-ticket > header strong {
+  font-size: 1.05rem;
+}
+
+.prediction-ticket__mode {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  display: grid;
+  gap: 0.25rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 0.75rem;
+  padding: 0.25rem;
+}
+
+.prediction-ticket__mode button {
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  color: var(--color-bone-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 750;
+  min-height: 42px;
+}
+
+.prediction-ticket__mode button[aria-pressed="true"] {
+  background: var(--color-surface);
+  box-shadow: 0 3px 12px rgb(16 44 67 / 9%);
+  color: var(--color-bone);
+}
+
+.prediction-ticket__mode button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.prediction-ticket__sides button {
+  min-height: 92px;
+  padding: 0.8rem;
+}
+
+.prediction-ticket__sides button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.prediction-ticket__sides span {
+  font-size: 0.9rem;
+  line-height: 1.25;
+}
+
+.prediction-ticket__sides strong {
+  font-size: 1.55rem;
+}
+
+.prediction-ticket__sides small {
+  color: var(--color-bone-muted);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.prediction-ticket > label {
+  gap: 0.5rem;
+  margin-top: 0.95rem;
+}
+
+.prediction-ticket input {
+  font-size: 2rem;
+  min-height: 66px;
+  padding: 0.7rem 0.8rem;
+}
+
+.prediction-ticket__quick {
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.prediction-ticket__quick button {
+  font-size: 0.9rem;
+  min-height: 43px;
+}
+
+.prediction-ticket__estimate {
+  gap: 0.3rem;
+  margin-top: 0.9rem;
+  padding: 0.8rem;
+}
+
+.prediction-ticket__estimate span,
+.prediction-ticket__estimate small {
+  font-size: 0.875rem;
+}
+
+.prediction-ticket__estimate strong {
+  font-size: 0.92rem;
+}
+
+.prediction-ticket__submit,
+.prediction-ticket__review > button:last-child {
+  font-size: 0.95rem;
+  min-height: 52px;
+}
+
+.prediction-ticket__review {
+  gap: 0.7rem;
+  padding: 0.85rem;
+}
+
+.prediction-ticket__review p {
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.prediction-ticket__review small {
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.prediction-ticket__rule {
+  font-size: 0.875rem;
+  gap: 0.4rem;
+  margin-top: 0.8rem;
+}
+
+.prediction-ticket__message {
+  background: #fff1f1;
+  border: 1px solid #edc0c0;
+  border-radius: 10px;
+  color: #9b2f2f;
+  font-size: 0.875rem;
+  padding: 0.65rem;
+}
+
+.prediction-ticket__receipt {
+  align-items: start;
+  background: #e7f5ef;
+  border: 1px solid #a9d8c9;
+  border-radius: 14px;
+  color: #08765d;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin-bottom: 0.85rem;
+  padding: 0.8rem;
+}
+
+.prediction-ticket__receipt p {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.prediction-ticket__receipt small {
+  color: currentColor;
+  font-size: 0.825rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.prediction-ticket__receipt strong {
+  color: var(--color-bone);
+  font-size: 0.95rem;
+  margin: 0.1rem 0;
+}
+
+.prediction-ticket__receipt span {
+  color: var(--color-bone-muted);
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.prediction-ticket--signed-out p {
+  font-size: 0.9rem;
+}
+
+.prediction-ticket--signed-out a {
+  font-size: 0.9rem;
+}
+
+.tournament-markets__layout {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+}
+
+.tournament-markets__overview,
+.tournament-markets__contracts {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 20px;
+  min-width: 0;
+}
+
+.tournament-markets__overview {
+  padding: 1.1rem;
+}
+
+.tournament-markets__overview > header {
+  align-items: end;
+  display: flex;
+  justify-content: space-between;
+}
+
+.tournament-markets__overview > header span {
+  color: var(--color-bone-muted);
+  font-size: 0.84rem;
+}
+
+.tournament-markets__overview > header h3 {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 3vw, 2.7rem);
+  letter-spacing: -0.055em;
+  margin: 0.2rem 0 0;
+}
+
+.tournament-markets__overview > header > strong {
+  font-family: var(--font-display);
+  font-size: 2.35rem;
+}
+
+.tournament-market-chart__legend {
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 0.9rem;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.tournament-market-chart__legend button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  font-size: 0.875rem;
+  gap: 0.45rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 42px;
+  padding: 0.45rem 0.55rem;
+  text-align: left;
+}
+
+.tournament-market-chart__legend button[aria-pressed="true"] {
+  background: #edf4fb;
+  border-color: #84acd2;
+}
+
+:root[data-theme="dark"]
+  .tournament-market-chart__legend
+  button[aria-pressed="true"] {
+  background: #142b3d;
+}
+
+.tournament-market-chart__legend i {
+  border-radius: 50%;
+  height: 9px;
+  width: 9px;
+}
+
+.tournament-market-chart__legend span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tournament-market-chart__legend strong {
+  font-size: 0.9rem;
+}
+
+.tournament-market-chart__plot {
+  min-height: 270px;
+  overflow: hidden;
+}
+
+.tournament-market-chart__plot svg {
+  display: block;
+  overflow: visible;
+  width: 100%;
+}
+
+.tournament-market-chart__plot text {
+  fill: var(--color-bone-muted);
+  font-size: 12px;
+}
+
+.tournament-market-chart__line {
+  fill: none;
+  opacity: 0.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+  transition:
+    opacity 160ms ease,
+    stroke-width 160ms ease;
+}
+
+.tournament-market-chart__line.is-selected {
+  opacity: 1;
+  stroke-width: 4;
+}
+
+.tournament-market-chart > footer {
+  align-items: center;
+  border-top: 1px solid var(--color-line);
+  display: flex;
+  justify-content: space-between;
+  padding-top: 0.7rem;
+}
+
+.tournament-market-chart > footer > span {
+  color: var(--color-bone-muted);
+  font-size: 0.875rem;
+}
+
+.tournament-market-chart > footer > div {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.tournament-market-chart > footer button {
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--color-bone-muted);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 750;
+  min-height: 38px;
+  min-width: 38px;
+}
+
+.tournament-market-chart > footer button[aria-pressed="true"] {
+  background: #e8eef9;
+  color: #1f5ea5;
+}
+
+.tournament-markets__contracts {
+  overflow: hidden;
+}
+
+.tournament-markets__contracts > header {
+  align-items: center;
+  background: var(--color-canvas);
+  display: flex;
+  justify-content: space-between;
+  padding: 0.9rem 1rem;
+}
+
+.tournament-markets__contracts > header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.16rem;
+}
+
+.tournament-markets__contracts > header span {
+  color: var(--color-bone-muted);
+  font-size: 0.875rem;
+}
+
+.tournament-markets__contracts > header strong {
+  font-size: 1rem;
+}
+
+.tournament-markets__contracts > article {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0.75rem;
+}
+
+.tournament-markets__contracts > article + article {
+  border-top: 1px solid var(--color-line);
+}
+
+.tournament-markets__contracts > article.is-selected {
+  background: #f1f6fb;
+  box-shadow: inset 3px 0 #2167ad;
+}
+
+:root[data-theme="dark"] .tournament-markets__contracts > article.is-selected {
+  background: #142b3d;
+}
+
+.tournament-markets__contract-name {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.tournament-markets__contract-name > span {
+  font-size: 1rem;
+}
+
+.tournament-markets__contract-name > strong {
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tournament-markets__contract-name > small {
+  color: var(--color-bone-muted);
+  font-size: 0.875rem;
+  grid-column: 2;
+}
+
+.tournament-markets__contract-name > b {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  grid-column: 3;
+  grid-row: 1 / 3;
+}
+
+.tournament-markets__contract-name > svg {
+  color: var(--color-bone-muted);
+  grid-column: 4;
+  grid-row: 1 / 3;
+  transition: transform 160ms ease;
+}
+
+.tournament-markets__contract-name[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+
+.tournament-markets__quotes {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.tournament-markets__quotes button {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.875rem;
+  min-height: 38px;
+  padding: 0 0.75rem;
+}
+
+.tournament-markets__quotes button:first-child {
+  color: #08765d;
+}
+
+.tournament-markets__quotes button:last-child {
+  color: #b34242;
+}
+
+.tournament-markets__quotes button[aria-pressed="true"] {
+  border-color: currentColor;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.tournament-markets__owned,
+.tournament-markets__contract-detail {
+  grid-column: 1 / -1;
+}
+
+.tournament-markets__owned {
+  align-items: center;
+  color: #08765d;
+  display: flex;
+  font-size: 0.875rem;
+  gap: 0.3rem;
+}
+
+.tournament-markets__contract-detail {
+  border-top: 1px solid var(--color-line);
+  color: var(--color-bone-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+  gap: 0.5rem 1rem;
+  padding-top: 0.6rem;
+}
+
+.tournament-markets__layout > .prediction-ticket {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.prediction-wallet-section {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  padding-inline: 0;
+}
+
+.prediction-wallet-summary small,
+.prediction-wallet-summary p,
+.prediction-wallet-positions small,
+.prediction-wallet-positions span {
+  font-size: 0.875rem;
+}
+
+.prediction-wallet-summary p {
+  line-height: 1.55;
+}
+
+.prediction-wallet-positions > section {
+  background: var(--color-surface);
+}
+
+.prediction-wallet-position-row {
+  align-items: center;
+  color: inherit;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  min-height: 92px;
+  padding: 0.9rem;
+  text-decoration: none;
+}
+
+.prediction-wallet-position-row + .prediction-wallet-position-row {
+  border-top: 1px solid var(--color-line);
+}
+
+.prediction-wallet-position-row:hover {
+  background: color-mix(in srgb, #e8f2f6 55%, var(--color-surface));
+}
+
+.prediction-wallet-position-row > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.prediction-wallet-position-row > div:first-child strong {
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prediction-wallet-position-row .duna-numeric {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  text-align: right;
+}
+
+.prediction-wallet-position-row > svg {
+  color: var(--color-bone-muted);
+}
+
+.pro-event-content {
+  max-width: 1480px;
+}
+
+.pro-back-link,
+.pro-match-hero > div:first-child > a {
+  font-size: 0.9rem;
+}
+
+.pro-event-hero__facts,
+.pro-match-hero__facts {
+  font-size: 0.88rem;
+}
+
+.pro-event-hero__actions a,
+.pro-match-source a,
+.pro-event-hero__address {
+  font-size: 0.9rem;
+}
+
+.pro-event-hero__visual > figure figcaption,
+.pro-event-hero__scorecard > span,
+.pro-event-hero__scorecard > small {
+  font-size: 0.875rem;
+}
+
+.pro-team-name--compact {
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.pro-team-name small {
+  font-size: 0.875rem;
+}
+
+.pro-watch > div small,
+.pro-watch > p,
+.pro-entry-lists__groups > section > header span,
+.pro-avp-table > header > div > span,
+.pro-avp-table > header > span,
+.pro-podium article small,
+.pro-bracket__rounds h3,
+.pro-pool-grid > article > header span,
+.pro-standing-head,
+.pro-standing-row > small,
+.pro-predictions article small,
+.pro-predictions article > a {
+  font-size: 0.875rem;
+}
+
+.pro-entry-list__head,
+.pro-live-table__head,
+.pro-avp-table thead th {
+  font-size: 0.875rem;
+}
+
+.pro-entry-team,
+.pro-avp-table th,
+.pro-avp-table td,
+.pro-standing-row,
+.pro-live-table__row > span:not(.pro-team-name) {
+  font-size: 0.88rem;
+}
+
+.pro-entry-team > div > span,
+.pro-avp-roster,
+.pro-avp-table tbody td > small,
+.pro-live-table__team > small {
+  font-size: 0.875rem;
+}
+
+.pro-live-table__head,
+.pro-live-table__row {
+  min-height: 62px;
+  padding: 0.9rem 1rem;
+}
+
+.pro-live-table__row .duna-numeric {
+  font-size: 1rem;
+}
+
+.pro-pool-grid h3 {
+  font-size: 1rem;
+}
+
+.pro-standing-head,
+.pro-standing-row {
+  min-height: 46px;
+  padding: 0.7rem 0.8rem;
+}
+
+.professional-match-card > header strong,
+.professional-match-card > header > div:last-child,
+.professional-match-card__context,
+.professional-match-card__pending {
+  font-size: 0.9rem;
+}
+
+.professional-match-card__players small {
+  font-size: 0.875rem;
+}
+
+.professional-match-card__status,
+.professional-match-card__outcome,
+.professional-match-card > footer {
+  font-size: 0.875rem;
+}
+
+@media (max-width: 980px) {
+  .tournament-markets__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .tournament-markets__layout > .prediction-ticket {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .tournament-market-chart__legend {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .viewer-prediction-position--compact {
+    align-items: start;
+    grid-template-columns: 1fr;
+  }
+
+  .prediction-ticket {
+    padding: 0.9rem;
+  }
+
+  .prediction-ticket__sides button {
+    min-height: 88px;
+  }
+
+  .tournament-markets__overview {
+    padding: 0.85rem;
+  }
+
+  .tournament-markets__overview > header {
+    align-items: start;
+    gap: 0.5rem;
+  }
+
+  .tournament-markets__overview > header h3 {
+    font-size: 1.6rem;
+  }
+
+  .tournament-markets__overview > header > strong {
+    font-size: 1.8rem;
+  }
+
+  .tournament-market-chart__legend {
+    display: flex;
+    margin-inline: -0.2rem;
+    max-height: none;
+    overflow-x: auto;
+    padding: 0.2rem;
+  }
+
+  .tournament-market-chart__legend button {
+    flex: 0 0 190px;
+    font-size: 0.875rem;
+  }
+
+  .tournament-market-chart__plot {
+    min-height: 210px;
+    overflow: hidden;
+  }
+
+  .tournament-market-chart__plot svg {
+    min-width: 0;
+  }
+
+  .tournament-market-chart > footer button,
+  .tournament-market-chart > footer > span,
+  .tournament-markets__quotes button,
+  .tournament-markets__owned,
+  .tournament-markets__contract-detail {
+    font-size: 0.875rem;
+  }
+
+  .tournament-markets__contracts > article {
+    grid-template-columns: 1fr;
+  }
+
+  .tournament-markets__quotes {
+    grid-column: 1;
+  }
+
+  .tournament-markets__quotes button {
+    flex: 1;
+  }
+
+  .prediction-wallet-position-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .prediction-wallet-position-row > svg {
+    display: none;
+  }
+
+  .prediction-wallet-position-row .duna-badge {
+    grid-column: 2;
+  }
+
+  .prediction-wallet-section .dashboard-section__heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .prediction-wallet-section .dashboard-section__heading > p {
+    line-height: 1.45;
+    margin: 0;
+  }
+}

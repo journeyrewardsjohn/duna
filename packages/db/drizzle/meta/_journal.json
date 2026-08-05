@@ -372,6 +372,13 @@
       "when": 1785948623524,
       "tag": "0052_glamorous_mister_fear",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1785959648003,
+      "tag": "0053_spotty_nightmare",
+      "breakpoints": true
     }
   ]
 }

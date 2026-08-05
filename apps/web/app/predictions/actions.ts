@@ -10,6 +10,36 @@ function failure(error: unknown, fallback: string) {
   };
 }
 
+export async function placePredictionSellOrderAction(input: {
+  readonly marketId: string;
+  readonly side: "yes" | "no";
+  readonly shares: number;
+  readonly limitPriceBps: number;
+  readonly idempotencyKey: string;
+  readonly returnTo: string;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.placePredictionSellOrder({
+      marketId: input.marketId,
+      side: input.side,
+      shares: input.shares,
+      limitPriceBps: input.limitPriceBps,
+      idempotencyKey: input.idempotencyKey,
+    });
+    if (
+      input.returnTo.startsWith("/events/") ||
+      input.returnTo.startsWith("/app/matches/")
+    ) {
+      revalidatePath(input.returnTo);
+    }
+    revalidatePath("/app/wallet");
+    return { ok: true as const, result };
+  } catch (error) {
+    return failure(error, "Your sell order could not be placed.");
+  }
+}
+
 export async function placeProMatchPredictionOrderAction(input: {
   readonly eventSlug: string;
   readonly matchId: string;

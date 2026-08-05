@@ -1,7 +1,11 @@
-import { ChevronRight } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import type { PredictionMarketView } from "@duna/api";
 import { TourBrandMark, type TourBrand } from "./tour-brand-mark";
+import {
+  buildViewerPredictionSummary,
+  formatPredictionAmount,
+} from "@/lib/prediction-position";
 
 export interface ProfessionalMatchPlayer {
   readonly name: string;
@@ -131,6 +135,9 @@ export function ProfessionalMatchCard({
   readonly predictionMarket?: PredictionMarketView;
   readonly className?: string;
 }) {
+  const viewerPosition = predictionMarket
+    ? buildViewerPredictionSummary(predictionMarket)
+    : undefined;
   const body = (
     <>
       <header>
@@ -196,6 +203,13 @@ export function ProfessionalMatchCard({
             })}{" "}
             credit volume · {predictionMarket.participantCount} predictors
           </small>
+          {viewerPosition && (
+            <span className="professional-match-card__market-position">
+              <Check aria-hidden size={14} /> Your position ·{" "}
+              {formatPredictionAmount(viewerPosition.totalCommittedCredits)}
+              credits
+            </span>
+          )}
         </div>
       )}
       {(ratingDelta !== undefined || href) && (

@@ -7,7 +7,10 @@ import {
   predictionOrderCostMicros,
   predictionOrderSharesMicros,
   predictionOrdersCross,
+  predictionSaleCostBasisMicros,
+  predictionShareOrdersCross,
   predictionSideCostMicros,
+  predictionSharesToMicros,
   predictionSettlementPayoutMicros,
   validatePredictionPrice,
   type PredictionSide,
@@ -26,6 +29,7 @@ import {
   predictionOrders,
   predictionPositions,
   predictionPriceSnapshots,
+  predictionShareTrades,
   predictionTrades,
   ratings,
   sessions,
@@ -60,12 +64,32 @@ export class PredictionMarketError extends Error {
       | "MARKET_NOT_FOUND"
       | "MARKET_CLOSED"
       | "INSUFFICIENT_CREDITS"
+      | "INSUFFICIENT_SHARES"
       | "INVALID_ORDER"
       | "ALREADY_SETTLED",
     message: string,
   ) {
     super(message);
   }
+}
+
+export function comparePredictionMakerPriority(
+  left: {
+    readonly sidePriceBps: number;
+    readonly createdAt: Date;
+    readonly id: string;
+  },
+  right: {
+    readonly sidePriceBps: number;
+    readonly createdAt: Date;
+    readonly id: string;
+  },
+) {
+  return (
+    left.sidePriceBps - right.sidePriceBps ||
+    left.createdAt.getTime() - right.createdAt.getTime() ||
+    left.id.localeCompare(right.id)
+  );
 }
 
 function monthKey(now: Date): string {
@@ -621,6 +645,7 @@ export async function loadPredictionMarket(input: {
         .limit(600),
       database
         .select({
+          intent: predictionOrders.intent,
           side: predictionOrders.side,
           limitPriceBps: predictionOrders.limitPriceBps,
           remainingSharesMicros: predictionOrders.remainingSharesMicros,
@@ -661,15 +686,29 @@ export async function loadPredictionMarket(input: {
         : Promise.resolve([]),
     ]);
   const yesBids = openOrders
-    .filter((order) => order.side === "yes")
+    .filter((order) => order.intent === "buy" && order.side === "yes")
     .map((order) => order.limitPriceBps);
   const noBids = openOrders
-    .filter((order) => order.side === "no")
+    .filter((order) => order.intent === "buy" && order.side === "no")
+    .map((order) => order.limitPriceBps);
+  const yesDirectAsks = openOrders
+    .filter((order) => order.intent === "sell" && order.side === "yes")
+    .map((order) => order.limitPriceBps);
+  const noDirectAsks = openOrders
+    .filter((order) => order.intent === "sell" && order.side === "no")
     .map((order) => order.limitPriceBps);
   const bestYesBid = yesBids.length ? Math.max(...yesBids) : undefined;
   const bestNoBid = noBids.length ? Math.max(...noBids) : undefined;
-  const yesAsk =
-    bestNoBid === undefined ? undefined : PREDICTION_PRICE_SCALE - bestNoBid;
+  const yesAsks = [
+    ...yesDirectAsks,
+    ...(bestNoBid === undefined ? [] : [PREDICTION_PRICE_SCALE - bestNoBid]),
+  ];
+  const noAsks = [
+    ...noDirectAsks,
+    ...(bestYesBid === undefined ? [] : [PREDICTION_PRICE_SCALE - bestYesBid]),
+  ];
+  const yesAsk = yesAsks.length ? Math.min(...yesAsks) : undefined;
+  const noAsk = noAsks.length ? Math.min(...noAsks) : undefined;
   const displayYesPriceBps = predictionDisplayPriceBps({
     bestBidBps: bestYesBid,
     bestAskBps: yesAsk,
@@ -690,6 +729,8 @@ export async function loadPredictionMarket(input: {
     lastYesPriceBps: market.lastYesPriceBps,
     bestYesBidBps: bestYesBid,
     yesAskBps: yesAsk,
+    bestNoBidBps: bestNoBid,
+    noAskBps: noAsk,
     volumeCredits: predictionMicrosToCredits(market.volumeMicros),
     participantCount: uniqueParticipants,
     locksAt: market.locksAt?.toISOString(),
@@ -710,17 +751,34 @@ export async function loadPredictionMarket(input: {
             id: position.id,
             side: position.side as PredictionSide,
             shares: predictionMicrosToCredits(position.sharesMicros),
+            availableShares: predictionMicrosToCredits(
+              position.sharesMicros - position.reservedSharesMicros,
+            ),
+            listedShares: predictionMicrosToCredits(
+              position.reservedSharesMicros,
+            ),
             costCredits: predictionMicrosToCredits(position.costMicros),
             payoutCredits: predictionMicrosToCredits(position.payoutMicros),
             status: position.status,
           })),
           orders: viewerOrders.map((order) => ({
             id: order.id,
+            intent: order.intent as "buy" | "sell",
             side: order.side as PredictionSide,
             limitPriceBps: order.limitPriceBps,
             allocatedCredits: predictionMicrosToCredits(
               order.spentMicros + order.reservedMicros,
             ),
+            filledCredits: predictionMicrosToCredits(order.spentMicros),
+            openCredits:
+              order.intent === "buy"
+                ? predictionMicrosToCredits(order.reservedMicros)
+                : 0,
+            openShares: predictionMicrosToCredits(order.remainingSharesMicros),
+            filledShares: predictionMicrosToCredits(
+              order.sharesMicros - order.remainingSharesMicros,
+            ),
+            proceedsCredits: predictionMicrosToCredits(order.proceedsMicros),
             status: order.status,
             createdAt: order.createdAt.toISOString(),
           })),
@@ -836,6 +894,193 @@ export async function placePredictionOrder(input: {
       createdAt: now,
     });
 
+    let remaining = sharesMicros;
+    let spent = 0;
+    let filledShares = 0;
+    let latestYesPriceBps = lockedMarket.lastYesPriceBps;
+    let addedVolumeMicros = 0;
+    const addPosition = async (position: {
+      readonly accountId: string;
+      readonly personId: string;
+      readonly side: PredictionSide;
+      readonly sharesMicros: number;
+      readonly costMicros: number;
+    }) => {
+      await transaction
+        .insert(predictionPositions)
+        .values({
+          marketId: market.id,
+          accountId: position.accountId,
+          personId: position.personId,
+          side: position.side,
+          sharesMicros: position.sharesMicros,
+          costMicros: position.costMicros,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [
+            predictionPositions.marketId,
+            predictionPositions.personId,
+            predictionPositions.side,
+          ],
+          set: {
+            sharesMicros: sql`${predictionPositions.sharesMicros} + ${position.sharesMicros}`,
+            costMicros: sql`${predictionPositions.costMicros} + ${position.costMicros}`,
+            updatedAt: now,
+          },
+        });
+    };
+
+    // A buy first takes any same-side shares offered at or below its limit.
+    // This transfers an existing fully collateralized claim without minting a
+    // second claim or changing the total prediction-credit supply.
+    const directSellOrders = await transaction
+      .select()
+      .from(predictionOrders)
+      .where(
+        and(
+          eq(predictionOrders.marketId, market.id),
+          eq(predictionOrders.intent, "sell"),
+          eq(predictionOrders.side, input.side),
+          inArray(predictionOrders.status, ["open", "partially-filled"]),
+          ne(predictionOrders.personId, input.personId),
+        ),
+      )
+      .orderBy(
+        asc(predictionOrders.limitPriceBps),
+        asc(predictionOrders.createdAt),
+      );
+    const fillDirectSellOrder = async (
+      maker: (typeof directSellOrders)[number],
+    ) => {
+      if (remaining <= 0) return;
+      if (
+        !predictionShareOrdersCross({
+          buyLimitPriceBps: input.limitPriceBps,
+          sellLimitPriceBps: maker.limitPriceBps,
+        })
+      ) {
+        return;
+      }
+      const sellerPosition =
+        await transaction.query.predictionPositions.findFirst({
+          where: and(
+            eq(predictionPositions.marketId, market.id),
+            eq(predictionPositions.personId, maker.personId),
+            eq(predictionPositions.side, input.side),
+            eq(predictionPositions.status, "open"),
+          ),
+        });
+      if (!sellerPosition) {
+        throw new Error("A listed prediction position could not be found.");
+      }
+      const fillShares = Math.min(
+        remaining,
+        maker.remainingSharesMicros,
+        sellerPosition.reservedSharesMicros,
+      );
+      if (fillShares <= 0) return;
+      const saleCreditsMicros = predictionSideCostMicros({
+        sharesMicros: fillShares,
+        side: input.side,
+        sidePriceBps: maker.limitPriceBps,
+      });
+      const costBasisReduction = predictionSaleCostBasisMicros({
+        positionSharesMicros: sellerPosition.sharesMicros,
+        positionCostMicros: sellerPosition.costMicros,
+        soldSharesMicros: fillShares,
+      });
+      const [trade] = await transaction
+        .insert(predictionShareTrades)
+        .values({
+          marketId: market.id,
+          side: input.side,
+          buyOrderId: order.id,
+          sellOrderId: maker.id,
+          sellerPositionId: sellerPosition.id,
+          makerOrderId: maker.id,
+          sharesMicros: fillShares,
+          priceBps: maker.limitPriceBps,
+          costMicros: saleCreditsMicros,
+          executedAt: now,
+          createdAt: now,
+        })
+        .returning({ id: predictionShareTrades.id });
+      if (!trade) throw new Error("Prediction share trade was not recorded.");
+      await addPosition({
+        accountId: account.id,
+        personId: input.personId,
+        side: input.side,
+        sharesMicros: fillShares,
+        costMicros: saleCreditsMicros,
+      });
+      await transaction
+        .update(predictionPositions)
+        .set({
+          sharesMicros: sellerPosition.sharesMicros - fillShares,
+          reservedSharesMicros:
+            sellerPosition.reservedSharesMicros - fillShares,
+          costMicros: sellerPosition.costMicros - costBasisReduction,
+          updatedAt: now,
+        })
+        .where(eq(predictionPositions.id, sellerPosition.id));
+      const makerRemaining = maker.remainingSharesMicros - fillShares;
+      await transaction
+        .update(predictionOrders)
+        .set({
+          remainingSharesMicros: makerRemaining,
+          reservedSharesMicros: makerRemaining,
+          proceedsMicros: maker.proceedsMicros + saleCreditsMicros,
+          status: makerRemaining === 0 ? "filled" : "partially-filled",
+          filledAt: makerRemaining === 0 ? now : undefined,
+          updatedAt: now,
+        })
+        .where(eq(predictionOrders.id, maker.id));
+      await transaction
+        .update(predictionCreditAccounts)
+        .set({
+          cachedAvailableMicros: sql`${predictionCreditAccounts.cachedAvailableMicros} + ${saleCreditsMicros}`,
+          updatedAt: now,
+        })
+        .where(eq(predictionCreditAccounts.id, maker.accountId));
+      await transaction.insert(predictionCreditLedger).values({
+        accountId: maker.accountId,
+        personId: maker.personId,
+        deltaMicros: saleCreditsMicros,
+        kind: "sale-proceeds",
+        marketId: market.id,
+        orderId: maker.id,
+        positionId: sellerPosition.id,
+        idempotencyKey: `prediction-share-trade:${trade.id}:seller-proceeds`,
+        note: `Sold ${predictionMicrosToCredits(fillShares)} shares of ${input.side === "yes" ? market.yesLabel : market.noLabel}`,
+        metadata: {
+          tradeId: trade.id,
+          sharesMicros: fillShares,
+          priceBps: maker.limitPriceBps,
+          nonCash: true,
+        },
+        occurredAt: now,
+        createdAt: now,
+      });
+      remaining -= fillShares;
+      filledShares += fillShares;
+      spent += saleCreditsMicros;
+      latestYesPriceBps =
+        input.side === "yes"
+          ? maker.limitPriceBps
+          : PREDICTION_PRICE_SCALE - maker.limitPriceBps;
+      addedVolumeMicros += fillShares;
+      await transaction.insert(predictionPriceSnapshots).values({
+        marketId: market.id,
+        yesPriceBps: latestYesPriceBps,
+        source: "trade",
+        volumeMicros: lockedMarket.volumeMicros + addedVolumeMicros,
+        recordedAt: now,
+        createdAt: now,
+      });
+    };
+
     const oppositeSide: PredictionSide = input.side === "yes" ? "no" : "yes";
     const oppositeOrders = await transaction
       .select()
@@ -843,6 +1088,7 @@ export async function placePredictionOrder(input: {
       .where(
         and(
           eq(predictionOrders.marketId, market.id),
+          eq(predictionOrders.intent, "buy"),
           eq(predictionOrders.side, oppositeSide),
           inArray(predictionOrders.status, ["open", "partially-filled"]),
           ne(predictionOrders.personId, input.personId),
@@ -852,23 +1098,19 @@ export async function placePredictionOrder(input: {
         desc(predictionOrders.limitPriceBps),
         asc(predictionOrders.createdAt),
       );
-
-    let remaining = sharesMicros;
-    let spent = 0;
-    let filledShares = 0;
-    let latestYesPriceBps = lockedMarket.lastYesPriceBps;
-    let addedVolumeMicros = 0;
-    for (const maker of oppositeOrders) {
-      if (remaining <= 0) break;
+    const fillOppositeBuyOrder = async (
+      maker: (typeof oppositeOrders)[number],
+    ) => {
+      if (remaining <= 0) return;
       const yesLimitPriceBps =
         input.side === "yes" ? input.limitPriceBps : maker.limitPriceBps;
       const noLimitPriceBps =
         input.side === "no" ? input.limitPriceBps : maker.limitPriceBps;
       if (!predictionOrdersCross({ yesLimitPriceBps, noLimitPriceBps })) {
-        continue;
+        return;
       }
       const fillShares = Math.min(remaining, maker.remainingSharesMicros);
-      if (fillShares <= 0) continue;
+      if (fillShares <= 0) return;
       const prices = predictionExecutionPrices({
         makerSide: maker.side as PredictionSide,
         makerLimitPriceBps: maker.limitPriceBps,
@@ -907,47 +1149,18 @@ export async function placePredictionOrder(input: {
         .returning({ id: predictionTrades.id });
       if (!trade) throw new Error("Prediction trade was not recorded.");
 
-      const addPosition = async (position: {
-        readonly accountId: string;
-        readonly personId: string;
-        readonly side: PredictionSide;
-        readonly costMicros: number;
-      }) => {
-        await transaction
-          .insert(predictionPositions)
-          .values({
-            marketId: market.id,
-            accountId: position.accountId,
-            personId: position.personId,
-            side: position.side,
-            sharesMicros: fillShares,
-            costMicros: position.costMicros,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .onConflictDoUpdate({
-            target: [
-              predictionPositions.marketId,
-              predictionPositions.personId,
-              predictionPositions.side,
-            ],
-            set: {
-              sharesMicros: sql`${predictionPositions.sharesMicros} + ${fillShares}`,
-              costMicros: sql`${predictionPositions.costMicros} + ${position.costMicros}`,
-              updatedAt: now,
-            },
-          });
-      };
       await addPosition({
         accountId: account.id,
         personId: input.personId,
         side: input.side,
+        sharesMicros: fillShares,
         costMicros: takerCost,
       });
       await addPosition({
         accountId: maker.accountId,
         personId: maker.personId,
         side: maker.side as PredictionSide,
+        sharesMicros: fillShares,
         costMicros: makerCost,
       });
       await transaction
@@ -996,6 +1209,43 @@ export async function placePredictionOrder(input: {
         recordedAt: now,
         createdAt: now,
       });
+    };
+
+    // Existing same-side shares and newly paired opposite-side contracts
+    // compete in one price-time queue. This guarantees that a taker receives
+    // the best available execution regardless of how the claim was sourced.
+    const prioritizedMakers = [
+      ...directSellOrders.map((maker) => ({
+        kind: "share-sale" as const,
+        maker,
+        sidePriceBps: maker.limitPriceBps,
+      })),
+      ...oppositeOrders.map((maker) => ({
+        kind: "paired-buy" as const,
+        maker,
+        sidePriceBps: PREDICTION_PRICE_SCALE - maker.limitPriceBps,
+      })),
+    ].sort((left, right) =>
+      comparePredictionMakerPriority(
+        {
+          sidePriceBps: left.sidePriceBps,
+          createdAt: left.maker.createdAt,
+          id: left.maker.id,
+        },
+        {
+          sidePriceBps: right.sidePriceBps,
+          createdAt: right.maker.createdAt,
+          id: right.maker.id,
+        },
+      ),
+    );
+    for (const candidate of prioritizedMakers) {
+      if (remaining <= 0) break;
+      if (candidate.kind === "share-sale") {
+        await fillDirectSellOrder(candidate.maker);
+      } else {
+        await fillOppositeBuyOrder(candidate.maker);
+      }
     }
 
     const remainingReserve = predictionSideCostMicros({
@@ -1072,6 +1322,358 @@ export async function placePredictionOrder(input: {
   });
 }
 
+export async function placePredictionSellOrder(input: {
+  readonly personId: string;
+  readonly marketId: string;
+  readonly side: PredictionSide;
+  readonly shares: number;
+  readonly limitPriceBps: number;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  validatePredictionPrice(input.limitPriceBps);
+  let sharesMicros: number;
+  try {
+    sharesMicros = predictionSharesToMicros(input.shares);
+  } catch (error) {
+    throw new PredictionMarketError(
+      "INVALID_ORDER",
+      error instanceof Error ? error.message : "Enter a valid share quantity.",
+    );
+  }
+  const now = input.now ?? new Date();
+  const { account } = await ensurePredictionCreditAccount({
+    personId: input.personId,
+    now,
+  });
+  const database = getTransactionalDatabase();
+  return database.transaction(async (transaction) => {
+    await transaction.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${input.marketId}))`,
+    );
+    const market = await transaction.query.predictionMarkets.findFirst({
+      where: eq(predictionMarkets.id, input.marketId),
+    });
+    if (!market) {
+      throw new PredictionMarketError("MARKET_NOT_FOUND", "Market not found.");
+    }
+    if (marketStatusForTime(market, now) !== "open") {
+      throw new PredictionMarketError(
+        "MARKET_CLOSED",
+        "This prediction market is no longer accepting orders.",
+      );
+    }
+    const position = await transaction.query.predictionPositions.findFirst({
+      where: and(
+        eq(predictionPositions.marketId, market.id),
+        eq(predictionPositions.personId, input.personId),
+        eq(predictionPositions.side, input.side),
+        eq(predictionPositions.status, "open"),
+      ),
+    });
+    if (
+      !position ||
+      position.sharesMicros - position.reservedSharesMicros < sharesMicros
+    ) {
+      throw new PredictionMarketError(
+        "INSUFFICIENT_SHARES",
+        "You do not have enough available shares to place this sell order.",
+      );
+    }
+    const [reservedPosition] = await transaction
+      .update(predictionPositions)
+      .set({
+        reservedSharesMicros: sql`${predictionPositions.reservedSharesMicros} + ${sharesMicros}`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(predictionPositions.id, position.id),
+          gte(
+            sql`${predictionPositions.sharesMicros} - ${predictionPositions.reservedSharesMicros}`,
+            sharesMicros,
+          ),
+        ),
+      )
+      .returning();
+    if (!reservedPosition) {
+      throw new PredictionMarketError(
+        "INSUFFICIENT_SHARES",
+        "Those shares are already committed to another sell order.",
+      );
+    }
+    const [order] = await transaction
+      .insert(predictionOrders)
+      .values({
+        marketId: market.id,
+        accountId: account.id,
+        personId: input.personId,
+        intent: "sell",
+        side: input.side,
+        limitPriceBps: input.limitPriceBps,
+        sharesMicros,
+        remainingSharesMicros: sharesMicros,
+        reservedMicros: 0,
+        reservedSharesMicros: sharesMicros,
+        spentMicros: 0,
+        proceedsMicros: 0,
+        status: "open",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    if (!order) throw new Error("Prediction sell order was not created.");
+    await transaction.insert(predictionCreditLedger).values({
+      accountId: account.id,
+      personId: input.personId,
+      deltaMicros: 0,
+      kind: "sell-order",
+      marketId: market.id,
+      orderId: order.id,
+      positionId: position.id,
+      idempotencyKey: `prediction-order:${order.id}:sell-listing`,
+      note: `Listed ${input.shares} shares of ${input.side === "yes" ? market.yesLabel : market.noLabel}`,
+      metadata: {
+        sharesMicros,
+        limitPriceBps: input.limitPriceBps,
+        nonCash: true,
+        immutable: true,
+      },
+      occurredAt: now,
+      createdAt: now,
+    });
+
+    const buyOrders = await transaction
+      .select()
+      .from(predictionOrders)
+      .where(
+        and(
+          eq(predictionOrders.marketId, market.id),
+          eq(predictionOrders.intent, "buy"),
+          eq(predictionOrders.side, input.side),
+          inArray(predictionOrders.status, ["open", "partially-filled"]),
+          ne(predictionOrders.personId, input.personId),
+        ),
+      )
+      .orderBy(
+        desc(predictionOrders.limitPriceBps),
+        asc(predictionOrders.createdAt),
+      );
+    let remaining = sharesMicros;
+    let filledShares = 0;
+    let proceedsMicros = 0;
+    let positionShares = reservedPosition.sharesMicros;
+    let positionReserved = reservedPosition.reservedSharesMicros;
+    let positionCost = reservedPosition.costMicros;
+    let latestYesPriceBps = market.lastYesPriceBps;
+    let addedVolumeMicros = 0;
+    for (const maker of buyOrders) {
+      if (remaining <= 0) break;
+      if (
+        !predictionShareOrdersCross({
+          buyLimitPriceBps: maker.limitPriceBps,
+          sellLimitPriceBps: input.limitPriceBps,
+        })
+      ) {
+        break;
+      }
+      const fillShares = Math.min(remaining, maker.remainingSharesMicros);
+      if (fillShares <= 0) continue;
+      const saleCreditsMicros = predictionSideCostMicros({
+        sharesMicros: fillShares,
+        side: input.side,
+        sidePriceBps: maker.limitPriceBps,
+      });
+      const costBasisReduction = predictionSaleCostBasisMicros({
+        positionSharesMicros: positionShares,
+        positionCostMicros: positionCost,
+        soldSharesMicros: fillShares,
+      });
+      const [trade] = await transaction
+        .insert(predictionShareTrades)
+        .values({
+          marketId: market.id,
+          side: input.side,
+          buyOrderId: maker.id,
+          sellOrderId: order.id,
+          sellerPositionId: position.id,
+          makerOrderId: maker.id,
+          sharesMicros: fillShares,
+          priceBps: maker.limitPriceBps,
+          costMicros: saleCreditsMicros,
+          executedAt: now,
+          createdAt: now,
+        })
+        .returning({ id: predictionShareTrades.id });
+      if (!trade) throw new Error("Prediction share trade was not recorded.");
+      await transaction
+        .insert(predictionPositions)
+        .values({
+          marketId: market.id,
+          accountId: maker.accountId,
+          personId: maker.personId,
+          side: input.side,
+          sharesMicros: fillShares,
+          costMicros: saleCreditsMicros,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [
+            predictionPositions.marketId,
+            predictionPositions.personId,
+            predictionPositions.side,
+          ],
+          set: {
+            sharesMicros: sql`${predictionPositions.sharesMicros} + ${fillShares}`,
+            costMicros: sql`${predictionPositions.costMicros} + ${saleCreditsMicros}`,
+            updatedAt: now,
+          },
+        });
+      positionShares -= fillShares;
+      positionReserved -= fillShares;
+      positionCost -= costBasisReduction;
+      await transaction
+        .update(predictionPositions)
+        .set({
+          sharesMicros: positionShares,
+          reservedSharesMicros: positionReserved,
+          costMicros: positionCost,
+          updatedAt: now,
+        })
+        .where(eq(predictionPositions.id, position.id));
+      const makerRemaining = maker.remainingSharesMicros - fillShares;
+      const makerReserve = predictionSideCostMicros({
+        sharesMicros: makerRemaining,
+        side: input.side,
+        sidePriceBps: maker.limitPriceBps,
+      });
+      const makerRefund = Math.max(
+        0,
+        maker.reservedMicros - saleCreditsMicros - makerReserve,
+      );
+      await transaction
+        .update(predictionOrders)
+        .set({
+          remainingSharesMicros: makerRemaining,
+          reservedMicros: makerReserve,
+          spentMicros: maker.spentMicros + saleCreditsMicros,
+          status: makerRemaining === 0 ? "filled" : "partially-filled",
+          filledAt: makerRemaining === 0 ? now : undefined,
+          updatedAt: now,
+        })
+        .where(eq(predictionOrders.id, maker.id));
+      if (makerRefund > 0) {
+        await transaction
+          .update(predictionCreditAccounts)
+          .set({
+            cachedAvailableMicros: sql`${predictionCreditAccounts.cachedAvailableMicros} + ${makerRefund}`,
+            updatedAt: now,
+          })
+          .where(eq(predictionCreditAccounts.id, maker.accountId));
+        await transaction.insert(predictionCreditLedger).values({
+          accountId: maker.accountId,
+          personId: maker.personId,
+          deltaMicros: makerRefund,
+          kind: "price-improvement-refund",
+          marketId: market.id,
+          orderId: maker.id,
+          idempotencyKey: `prediction-share-trade:${trade.id}:buyer-refund`,
+          note: "Returned unused prediction credits after a share purchase",
+          metadata: { tradeId: trade.id, nonCash: true },
+          occurredAt: now,
+          createdAt: now,
+        });
+      }
+      await transaction
+        .update(predictionCreditAccounts)
+        .set({
+          cachedAvailableMicros: sql`${predictionCreditAccounts.cachedAvailableMicros} + ${saleCreditsMicros}`,
+          updatedAt: now,
+        })
+        .where(eq(predictionCreditAccounts.id, account.id));
+      await transaction.insert(predictionCreditLedger).values({
+        accountId: account.id,
+        personId: input.personId,
+        deltaMicros: saleCreditsMicros,
+        kind: "sale-proceeds",
+        marketId: market.id,
+        orderId: order.id,
+        positionId: position.id,
+        idempotencyKey: `prediction-share-trade:${trade.id}:seller-proceeds`,
+        note: `Sold ${predictionMicrosToCredits(fillShares)} shares of ${input.side === "yes" ? market.yesLabel : market.noLabel}`,
+        metadata: {
+          tradeId: trade.id,
+          sharesMicros: fillShares,
+          priceBps: maker.limitPriceBps,
+          nonCash: true,
+        },
+        occurredAt: now,
+        createdAt: now,
+      });
+      remaining -= fillShares;
+      filledShares += fillShares;
+      proceedsMicros += saleCreditsMicros;
+      latestYesPriceBps =
+        input.side === "yes"
+          ? maker.limitPriceBps
+          : PREDICTION_PRICE_SCALE - maker.limitPriceBps;
+      addedVolumeMicros += fillShares;
+      await transaction.insert(predictionPriceSnapshots).values({
+        marketId: market.id,
+        yesPriceBps: latestYesPriceBps,
+        source: "trade",
+        volumeMicros: market.volumeMicros + addedVolumeMicros,
+        recordedAt: now,
+        createdAt: now,
+      });
+    }
+    const status: "open" | "partially-filled" | "filled" =
+      remaining === 0
+        ? "filled"
+        : filledShares > 0
+          ? "partially-filled"
+          : "open";
+    await transaction
+      .update(predictionOrders)
+      .set({
+        remainingSharesMicros: remaining,
+        reservedSharesMicros: remaining,
+        proceedsMicros,
+        status,
+        filledAt: remaining === 0 ? now : undefined,
+        updatedAt: now,
+      })
+      .where(eq(predictionOrders.id, order.id));
+    if (addedVolumeMicros > 0) {
+      await transaction
+        .update(predictionMarkets)
+        .set({
+          lastYesPriceBps: latestYesPriceBps,
+          volumeMicros: sql`${predictionMarkets.volumeMicros} + ${addedVolumeMicros}`,
+          updatedAt: now,
+        })
+        .where(eq(predictionMarkets.id, market.id));
+    }
+    const refreshedAccount =
+      await transaction.query.predictionCreditAccounts.findFirst({
+        where: eq(predictionCreditAccounts.id, account.id),
+      });
+    return {
+      orderId: order.id,
+      marketId: market.id,
+      status,
+      filledShares: predictionMicrosToCredits(filledShares),
+      openShares: predictionMicrosToCredits(remaining),
+      proceedsCredits: predictionMicrosToCredits(proceedsMicros),
+      availableCredits: predictionMicrosToCredits(
+        refreshedAccount?.cachedAvailableMicros ?? 0,
+      ),
+      immutable: true as const,
+    };
+  });
+}
+
 export async function settlePredictionMarket(input: {
   readonly marketId: string;
   readonly resolvedSide: PredictionSide;
@@ -1103,7 +1705,13 @@ export async function settlePredictionMarket(input: {
       transaction
         .select()
         .from(predictionPositions)
-        .where(eq(predictionPositions.marketId, market.id)),
+        .where(
+          and(
+            eq(predictionPositions.marketId, market.id),
+            eq(predictionPositions.status, "open"),
+            gte(predictionPositions.sharesMicros, 1),
+          ),
+        ),
       transaction
         .select()
         .from(predictionOrders)
@@ -1118,7 +1726,45 @@ export async function settlePredictionMarket(input: {
         ),
     ]);
     for (const order of openOrders) {
-      if (order.reservedMicros > 0) {
+      if (order.intent === "sell" && order.reservedSharesMicros > 0) {
+        const position = await transaction.query.predictionPositions.findFirst({
+          where: and(
+            eq(predictionPositions.marketId, market.id),
+            eq(predictionPositions.personId, order.personId),
+            eq(predictionPositions.side, order.side),
+            eq(predictionPositions.status, "open"),
+          ),
+        });
+        if (position) {
+          await transaction
+            .update(predictionPositions)
+            .set({
+              reservedSharesMicros: Math.max(
+                0,
+                position.reservedSharesMicros - order.reservedSharesMicros,
+              ),
+              updatedAt: now,
+            })
+            .where(eq(predictionPositions.id, position.id));
+        }
+        await transaction.insert(predictionCreditLedger).values({
+          accountId: order.accountId,
+          personId: order.personId,
+          deltaMicros: 0,
+          kind: "sell-release",
+          marketId: market.id,
+          orderId: order.id,
+          positionId: position?.id,
+          idempotencyKey: `prediction-market:${market.id}:release-sell-order:${order.id}`,
+          note: "Released unsold shares when the prediction market closed",
+          metadata: {
+            sharesMicros: order.reservedSharesMicros,
+            nonCash: true,
+          },
+          occurredAt: now,
+          createdAt: now,
+        });
+      } else if (order.reservedMicros > 0) {
         await transaction
           .update(predictionCreditAccounts)
           .set({
@@ -1145,7 +1791,12 @@ export async function settlePredictionMarket(input: {
       }
       await transaction
         .update(predictionOrders)
-        .set({ status: "void", reservedMicros: 0, updatedAt: now })
+        .set({
+          status: "void",
+          reservedMicros: 0,
+          reservedSharesMicros: 0,
+          updatedAt: now,
+        })
         .where(eq(predictionOrders.id, order.id));
     }
     for (const position of positions) {
@@ -1293,6 +1944,30 @@ export async function settleResolvedPredictionMarkets(input?: {
   return { settled };
 }
 
+export function predictionMarketPath(
+  market: Pick<
+    typeof predictionMarkets.$inferSelect,
+    "sourceSnapshot" | "subjectId" | "subjectType"
+  >,
+) {
+  const snapshot = market.sourceSnapshot as Record<string, unknown>;
+  const canonicalPath = snapshot.canonicalPath;
+  if (typeof canonicalPath === "string" && canonicalPath.startsWith("/")) {
+    return canonicalPath;
+  }
+  if (market.subjectType === "match") {
+    return `/app/matches/${market.subjectId}`;
+  }
+  const eventSlug = snapshot.eventSlug;
+  if (typeof eventSlug === "string" && eventSlug.length > 0) {
+    if (market.subjectType === "pro-match") {
+      return `/events/${eventSlug}`;
+    }
+    return `/events/${eventSlug}#prediction-markets`;
+  }
+  return "/app/wallet";
+}
+
 export async function loadPredictionWallet(input: {
   readonly personId: string;
   readonly now?: Date;
@@ -1306,6 +1981,12 @@ export async function loadPredictionWallet(input: {
       positions: [],
       openOrders: [],
       activity: [],
+      integrity: {
+        algorithm: "SHA-256" as const,
+        chainVersion: 1 as const,
+        entryCount: 0,
+        verified: true,
+      },
       rules: predictionCreditRules,
     };
   }
@@ -1315,7 +1996,7 @@ export async function loadPredictionWallet(input: {
     now,
   });
   const database = getDatabase();
-  const [positions, orders, ledger] = await Promise.all([
+  const [positions, orders, ledger, integrityResult] = await Promise.all([
     database
       .select({ position: predictionPositions, market: predictionMarkets })
       .from(predictionPositions)
@@ -1323,7 +2004,15 @@ export async function loadPredictionWallet(input: {
         predictionMarkets,
         eq(predictionPositions.marketId, predictionMarkets.id),
       )
-      .where(eq(predictionPositions.personId, input.personId))
+      .where(
+        and(
+          eq(predictionPositions.personId, input.personId),
+          or(
+            gte(predictionPositions.sharesMicros, 1),
+            ne(predictionPositions.status, "open"),
+          ),
+        ),
+      )
       .orderBy(desc(predictionPositions.updatedAt))
       .limit(100),
     database
@@ -1347,7 +2036,18 @@ export async function loadPredictionWallet(input: {
       .where(eq(predictionCreditLedger.accountId, ensured.account.id))
       .orderBy(desc(predictionCreditLedger.occurredAt))
       .limit(100),
+    database.execute(sql`
+      select entry_count, head_hash, verified
+      from prediction_credit_ledger_integrity(${ensured.account.id}::uuid)
+    `),
   ]);
+  const integrity = integrityResult.rows[0] as
+    | {
+        entry_count?: number | string;
+        head_hash?: string | null;
+        verified?: boolean;
+      }
+    | undefined;
   return {
     availableCredits: predictionMicrosToCredits(
       ensured.account.cachedAvailableMicros,
@@ -1364,6 +2064,10 @@ export async function loadPredictionWallet(input: {
       selectedLabel: position.side === "yes" ? market.yesLabel : market.noLabel,
       side: position.side as PredictionSide,
       shares: predictionMicrosToCredits(position.sharesMicros),
+      availableShares: predictionMicrosToCredits(
+        position.sharesMicros - position.reservedSharesMicros,
+      ),
+      listedShares: predictionMicrosToCredits(position.reservedSharesMicros),
       costCredits: predictionMicrosToCredits(position.costMicros),
       payoutCredits: predictionMicrosToCredits(position.payoutMicros),
       currentPriceBps:
@@ -1373,21 +2077,29 @@ export async function loadPredictionWallet(input: {
       status: predictionPositionStatus(position.status),
       subjectType: market.subjectType,
       subjectId: market.subjectId,
+      marketPath: predictionMarketPath(market),
       updatedAt: position.updatedAt.toISOString(),
     })),
     openOrders: orders.map(({ order, market }) => ({
       id: order.id,
       marketId: market.id,
+      intent: order.intent as "buy" | "sell",
       title: market.title,
       selectedLabel: order.side === "yes" ? market.yesLabel : market.noLabel,
       side: order.side as PredictionSide,
       limitPriceBps: order.limitPriceBps,
       reservedCredits: predictionMicrosToCredits(order.reservedMicros),
       filledCredits: predictionMicrosToCredits(order.spentMicros),
+      openShares: predictionMicrosToCredits(order.remainingSharesMicros),
+      filledShares: predictionMicrosToCredits(
+        order.sharesMicros - order.remainingSharesMicros,
+      ),
+      proceedsCredits: predictionMicrosToCredits(order.proceedsMicros),
       status:
         order.status === "partially-filled"
           ? ("partially-filled" as const)
           : ("open" as const),
+      marketPath: predictionMarketPath(market),
       createdAt: order.createdAt.toISOString(),
     })),
     activity: ledger.map((entry) => ({
@@ -1397,6 +2109,13 @@ export async function loadPredictionWallet(input: {
       note: entry.note,
       occurredAt: entry.occurredAt.toISOString(),
     })),
+    integrity: {
+      algorithm: "SHA-256" as const,
+      chainVersion: 1 as const,
+      entryCount: Number(integrity?.entry_count ?? 0),
+      headHash: integrity?.head_hash ?? undefined,
+      verified: integrity?.verified === true,
+    },
     rules: predictionCreditRules,
   };
 }
@@ -1410,7 +2129,9 @@ export const predictionCreditRules = {
   redeemable: false,
   cashValue: false,
   prizes: false,
-  positionsImmutable: true,
+  ordersImmutable: true,
+  positionsTradable: true,
+  ledgerHashAlgorithm: "SHA-256",
   contractPayoutCredits: 1,
 } as const;
 
