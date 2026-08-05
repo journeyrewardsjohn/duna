@@ -1268,25 +1268,23 @@ async function persistWorldRankings(input: {
       ranking,
     ]),
   );
-  const rankingRows = dedupeWorldRankingRows(
-    [...rankingByIdentity.values()].map((ranking) => ({
-      sourceId: input.sourceId,
-      rankingDate: ranking.rankingDate,
-      genderCategory: ranking.genderCategory,
-      rank: ranking.rank,
-      points: ranking.points,
-      externalPersonId: ranking.externalPersonId,
-      displayName: ranking.displayName,
-      countryCode: storedCountryCode(ranking.countryCode),
-      personId: peopleByExternalId.get(ranking.externalPersonId),
-      previousRank: ranking.previousRank,
-      rawPayload: ranking.raw,
-      createdAt: input.now,
-    })),
-  );
-  if (rankingRows.length === 0) return 0;
+  const candidateRows = [...rankingByIdentity.values()].map((ranking) => ({
+    sourceId: input.sourceId,
+    rankingDate: ranking.rankingDate,
+    genderCategory: ranking.genderCategory,
+    rank: ranking.rank,
+    points: ranking.points,
+    externalPersonId: ranking.externalPersonId,
+    displayName: ranking.displayName,
+    countryCode: storedCountryCode(ranking.countryCode),
+    personId: peopleByExternalId.get(ranking.externalPersonId),
+    previousRank: ranking.previousRank,
+    rawPayload: ranking.raw,
+    createdAt: input.now,
+  }));
+  if (candidateRows.length === 0) return 0;
   const snapshotKeys = new Map(
-    rankingRows.map((ranking) => [
+    candidateRows.map((ranking) => [
       `${ranking.rankingDate}:${ranking.genderCategory}`,
       {
         rankingDate: ranking.rankingDate,
@@ -1294,6 +1292,39 @@ async function persistWorldRankings(input: {
       },
     ]),
   );
+  const comparisonRows = (
+    await Promise.all(
+      [...snapshotKeys.values()].map((snapshot) =>
+        database
+          .select({
+            sourceId: worldRankings.sourceId,
+            rankingDate: worldRankings.rankingDate,
+            genderCategory: worldRankings.genderCategory,
+            rank: worldRankings.rank,
+            points: worldRankings.points,
+            externalPersonId: worldRankings.externalPersonId,
+            displayName: worldRankings.displayName,
+            countryCode: worldRankings.countryCode,
+            personId: worldRankings.personId,
+            previousRank: worldRankings.previousRank,
+            rawPayload: worldRankings.rawPayload,
+            createdAt: worldRankings.createdAt,
+          })
+          .from(worldRankings)
+          .where(
+            and(
+              ne(worldRankings.sourceId, input.sourceId),
+              eq(worldRankings.rankingDate, snapshot.rankingDate),
+              eq(worldRankings.genderCategory, snapshot.genderCategory),
+            ),
+          ),
+      ),
+    )
+  ).flat();
+  const rankingRows = dedupeWorldRankingRows([
+    ...comparisonRows,
+    ...candidateRows,
+  ]).filter((ranking) => ranking.sourceId === input.sourceId);
   const insertStatements = [];
   for (let offset = 0; offset < rankingRows.length; offset += 250) {
     insertStatements.push(

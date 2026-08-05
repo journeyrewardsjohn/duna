@@ -32,6 +32,33 @@ function strictIdentityKey(row: RankingIdentityRow): string {
   ].join(":");
 }
 
+function rankingEvidenceKey(row: RankingIdentityRow): string {
+  return [
+    row.rankingDate,
+    row.genderCategory,
+    row.countryCode?.trim().toUpperCase() ?? "",
+    row.rank,
+    Number.isFinite(row.points) ? row.points : 0,
+  ].join(":");
+}
+
+function nameTokens(value: string): readonly string[] {
+  return normalizePersonName(value).split(" ").filter(Boolean);
+}
+
+function aliasMatchesCanonical(alias: string, canonical: string): boolean {
+  const aliasParts = nameTokens(alias);
+  const canonicalParts = nameTokens(canonical);
+  if (aliasParts.length === 0 || canonicalParts.length === 0) return false;
+  return aliasParts.every((aliasPart) =>
+    canonicalParts.some(
+      (canonicalPart) =>
+        canonicalPart === aliasPart ||
+        (aliasPart.length === 1 && canonicalPart.startsWith(aliasPart)),
+    ),
+  );
+}
+
 function quality(row: RankingIdentityRow): number {
   const normalized = normalizePersonName(row.displayName);
   return (
@@ -76,7 +103,9 @@ function dedupeBy<T extends RankingIdentityRow>(
 /**
  * Collapses only decisive ranking duplicates:
  * - rows already linked to the same Duna person; or
- * - exact normalized name/country/rank/points duplicates in one snapshot.
+ * - exact normalized name/country/rank/points duplicates in one snapshot; or
+ * - an abbreviated row that uniquely matches one mapped canonical player with
+ *   identical ranking evidence.
  *
  * Rank and points are deliberately part of the fallback identity so two
  * different athletes with the same name and country are not silently merged.
@@ -84,14 +113,32 @@ function dedupeBy<T extends RankingIdentityRow>(
 export function dedupeWorldRankingRows<T extends RankingIdentityRow>(
   rows: readonly T[],
 ): T[] {
-  return dedupeBy(
+  const decisiveRows = dedupeBy(
     dedupeBy(rows, (row) => personKey(row)),
     (row) => strictIdentityKey(row),
-  ).sort(
-    (left, right) =>
-      left.genderCategory.localeCompare(right.genderCategory) ||
-      left.rankingDate.localeCompare(right.rankingDate) ||
-      left.rank - right.rank ||
-      left.displayName.localeCompare(right.displayName),
   );
+  const linkedByEvidence = new Map<string, T[]>();
+  for (const row of decisiveRows) {
+    if (!row.personId) continue;
+    const key = rankingEvidenceKey(row);
+    linkedByEvidence.set(key, [...(linkedByEvidence.get(key) ?? []), row]);
+  }
+  return decisiveRows
+    .filter((row) => {
+      if (row.personId) return true;
+      const matches = (linkedByEvidence.get(rankingEvidenceKey(row)) ?? [])
+        .filter((candidate) =>
+          aliasMatchesCanonical(row.displayName, candidate.displayName),
+        )
+        .map((candidate) => candidate.personId)
+        .filter((personId): personId is string => Boolean(personId));
+      return new Set(matches).size !== 1;
+    })
+    .sort(
+      (left, right) =>
+        left.genderCategory.localeCompare(right.genderCategory) ||
+        left.rankingDate.localeCompare(right.rankingDate) ||
+        left.rank - right.rank ||
+        left.displayName.localeCompare(right.displayName),
+    );
 }

@@ -56,4 +56,47 @@ describe("world-ranking identity deduplication", () => {
 
     expect(rows).toHaveLength(2);
   });
+
+  it("suppresses a unique abbreviated cross-source alias", () => {
+    const rows = dedupeWorldRankingRows([
+      {
+        ...base,
+        displayName: "Elmer Andersson",
+        externalPersonId: "588",
+        personId: "canonical-elmer",
+      },
+      {
+        ...base,
+        displayName: "Andersson, E",
+        externalPersonId: "andersson-e:swe",
+      },
+    ]);
+
+    expect(rows).toMatchObject([
+      {
+        displayName: "Elmer Andersson",
+        personId: "canonical-elmer",
+      },
+    ]);
+  });
+
+  it("keeps an alias when more than one canonical player could match", () => {
+    const rows = dedupeWorldRankingRows([
+      {
+        ...base,
+        displayName: "Rebecca Silva",
+        externalPersonId: "canonical-one",
+        personId: "canonical-one",
+      },
+      {
+        ...base,
+        displayName: "Rebecca Cavalcante",
+        externalPersonId: "canonical-two",
+        personId: "canonical-two",
+      },
+      { ...base, externalPersonId: "rebecca-shadow" },
+    ]);
+
+    expect(rows).toHaveLength(3);
+  });
 });
