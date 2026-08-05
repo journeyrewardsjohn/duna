@@ -236,6 +236,7 @@ export function DiscoveryExperience({
         <form className="discover-v2-search" onSubmit={openResults}>
           <Search aria-hidden size={20} />
           <input
+            aria-label="Search Duna"
             aria-autocomplete="list"
             aria-controls="discover-search-suggestions"
             aria-expanded={searchOpen && suggestions.length > 0}

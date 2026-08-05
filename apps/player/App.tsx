@@ -11092,7 +11092,7 @@ function createStyles(palette: Palette) {
     },
     searchSuggestionMeta: {
       color: colors.muted,
-      fontSize: 9,
+      fontSize: 10,
       marginTop: 3,
       textTransform: "capitalize",
     },

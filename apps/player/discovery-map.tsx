@@ -849,7 +849,7 @@ const nativeStyles = StyleSheet.create({
   fullMap: { backgroundColor: "#081522", flex: 1 },
   legendDot: { borderRadius: 4, height: 7, width: 7 },
   legendItem: { alignItems: "center", flexDirection: "row", gap: 4 },
-  legendText: { color: "#071b2d", fontSize: 7, fontWeight: "800" },
+  legendText: { color: "#071b2d", fontSize: 10, fontWeight: "800" },
   locateIcon: { color: "#071b2d", fontSize: 22, fontWeight: "800" },
   mapChrome: { left: 0, position: "absolute", right: 0, top: 0 },
   mapFilter: {
@@ -904,7 +904,7 @@ const nativeStyles = StyleSheet.create({
   },
   previewEyebrow: {
     color: "#f2c46d",
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.2,
   },
@@ -970,7 +970,7 @@ const nativeStyles = StyleSheet.create({
   },
   resultImageText: {
     color: "#ffffff",
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.8,
   },
@@ -978,7 +978,7 @@ const nativeStyles = StyleSheet.create({
   resultTitle: { color: "#071b2d", fontSize: 13, fontWeight: "900" },
   resultType: {
     color: "#617185",
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.6,
   },
@@ -1038,7 +1038,7 @@ const nativeStyles = StyleSheet.create({
   searchResultCount: { color: "#617185", fontSize: 11, fontWeight: "800" },
   searchResultEyebrow: {
     color: "#2f75b7",
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.1,
   },
