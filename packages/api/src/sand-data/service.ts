@@ -2633,6 +2633,7 @@ export async function approveReadySandRatingMatches(input: {
   readonly requestId: string;
   readonly ipAddress?: string;
   readonly source?: "sandrating" | "bvbinfo";
+  readonly subjectPersonId?: string;
   readonly limit?: number;
   readonly now?: Date;
 }) {
@@ -2663,6 +2664,13 @@ export async function approveReadySandRatingMatches(input: {
       and(
         eq(importedMatches.sourceId, source.id),
         eq(importedMatches.importState, "ready"),
+        ...(input.subjectPersonId
+          ? [
+              sql`${importedMatches.participants} @> ${JSON.stringify([
+                { personId: input.subjectPersonId },
+              ])}::jsonb`,
+            ]
+          : []),
       ),
     )
     .orderBy(asc(importedMatches.playedAt), asc(importedMatches.id))
@@ -2823,7 +2831,13 @@ export async function approveReadySandRatingMatches(input: {
     action: `sand-data.${sourceSlug}-backfill.approved`,
     entityType: "import-source",
     entityId: source.id,
-    afterHash: stableHash({ approved: prepared.length, skipped, replay }),
+    afterHash: stableHash({
+      source: sourceSlug,
+      subjectPersonId: input.subjectPersonId,
+      approved: prepared.length,
+      skipped,
+      replay,
+    }),
     reason: input.reason,
     traceId: input.requestId,
     ipAddress: input.ipAddress,
@@ -2831,6 +2845,7 @@ export async function approveReadySandRatingMatches(input: {
   });
   return {
     source: sourceSlug,
+    subjectPersonId: input.subjectPersonId,
     approved: prepared.length,
     skipped,
     replay,
