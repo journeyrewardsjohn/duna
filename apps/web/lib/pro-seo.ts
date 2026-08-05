@@ -9,12 +9,23 @@ type JsonLdValue =
   | { readonly [key: string]: JsonLdValue | undefined };
 
 const productionOrigin = "https://duna.coach";
+const internalDeploymentHosts = new Set(["duna-web.vercel.app"]);
 
 export function publicSiteOrigin(): string {
   const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (!configured) return productionOrigin;
+  if (!configured) {
+    return process.env.NODE_ENV === "development"
+      ? "http://localhost:3000"
+      : productionOrigin;
+  }
   try {
     const url = new URL(configured);
+    if (
+      internalDeploymentHosts.has(url.hostname) ||
+      url.hostname.endsWith(".vercel.app")
+    ) {
+      return productionOrigin;
+    }
     return url.protocol === "https:" || url.protocol === "http:"
       ? url.origin
       : productionOrigin;

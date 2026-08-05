@@ -1,11 +1,16 @@
 import type { PublicProEvent, PublicProMatchDetail } from "@duna/api";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   professionalEventJsonLd,
   professionalMatchJsonLd,
   professionalOgImageUrl,
+  publicSiteOrigin,
   serializeJsonLd,
 } from "./pro-seo";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const teamA = {
   key: "a",
@@ -147,5 +152,19 @@ describe("professional public discovery metadata", () => {
     expect(
       professionalOgImageUrl({ title: "AVP Dallas", detail: "Week 8" }),
     ).toMatch(/^https:\/\/duna\.coach\/api\/og\/pro\?/);
+  });
+
+  it("never exposes an internal Vercel hostname as the public canonical", () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://duna-web.vercel.app");
+    expect(publicSiteOrigin()).toBe("https://duna.coach");
+
+    vi.stubEnv(
+      "NEXT_PUBLIC_APP_URL",
+      "https://duna-web-git-feature-suttonx.vercel.app",
+    );
+    expect(publicSiteOrigin()).toBe("https://duna.coach");
+
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3000");
+    expect(publicSiteOrigin()).toBe("http://localhost:3000");
   });
 });

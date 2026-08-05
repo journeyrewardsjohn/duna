@@ -8,30 +8,11 @@ import { themeBootScript } from "@duna/ui/theme";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { DunaAuthProvider } from "@/components/auth-provider";
-import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
-
-function resolveMetadataBase() {
-  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  const vercelUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
-  const candidates = [
-    configuredUrl,
-    vercelUrl ? `https://${vercelUrl}` : undefined,
-  ];
-
-  for (const candidate of candidates) {
-    if (!candidate) {
-      continue;
-    }
-
-    try {
-      return new URL(candidate);
-    } catch {
-      // Ignore malformed deployment configuration and use the local fallback.
-    }
-  }
-
-  return new URL("http://localhost:3000");
-}
+import {
+  absolutePublicUrl,
+  publicSiteOrigin,
+  serializeJsonLd,
+} from "@/lib/pro-seo";
 
 export const metadata: Metadata = {
   title: {
@@ -50,7 +31,7 @@ export const metadata: Metadata = {
     "beach volleyball scores",
     "SandRating",
   ],
-  metadataBase: resolveMetadataBase(),
+  metadataBase: new URL(publicSiteOrigin()),
   openGraph: {
     title: "Duna — The operating system for sand",
     description:
