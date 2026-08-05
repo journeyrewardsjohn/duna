@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   eventBroadcastCoverage,
   filterProfessionalEvents,
+  professionalEventDivisionLabel,
   professionalEventTour,
   type ProfessionalEvent,
 } from "./pro-tour-admin-helpers";
@@ -50,6 +51,19 @@ describe("professional event administration filters", () => {
         event({ id: "avp", name: "AVP Dallas", sourceSlug: "avp-league" }),
       ),
     ).toBe("avp");
+  });
+
+  it("labels event divisions clearly in duplicated tour stops", () => {
+    expect(
+      professionalEventDivisionLabel(
+        event({ id: "women", name: "Hamburg", genderCategory: "women" }),
+      ),
+    ).toBe("Women");
+    expect(
+      professionalEventDivisionLabel(
+        event({ id: "men", name: "Hamburg", genderCategory: "men" }),
+      ),
+    ).toBe("Men");
   });
 
   it("keeps live events first and finds events by source context", () => {
