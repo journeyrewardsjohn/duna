@@ -2632,6 +2632,7 @@ export async function approveReadySandRatingMatches(input: {
   readonly reason: string;
   readonly requestId: string;
   readonly ipAddress?: string;
+  readonly source?: "sandrating" | "bvbinfo";
   readonly limit?: number;
   readonly now?: Date;
 }) {
@@ -2639,18 +2640,19 @@ export async function approveReadySandRatingMatches(input: {
   if (!input.actor.roles.includes("super-admin")) {
     throw new SandDataServiceError(
       "SUPER_ADMIN_REQUIRED",
-      "Only a super administrator can approve a partner match backfill.",
+      "Only a super administrator can approve a professional match backfill.",
     );
   }
   const now = input.now ?? new Date();
   const database = getDatabase();
+  const sourceSlug = input.source ?? "sandrating";
   const source = await database.query.importSources.findFirst({
-    where: eq(importSources.slug, "sandrating"),
+    where: eq(importSources.slug, sourceSlug),
   });
   if (!source) {
     throw new SandDataServiceError(
       "SOURCE_UNAVAILABLE",
-      "Import a SandRating network snapshot before approving its matches.",
+      `Import ${sourceNames[sourceSlug]} before approving its matches.`,
     );
   }
   const limit = Math.min(5_000, Math.max(1, Math.floor(input.limit ?? 5_000)));
@@ -2810,8 +2812,7 @@ export async function approveReadySandRatingMatches(input: {
 
   const replay = await rebuildSandRatingProjection({
     actor: input.actor,
-    reason:
-      "Partner-authorized SandRating match history was approved and replayed in chronological order.",
+    reason: `${source.name} match history was approved and replayed in chronological order.`,
     requestId: input.requestId,
     ipAddress: input.ipAddress,
     now,
@@ -2819,7 +2820,7 @@ export async function approveReadySandRatingMatches(input: {
   await database.insert(auditLog).values({
     actorPersonId: input.actor.personId,
     actorType: "person",
-    action: "sand-data.sandrating-backfill.approved",
+    action: `sand-data.${sourceSlug}-backfill.approved`,
     entityType: "import-source",
     entityId: source.id,
     afterHash: stableHash({ approved: prepared.length, skipped, replay }),
@@ -2829,6 +2830,7 @@ export async function approveReadySandRatingMatches(input: {
     createdAt: now,
   });
   return {
+    source: sourceSlug,
     approved: prepared.length,
     skipped,
     replay,
