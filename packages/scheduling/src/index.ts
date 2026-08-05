@@ -8,6 +8,8 @@ export type AvailabilityMode =
   | "maintenance"
   | "blocked";
 
+export * from "./arrival";
+
 export interface TimeRange {
   readonly startsAt: string;
   readonly endsAt: string;

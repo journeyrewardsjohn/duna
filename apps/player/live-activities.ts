@@ -20,24 +20,12 @@ async function loadDunaLiveActivity() {
   }
 }
 
-async function endExistingActivities() {
-  const liveActivity = await loadDunaLiveActivity();
-  if (!liveActivity) return;
-  const existing = liveActivity.getInstances();
-  await Promise.all(
-    existing.map((instance) =>
-      instance.end("immediate").catch(() => undefined),
-    ),
-  );
-}
-
 export async function startDunaLiveActivity(
   props: Omit<DunaLiveActivityProps, "updatedAt">,
   options: StartOptions = {},
 ) {
   if (Platform.OS !== "ios") return null;
 
-  await endExistingActivities();
   const liveActivity = await loadDunaLiveActivity();
   if (!liveActivity) return null;
   const activity = liveActivity.start(
@@ -64,23 +52,4 @@ export async function startDunaLiveActivity(
     .catch(() => undefined);
 
   return activity;
-}
-
-export async function updateDunaLiveActivity(
-  props: Omit<DunaLiveActivityProps, "updatedAt">,
-) {
-  if (Platform.OS !== "ios") return;
-  const liveActivity = await loadDunaLiveActivity();
-  if (!liveActivity) return;
-  const instances = liveActivity.getInstances();
-  await Promise.all(
-    instances.map((instance) =>
-      instance.update({ ...props, updatedAt: new Date().toISOString() }),
-    ),
-  );
-}
-
-export async function endDunaLiveActivities() {
-  if (Platform.OS !== "ios") return;
-  await endExistingActivities();
 }

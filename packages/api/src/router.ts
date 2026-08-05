@@ -96,6 +96,8 @@ import {
   stripeAccountReadinessResultSchema,
   stripeOnboardingResultSchema,
   scoreEventSchema,
+  sessionArrivalBoardSchema,
+  sessionArrivalSignalSchema,
   teamClaimSummarySchema,
   teammateSearchResultSchema,
   ticketApprovalResultSchema,
@@ -117,6 +119,12 @@ import {
   visionSessionSettingsSchema,
   visionTimelineEventSchema,
 } from "./contracts";
+import {
+  loadSessionArrivalBoard,
+  publishCoachArrivalSignal,
+  publishPlayerArrivalSignal,
+  stopArrivalSharing,
+} from "./arrival-service";
 import { loadPublicImportedMatchSummary } from "./database-repository";
 import { loadDiscoveryMap } from "./discovery-service";
 import {
@@ -344,8 +352,13 @@ import {
 } from "./match-service";
 import {
   canRegisterLiveActivity,
+  loadProfessionalEventFollowState,
+  publishCoachArrivalLiveActivity,
+  publishLiveActivity,
+  publishPlayerArrivalLiveActivity,
   registerLiveActivitySubscription,
   revokeLiveActivitySubscription,
+  setProfessionalEventFollow,
 } from "./live-activities";
 import {
   claimGuardianInvitation,
@@ -3215,6 +3228,57 @@ const playerRouter = router({
   dashboard: protectedProcedure
     .output(playerDashboardSchema)
     .query(({ ctx }) => getRepository().player.dashboard(ctx.actor!.personId)),
+  professionalEventFollowState: protectedProcedure
+    .input(z.object({ eventId: z.string().uuid() }))
+    .output(
+      z.object({
+        eventId: z.string().uuid(),
+        available: z.boolean(),
+        following: z.boolean(),
+      }),
+    )
+    .query(({ input, ctx }) =>
+      loadProfessionalEventFollowState({
+        personId: ctx.actor!.personId,
+        eventId: input.eventId,
+      }),
+    ),
+  setProfessionalEventFollow: protectedProcedure
+    .use(requireScope("social:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "professional-event-follow-update",
+        capacity: 30,
+        refillPerMinute: 10,
+      }),
+    )
+    .input(
+      z.object({
+        eventId: z.string().uuid(),
+        following: z.boolean(),
+      }),
+    )
+    .output(
+      z.object({
+        eventId: z.string().uuid(),
+        available: z.literal(true),
+        following: z.boolean(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const result = await setProfessionalEventFollow({
+        personId: ctx.actor!.personId,
+        ...input,
+        now: ctx.now,
+      });
+      if (!result.available) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "This professional event is no longer available.",
+        });
+      }
+      return { ...result, available: true as const };
+    }),
   registerLiveActivity: protectedProcedure
     .use(requireScope("social:write"))
     .use(
@@ -3226,7 +3290,7 @@ const playerRouter = router({
     )
     .input(
       z.object({
-        kind: z.enum(["upcoming", "match"]),
+        kind: z.enum(["upcoming", "match", "event", "player"]),
         subjectId: z.string().uuid(),
         activityId: z.string().trim().min(1).max(128),
         pushToken: z
@@ -3254,11 +3318,12 @@ const playerRouter = router({
         throw new TRPCError({
           code: "FORBIDDEN",
           message:
-            "This Live Activity is available only to its participant or to signed-in followers of a public Pro Tour match.",
+            "This Live Activity is available only to its participant or to signed-in followers of public Duna competition.",
         });
       }
       return registerLiveActivitySubscription({
         personId: ctx.actor!.personId,
+        app: "player",
         ...input,
         now: ctx.now,
       });
@@ -3283,6 +3348,96 @@ const playerRouter = router({
         now: ctx.now,
       }),
     ),
+  publishSessionArrival: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "player-session-arrival",
+        capacity: 40,
+        refillPerMinute: 12,
+      }),
+    )
+    .input(
+      z.object({
+        registrationId: z.string().uuid(),
+        latitude: z.number().min(-90).max(90),
+        longitude: z.number().min(-180).max(180),
+        accuracyMeters: z.number().nonnegative().max(10_000).optional(),
+        consentedAt: z.iso.datetime(),
+      }),
+    )
+    .output(sessionArrivalSignalSchema)
+    .mutation(async ({ input, ctx }) => {
+      const signal = await publishPlayerArrivalSignal({
+        actor: ctx.actor!,
+        ...input,
+        consentedAt: new Date(input.consentedAt),
+        now: ctx.now,
+      });
+      const board = await loadSessionArrivalBoard({
+        organizationId: signal.organizationId,
+        sessionId: signal.sessionId,
+        now: ctx.now,
+      });
+      const visibleSignal = board.signals.find(
+        (candidate) => candidate.personId === ctx.actor!.personId,
+      );
+      if (!visibleSignal) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "The arrival was saved but could not be displayed.",
+        });
+      }
+      await Promise.all([
+        signal.registrationId
+          ? publishPlayerArrivalLiveActivity({
+              registrationId: signal.registrationId,
+              title: signal.title,
+              venueName: signal.venueName,
+              startsAt: signal.startsAt,
+              status: signal.status,
+              distanceMeters: signal.distanceMeters,
+              travelDurationSeconds: signal.travelDurationSeconds,
+              leaveBy: signal.leaveBy,
+              timezone: signal.timezone,
+              now: ctx.now,
+            })
+          : Promise.resolve(),
+        publishCoachArrivalLiveActivity({
+          sessionId: signal.sessionId,
+          title: signal.title,
+          venueName: signal.venueName,
+          startsAt: signal.startsAt,
+          signals: board.signals,
+          expectedPlayers: board.expectedPlayers,
+          now: ctx.now,
+        }),
+      ]);
+      return visibleSignal;
+    }),
+  stopSessionArrival: protectedProcedure
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .output(z.object({ stopped: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      const stopped = await stopArrivalSharing({
+        actor: ctx.actor!,
+        sessionId: input.sessionId,
+      });
+      if (stopped.stopped && stopped.registrationId) {
+        await publishLiveActivity({
+          kind: "upcoming",
+          subjectId: stopped.registrationId,
+          contentState: {
+            title: "Arrival sharing ended",
+            subtitle: "Duna",
+            status: "Ended",
+            phase: "final",
+          },
+          now: ctx.now,
+          end: true,
+        });
+      }
+      return { stopped: stopped.stopped };
+    }),
   catalogOfferEligibility: protectedProcedure
     .input(z.object({ catalogItemId: z.string().uuid() }))
     .output(catalogOfferEligibilitySchema)
@@ -5919,6 +6074,136 @@ const operatorRouter = router({
             ipAddress: ctx.ipAddress,
           }),
     ),
+  sessionArrivalBoard: organizationProcedure("sessions:read")
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .output(sessionArrivalBoardSchema)
+    .query(({ input, ctx }) =>
+      loadSessionArrivalBoard({
+        organizationId: ctx.actor!.organizationId!,
+        sessionId: input.sessionId,
+        now: ctx.now,
+      }),
+    ),
+  registerCoachLiveActivity: organizationProcedure("sessions:read")
+    .use(
+      rateLimitMiddleware({
+        id: "coach-live-activity-register",
+        capacity: 30,
+        refillPerMinute: 20,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        activityId: z.string().trim().min(1).max(128),
+        pushToken: z
+          .string()
+          .trim()
+          .min(32)
+          .max(512)
+          .regex(/^[a-fA-F0-9]+$/, "Invalid APNs Live Activity token."),
+        environment: z.enum(["sandbox", "production"]),
+      }),
+    )
+    .output(
+      z.object({
+        registered: z.literal(true),
+        deliveryConfigured: z.boolean(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      await loadSessionArrivalBoard({
+        organizationId: ctx.actor!.organizationId!,
+        sessionId: input.sessionId,
+        now: ctx.now,
+      });
+      return registerLiveActivitySubscription({
+        personId: ctx.actor!.personId,
+        kind: "coach",
+        subjectId: input.sessionId,
+        activityId: input.activityId,
+        pushToken: input.pushToken,
+        environment: input.environment,
+        app: "pro",
+        now: ctx.now,
+      });
+    }),
+  publishCoachSessionArrival: organizationProcedure("sessions:write")
+    .use(
+      rateLimitMiddleware({
+        id: "coach-session-arrival",
+        capacity: 40,
+        refillPerMinute: 12,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        latitude: z.number().min(-90).max(90),
+        longitude: z.number().min(-180).max(180),
+        accuracyMeters: z.number().nonnegative().max(10_000).optional(),
+        consentedAt: z.iso.datetime(),
+      }),
+    )
+    .output(sessionArrivalSignalSchema)
+    .mutation(async ({ input, ctx }) => {
+      const signal = await publishCoachArrivalSignal({
+        actor: ctx.actor!,
+        ...input,
+        consentedAt: new Date(input.consentedAt),
+        now: ctx.now,
+      });
+      const board = await loadSessionArrivalBoard({
+        organizationId: ctx.actor!.organizationId!,
+        sessionId: input.sessionId,
+        now: ctx.now,
+      });
+      await publishCoachArrivalLiveActivity({
+        sessionId: signal.sessionId,
+        title: signal.title,
+        venueName: signal.venueName,
+        startsAt: signal.startsAt,
+        signals: board.signals,
+        expectedPlayers: board.expectedPlayers,
+        now: ctx.now,
+      });
+      const visibleSignal = board.signals.find(
+        (candidate) => candidate.personId === ctx.actor!.personId,
+      );
+      if (!visibleSignal) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "The coach arrival was saved but could not be displayed.",
+        });
+      }
+      return visibleSignal;
+    }),
+  stopCoachSessionArrival: organizationProcedure("sessions:write")
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .output(z.object({ stopped: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      const stopped = await stopArrivalSharing({
+        actor: ctx.actor!,
+        sessionId: input.sessionId,
+      });
+      if (stopped.stopped) {
+        await publishLiveActivity({
+          kind: "coach",
+          subjectId: input.sessionId,
+          contentState: {
+            title: "Session arrival reminder ended",
+            subtitle: "Duna Pro",
+            status: "Ended",
+            phase: "final",
+          },
+          now: ctx.now,
+          end: true,
+        });
+      }
+      return { stopped: stopped.stopped };
+    }),
   sessionDetail: organizationProcedure("sessions:read")
     .input(z.object({ sessionId: z.string().uuid() }))
     .output(operatorSessionDetailSchema)
@@ -5927,10 +6212,12 @@ const operatorRouter = router({
         ? loadDemoOperatorSessionDetail(
             ctx.actor!.organizationId!,
             input.sessionId,
+            ctx.now,
           )
         : loadOperatorSessionDetail(
             ctx.actor!.organizationId!,
             input.sessionId,
+            ctx.now,
           ),
     ),
   createSessionNote: organizationProcedure("sessions:write")

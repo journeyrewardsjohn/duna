@@ -126,6 +126,17 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
+function arrivalDistance(meters: number): string {
+  if (meters < 160) return "At the venue";
+  const miles = meters / 1609.344;
+  return `${miles < 10 ? miles.toFixed(1) : Math.round(miles)} mi away`;
+}
+
+function arrivalEta(seconds: number, status: string): string {
+  if (status === "arrived") return "Here";
+  return `${Math.max(1, Math.ceil(seconds / 60))} min`;
+}
+
 export function EventOperationsWorkspace({
   detail,
   workspace,
@@ -153,6 +164,15 @@ export function EventOperationsWorkspace({
     (attendee) => attendee.attendanceStatus === "cancelled",
   ).length;
   const partialTeams = detail.teams.filter((team) => team.needsAttention);
+  const arrivalSignals = detail.arrivalBoard.signals.filter(
+    (signal) => signal.role === "player",
+  );
+  const arrivedPlayers = arrivalSignals.filter(
+    (signal) => signal.status === "arrived",
+  ).length;
+  const latePlayers = arrivalSignals.filter(
+    (signal) => signal.status === "running-late",
+  ).length;
   const recipientPhones = [
     ...new Set(
       detail.attendees.flatMap((attendee) =>
@@ -274,6 +294,67 @@ export function EventOperationsWorkspace({
             returned
           </span>
         </article>
+      </section>
+
+      <section
+        className="event-live-arrivals"
+        aria-label="Live player arrivals"
+      >
+        <header>
+          <span className="event-live-arrivals__pulse" aria-hidden />
+          <span>
+            <small>Live arrivals · private window</small>
+            <h2>
+              {latePlayers
+                ? `${latePlayers} player${latePlayers === 1 ? " is" : "s are"} running late`
+                : "Know who is on the way."}
+            </h2>
+          </span>
+          <span className="event-live-arrivals__summary">
+            <strong>{arrivedPlayers}</strong> arrived
+            <i aria-hidden>·</i>
+            <strong>{arrivalSignals.length}</strong>/
+            {detail.arrivalBoard.expectedPlayers} sharing
+          </span>
+        </header>
+        {arrivalSignals.length ? (
+          <div className="event-live-arrivals__grid">
+            {arrivalSignals.slice(0, 8).map((signal) => (
+              <article data-status={signal.status} key={signal.personId}>
+                <span className="event-live-arrivals__avatar">
+                  {signal.avatarUrl ? (
+                    <img alt="" src={signal.avatarUrl} />
+                  ) : (
+                    initials(signal.displayName)
+                  )}
+                </span>
+                <span>
+                  <strong>{signal.displayName}</strong>
+                  <small>
+                    {signal.status.replaceAll("-", " ")} ·{" "}
+                    {arrivalDistance(signal.distanceMeters)}
+                  </small>
+                </span>
+                <span className="event-live-arrivals__eta">
+                  <strong>
+                    {arrivalEta(signal.travelDurationSeconds, signal.status)}
+                  </strong>
+                  <small>ETA</small>
+                </span>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="event-live-arrivals__empty">
+            Player ETAs appear here after each player opts in from their Duna
+            session card.
+          </p>
+        )}
+        <footer>
+          <ShieldCheck aria-hidden size={15} /> Raw coordinates are never shown
+          or stored. Arrival signals exist only from 60 minutes before to 30
+          minutes after the session starts.
+        </footer>
       </section>
 
       {partialTeams.length > 0 && (

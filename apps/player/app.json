@@ -22,7 +22,9 @@
         "NSHealthShareUsageDescription": "Duna reads only the Apple Health categories you choose to build private, personalized Readiness, Sleep and Strain trends, compare those patterns with your matches, and align heart rate with your Duna Vision recordings.",
         "NSHealthUpdateUsageDescription": "Duna does not write to or change Apple Health. HealthKit access is read-only so you can choose the data behind your private performance timeline, personal insights and video overlays.",
         "NSContactsUsageDescription": "Duna uses contacts you select to find frequent partners or send a one-time game invitation.",
-        "NSLocationWhenInUseUsageDescription": "Duna uses your location to show nearby play and venues."
+        "NSLocationWhenInUseUsageDescription": "Duna uses location to show nearby courts and events when you open Discover. If you choose Share trip ETA, Duna shares only a short-lived distance and ETA with your coach during the session arrival window.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "After you choose Share trip ETA, background location keeps your Lock Screen ETA current during the private arrival window. Duna stops automatically 30 minutes after the session starts and never stores raw coordinates.",
+        "UIBackgroundModes": ["location", "remote-notification"]
       },
       "entitlements": {
         "com.apple.developer.healthkit": true,
@@ -54,7 +56,11 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Duna uses your location to show nearby courts, events, and coaches on the discovery map."
+          "locationWhenInUsePermission": "Duna uses location to show nearby courts and events when you open Discover. If you choose Share trip ETA, Duna shares only a short-lived distance and ETA with your coach during the session arrival window.",
+          "locationAlwaysAndWhenInUsePermission": "After you choose Share trip ETA, background location keeps your Lock Screen ETA current during the private arrival window. Duna stops automatically 30 minutes after the session starts and never stores raw coordinates.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       [

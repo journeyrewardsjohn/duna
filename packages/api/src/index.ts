@@ -3,6 +3,7 @@ export * from "./workos-environment";
 export * from "./contracts";
 export * from "./auth";
 export * from "./account-deletion";
+export * from "./arrival-service";
 export * from "./checkout";
 export * from "./catalog-service";
 export * from "./catalog-checkout";

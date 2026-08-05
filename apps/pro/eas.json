@@ -40,7 +40,7 @@
       "autoIncrement": true,
       "channel": "testflight",
       "env": {
-        "EXPO_PUBLIC_DUNA_PREVIEW": "true",
+        "EXPO_PUBLIC_DUNA_PREVIEW": "false",
         "EXPO_PUBLIC_DUNA_AUTH_URL": "https://duna.coach",
         "EXPO_PUBLIC_WORKOS_CLIENT_ID": "client_01KYZD6CFHPKW2C43JMF1GKQDN"
       }

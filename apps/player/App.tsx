@@ -51,7 +51,6 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Line, Path, SvgUri } from "react-native-svg";
 import {
   startDunaLiveActivity,
-  updateDunaLiveActivity,
   type LiveActivityPushToken,
 } from "./live-activities";
 import { dunaWebUrl, type DunaApiClient } from "./mobile-api";
@@ -69,6 +68,7 @@ import {
 import { VideoStudioScreen } from "./video-studio";
 import { HealthScreen } from "./health-screen";
 import { HealthHistorySyncAgent } from "./health-history-sync-agent";
+import { SessionArrivalCard } from "./session-arrival-card";
 import {
   DiscoveryMapModal,
   DiscoveryMapPreview,
@@ -898,7 +898,6 @@ function HomeScreen({
       (coach) => coach.organizationId === homeOrganization?.organizationId,
     ) ?? [];
   const nextBooking = bookings[0];
-  const [liveActivityNotice, setLiveActivityNotice] = useState<string>();
   const [selectedCoach, setSelectedCoach] = useState<MobileCoach>();
   const metrics = dashboard?.metrics.slice(0, 4) ?? [
     { label: "Win rate", value: "61%" },
@@ -1088,52 +1087,10 @@ function HomeScreen({
             <Pressable style={styles.cardLink}>
               <Text style={styles.cardLinkText}>Open game thread →</Text>
             </Pressable>
-            {Platform.OS === "ios" && nextBooking && (
-              <Pressable
-                onPress={() => {
-                  selectionHaptic();
-                  void startDunaLiveActivity(
-                    {
-                      subjectId: nextBooking.id,
-                      kind: "upcoming",
-                      title: nextBooking.title,
-                      subtitle: `${new Date(
-                        nextBooking.startsAt,
-                      ).toLocaleTimeString("en-US", {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })} · ${nextBooking.venueName}`,
-                      status: "Upcoming",
-                      startsAt: nextBooking.startsAt,
-                    },
-                    {
-                      onPushToken: (token) => {
-                        void rememberLiveActivityToken(token, client).catch(
-                          () => undefined,
-                        );
-                      },
-                    },
-                  )
-                    .then(() => {
-                      successHaptic();
-                      setLiveActivityNotice("Added to your Lock Screen.");
-                    })
-                    .catch((reason) => {
-                      setLiveActivityNotice(displayError(reason));
-                    });
-                }}
-                style={styles.liveActivityButton}
-              >
-                <Text style={styles.liveActivityButtonText}>
-                  ◉ Keep on Lock Screen
-                </Text>
-              </Pressable>
-            )}
-            {liveActivityNotice && (
-              <Text style={styles.liveActivityNotice}>
-                {liveActivityNotice}
-              </Text>
-            )}
+            {nextBooking &&
+              !["pickup", "court-rental"].includes(nextBooking.kind) && (
+                <SessionArrivalCard booking={nextBooking} client={client} />
+              )}
           </View>
         </View>
         <View style={styles.metricStrip}>
@@ -3421,9 +3378,11 @@ function ProTourSectionTitle({
 function ProTourModal({
   visible,
   onClose,
+  initialSlug,
 }: {
   readonly visible: boolean;
   readonly onClose: () => void;
+  readonly initialSlug?: string;
 }) {
   const { width } = useWindowDimensions();
   const { client, predictionWallet, publicClient, proCoverage, refresh } =
@@ -3447,6 +3406,9 @@ function ProTourModal({
   const [reloadKey, setReloadKey] = useState(0);
   const [posterFailed, setPosterFailed] = useState(false);
   const [followedMatchId, setFollowedMatchId] = useState<string>();
+  const [followedEventIds, setFollowedEventIds] = useState<readonly string[]>(
+    [],
+  );
   const [followNotice, setFollowNotice] = useState<string>();
   const [copiedAddress, setCopiedAddress] = useState(false);
   const events = proCoverage?.events ?? [];
@@ -3472,6 +3434,10 @@ function ProTourModal({
       setCopiedAddress(false);
     }
   }, [visible]);
+
+  useEffect(() => {
+    if (visible && initialSlug) setSelectedSlug(initialSlug);
+  }, [initialSlug, visible]);
 
   useEffect(() => {
     if (!copiedAddress) return;
@@ -3519,36 +3485,44 @@ function ProTourModal({
 
   useEffect(() => {
     if (!visible) return;
-    void AsyncStorage.getItem("duna.followed-pro-match").then((value) => {
-      setFollowedMatchId(value ?? undefined);
+    void Promise.all([
+      AsyncStorage.getItem("duna.followed-pro-match"),
+      AsyncStorage.getItem("duna.followed-pro-events"),
+    ]).then(([matchId, eventIds]) => {
+      setFollowedMatchId(matchId ?? undefined);
+      try {
+        const parsed = eventIds ? (JSON.parse(eventIds) as unknown) : [];
+        setFollowedEventIds(
+          Array.isArray(parsed)
+            ? parsed.filter(
+                (value): value is string => typeof value === "string",
+              )
+            : [],
+        );
+      } catch {
+        setFollowedEventIds([]);
+      }
     });
   }, [visible]);
 
   useEffect(() => {
-    if (!event || !followedMatchId) return;
-    const followed = event.matches.find(
-      (candidate) => candidate.id === followedMatchId,
-    );
-    if (!followed) return;
-    const latestSet = followed.sets.at(-1);
-    void updateDunaLiveActivity({
-      subjectId: followed.id,
-      kind: "match",
-      title: event.name,
-      subtitle: event.location ?? "Beach Pro Tour",
-      status:
-        followed.status === "live"
-          ? "Live"
-          : followed.status === "completed"
-            ? "Final"
-            : "Upcoming",
-      teamA: followed.teamA.label,
-      teamB: followed.teamB.label,
-      scoreA: latestSet?.a ?? 0,
-      scoreB: latestSet?.b ?? 0,
-      setLabel: `Set ${Math.max(followed.sets.length, 1)}`,
-    }).catch(() => undefined);
-  }, [event, followedMatchId]);
+    if (!client || !event?.id) return;
+    let active = true;
+    void client.player.professionalEventFollowState
+      .query({ eventId: event.id })
+      .then((state) => {
+        if (!active || !state.available) return;
+        setFollowedEventIds((current) =>
+          state.following
+            ? [...new Set([...current, event.id])]
+            : current.filter((eventId) => eventId !== event.id),
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [client, event?.id]);
 
   const openEvent = (slug: string) => {
     selectionHaptic();
@@ -3657,6 +3631,56 @@ function ProTourModal({
       match.status === "live"
         ? "Live updates are on your Lock Screen."
         : "You’ll have this match ready on your Lock Screen.",
+    );
+    successHaptic();
+  };
+
+  const followEvent = async () => {
+    if (!event) return;
+    if (client) {
+      await client.player.setProfessionalEventFollow.mutate({
+        eventId: event.id,
+        following: true,
+      });
+    }
+    const featured =
+      event.matches.find((match) => match.status === "live") ??
+      event.matches.find((match) => match.status === "scheduled") ??
+      event.matches.at(-1);
+    const latestSet = featured?.sets.at(-1);
+    await startDunaLiveActivity(
+      {
+        subjectId: event.id,
+        kind: "event",
+        title: event.name,
+        subtitle: event.location ?? "Beach Pro Tour",
+        status: event.live ? "Live" : "Following",
+        teamA: featured?.teamA.label,
+        teamB: featured?.teamB.label,
+        scoreA: latestSet?.a ?? 0,
+        scoreB: latestSet?.b ?? 0,
+        setLabel: featured
+          ? `Set ${Math.max(featured.sets.length, 1)}`
+          : `${event.matches.length} matches`,
+        liveMatchCount: event.matches.filter((match) => match.status === "live")
+          .length,
+      },
+      {
+        onPushToken: (token) => {
+          void rememberLiveActivityToken(token, client).catch(() => undefined);
+        },
+      },
+    );
+    const next = [...new Set([...followedEventIds, event.id])];
+    await AsyncStorage.setItem(
+      "duna.followed-pro-events",
+      JSON.stringify(next),
+    );
+    setFollowedEventIds(next);
+    setFollowNotice(
+      Platform.OS === "ios"
+        ? "Event scores are now live on your Lock Screen."
+        : "You’re following this event. Live scores will stay ready in Discover.",
     );
     successHaptic();
   };
@@ -4386,6 +4410,44 @@ function ProTourModal({
                       </View>
                     </View>
                   )}
+                  <Pressable
+                    accessibilityLabel={
+                      followedEventIds.includes(event.id)
+                        ? `Following ${event.name}`
+                        : `Follow ${event.name}`
+                    }
+                    disabled={followedEventIds.includes(event.id)}
+                    onPress={() => {
+                      selectionHaptic();
+                      void followEvent().catch((reason) =>
+                        setFollowNotice(displayError(reason)),
+                      );
+                    }}
+                    style={[
+                      styles.proMobileFollowEvent,
+                      followedEventIds.includes(event.id) &&
+                        styles.proMobileFollowEventActive,
+                    ]}
+                  >
+                    <View style={styles.proMobileFollowEventIcon}>
+                      <Text style={styles.proMobileFollowEventIconText}>
+                        {followedEventIds.includes(event.id) ? "✓" : "◉"}
+                      </Text>
+                    </View>
+                    <View style={styles.flex}>
+                      <Text style={styles.proMobileFollowEventTitle}>
+                        {followedEventIds.includes(event.id)
+                          ? "Following event"
+                          : "Follow this event"}
+                      </Text>
+                      <Text style={styles.proMobileFollowEventBody}>
+                        {Platform.OS === "ios"
+                          ? "Live scores, round changes, and finals on your Lock Screen"
+                          : "Keep live scores, round changes, and finals ready in Discover"}
+                      </Text>
+                    </View>
+                    <Text style={styles.proMobileFollowEventArrow}>›</Text>
+                  </Pressable>
                   {followNotice && (
                     <View style={styles.proMobileNotice}>
                       <Text style={styles.proMobileNoticeText}>
@@ -4559,6 +4621,122 @@ function ProTourModal({
   );
 }
 
+function FollowPlayerCard({ player }: { readonly player: PersonSummary }) {
+  const { client, mode } = usePlayerRuntime();
+  const [following, setFollowing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    if (!client || mode !== "live") return;
+    let active = true;
+    void client.player.playerFollowState
+      .query({ playerPersonId: player.id })
+      .then((state) => {
+        if (active) setFollowing(state.following);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [client, mode, player.id]);
+
+  const follow = async () => {
+    if (following || busy) return;
+    selectionHaptic();
+    setBusy(true);
+    setError(undefined);
+    try {
+      if (client && mode === "live") {
+        await client.player.setPlayerFollow.mutate({
+          playerPersonId: player.id,
+          following: true,
+          notifyRegistrations: true,
+          notifyWatch: true,
+          notifyResults: true,
+          idempotencyKey: Crypto.randomUUID(),
+        });
+      }
+      await startDunaLiveActivity(
+        {
+          subjectId: player.id,
+          kind: "player",
+          title: player.displayName,
+          subtitle: `${player.homeMarket} · ${player.rating.display.toFixed(2)}`,
+          status: "Following",
+          teamA: player.displayName,
+          teamB: "Next opponent",
+          scoreA: 0,
+          scoreB: 0,
+          setLabel: "Live match alerts ready",
+        },
+        {
+          onPushToken: (token) => {
+            void rememberLiveActivityToken(token, client).catch(
+              () => undefined,
+            );
+          },
+        },
+      );
+      setFollowing(true);
+      successHaptic();
+    } catch (reason) {
+      setError(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View style={styles.playerFollowCard}>
+      {player.avatarUrl ? (
+        <Image
+          accessibilityIgnoresInvertColors
+          source={{ uri: player.avatarUrl }}
+          style={styles.playerFollowAvatar}
+        />
+      ) : (
+        <View style={styles.playerFollowAvatarFallback}>
+          <Text style={styles.playerFollowAvatarText}>{player.initials}</Text>
+        </View>
+      )}
+      <Text numberOfLines={1} style={styles.playerFollowName}>
+        {player.displayName}
+      </Text>
+      <Text numberOfLines={1} style={styles.playerFollowMeta}>
+        {player.homeMarket} · {player.rating.display.toFixed(2)}
+      </Text>
+      <Pressable
+        accessibilityLabel={
+          following
+            ? `Following ${player.displayName}`
+            : `Follow ${player.displayName}`
+        }
+        disabled={following || busy}
+        onPress={() => void follow()}
+        style={[
+          styles.playerFollowButton,
+          following && styles.playerFollowButtonActive,
+        ]}
+      >
+        <Text
+          style={[
+            styles.playerFollowButtonText,
+            following && styles.playerFollowButtonTextActive,
+          ]}
+        >
+          {busy ? "Following…" : following ? "✓ Following" : "+ Follow"}
+        </Text>
+      </Pressable>
+      {error && (
+        <Text numberOfLines={2} style={styles.playerFollowError}>
+          {error}
+        </Text>
+      )}
+    </View>
+  );
+}
+
 function DiscoverScreen({
   onBook,
 }: {
@@ -4573,15 +4751,21 @@ function DiscoverScreen({
   const [showDiscoverySearch, setShowDiscoverySearch] = useState(false);
   const [discoverLocation, setDiscoverLocation] =
     useState<DiscoveryCoordinates>();
+  const [selectedProTourSlug, setSelectedProTourSlug] = useState<string>();
   const {
     coaches,
     dashboard,
     discoveryMap,
     organizationWallets,
+    people,
     proCoverage,
     venues,
   } = usePlayerRuntime();
   const events = dashboard?.events ?? demoEvents;
+  const discoverProEvents = sortProEvents(proCoverage?.events ?? []).slice(
+    0,
+    3,
+  );
   const query = search.trim().toLowerCase();
   useEffect(() => {
     let mounted = true;
@@ -4603,6 +4787,21 @@ function DiscoverScreen({
       mounted = false;
     };
   }, []);
+  const discoverPlayers = (people ?? demoPeople)
+    .filter((player) => player.id !== dashboard?.player.id)
+    .filter((player) =>
+      query
+        ? `${player.displayName} ${player.handle} ${player.homeMarket}`
+            .toLowerCase()
+            .includes(query)
+        : true,
+    )
+    .sort(
+      (left, right) =>
+        Number(Boolean(right.isProfessional)) -
+        Number(Boolean(left.isProfessional)),
+    )
+    .slice(0, 8);
   const homeOrganization =
     organizationWallets?.find(
       (organization) =>
@@ -4925,6 +5124,28 @@ function DiscoverScreen({
           </View>
           <Text style={styles.proTourEntryArrow}>↗</Text>
         </Pressable>
+        {discoverProEvents.length > 0 && (
+          <View style={styles.discoverProEvents}>
+            <SectionHeader
+              eyebrow="WATCH + FOLLOW"
+              title="Pro events, live here."
+              action={`${discoverProEvents.length} now`}
+            />
+            <View style={styles.proMobileCardStack}>
+              {discoverProEvents.map((event) => (
+                <ProTourEventCard
+                  event={event}
+                  key={event.id}
+                  onPress={() => {
+                    selectionHaptic();
+                    setSelectedProTourSlug(event.slug);
+                    setShowProTour(true);
+                  }}
+                />
+              ))}
+            </View>
+          </View>
+        )}
         <View style={styles.searchField}>
           <Text style={styles.searchIcon}>⌕</Text>
           <TextInput
@@ -5015,6 +5236,26 @@ function DiscoverScreen({
             ))}
           </View>
         </ScrollView>
+        {discoverPlayers.length > 0 && (
+          <>
+            <SectionHeader
+              eyebrow="PLAYERS TO FOLLOW"
+              title="Their next point, on your Lock Screen."
+              action={`${discoverPlayers.length} players`}
+            />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.horizontalBleed}
+            >
+              <View style={styles.playerFollowRow}>
+                {discoverPlayers.map((player) => (
+                  <FollowPlayerCard key={player.id} player={player} />
+                ))}
+              </View>
+            </ScrollView>
+          </>
+        )}
         {homeCoaches.length > 0 && (
           <>
             <SectionHeader
@@ -5217,7 +5458,11 @@ function DiscoverScreen({
         visible={Boolean(bookingVenueId)}
       />
       <ProTourModal
-        onClose={() => setShowProTour(false)}
+        initialSlug={selectedProTourSlug}
+        onClose={() => {
+          setShowProTour(false);
+          setSelectedProTourSlug(undefined);
+        }}
         visible={showProTour}
       />
       <CoachProfileModal
@@ -7947,6 +8192,20 @@ function DunaApp() {
   }, []);
 
   useEffect(() => {
+    const openLiveActivity = (url: string | null) => {
+      const match = url?.match(/^duna:\/\/live\/([^/]+)\//);
+      if (!match) return;
+      setEventIndex(null);
+      setTab(match[1] === "upcoming" ? "home" : "discover");
+    };
+    void Linking.getInitialURL().then(openLiveActivity);
+    const subscription = Linking.addEventListener("url", ({ url }) =>
+      openLiveActivity(url),
+    );
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
     screenTransition.setValue(0);
     Animated.timing(screenTransition, {
       toValue: 1,
@@ -8940,6 +9199,81 @@ function createStyles(palette: Palette) {
       paddingHorizontal: 18,
       paddingRight: 36,
     },
+    playerFollowRow: {
+      flexDirection: "row",
+      gap: 10,
+      paddingHorizontal: 18,
+      paddingRight: 36,
+    },
+    playerFollowCard: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 20,
+      borderWidth: 1,
+      minHeight: 220,
+      padding: 14,
+      width: 172,
+    },
+    playerFollowAvatar: {
+      borderRadius: 29,
+      height: 82,
+      width: 82,
+    },
+    playerFollowAvatarFallback: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 29,
+      height: 82,
+      justifyContent: "center",
+      width: 82,
+    },
+    playerFollowAvatarText: {
+      color: colors.aqua,
+      fontSize: 21,
+      fontWeight: "900",
+    },
+    playerFollowName: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "900",
+      marginTop: 11,
+      maxWidth: "100%",
+    },
+    playerFollowMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 4,
+      maxWidth: "100%",
+    },
+    playerFollowButton: {
+      alignItems: "center",
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 12,
+      justifyContent: "center",
+      marginTop: 12,
+      minHeight: 38,
+      paddingHorizontal: 14,
+      width: "100%",
+    },
+    playerFollowButtonActive: {
+      backgroundColor: rgba(colors.positiveRgb, 0.12),
+      borderColor: rgba(colors.positiveRgb, 0.25),
+      borderWidth: 1,
+    },
+    playerFollowButtonText: {
+      color: colors.onAccent,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    playerFollowButtonTextActive: { color: colors.positive },
+    playerFollowError: {
+      color: colors.danger,
+      fontSize: 10,
+      lineHeight: 13,
+      marginTop: 6,
+      textAlign: "center",
+    },
     coachCard: {
       alignItems: "center",
       backgroundColor: colors.depth,
@@ -9490,6 +9824,7 @@ function createStyles(palette: Palette) {
       overflow: "hidden",
       padding: 18,
     },
+    discoverProEvents: { marginTop: 4 },
     proTourEntryEyebrow: {
       color: "#9de9ff",
       fontSize: 10,
@@ -10122,6 +10457,51 @@ function createStyles(palette: Palette) {
       borderWidth: 1,
       marginTop: 12,
       padding: 11,
+    },
+    proMobileFollowEvent: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.accentRgb, 0.22),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      marginHorizontal: 18,
+      marginTop: 14,
+      padding: 14,
+    },
+    proMobileFollowEventActive: {
+      backgroundColor: rgba(colors.positiveRgb, 0.1),
+      borderColor: rgba(colors.positiveRgb, 0.28),
+    },
+    proMobileFollowEventIcon: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 15,
+      height: 42,
+      justifyContent: "center",
+      width: 42,
+    },
+    proMobileFollowEventIconText: {
+      color: colors.onAccent,
+      fontSize: 17,
+      fontWeight: "900",
+    },
+    proMobileFollowEventTitle: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    proMobileFollowEventBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 3,
+    },
+    proMobileFollowEventArrow: {
+      color: colors.aqua,
+      fontSize: 22,
+      fontWeight: "700",
     },
     proMobileNoticeText: {
       color: colors.positive,

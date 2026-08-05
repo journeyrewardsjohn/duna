@@ -10,7 +10,7 @@ import { createLiveActivity } from "expo-widgets";
 
 export type DunaLiveActivityProps = {
   readonly subjectId: string;
-  readonly kind: "upcoming" | "match";
+  readonly kind: "upcoming" | "match" | "event" | "player";
   readonly title: string;
   readonly subtitle: string;
   readonly status: string;
@@ -20,11 +20,19 @@ export type DunaLiveActivityProps = {
   readonly scoreA?: number;
   readonly scoreB?: number;
   readonly setLabel?: string;
+  readonly phase?:
+    "prepare" | "leave" | "travel" | "arrived" | "live" | "final";
+  readonly distanceMeters?: number;
+  readonly travelDurationSeconds?: number;
+  readonly leaveBy?: string;
+  readonly leaveByLabel?: string;
+  readonly startsAtLabel?: string;
+  readonly venueName?: string;
+  readonly liveMatchCount?: number;
   readonly updatedAt: string;
 };
 
 const navy = "#10263d";
-const blue = "#2f6fb1";
 const sky = "#86c9ef";
 const white = "#ffffff";
 const mist = "#d9e7f2";
@@ -38,21 +46,36 @@ function shortLabel(label?: string) {
     .join(" / ");
 }
 
+function arrivalDistance(distance?: number) {
+  if (distance === undefined) return "Location ready";
+  if (distance < 160) return "At the venue";
+  const miles = distance / 1609.344;
+  return miles < 10
+    ? `${miles.toFixed(1)} mi away`
+    : `${Math.round(miles)} mi away`;
+}
+
 function Activity(
   props: DunaLiveActivityProps,
 ): ReturnType<Parameters<typeof createLiveActivity<DunaLiveActivityProps>>[1]> {
   "widget";
 
-  const isMatch = props.kind === "match";
+  const isScore =
+    props.kind === "match" || props.kind === "event" || props.kind === "player";
+  const etaMinutes = Math.max(
+    0,
+    Math.ceil((props.travelDurationSeconds ?? 0) / 60),
+  );
+  const hasTravelEta = props.travelDurationSeconds !== undefined;
   const score = `${props.scoreA ?? 0}–${props.scoreB ?? 0}`;
-  const leading = isMatch ? shortLabel(props.teamA) : props.status;
-  const trailing = isMatch ? shortLabel(props.teamB) : "DUNA";
+  const leading = isScore ? shortLabel(props.teamA) : props.status;
+  const trailing = isScore ? shortLabel(props.teamB) : `${etaMinutes} MIN`;
 
   const mark = (
     <Image
       color={sky}
       size={18}
-      systemName={isMatch ? "volleyball.fill" : "calendar.badge.clock"}
+      systemName={isScore ? "volleyball.fill" : "location.fill"}
     />
   );
 
@@ -82,7 +105,7 @@ function Activity(
           DUNA
         </Text>
       </HStack>
-      {isMatch ? (
+      {isScore ? (
         <HStack alignment="center" spacing={12}>
           <VStack alignment="leading" spacing={2}>
             <Text
@@ -123,23 +146,89 @@ function Activity(
           </VStack>
         </HStack>
       ) : (
-        <VStack alignment="leading" spacing={4}>
+        <VStack alignment="leading" spacing={8}>
           <Text
             modifiers={[
-              font({ size: 20, weight: "bold", design: "rounded" }),
+              font({ size: 19, weight: "bold", design: "rounded" }),
               foregroundStyle(white),
             ]}
           >
             {props.title}
           </Text>
-          <Text
-            modifiers={[
-              font({ size: 13, weight: "medium", design: "rounded" }),
-              foregroundStyle(mist),
-            ]}
-          >
-            {props.subtitle}
-          </Text>
+          <HStack alignment="center" spacing={10}>
+            <VStack alignment="leading" spacing={1}>
+              <Text
+                modifiers={[
+                  font({ size: 10, weight: "bold", design: "rounded" }),
+                  foregroundStyle(sky),
+                ]}
+              >
+                LEAVE BY
+              </Text>
+              <Text
+                modifiers={[
+                  font({ size: 18, weight: "black", design: "rounded" }),
+                  foregroundStyle(white),
+                ]}
+              >
+                {props.leaveByLabel ?? "—"}
+              </Text>
+            </VStack>
+            <Spacer />
+            <VStack alignment="leading" spacing={1}>
+              <Text
+                modifiers={[
+                  font({ size: 10, weight: "bold", design: "rounded" }),
+                  foregroundStyle(sky),
+                ]}
+              >
+                TRAVEL ETA
+              </Text>
+              <Text
+                modifiers={[
+                  font({ size: 27, weight: "black", design: "rounded" }),
+                  foregroundStyle(white),
+                ]}
+              >
+                {hasTravelEta
+                  ? etaMinutes === 0
+                    ? "HERE"
+                    : `${etaMinutes} MIN`
+                  : "READY"}
+              </Text>
+            </VStack>
+            <Spacer />
+            <VStack alignment="trailing" spacing={1}>
+              <Text
+                modifiers={[
+                  font({ size: 10, weight: "bold", design: "rounded" }),
+                  foregroundStyle(sky),
+                ]}
+              >
+                SESSION
+              </Text>
+              <Text
+                modifiers={[
+                  font({ size: 18, weight: "black", design: "rounded" }),
+                  foregroundStyle(white),
+                ]}
+              >
+                {props.startsAtLabel ?? "—"}
+              </Text>
+            </VStack>
+          </HStack>
+          <HStack alignment="center" spacing={6}>
+            <Image color={mist} size={11} systemName="location.fill" />
+            <Text
+              modifiers={[
+                font({ size: 10, weight: "medium", design: "rounded" }),
+                foregroundStyle(mist),
+              ]}
+            >
+              {arrivalDistance(props.distanceMeters)} ·{" "}
+              {props.venueName ?? props.subtitle}
+            </Text>
+          </HStack>
         </VStack>
       )}
     </VStack>
@@ -159,7 +248,7 @@ function Activity(
             foregroundStyle(white),
           ]}
         >
-          {isMatch ? `${leading} vs ${trailing}` : props.title}
+          {isScore ? `${leading} vs ${trailing}` : props.title}
         </Text>
         <Text
           modifiers={[
@@ -167,9 +256,9 @@ function Activity(
             foregroundStyle(mist),
           ]}
         >
-          {isMatch
+          {isScore
             ? `${score} · ${props.setLabel ?? props.status}`
-            : props.status}
+            : `${props.status} · ${hasTravelEta ? (etaMinutes ? `${etaMinutes} min` : "at venue") : "ETA ready"}`}
         </Text>
       </VStack>
       <Spacer />
@@ -195,14 +284,20 @@ function Activity(
           foregroundStyle(white),
         ]}
       >
-        {isMatch ? score : props.status}
+        {isScore
+          ? score
+          : hasTravelEta
+            ? etaMinutes
+              ? `${etaMinutes}m`
+              : "HERE"
+            : "SOON"}
       </Text>
     ),
     minimal: (
       <Image
         color={sky}
         size={15}
-        systemName={isMatch ? "volleyball.fill" : "calendar.badge.clock"}
+        systemName={isScore ? "volleyball.fill" : "location.fill"}
       />
     ),
     expandedLeading: (
@@ -227,14 +322,20 @@ function Activity(
         <Text
           modifiers={[
             font({
-              size: isMatch ? 24 : 14,
+              size: isScore ? 24 : 14,
               weight: "black",
               design: "rounded",
             }),
             foregroundStyle(white),
           ]}
         >
-          {isMatch ? score : props.title}
+          {isScore
+            ? score
+            : hasTravelEta
+              ? etaMinutes
+                ? `${etaMinutes} MIN`
+                : "ARRIVED"
+              : "READY"}
         </Text>
         <Text
           modifiers={[

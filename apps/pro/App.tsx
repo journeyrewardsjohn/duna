@@ -12,7 +12,6 @@ import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
-import * as WebBrowser from "expo-web-browser";
 import {
   createContext,
   useContext,
@@ -35,9 +34,9 @@ import {
   type ViewStyle,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { dunaHqUrl } from "./mobile-api";
 import { GetPaidScreen } from "./get-paid";
 import { OperatorCreateScreen } from "./operator-create";
+import { SessionArrivalBoard } from "./session-arrival-board";
 import { SessionNotesScreen } from "./session-notes";
 import {
   ProRuntimeProvider,
@@ -144,12 +143,13 @@ function ThemeButton() {
   );
 }
 
-type Tab = "today" | "calendar" | "score" | "people" | "more";
+type Tab = "today" | "calendar" | "people" | "more";
+type NavDestination = Tab | "paid";
 
-const tabs: readonly { key: Tab; label: string; icon: string }[] = [
+const tabs: readonly { key: NavDestination; label: string; icon: string }[] = [
   { key: "today", label: "Today", icon: "⌂" },
   { key: "calendar", label: "Calendar", icon: "▦" },
-  { key: "score", label: "Score", icon: "＋" },
+  { key: "paid", label: "Get Paid", icon: ")))" },
   { key: "people", label: "People", icon: "◎" },
   { key: "more", label: "More", icon: "•••" },
 ];
@@ -494,11 +494,13 @@ function TodayScreen({
   onCalendar,
   onCreate,
   onGetPaid,
+  onPeople,
   onRecordNotes,
 }: {
   readonly onCalendar: (entryId?: string) => void;
   readonly onCreate: () => void;
   readonly onGetPaid: () => void;
+  readonly onPeople: () => void;
   readonly onRecordNotes: (sessionId: string) => void;
 }) {
   const { dashboard, mode, workspace } = useProRuntime();
@@ -707,7 +709,7 @@ function TodayScreen({
               if (focusEntry) {
                 void openGroupMessage();
               } else {
-                void WebBrowser.openBrowserAsync(`${dunaHqUrl}/members`);
+                onPeople();
               }
             }}
             style={styles.nowCardSecondary}
@@ -724,18 +726,23 @@ function TodayScreen({
         </Text>
       </View>
 
+      {focusEntry && (
+        <SessionArrivalBoard
+          expectedPlayers={focusEntry.participantCount}
+          sessionId={focusEntry.id}
+          startsAt={focusEntry.startsAt}
+          title={focusEntry.title}
+          venueName={focusEntry.venueName}
+        />
+      )}
+
       <View style={styles.todayJobs}>
         <Pressable onPress={() => onCalendar()} style={styles.todayJob}>
           <Text style={styles.todayJobIcon}>▦</Text>
           <Text style={styles.todayJobTitle}>Schedule</Text>
           <Text style={styles.todayJobMeta}>{todayEntries.length} today</Text>
         </Pressable>
-        <Pressable
-          onPress={() =>
-            void WebBrowser.openBrowserAsync(`${dunaHqUrl}/members`)
-          }
-          style={styles.todayJob}
-        >
+        <Pressable onPress={onPeople} style={styles.todayJob}>
           <Text style={styles.todayJobIcon}>◎</Text>
           <Text style={styles.todayJobTitle}>People</Text>
           <Text style={styles.todayJobMeta}>
@@ -826,9 +833,7 @@ function TodayScreen({
       <SectionTitle eyebrow="CARE SIGNALS" title="What changed" />
       <View style={styles.todaySignals}>
         <Pressable
-          onPress={() =>
-            void WebBrowser.openBrowserAsync(`${dunaHqUrl}/events`)
-          }
+          onPress={() => onCalendar(focusEntry?.id)}
           style={styles.todaySignalRow}
         >
           <View
@@ -853,12 +858,7 @@ function TodayScreen({
           </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
-        <Pressable
-          onPress={() =>
-            void WebBrowser.openBrowserAsync(`${dunaHqUrl}/members`)
-          }
-          style={styles.todaySignalRow}
-        >
+        <Pressable onPress={onPeople} style={styles.todaySignalRow}>
           <View style={styles.todaySignalIcon}>
             <Text style={styles.todaySignalIconText}>◎</Text>
           </View>
@@ -887,12 +887,7 @@ function TodayScreen({
             }{" "}
             completed.
           </Text>
-          <Pressable
-            onPress={() =>
-              void WebBrowser.openBrowserAsync(`${dunaHqUrl}/events`)
-            }
-            style={styles.dayRecapButton}
-          >
+          <Pressable onPress={() => onCalendar()} style={styles.dayRecapButton}>
             <Text style={styles.dayRecapButtonText}>
               Review session history →
             </Text>
@@ -1708,6 +1703,13 @@ function CalendarScreen({
 
                     {selectedEntry.sourceType === "session" ? (
                       <>
+                        <SessionArrivalBoard
+                          expectedPlayers={selectedEntry.participantCount}
+                          sessionId={selectedEntry.id}
+                          startsAt={selectedEntry.startsAt}
+                          title={selectedEntry.title}
+                          venueName={selectedEntry.venueName}
+                        />
                         <View style={styles.calendarSheetSectionHeader}>
                           <View>
                             <Text style={styles.calendarSheetEyebrow}>
@@ -1752,29 +1754,73 @@ function CalendarScreen({
                                       : ""}
                                   </Text>
                                 </View>
-                                <Pressable
-                                  disabled={
-                                    busyAction === attendee.registrationId
-                                  }
-                                  onPress={() =>
-                                    void perform(attendee.registrationId, () =>
-                                      client!.operator.removeCalendarParticipant.mutate(
-                                        {
-                                          registrationId:
-                                            attendee.registrationId,
-                                          reason:
-                                            "Removed from the session by an organization operator in Duna Pro.",
-                                          idempotencyKey: Crypto.randomUUID(),
-                                        },
-                                      ),
-                                    )
-                                  }
-                                  style={styles.calendarRemoveButton}
-                                >
-                                  <Text style={styles.calendarRemoveButtonText}>
-                                    Remove
-                                  </Text>
-                                </Pressable>
+                                <View style={styles.calendarRosterActions}>
+                                  {attendee.status === "checked-in" ? (
+                                    <Pill tone="positive">Here</Pill>
+                                  ) : ![
+                                      "cancelled",
+                                      "refunded",
+                                      "waitlisted",
+                                    ].includes(attendee.status) ? (
+                                    <Pressable
+                                      disabled={
+                                        busyAction ===
+                                        `check-in:${attendee.registrationId}`
+                                      }
+                                      onPress={() =>
+                                        void perform(
+                                          `check-in:${attendee.registrationId}`,
+                                          () =>
+                                            client!.operator.recordSessionAttendance.mutate(
+                                              {
+                                                registrationId:
+                                                  attendee.registrationId,
+                                                status: "attended",
+                                                note: "Checked in by a coach in Duna Pro.",
+                                                idempotencyKey:
+                                                  Crypto.randomUUID(),
+                                              },
+                                            ),
+                                        )
+                                      }
+                                      style={styles.calendarCheckInButton}
+                                    >
+                                      <Text
+                                        style={styles.calendarCheckInButtonText}
+                                      >
+                                        Check in
+                                      </Text>
+                                    </Pressable>
+                                  ) : null}
+                                  <Pressable
+                                    disabled={
+                                      busyAction === attendee.registrationId
+                                    }
+                                    onPress={() =>
+                                      void perform(
+                                        attendee.registrationId,
+                                        () =>
+                                          client!.operator.removeCalendarParticipant.mutate(
+                                            {
+                                              registrationId:
+                                                attendee.registrationId,
+                                              reason:
+                                                "Removed from the session by an organization operator in Duna Pro.",
+                                              idempotencyKey:
+                                                Crypto.randomUUID(),
+                                            },
+                                          ),
+                                      )
+                                    }
+                                    style={styles.calendarRemoveButton}
+                                  >
+                                    <Text
+                                      style={styles.calendarRemoveButtonText}
+                                    >
+                                      Remove
+                                    </Text>
+                                  </Pressable>
+                                </View>
                               </View>
                             ))
                           )}
@@ -2055,7 +2101,10 @@ function CalendarScreen({
                     selectedEntry.kind ?? "",
                   ) && (
                     <Pressable
-                      onPress={onScore}
+                      onPress={() => {
+                        closeSheet();
+                        onScore();
+                      }}
                       style={styles.calendarSheetSecondary}
                     >
                       <Text style={styles.calendarSheetSecondaryText}>
@@ -2099,7 +2148,18 @@ function CalendarScreen({
 function PeopleScreen() {
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
-  const { dashboard, members, workspace } = useProRuntime();
+  const [selectedPersonId, setSelectedPersonId] = useState<string>();
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [invitePhone, setInvitePhone] = useState("");
+  const [inviteMinor, setInviteMinor] = useState(false);
+  const [guardianName, setGuardianName] = useState("");
+  const [guardianEmail, setGuardianEmail] = useState("");
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteFeedback, setInviteFeedback] = useState<string>();
+  const { client, dashboard, members, mode, refresh, workspace } =
+    useProRuntime();
   const people = members ?? demoPeople;
   const filteredPeople = people.filter((person) => {
     const query = search.trim().toLowerCase();
@@ -2127,40 +2187,97 @@ function PeopleScreen() {
     person.roles.includes("guardian"),
   ).length;
   const minorCount = people.filter((person) => person.isMinor).length;
+  const selectedPerson = people.find(
+    (person) => person.id === selectedPersonId,
+  );
+  const selectedRelationship = workspace?.people.find(
+    (person) => person.personId === selectedPersonId,
+  );
+
+  const sendInvitation = async () => {
+    if (!client || mode !== "live") {
+      setInviteFeedback("Invitations are disabled in preview.");
+      return;
+    }
+    setInviteBusy(true);
+    setInviteFeedback(undefined);
+    try {
+      const normalizedPhone = invitePhone.trim()
+        ? `+${invitePhone.replace(/\D/g, "")}`
+        : undefined;
+      const result = await client.operator.createPlayerInvitation.mutate({
+        invitedName: inviteName.trim(),
+        ...(inviteEmail.trim() ? { invitedEmail: inviteEmail.trim() } : {}),
+        ...(normalizedPhone ? { invitedPhoneE164: normalizedPhone } : {}),
+        relationship: "player",
+        isMinor: inviteMinor,
+        ...(inviteMinor && guardianName.trim()
+          ? { guardianName: guardianName.trim() }
+          : {}),
+        ...(inviteMinor && guardianEmail.trim()
+          ? { guardianEmail: guardianEmail.trim() }
+          : {}),
+        confirmed: true,
+        idempotencyKey: Crypto.randomUUID(),
+      });
+      await refresh();
+      setInviteFeedback(
+        result.status === "sent"
+          ? "Invitation sent."
+          : "Invitation created and queued for delivery.",
+      );
+      setInviteName("");
+      setInviteEmail("");
+      setInvitePhone("");
+      setGuardianName("");
+      setGuardianEmail("");
+      successHaptic();
+    } catch (reason) {
+      setInviteFeedback(displayError(reason));
+    } finally {
+      setInviteBusy(false);
+    }
+  };
+
   return (
-    <ScrollView
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      <Header
-        context={`${dashboard?.organization.name ?? "PEOPLE"} · PEOPLE + HOUSEHOLDS`}
-      />
-      <PageTitle
-        action="Add person"
-        eyebrow="CRM + ELIGIBILITY"
-        onAction={() =>
-          void WebBrowser.openBrowserAsync(`${dunaHqUrl}/members`)
-        }
-        title="People."
-      />
-      <View style={styles.searchField}>
-        <Text style={styles.searchIcon}>⌕</Text>
-        <TextInput
-          onChangeText={setSearch}
-          placeholder={`Search ${people.length} people…`}
-          placeholderTextColor={colors.muted}
-          style={styles.searchInput}
-          value={search}
-        />
-      </View>
+    <>
       <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterBleed}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.filterRow}>
-          {["All", "Players", "Upcoming", "Credits", "Attention", "Minors"].map(
-            (item) => (
+        <Header
+          context={`${dashboard?.organization.name ?? "PEOPLE"} · PEOPLE + HOUSEHOLDS`}
+        />
+        <PageTitle
+          action="Add person"
+          eyebrow="CRM + ELIGIBILITY"
+          onAction={() => setInviteOpen(true)}
+          title="People."
+        />
+        <View style={styles.searchField}>
+          <Text style={styles.searchIcon}>⌕</Text>
+          <TextInput
+            onChangeText={setSearch}
+            placeholder={`Search ${people.length} people…`}
+            placeholderTextColor={colors.muted}
+            style={styles.searchInput}
+            value={search}
+          />
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterBleed}
+        >
+          <View style={styles.filterRow}>
+            {[
+              "All",
+              "Players",
+              "Upcoming",
+              "Credits",
+              "Attention",
+              "Minors",
+            ].map((item) => (
               <Pressable
                 key={item}
                 onPress={() => setFilter(item)}
@@ -2178,84 +2295,324 @@ function PeopleScreen() {
                   {item}
                 </Text>
               </Pressable>
-            ),
-          )}
+            ))}
+          </View>
+        </ScrollView>
+        <View style={styles.peopleSummary}>
+          <View>
+            <Text style={styles.metricValue}>{people.length}</Text>
+            <Text style={styles.metaText}>active people</Text>
+          </View>
+          <View>
+            <Text style={styles.metricValue}>{guardianCount}</Text>
+            <Text style={styles.metaText}>guardians</Text>
+          </View>
+          <View>
+            <Text style={styles.metricValue}>{minorCount}</Text>
+            <Text style={styles.metaText}>minor profiles</Text>
+          </View>
+        </View>
+        <View style={styles.peopleList}>
+          {filteredPeople.map((person) => {
+            const relationship = workspace?.people.find(
+              (candidate) => candidate.personId === person.id,
+            );
+            return (
+              <Pressable
+                key={person.id}
+                onPress={() => setSelectedPersonId(person.id)}
+                style={styles.personRow}
+              >
+                <View style={styles.personAvatar}>
+                  <Text style={styles.personAvatarText}>{person.initials}</Text>
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.rowTitle}>{person.displayName}</Text>
+                  <Text style={styles.metaText}>
+                    @{person.handle} · {person.roles.join(" + ")}
+                  </Text>
+                  {relationship && (
+                    <Text style={styles.personRelationshipMeta}>
+                      {relationship.membershipName ?? "No active plan"} ·{" "}
+                      {relationship.creditBalance} credits ·{" "}
+                      {relationship.upcomingCount} upcoming
+                    </Text>
+                  )}
+                </View>
+                <Pill
+                  tone={
+                    relationship?.churnRisk.level === "high"
+                      ? "warning"
+                      : person.isMinor
+                        ? "warning"
+                        : "positive"
+                  }
+                >
+                  {person.isMinor
+                    ? "Minor"
+                    : relationship?.churnRisk.level === "high"
+                      ? "Follow up"
+                      : person.roles.includes("guardian")
+                        ? "Guardian"
+                        : "Active"}
+                </Pill>
+                <View style={styles.personRating}>
+                  <Text style={styles.ratingNumber}>
+                    {person.rating.display.toFixed(2)}
+                  </Text>
+                  <Text style={styles.metaText}>
+                    {person.rating.confidence}
+                  </Text>
+                </View>
+                <Text style={styles.chevron}>›</Text>
+              </Pressable>
+            );
+          })}
         </View>
       </ScrollView>
-      <View style={styles.peopleSummary}>
-        <View>
-          <Text style={styles.metricValue}>{people.length}</Text>
-          <Text style={styles.metaText}>active people</Text>
-        </View>
-        <View>
-          <Text style={styles.metricValue}>{guardianCount}</Text>
-          <Text style={styles.metaText}>guardians</Text>
-        </View>
-        <View>
-          <Text style={styles.metricValue}>{minorCount}</Text>
-          <Text style={styles.metaText}>minor profiles</Text>
-        </View>
-      </View>
-      <View style={styles.peopleList}>
-        {filteredPeople.map((person) => {
-          const relationship = workspace?.people.find(
-            (candidate) => candidate.personId === person.id,
-          );
-          return (
+
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setSelectedPersonId(undefined)}
+        presentationStyle="pageSheet"
+        visible={Boolean(selectedPerson)}
+      >
+        <SafeAreaView edges={["top", "bottom"]} style={styles.peopleModalSafe}>
+          <View style={styles.peopleModalHeader}>
+            <View>
+              <Text style={styles.eyebrow}>CONNECTED PERSON</Text>
+              <Text style={styles.peopleModalTitle}>
+                {selectedPerson?.displayName ?? "Player"}
+              </Text>
+            </View>
             <Pressable
-              key={person.id}
-              onPress={() =>
-                void WebBrowser.openBrowserAsync(
-                  `${dunaHqUrl}/members/${person.id}`,
-                )
-              }
-              style={styles.personRow}
+              accessibilityLabel="Close person profile"
+              onPress={() => setSelectedPersonId(undefined)}
+              style={styles.peopleModalClose}
             >
-              <View style={styles.personAvatar}>
-                <Text style={styles.personAvatarText}>{person.initials}</Text>
+              <Text style={styles.peopleModalCloseText}>×</Text>
+            </Pressable>
+          </View>
+          {selectedPerson && (
+            <ScrollView contentContainerStyle={styles.peopleModalContent}>
+              <View style={styles.peopleProfileHero}>
+                <View style={styles.peopleProfileAvatar}>
+                  <Text style={styles.peopleProfileAvatarText}>
+                    {selectedPerson.initials}
+                  </Text>
+                </View>
+                <Text style={styles.peopleProfileName}>
+                  {selectedPerson.displayName}
+                </Text>
+                <Text style={styles.peopleProfileMeta}>
+                  @{selectedPerson.handle} · {selectedPerson.homeMarket}
+                </Text>
+                <View style={styles.peopleProfilePills}>
+                  {selectedPerson.roles.map((role) => (
+                    <Pill key={role} tone="neutral">
+                      {role}
+                    </Pill>
+                  ))}
+                  {selectedPerson.isMinor && <Pill tone="warning">Minor</Pill>}
+                </View>
+              </View>
+              <View style={styles.peopleProfileMetrics}>
+                <View>
+                  <Text style={styles.metricValue}>
+                    {selectedPerson.rating.display.toFixed(2)}
+                  </Text>
+                  <Text style={styles.metaText}>rating</Text>
+                </View>
+                <View>
+                  <Text style={styles.metricValue}>
+                    {selectedRelationship?.creditBalance ?? 0}
+                  </Text>
+                  <Text style={styles.metaText}>credits</Text>
+                </View>
+                <View>
+                  <Text style={styles.metricValue}>
+                    {selectedRelationship?.upcomingCount ?? 0}
+                  </Text>
+                  <Text style={styles.metaText}>upcoming</Text>
+                </View>
+              </View>
+              {selectedRelationship && (
+                <View style={styles.peopleProfileCard}>
+                  <Text style={styles.eyebrow}>RELATIONSHIP</Text>
+                  <Text style={styles.peopleProfileCardTitle}>
+                    {selectedRelationship.membershipName ?? "No active plan"}
+                  </Text>
+                  <Text style={styles.peopleProfileCardBody}>
+                    {selectedRelationship.purchaseCount} purchases ·{" "}
+                    {selectedRelationship.churnRisk.level} care signal
+                  </Text>
+                  {selectedRelationship.churnRisk.reasons.map((reason) => (
+                    <Text key={reason} style={styles.peopleProfileReason}>
+                      • {reason}
+                    </Text>
+                  ))}
+                </View>
+              )}
+              {(selectedRelationship?.phoneE164 ||
+                selectedRelationship?.email) && (
+                <View style={styles.peopleProfileActions}>
+                  {selectedRelationship.phoneE164 && (
+                    <Pressable
+                      onPress={() =>
+                        void Linking.openURL(
+                          `sms:${selectedRelationship.phoneE164}`,
+                        )
+                      }
+                      style={styles.peopleProfilePrimary}
+                    >
+                      <Text style={styles.peopleProfilePrimaryText}>
+                        Message
+                      </Text>
+                    </Pressable>
+                  )}
+                  {selectedRelationship.email && (
+                    <Pressable
+                      onPress={() =>
+                        void Linking.openURL(
+                          `mailto:${selectedRelationship.email}`,
+                        )
+                      }
+                      style={styles.peopleProfileSecondary}
+                    >
+                      <Text style={styles.peopleProfileSecondaryText}>
+                        Email
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              )}
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setInviteOpen(false)}
+        presentationStyle="pageSheet"
+        visible={inviteOpen}
+      >
+        <SafeAreaView edges={["top", "bottom"]} style={styles.peopleModalSafe}>
+          <View style={styles.peopleModalHeader}>
+            <View>
+              <Text style={styles.eyebrow}>NATIVE INVITATION</Text>
+              <Text style={styles.peopleModalTitle}>Add a player.</Text>
+            </View>
+            <Pressable
+              accessibilityLabel="Close invitation"
+              onPress={() => setInviteOpen(false)}
+              style={styles.peopleModalClose}
+            >
+              <Text style={styles.peopleModalCloseText}>×</Text>
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.peopleInviteContent}>
+            <Text style={styles.peopleInviteLead}>
+              Duna creates a connected identity invitation. Nothing is sent
+              until you confirm below.
+            </Text>
+            <Text style={styles.calendarFieldLabel}>PLAYER NAME</Text>
+            <TextInput
+              onChangeText={setInviteName}
+              placeholder="Full name"
+              placeholderTextColor={colors.muted}
+              style={styles.peopleInviteInput}
+              value={inviteName}
+            />
+            <Text style={styles.calendarFieldLabel}>EMAIL</Text>
+            <TextInput
+              autoCapitalize="none"
+              keyboardType="email-address"
+              onChangeText={setInviteEmail}
+              placeholder="player@example.com"
+              placeholderTextColor={colors.muted}
+              style={styles.peopleInviteInput}
+              value={inviteEmail}
+            />
+            <Text style={styles.calendarFieldLabel}>PHONE · OPTIONAL</Text>
+            <TextInput
+              keyboardType="phone-pad"
+              onChangeText={setInvitePhone}
+              placeholder="+1 310 555 0100"
+              placeholderTextColor={colors.muted}
+              style={styles.peopleInviteInput}
+              value={invitePhone}
+            />
+            <Pressable
+              onPress={() => setInviteMinor((value) => !value)}
+              style={styles.peopleInviteToggle}
+            >
+              <View
+                style={[
+                  styles.peopleInviteToggleMark,
+                  inviteMinor && styles.peopleInviteToggleMarkActive,
+                ]}
+              >
+                <Text style={styles.peopleInviteToggleMarkText}>
+                  {inviteMinor ? "✓" : ""}
+                </Text>
               </View>
               <View style={styles.flex}>
-                <Text style={styles.rowTitle}>{person.displayName}</Text>
+                <Text style={styles.rowTitle}>This player is a minor</Text>
                 <Text style={styles.metaText}>
-                  @{person.handle} · {person.roles.join(" + ")}
+                  The invitation goes to a verified guardian.
                 </Text>
-                {relationship && (
-                  <Text style={styles.personRelationshipMeta}>
-                    {relationship.membershipName ?? "No active plan"} ·{" "}
-                    {relationship.creditBalance} credits ·{" "}
-                    {relationship.upcomingCount} upcoming
-                  </Text>
-                )}
               </View>
-              <Pill
-                tone={
-                  relationship?.churnRisk.level === "high"
-                    ? "warning"
-                    : person.isMinor
-                      ? "warning"
-                      : "positive"
-                }
-              >
-                {person.isMinor
-                  ? "Minor"
-                  : relationship?.churnRisk.level === "high"
-                    ? "Follow up"
-                    : person.roles.includes("guardian")
-                      ? "Guardian"
-                      : "Active"}
-              </Pill>
-              <View style={styles.personRating}>
-                <Text style={styles.ratingNumber}>
-                  {person.rating.display.toFixed(2)}
-                </Text>
-                <Text style={styles.metaText}>{person.rating.confidence}</Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
             </Pressable>
-          );
-        })}
-      </View>
-    </ScrollView>
+            {inviteMinor && (
+              <>
+                <Text style={styles.calendarFieldLabel}>GUARDIAN NAME</Text>
+                <TextInput
+                  onChangeText={setGuardianName}
+                  placeholder="Guardian name"
+                  placeholderTextColor={colors.muted}
+                  style={styles.peopleInviteInput}
+                  value={guardianName}
+                />
+                <Text style={styles.calendarFieldLabel}>GUARDIAN EMAIL</Text>
+                <TextInput
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  onChangeText={setGuardianEmail}
+                  placeholder="guardian@example.com"
+                  placeholderTextColor={colors.muted}
+                  style={styles.peopleInviteInput}
+                  value={guardianEmail}
+                />
+              </>
+            )}
+            {inviteFeedback && (
+              <Text style={styles.peopleInviteFeedback}>{inviteFeedback}</Text>
+            )}
+            <Pressable
+              disabled={
+                inviteBusy ||
+                inviteName.trim().length < 2 ||
+                (inviteMinor
+                  ? guardianEmail.trim().length < 3
+                  : inviteEmail.trim().length < 3 &&
+                    invitePhone.trim().length < 8)
+              }
+              onPress={() => void sendInvitation()}
+              style={[
+                styles.peopleInviteSubmit,
+                (inviteBusy || inviteName.trim().length < 2) &&
+                  styles.buttonDisabled,
+              ]}
+            >
+              <Text style={styles.peopleInviteSubmitText}>
+                {inviteBusy ? "Creating invitation…" : "Confirm invitation"}
+              </Text>
+            </Pressable>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+    </>
   );
 }
 
@@ -2306,7 +2663,7 @@ function MatchPicker({
         <Text style={styles.scorerExitIcon}>‹</Text>
         <View>
           <Text style={styles.scorerExitText}>Exit scoring</Text>
-          <Text style={styles.scorerExitMeta}>Back to Today</Text>
+          <Text style={styles.scorerExitMeta}>Back to schedule</Text>
         </View>
       </Pressable>
       <Header context="AUTHORIZED MATCH SCORING" />
@@ -2321,15 +2678,11 @@ function MatchPicker({
           <View style={styles.emptyState}>
             <Text style={styles.sectionHeading}>No scorable matches.</Text>
             <Text style={styles.metaText}>
-              Schedule teams into a match in Duna HQ, then return here to begin
-              live scoring.
+              Create the event and teams from the native schedule, then return
+              here to begin live scoring.
             </Text>
-            <Pressable
-              onPress={() =>
-                void WebBrowser.openBrowserAsync(`${dunaHqUrl}/leagues`)
-              }
-            >
-              <Text style={styles.linkText}>Open matches in HQ →</Text>
+            <Pressable onPress={onExit}>
+              <Text style={styles.linkText}>Back to schedule →</Text>
             </Pressable>
           </View>
         )}
@@ -2985,12 +3338,15 @@ function MoreScreen({
   onCalendar,
   onCreate,
   onGetPaid,
+  onPeople,
 }: {
   readonly onCalendar: () => void;
   readonly onCreate: () => void;
   readonly onGetPaid: () => void;
+  readonly onPeople: () => void;
 }) {
-  const { dashboard, mode, signOut, workspace } = useProRuntime();
+  const { dashboard, signOut, workspace } = useProRuntime();
+  const [selectedMenu, setSelectedMenu] = useState<string>();
   const organization = dashboard?.organization ?? demoOrganization;
   const organizationInitials = organization.name
     .split(/\s+/)
@@ -3030,95 +3386,263 @@ function MoreScreen({
       ],
     ],
   ] as const;
-  const routes: Readonly<Record<string, string>> = {
-    Calendar: "calendar",
-    "Products + services": "products",
-    "Events + leagues": "leagues",
-    Messages: "messages",
-    Reports: "reports",
-    "Money + tax": "money",
-    "Memberships + credits": "products",
-    "Retail + inventory": "inventory",
-    "Coach payroll support": "money",
-    "Venues + courts": "facilities",
-    "Team + roles": "members",
-    "Policies + waivers": "members",
-    Integrations: "settings",
-    "Billing + plan": "settings",
-    "Account + privacy": "account",
-    "Delete my account": "account",
+  const detailRows: readonly {
+    readonly title: string;
+    readonly meta: string;
+  }[] =
+    selectedMenu === "Products + services"
+      ? (workspace?.catalog.map((item) => ({
+          title: item.title,
+          meta: `${item.type} · ${item.status} · ${item.variants.length} option${item.variants.length === 1 ? "" : "s"}`,
+        })) ?? [])
+      : selectedMenu === "Events + leagues"
+        ? (workspace?.sessions
+            .filter((session) =>
+              ["tournament", "league", "pickup"].includes(session.kind),
+            )
+            .map((session) => ({
+              title: session.title,
+              meta: `${session.kind} · ${session.status}`,
+            })) ?? [])
+        : selectedMenu === "Messages"
+          ? [
+              {
+                title: `${workspace?.people.filter((person) => person.email || person.phoneE164).length ?? 0} reachable people`,
+                meta: "Open People to choose a player, guardian, or staff member and use the device messenger.",
+              },
+            ]
+          : selectedMenu === "Reports"
+            ? (workspace?.productPerformance.map((item) => ({
+                title:
+                  workspace.catalog.find(
+                    (product) => product.id === item.catalogItemId,
+                  )?.title ?? "Product performance",
+                meta: `${item.paidPurchases} sales · ${item.uniqueCustomers} customers · ${item.grossMarginBps === undefined ? "margin pending" : `${(item.grossMarginBps / 100).toFixed(1)}% margin`}`,
+              })) ?? [])
+            : selectedMenu === "Memberships + credits"
+              ? (workspace?.ratePlans.map((plan) => ({
+                  title: plan.name,
+                  meta: `${plan.currency} ${(plan.baseAmountMinor / 100).toFixed(2)} · ${plan.rateUnitMinutes} min`,
+                })) ?? [])
+              : selectedMenu === "Retail + inventory"
+                ? (workspace?.inventory.map((item) => ({
+                    title: `${item.itemTitle} · ${item.variantTitle}`,
+                    meta: `${item.quantityOnHand - item.quantityReserved} available · ${item.locationName}`,
+                  })) ?? [])
+                : selectedMenu === "Coach payroll support" ||
+                    selectedMenu === "Team + roles"
+                  ? (workspace?.staff.map((person) => ({
+                      title: person.displayName,
+                      meta: `${person.role} · ${person.compensationModel.replaceAll("-", " ")} · ${person.active ? "active" : "inactive"}`,
+                    })) ?? [])
+                  : selectedMenu === "Venues + courts"
+                    ? (workspace?.venues.map((venue) => ({
+                        title: venue.name,
+                        meta: `${venue.courts.length} court${venue.courts.length === 1 ? "" : "s"} · ${venue.status}`,
+                      })) ?? [])
+                    : selectedMenu === "Money + tax"
+                      ? [
+                          {
+                            title: `Reconciliation · ${workspace?.ledger.reconciliationStatus.replaceAll("-", " ") ?? "not started"}`,
+                            meta: `${workspace?.ledger.postedJournalCount ?? 0} posted journals · ${workspace?.ledger.draftJournalCount ?? 0} drafts`,
+                          },
+                          {
+                            title: `Stripe Tax · ${workspace?.organization.taxRegistrationStatus.replaceAll("-", " ") ?? "not configured"}`,
+                            meta: workspace?.organization.stripeChargesEnabled
+                              ? "Card payments are enabled."
+                              : "Card payments need organization setup.",
+                          },
+                        ]
+                      : selectedMenu
+                        ? [
+                            {
+                              title: selectedMenu,
+                              meta:
+                                selectedMenu === "Delete my account"
+                                  ? "Account deletion is a protected, reviewable request. Duna will never trigger it from a menu tap."
+                                  : "This organization setting is available here without leaving Duna Pro. Changes that affect members require explicit confirmation.",
+                            },
+                          ]
+                        : [];
+
+  const detailAction = () => {
+    const item = selectedMenu;
+    setSelectedMenu(undefined);
+    if (!item) return;
+    if (
+      [
+        "Products + services",
+        "Memberships + credits",
+        "Retail + inventory",
+      ].includes(item)
+    ) {
+      onCreate();
+    } else if (["Events + leagues", "Venues + courts"].includes(item)) {
+      onCalendar();
+    } else if (["Money + tax", "Coach payroll support"].includes(item)) {
+      onGetPaid();
+    } else if (
+      ["Messages", "Team + roles", "Policies + waivers"].includes(item)
+    ) {
+      onPeople();
+    }
   };
+  const detailActionLabel = selectedMenu
+    ? [
+        "Products + services",
+        "Memberships + credits",
+        "Retail + inventory",
+      ].includes(selectedMenu)
+      ? "Create natively"
+      : ["Events + leagues", "Venues + courts"].includes(selectedMenu)
+        ? "Open schedule"
+        : ["Money + tax", "Coach payroll support"].includes(selectedMenu)
+          ? "Open Get Paid"
+          : ["Messages", "Team + roles", "Policies + waivers"].includes(
+                selectedMenu,
+              )
+            ? "Open People"
+            : undefined
+    : undefined;
   return (
-    <ScrollView
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      <Header context={organization.name.toUpperCase()} />
-      <PageTitle eyebrow="EVERYTHING ELSE" title="More." />
-      <View style={styles.moreQuickActions}>
-        <Pressable onPress={onGetPaid} style={styles.moreQuickPrimary}>
-          <Text style={styles.moreQuickIcon}>)))</Text>
-          <Text style={styles.moreQuickPrimaryText}>Get Paid</Text>
-        </Pressable>
-        <Pressable onPress={onCreate} style={styles.moreQuickSecondary}>
-          <Text style={styles.moreQuickIconAlt}>＋</Text>
-          <Text style={styles.moreQuickSecondaryText}>Create</Text>
-        </Pressable>
-      </View>
-      <View style={styles.organizationCard}>
-        <View style={styles.orgAvatar}>
-          <Text style={styles.orgAvatarText}>{organizationInitials}</Text>
+    <>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <Header context={organization.name.toUpperCase()} />
+        <PageTitle eyebrow="EVERYTHING ELSE" title="More." />
+        <View style={styles.moreQuickActions}>
+          <Pressable onPress={onGetPaid} style={styles.moreQuickPrimary}>
+            <Text style={styles.moreQuickIcon}>)))</Text>
+            <Text style={styles.moreQuickPrimaryText}>Get Paid</Text>
+          </Pressable>
+          <Pressable onPress={onCreate} style={styles.moreQuickSecondary}>
+            <Text style={styles.moreQuickIconAlt}>＋</Text>
+            <Text style={styles.moreQuickSecondaryText}>Create</Text>
+          </Pressable>
         </View>
-        <View style={styles.flex}>
-          <Text style={styles.orgName}>{organization.name}</Text>
-          <Text style={styles.metaText}>
-            {organization.plan} plan · {organization.memberCount} people ·{" "}
-            {workspace?.venues.length ?? organization.venueCount} venues
-          </Text>
-        </View>
-        <Text style={styles.chevron}>›</Text>
-      </View>
-      {sections.map((section) => (
-        <View key={section[0]}>
-          <Text style={styles.menuEyebrow}>{section[0]}</Text>
-          <View style={styles.menuCard}>
-            {section[1].map((item) => (
-              <Pressable
-                disabled={mode === "preview" && item !== "Calendar"}
-                key={item}
-                onPress={() => {
-                  if (item === "Calendar") {
-                    onCalendar();
-                    return;
-                  }
-                  void WebBrowser.openBrowserAsync(
-                    `${dunaHqUrl}/${routes[item] ?? "dashboard"}`,
-                  );
-                }}
-                style={styles.menuRow}
-              >
-                <Text style={styles.menuIcon}>{item.charAt(0)}</Text>
-                <Text style={styles.rowTitle}>{item}</Text>
-                <Text style={styles.chevron}>›</Text>
-              </Pressable>
-            ))}
+        <View style={styles.organizationCard}>
+          <View style={styles.orgAvatar}>
+            <Text style={styles.orgAvatarText}>{organizationInitials}</Text>
           </View>
+          <View style={styles.flex}>
+            <Text style={styles.orgName}>{organization.name}</Text>
+            <Text style={styles.metaText}>
+              {organization.plan} plan · {organization.memberCount} people ·{" "}
+              {workspace?.venues.length ?? organization.venueCount} venues
+            </Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
         </View>
-      ))}
-      <View style={styles.proNote}>
-        <Mark />
-        <Text style={styles.metaText}>
-          Duna Pro keeps core workflows available in the field. Drafts and score
-          events persist on-device, then sync when a connection returns.
-        </Text>
-        <Pill tone="positive">Offline ready</Pill>
-      </View>
-      {signOut && (
-        <Pressable onPress={() => void signOut()} style={styles.signOutButton}>
-          <Text style={styles.signOutText}>Sign out of Duna Pro</Text>
-        </Pressable>
-      )}
-    </ScrollView>
+        {sections.map((section) => (
+          <View key={section[0]}>
+            <Text style={styles.menuEyebrow}>{section[0]}</Text>
+            <View style={styles.menuCard}>
+              {section[1].map((item) => (
+                <Pressable
+                  key={item}
+                  onPress={() => {
+                    if (item === "Calendar") {
+                      onCalendar();
+                      return;
+                    }
+                    setSelectedMenu(item);
+                  }}
+                  style={styles.menuRow}
+                >
+                  <Text style={styles.menuIcon}>{item.charAt(0)}</Text>
+                  <Text style={styles.rowTitle}>{item}</Text>
+                  <Text style={styles.chevron}>›</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ))}
+        <View style={styles.proNote}>
+          <Mark />
+          <Text style={styles.metaText}>
+            Duna Pro keeps core workflows available in the field. Drafts and
+            score events persist on-device, then sync when a connection returns.
+          </Text>
+          <Pill tone="positive">Offline ready</Pill>
+        </View>
+        {signOut && (
+          <Pressable
+            onPress={() => void signOut()}
+            style={styles.signOutButton}
+          >
+            <Text style={styles.signOutText}>Sign out of Duna Pro</Text>
+          </Pressable>
+        )}
+      </ScrollView>
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setSelectedMenu(undefined)}
+        presentationStyle="pageSheet"
+        visible={Boolean(selectedMenu)}
+      >
+        <SafeAreaView edges={["top", "bottom"]} style={styles.peopleModalSafe}>
+          <View style={styles.peopleModalHeader}>
+            <View style={styles.flex}>
+              <Text style={styles.eyebrow}>NATIVE OPERATIONS</Text>
+              <Text numberOfLines={2} style={styles.peopleModalTitle}>
+                {selectedMenu}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityLabel="Close operations"
+              onPress={() => setSelectedMenu(undefined)}
+              style={styles.peopleModalClose}
+            >
+              <Text style={styles.peopleModalCloseText}>×</Text>
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.moreDetailContent}>
+            <Text style={styles.moreDetailLead}>
+              Built for quick decisions in the field. Deeper records stay
+              structured and reviewable inside the same Duna data model.
+            </Text>
+            <View style={styles.moreDetailList}>
+              {detailRows.map((row, index) => (
+                <View
+                  key={`${row.title}:${index}`}
+                  style={styles.moreDetailRow}
+                >
+                  <View style={styles.moreDetailMark}>
+                    <Text style={styles.moreDetailMarkText}>
+                      {row.title.charAt(0)}
+                    </Text>
+                  </View>
+                  <View style={styles.flex}>
+                    <Text style={styles.rowTitle}>{row.title}</Text>
+                    <Text style={styles.moreDetailMeta}>{row.meta}</Text>
+                  </View>
+                </View>
+              ))}
+              {detailRows.length === 0 && (
+                <View style={styles.moreDetailEmpty}>
+                  <Text style={styles.rowTitle}>Nothing here yet.</Text>
+                  <Text style={styles.metaText}>
+                    Use the native action below to create the first record.
+                  </Text>
+                </View>
+              )}
+            </View>
+            {detailActionLabel && (
+              <Pressable
+                onPress={detailAction}
+                style={styles.peopleInviteSubmit}
+              >
+                <Text style={styles.peopleInviteSubmitText}>
+                  {detailActionLabel}
+                </Text>
+              </Pressable>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+    </>
   );
 }
 
@@ -3127,7 +3651,7 @@ function TabBar({
   onChange,
 }: {
   readonly active: Tab;
-  readonly onChange: (tab: Tab) => void;
+  readonly onChange: (tab: NavDestination) => void;
 }) {
   return (
     <View style={styles.tabBar}>
@@ -3140,13 +3664,13 @@ function TabBar({
             selectionHaptic();
             onChange(tab.key);
           }}
-          style={[styles.tabItem, tab.key === "score" && styles.scoreTab]}
+          style={[styles.tabItem, tab.key === "paid" && styles.scoreTab]}
         >
           <Text
             style={[
               styles.tabIcon,
               active === tab.key && styles.tabActive,
-              tab.key === "score" && styles.scoreTabIcon,
+              tab.key === "paid" && styles.scoreTabIcon,
             ]}
           >
             {tab.icon}
@@ -3155,14 +3679,12 @@ function TabBar({
             style={[
               styles.tabLabel,
               active === tab.key && styles.tabActive,
-              tab.key === "score" && styles.scoreTabLabel,
+              tab.key === "paid" && styles.scoreTabLabel,
             ]}
           >
             {tab.label}
           </Text>
-          {active === tab.key && tab.key !== "score" && (
-            <View style={styles.tabIndicator} />
-          )}
+          {active === tab.key && <View style={styles.tabIndicator} />}
         </Pressable>
       ))}
     </View>
@@ -3172,7 +3694,7 @@ function TabBar({
 function ProApp() {
   const { refresh } = useProRuntime();
   const [tab, setTab] = useState<Tab>("today");
-  const [surface, setSurface] = useState<"create" | "get-paid">();
+  const [surface, setSurface] = useState<"create" | "get-paid" | "score">();
   const [sessionNotesId, setSessionNotesId] = useState<string>();
   const [calendarEntryId, setCalendarEntryId] = useState<string>();
   const [theme, setTheme] = useState<ThemeName>("light");
@@ -3183,7 +3705,11 @@ function ProApp() {
     setTab("calendar");
   };
 
-  const changeTab = (nextTab: Tab) => {
+  const changeTab = (nextTab: NavDestination) => {
+    if (nextTab === "paid") {
+      setSurface("get-paid");
+      return;
+    }
     if (nextTab === "calendar") setCalendarEntryId(undefined);
     setTab(nextTab);
   };
@@ -3192,6 +3718,21 @@ function ProApp() {
     void AsyncStorage.getItem("duna-theme").then((stored) => {
       if (stored === "dark") setTheme("dark");
     });
+  }, []);
+
+  useEffect(() => {
+    const openSessionActivity = (url: string | null) => {
+      const match = url?.match(/^duna-pro:\/\/session\/([^/?#]+)/);
+      if (!match?.[1]) return;
+      setSurface(undefined);
+      setCalendarEntryId(decodeURIComponent(match[1]));
+      setTab("calendar");
+    };
+    void Linking.getInitialURL().then(openSessionActivity);
+    const subscription = Linking.addEventListener("url", ({ url }) =>
+      openSessionActivity(url),
+    );
+    return () => subscription.remove();
   }, []);
 
   useEffect(() => {
@@ -3235,11 +3776,18 @@ function ProApp() {
           onClose={() => setSurface(undefined)}
           onCreate={() => setSurface("create")}
         />
+      ) : surface === "score" ? (
+        <SafeAreaView edges={["top"]} style={styles.safe}>
+          <StatusBar style="light" />
+          <View style={styles.app}>
+            <ScorerScreen onExit={() => setSurface(undefined)} />
+          </View>
+        </SafeAreaView>
       ) : (
         <SafeAreaView edges={["top"]} style={styles.safe}>
           <StatusBar style={theme === "dark" ? "light" : "dark"} />
           <View style={styles.app}>
-            {tab !== "score" && <PreviewBanner />}
+            <PreviewBanner />
             <Animated.View
               style={[
                 styles.animatedScreen,
@@ -3261,6 +3809,7 @@ function ProApp() {
                   onCalendar={openCalendar}
                   onCreate={() => setSurface("create")}
                   onGetPaid={() => setSurface("get-paid")}
+                  onPeople={() => setTab("people")}
                   onRecordNotes={setSessionNotesId}
                 />
               )}
@@ -3269,22 +3818,20 @@ function ProApp() {
                   focusEntryId={calendarEntryId}
                   onCreate={() => setSurface("create")}
                   onRecordNotes={setSessionNotesId}
-                  onScore={() => setTab("score")}
+                  onScore={() => setSurface("score")}
                 />
               )}
               {tab === "people" && <PeopleScreen />}
-              {tab === "score" && (
-                <ScorerScreen onExit={() => setTab("today")} />
-              )}
               {tab === "more" && (
                 <MoreScreen
                   onCalendar={() => openCalendar()}
                   onCreate={() => setSurface("create")}
                   onGetPaid={() => setSurface("get-paid")}
+                  onPeople={() => setTab("people")}
                 />
               )}
             </Animated.View>
-            {tab !== "score" && <TabBar active={tab} onChange={changeTab} />}
+            <TabBar active={tab} onChange={changeTab} />
           </View>
         </SafeAreaView>
       )}
@@ -4249,6 +4796,24 @@ function createStyles(palette: Palette) {
       fontSize: 10,
       marginTop: 2,
     },
+    calendarRosterActions: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 6,
+    },
+    calendarCheckInButton: {
+      backgroundColor: rgba(colors.positiveRgb, 0.12),
+      borderColor: rgba(colors.positiveRgb, 0.22),
+      borderRadius: 12,
+      borderWidth: 1,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    calendarCheckInButtonText: {
+      color: colors.positive,
+      fontSize: 10,
+      fontWeight: "900",
+    },
     calendarRemoveButton: {
       borderColor: rgba(colors.dangerRgb, 0.22),
       borderRadius: 12,
@@ -4880,6 +5445,192 @@ function createStyles(palette: Palette) {
     },
     personRating: { alignItems: "flex-end", minWidth: 30 },
     ratingNumber: { color: colors.bone, fontSize: 10, fontWeight: "800" },
+    peopleModalSafe: { backgroundColor: colors.canvas, flex: 1 },
+    peopleModalHeader: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.08),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      padding: 18,
+    },
+    peopleModalTitle: {
+      color: colors.bone,
+      fontSize: 22,
+      fontWeight: "900",
+      letterSpacing: -0.8,
+      marginTop: 3,
+    },
+    peopleModalClose: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderRadius: 18,
+      height: 38,
+      justifyContent: "center",
+      width: 38,
+    },
+    peopleModalCloseText: {
+      color: colors.bone,
+      fontSize: 24,
+      lineHeight: 25,
+    },
+    peopleModalContent: { padding: 18, paddingBottom: 42 },
+    peopleProfileHero: { alignItems: "center", paddingVertical: 14 },
+    peopleProfileAvatar: {
+      alignItems: "center",
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 30,
+      height: 90,
+      justifyContent: "center",
+      width: 90,
+    },
+    peopleProfileAvatarText: {
+      color: colors.onAccent,
+      fontSize: 24,
+      fontWeight: "900",
+    },
+    peopleProfileName: {
+      color: colors.bone,
+      fontSize: 26,
+      fontWeight: "900",
+      letterSpacing: -1,
+      marginTop: 13,
+    },
+    peopleProfileMeta: { color: colors.muted, fontSize: 11, marginTop: 4 },
+    peopleProfilePills: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+      justifyContent: "center",
+      marginTop: 10,
+    },
+    peopleProfileMetrics: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-around",
+      padding: 16,
+    },
+    peopleProfileCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      marginTop: 12,
+      padding: 16,
+    },
+    peopleProfileCardTitle: {
+      color: colors.bone,
+      fontSize: 18,
+      fontWeight: "900",
+      marginTop: 5,
+    },
+    peopleProfileCardBody: {
+      color: colors.muted,
+      fontSize: 11,
+      marginTop: 5,
+    },
+    peopleProfileReason: {
+      color: colors.warning,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 6,
+    },
+    peopleProfileActions: { flexDirection: "row", gap: 8, marginTop: 12 },
+    peopleProfilePrimary: {
+      alignItems: "center",
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 15,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 50,
+    },
+    peopleProfilePrimaryText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    peopleProfileSecondary: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.14),
+      borderRadius: 15,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 50,
+    },
+    peopleProfileSecondaryText: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    peopleInviteContent: { padding: 18, paddingBottom: 42 },
+    peopleInviteLead: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginBottom: 18,
+    },
+    peopleInviteInput: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 14,
+      borderWidth: 1,
+      color: colors.bone,
+      fontSize: 13,
+      marginBottom: 13,
+      minHeight: 50,
+      paddingHorizontal: 13,
+    },
+    peopleInviteToggle: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 15,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginBottom: 14,
+      padding: 12,
+    },
+    peopleInviteToggleMark: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.22),
+      borderRadius: 8,
+      borderWidth: 1,
+      height: 26,
+      justifyContent: "center",
+      width: 26,
+    },
+    peopleInviteToggleMarkActive: {
+      backgroundColor: colors.positive,
+      borderColor: colors.positive,
+    },
+    peopleInviteToggleMarkText: {
+      color: colors.onAccent,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    peopleInviteFeedback: {
+      color: colors.aqua,
+      fontSize: 11,
+      lineHeight: 16,
+      marginBottom: 10,
+    },
+    peopleInviteSubmit: {
+      alignItems: "center",
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 16,
+      justifyContent: "center",
+      minHeight: 54,
+    },
+    peopleInviteSubmitText: {
+      color: colors.onAccent,
+      fontSize: 12,
+      fontWeight: "900",
+    },
     scorer: { backgroundColor: colors.canvas, flex: 1 },
     scorerTop: {
       alignItems: "center",
@@ -5268,6 +6019,50 @@ function createStyles(palette: Palette) {
       textAlign: "center",
       width: 30,
     },
+    moreDetailContent: { padding: 18, paddingBottom: 42 },
+    moreDetailLead: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginBottom: 14,
+    },
+    moreDetailList: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      marginBottom: 12,
+      overflow: "hidden",
+    },
+    moreDetailRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 66,
+      padding: 11,
+    },
+    moreDetailMark: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 10,
+      height: 38,
+      justifyContent: "center",
+      width: 38,
+    },
+    moreDetailMarkText: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    moreDetailMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 3,
+    },
+    moreDetailEmpty: { gap: 4, padding: 16 },
     proNote: {
       alignItems: "center",
       backgroundColor: colors.navy,

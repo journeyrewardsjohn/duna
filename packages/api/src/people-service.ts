@@ -27,6 +27,7 @@ import {
   venues,
   videos,
 } from "@duna/db";
+import { arrivalSharingWindow } from "@duna/scheduling";
 import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import type {
@@ -37,6 +38,7 @@ import type {
   OperatorWorkspace,
 } from "./contracts";
 import type { ApiActor } from "./context";
+import { loadSessionArrivalBoard } from "./arrival-service";
 import { loadHealthProfile } from "./health-service";
 import {
   loadDemoOperatorWorkspace,
@@ -940,6 +942,7 @@ export async function loadDemoOperatorMemberProfile(
 export async function loadOperatorSessionDetail(
   organizationId: string,
   sessionId: string,
+  now: Date = new Date(),
 ): Promise<OperatorSessionDetail> {
   requireDatabase();
   const workspace = await loadOperatorWorkspace(organizationId);
@@ -970,6 +973,7 @@ export async function loadOperatorSessionDetail(
     notes,
     videoRows,
     teamEntryRows,
+    arrivalBoard,
   ] = await Promise.all([
     database
       .select()
@@ -1051,6 +1055,7 @@ export async function loadOperatorSessionDetail(
       .innerJoin(people, eq(teamEntries.payingPersonId, people.id))
       .leftJoin(orders, eq(registrations.orderId, orders.id))
       .where(eq(registrations.sessionId, sessionId)),
+    loadSessionArrivalBoard({ organizationId, sessionId, now }),
   ]);
   const personIds = [
     ...new Set([
@@ -1098,6 +1103,7 @@ export async function loadOperatorSessionDetail(
     : undefined;
   return {
     session,
+    arrivalBoard,
     coaches: coach
       ? [
           {
@@ -1226,6 +1232,7 @@ export async function loadOperatorSessionDetail(
 export async function loadDemoOperatorSessionDetail(
   organizationId: string,
   sessionId: string,
+  now: Date = new Date(),
 ): Promise<OperatorSessionDetail> {
   const workspace = await loadDemoOperatorWorkspace(organizationId);
   const session = workspace.sessions.find(
@@ -1314,6 +1321,44 @@ export async function loadDemoOperatorSessionDetail(
     : [];
   return {
     session,
+    arrivalBoard: {
+      sessionId,
+      venueName: session.venueName,
+      startsAt: session.startsAt,
+      expectedPlayers: attendees.filter(
+        (attendee) => attendee.attendanceStatus !== "cancelled",
+      ).length,
+      sharingWindow: arrivalSharingWindow(session.startsAt, now),
+      signals: attendees.slice(0, 4).map((attendee, index) => {
+        const etaMinutes = index === 0 ? 0 : 6 + index * 4;
+        return {
+          sessionId,
+          personId: attendee.personId,
+          displayName: attendee.displayName,
+          avatarUrl: attendee.avatarUrl,
+          role: "player" as const,
+          status:
+            index === 0
+              ? ("arrived" as const)
+              : index === 3
+                ? ("running-late" as const)
+                : index === 2
+                  ? ("leave-now" as const)
+                  : ("on-time" as const),
+          distanceMeters: index === 0 ? 45 : 1_200 + index * 1_900,
+          travelDurationSeconds: etaMinutes * 60,
+          leaveBy: new Date(
+            Date.parse(session.startsAt) - etaMinutes * 60_000 - 5 * 60_000,
+          ).toISOString(),
+          routeSource: "google-routes" as const,
+          accuracyMeters: 18,
+          observedAt: now.toISOString(),
+          expiresAt: new Date(
+            Date.parse(session.startsAt) + 30 * 60_000,
+          ).toISOString(),
+        };
+      }),
+    },
     coaches: [
       {
         personId: coachPersonId,

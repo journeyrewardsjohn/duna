@@ -63,6 +63,50 @@ async function clearSession(): Promise<void> {
   ]);
 }
 
+let backgroundRefresh: Promise<string | null> | undefined;
+
+/**
+ * Restores or refreshes the same encrypted mobile session for a short-lived
+ * background task. This never copies the token into app preferences or task
+ * payloads; it remains in SecureStore.
+ */
+export async function getStoredWorkOSMobileToken(
+  authBaseUrl: string,
+): Promise<string | null> {
+  const [accessToken, expiresAt, refreshToken, organizationId] =
+    await Promise.all([
+      SecureStore.getItemAsync(ACCESS_TOKEN_KEY),
+      SecureStore.getItemAsync(EXPIRES_AT_KEY),
+      SecureStore.getItemAsync(REFRESH_TOKEN_KEY),
+      SecureStore.getItemAsync(ORGANIZATION_KEY),
+    ]);
+  if (accessToken && Number(expiresAt) > Date.now() + 60_000) {
+    return accessToken;
+  }
+  if (!refreshToken) return null;
+  backgroundRefresh ??= fetch(
+    `${cleanBaseUrl(authBaseUrl)}/api/auth/mobile/refresh`,
+    {
+      body: JSON.stringify({
+        organizationId: organizationId ?? undefined,
+        refreshToken,
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    },
+  )
+    .then((response) => responseJson<MobileSession>(response))
+    .then(async (session) => {
+      await storeSession(session);
+      return session.accessToken;
+    })
+    .catch(() => null)
+    .finally(() => {
+      backgroundRefresh = undefined;
+    });
+  return backgroundRefresh;
+}
+
 function cleanBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
