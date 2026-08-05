@@ -425,7 +425,7 @@ function CanonicalIdentityEditor({
           </div>
           <Link
             className="hq-button hq-button--secondary"
-            href="/admin/profile-merge"
+            href="/admin/player-mapping#profile-merge"
           >
             Review merge
           </Link>

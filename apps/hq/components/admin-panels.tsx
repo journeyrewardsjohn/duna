@@ -40,7 +40,6 @@ import { GuardianReviewCard } from "./guardian-review-card";
 import { OrganizationCommissionControls } from "./organization-commission-controls";
 import {
   PlayerMappingPanel,
-  ProfileMergePanel,
   RatingsLabPanel,
   SandDataPanel,
 } from "./sand-admin-controls";
@@ -115,12 +114,6 @@ const copy: Record<
     title: "Ratings lab",
     description:
       "Measure prediction accuracy and calibration, then version rating parameters safely.",
-  },
-  "profile-merge": {
-    eyebrow: "Duplicate identity repair",
-    title: "Merge profiles",
-    description:
-      "Move unclaimed source identities into a canonical Duna player with a complete audit record.",
   },
   payments: {
     eyebrow: "Platform financial operations",
@@ -779,8 +772,7 @@ export function AdminPanel({
               ? Sparkles
               : module === "sand-data" ||
                   module === "player-mapping" ||
-                  module === "ratings-lab" ||
-                  module === "profile-merge"
+                  module === "ratings-lab"
                 ? Activity
                 : module === "payments"
                   ? WalletCards
@@ -873,8 +865,6 @@ export function AdminPanel({
         />
       ) : module === "ratings-lab" && sandData ? (
         <RatingsLabPanel data={sandData} />
-      ) : module === "profile-merge" ? (
-        <ProfileMergePanel />
       ) : module === "payments" ? (
         <div className="module-grid module-grid--two">
           <section className="hq-card module-feature-card">

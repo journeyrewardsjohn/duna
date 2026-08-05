@@ -1,10 +1,16 @@
 "use client";
 
-import type { SandDataOverview } from "@duna/api";
+import type {
+  PlayerMergeFieldChoice,
+  PlayerMergeFieldPlan,
+  PlayerMergePreview,
+  SandDataOverview,
+} from "@duna/api";
 import type { PersonSummary } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   Activity,
+  ArrowLeftRight,
   ArrowRight,
   CheckCircle2,
   Database,
@@ -16,6 +22,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  Sparkles,
   TriangleAlert,
   Trash2,
   Trophy,
@@ -31,6 +38,7 @@ import {
   importSandSourceAction,
   linkSandPlayerAction,
   mergeSandProfilesAction,
+  previewSandProfilesAction,
   refreshFivbIndexAction,
   refreshSandRatingNetworkAction,
   refreshWorldRankingsAction,
@@ -1188,6 +1196,367 @@ function ProfileClaimReview({
   );
 }
 
+function mergeValueLabel(
+  field: PlayerMergeFieldPlan,
+  value: PlayerMergeFieldPlan["sourceValue"],
+): string {
+  if (value === null) return "No value";
+  if (Array.isArray(value)) {
+    const labels = value
+      .map((item) => {
+        const label = item.label ?? item.title ?? item.url;
+        return typeof label === "string" ? label : undefined;
+      })
+      .filter((label): label is string => Boolean(label));
+    return labels.length
+      ? `${value.length} · ${labels.slice(0, 2).join(", ")}${labels.length > 2 ? "…" : ""}`
+      : `${value.length} item${value.length === 1 ? "" : "s"}`;
+  }
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (field.key === "heightMillimeters" && typeof value === "number") {
+    return `${Math.round(value / 10)} cm`;
+  }
+  return String(value);
+}
+
+function MergeFieldControl({
+  choice,
+  field,
+  onChange,
+  sourceName,
+  targetName,
+}: {
+  readonly choice: PlayerMergeFieldChoice;
+  readonly field: PlayerMergeFieldPlan;
+  readonly onChange: (choice: PlayerMergeFieldChoice) => void;
+  readonly sourceName: string;
+  readonly targetName: string;
+}) {
+  return (
+    <article className="player-merge-field">
+      <div>
+        <small>{field.group}</small>
+        <strong>{field.label}</strong>
+      </div>
+      <label>
+        <span className="sr-only">Value to keep for {field.label}</span>
+        <select
+          aria-label={`Value to keep for ${field.label}`}
+          onChange={(event) =>
+            onChange(event.target.value as PlayerMergeFieldChoice)
+          }
+          value={choice}
+        >
+          <option value="target">
+            {targetName}: {mergeValueLabel(field, field.targetValue)}
+          </option>
+          <option value="source">
+            {sourceName}: {mergeValueLabel(field, field.sourceValue)}
+          </option>
+          {field.kind === "collection" ? (
+            <option value="combine">Combine unique items</option>
+          ) : null}
+          <option value="discard">Discard this field</option>
+        </select>
+      </label>
+      <small className="player-merge-field__suggestion">
+        <Sparkles aria-hidden size={12} /> Duna suggests {field.suggestedChoice}
+      </small>
+    </article>
+  );
+}
+
+function PlayerMergeReview({
+  preview,
+}: {
+  readonly preview: PlayerMergePreview;
+}) {
+  const [state, action, pending] = useActionState(
+    mergeSandProfilesAction,
+    initialState,
+  );
+  const suggestedChoices = useMemo(
+    () =>
+      Object.fromEntries(
+        preview.plan.fields.map((field) => [field.key, field.suggestedChoice]),
+      ) as Record<string, PlayerMergeFieldChoice>,
+    [preview.plan.fields],
+  );
+  const [choices, setChoices] = useState(suggestedChoices);
+  const conflicts = preview.plan.fields.filter(
+    (field) => field.status === "conflict",
+  );
+  const automatic = preview.plan.fields.filter((field) =>
+    ["source-fill", "target-fill", "combined"].includes(field.status),
+  );
+  const impact = [
+    ["Source profiles", preview.impact.externalProfiles],
+    ["Imported matches", preview.impact.importedMatches],
+    ["Team memberships", preview.impact.teamMemberships],
+    ["Rating events", preview.impact.ratingEvents],
+    ["Followers", preview.impact.followers],
+    ["Duplicate matches", preview.impact.duplicateImportedMatches],
+  ] as const;
+  return (
+    <div className="player-merge-review">
+      <section className="player-merge-recommendation">
+        <div>
+          <span className="player-merge-recommendation__icon">
+            <Sparkles aria-hidden size={18} />
+          </span>
+          <div>
+            <span className="hq-eyebrow">Duna merge intelligence</span>
+            <h3>Keep {preview.plan.target.displayName} as canonical</h3>
+            <p>
+              Merge {preview.plan.source.displayName} into this identity with{" "}
+              {preview.plan.confidence}% confidence.
+            </p>
+          </div>
+        </div>
+        <Badge tone={preview.plan.canMerge ? "positive" : "warning"}>
+          {preview.plan.canMerge ? "ready to review" : "blocked"}
+        </Badge>
+      </section>
+      <div className="player-merge-profile-pair">
+        <article>
+          <small>Duplicate profile</small>
+          <strong>{preview.plan.source.displayName}</strong>
+          <span>@{preview.plan.source.handle}</span>
+          <Badge>{preview.plan.source.profileClaimStatus}</Badge>
+        </article>
+        <ArrowRight aria-hidden size={20} />
+        <article className="is-canonical">
+          <small>Canonical survivor</small>
+          <strong>{preview.plan.target.displayName}</strong>
+          <span>@{preview.plan.target.handle}</span>
+          <Badge tone="positive">
+            {preview.plan.target.profileClaimStatus}
+          </Badge>
+        </article>
+      </div>
+      <ul className="player-merge-reasons">
+        {preview.plan.reasons.map((reason) => (
+          <li key={reason}>
+            <CheckCircle2 aria-hidden size={14} /> {reason}
+          </li>
+        ))}
+      </ul>
+      <div className="player-merge-impact">
+        {impact.map(([label, value]) => (
+          <span key={label}>
+            <strong>{value}</strong>
+            <small>{label}</small>
+          </span>
+        ))}
+      </div>
+      {preview.plan.blockers.length > 0 ? (
+        <div className="player-merge-blockers">
+          <TriangleAlert aria-hidden size={18} />
+          <div>
+            <strong>Merge blocked</strong>
+            {preview.plan.blockers.map((blocker) => (
+              <p key={blocker}>{blocker}</p>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <form action={action} className="player-merge-resolution">
+          <input
+            name="sourcePersonId"
+            type="hidden"
+            value={preview.plan.source.id}
+          />
+          <input
+            name="targetPersonId"
+            type="hidden"
+            value={preview.plan.target.id}
+          />
+          <input
+            name="fieldChoices"
+            type="hidden"
+            value={JSON.stringify(choices)}
+          />
+          <section>
+            <header>
+              <div>
+                <span className="hq-eyebrow">Conflicts requiring a choice</span>
+                <h3>
+                  {conflicts.length
+                    ? `${conflicts.length} field conflict${conflicts.length === 1 ? "" : "s"}`
+                    : "No conflicting fields"}
+                </h3>
+              </div>
+              <Badge tone={conflicts.length ? "warning" : "positive"}>
+                {conflicts.length ? "review" : "resolved"}
+              </Badge>
+            </header>
+            {conflicts.length ? (
+              <div className="player-merge-fields">
+                {conflicts.map((field) => (
+                  <MergeFieldControl
+                    choice={choices[field.key] ?? field.suggestedChoice}
+                    field={field}
+                    key={field.key}
+                    onChange={(choice) =>
+                      setChoices((current) => ({
+                        ...current,
+                        [field.key]: choice,
+                      }))
+                    }
+                    sourceName={preview.plan.source.displayName}
+                    targetName={preview.plan.target.displayName}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="hq-empty">
+                Every populated field has one clear value or an identical value.
+              </p>
+            )}
+          </section>
+          {automatic.length > 0 ? (
+            <details className="player-merge-automatic">
+              <summary>
+                Review {automatic.length} automatically filled or combined
+                fields
+              </summary>
+              <div className="player-merge-fields">
+                {automatic.map((field) => (
+                  <MergeFieldControl
+                    choice={choices[field.key] ?? field.suggestedChoice}
+                    field={field}
+                    key={field.key}
+                    onChange={(choice) =>
+                      setChoices((current) => ({
+                        ...current,
+                        [field.key]: choice,
+                      }))
+                    }
+                    sourceName={preview.plan.source.displayName}
+                    targetName={preview.plan.target.displayName}
+                  />
+                ))}
+              </div>
+            </details>
+          ) : null}
+          <section className="player-merge-rescore">
+            <RefreshCw aria-hidden size={19} />
+            <div>
+              <strong>De-duplicate, then rescore</strong>
+              <p>
+                The merge will consolidate every source and match participant,
+                cancel {preview.impact.duplicateCanonicalMatches} duplicate
+                rated match
+                {preview.impact.duplicateCanonicalMatches === 1 ? "" : "es"},
+                and replay the Sand Rating projection chronologically.
+              </p>
+            </div>
+          </section>
+          <label className="player-merge-reason">
+            <span>Merge reason</span>
+            <textarea
+              minLength={10}
+              name="reason"
+              placeholder="Evidence reviewed and why these are the same player"
+              required
+              rows={3}
+            />
+          </label>
+          <label className="player-merge-confirmation">
+            <input required type="checkbox" />
+            <span>
+              I reviewed the canonical survivor, field conflicts, duplicate
+              matches, and rating replay impact.
+            </span>
+          </label>
+          <button
+            className="hq-button hq-button--primary"
+            disabled={pending}
+            type="submit"
+          >
+            {pending ? (
+              <LoaderCircle className="spin" size={16} />
+            ) : (
+              <GitMerge size={16} />
+            )}
+            Merge profiles + rescore
+          </button>
+          <ActionFeedback state={state} />
+        </form>
+      )}
+    </div>
+  );
+}
+
+function PlayerMergeWorkspace({
+  initialPlayer,
+  players,
+}: {
+  readonly initialPlayer?: PersonSummary;
+  readonly players: readonly PersonSummary[];
+}) {
+  const [state, action, pending] = useActionState(
+    previewSandProfilesAction,
+    initialState,
+  );
+  const options = useMemo(() => playerComboboxOptions(players), [players]);
+  const initialOption = initialPlayer
+    ? options.find((option) => option.id === initialPlayer.id)
+    : undefined;
+  return (
+    <section className="hq-card player-merge-workspace" id="profile-merge">
+      <header className="hq-card-heading">
+        <div>
+          <span className="hq-eyebrow">Map, compare, merge</span>
+          <h2>Merge duplicate player profiles</h2>
+        </div>
+        <GitMerge aria-hidden size={21} />
+      </header>
+      <p>
+        Search for two profiles. Duna recommends the canonical survivor, fills
+        empty fields, combines unique evidence, and asks only about real
+        conflicts before any data changes.
+      </p>
+      <form action={action} className="player-merge-picker">
+        <PlayerCombobox
+          currentOption={initialOption}
+          initialOptions={options}
+          key={`profile-a-${initialOption?.id ?? "empty"}`}
+          label="Profile A"
+          name="profileAId"
+          placeholder="Search the first player…"
+        />
+        <ArrowLeftRight aria-hidden size={20} />
+        <PlayerCombobox
+          initialOptions={options}
+          label="Profile B"
+          name="profileBId"
+          placeholder="Search the possible duplicate…"
+        />
+        <button
+          className="hq-button hq-button--primary"
+          disabled={pending}
+          type="submit"
+        >
+          {pending ? (
+            <LoaderCircle className="spin" size={16} />
+          ) : (
+            <Sparkles size={16} />
+          )}
+          Preview intelligent merge
+        </button>
+      </form>
+      <ActionFeedback state={state} />
+      {state.mergePreview ? (
+        <PlayerMergeReview
+          key={`${state.mergePreview.plan.source.id}-${state.mergePreview.plan.target.id}`}
+          preview={state.mergePreview}
+        />
+      ) : null}
+    </section>
+  );
+}
+
 export function PlayerMappingPanel({
   data,
   players,
@@ -1331,6 +1700,9 @@ export function PlayerMappingPanel({
                 >
                   Copy person ID
                 </button>
+                <a href="#profile-merge">
+                  <GitMerge aria-hidden size={14} /> Compare + merge
+                </a>
               </div>
               <section>
                 <h4>Connected records</h4>
@@ -1373,6 +1745,8 @@ export function PlayerMappingPanel({
           ) : null}
         </div>
       </section>
+
+      <PlayerMergeWorkspace initialPlayer={selectedPlayer} players={players} />
 
       <section className="hq-card profile-claim-queue">
         <header className="hq-card-heading">
@@ -1723,54 +2097,5 @@ export function RatingsLabPanel({ data }: { readonly data: SandDataOverview }) {
         ))}
       </section>
     </div>
-  );
-}
-
-export function ProfileMergePanel() {
-  const [state, action, pending] = useActionState(
-    mergeSandProfilesAction,
-    initialState,
-  );
-  return (
-    <section className="hq-card profile-merge-card">
-      <header className="hq-card-heading">
-        <div>
-          <span className="hq-eyebrow">Identity repair</span>
-          <h2>Merge an unclaimed profile</h2>
-        </div>
-        <GitMerge size={21} />
-      </header>
-      <div className="profile-merge-explainer">
-        <UsersRound size={23} />
-        <p>
-          External links, match participation, rankings, and rating history move
-          to the canonical player. Claimed profiles cannot be merged
-          automatically.
-        </p>
-      </div>
-      <form action={action}>
-        <label>
-          <span>Unclaimed source person ID</span>
-          <input name="sourcePersonId" required />
-        </label>
-        <ArrowRight aria-hidden size={19} />
-        <label>
-          <span>Canonical target person ID</span>
-          <input name="targetPersonId" required />
-        </label>
-        <label className="profile-merge-card__reason">
-          <span>Merge reason</span>
-          <textarea name="reason" required rows={3} />
-        </label>
-        <button className="hq-button hq-button--primary" disabled={pending}>
-          <GitMerge size={16} /> Merge profiles
-        </button>
-      </form>
-      <ActionFeedback state={state} />
-      <p className="profile-merge-warning">
-        If both profiles already have rating events, the operation pauses for a
-        Ratings Lab replay instead of combining incompatible projections.
-      </p>
-    </section>
   );
 }

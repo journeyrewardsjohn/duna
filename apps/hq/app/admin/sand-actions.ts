@@ -1,11 +1,13 @@
 "use server";
 
+import type { PlayerMergePreview } from "@duna/api";
 import { revalidatePath } from "next/cache";
 import { getServerCaller } from "@/lib/api";
 
 export interface SandActionState {
   readonly status: "idle" | "success" | "error";
   readonly message: string;
+  readonly mergePreview?: PlayerMergePreview;
 }
 
 function refreshSandAdmin(): void {
@@ -819,6 +821,25 @@ export async function mergeSandProfilesAction(
   const sourcePersonId = String(formData.get("sourcePersonId") ?? "").trim();
   const targetPersonId = String(formData.get("targetPersonId") ?? "").trim();
   const reason = String(formData.get("reason") ?? "").trim();
+  let fieldChoices: Record<string, "source" | "target" | "combine" | "discard">;
+  try {
+    const parsed = JSON.parse(
+      String(formData.get("fieldChoices") ?? "{}"),
+    ) as Record<string, unknown>;
+    fieldChoices = Object.fromEntries(
+      Object.entries(parsed).filter(
+        (
+          entry,
+        ): entry is [string, "source" | "target" | "combine" | "discard"] =>
+          ["source", "target", "combine", "discard"].includes(String(entry[1])),
+      ),
+    );
+  } catch {
+    return {
+      status: "error",
+      message: "The merge field selections could not be read. Preview again.",
+    };
+  }
   if (!sourcePersonId || !targetPersonId || reason.length < 10) {
     return {
       status: "error",
@@ -827,17 +848,48 @@ export async function mergeSandProfilesAction(
   }
   try {
     const caller = await getServerCaller();
-    await caller.admin.mergeSandProfiles({
+    const result = await caller.admin.mergeSandProfiles({
       sourcePersonId,
       targetPersonId,
+      fieldChoices,
       reason,
     });
     refreshSandAdmin();
     return {
       status: "success",
-      message: "The unclaimed profile was merged into the canonical identity.",
+      message: `Profiles merged, ${result.duplicateImportedMatches} duplicate match records consolidated, ${result.duplicateCanonicalMatches} duplicate rated matches removed, and ${result.ratingReplay.players} player ratings rescored from ${result.ratingReplay.matches} chronological matches.`,
     };
   } catch (error) {
     return failure(error, "The profiles could not be merged.");
+  }
+}
+
+export async function previewSandProfilesAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const profileAId = String(formData.get("profileAId") ?? "").trim();
+  const profileBId = String(formData.get("profileBId") ?? "").trim();
+  if (!profileAId || !profileBId || profileAId === profileBId) {
+    return {
+      status: "error",
+      message: "Choose two different player profiles to compare.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const mergePreview = await caller.admin.previewSandProfileMerge({
+      profileAId,
+      profileBId,
+    });
+    return {
+      status: "success",
+      message: mergePreview.plan.canMerge
+        ? `${mergePreview.plan.autoFilledCount} fields can be resolved automatically; review ${mergePreview.plan.conflictCount} conflicts before merging.`
+        : "These profiles need manual identity review before they can be merged.",
+      mergePreview,
+    };
+  } catch (error) {
+    return failure(error, "The merge preview could not be prepared.");
   }
 }
