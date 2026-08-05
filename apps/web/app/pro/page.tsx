@@ -5,6 +5,10 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { DatePillFilter } from "@/components/date-pill-filter";
 import { ProEventCard } from "@/components/pro-event-card";
+import {
+  ProPlayerDiscovery,
+  type ProDiscoveryPlayer,
+} from "@/components/pro-player-discovery";
 import { ProfessionalMatchCard } from "@/components/professional-match-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -163,7 +167,29 @@ export default async function ProTourPage({
     const query = params.toString();
     return query ? `/pro?${query}` : "/pro";
   };
-  const coverage = await caller.public.proCoverage().catch(() => undefined);
+  const [coverage, rankings] = await Promise.all([
+    caller.public.proCoverage().catch(() => undefined),
+    caller.public.worldRankings().catch(() => undefined),
+  ]);
+  const playersFor = (gender: "men" | "women"): ProDiscoveryPlayer[] =>
+    (rankings?.world[gender] ?? []).flatMap((player) =>
+      player.publicPath
+        ? [
+            {
+              id: player.personId ?? player.publicPath,
+              displayName: player.displayName,
+              publicPath: player.publicPath,
+              gender,
+              worldRank: player.rank,
+              points: player.points,
+              countryCode: player.countryCode,
+              avatarUrl: player.avatarUrl,
+              sandRating: player.sandRating,
+            },
+          ]
+        : [],
+    );
+  const proPlayers = [...playersFor("men"), ...playersFor("women")];
   const tourEvents =
     coverage?.events.filter(
       (event) => selectedTour === "all" || event.tour === selectedTour,
@@ -208,6 +234,7 @@ export default async function ProTourPage({
         timeZone: "UTC",
       }).format(new Date(`${selectedDate}T12:00:00Z`))
     : undefined;
+  const featuredPlayers = proPlayers.filter((player) => player.worldRank <= 8);
   const structuredData = {
     "@context": "https://schema.org",
     "@graph": [
@@ -229,6 +256,24 @@ export default async function ProTourPage({
           position: index + 1,
           name: event.name,
           url: absolutePublicUrl(`/events/${event.slug}`),
+        })),
+      },
+      {
+        "@type": "ItemList",
+        "@id": `${absolutePublicUrl("/pro")}#players`,
+        name: "Top professional beach volleyball players",
+        numberOfItems: featuredPlayers.length,
+        itemListElement: featuredPlayers.map((player, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          url: absolutePublicUrl(player.publicPath),
+          item: {
+            "@type": "Person",
+            name: player.displayName,
+            nationality: player.countryCode
+              ? { "@type": "Country", name: player.countryCode }
+              : undefined,
+          },
         })),
       },
     ],
@@ -326,6 +371,8 @@ export default async function ProTourPage({
                 : `No ${selectedTourLabel} events are currently indexed.`}
           </p>
         )}
+
+        {proPlayers.length > 0 && <ProPlayerDiscovery players={proPlayers} />}
 
         <section className="pro-live-results" id="latest-match-updates">
           <header>

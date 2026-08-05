@@ -1,6 +1,9 @@
+"use client";
+
 import { ArrowUpRight, MapPin, Trophy } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 import { countryFlag } from "@/lib/country-flag";
 
 export interface PartnershipMatchPoint {
@@ -58,6 +61,12 @@ function signed(value: number) {
   return `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
 }
 
+function resultLabel(result: PartnershipMatchPoint["result"]) {
+  if (result === "win") return "Win";
+  if (result === "loss") return "Loss";
+  return "Result";
+}
+
 function trendGeometry(history: readonly PartnershipMatchPoint[]) {
   let wins = 0;
   let decided = 0;
@@ -99,6 +108,11 @@ export function PartnershipHistoryCard({
   const { path, points } = trendGeometry(partner.history);
   const firstPoint = points[0];
   const lastPoint = points.at(-1);
+  const [selectedIndex, setSelectedIndex] = useState<number>();
+  const [hoveredIndex, setHoveredIndex] = useState<number>();
+  const activeIndex = hoveredIndex ?? selectedIndex;
+  const activePoint =
+    activeIndex === undefined ? undefined : points[activeIndex];
 
   return (
     <article className="partnership-card">
@@ -187,59 +201,124 @@ export function PartnershipHistoryCard({
           </div>
           <b>{lastPoint ? `${Math.round(lastPoint.winRate)}%` : "—"}</b>
         </header>
-        <svg
-          aria-label={`${partner.name} partnership win-rate trend across ${partner.matches} shared matches`}
-          role="img"
-          viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-        >
-          {[0, 50, 100].map((value) => {
-            const y =
-              CHART_PADDING.top +
-              (1 - value / 100) *
-                (CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom);
-            return (
-              <line
-                className="partnership-card__gridline"
-                key={value}
-                x1={CHART_PADDING.left}
-                x2={CHART_WIDTH - CHART_PADDING.right}
-                y1={y}
-                y2={y}
+        <div className="partnership-card__chart">
+          <svg
+            aria-label={`${partner.name} partnership win-rate trend across ${partner.matches} shared matches`}
+            role="img"
+            viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+          >
+            {[0, 50, 100].map((value) => {
+              const y =
+                CHART_PADDING.top +
+                (1 - value / 100) *
+                  (CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom);
+              return (
+                <line
+                  className="partnership-card__gridline"
+                  key={value}
+                  x1={CHART_PADDING.left}
+                  x2={CHART_WIDTH - CHART_PADDING.right}
+                  y1={y}
+                  y2={y}
+                />
+              );
+            })}
+            <path className="partnership-card__trend-line" d={path} />
+            {points.map((point, index) => {
+              const previousX = points[index - 1]?.x ?? CHART_PADDING.left;
+              const nextX =
+                points[index + 1]?.x ?? CHART_WIDTH - CHART_PADDING.right;
+              const startX =
+                index === 0 ? CHART_PADDING.left : (previousX + point.x) / 2;
+              const endX =
+                index === points.length - 1
+                  ? CHART_WIDTH - CHART_PADDING.right
+                  : (point.x + nextX) / 2;
+              return (
+                <rect
+                  aria-label={`${formatDate(point.occurredAt, true)}: ${resultLabel(point.result)} versus ${point.opponents || "opponent pending"}`}
+                  className="partnership-card__hit-area"
+                  fill="transparent"
+                  height={CHART_HEIGHT - CHART_PADDING.bottom}
+                  key={`${point.id}-hit-area`}
+                  onBlur={() => setHoveredIndex(undefined)}
+                  onClick={() => setSelectedIndex(index)}
+                  onFocus={() => setHoveredIndex(index)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedIndex(index);
+                    }
+                  }}
+                  onMouseEnter={() => setHoveredIndex(index)}
+                  onMouseLeave={() => setHoveredIndex(undefined)}
+                  role="button"
+                  tabIndex={0}
+                  width={Math.max(endX - startX, 1)}
+                  x={startX}
+                  y={0}
+                />
+              );
+            })}
+            {points.map((point, index) => (
+              <circle
+                aria-hidden
+                className="partnership-card__trend-point"
+                cx={point.x}
+                cy={point.y}
+                data-active={activeIndex === index ? "true" : undefined}
+                data-result={point.result}
+                key={point.id}
+                r={activeIndex === index ? 3.25 : 2.4}
               />
-            );
-          })}
-          <path className="partnership-card__trend-line" d={path} />
-          {points.map((point) => (
-            <circle
-              aria-label={`${formatDate(point.occurredAt, true)} ${point.result}, ${Math.round(point.winRate)} percent cumulative win rate`}
-              className="partnership-card__trend-point"
-              cx={point.x}
-              cy={point.y}
-              data-result={point.result}
-              key={point.id}
-              r="4.5"
-            />
-          ))}
-          {firstPoint && (
-            <text
-              className="partnership-card__axis"
-              x={CHART_PADDING.left}
-              y={CHART_HEIGHT - 7}
+            ))}
+            {firstPoint && (
+              <text
+                className="partnership-card__axis"
+                x={CHART_PADDING.left}
+                y={CHART_HEIGHT - 7}
+              >
+                {formatDate(firstPoint.occurredAt)}
+              </text>
+            )}
+            {lastPoint && (
+              <text
+                className="partnership-card__axis"
+                textAnchor="end"
+                x={CHART_WIDTH - CHART_PADDING.right}
+                y={CHART_HEIGHT - 7}
+              >
+                {formatDate(lastPoint.occurredAt)}
+              </text>
+            )}
+          </svg>
+          {activePoint && (
+            <div
+              aria-live="polite"
+              className={`partnership-card__tooltip partnership-card__tooltip--${activePoint.result} ${
+                activePoint.x / CHART_WIDTH < 0.28
+                  ? "is-right"
+                  : activePoint.x / CHART_WIDTH > 0.72
+                    ? "is-left"
+                    : "is-center"
+              }`}
+              style={{
+                left: `${(activePoint.x / CHART_WIDTH) * 100}%`,
+              }}
             >
-              {formatDate(firstPoint.occurredAt)}
-            </text>
+              <span>{resultLabel(activePoint.result)}</span>
+              <time dateTime={activePoint.occurredAt}>
+                {formatDate(activePoint.occurredAt, true)}
+              </time>
+              <strong>vs {activePoint.opponents || "opponent pending"}</strong>
+              <small>
+                {activePoint.score || "Score pending"} ·{" "}
+                {signed(activePoint.delta)}
+                {" SandRating"}
+              </small>
+            </div>
           )}
-          {lastPoint && (
-            <text
-              className="partnership-card__axis"
-              textAnchor="end"
-              x={CHART_WIDTH - CHART_PADDING.right}
-              y={CHART_HEIGHT - 7}
-            >
-              {formatDate(lastPoint.occurredAt)}
-            </text>
-          )}
-        </svg>
+        </div>
       </section>
 
       <section className="partnership-card__recent">

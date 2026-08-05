@@ -3929,12 +3929,6 @@ export async function loadPublicProCoverage(now = new Date()) {
           candidate.sourceId === match.sourceId &&
           candidate.externalEventId === match.externalEventId,
       );
-      const team = (side: "A" | "B") =>
-        match.participants
-          .filter((participant) => participant.side === side)
-          .map((participant) => participant.name)
-          .join(" / ");
-      const matchSlug = slugSegment(`${team("A")}-vs-${team("B")}`) || "match";
       const teamA = coverageTeam(match.participants, "A");
       const teamB = coverageTeam(match.participants, "B");
       const time = objectString(match.rawPayload, "time");
@@ -3955,7 +3949,11 @@ export async function loadPublicProCoverage(now = new Date()) {
         teamB,
         ...(event
           ? {
-              canonicalPath: `/events/${professionalEventSlug(event)}/match/${matchSlug}/${match.id}`,
+              canonicalPath: professionalMatchCanonicalPath({
+                event,
+                matchId: match.id,
+                participants: match.participants,
+              }),
               source: professionalSource(event.sourceSlug),
               status: professionalMatchStatus({
                 winnerSide: match.winnerSide,
@@ -4039,6 +4037,27 @@ export function professionalEventSlug(event: {
   ]
     .filter(Boolean)
     .join("-");
+}
+
+export function professionalMatchCanonicalPath(input: {
+  readonly event: {
+    readonly name: string;
+    readonly genderCategory: string;
+    readonly startsOn?: string | null;
+  };
+  readonly matchId: string;
+  readonly participants: readonly {
+    readonly name: string;
+    readonly side: "A" | "B";
+  }[];
+}): string {
+  const team = (side: "A" | "B") =>
+    input.participants
+      .filter((participant) => participant.side === side)
+      .map((participant) => participant.name)
+      .join(" / ");
+  const matchSlug = slugSegment(`${team("A")}-vs-${team("B")}`) || "match";
+  return `/events/${professionalEventSlug(input.event)}/match/${matchSlug}/${input.matchId}`;
 }
 
 type ProParticipant = {
@@ -7382,10 +7401,14 @@ export async function loadPublicPlayerPerformance(personId: string) {
         startedAt: matches.startedAt,
         scheduledAt: matches.scheduledAt,
         matchCreatedAt: matches.createdAt,
+        importedMatchId: importedMatches.id,
         matchTitle: importedMatches.title,
         sourceUrl: importedMatches.sourceUrl,
         sets: importedMatches.sets,
         participants: importedMatches.participants,
+        professionalEventName: professionalEvents.name,
+        professionalEventGenderCategory: professionalEvents.genderCategory,
+        professionalEventStartsOn: professionalEvents.startsOn,
       })
       .from(ratingEvents)
       .leftJoin(matches, eq(matches.id, ratingEvents.matchId))
@@ -7394,6 +7417,16 @@ export async function loadPublicPlayerPerformance(personId: string) {
         and(
           eq(importedMatches.canonicalMatchId, ratingEvents.matchId),
           eq(importedMatches.importState, "approved"),
+        ),
+      )
+      .leftJoin(
+        professionalEvents,
+        and(
+          eq(professionalEvents.sourceId, importedMatches.sourceId),
+          eq(
+            professionalEvents.externalEventId,
+            importedMatches.externalEventId,
+          ),
         ),
       )
       .where(eq(ratingEvents.personId, personId))
@@ -7544,9 +7577,27 @@ export async function loadPublicPlayerPerformance(personId: string) {
             ? backtest.actualTeamA === 1
             : backtest.actualTeamA === 0
           : undefined;
+      const participants = event.participants ?? [];
+      const canonicalMatchPath =
+        event.importedMatchId &&
+        event.professionalEventName &&
+        event.professionalEventGenderCategory
+          ? professionalMatchCanonicalPath({
+              event: {
+                name: event.professionalEventName,
+                genderCategory: event.professionalEventGenderCategory,
+                startsOn: event.professionalEventStartsOn,
+              },
+              matchId: event.importedMatchId,
+              participants,
+            })
+          : event.importedMatchId
+            ? `/matches/${event.matchId}`
+            : undefined;
       return {
         id: event.id,
         matchId: event.matchId,
+        ...(canonicalMatchPath ? { canonicalMatchPath } : {}),
         beforeDisplay:
           typeof event.before.display === "number" ? event.before.display : 3,
         afterDisplay:
@@ -7578,7 +7629,7 @@ export async function loadPublicPlayerPerformance(personId: string) {
         matchTitle: event.matchTitle ?? "Duna match",
         sourceUrl: event.sourceUrl ?? undefined,
         sets: event.sets ?? [],
-        participants: event.participants ?? [],
+        participants,
         ...(walkForwardWinProbability === undefined
           ? {}
           : {
