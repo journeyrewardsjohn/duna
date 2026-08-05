@@ -74,19 +74,69 @@ export function crossSourceMatchFingerprint(
   );
 }
 
-export function parseDate(value: string): string | undefined {
+export interface ParsedDateSpan {
+  readonly start: string;
+  readonly end?: string;
+}
+
+function isoDate(year: number, month: number, day: number): string | undefined {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+export function parseDateSpan(value: string): ParsedDateSpan | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
   const iso = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  if (iso) {
+    const start = isoDate(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+    return start ? { start } : undefined;
+  }
+  const crossMonthRange = trimmed.match(
+    /^(\d{1,2})\/(\d{1,2})\s*[-–—]\s*(\d{1,2})\/(\d{1,2})\/(\d{4})$/,
+  );
+  if (crossMonthRange) {
+    const endYear = Number(crossMonthRange[5]);
+    const startMonth = Number(crossMonthRange[1]);
+    const endMonth = Number(crossMonthRange[3]);
+    const start = isoDate(
+      startMonth > endMonth ? endYear - 1 : endYear,
+      startMonth,
+      Number(crossMonthRange[2]),
+    );
+    const end = isoDate(endYear, endMonth, Number(crossMonthRange[4]));
+    return start && end && start <= end ? { start, end } : undefined;
+  }
+  const sameMonthRange = trimmed.match(
+    /^(\d{1,2})\/(\d{1,2})\s*[-–—]\s*(\d{1,2})\/(\d{4})$/,
+  );
+  if (sameMonthRange) {
+    const year = Number(sameMonthRange[4]);
+    const month = Number(sameMonthRange[1]);
+    const start = isoDate(year, month, Number(sameMonthRange[2]));
+    const end = isoDate(year, month, Number(sameMonthRange[3]));
+    return start && end && start <= end ? { start, end } : undefined;
+  }
   const us = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (us) {
-    return `${us[3]}-${(us[1] ?? "").padStart(2, "0")}-${(us[2] ?? "").padStart(2, "0")}`;
+    const start = isoDate(Number(us[3]), Number(us[1]), Number(us[2]));
+    return start ? { start } : undefined;
   }
   const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime())
     ? undefined
-    : parsed.toISOString().slice(0, 10);
+    : { start: parsed.toISOString().slice(0, 10) };
+}
+
+export function parseDate(value: string): string | undefined {
+  return parseDateSpan(value)?.start;
 }
 
 export function matchMappingConfidence(input: {

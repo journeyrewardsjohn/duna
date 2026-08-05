@@ -28,7 +28,17 @@ import {
   performanceEvidenceFromSetScores,
   worldRankingSignal,
 } from "@duna/rating";
-import { and, asc, desc, eq, inArray, lte, ne, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  lte,
+  ne,
+  sql,
+} from "drizzle-orm";
 import { stableHash } from "../canonical";
 import { scopesForRoles, type ApiActor } from "../context";
 import { venueWallTimeToUtc } from "../court-checkout";
@@ -1021,14 +1031,15 @@ async function persistImportedMatches(input: {
     }));
     const allMapped = participants.every((participant) => participant.personId);
     const complete = hasDecisiveImportedScore(match.sets, match.winnerSide);
+    const hasSourceDate = Boolean(match.playedAt);
     const importState =
       existing?.importState === "approved"
         ? "approved"
         : shouldMarkDuplicate
           ? "duplicate"
-          : complete && allMapped
+          : complete && allMapped && hasSourceDate
             ? "ready"
-            : complete
+            : complete && !allMapped
               ? "needs-mapping"
               : "staged";
     const storedMatch = {
@@ -1049,6 +1060,10 @@ async function persistImportedMatches(input: {
       sets: match.sets,
       winnerSide: match.winnerSide,
       importState,
+      exclusionReason:
+        !hasSourceDate && !shouldMarkDuplicate
+          ? "Missing or invalid source match date."
+          : undefined,
       possibleDuplicateOfId: distinctDuplicate?.id,
       rawPayload: preserveEditorialPayload(match.raw, existing?.rawPayload),
       createdAt: input.now,
@@ -1090,6 +1105,7 @@ async function persistImportedMatches(input: {
             sets: match.sets,
             winnerSide: match.winnerSide,
             importState: match.importState,
+            exclusionReason: match.exclusionReason,
             possibleDuplicateOfId: match.possibleDuplicateOfId,
             rawPayload: match.rawPayload,
             updatedAt: input.now,
@@ -2195,10 +2211,11 @@ async function refreshMatchMappingStates(
       personId: peopleByExternalId.get(participant.externalPersonId),
     }));
     const complete = hasDecisiveImportedScore(row.sets, row.winnerSide);
+    const allMapped = participants.every((participant) => participant.personId);
     const importState =
-      complete && participants.every((participant) => participant.personId)
+      complete && row.playedAt && allMapped
         ? "ready"
-        : complete
+        : complete && !allMapped
           ? "needs-mapping"
           : "staged";
     await database
@@ -2247,6 +2264,7 @@ export async function approveImportedMatch(input: {
     );
   if (
     imported.importState !== "ready" ||
+    !imported.playedAt ||
     peopleA.length !== 2 ||
     peopleB.length !== 2 ||
     imported.sets.length === 0 ||
@@ -2254,7 +2272,7 @@ export async function approveImportedMatch(input: {
   ) {
     throw new SandDataServiceError(
       "MATCH_NOT_READY",
-      "Resolve all four players, a complete score, and duplicates before approval.",
+      "Resolve all four players, a source date, a complete score, and duplicates before approval.",
     );
   }
   const source = await database.query.importSources.findFirst({
@@ -2434,6 +2452,7 @@ export async function approveReadySandRatingMatches(input: {
       peopleA.length !== 2 ||
       peopleB.length !== 2 ||
       new Set([...peopleA, ...peopleB]).size !== 4 ||
+      !imported.playedAt ||
       imported.sets.length === 0 ||
       (imported.winnerSide !== "A" && imported.winnerSide !== "B")
     ) {
@@ -2577,6 +2596,125 @@ export async function approveReadySandRatingMatches(input: {
     skipped,
     replay,
   };
+}
+
+export async function repairApprovedSandRatingMatchDates(input: {
+  readonly actor: ApiActor;
+  readonly reason: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  if (!input.actor.roles.includes("super-admin")) {
+    throw new SandDataServiceError(
+      "SUPER_ADMIN_REQUIRED",
+      "Only a super administrator can repair approved partner match dates.",
+    );
+  }
+  const now = input.now ?? new Date();
+  const database = getDatabase();
+  const source = await database.query.importSources.findFirst({
+    where: eq(importSources.slug, "sandrating"),
+  });
+  if (!source) {
+    throw new SandDataServiceError(
+      "SOURCE_UNAVAILABLE",
+      "Import a SandRating network snapshot before repairing match dates.",
+    );
+  }
+  const candidates = await database
+    .select({
+      importedMatchId: importedMatches.id,
+      canonicalMatchId: importedMatches.canonicalMatchId,
+      playedAt: importedMatches.playedAt,
+      rawPayload: importedMatches.rawPayload,
+      scheduledAt: matches.scheduledAt,
+      startedAt: matches.startedAt,
+      completedAt: matches.completedAt,
+      format: matches.format,
+    })
+    .from(importedMatches)
+    .innerJoin(matches, eq(importedMatches.canonicalMatchId, matches.id))
+    .where(
+      and(
+        eq(importedMatches.sourceId, source.id),
+        eq(importedMatches.importState, "approved"),
+        isNotNull(importedMatches.canonicalMatchId),
+        isNotNull(importedMatches.playedAt),
+      ),
+    );
+  const repairs = candidates.flatMap((candidate) => {
+    const canonicalMatchId = candidate.canonicalMatchId;
+    const playedAt = candidate.playedAt;
+    if (
+      !canonicalMatchId ||
+      !playedAt ||
+      (candidate.scheduledAt && candidate.startedAt && candidate.completedAt)
+    ) {
+      return [];
+    }
+    const raw = unknownRecord(candidate.rawPayload);
+    const sourceMatchDate = optionalSnapshotString(raw.sourceMatchDate);
+    const sourceMatchDateEnd = optionalSnapshotString(raw.sourceMatchDateEnd);
+    return [
+      {
+        ...candidate,
+        canonicalMatchId,
+        playedAt,
+        sourceMatchDate,
+        sourceMatchDateEnd,
+      },
+    ];
+  });
+  for (let offset = 0; offset < repairs.length; offset += 50) {
+    const statements = repairs.slice(offset, offset + 50).map((repair) =>
+      database
+        .update(matches)
+        .set({
+          scheduledAt: repair.scheduledAt ?? repair.playedAt,
+          startedAt: repair.startedAt ?? repair.playedAt,
+          completedAt: repair.completedAt ?? repair.playedAt,
+          format: {
+            ...unknownRecord(repair.format),
+            ...(repair.sourceMatchDate
+              ? { sourceMatchDate: repair.sourceMatchDate }
+              : {}),
+            ...(repair.sourceMatchDateEnd
+              ? { sourceMatchDateEnd: repair.sourceMatchDateEnd }
+              : {}),
+          },
+          updatedAt: now,
+        })
+        .where(eq(matches.id, repair.canonicalMatchId)),
+    );
+    const [first, ...rest] = statements;
+    if (first) await database.batch([first, ...rest]);
+  }
+  if (repairs.length === 0) {
+    return { repaired: 0, replay: undefined };
+  }
+  const replay = await rebuildSandRatingProjection({
+    actor: input.actor,
+    reason:
+      "Corrected partner source dates were replayed chronologically so displayed history and Sand Ratings remain aligned.",
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+    now,
+  });
+  await database.insert(auditLog).values({
+    actorPersonId: input.actor.personId,
+    actorType: "person",
+    action: "sand-data.sandrating-dates.repaired",
+    entityType: "import-source",
+    entityId: source.id,
+    afterHash: stableHash({ repaired: repairs.length, replay }),
+    reason: input.reason,
+    traceId: input.requestId,
+    ipAddress: input.ipAddress,
+    createdAt: now,
+  });
+  return { repaired: repairs.length, replay };
 }
 
 export async function rejectImportedMatch(input: {

@@ -29,6 +29,7 @@ const users = [
 function match(
   id: number,
   participants: readonly [number, number, number, number],
+  matchDate = `2026-0${id}-01`,
 ) {
   return {
     match: {
@@ -38,7 +39,7 @@ function match(
       team2Player1Id: participants[2],
       team2Player2Id: participants[3],
       winningSide: 1,
-      matchDate: `2026-0${id}-01`,
+      matchDate,
       location: "Partner event",
     },
     sets: [
@@ -54,7 +55,7 @@ describe("SandRating network import", () => {
     const result = buildSandRatingNetwork({
       users,
       matches: [
-        match(1, [1, 2, 3, 4]),
+        match(1, [1, 2, 3, 4], "7/1-3/2022"),
         match(2, [3, 4, 5, 6]),
         match(3, [5, 6, 7, 8]),
       ],
@@ -105,6 +106,11 @@ describe("SandRating network import", () => {
         { a: 21, b: 19 },
       ],
       winnerSide: "A",
+      playedAt: "2022-07-01T12:00:00.000Z",
+      raw: {
+        sourceMatchDate: "7/1-3/2022",
+        sourceMatchDateEnd: "2022-07-03",
+      },
     });
     expect(result.checkpoint).toMatchObject({
       maxDepth: 2,

@@ -1,4 +1,4 @@
-import { normalizePersonName, parseDate } from "./normalize";
+import { normalizePersonName, parseDate, parseDateSpan } from "./normalize";
 import { scrapeJson } from "./http";
 import type {
   ExternalMatchRecord,
@@ -448,7 +448,8 @@ export function buildSandRatingNetwork(
           ? ("B" as const)
           : undefined;
     const location = row.match.location?.trim() || undefined;
-    const playedOn = parseDate(row.match.matchDate ?? "");
+    const sourceMatchDate = row.match.matchDate?.trim() || undefined;
+    const dateSpan = parseDateSpan(sourceMatchDate ?? "");
     matches.push({
       externalMatchId: String(row.match.id),
       externalEventId: row.match.tournamentId
@@ -458,7 +459,7 @@ export function buildSandRatingNetwork(
       title: location ?? "SandRating match",
       location,
       genderCategory: inferredMatchGender(row, users),
-      playedAt: playedOn ? `${playedOn}T12:00:00.000Z` : undefined,
+      playedAt: dateSpan ? `${dateSpan.start}T12:00:00.000Z` : undefined,
       participants: [
         {
           externalPersonId: String(ids[0]),
@@ -490,6 +491,8 @@ export function buildSandRatingNetwork(
         verificationStatus: row.verificationStatus,
         tournamentId: row.match.tournamentId ?? undefined,
         graphDepth: minimumDepth,
+        sourceMatchDate,
+        sourceMatchDateEnd: dateSpan?.end,
       },
     });
   }
