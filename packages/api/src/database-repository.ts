@@ -814,6 +814,66 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
   });
 }
 
+export async function loadPublicImportedMatchSummary(
+  matchId: string,
+): Promise<MatchSummary | undefined> {
+  const database = getDatabase();
+  const [importedMatch] = await database
+    .select({ id: importedMatches.id })
+    .from(importedMatches)
+    .where(
+      and(
+        eq(importedMatches.canonicalMatchId, matchId),
+        eq(importedMatches.importState, "approved"),
+      ),
+    )
+    .limit(1);
+  if (!importedMatch) return undefined;
+
+  const [match] = await database
+    .select({
+      teamAId: matches.teamAId,
+      teamBId: matches.teamBId,
+      status: matches.status,
+    })
+    .from(matches)
+    .where(eq(matches.id, matchId))
+    .limit(1);
+  if (
+    !match?.teamAId ||
+    !match.teamBId ||
+    !["verified", "complete"].includes(match.status)
+  ) {
+    return undefined;
+  }
+
+  const participants = await database
+    .select({
+      personId: people.id,
+      status: people.status,
+      profileVisibility: people.profileVisibility,
+      isMinor: people.isMinor,
+    })
+    .from(teamMembers)
+    .innerJoin(people, eq(teamMembers.personId, people.id))
+    .where(inArray(teamMembers.teamId, [match.teamAId, match.teamBId]));
+  if (
+    participants.length < 2 ||
+    participants.some(
+      (participant) =>
+        participant.status !== "active" ||
+        participant.profileVisibility !== "public" ||
+        participant.isMinor,
+    )
+  ) {
+    return undefined;
+  }
+
+  return (await loadMatchHistory(participants[0]!.personId)).find(
+    (candidate) => candidate.id === matchId,
+  );
+}
+
 interface ScopedEvent {
   readonly event: EventSummary;
   readonly organizationId?: string;

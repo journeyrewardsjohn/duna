@@ -388,7 +388,7 @@ export function RatingTrendChart({
                   data-active={activeIndex === index ? "true" : undefined}
                   data-result={point.result ?? "unknown"}
                   key={point.id}
-                  r={activeIndex === index ? 6 : 4}
+                  r={activeIndex === index ? 3.4 : 2.5}
                 />
               ))}
               <text

@@ -370,7 +370,7 @@ export default async function PublicPlayerPage({
           : "A",
       ),
       score: matchScore(event),
-      matchHref: event.matchId ? `/app/matches/${event.matchId}` : undefined,
+      matchHref: event.canonicalMatchPath,
     }),
   );
   const fallbackSummary = history.length
@@ -1254,8 +1254,8 @@ function MatchHistoryCard({
           </strong>
         </span>
         <div>
-          {event.matchId && (
-            <Link href={`/app/matches/${event.matchId}`}>
+          {event.canonicalMatchPath && (
+            <Link href={event.canonicalMatchPath}>
               Match details <ArrowRight aria-hidden size={14} />
             </Link>
           )}

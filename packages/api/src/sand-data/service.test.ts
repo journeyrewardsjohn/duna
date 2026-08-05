@@ -7,6 +7,7 @@ import {
   parsePlayerSourceProfile,
   professionalEventCurrentRound,
   professionalEventSlug,
+  professionalMatchCanonicalPath,
   professionalMatchScheduledAt,
   professionalMatchPredictionClosed,
   professionalMatchStatus,
@@ -152,6 +153,27 @@ describe("professionalEventSlug", () => {
         startsOn: "2026-08-20",
       }),
     ).toBe("elite-16-montreal-womens-2026-08-20");
+  });
+
+  it("builds a public event-match route for an imported result", () => {
+    expect(
+      professionalMatchCanonicalPath({
+        event: {
+          name: "BPT Elite Hamburg - Women's",
+          genderCategory: "women",
+          startsOn: "2026-08-05",
+        },
+        matchId: "8d78c8b5-2d18-4755-9ec5-2e4fe75a6d78",
+        participants: [
+          { name: "Melanie Paul", side: "A" },
+          { name: "Anna Behlen", side: "A" },
+          { name: "Sandra Ittlinger", side: "B" },
+          { name: "Kim van de Velde", side: "B" },
+        ],
+      }),
+    ).toBe(
+      "/events/bpt-elite-hamburg-womens-2026-08-05/match/melanie-paul-anna-behlen-vs-sandra-ittlinger-kim-van-de-velde/8d78c8b5-2d18-4755-9ec5-2e4fe75a6d78",
+    );
   });
 });
 

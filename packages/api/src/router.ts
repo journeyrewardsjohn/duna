@@ -114,6 +114,7 @@ import {
   visionSessionSettingsSchema,
   visionTimelineEventSchema,
 } from "./contracts";
+import { loadPublicImportedMatchSummary } from "./database-repository";
 import {
   createOperatorTerminalConnectionToken,
   finalizeOperatorPaymentCollection,
@@ -1208,6 +1209,14 @@ const publicRouter = router({
       } catch (error) {
         return throwDomainError(error);
       }
+    }),
+  matchDetails: publicProcedure
+    .input(z.object({ matchId: z.string().uuid() }))
+    .output(matchSummarySchema)
+    .query(async ({ input }) => {
+      const match = await loadPublicImportedMatchSummary(input.matchId);
+      if (!match) throw new TRPCError({ code: "NOT_FOUND" });
+      return match;
     }),
   visionRemoteSession: publicProcedure
     .use(
