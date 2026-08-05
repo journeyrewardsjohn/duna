@@ -13,6 +13,7 @@ export interface RankingIdentityRow {
   readonly avatarUrl?: string | null;
   readonly sandRating?: number | null;
   readonly ratedMatches?: number | null;
+  readonly rawPayload?: unknown;
 }
 
 function personKey(row: RankingIdentityRow): string | undefined {
@@ -57,6 +58,19 @@ function aliasMatchesCanonical(alias: string, canonical: string): boolean {
         (aliasPart.length === 1 && canonicalPart.startsWith(aliasPart)),
     ),
   );
+}
+
+function canonicalNameVariants(row: RankingIdentityRow): readonly string[] {
+  const variants = [row.displayName];
+  if (
+    row.rawPayload &&
+    typeof row.rawPayload === "object" &&
+    "sourcePlayerName" in row.rawPayload &&
+    typeof row.rawPayload.sourcePlayerName === "string"
+  ) {
+    variants.push(row.rawPayload.sourcePlayerName);
+  }
+  return [...new Set(variants.map((value) => value.trim()).filter(Boolean))];
 }
 
 function quality(row: RankingIdentityRow): number {
@@ -128,7 +142,9 @@ export function dedupeWorldRankingRows<T extends RankingIdentityRow>(
       if (row.personId) return true;
       const matches = (linkedByEvidence.get(rankingEvidenceKey(row)) ?? [])
         .filter((candidate) =>
-          aliasMatchesCanonical(row.displayName, candidate.displayName),
+          canonicalNameVariants(candidate).some((candidateName) =>
+            aliasMatchesCanonical(row.displayName, candidateName),
+          ),
         )
         .map((candidate) => candidate.personId)
         .filter((personId): personId is string => Boolean(personId));

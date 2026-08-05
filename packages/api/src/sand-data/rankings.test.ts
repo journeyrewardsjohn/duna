@@ -80,6 +80,64 @@ describe("world-ranking identity deduplication", () => {
     ]);
   });
 
+  it("uses the source player name when the canonical display name is only a surname", () => {
+    const rows = dedupeWorldRankingRows([
+      {
+        ...base,
+        displayName: "Mol",
+        externalPersonId: "sandrating:1042",
+        personId: "canonical-anders-mol",
+        rawPayload: { sourcePlayerName: "Mol, A." },
+      },
+      {
+        ...base,
+        displayName: "Mol, A.",
+        externalPersonId: "volleyball-world:mol-a",
+      },
+      {
+        ...base,
+        displayName: "Sørum, C.",
+        externalPersonId: "sandrating:662",
+        personId: "canonical-christian-sorum",
+        rawPayload: { sourcePlayerName: "Sørum, C." },
+      },
+    ]);
+
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.externalPersonId)).toEqual([
+      "sandrating:1042",
+      "sandrating:662",
+    ]);
+  });
+
+  it("does not collapse similarly abbreviated teammates", () => {
+    const rows = dedupeWorldRankingRows([
+      {
+        ...base,
+        displayName: "Juan Enrique Bello",
+        externalPersonId: "sandrating:746",
+        personId: "canonical-javier-bello",
+        rawPayload: { sourcePlayerName: "Bello, Ja." },
+      },
+      {
+        ...base,
+        displayName: "Bello, Ja.",
+        externalPersonId: "volleyball-world:bello-ja",
+      },
+      {
+        ...base,
+        displayName: "Bello, Jo.",
+        externalPersonId: "volleyball-world:bello-jo",
+      },
+    ]);
+
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.displayName)).toEqual([
+      "Bello, Jo.",
+      "Juan Enrique Bello",
+    ]);
+  });
+
   it("keeps an alias when more than one canonical player could match", () => {
     const rows = dedupeWorldRankingRows([
       {

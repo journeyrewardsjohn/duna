@@ -798,6 +798,7 @@ export async function loadPlayerIntelligenceAdmin(input: {
             heroImageUrl: playerPublicProfiles.heroImageUrl,
             researchedAt: playerPublicProfiles.researchedAt,
             updatedAt: playerPublicProfiles.updatedAt,
+            rawPayload: worldRankings.rawPayload,
           })
           .from(worldRankings)
           .leftJoin(people, eq(worldRankings.personId, people.id))

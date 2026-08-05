@@ -3668,6 +3668,7 @@ export async function loadPublicWorldRankings() {
             isMinor: people.isMinor,
             sandRating: ratings.display,
             ratedMatches: ratings.ratedMatches,
+            rawPayload: worldRankings.rawPayload,
           })
           .from(worldRankings)
           .leftJoin(people, eq(worldRankings.personId, people.id))
