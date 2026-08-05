@@ -22,6 +22,7 @@ export interface PlaceDetails {
   readonly latitude?: number;
   readonly longitude?: number;
   readonly googleMapsUri?: string;
+  readonly timeZone?: string;
 }
 
 export function PlaceSearch({

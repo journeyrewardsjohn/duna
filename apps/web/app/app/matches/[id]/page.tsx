@@ -291,36 +291,6 @@ export default async function MatchPage({
           </div>
         </dl>
       </section>
-      <section className="match-detail__rating-story">
-        <div>
-          <span className="page-eyebrow">Why your rating moved</span>
-          <h2>{explanation.title}</h2>
-          <p>{explanation.body}</p>
-        </div>
-        <dl>
-          <div>
-            <dt>Pre-match chance</dt>
-            <dd>
-              {percentage(match.ratingExplanation?.expectedWinProbability) ??
-                "Not available"}
-            </dd>
-          </div>
-          <div>
-            <dt>Point share</dt>
-            <dd>
-              {percentage(match.ratingExplanation?.pointShare) ??
-                "Not available"}
-            </dd>
-          </div>
-          <div>
-            <dt>Your weighting</dt>
-            <dd>
-              {percentage(match.ratingExplanation?.responsibilityWeight) ??
-                "Not available"}
-            </dd>
-          </div>
-        </dl>
-      </section>
       <MatchConfirmation
         confirmationRequired={Boolean(match.confirmationRequired)}
         matchId={match.id}

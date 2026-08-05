@@ -964,6 +964,105 @@ a.professional-match-card:hover {
   }
 }
 
+/* Verified professional event venue */
+
+.pro-event-venue {
+  align-items: stretch;
+  display: grid;
+  gap: 0;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+  overflow: hidden;
+  padding: 0;
+}
+
+.pro-event-venue__map {
+  min-height: 360px;
+  overflow: hidden;
+  position: relative;
+}
+
+.pro-event-venue__map img {
+  height: 100%;
+  object-fit: cover;
+  transition: transform 320ms ease;
+  width: 100%;
+}
+
+.pro-event-venue__map:hover img {
+  transform: scale(1.02);
+}
+
+.pro-event-venue__map > span {
+  align-items: center;
+  backdrop-filter: blur(14px);
+  background: rgb(8 29 41 / 82%);
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 999px;
+  bottom: 1rem;
+  color: #fff;
+  display: inline-flex;
+  font-size: max(0.72rem, 10px);
+  font-weight: 780;
+  gap: 0.4rem;
+  left: 1rem;
+  padding: 0.65rem 0.8rem;
+  position: absolute;
+}
+
+.pro-event-venue__details {
+  align-content: center;
+  background:
+    radial-gradient(
+      circle at 100% 0%,
+      rgb(var(--accent-rgb) / 11%),
+      transparent 40%
+    ),
+    var(--color-surface);
+  display: grid;
+  padding: clamp(1.5rem, 3vw, 2.5rem);
+}
+
+.pro-event-venue__details h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3vw, 2.7rem);
+  letter-spacing: -0.045em;
+  line-height: 1;
+  margin: 0.55rem 0 0.8rem;
+}
+
+.pro-event-venue__details p {
+  color: var(--color-bone-muted);
+  font-size: max(0.82rem, 12px);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.pro-event-venue__details small {
+  color: var(--color-bone-muted);
+  font-size: max(0.7rem, 10px);
+  margin-top: 0.65rem;
+}
+
+.pro-event-venue__details a {
+  align-items: center;
+  color: var(--color-aqua);
+  display: inline-flex;
+  font-size: max(0.76rem, 11px);
+  font-weight: 780;
+  gap: 0.4rem;
+  margin-top: 1.4rem;
+}
+
+@media (max-width: 760px) {
+  .pro-event-venue {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-event-venue__map {
+    min-height: 260px;
+  }
+}
+
 @media (max-width: 680px) {
   .date-pill-filter {
     border-radius: 23px;

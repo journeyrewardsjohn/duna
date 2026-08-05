@@ -10,6 +10,7 @@ const professionalTourTools = new Set<ProfessionalTourTool>([
   "overview",
   "events",
   "editorial",
+  "research",
   "schedule",
   "broadcasts",
   "rosters",

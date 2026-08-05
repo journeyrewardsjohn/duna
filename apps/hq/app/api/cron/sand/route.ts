@@ -2,7 +2,9 @@ import {
   refreshAvpLeague,
   refreshActiveFivbEvents,
   refreshFivbEventIndex,
+  refreshSandRatingNetwork,
   refreshWorldRankings,
+  researchUpcomingProfessionalEvents,
 } from "@duna/api";
 import { NextResponse } from "next/server";
 
@@ -31,6 +33,19 @@ export async function GET(request: Request) {
     }
     if (mode === "avp") {
       return NextResponse.json(await refreshAvpLeague({}));
+    }
+    if (mode === "research") {
+      return NextResponse.json(
+        await researchUpcomingProfessionalEvents({ limit: 2 }),
+      );
+    }
+    if (mode === "sandrating") {
+      return NextResponse.json(
+        await refreshSandRatingNetwork({
+          maxDepth: 4,
+          topPlayersPerGender: 200,
+        }),
+      );
     }
     return NextResponse.json({ error: "Unknown mode" }, { status: 400 });
   } catch (error) {

@@ -24,12 +24,14 @@ import {
 } from "lucide-react";
 import { useActionState, useMemo, useState } from "react";
 import {
+  approveSandRatingBackfillAction,
   approveSandMatchAction,
   evaluateRatingAction,
   importSandSourceAction,
   linkSandPlayerAction,
   mergeSandProfilesAction,
   refreshFivbIndexAction,
+  refreshSandRatingNetworkAction,
   refreshWorldRankingsAction,
   removeProfessionalWatchOptionAction,
   reviewMatchHistoryDisputeAction,
@@ -142,6 +144,53 @@ function RefreshRankingsForm() {
       </button>
       <ActionFeedback state={state} />
     </form>
+  );
+}
+
+function SandRatingNetworkForm() {
+  const [refreshState, refresh, refreshing] = useActionState(
+    refreshSandRatingNetworkAction,
+    initialState,
+  );
+  const [approvalState, approve, approving] = useActionState(
+    approveSandRatingBackfillAction,
+    initialState,
+  );
+  return (
+    <div className="sandrating-network-actions">
+      <form action={refresh} className="sand-mini-action">
+        <input
+          aria-label="Ranked players per division"
+          defaultValue={200}
+          max={500}
+          min={50}
+          name="topPlayersPerGender"
+          type="number"
+        />
+        <select aria-label="Network degrees" defaultValue="4" name="maxDepth">
+          <option value="3">3 degrees</option>
+          <option value="4">4 degrees</option>
+        </select>
+        <button disabled={refreshing}>
+          <RefreshCw className={refreshing ? "spin" : undefined} size={15} />
+          Stage SandRating network
+        </button>
+        <ActionFeedback state={refreshState} />
+      </form>
+      <form action={approve} className="sand-mini-action">
+        <input name="limit" type="hidden" value="5000" />
+        <input
+          aria-label="Backfill approval basis"
+          name="reason"
+          placeholder="Partner authorization and evidence reviewed"
+          required
+        />
+        <button disabled={approving}>
+          <ShieldCheck size={15} /> Approve ready history + rebuild
+        </button>
+        <ActionFeedback state={approvalState} />
+      </form>
+    </div>
   );
 }
 
@@ -471,6 +520,7 @@ export function SandDataPanel({ data }: { readonly data: SandDataOverview }) {
           <RefreshFivbForm />
           <RefreshRankingsForm />
         </div>
+        <SandRatingNetworkForm />
       </section>
 
       <BroadcastConfiguration events={data.events} />

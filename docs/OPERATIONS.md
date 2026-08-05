@@ -66,6 +66,18 @@ directly. If Gateway normalization fails, the validated deterministic parse is
 kept and the ingestion checkpoint records the fallback instead of clearing
 stored results.
 
+Upcoming-event research also requires `FIRECRAWL_API_KEY`. It searches for the
+current event year, asks the configured Gateway model
+(`AI_GATEWAY_EVENT_RESEARCH_MODEL`) to return evidence-linked facts, validates
+the venue through Google Places, and keeps the result as a review proposal.
+Automation never publishes the proposal directly: a super admin approves it,
+and approval fills only editorial fields that staff have not already set.
+
+Player-profile synthesis and professional sportswriting use the same Gateway
+credential with `AI_GATEWAY_PROFILE_MODEL` and
+`AI_GATEWAY_SPORTSWRITER_MODEL`. Duna does not call an OpenAI provider endpoint
+directly.
+
 Event and match broadcast options, including match overrides, are audited
 super-admin changes. Seasonal AVP team mappings and date-bounded substitutions
 are also audited; approved historical matches are not silently rewritten.
@@ -120,6 +132,27 @@ URL exists.
 Automatic Tax remains disabled until Beach Elite LLC’s verified head-office
 address is entered in Stripe. Do not invent that legal address.
 
+## Partner match-history backfill
+
+Duna HQ’s Sand Data panel can stage a complete SandRating network snapshot.
+The default run takes the top 200 distinct men and women, retains a 25-player
+buffer per division for identity deduplication, and expands their match graph
+to four degrees. Player and match data are downloaded through sequential,
+one-second-spaced bulk API requests; graph traversal then runs locally so it
+does not multiply traffic against the partner service. Email fields are never
+persisted.
+
+Imports remain evidence-first: partner IDs and confirmed cross-source IDs are
+linked automatically, uncertain identities stay in the mapping queue, and new
+source identities become unclaimed profile pages. A super administrator must
+use **Approve ready history + rebuild** before complete, decisive, mapped
+matches enter the chronological Sand Rating projection. Ambiguous identities,
+duplicates, incomplete scores, and invalid rosters remain staged for review.
+
+The same snapshot can be refreshed through the authorized sand cron endpoint
+with `mode=sandrating`. Scheduled refreshes stage changes only; they never
+approve new rating evidence automatically.
+
 ## External launch gates
 
 The repository is technically ready for previews, but public production launch
@@ -136,5 +169,6 @@ still requires external approvals or account data:
   physical-device iOS streaming check
 - An approved audio-isolation processor before music-removal requests can
   modify recordings
-- VolleyballLife and BVBInfo data licenses
+- Provider authorization, retention terms, and credentials for player-data
+  sources added beyond the currently operator-authorized partner feeds
 - Wallet, escheatment, minors, privacy, and tax counsel review

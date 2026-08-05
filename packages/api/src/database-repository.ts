@@ -1812,7 +1812,9 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
         process.env.LIVEKIT_API_KEY &&
         process.env.LIVEKIT_API_SECRET,
       ),
-      aiConfigured: Boolean(process.env.OPENAI_API_KEY),
+      aiConfigured: Boolean(
+        process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN,
+      ),
     },
     household,
     dunaPlus,
