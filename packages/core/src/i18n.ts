@@ -22,12 +22,18 @@ export function formatVenueTime(
   locale: SupportedLocale = defaultLocale,
   options: Intl.DateTimeFormatOptions = {},
 ): string {
+  const usesStyle =
+    options.dateStyle !== undefined || options.timeStyle !== undefined;
   return new Intl.DateTimeFormat(locale, {
     timeZone: timezone,
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
+    ...(usesStyle
+      ? {}
+      : {
+          month: "short" as const,
+          day: "numeric" as const,
+          hour: "numeric" as const,
+          minute: "2-digit" as const,
+        }),
     ...options,
   }).format(new Date(value));
 }

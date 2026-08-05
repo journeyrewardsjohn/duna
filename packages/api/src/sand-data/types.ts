@@ -2,6 +2,7 @@ export type SandDataSource =
   | "volleyball-life"
   | "bvbinfo"
   | "fivb-12ndr"
+  | "sandrating"
   | "volleyball-world"
   | "avp-league";
 
@@ -13,6 +14,7 @@ export interface ExternalPlayerRecord {
   readonly countryCode?: string;
   readonly birthDate?: string;
   readonly avatarUrl?: string;
+  readonly genderCategory?: "men" | "women" | "coed";
   readonly isProfessional?: boolean;
   readonly externalRating?: number;
   readonly externalRatingConfidence?: number;

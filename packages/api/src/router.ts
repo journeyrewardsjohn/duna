@@ -286,6 +286,7 @@ import {
 import {
   approveImportedMatch,
   applyProfessionalEventResearch,
+  approveReadySandRatingMatches,
   createRatingConfiguration,
   evaluateCurrentRating,
   importSandSource,
@@ -301,6 +302,7 @@ import {
   refreshAvpLeague,
   refreshActiveFivbEvents,
   refreshFivbEventIndex,
+  refreshSandRatingNetwork,
   refreshWorldRankings,
   researchProfessionalEvent,
   rejectImportedMatch,
@@ -6305,6 +6307,60 @@ const adminRouter = router({
       try {
         return await refreshWorldRankings({
           actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  refreshSandRatingNetwork: adminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-sandrating-network-refresh",
+        capacity: 2,
+        refillPerMinute: 0.1,
+      }),
+    )
+    .input(
+      z
+        .object({
+          maxDepth: z.number().int().min(1).max(4).default(4),
+          topPlayersPerGender: z.number().int().min(50).max(500).default(200),
+        })
+        .default({ maxDepth: 4, topPlayersPerGender: 200 }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await refreshSandRatingNetwork({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  approveReadySandRatingMatches: adminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-sandrating-backfill-approval",
+        capacity: 1,
+        refillPerMinute: 0.05,
+      }),
+    )
+    .input(
+      z.object({
+        limit: z.number().int().min(1).max(5_000).default(5_000),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await approveReadySandRatingMatches({
+          ...input,
+          actor: ctx.actor!,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
           now: ctx.now,
         });
       } catch (error) {
