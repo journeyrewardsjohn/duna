@@ -29,6 +29,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
+import {
+  PartnershipHistoryCard,
+  type PartnershipHistory,
+  type PartnershipMatchPoint,
+} from "@/components/partnership-history-card";
 import { PlayerFollowButton } from "@/components/player-follow-button";
 import {
   RatingTrendChart,
@@ -47,6 +52,7 @@ import {
   getProfessionalEditorialSummary,
   professionalEditorialHash,
 } from "@/lib/pro-editorial";
+import "./player-profile-performance.css";
 
 type PerformanceEvent = PublicPlayerPerformance["history"][number];
 type PublicParticipant = PerformanceEvent["participants"][number];
@@ -99,13 +105,8 @@ function teamName(participants: readonly PublicParticipant[], side: "A" | "B") {
     .join(" / ");
 }
 
-function initials(value: string) {
-  return value
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+function matchScore(event: PerformanceEvent) {
+  return event.sets.map((set) => `${set.a}–${set.b}`).join(" · ");
 }
 
 function profileStateLabel(state: string | undefined) {
@@ -270,15 +271,8 @@ export default async function PublicPlayerPage({
   );
   const partnerships = new Map<
     string,
-    {
-      personId: string;
-      handle: string;
-      name: string;
-      avatarUrl?: string;
-      matches: number;
-      wins: number;
-      losses: number;
-      lastPlayedAt: string;
+    Omit<PartnershipHistory, "history"> & {
+      history: PartnershipMatchPoint[];
     }
   >();
   for (const { event, result } of results) {
@@ -297,28 +291,59 @@ export default async function PublicPlayerPage({
       const partner = profileById.get(participant.personId);
       if (!partner?.handle) continue;
       const existing = partnerships.get(partner.id);
+      const oppositeSide = side === "A" ? "B" : "A";
+      const historyPoint: PartnershipMatchPoint = {
+        id: event.id,
+        occurredAt: event.occurredAt,
+        result,
+        ratingAfter: event.afterDisplay,
+        delta: event.delta,
+        matchTitle: event.matchTitle,
+        opponents: teamName(event.participants, oppositeSide),
+        score: matchScore(event),
+      };
       partnerships.set(partner.id, {
         personId: partner.id,
-        handle: partner.handle,
+        publicPath: partner.publicPath,
         name: partner.displayName,
         avatarUrl: partner.avatarUrl,
+        homeMarket: partner.homeMarket,
+        countryCode: partner.countryCode,
+        isProfessional: partner.isProfessional,
+        sandRating: partner.sandRating,
+        ratedMatches: partner.ratedMatches,
         matches: (existing?.matches ?? 0) + 1,
         wins: (existing?.wins ?? 0) + (result === "win" ? 1 : 0),
         losses: (existing?.losses ?? 0) + (result === "loss" ? 1 : 0),
+        firstPlayedAt:
+          !existing ||
+          new Date(event.occurredAt) < new Date(existing.firstPlayedAt)
+            ? event.occurredAt
+            : existing.firstPlayedAt,
         lastPlayedAt:
           !existing ||
           new Date(event.occurredAt) > new Date(existing.lastPlayedAt)
             ? event.occurredAt
             : existing.lastPlayedAt,
+        history: [...(existing?.history ?? []), historyPoint],
       });
     }
   }
-  const partnershipRows = [...partnerships.values()].sort(
-    (left, right) =>
-      right.matches - left.matches ||
-      new Date(right.lastPlayedAt).getTime() -
-        new Date(left.lastPlayedAt).getTime(),
-  );
+  const partnershipRows: PartnershipHistory[] = [...partnerships.values()]
+    .map((partnership) => ({
+      ...partnership,
+      history: [...partnership.history].sort(
+        (left, right) =>
+          new Date(left.occurredAt).getTime() -
+          new Date(right.occurredAt).getTime(),
+      ),
+    }))
+    .sort(
+      (left, right) =>
+        right.matches - left.matches ||
+        new Date(right.lastPlayedAt).getTime() -
+          new Date(left.lastPlayedAt).getTime(),
+    );
   const trendPoints: RatingTrendPoint[] = chronological.map(
     ({ event, result }) => ({
       id: event.id,
@@ -327,6 +352,25 @@ export default async function PublicPlayerPage({
       before: event.beforeDisplay,
       delta: event.delta,
       result,
+      matchTitle: event.matchTitle,
+      partner: teamName(
+        event.participants.filter(
+          (participant) => participant.personId !== player.id,
+        ),
+        event.participants.find(
+          (participant) => participant.personId === player.id,
+        )?.side ?? "A",
+      ),
+      opponents: teamName(
+        event.participants,
+        event.participants.find(
+          (participant) => participant.personId === player.id,
+        )?.side === "A"
+          ? "B"
+          : "A",
+      ),
+      score: matchScore(event),
+      matchHref: event.matchId ? `/app/matches/${event.matchId}` : undefined,
     }),
   );
   const fallbackSummary = history.length
@@ -1029,7 +1073,10 @@ export default async function PublicPlayerPage({
         )}
 
         {partnershipRows.length > 0 && (
-          <section className="profile-partnerships athlete-partnerships">
+          <section
+            className="profile-partnerships athlete-partnerships"
+            id="partnerships"
+          >
             <header>
               <div>
                 <span className="page-eyebrow">Partnerships</span>
@@ -1039,29 +1086,10 @@ export default async function PublicPlayerPage({
             </header>
             <div>
               {partnershipRows.slice(0, 8).map((partner) => (
-                <Link
-                  href={`/teams/${player.handle}/${partner.handle}`}
+                <PartnershipHistoryCard
                   key={partner.personId}
-                >
-                  <span
-                    className="profile-partnerships__avatar"
-                    style={
-                      partner.avatarUrl
-                        ? { backgroundImage: `url("${partner.avatarUrl}")` }
-                        : undefined
-                    }
-                  >
-                    {partner.avatarUrl ? null : initials(partner.name)}
-                  </span>
-                  <span>
-                    <strong>{partner.name}</strong>
-                    <small>
-                      {partner.matches} matches · {partner.wins}–
-                      {partner.losses}
-                    </small>
-                  </span>
-                  <ArrowRight aria-hidden size={17} />
-                </Link>
+                  partner={partner}
+                />
               ))}
             </div>
           </section>

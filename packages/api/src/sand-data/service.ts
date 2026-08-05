@@ -6450,25 +6450,66 @@ export async function loadPublicPlayerPerformance(personId: string) {
       ),
     ),
   ];
-  const participantProfiles =
+  const [participantProfiles, participantRankingRows] =
     participantPersonIds.length > 0
-      ? await database
-          .select({
-            id: people.id,
-            handle: people.handle,
-            displayName: people.displayName,
-            avatarUrl: people.avatarUrl,
-          })
-          .from(people)
-          .where(
-            and(
-              inArray(people.id, participantPersonIds),
-              eq(people.status, "active"),
-              eq(people.profileVisibility, "public"),
-              eq(people.isMinor, false),
+      ? await Promise.all([
+          database
+            .select({
+              id: people.id,
+              handle: people.handle,
+              displayName: people.displayName,
+              avatarUrl: people.avatarUrl,
+              homeMarket: people.homeMarket,
+              profileClaimStatus: people.profileClaimStatus,
+              isProfessional: people.isProfessional,
+              countryCode: playerPublicProfiles.countryCode,
+              sandRating: ratings.display,
+              ratedMatches: ratings.ratedMatches,
+            })
+            .from(people)
+            .leftJoin(
+              playerPublicProfiles,
+              and(
+                eq(playerPublicProfiles.personId, people.id),
+                eq(playerPublicProfiles.publicationStatus, "published"),
+              ),
+            )
+            .leftJoin(
+              ratings,
+              and(
+                eq(ratings.personId, people.id),
+                eq(ratings.discipline, "beach-2s"),
+              ),
+            )
+            .where(
+              and(
+                inArray(people.id, participantPersonIds),
+                eq(people.status, "active"),
+                eq(people.profileVisibility, "public"),
+                eq(people.isMinor, false),
+              ),
             ),
-          )
-      : [];
+          database
+            .select({
+              personId: worldRankings.personId,
+              countryCode: worldRankings.countryCode,
+              rankingDate: worldRankings.rankingDate,
+            })
+            .from(worldRankings)
+            .where(inArray(worldRankings.personId, participantPersonIds))
+            .orderBy(desc(worldRankings.rankingDate)),
+        ])
+      : [[], []];
+  const participantRankingCountry = new Map<string, string>();
+  for (const ranking of participantRankingRows) {
+    if (
+      ranking.personId &&
+      ranking.countryCode &&
+      !participantRankingCountry.has(ranking.personId)
+    ) {
+      participantRankingCountry.set(ranking.personId, ranking.countryCode);
+    }
+  }
   const world = latestRanking[0];
   return {
     history: eventRows.map((event) => {
@@ -6555,10 +6596,30 @@ export async function loadPublicPlayerPerformance(personId: string) {
       isProfessional: source.isProfessional,
       lastImportedAt: source.lastImportedAt?.toISOString(),
     })),
-    participantProfiles: participantProfiles.map((profile) => ({
-      ...profile,
-      avatarUrl: profile.avatarUrl ?? undefined,
-    })),
+    participantProfiles: participantProfiles.map((profile) => {
+      const countryCode =
+        profile.countryCode ?? participantRankingCountry.get(profile.id);
+      return {
+        id: profile.id,
+        handle: profile.handle,
+        displayName: profile.displayName,
+        publicPath: publicPlayerPath({
+          id: profile.id,
+          displayName: profile.displayName,
+          handle: profile.handle,
+          homeMarket: profile.homeMarket,
+          countryCode,
+          profileClaimStatus: profile.profileClaimStatus as
+            "claimed" | "unclaimed" | "claim-pending" | "merged",
+        }),
+        avatarUrl: profile.avatarUrl ?? undefined,
+        homeMarket: profile.homeMarket ?? undefined,
+        countryCode,
+        isProfessional: profile.isProfessional,
+        sandRating: profile.sandRating ?? undefined,
+        ratedMatches: profile.ratedMatches ?? undefined,
+      };
+    }),
     worldRanking: world
       ? {
           rank: world.rank,
