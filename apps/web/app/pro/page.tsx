@@ -1,9 +1,9 @@
-import type { PublicProCoverage } from "@duna/api";
+import type { PredictionMarketView, PublicProCoverage } from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
 import { Activity, Globe2, Radio } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { DatePillFilter } from "@/components/date-pill-filter";
+import { ProScheduleCalendar } from "@/components/pro-schedule-calendar";
 import { ProEventCard } from "@/components/pro-event-card";
 import {
   ProPlayerDiscovery,
@@ -14,12 +14,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { TourBrandMark, type TourBrand } from "@/components/tour-brand-mark";
 import { getServerCaller } from "@/lib/api";
-import {
-  datePillDays,
-  instantIsoDay,
-  isoDay as currentIsoDay,
-  parseIsoDay,
-} from "@/lib/date-filter";
+import { instantIsoDay, parseIsoDay } from "@/lib/date-filter";
 import {
   absolutePublicUrl,
   professionalOgImageUrl,
@@ -103,6 +98,20 @@ function overlaps(
   return Boolean(
     starts && ends && starts <= window.end && ends >= window.start,
   );
+}
+
+function eventDays(event: ProEvent): readonly string[] {
+  const start = event.startsOn ?? event.endsOn;
+  const end = event.endsOn ?? event.startsOn;
+  if (!start || !end) return [];
+  const cursor = new Date(`${start}T12:00:00Z`);
+  const last = new Date(`${end}T12:00:00Z`);
+  const days: string[] = [];
+  while (cursor <= last && days.length < 32) {
+    days.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return days;
 }
 
 function EventShelf({
@@ -222,10 +231,42 @@ export default async function ProTourPage({
             (match.playedAt && instantIsoDay(match.playedAt) === selectedDate)),
       )
       .slice(0, 20) ?? [];
+  const matchMarkets = await caller.public
+    .proMatchPredictionMarkets({
+      matches: filteredMatches.flatMap((match) => {
+        const eventSlug = match.canonicalPath?.split("/")[2];
+        return eventSlug ? [{ eventSlug, matchId: match.id }] : [];
+      }),
+    })
+    .catch((): Record<string, PredictionMarketView> => ({}));
   const selectedTourLabel =
     tourFilters.find((filter) => filter.value === selectedTour)?.label ??
     "selected tour";
-  const calendarDays = datePillDays(selectedDate ?? currentIsoDay());
+  const scheduleMarkers = [
+    ...tourEvents.flatMap((event) =>
+      eventDays(event).map((day) => ({
+        date: day,
+        id: `event-${event.id}-${day}`,
+        label: event.name,
+        tone: "event" as const,
+      })),
+    ),
+    ...(coverage?.matches ?? [])
+      .filter((match) => selectedTour === "all" || match.tour === selectedTour)
+      .flatMap((match) => {
+        if (!match.playedAt) return [];
+        const date = instantIsoDay(match.playedAt);
+        if (!date) return [];
+        return [
+          {
+            date,
+            id: `match-${match.id}`,
+            label: match.title,
+            tone: "booking" as const,
+          },
+        ];
+      }),
+  ];
   const selectedDateLabel = selectedDate
     ? new Intl.DateTimeFormat("en-US", {
         month: "long",
@@ -307,13 +348,11 @@ export default async function ProTourPage({
       </section>
 
       <section className="pro-tour-content">
-        <DatePillFilter
-          allHref={proHref(selectedTour, null)}
-          dates={calendarDays}
-          eyebrow="Quick date"
-          hrefForDate={(nextDate) => proHref(selectedTour, nextDate)}
+        <ProScheduleCalendar
+          markers={scheduleMarkers}
           selectedDate={selectedDate}
-          title="Scores and schedule"
+          selectedTour={selectedTour}
+          trackedEventCount={tourEvents.length}
         />
         <nav
           aria-label="Filter professional tours"
@@ -394,6 +433,7 @@ export default async function ProTourPage({
                   href={match.canonicalPath ?? "/pro"}
                   key={match.id}
                   playedAt={match.playedAt}
+                  predictionMarket={matchMarkets[match.id]}
                   roundLabel={match.roundLabel ?? match.title}
                   sets={match.sets}
                   source={match.source ?? "fivb"}

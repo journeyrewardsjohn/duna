@@ -30,6 +30,9 @@ type PlayerDashboard = Awaited<
 type PlayerWallet = Awaited<
   ReturnType<DunaApiClient["player"]["wallet"]["query"]>
 >;
+type PredictionWallet = Awaited<
+  ReturnType<DunaApiClient["player"]["predictionWallet"]["query"]>
+>;
 type PlayerSettings = Awaited<
   ReturnType<DunaApiClient["player"]["settings"]["query"]>
 >;
@@ -58,6 +61,7 @@ export interface PlayerRuntime {
   readonly publicClient?: DunaApiClient;
   readonly dashboard?: PlayerDashboard;
   readonly wallet?: PlayerWallet;
+  readonly predictionWallet?: PredictionWallet;
   readonly settings?: PlayerSettings;
   readonly coachingNotes?: PlayerCoachingNotes;
   readonly people?: PublicPeople;
@@ -235,6 +239,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   const client = useMemo(() => createDunaApiClient(getToken), [getToken]);
   const [dashboard, setDashboard] = useState<PlayerDashboard>();
   const [wallet, setWallet] = useState<PlayerWallet>();
+  const [predictionWallet, setPredictionWallet] = useState<PredictionWallet>();
   const [settings, setSettings] = useState<PlayerSettings>();
   const [coachingNotes, setCoachingNotes] = useState<PlayerCoachingNotes>();
   const [people, setPeople] = useState<PublicPeople>();
@@ -253,6 +258,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       const [
         nextDashboard,
         nextWallet,
+        nextPredictionWallet,
         nextSettings,
         nextCoachingNotes,
         nextPeople,
@@ -263,6 +269,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       ] = await Promise.all([
         client.player.dashboard.query(),
         client.player.wallet.query(),
+        client.player.predictionWallet.query(),
         client.player.settings.query(),
         client.player.coachingNotes.query().catch(() => []),
         client.public.players.query({ limit: 50 }).catch(() => []),
@@ -273,6 +280,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       ]);
       setDashboard(nextDashboard);
       setWallet(nextWallet);
+      setPredictionWallet(nextPredictionWallet);
       setSettings(nextSettings);
       setCoachingNotes(nextCoachingNotes);
       setPeople(nextPeople);
@@ -322,6 +330,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     error ||
     !dashboard ||
     !wallet ||
+    !predictionWallet ||
     !settings ||
     !coachingNotes ||
     !people ||
@@ -347,6 +356,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         publicClient: client,
         dashboard,
         wallet,
+        predictionWallet,
         settings,
         coachingNotes,
         people,

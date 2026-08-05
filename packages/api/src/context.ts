@@ -21,6 +21,7 @@ import {
   isWorkOSConfigured,
   resolveWorkOSCredentials,
 } from "./workos-environment";
+import { ensurePredictionCreditAccount } from "./prediction-market";
 
 export type ApiAgeBand = "unknown" | "under-13" | "teen" | "adult";
 
@@ -294,6 +295,7 @@ export async function resolveWorkOSPerson(user: User) {
     where: eq(people.workosUserId, user.id),
   });
   if (!person) throw new Error("WorkOS identity could not be synchronized");
+  await ensurePredictionCreditAccount({ personId: person.id });
   return person;
 }
 

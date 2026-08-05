@@ -13,6 +13,7 @@ import Link from "next/link";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
 import { MatchConfirmation } from "@/components/match-confirmation";
 import { MatchHistoryControls } from "@/components/match-history-controls";
+import { PredictionMarketDetail } from "@/components/prediction-market";
 import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Match result" };
@@ -82,10 +83,16 @@ export default async function MatchPage({
 }) {
   const { id } = await params;
   const caller = await getServerCaller();
-  const [match, videos] = await Promise.all([
-    caller.player.matchById({ matchId: id }),
-    caller.public.videos({ matchId: id }).catch(() => []),
-  ]);
+  const [match, videos, predictionMarket, predictionWallet] = await Promise.all(
+    [
+      caller.player.matchById({ matchId: id }),
+      caller.public.videos({ matchId: id }).catch(() => []),
+      caller.public
+        .matchPredictionMarket({ matchId: id })
+        .catch(() => undefined),
+      caller.player.predictionWallet().catch(() => undefined),
+    ],
+  );
   const explanation = ratingExplanation(match);
   return (
     <main className="standard-page match-detail">
@@ -234,6 +241,14 @@ export default async function MatchPage({
           </article>
         )}
       </section>
+      {predictionMarket && (
+        <PredictionMarketDetail
+          market={predictionMarket}
+          returnTo={`/app/matches/${id}`}
+          target={{ kind: "match", matchId: id }}
+          wallet={predictionWallet}
+        />
+      )}
       <section className="match-detail__players">
         {(
           [

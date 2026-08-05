@@ -46,7 +46,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { SvgUri } from "react-native-svg";
+import Svg, { Circle, Line, Path, SvgUri } from "react-native-svg";
 import {
   startDunaLiveActivity,
   updateDunaLiveActivity,
@@ -319,6 +319,20 @@ type CourtAvailability = Awaited<
 type ProEventDetail = Awaited<
   ReturnType<DunaApiClient["public"]["proEvent"]["query"]>
 >;
+type MobilePredictionMarket = Awaited<
+  ReturnType<DunaApiClient["public"]["proMatchPredictionMarket"]["query"]>
+>;
+type MobilePredictionTarget =
+  | {
+      readonly kind: "pro-match";
+      readonly eventSlug: string;
+      readonly matchId: string;
+    }
+  | {
+      readonly kind: "pro-event-team";
+      readonly eventSlug: string;
+      readonly externalTeamId: string;
+    };
 type BookingParticipant = {
   readonly personId?: string;
   readonly name?: string;
@@ -2637,14 +2651,600 @@ function ProTourEventCard({
   );
 }
 
+function mobilePredictionPercent(priceBps: number) {
+  return `${Math.round(priceBps / 100)}%`;
+}
+
+function MobilePredictionChart({
+  market,
+}: {
+  readonly market: MobilePredictionMarket;
+}) {
+  const { width } = useWindowDimensions();
+  const reveal = useRef(new Animated.Value(0)).current;
+  const [selectedIndex, setSelectedIndex] = useState(
+    Math.max(0, market.history.length - 1),
+  );
+  const data = useMemo(() => {
+    const points = market.history.length
+      ? [...market.history]
+      : [
+          {
+            recordedAt: new Date().toISOString(),
+            yesPriceBps: market.yesPriceBps,
+            volumeCredits: market.volumeCredits,
+            source: "model" as const,
+          },
+        ];
+    return points.length === 1 ? [points[0]!, points[0]!] : points;
+  }, [market]);
+  const chartWidth = Math.max(260, Math.min(700, width - 46));
+  const chartHeight = 190;
+  const padX = 9;
+  const padY = 18;
+  const xFor = (index: number) =>
+    padX + (index / Math.max(1, data.length - 1)) * (chartWidth - padX * 2);
+  const yFor = (priceBps: number) =>
+    padY + ((10_000 - priceBps) / 10_000) * (chartHeight - padY * 2);
+  const pathFor = (side: "yes" | "no") =>
+    data
+      .map((point, index) => {
+        const price =
+          side === "yes" ? point.yesPriceBps : 10_000 - point.yesPriceBps;
+        return `${index === 0 ? "M" : "L"}${xFor(index).toFixed(1)},${yFor(price).toFixed(1)}`;
+      })
+      .join(" ");
+  const selected = data[Math.min(selectedIndex, data.length - 1)] ?? data[0]!;
+  const selectedX = xFor(Math.min(selectedIndex, data.length - 1));
+
+  useEffect(() => {
+    reveal.setValue(0);
+    Animated.timing(reveal, {
+      duration: 460,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  }, [market.id, reveal]);
+
+  const selectFromTouch = (locationX: number) => {
+    const ratio = Math.max(0, Math.min(1, locationX / chartWidth));
+    setSelectedIndex(Math.round(ratio * (data.length - 1)));
+  };
+
+  return (
+    <Animated.View
+      accessibilityLabel={`Crowd prediction history for ${market.title}`}
+      style={[
+        styles.mobilePredictionChart,
+        {
+          opacity: reveal,
+          transform: [
+            {
+              translateY: reveal.interpolate({
+                inputRange: [0, 1],
+                outputRange: [8, 0],
+              }),
+            },
+          ],
+        },
+      ]}
+    >
+      <View style={styles.mobilePredictionChartLegend}>
+        <View style={styles.mobilePredictionChartLegendItem}>
+          <View style={styles.mobilePredictionChartDotYes} />
+          <Text
+            numberOfLines={1}
+            style={styles.mobilePredictionChartLegendText}
+          >
+            {market.yesLabel}
+          </Text>
+          <Text style={styles.mobilePredictionChartLegendValue}>
+            {mobilePredictionPercent(selected.yesPriceBps)}
+          </Text>
+        </View>
+        <View style={styles.mobilePredictionChartLegendItem}>
+          <View style={styles.mobilePredictionChartDotNo} />
+          <Text
+            numberOfLines={1}
+            style={styles.mobilePredictionChartLegendText}
+          >
+            {market.noLabel}
+          </Text>
+          <Text style={styles.mobilePredictionChartLegendValue}>
+            {mobilePredictionPercent(10_000 - selected.yesPriceBps)}
+          </Text>
+        </View>
+      </View>
+      <View
+        onMoveShouldSetResponder={() => true}
+        onResponderGrant={(event) =>
+          selectFromTouch(event.nativeEvent.locationX)
+        }
+        onResponderMove={(event) =>
+          selectFromTouch(event.nativeEvent.locationX)
+        }
+        onStartShouldSetResponder={() => true}
+      >
+        <Svg
+          height={chartHeight}
+          viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+          width={chartWidth}
+        >
+          {[2_500, 5_000, 7_500].map((price) => (
+            <Line
+              key={price}
+              stroke={rgba(colors.overlayRgb, 0.08)}
+              strokeDasharray="3 5"
+              x1={padX}
+              x2={chartWidth - padX}
+              y1={yFor(price)}
+              y2={yFor(price)}
+            />
+          ))}
+          <Path
+            d={pathFor("yes")}
+            fill="none"
+            stroke={colors.aqua}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={3}
+          />
+          <Path
+            d={pathFor("no")}
+            fill="none"
+            stroke={colors.sand}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={3}
+          />
+          <Line
+            stroke={rgba(colors.overlayRgb, 0.22)}
+            strokeWidth={1}
+            x1={selectedX}
+            x2={selectedX}
+            y1={padY}
+            y2={chartHeight - padY}
+          />
+          <Circle
+            cx={selectedX}
+            cy={yFor(selected.yesPriceBps)}
+            fill={colors.aqua}
+            r={5}
+            stroke={colors.depth}
+            strokeWidth={2}
+          />
+          <Circle
+            cx={selectedX}
+            cy={yFor(10_000 - selected.yesPriceBps)}
+            fill={colors.sand}
+            r={5}
+            stroke={colors.depth}
+            strokeWidth={2}
+          />
+        </Svg>
+      </View>
+      <View style={styles.mobilePredictionChartFooter}>
+        <Text style={styles.mobilePredictionChartTime}>
+          {new Intl.DateTimeFormat("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          }).format(new Date(selected.recordedAt))}
+        </Text>
+        <Text style={styles.mobilePredictionChartVolume}>
+          {Math.round(market.volumeCredits).toLocaleString("en-US")} matched ·{" "}
+          {market.participantCount} people
+        </Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+function MobilePredictionMarketSheet({
+  client,
+  market: initialMarket,
+  onClose,
+  onPlaced,
+  target,
+  wallet,
+}: {
+  readonly client?: DunaApiClient;
+  readonly market: MobilePredictionMarket;
+  readonly onClose: () => void;
+  readonly onPlaced: () => Promise<void>;
+  readonly target: MobilePredictionTarget;
+  readonly wallet?: PlayerRuntime["predictionWallet"];
+}) {
+  const [market, setMarket] = useState(initialMarket);
+  const [side, setSide] = useState<"yes" | "no">("yes");
+  const [credits, setCredits] = useState("1");
+  const [reviewing, setReviewing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string>();
+  const available = Math.floor(wallet?.availableCredits ?? 0);
+  const amount = Math.max(0, Number.parseInt(credits || "0", 10) || 0);
+  const priceBps = side === "yes" ? market.yesPriceBps : market.noPriceBps;
+  const selectedLabel = side === "yes" ? market.yesLabel : market.noLabel;
+  const estimatedShares = amount / (priceBps / 10_000);
+  const canSubmit =
+    Boolean(client) &&
+    market.status === "open" &&
+    amount >= 1 &&
+    amount <= available &&
+    !busy;
+
+  const reloadMarket = async () => {
+    if (!client) return;
+    const next =
+      target.kind === "pro-match"
+        ? await client.public.proMatchPredictionMarket.query({
+            eventSlug: target.eventSlug,
+            matchId: target.matchId,
+          })
+        : (
+            await client.public.proEventPredictionMarkets.query({
+              eventSlug: target.eventSlug,
+            })
+          ).find((candidate) => candidate.id === market.id);
+    if (next) setMarket(next);
+  };
+
+  const placeOrder = async () => {
+    if (!client || !canSubmit) return;
+    setBusy(true);
+    setMessage(undefined);
+    try {
+      const shared = {
+        credits: amount,
+        idempotencyKey: Crypto.randomUUID(),
+        limitPriceBps: priceBps,
+      };
+      const result =
+        target.kind === "pro-match"
+          ? await client.player.placeProMatchPredictionOrder.mutate({
+              ...shared,
+              eventSlug: target.eventSlug,
+              matchId: target.matchId,
+              side: side === "yes" ? "A" : "B",
+            })
+          : await client.player.placeProEventTeamPredictionOrder.mutate({
+              ...shared,
+              eventSlug: target.eventSlug,
+              externalTeamId: target.externalTeamId,
+              side,
+            });
+      await Promise.all([onPlaced(), reloadMarket()]);
+      setReviewing(false);
+      setMessage(
+        result.status === "filled"
+          ? "Matched. Your immutable position is in the ledger."
+          : "Placed in the order book. Unmatched credits stay reserved.",
+      );
+      successHaptic();
+    } catch (reason) {
+      setMessage(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="pageSheet"
+      visible
+    >
+      <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
+        <View style={styles.mobilePredictionSheetHeader}>
+          <View style={styles.flex}>
+            <Text style={styles.mobilePredictionSheetEyebrow}>
+              CROWD PREDICTION · NO CASH VALUE
+            </Text>
+            <Text numberOfLines={2} style={styles.mobilePredictionSheetTitle}>
+              {market.title}
+            </Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Close prediction market"
+            onPress={onClose}
+            style={styles.proMobileHeaderButton}
+          >
+            <Text style={styles.proMobileHeaderCloseText}>×</Text>
+          </Pressable>
+        </View>
+        <ScrollView
+          contentContainerStyle={styles.mobilePredictionSheetContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <MobilePredictionChart market={market} />
+          <View style={styles.mobilePredictionTradeCard}>
+            <View style={styles.mobilePredictionTradeBalanceRow}>
+              <View>
+                <Text style={styles.mobilePredictionTradeEyebrow}>
+                  AVAILABLE
+                </Text>
+                <Text style={styles.mobilePredictionTradeBalance}>
+                  {available.toLocaleString("en-US")} credits
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.mobilePredictionStatusPill,
+                  market.status !== "open" &&
+                    styles.mobilePredictionStatusPillClosed,
+                ]}
+              >
+                <Text style={styles.mobilePredictionStatusPillText}>
+                  {market.status === "open"
+                    ? "OPEN"
+                    : market.status.toUpperCase()}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.mobilePredictionTradeLabel}>
+              What do you think happens?
+            </Text>
+            <View style={styles.mobilePredictionSideGrid}>
+              {(["yes", "no"] as const).map((option) => {
+                const selected = side === option;
+                const optionPrice =
+                  option === "yes" ? market.yesPriceBps : market.noPriceBps;
+                return (
+                  <Pressable
+                    accessibilityState={{ selected }}
+                    key={option}
+                    onPress={() => {
+                      selectionHaptic();
+                      setSide(option);
+                      setReviewing(false);
+                    }}
+                    style={[
+                      styles.mobilePredictionSideButton,
+                      selected && styles.mobilePredictionSideButtonSelected,
+                      selected &&
+                        option === "no" &&
+                        styles.mobilePredictionSideButtonSelectedNo,
+                    ]}
+                  >
+                    <Text
+                      numberOfLines={2}
+                      style={[
+                        styles.mobilePredictionSideLabel,
+                        selected && styles.mobilePredictionSideLabelSelected,
+                      ]}
+                    >
+                      {option === "yes" ? market.yesLabel : market.noLabel}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.mobilePredictionSidePrice,
+                        selected && styles.mobilePredictionSidePriceSelected,
+                      ]}
+                    >
+                      {mobilePredictionPercent(optionPrice)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={styles.mobilePredictionAmountHeader}>
+              <Text style={styles.mobilePredictionTradeLabel}>Credits</Text>
+              <Text style={styles.mobilePredictionAmountHint}>
+                ≈{" "}
+                {estimatedShares.toLocaleString("en-US", {
+                  maximumFractionDigits: 1,
+                })}{" "}
+                shares if matched
+              </Text>
+            </View>
+            <TextInput
+              accessibilityLabel="Prediction credits to allocate"
+              keyboardType="number-pad"
+              onChangeText={(value) => {
+                setCredits(value.replace(/[^0-9]/g, ""));
+                setReviewing(false);
+              }}
+              style={styles.mobilePredictionAmountInput}
+              value={credits}
+            />
+            <View style={styles.mobilePredictionQuickRow}>
+              {[1, 5, 25].map((quickAmount) => (
+                <Pressable
+                  key={quickAmount}
+                  onPress={() => {
+                    selectionHaptic();
+                    setCredits(String(Math.min(available, quickAmount)));
+                    setReviewing(false);
+                  }}
+                  style={styles.mobilePredictionQuickButton}
+                >
+                  <Text style={styles.mobilePredictionQuickButtonText}>
+                    +{quickAmount}
+                  </Text>
+                </Pressable>
+              ))}
+              <Pressable
+                onPress={() => {
+                  selectionHaptic();
+                  setCredits(String(available));
+                  setReviewing(false);
+                }}
+                style={styles.mobilePredictionQuickButton}
+              >
+                <Text style={styles.mobilePredictionQuickButtonText}>ALL</Text>
+              </Pressable>
+            </View>
+            {amount > available && (
+              <Text style={styles.formError}>
+                You only have {available.toLocaleString("en-US")} credits
+                available.
+              </Text>
+            )}
+            {reviewing && (
+              <View style={styles.mobilePredictionReviewCard}>
+                <Text style={styles.mobilePredictionReviewEyebrow}>
+                  FINAL REVIEW
+                </Text>
+                <Text style={styles.mobilePredictionReviewTitle}>
+                  Allocate {amount.toLocaleString("en-US")} credits to{" "}
+                  {selectedLabel}?
+                </Text>
+                <Text style={styles.mobilePredictionReviewBody}>
+                  This order cannot be edited or withdrawn after confirmation.
+                  It may fill immediately, partially, or remain open in the
+                  order book.
+                </Text>
+              </View>
+            )}
+            {message && (
+              <Text style={styles.mobilePredictionMessage}>{message}</Text>
+            )}
+            {!client || !market.viewer.authenticated ? (
+              <Pressable
+                onPress={() =>
+                  void WebBrowser.openBrowserAsync(
+                    `${dunaWebUrl}/sign-in?returnTo=${encodeURIComponent(`/events/${target.eventSlug}`)}`,
+                  )
+                }
+                style={styles.mobilePredictionTradeButton}
+              >
+                <Text style={styles.mobilePredictionTradeButtonText}>
+                  Sign in to predict
+                </Text>
+              </Pressable>
+            ) : reviewing ? (
+              <Pressable
+                disabled={!canSubmit}
+                onPress={() => void placeOrder()}
+                style={[
+                  styles.mobilePredictionTradeButton,
+                  !canSubmit && styles.buttonDisabled,
+                ]}
+              >
+                <Text style={styles.mobilePredictionTradeButtonText}>
+                  {busy ? "Recording…" : "Confirm immutable position"}
+                </Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                disabled={!canSubmit}
+                onPress={() => {
+                  selectionHaptic();
+                  setReviewing(true);
+                }}
+                style={[
+                  styles.mobilePredictionTradeButton,
+                  !canSubmit && styles.buttonDisabled,
+                ]}
+              >
+                <Text style={styles.mobilePredictionTradeButtonText}>
+                  Review position
+                </Text>
+              </Pressable>
+            )}
+            <Text style={styles.mobilePredictionTradeFootnote}>
+              Prediction credits cannot be bought, transferred, redeemed, cashed
+              out, or exchanged for prizes. Market prices are crowd signals, not
+              odds.
+            </Text>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+function MobileTournamentMarkets({
+  event,
+  markets,
+  onOpen,
+}: {
+  readonly event: ResolvedProEvent;
+  readonly markets: readonly MobilePredictionMarket[];
+  readonly onOpen: (
+    market: MobilePredictionMarket,
+    externalTeamId: string,
+  ) => void;
+}) {
+  if (!markets.length) return null;
+  return (
+    <View style={styles.mobileTournamentMarkets}>
+      <View style={styles.mobileTournamentMarketsHeader}>
+        <View>
+          <Text style={styles.proMobileSectionEyebrow}>TOURNAMENT MARKET</Text>
+          <Text style={styles.mobileTournamentMarketsTitle}>
+            Who wins it all?
+          </Text>
+        </View>
+        <Text style={styles.mobileTournamentMarketsBadge}>FREE CREDITS</Text>
+      </View>
+      {markets.slice(0, 12).map((market, index) => {
+        const entry = event.winnerPrediction.entries[index];
+        if (!entry) return null;
+        const first = market.history[0]?.yesPriceBps ?? market.yesPriceBps;
+        const change = (market.yesPriceBps - first) / 100;
+        return (
+          <Pressable
+            key={market.id}
+            onPress={() => onOpen(market, entry.externalTeamId)}
+            style={({ pressed }) => [
+              styles.mobileTournamentMarketRow,
+              pressed && styles.proMobilePressed,
+            ]}
+          >
+            <View style={styles.mobileTournamentMarketCopy}>
+              <Text numberOfLines={1} style={styles.mobileTournamentMarketName}>
+                {countryFlag(entry.countryCode)} {entry.label}
+              </Text>
+              <View style={styles.mobileTournamentMarketTrack}>
+                <View
+                  style={[
+                    styles.mobileTournamentMarketFill,
+                    { width: `${market.yesPriceBps / 100}%` },
+                  ]}
+                />
+              </View>
+            </View>
+            <View style={styles.mobileTournamentMarketPriceBlock}>
+              <Text style={styles.mobileTournamentMarketPrice}>
+                {mobilePredictionPercent(market.yesPriceBps)}
+              </Text>
+              <Text
+                style={[
+                  styles.mobileTournamentMarketChange,
+                  change < 0 && styles.mobileTournamentMarketChangeDown,
+                ]}
+              >
+                {change === 0
+                  ? "—"
+                  : `${change > 0 ? "+" : ""}${change.toFixed(1)}`}
+              </Text>
+            </View>
+            <Text style={styles.mobileTournamentMarketArrow}>›</Text>
+          </Pressable>
+        );
+      })}
+      <Text style={styles.mobileTournamentMarketsFootnote}>
+        Buy a team to win or not win. One credit-funded order book per team.
+      </Text>
+    </View>
+  );
+}
+
 function ProTourMatchCard({
   match,
   followed,
   onFollow,
+  onOpen,
 }: {
   readonly match: ProMatch;
   readonly followed: boolean;
   readonly onFollow?: () => void;
+  readonly onOpen?: () => void;
 }) {
   const live = match.status === "live";
   const time =
@@ -2660,8 +3260,16 @@ function ProTourMatchCard({
   const scores = (side: "a" | "b") =>
     match.sets.map((set) => set[side]).join("  ") || "—";
   return (
-    <View
-      style={[styles.proMobileMatchCard, live && styles.proMobileMatchCardLive]}
+    <Pressable
+      accessibilityHint="Opens scores, history, and the crowd market"
+      accessibilityLabel={`Open ${match.teamA.label} versus ${match.teamB.label}`}
+      disabled={!onOpen}
+      onPress={onOpen}
+      style={({ pressed }) => [
+        styles.proMobileMatchCard,
+        live && styles.proMobileMatchCardLive,
+        pressed && styles.proMobilePressed,
+      ]}
     >
       <View style={styles.proMobileMatchHeader}>
         <Text
@@ -2706,17 +3314,36 @@ function ProTourMatchCard({
         <Text style={styles.proMobileMatchScore}>{scores("b")}</Text>
       </View>
       <View style={styles.proMobileMatchFooter}>
-        <Text style={styles.proMobileMatchPrediction}>
-          {match.prediction.basis === "SandRating"
-            ? `${match.prediction.teamA.toFixed(0)}% · ${match.prediction.teamB.toFixed(0)}% Sand Rating`
-            : "Even matchup"}
-        </Text>
+        <View style={styles.proMobileMatchPrediction}>
+          <View style={styles.proMobileMatchPredictionLabels}>
+            <Text style={styles.proMobileMatchPredictionValue}>
+              {match.prediction.teamA.toFixed(0)}%
+            </Text>
+            <Text style={styles.proMobileMatchPredictionCaption}>
+              DUNA FORECAST
+            </Text>
+            <Text style={styles.proMobileMatchPredictionValue}>
+              {match.prediction.teamB.toFixed(0)}%
+            </Text>
+          </View>
+          <View style={styles.proMobileMatchPredictionTrack}>
+            <View
+              style={[
+                styles.proMobileMatchPredictionFill,
+                { width: `${match.prediction.teamA}%` },
+              ]}
+            />
+          </View>
+        </View>
         {onFollow && (
           <Pressable
             accessibilityLabel={
               followed ? "Following match on Lock Screen" : "Follow match"
             }
-            onPress={onFollow}
+            onPress={(event) => {
+              event.stopPropagation();
+              onFollow();
+            }}
             style={[
               styles.proMobileFollowButton,
               followed && styles.proMobileFollowButtonActive,
@@ -2732,8 +3359,11 @@ function ProTourMatchCard({
             </Text>
           </Pressable>
         )}
+        {onOpen && !onFollow && (
+          <Text style={styles.proMobileMatchOpenArrow}>›</Text>
+        )}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -2765,10 +3395,19 @@ function ProTourModal({
   readonly onClose: () => void;
 }) {
   const { width } = useWindowDimensions();
-  const { client, publicClient, proCoverage } = usePlayerRuntime();
+  const { client, predictionWallet, publicClient, proCoverage, refresh } =
+    usePlayerRuntime();
   const coverageClient = publicClient ?? client;
   const [selectedSlug, setSelectedSlug] = useState<string>();
   const [event, setEvent] = useState<ProEventDetail>();
+  const [tournamentMarkets, setTournamentMarkets] = useState<
+    readonly MobilePredictionMarket[]
+  >([]);
+  const [selectedMarket, setSelectedMarket] = useState<{
+    readonly market: MobilePredictionMarket;
+    readonly target: MobilePredictionTarget;
+  }>();
+  const [marketLoadingId, setMarketLoadingId] = useState<string>();
   const [activeSection, setActiveSection] =
     useState<ProTourSection>("overview");
   const [search, setSearch] = useState("");
@@ -2792,6 +3431,9 @@ function ProTourModal({
     if (!visible) {
       setSelectedSlug(undefined);
       setEvent(undefined);
+      setTournamentMarkets([]);
+      setSelectedMarket(undefined);
+      setMarketLoadingId(undefined);
       setActiveSection("overview");
       setSearch("");
       setError(undefined);
@@ -2817,15 +3459,20 @@ function ProTourModal({
     setLoading(true);
     setError(undefined);
     setPosterFailed(false);
-    void coverageClient.public.proEvent
-      .query({ slug: selectedSlug })
-      .then((nextEvent) => {
+    void Promise.all([
+      coverageClient.public.proEvent.query({ slug: selectedSlug }),
+      coverageClient.public.proEventPredictionMarkets
+        .query({ eventSlug: selectedSlug })
+        .catch(() => []),
+    ])
+      .then(([nextEvent, nextMarkets]) => {
         if (cancelled) return;
         if (!nextEvent) {
           setError("This event is not available yet.");
           return;
         }
         setEvent(nextEvent);
+        setTournamentMarkets(nextMarkets);
         setActiveSection("overview");
       })
       .catch((reason) => {
@@ -2875,6 +3522,8 @@ function ProTourModal({
   const openEvent = (slug: string) => {
     selectionHaptic();
     setEvent(undefined);
+    setTournamentMarkets([]);
+    setSelectedMarket(undefined);
     setError(undefined);
     setFollowNotice(undefined);
     setCopiedAddress(false);
@@ -2885,6 +3534,8 @@ function ProTourModal({
     selectionHaptic();
     setSelectedSlug(undefined);
     setEvent(undefined);
+    setTournamentMarkets([]);
+    setSelectedMarket(undefined);
     setError(undefined);
     setActiveSection("overview");
     setCopiedAddress(false);
@@ -2893,8 +3544,54 @@ function ProTourModal({
   const handleClose = () => {
     setSelectedSlug(undefined);
     setEvent(undefined);
+    setTournamentMarkets([]);
+    setSelectedMarket(undefined);
     setSearch("");
     onClose();
+  };
+
+  const openMatchMarket = async (match: ProMatch) => {
+    if (!coverageClient || !event || marketLoadingId) return;
+    selectionHaptic();
+    setMarketLoadingId(match.id);
+    setFollowNotice("Opening the crowd market…");
+    try {
+      const market = await coverageClient.public.proMatchPredictionMarket.query(
+        {
+          eventSlug: event.slug,
+          matchId: match.id,
+        },
+      );
+      setSelectedMarket({
+        market,
+        target: {
+          kind: "pro-match",
+          eventSlug: event.slug,
+          matchId: match.id,
+        },
+      });
+      setFollowNotice(undefined);
+    } catch (reason) {
+      setFollowNotice(displayError(reason));
+    } finally {
+      setMarketLoadingId(undefined);
+    }
+  };
+
+  const openTournamentMarket = (
+    market: MobilePredictionMarket,
+    externalTeamId: string,
+  ) => {
+    if (!event) return;
+    selectionHaptic();
+    setSelectedMarket({
+      market,
+      target: {
+        kind: "pro-event-team",
+        eventSlug: event.slug,
+        externalTeamId,
+      },
+    });
   };
 
   const followMatch = async (match: ProMatch) => {
@@ -3048,6 +3745,27 @@ function ProTourModal({
     if (!event) return null;
     return (
       <>
+        {liveMatches.length > 0 && (
+          <>
+            <ProTourSectionTitle
+              eyebrow="UPDATING LIVE"
+              title="On court now"
+              trailing={`${liveMatches.length}`}
+            />
+            <View style={styles.proMobileCardStack}>
+              {liveMatches.slice(0, 3).map((match) => (
+                <ProTourMatchCard
+                  followed={followedMatchId === match.id}
+                  key={match.id}
+                  match={match}
+                  onFollow={followAction(match)}
+                  onOpen={() => void openMatchMarket(match)}
+                />
+              ))}
+            </View>
+          </>
+        )}
+
         <View style={styles.proMobileStatGrid}>
           <View style={styles.proMobileStatCard}>
             <Text style={styles.proMobileStatValue}>{event.teamCount}</Text>
@@ -3078,25 +3796,11 @@ function ProTourModal({
           </View>
         )}
 
-        {liveMatches.length > 0 && (
-          <>
-            <ProTourSectionTitle
-              eyebrow="UPDATING LIVE"
-              title="On court now"
-              trailing={`${liveMatches.length}`}
-            />
-            <View style={styles.proMobileCardStack}>
-              {liveMatches.slice(0, 3).map((match) => (
-                <ProTourMatchCard
-                  followed={followedMatchId === match.id}
-                  key={match.id}
-                  match={match}
-                  onFollow={followAction(match)}
-                />
-              ))}
-            </View>
-          </>
-        )}
+        <MobileTournamentMarkets
+          event={event}
+          markets={tournamentMarkets}
+          onOpen={openTournamentMarket}
+        />
 
         {venueName && venueAddress && venueMapHref && (
           <View style={styles.proMobileLocationCard}>
@@ -3221,6 +3925,7 @@ function ProTourModal({
                 key={match.id}
                 match={match}
                 onFollow={followAction(match)}
+                onOpen={() => void openMatchMarket(match)}
               />
             ))}
           </View>
@@ -3251,6 +3956,7 @@ function ProTourModal({
                 key={match.id}
                 match={match}
                 onFollow={followAction(match)}
+                onOpen={() => void openMatchMarket(match)}
               />
             ))}
             {event.matches.length > 60 && (
@@ -3293,6 +3999,7 @@ function ProTourModal({
                         key={match.id}
                         match={match}
                         onFollow={followAction(match)}
+                        onOpen={() => void openMatchMarket(match)}
                       />
                     ))}
                   </View>
@@ -3478,286 +4185,268 @@ function ProTourModal({
   };
 
   return (
-    <Modal
-      animationType="slide"
-      onRequestClose={handleClose}
-      presentationStyle="pageSheet"
-      visible={visible}
-    >
-      <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
-        {selectedSlug ? (
-          <>
-            <View style={styles.proMobileDetailHeader}>
-              <Pressable
-                accessibilityLabel="Back to Pro Tour events"
-                onPress={backToEvents}
-                style={styles.proMobileHeaderButton}
-              >
-                <Text style={styles.proMobileHeaderButtonText}>‹</Text>
-              </Pressable>
-              <View style={styles.proMobileDetailHeaderCopy}>
-                <Text style={styles.proMobileDetailHeaderEyebrow}>
-                  {event?.live || selectedSummary?.live
-                    ? "● LIVE EVENT"
-                    : "PRO EVENT"}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  style={styles.proMobileDetailHeaderTitle}
-                >
-                  {event?.name ?? selectedSummary?.name ?? "Event"}
-                </Text>
-              </View>
-              <Pressable
-                accessibilityLabel="Close Pro Tour"
-                onPress={handleClose}
-                style={styles.proMobileHeaderButton}
-              >
-                <Text style={styles.proMobileHeaderCloseText}>×</Text>
-              </Pressable>
-            </View>
-
-            {event && (
-              <ScrollView
-                contentContainerStyle={styles.proMobileSectionNavContent}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.proMobileSectionNav}
-              >
-                {sections.map((section) => (
-                  <Pressable
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: activeSection === section }}
-                    key={section}
-                    onPress={() => {
-                      selectionHaptic();
-                      setActiveSection(section);
-                    }}
-                    style={[
-                      styles.proMobileSectionTab,
-                      activeSection === section &&
-                        styles.proMobileSectionTabActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.proMobileSectionTabText,
-                        activeSection === section &&
-                          styles.proMobileSectionTabTextActive,
-                      ]}
-                    >
-                      {proTourSectionLabels[section]}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            )}
-
-            {loading && !event ? (
-              <View style={styles.proMobileLoadingState}>
-                <View style={styles.proMobileLoadingMark}>
-                  <Text style={styles.proMobileLoadingMarkText}>D</Text>
-                </View>
-                <Text style={styles.proMobileLoadingTitle}>
-                  Opening the tournament desk
-                </Text>
-                <Text style={styles.proMobileLoadingBody}>
-                  Bringing in live scores, teams, and event media…
-                </Text>
-              </View>
-            ) : error && !event ? (
-              <View style={styles.proMobileLoadingState}>
-                <Text style={styles.proMobileEmptyIcon}>!</Text>
-                <Text style={styles.proMobileLoadingTitle}>
-                  Event could not load
-                </Text>
-                <Text style={styles.proMobileLoadingBody}>{error}</Text>
+    <>
+      <Modal
+        animationType="slide"
+        onRequestClose={handleClose}
+        presentationStyle="pageSheet"
+        visible={visible}
+      >
+        <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
+          {selectedSlug ? (
+            <>
+              <View style={styles.proMobileDetailHeader}>
                 <Pressable
-                  onPress={() => setReloadKey((value) => value + 1)}
-                  style={styles.proMobileRetryButton}
+                  accessibilityLabel="Back to Pro Tour events"
+                  onPress={backToEvents}
+                  style={styles.proMobileHeaderButton}
                 >
-                  <Text style={styles.proMobileRetryButtonText}>Try again</Text>
+                  <Text style={styles.proMobileHeaderButtonText}>‹</Text>
+                </Pressable>
+                <View style={styles.proMobileDetailHeaderCopy}>
+                  <Text style={styles.proMobileDetailHeaderEyebrow}>
+                    {event?.live || selectedSummary?.live
+                      ? "● LIVE EVENT"
+                      : "PRO EVENT"}
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    style={styles.proMobileDetailHeaderTitle}
+                  >
+                    {event?.name ?? selectedSummary?.name ?? "Event"}
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityLabel="Close Pro Tour"
+                  onPress={handleClose}
+                  style={styles.proMobileHeaderButton}
+                >
+                  <Text style={styles.proMobileHeaderCloseText}>×</Text>
                 </Pressable>
               </View>
-            ) : event ? (
+
+              {event && (
+                <ScrollView
+                  contentContainerStyle={styles.proMobileSectionNavContent}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.proMobileSectionNav}
+                >
+                  {sections.map((section) => (
+                    <Pressable
+                      accessibilityRole="tab"
+                      accessibilityState={{
+                        selected: activeSection === section,
+                      }}
+                      key={section}
+                      onPress={() => {
+                        selectionHaptic();
+                        setActiveSection(section);
+                      }}
+                      style={[
+                        styles.proMobileSectionTab,
+                        activeSection === section &&
+                          styles.proMobileSectionTabActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.proMobileSectionTabText,
+                          activeSection === section &&
+                            styles.proMobileSectionTabTextActive,
+                        ]}
+                      >
+                        {proTourSectionLabels[section]}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              )}
+
+              {loading && !event ? (
+                <View style={styles.proMobileLoadingState}>
+                  <View style={styles.proMobileLoadingMark}>
+                    <Text style={styles.proMobileLoadingMarkText}>D</Text>
+                  </View>
+                  <Text style={styles.proMobileLoadingTitle}>
+                    Opening the tournament desk
+                  </Text>
+                  <Text style={styles.proMobileLoadingBody}>
+                    Bringing in live scores, teams, and event media…
+                  </Text>
+                </View>
+              ) : error && !event ? (
+                <View style={styles.proMobileLoadingState}>
+                  <Text style={styles.proMobileEmptyIcon}>!</Text>
+                  <Text style={styles.proMobileLoadingTitle}>
+                    Event could not load
+                  </Text>
+                  <Text style={styles.proMobileLoadingBody}>{error}</Text>
+                  <Pressable
+                    onPress={() => setReloadKey((value) => value + 1)}
+                    style={styles.proMobileRetryButton}
+                  >
+                    <Text style={styles.proMobileRetryButtonText}>
+                      Try again
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : event ? (
+                <ScrollView
+                  contentContainerStyle={styles.proMobileDetailContent}
+                  key={activeSection}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {activeSection === "overview" && (
+                    <View
+                      style={[styles.proMobileHero, { height: heroHeight }]}
+                    >
+                      {posterUrl && !posterFailed ? (
+                        <Image
+                          accessibilityLabel={featuredMedia?.alt ?? event.name}
+                          onError={() => setPosterFailed(true)}
+                          resizeMode={posterIsPortrait ? "contain" : "cover"}
+                          source={{ uri: posterUrl }}
+                          style={styles.proMobileHeroImage}
+                        />
+                      ) : (
+                        <View style={styles.proMobileHeroFallback}>
+                          <View style={styles.proMobileCourtOutline} />
+                          <View style={styles.proMobileCourtNet} />
+                        </View>
+                      )}
+                      <View style={styles.proMobileHeroScrim} />
+                      <View style={styles.proMobileHeroTop}>
+                        <View style={styles.proMobileHeroBadges}>
+                          <View
+                            style={[
+                              styles.proMobileHeroBadge,
+                              event.live && styles.proMobileHeroBadgeLive,
+                            ]}
+                          >
+                            <Text style={styles.proMobileHeroBadgeText}>
+                              {event.live
+                                ? "● LIVE NOW"
+                                : event.status.toUpperCase()}
+                            </Text>
+                          </View>
+                          <View style={styles.proMobileHeroBadge}>
+                            <Text style={styles.proMobileHeroBadgeText}>
+                              {event.genderCategory.toUpperCase()}
+                            </Text>
+                          </View>
+                        </View>
+                        <ProTourBrandMark compact source={event.source} />
+                      </View>
+                      <View style={styles.proMobileHeroCopy}>
+                        <Text style={styles.proMobileHeroCategory}>
+                          {event.category ?? "Professional beach volleyball"}
+                        </Text>
+                        <Text style={styles.proMobileHeroTitle}>
+                          {event.name}
+                        </Text>
+                        <Text style={styles.proMobileHeroMeta}>
+                          {countryFlag(event.countryCode)}{" "}
+                          {formatProEventDates(event.startsOn, event.endsOn)} ·{" "}
+                          {event.editorial.venueName ??
+                            event.location ??
+                            "Location pending"}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                  {followNotice && (
+                    <View style={styles.proMobileNotice}>
+                      <Text style={styles.proMobileNoticeText}>
+                        {followNotice}
+                      </Text>
+                    </View>
+                  )}
+                  {error && event && (
+                    <Text style={styles.formError}>{error}</Text>
+                  )}
+                  {renderActiveSection()}
+                </ScrollView>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <View style={styles.proMobileHubHeader}>
+                <View>
+                  <Text style={styles.proMobileHubEyebrow}>
+                    PROFESSIONAL BEACH VOLLEYBALL
+                  </Text>
+                  <Text style={styles.proMobileHubTitle}>Pro Tour</Text>
+                </View>
+                <Pressable
+                  accessibilityLabel="Close Pro Tour"
+                  onPress={handleClose}
+                  style={styles.proMobileHeaderButton}
+                >
+                  <Text style={styles.proMobileHeaderCloseText}>×</Text>
+                </Pressable>
+              </View>
               <ScrollView
-                contentContainerStyle={styles.proMobileDetailContent}
-                key={activeSection}
+                contentContainerStyle={styles.proMobileHubContent}
+                keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
-                {activeSection === "overview" && (
-                  <View style={[styles.proMobileHero, { height: heroHeight }]}>
-                    {posterUrl && !posterFailed ? (
-                      <Image
-                        accessibilityLabel={featuredMedia?.alt ?? event.name}
-                        onError={() => setPosterFailed(true)}
-                        resizeMode={posterIsPortrait ? "contain" : "cover"}
-                        source={{ uri: posterUrl }}
-                        style={styles.proMobileHeroImage}
-                      />
-                    ) : (
-                      <View style={styles.proMobileHeroFallback}>
-                        <View style={styles.proMobileCourtOutline} />
-                        <View style={styles.proMobileCourtNet} />
-                      </View>
-                    )}
-                    <View style={styles.proMobileHeroScrim} />
-                    <View style={styles.proMobileHeroTop}>
-                      <View style={styles.proMobileHeroBadges}>
-                        <View
-                          style={[
-                            styles.proMobileHeroBadge,
-                            event.live && styles.proMobileHeroBadgeLive,
-                          ]}
-                        >
-                          <Text style={styles.proMobileHeroBadgeText}>
-                            {event.live
-                              ? "● LIVE NOW"
-                              : event.status.toUpperCase()}
-                          </Text>
-                        </View>
-                        <View style={styles.proMobileHeroBadge}>
-                          <Text style={styles.proMobileHeroBadgeText}>
-                            {event.genderCategory.toUpperCase()}
-                          </Text>
-                        </View>
-                      </View>
-                      <ProTourBrandMark compact source={event.source} />
-                    </View>
-                    <View style={styles.proMobileHeroCopy}>
-                      <Text style={styles.proMobileHeroCategory}>
-                        {event.category ?? "Professional beach volleyball"}
-                      </Text>
-                      <Text style={styles.proMobileHeroTitle}>
-                        {event.name}
-                      </Text>
-                      <Text style={styles.proMobileHeroMeta}>
-                        {countryFlag(event.countryCode)}{" "}
-                        {formatProEventDates(event.startsOn, event.endsOn)} ·{" "}
-                        {event.editorial.venueName ??
-                          event.location ??
-                          "Location pending"}
-                      </Text>
-                    </View>
-                  </View>
-                )}
-                {followNotice && (
-                  <View style={styles.proMobileNotice}>
-                    <Text style={styles.proMobileNoticeText}>
-                      {followNotice}
+                <View style={styles.proMobileIntro}>
+                  <View style={styles.proMobileIntroCopy}>
+                    <Text style={styles.proMobileIntroKicker}>
+                      {liveEvents.length > 0
+                        ? `● ${liveEvents.length} LIVE NOW`
+                        : "WORLD TOUR COVERAGE"}
+                    </Text>
+                    <Text style={styles.proMobileIntroTitle}>
+                      The world’s game, live in Duna.
+                    </Text>
+                    <Text style={styles.proMobileIntroBody}>
+                      Scores, draws, teams, schedules, and broadcasts in one
+                      mobile tournament desk.
                     </Text>
                   </View>
-                )}
-                {error && event && (
-                  <Text style={styles.formError}>{error}</Text>
-                )}
-                {renderActiveSection()}
-              </ScrollView>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <View style={styles.proMobileHubHeader}>
-              <View>
-                <Text style={styles.proMobileHubEyebrow}>
-                  PROFESSIONAL BEACH VOLLEYBALL
-                </Text>
-                <Text style={styles.proMobileHubTitle}>Pro Tour</Text>
-              </View>
-              <Pressable
-                accessibilityLabel="Close Pro Tour"
-                onPress={handleClose}
-                style={styles.proMobileHeaderButton}
-              >
-                <Text style={styles.proMobileHeaderCloseText}>×</Text>
-              </Pressable>
-            </View>
-            <ScrollView
-              contentContainerStyle={styles.proMobileHubContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.proMobileIntro}>
-                <View style={styles.proMobileIntroCopy}>
-                  <Text style={styles.proMobileIntroKicker}>
-                    {liveEvents.length > 0
-                      ? `● ${liveEvents.length} LIVE NOW`
-                      : "WORLD TOUR COVERAGE"}
-                  </Text>
-                  <Text style={styles.proMobileIntroTitle}>
-                    The world’s game, live in Duna.
-                  </Text>
-                  <Text style={styles.proMobileIntroBody}>
-                    Scores, draws, teams, schedules, and broadcasts in one
-                    mobile tournament desk.
-                  </Text>
+                  <View style={styles.proMobileIntroBrands}>
+                    <ProTourBrandMark source="fivb" />
+                    <ProTourBrandMark source="avp" />
+                  </View>
                 </View>
-                <View style={styles.proMobileIntroBrands}>
-                  <ProTourBrandMark source="fivb" />
-                  <ProTourBrandMark source="avp" />
-                </View>
-              </View>
 
-              <View style={styles.proMobileSearchBar}>
-                <Text aria-hidden style={styles.proMobileSearchIcon}>
-                  ⌕
-                </Text>
-                <TextInput
-                  accessibilityLabel="Search Pro Tour events"
-                  autoCapitalize="none"
-                  onChangeText={setSearch}
-                  placeholder="Search events, cities, or tours"
-                  placeholderTextColor={colors.muted}
-                  returnKeyType="search"
-                  style={styles.proMobileSearchInput}
-                  value={search}
-                />
-                {search.length > 0 && (
-                  <Pressable
-                    accessibilityLabel="Clear event search"
-                    onPress={() => setSearch("")}
-                    style={styles.proMobileSearchClear}
-                  >
-                    <Text style={styles.proMobileSearchClearText}>×</Text>
-                  </Pressable>
-                )}
-              </View>
-
-              {search.trim() ? (
-                <>
-                  <ProTourSectionTitle
-                    eyebrow="SEARCH RESULTS"
-                    title="Events"
-                    trailing={`${filteredEvents.length}`}
+                <View style={styles.proMobileSearchBar}>
+                  <Text aria-hidden style={styles.proMobileSearchIcon}>
+                    ⌕
+                  </Text>
+                  <TextInput
+                    accessibilityLabel="Search Pro Tour events"
+                    autoCapitalize="none"
+                    onChangeText={setSearch}
+                    placeholder="Search events, cities, or tours"
+                    placeholderTextColor={colors.muted}
+                    returnKeyType="search"
+                    style={styles.proMobileSearchInput}
+                    value={search}
                   />
-                  {filteredEvents.length > 0 ? (
-                    <View style={styles.proMobileCardStack}>
-                      {filteredEvents.map((candidate) => (
-                        <ProTourEventCard
-                          event={candidate}
-                          key={candidate.id}
-                          onPress={() => openEvent(candidate.slug)}
-                        />
-                      ))}
-                    </View>
-                  ) : (
-                    renderEmpty(
-                      "No matching events",
-                      "Try a city, event name, category, or tour.",
-                    )
+                  {search.length > 0 && (
+                    <Pressable
+                      accessibilityLabel="Clear event search"
+                      onPress={() => setSearch("")}
+                      style={styles.proMobileSearchClear}
+                    >
+                      <Text style={styles.proMobileSearchClearText}>×</Text>
+                    </Pressable>
                   )}
-                </>
-              ) : (
-                <>
-                  {liveEvents.length > 0 && (
-                    <>
-                      <ProTourSectionTitle
-                        eyebrow="UPDATING FREQUENTLY"
-                        title="Live now"
-                        trailing={`${liveEvents.length}`}
-                      />
+                </View>
+
+                {search.trim() ? (
+                  <>
+                    <ProTourSectionTitle
+                      eyebrow="SEARCH RESULTS"
+                      title="Events"
+                      trailing={`${filteredEvents.length}`}
+                    />
+                    {filteredEvents.length > 0 ? (
                       <View style={styles.proMobileCardStack}>
-                        {liveEvents.slice(0, 6).map((candidate) => (
+                        {filteredEvents.map((candidate) => (
                           <ProTourEventCard
                             event={candidate}
                             key={candidate.id}
@@ -3765,39 +4454,77 @@ function ProTourModal({
                           />
                         ))}
                       </View>
-                    </>
-                  )}
-
-                  <ProTourSectionTitle
-                    eyebrow={liveEvents.length > 0 ? "EXPLORE MORE" : "NEXT UP"}
-                    title={
-                      liveEvents.length > 0 ? "Other events" : "Tour calendar"
-                    }
-                    trailing={`${otherEvents.length}`}
-                  />
-                  {otherEvents.length > 0 ? (
-                    <View style={styles.proMobileCardStack}>
-                      {otherEvents.slice(0, 20).map((candidate) => (
-                        <ProTourEventCard
-                          event={candidate}
-                          key={candidate.id}
-                          onPress={() => openEvent(candidate.slug)}
+                    ) : (
+                      renderEmpty(
+                        "No matching events",
+                        "Try a city, event name, category, or tour.",
+                      )
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {liveEvents.length > 0 && (
+                      <>
+                        <ProTourSectionTitle
+                          eyebrow="UPDATING FREQUENTLY"
+                          title="Live now"
+                          trailing={`${liveEvents.length}`}
                         />
-                      ))}
-                    </View>
-                  ) : events.length === 0 ? (
-                    renderEmpty(
-                      "Tour calendar is syncing",
-                      "Live and upcoming professional events will appear here shortly.",
-                    )
-                  ) : null}
-                </>
-              )}
-            </ScrollView>
-          </>
-        )}
-      </SafeAreaView>
-    </Modal>
+                        <View style={styles.proMobileCardStack}>
+                          {liveEvents.slice(0, 6).map((candidate) => (
+                            <ProTourEventCard
+                              event={candidate}
+                              key={candidate.id}
+                              onPress={() => openEvent(candidate.slug)}
+                            />
+                          ))}
+                        </View>
+                      </>
+                    )}
+
+                    <ProTourSectionTitle
+                      eyebrow={
+                        liveEvents.length > 0 ? "EXPLORE MORE" : "NEXT UP"
+                      }
+                      title={
+                        liveEvents.length > 0 ? "Other events" : "Tour calendar"
+                      }
+                      trailing={`${otherEvents.length}`}
+                    />
+                    {otherEvents.length > 0 ? (
+                      <View style={styles.proMobileCardStack}>
+                        {otherEvents.slice(0, 20).map((candidate) => (
+                          <ProTourEventCard
+                            event={candidate}
+                            key={candidate.id}
+                            onPress={() => openEvent(candidate.slug)}
+                          />
+                        ))}
+                      </View>
+                    ) : events.length === 0 ? (
+                      renderEmpty(
+                        "Tour calendar is syncing",
+                        "Live and upcoming professional events will appear here shortly.",
+                      )
+                    ) : null}
+                  </>
+                )}
+              </ScrollView>
+            </>
+          )}
+        </SafeAreaView>
+      </Modal>
+      {selectedMarket && (
+        <MobilePredictionMarketSheet
+          client={client}
+          market={selectedMarket.market}
+          onClose={() => setSelectedMarket(undefined)}
+          onPlaced={refresh}
+          target={selectedMarket.target}
+          wallet={predictionWallet}
+        />
+      )}
+    </>
   );
 }
 
@@ -4382,7 +5109,7 @@ function PlayScreen() {
 }
 
 function WalletScreen() {
-  const { mode, settings, wallet } = usePlayerRuntime();
+  const { mode, predictionWallet, settings, wallet } = usePlayerRuntime();
   const entries = wallet?.entries ?? demoWalletEntries;
   const balance =
     wallet?.availableMinor ??
@@ -4448,6 +5175,79 @@ function WalletScreen() {
           <Text style={styles.bodyText}>Payment is still processing</Text>
         </View>
       </View>
+      <View style={styles.predictionWalletCard}>
+        <View style={styles.predictionWalletHeader}>
+          <View>
+            <Text style={styles.eyebrow}>PREDICTION CREDITS</Text>
+            <Text style={styles.predictionWalletBalance}>
+              {Math.floor(
+                predictionWallet?.availableCredits ?? 1_000,
+              ).toLocaleString("en-US")}
+            </Text>
+          </View>
+          <View style={styles.predictionWalletCoin}>
+            <Text style={styles.predictionWalletCoinText}>◇</Text>
+          </View>
+        </View>
+        <Text style={styles.predictionWalletBody}>
+          Free, non-cash credits for crowd predictions. They cannot be bought,
+          transferred, redeemed, or exchanged for prizes.
+        </Text>
+        <View style={styles.predictionWalletFacts}>
+          <View>
+            <Text style={styles.predictionWalletFactValue}>
+              +{predictionWallet?.nextMonthlyGrantCredits ?? 100}
+            </Text>
+            <Text style={styles.predictionWalletFactLabel}>NEXT MONTH</Text>
+          </View>
+          <View>
+            <Text style={styles.predictionWalletFactValue}>
+              {predictionWallet?.positions.length ?? 0}
+            </Text>
+            <Text style={styles.predictionWalletFactLabel}>POSITIONS</Text>
+          </View>
+          <View>
+            <Text style={styles.predictionWalletFactValue}>
+              {predictionWallet?.openOrders.length ?? 0}
+            </Text>
+            <Text style={styles.predictionWalletFactLabel}>OPEN ORDERS</Text>
+          </View>
+        </View>
+      </View>
+      {(predictionWallet?.positions.length ?? 0) > 0 && (
+        <>
+          <SectionHeader eyebrow="IMMUTABLE LEDGER" title="Predictions." />
+          <View style={styles.listCard}>
+            {predictionWallet?.positions.slice(0, 20).map((position) => (
+              <View style={styles.predictionWalletRow} key={position.id}>
+                <View style={styles.flex}>
+                  <Text numberOfLines={1} style={styles.rowTitle}>
+                    {position.title}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.rowMeta}>
+                    {position.selectedLabel} ·{" "}
+                    {position.costCredits.toLocaleString("en-US", {
+                      maximumFractionDigits: 1,
+                    })}{" "}
+                    credits
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.predictionWalletStatus,
+                    position.status === "won" &&
+                      styles.predictionWalletStatusWon,
+                  ]}
+                >
+                  <Text style={styles.predictionWalletStatusText}>
+                    {position.status.toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </>
+      )}
       <SectionHeader
         eyebrow="YOUR MONEY ON SAND"
         title="Activity."
@@ -9202,6 +10002,338 @@ function createStyles(palette: Palette) {
       marginTop: 4,
     },
     proMobileSiblingArrow: { color: colors.aqua, fontSize: 26 },
+    mobilePredictionChart: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 22,
+      borderWidth: 1,
+      overflow: "hidden",
+      paddingHorizontal: 12,
+      paddingTop: 15,
+    },
+    mobilePredictionChartLegend: { gap: 8, marginBottom: 4 },
+    mobilePredictionChartLegendItem: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 7,
+    },
+    mobilePredictionChartDotYes: {
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      height: 7,
+      width: 7,
+    },
+    mobilePredictionChartDotNo: {
+      backgroundColor: colors.sand,
+      borderRadius: 999,
+      height: 7,
+      width: 7,
+    },
+    mobilePredictionChartLegendText: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    mobilePredictionChartLegendValue: {
+      color: colors.bone,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    mobilePredictionChartFooter: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.07),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: 42,
+    },
+    mobilePredictionChartTime: { color: colors.muted, fontSize: 10 },
+    mobilePredictionChartVolume: {
+      color: colors.aquaDeep,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    mobilePredictionSheetHeader: {
+      alignItems: "flex-start",
+      borderBottomColor: rgba(colors.overlayRgb, 0.08),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      padding: 17,
+    },
+    mobilePredictionSheetEyebrow: {
+      color: colors.aquaDeep,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    mobilePredictionSheetTitle: {
+      color: colors.bone,
+      fontSize: 20,
+      fontWeight: "900",
+      letterSpacing: -0.5,
+      lineHeight: 24,
+      marginTop: 5,
+    },
+    mobilePredictionSheetContent: {
+      gap: 12,
+      padding: 14,
+      paddingBottom: 44,
+    },
+    mobilePredictionTradeCard: {
+      backgroundColor: colors.navyLift,
+      borderColor: rgba(colors.accentRgb, 0.16),
+      borderRadius: 22,
+      borderWidth: 1,
+      padding: 16,
+    },
+    mobilePredictionTradeBalanceRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    mobilePredictionTradeEyebrow: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    mobilePredictionTradeBalance: {
+      color: colors.bone,
+      fontSize: 17,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+    mobilePredictionStatusPill: {
+      backgroundColor: rgba(colors.positiveRgb, 0.13),
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    mobilePredictionStatusPillClosed: {
+      backgroundColor: rgba(colors.overlayRgb, 0.08),
+    },
+    mobilePredictionStatusPillText: {
+      color: colors.positive,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+    mobilePredictionTradeLabel: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "900",
+      marginTop: 18,
+    },
+    mobilePredictionSideGrid: {
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 9,
+    },
+    mobilePredictionSideButton: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 15,
+      borderWidth: 1,
+      flex: 1,
+      minHeight: 88,
+      padding: 12,
+    },
+    mobilePredictionSideButtonSelected: {
+      backgroundColor: rgba(colors.accentRgb, 0.12),
+      borderColor: colors.aqua,
+    },
+    mobilePredictionSideButtonSelectedNo: {
+      backgroundColor: rgba(colors.warningRgb, 0.11),
+      borderColor: colors.sand,
+    },
+    mobilePredictionSideLabel: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 10,
+      fontWeight: "700",
+      lineHeight: 14,
+    },
+    mobilePredictionSideLabelSelected: { color: colors.bone },
+    mobilePredictionSidePrice: {
+      color: colors.muted,
+      fontSize: 23,
+      fontWeight: "900",
+      letterSpacing: -0.8,
+    },
+    mobilePredictionSidePriceSelected: { color: colors.bone },
+    mobilePredictionAmountHeader: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    mobilePredictionAmountHint: { color: colors.muted, fontSize: 10 },
+    mobilePredictionAmountInput: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 15,
+      borderWidth: 1,
+      color: colors.bone,
+      fontSize: 30,
+      fontWeight: "900",
+      marginTop: 8,
+      minHeight: 62,
+      paddingHorizontal: 14,
+    },
+    mobilePredictionQuickRow: {
+      flexDirection: "row",
+      gap: 7,
+      marginTop: 8,
+    },
+    mobilePredictionQuickButton: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.13),
+      borderRadius: 999,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 36,
+    },
+    mobilePredictionQuickButtonText: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    mobilePredictionReviewCard: {
+      backgroundColor: rgba(colors.warningRgb, 0.09),
+      borderColor: rgba(colors.warningRgb, 0.3),
+      borderRadius: 14,
+      borderWidth: 1,
+      marginTop: 14,
+      padding: 13,
+    },
+    mobilePredictionReviewEyebrow: {
+      color: colors.warning,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+    mobilePredictionReviewTitle: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
+      lineHeight: 18,
+      marginTop: 5,
+    },
+    mobilePredictionReviewBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 4,
+    },
+    mobilePredictionMessage: {
+      color: colors.aqua,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 12,
+    },
+    mobilePredictionTradeButton: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      justifyContent: "center",
+      marginTop: 15,
+      minHeight: 52,
+      paddingHorizontal: 16,
+    },
+    mobilePredictionTradeButtonText: {
+      color: colors.onAccent,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    mobilePredictionTradeFootnote: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 13,
+      marginTop: 11,
+      textAlign: "center",
+    },
+    mobileTournamentMarkets: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.accentRgb, 0.18),
+      borderRadius: 20,
+      borderWidth: 1,
+      marginTop: 16,
+      overflow: "hidden",
+      padding: 14,
+    },
+    mobileTournamentMarketsHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 8,
+    },
+    mobileTournamentMarketsTitle: {
+      color: colors.bone,
+      fontSize: 18,
+      fontWeight: "900",
+      letterSpacing: -0.4,
+      marginTop: 3,
+    },
+    mobileTournamentMarketsBadge: {
+      backgroundColor: rgba(colors.accentRgb, 0.11),
+      borderRadius: 999,
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      overflow: "hidden",
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    mobileTournamentMarketRow: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.07),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 58,
+    },
+    mobileTournamentMarketCopy: { flex: 1 },
+    mobileTournamentMarketName: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    mobileTournamentMarketTrack: {
+      backgroundColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 999,
+      height: 3,
+      marginTop: 7,
+      overflow: "hidden",
+    },
+    mobileTournamentMarketFill: {
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      height: 3,
+    },
+    mobileTournamentMarketPriceBlock: {
+      alignItems: "flex-end",
+      minWidth: 48,
+    },
+    mobileTournamentMarketPrice: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    mobileTournamentMarketChange: {
+      color: colors.positive,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    mobileTournamentMarketChangeDown: { color: colors.danger },
+    mobileTournamentMarketArrow: { color: colors.muted, fontSize: 22 },
+    mobileTournamentMarketsFootnote: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 13,
+      marginTop: 10,
+    },
     proMobileMatchCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.09),
@@ -9264,10 +10396,37 @@ function createStyles(palette: Palette) {
       marginTop: 9,
     },
     proMobileMatchPrediction: {
-      color: colors.muted,
       flex: 1,
-      fontSize: 10,
+      gap: 4,
     },
+    proMobileMatchPredictionLabels: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    proMobileMatchPredictionValue: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    proMobileMatchPredictionCaption: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.5,
+    },
+    proMobileMatchPredictionTrack: {
+      backgroundColor: rgba(colors.warningRgb, 0.24),
+      borderRadius: 999,
+      height: 4,
+      overflow: "hidden",
+    },
+    proMobileMatchPredictionFill: {
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 999,
+      height: 4,
+    },
+    proMobileMatchOpenArrow: { color: colors.aqua, fontSize: 22 },
     proMobileFollowButton: {
       borderColor: colors.aqua,
       borderRadius: 999,
@@ -9812,6 +10971,89 @@ function createStyles(palette: Palette) {
       right: -130,
       top: -120,
       width: 240,
+    },
+    predictionWalletCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.accentRgb, 0.2),
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 12,
+      overflow: "hidden",
+      padding: 18,
+    },
+    predictionWalletHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    predictionWalletBalance: {
+      color: colors.bone,
+      fontSize: 46,
+      fontWeight: "900",
+      letterSpacing: -2.5,
+      marginTop: 5,
+    },
+    predictionWalletCoin: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderRadius: 18,
+      height: 52,
+      justifyContent: "center",
+      width: 52,
+    },
+    predictionWalletCoinText: {
+      color: colors.aqua,
+      fontSize: 26,
+      fontWeight: "900",
+    },
+    predictionWalletBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 17,
+      marginTop: 8,
+    },
+    predictionWalletFacts: {
+      borderTopColor: rgba(colors.overlayRgb, 0.08),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      justifyContent: "space-between",
+      marginTop: 16,
+      paddingTop: 14,
+    },
+    predictionWalletFactValue: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    predictionWalletFactLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.7,
+      marginTop: 2,
+    },
+    predictionWalletRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.06),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      padding: 12,
+    },
+    predictionWalletStatus: {
+      backgroundColor: rgba(colors.warningRgb, 0.12),
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+    },
+    predictionWalletStatusWon: {
+      backgroundColor: rgba(colors.positiveRgb, 0.14),
+    },
+    predictionWalletStatusText: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
     },
     walletInfoGrid: {
       flexDirection: "row",

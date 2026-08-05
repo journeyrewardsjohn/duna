@@ -5,10 +5,13 @@ import {
   ArrowUpRight,
   Building2,
   CircleDollarSign,
+  Coins,
+  LockKeyhole,
   Plus,
   ReceiptText,
   ShieldCheck,
   WalletCards,
+  TrendingUp,
 } from "lucide-react";
 import Link from "next/link";
 import { getServerCaller } from "@/lib/api";
@@ -17,16 +20,17 @@ export const metadata = { title: "Wallet" };
 
 export default async function WalletPage() {
   const caller = await getServerCaller();
-  const [wallet, organizationWallets] = await Promise.all([
+  const [wallet, organizationWallets, predictionWallet] = await Promise.all([
     caller.player.wallet(),
     caller.player.organizationWallets(),
+    caller.player.predictionWallet(),
   ]);
   return (
     <main className="standard-page wallet-page">
       <section className="page-heading-row">
         <div>
           <span className="page-eyebrow">Securely managed balance</span>
-          <h1>Money + club credits.</h1>
+          <h1>Money, club credits + predictions.</h1>
           <p>
             Keep cash, prize earnings, memberships, and each organization’s
             credits clear and separate.
@@ -91,6 +95,144 @@ export default async function WalletPage() {
             </div>
             <ArrowUpRight aria-hidden size={17} />
           </article>
+        </div>
+      </section>
+
+      <section className="dashboard-section prediction-wallet-section">
+        <div className="dashboard-section__heading">
+          <div>
+            <span className="page-eyebrow">Wisdom of the crowd</span>
+            <h2>Prediction credits</h2>
+          </div>
+          <p>
+            Free play credits with no cash value, purchase, transfer, prizes, or
+            redemption.
+          </p>
+        </div>
+        <div className="prediction-wallet-summary">
+          <article>
+            <span className="prediction-wallet-summary__icon">
+              <Coins aria-hidden size={24} />
+            </span>
+            <small>Available</small>
+            <Numeric>
+              {Math.floor(predictionWallet.availableCredits).toLocaleString(
+                "en-US",
+              )}
+            </Numeric>
+            <strong>prediction credits</strong>
+            <p>
+              Next monthly allocation:{" "}
+              {predictionWallet.nextMonthlyGrantCredits.toLocaleString("en-US")}{" "}
+              credits
+              {predictionWallet.membershipPlan !== "free"
+                ? " with Premium"
+                : ""}
+              .
+            </p>
+          </article>
+          <article>
+            <span className="prediction-wallet-summary__icon">
+              <TrendingUp aria-hidden size={24} />
+            </span>
+            <small>Positions</small>
+            <Numeric>{predictionWallet.positions.length}</Numeric>
+            <strong>open or settled</strong>
+            <p>
+              {predictionWallet.openOrders.length} unmatched or partially
+              matched order{predictionWallet.openOrders.length === 1 ? "" : "s"}
+              .
+            </p>
+          </article>
+          <article className="prediction-wallet-summary__rules">
+            <span className="prediction-wallet-summary__icon">
+              <LockKeyhole aria-hidden size={24} />
+            </span>
+            <small>Immutable ledger</small>
+            <strong>Positions cannot be changed.</strong>
+            <p>
+              Every allocation, match, refund, and settlement remains in a
+              separate prediction-credit ledger.
+            </p>
+          </article>
+        </div>
+
+        <div className="prediction-wallet-positions">
+          <section>
+            <header>
+              <h3>Your positions</h3>
+              <Badge>{predictionWallet.positions.length}</Badge>
+            </header>
+            {predictionWallet.positions.length ? (
+              predictionWallet.positions.map((position) => (
+                <article key={position.id}>
+                  <div>
+                    <small>
+                      {position.status === "open"
+                        ? "Open position"
+                        : "Settled position"}
+                    </small>
+                    <strong>{position.title}</strong>
+                    <span>{position.selectedLabel}</span>
+                  </div>
+                  <div>
+                    <Numeric>
+                      {position.costCredits.toLocaleString("en-US", {
+                        maximumFractionDigits: 1,
+                      })}
+                    </Numeric>
+                    <small>credits allocated</small>
+                  </div>
+                  <Badge
+                    tone={
+                      position.status === "won"
+                        ? "positive"
+                        : position.status === "lost"
+                          ? "neutral"
+                          : "warning"
+                    }
+                  >
+                    {position.status}
+                  </Badge>
+                </article>
+              ))
+            ) : (
+              <p className="profile-empty">
+                Your first matched prediction will appear here.
+              </p>
+            )}
+          </section>
+          <section>
+            <header>
+              <h3>Open order book</h3>
+              <Badge>{predictionWallet.openOrders.length}</Badge>
+            </header>
+            {predictionWallet.openOrders.length ? (
+              predictionWallet.openOrders.map((order) => (
+                <article key={order.id}>
+                  <div>
+                    <small>{order.status.replace("-", " ")}</small>
+                    <strong>{order.title}</strong>
+                    <span>
+                      {order.selectedLabel} ·{" "}
+                      {(order.limitPriceBps / 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <div>
+                    <Numeric>
+                      {order.reservedCredits.toLocaleString("en-US", {
+                        maximumFractionDigits: 1,
+                      })}
+                    </Numeric>
+                    <small>credits reserved</small>
+                  </div>
+                  <Badge tone="warning">Open</Badge>
+                </article>
+              ))
+            ) : (
+              <p className="profile-empty">No unmatched orders.</p>
+            )}
+          </section>
         </div>
       </section>
 

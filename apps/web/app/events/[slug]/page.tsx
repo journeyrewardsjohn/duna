@@ -29,6 +29,7 @@ import { SiteHeader } from "@/components/site-header";
 import { ProEventDetail } from "@/components/pro-event-detail";
 import { MarkdownContent } from "@/components/markdown-content";
 import { PickupEventActions } from "@/components/pickup-event-actions";
+import { TournamentPredictionMarkets } from "@/components/prediction-market";
 import { WeatherForecastCard } from "@/components/weather-forecast";
 import { getServerCaller } from "@/lib/api";
 import {
@@ -131,7 +132,31 @@ export default async function EventPage({
     caller.public.eventBySlug({ slug }).catch(() => undefined),
     caller.public.proEvent({ slug }).catch(() => undefined),
   ]);
-  if (!event && proEvent) return <ProEventDetail event={proEvent} />;
+  if (!event && proEvent) {
+    const marketMatches = proEvent.matches.slice(0, 40);
+    const [eventMarkets, predictionWallet, matchMarkets] = await Promise.all([
+      caller.public
+        .proEventPredictionMarkets({ eventSlug: slug })
+        .catch(() => []),
+      caller.player.predictionWallet().catch(() => undefined),
+      caller.public
+        .proMatchPredictionMarkets({
+          matches: marketMatches.map((match) => ({
+            eventSlug: slug,
+            matchId: match.id,
+          })),
+        })
+        .catch(() => ({})),
+    ]);
+    return (
+      <ProEventDetail
+        event={proEvent}
+        eventMarkets={eventMarkets}
+        matchMarkets={matchMarkets}
+        predictionWallet={predictionWallet}
+      />
+    );
+  }
   if (!event) notFound();
   const pickupManagement =
     event.kind === "pickup"
@@ -139,9 +164,13 @@ export default async function EventPage({
           .pickupManagement({ pickupSessionId: event.id })
           .catch(() => undefined)
       : undefined;
-  const videos = await caller.public
-    .videos({ eventId: event.id })
-    .catch(() => []);
+  const [videos, eventPredictionData, predictionWallet] = await Promise.all([
+    caller.public.videos({ eventId: event.id }).catch(() => []),
+    caller.public
+      .eventPredictionMarkets({ eventSlug: event.slug })
+      .catch(() => undefined),
+    caller.player.predictionWallet().catch(() => undefined),
+  ]);
 
   const cover = event.media?.[0];
   const fallbackMedia = defaultEventMedia(event.kind, event.id);
@@ -274,6 +303,19 @@ export default async function EventPage({
           title="Forecast at first serve"
         />
       </section>
+
+      {eventPredictionData && eventPredictionData.markets.length > 0 && (
+        <div className="event-public__prediction">
+          <TournamentPredictionMarkets
+            entries={eventPredictionData.entries}
+            eventSlug={event.slug}
+            markets={eventPredictionData.markets}
+            returnTo={`/events/${event.slug}`}
+            targetKind="event-team"
+            wallet={predictionWallet}
+          />
+        </div>
+      )}
 
       {videos.length > 0 && (
         <div className="event-public__video">

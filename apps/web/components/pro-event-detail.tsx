@@ -1,4 +1,8 @@
-import type { PublicProEvent } from "@duna/api";
+import type {
+  PredictionMarketView,
+  PredictionWallet,
+  PublicProEvent,
+} from "@duna/api";
 import { googleMapsSearchUrl } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
@@ -6,7 +10,6 @@ import {
   ArrowLeft,
   ArrowRight,
   CalendarDays,
-  Clock3,
   ExternalLink,
   MapPin,
   Radio,
@@ -18,10 +21,7 @@ import {
   Video,
 } from "lucide-react";
 import Link from "next/link";
-import {
-  ProEventWinnerPicker,
-  ProMatchCommunityPicker,
-} from "@/components/pro-prediction-picker";
+import { TournamentPredictionMarkets } from "@/components/prediction-market";
 import { ProfessionalMatchCard } from "@/components/professional-match-card";
 import { ProEventVenueCard } from "@/components/pro-event-venue-card";
 import { SiteFooter } from "@/components/site-footer";
@@ -276,7 +276,17 @@ function AvpOverallStandings({
   );
 }
 
-export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
+export function ProEventDetail({
+  event,
+  eventMarkets = [],
+  matchMarkets = {},
+  predictionWallet,
+}: {
+  readonly event: PublicProEvent;
+  readonly eventMarkets?: readonly PredictionMarketView[];
+  readonly matchMarkets?: Readonly<Record<string, PredictionMarketView>>;
+  readonly predictionWallet?: PredictionWallet;
+}) {
   const completedMatchCount = event.completedMatchCount;
   const topMatches = event.matches
     .filter(
@@ -916,8 +926,14 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
           </section>
         )}
 
-        {event.winnerPrediction.entries.length > 0 && (
-          <ProEventWinnerPicker event={event} />
+        {eventMarkets.length > 0 && (
+          <TournamentPredictionMarkets
+            entries={event.winnerPrediction.entries}
+            eventSlug={event.slug}
+            markets={eventMarkets}
+            returnTo={`/events/${event.slug}`}
+            wallet={predictionWallet}
+          />
         )}
 
         {topMatches.length > 0 && (
@@ -933,56 +949,22 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
             </header>
             <div className="pro-top-matches__grid">
               {topMatches.map((match) => (
-                <article
-                  className={match.status === "live" ? "is-live" : undefined}
+                <ProfessionalMatchCard
+                  className="pro-top-matches__card"
+                  context={match.court ?? event.name}
+                  href={match.canonicalPath}
                   key={match.id}
-                >
-                  <header>
-                    <Badge
-                      tone={match.status === "live" ? "danger" : "neutral"}
-                    >
-                      {match.status === "live" ? (
-                        <>
-                          <Radio aria-hidden size={11} /> Live
-                        </>
-                      ) : (
-                        "Upcoming"
-                      )}
-                    </Badge>
-                    <span>{match.roundLabel}</span>
-                    <time dateTime={match.scheduledAt ?? match.playedAt}>
-                      <Clock3 aria-hidden size={13} />
-                      {match.time ?? "Time pending"}
-                    </time>
-                  </header>
-                  <Link
-                    className="pro-top-matches__matchup"
-                    href={match.canonicalPath}
-                  >
-                    <TeamName compact team={match.teamA} />
-                    <span>vs</span>
-                    <TeamName compact team={match.teamB} />
-                  </Link>
-                  <div className="pro-top-matches__model">
-                    <small>Duna forecast</small>
-                    <div className="pro-prediction-meter">
-                      <span style={{ width: `${match.prediction.teamA}%` }} />
-                      <strong>{match.prediction.teamA.toFixed(0)}%</strong>
-                      <strong>{match.prediction.teamB.toFixed(0)}%</strong>
-                    </div>
-                  </div>
-                  <ProMatchCommunityPicker
-                    compact
-                    eventSlug={event.slug}
-                    match={match}
-                  />
-                  <Link
-                    className="pro-top-matches__open"
-                    href={match.canonicalPath}
-                  >
-                    Open match center <ArrowRight aria-hidden size={14} />
-                  </Link>
-                </article>
+                  playedAt={match.playedAt}
+                  predictionMarket={matchMarkets[match.id]}
+                  roundLabel={match.roundLabel}
+                  sets={match.sets}
+                  source={event.source}
+                  status={match.status}
+                  teamA={match.teamA}
+                  teamB={match.teamB}
+                  timeLabel={match.time}
+                  winnerSide={match.winnerSide}
+                />
               ))}
             </div>
           </section>
@@ -1017,6 +999,7 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
                       href={match.canonicalPath}
                       key={match.id}
                       playedAt={match.playedAt}
+                      predictionMarket={matchMarkets[match.id]}
                       roundLabel={match.roundLabel}
                       sets={match.sets}
                       source={event.source}

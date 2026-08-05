@@ -12,6 +12,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
+import { PredictionMarketDetail } from "@/components/prediction-market";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
@@ -116,6 +117,11 @@ export default async function PublicMatchPage({
   const { matchId } = await params;
   const { match, videos } = await loadMatch(matchId);
   if (!match) notFound();
+  const caller = await getServerCaller();
+  const [market, predictionWallet] = await Promise.all([
+    caller.public.matchPredictionMarket({ matchId }).catch(() => undefined),
+    caller.player.predictionWallet().catch(() => undefined),
+  ]);
   const teamA = teamLabel(match.teamA, true);
   const teamB = teamLabel(match.teamB, true);
   const sourceUrl = publicSourceUrl(match.sourceUrl);
@@ -243,6 +249,15 @@ export default async function PublicMatchPage({
             </article>
           )}
         </section>
+
+        {market && (
+          <PredictionMarketDetail
+            market={market}
+            returnTo={`/matches/${matchId}`}
+            target={{ kind: "match", matchId }}
+            wallet={predictionWallet}
+          />
+        )}
 
         <section className="match-detail__players">
           {(

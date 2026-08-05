@@ -590,6 +590,128 @@ export const playerWalletSchema = z.object({
   taxFormStatus: z.enum(["not-required", "pending", "ready"]),
 });
 
+export const predictionMarketSchema = z.object({
+  id: z.string().uuid(),
+  subjectType: z.string(),
+  subjectId: z.string(),
+  groupKey: z.string().optional(),
+  title: z.string(),
+  yesLabel: z.string(),
+  noLabel: z.string(),
+  status: z.enum(["open", "locked", "settled", "void"]),
+  yesPriceBps: z.number().int().min(0).max(10_000),
+  noPriceBps: z.number().int().min(0).max(10_000),
+  lastYesPriceBps: z.number().int().min(0).max(10_000),
+  bestYesBidBps: z.number().int().min(100).max(9_900).optional(),
+  yesAskBps: z.number().int().min(100).max(9_900).optional(),
+  volumeCredits: z.number().nonnegative(),
+  participantCount: z.number().int().nonnegative(),
+  locksAt: z.iso.datetime().optional(),
+  resolvedSide: z.enum(["yes", "no"]).optional(),
+  history: z
+    .array(
+      z.object({
+        recordedAt: z.iso.datetime(),
+        yesPriceBps: z.number().int().min(0).max(10_000),
+        volumeCredits: z.number().nonnegative(),
+        source: z.enum(["model", "trade", "settlement"]),
+      }),
+    )
+    .readonly(),
+  viewer: z.object({
+    authenticated: z.boolean(),
+    positions: z
+      .array(
+        z.object({
+          id: z.string().uuid(),
+          side: z.enum(["yes", "no"]),
+          shares: z.number().nonnegative(),
+          costCredits: z.number().nonnegative(),
+          payoutCredits: z.number().nonnegative(),
+          status: z.string(),
+        }),
+      )
+      .readonly(),
+    orders: z
+      .array(
+        z.object({
+          id: z.string().uuid(),
+          side: z.enum(["yes", "no"]),
+          limitPriceBps: z.number().int().min(100).max(9_900),
+          allocatedCredits: z.number().nonnegative(),
+          status: z.string(),
+          createdAt: z.iso.datetime(),
+        }),
+      )
+      .readonly(),
+  }),
+});
+
+export const predictionWalletSchema = z.object({
+  availableCredits: z.number().nonnegative(),
+  lifetimeGrantedCredits: z.number().nonnegative(),
+  nextMonthlyGrantCredits: z.number().int().positive(),
+  membershipPlan: z.enum(["free", "premium", "premium-plus"]),
+  positions: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        marketId: z.string().uuid(),
+        title: z.string(),
+        selectedLabel: z.string(),
+        side: z.enum(["yes", "no"]),
+        shares: z.number().nonnegative(),
+        costCredits: z.number().nonnegative(),
+        payoutCredits: z.number().nonnegative(),
+        currentPriceBps: z.number().int().min(0).max(10_000),
+        status: z.enum(["open", "won", "lost", "void"]),
+        subjectType: z.string(),
+        subjectId: z.string(),
+        updatedAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
+  openOrders: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        marketId: z.string().uuid(),
+        title: z.string(),
+        selectedLabel: z.string(),
+        side: z.enum(["yes", "no"]),
+        limitPriceBps: z.number().int().min(100).max(9_900),
+        reservedCredits: z.number().nonnegative(),
+        filledCredits: z.number().nonnegative(),
+        status: z.enum(["open", "partially-filled"]),
+        createdAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
+  activity: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        deltaCredits: z.number(),
+        kind: z.string(),
+        note: z.string(),
+        occurredAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
+  rules: z.object({
+    initialGrantCredits: z.literal(1_000),
+    memberMonthlyGrantCredits: z.literal(100),
+    premiumMonthlyGrantCredits: z.literal(1_000),
+    purchasable: z.literal(false),
+    transferable: z.literal(false),
+    redeemable: z.literal(false),
+    cashValue: z.literal(false),
+    prizes: z.literal(false),
+    positionsImmutable: z.literal(true),
+    contractPayoutCredits: z.literal(1),
+  }),
+});
+
 export const videoSourceSchema = z.enum(["live", "upload"]);
 export const videoCategorySchema = z.enum([
   "practice",

@@ -4281,6 +4281,328 @@ export const professionalMatchPredictionHistory = pgTable(
   ],
 );
 
+// Prediction credits are a closed, non-cash unit. They cannot be purchased,
+// transferred, redeemed, or mixed with money and organization-credit ledgers.
+export const predictionCreditAccounts = pgTable(
+  "prediction_credit_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" })
+      .unique(),
+    cachedAvailableMicros: bigint("cached_available_micros", {
+      mode: "number",
+    })
+      .notNull()
+      .default(0),
+    lifetimeGrantedMicros: bigint("lifetime_granted_micros", {
+      mode: "number",
+    })
+      .notNull()
+      .default(0),
+    status: varchar("status", { length: 24 }).notNull().default("active"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    check(
+      "prediction_credit_account_balance_valid",
+      sql`${table.cachedAvailableMicros} >= 0 AND ${table.lifetimeGrantedMicros} >= 0`,
+    ),
+    check(
+      "prediction_credit_account_status_valid",
+      sql`${table.status} IN ('active', 'frozen', 'closed')`,
+    ),
+  ],
+);
+
+export const predictionMarkets = pgTable(
+  "prediction_markets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    subjectType: varchar("subject_type", { length: 32 }).notNull(),
+    subjectId: text("subject_id").notNull(),
+    groupKey: text("group_key"),
+    title: text("title").notNull(),
+    yesLabel: text("yes_label").notNull(),
+    noLabel: text("no_label").notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("open"),
+    initialYesPriceBps: integer("initial_yes_price_bps")
+      .notNull()
+      .default(5_000),
+    lastYesPriceBps: integer("last_yes_price_bps").notNull().default(5_000),
+    volumeMicros: bigint("volume_micros", { mode: "number" })
+      .notNull()
+      .default(0),
+    opensAt: timestamp("opens_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    locksAt: timestamp("locks_at", { withTimezone: true, mode: "date" }),
+    resolvedSide: varchar("resolved_side", { length: 3 }),
+    settledAt: timestamp("settled_at", { withTimezone: true, mode: "date" }),
+    sourceSnapshot: jsonb("source_snapshot")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("prediction_market_subject_unique").on(
+      table.subjectType,
+      table.subjectId,
+    ),
+    index("prediction_market_group_idx").on(table.groupKey, table.status),
+    index("prediction_market_status_lock_idx").on(table.status, table.locksAt),
+    check(
+      "prediction_market_status_valid",
+      sql`${table.status} IN ('open', 'locked', 'settled', 'void')`,
+    ),
+    check(
+      "prediction_market_prices_valid",
+      sql`${table.initialYesPriceBps} BETWEEN 100 AND 9900 AND ${table.lastYesPriceBps} BETWEEN 0 AND 10000`,
+    ),
+    check(
+      "prediction_market_resolution_valid",
+      sql`${table.resolvedSide} IS NULL OR ${table.resolvedSide} IN ('yes', 'no')`,
+    ),
+  ],
+);
+
+export const predictionOrders = pgTable(
+  "prediction_orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    marketId: uuid("market_id")
+      .notNull()
+      .references(() => predictionMarkets.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => predictionCreditAccounts.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    side: varchar("side", { length: 3 }).notNull(),
+    limitPriceBps: integer("limit_price_bps").notNull(),
+    sharesMicros: bigint("shares_micros", { mode: "number" }).notNull(),
+    remainingSharesMicros: bigint("remaining_shares_micros", {
+      mode: "number",
+    }).notNull(),
+    reservedMicros: bigint("reserved_micros", { mode: "number" }).notNull(),
+    spentMicros: bigint("spent_micros", { mode: "number" })
+      .notNull()
+      .default(0),
+    status: varchar("status", { length: 24 }).notNull().default("open"),
+    filledAt: timestamp("filled_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("prediction_order_book_idx").on(
+      table.marketId,
+      table.side,
+      table.status,
+      table.limitPriceBps,
+      table.createdAt,
+    ),
+    index("prediction_order_person_idx").on(table.personId, table.createdAt),
+    check("prediction_order_side_valid", sql`${table.side} IN ('yes', 'no')`),
+    check(
+      "prediction_order_price_valid",
+      sql`${table.limitPriceBps} BETWEEN 100 AND 9900`,
+    ),
+    check(
+      "prediction_order_amounts_valid",
+      sql`${table.sharesMicros} > 0 AND ${table.remainingSharesMicros} >= 0 AND ${table.remainingSharesMicros} <= ${table.sharesMicros} AND ${table.reservedMicros} >= 0 AND ${table.spentMicros} >= 0`,
+    ),
+    check(
+      "prediction_order_status_valid",
+      sql`${table.status} IN ('open', 'partially-filled', 'filled', 'settled', 'void')`,
+    ),
+  ],
+);
+
+export const predictionTrades = pgTable(
+  "prediction_trades",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    marketId: uuid("market_id")
+      .notNull()
+      .references(() => predictionMarkets.id, { onDelete: "cascade" }),
+    yesOrderId: uuid("yes_order_id")
+      .notNull()
+      .references(() => predictionOrders.id),
+    noOrderId: uuid("no_order_id")
+      .notNull()
+      .references(() => predictionOrders.id),
+    makerOrderId: uuid("maker_order_id")
+      .notNull()
+      .references(() => predictionOrders.id),
+    sharesMicros: bigint("shares_micros", { mode: "number" }).notNull(),
+    yesPriceBps: integer("yes_price_bps").notNull(),
+    yesCostMicros: bigint("yes_cost_micros", { mode: "number" }).notNull(),
+    noCostMicros: bigint("no_cost_micros", { mode: "number" }).notNull(),
+    executedAt: timestamp("executed_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    createdAt,
+  },
+  (table) => [
+    index("prediction_trade_market_time_idx").on(
+      table.marketId,
+      table.executedAt,
+    ),
+    check("prediction_trade_shares_valid", sql`${table.sharesMicros} > 0`),
+    check(
+      "prediction_trade_price_valid",
+      sql`${table.yesPriceBps} BETWEEN 100 AND 9900`,
+    ),
+    check(
+      "prediction_trade_cost_valid",
+      sql`${table.yesCostMicros} >= 0 AND ${table.noCostMicros} >= 0 AND ${table.yesCostMicros} + ${table.noCostMicros} = ${table.sharesMicros}`,
+    ),
+  ],
+);
+
+export const predictionPositions = pgTable(
+  "prediction_positions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    marketId: uuid("market_id")
+      .notNull()
+      .references(() => predictionMarkets.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => predictionCreditAccounts.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    side: varchar("side", { length: 3 }).notNull(),
+    sharesMicros: bigint("shares_micros", { mode: "number" })
+      .notNull()
+      .default(0),
+    costMicros: bigint("cost_micros", { mode: "number" }).notNull().default(0),
+    payoutMicros: bigint("payout_micros", { mode: "number" })
+      .notNull()
+      .default(0),
+    status: varchar("status", { length: 24 }).notNull().default("open"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("prediction_position_person_side_unique").on(
+      table.marketId,
+      table.personId,
+      table.side,
+    ),
+    index("prediction_position_person_status_idx").on(
+      table.personId,
+      table.status,
+    ),
+    check(
+      "prediction_position_side_valid",
+      sql`${table.side} IN ('yes', 'no')`,
+    ),
+    check(
+      "prediction_position_amounts_valid",
+      sql`${table.sharesMicros} >= 0 AND ${table.costMicros} >= 0 AND ${table.payoutMicros} >= 0`,
+    ),
+    check(
+      "prediction_position_status_valid",
+      sql`${table.status} IN ('open', 'won', 'lost', 'void')`,
+    ),
+  ],
+);
+
+export const predictionPriceSnapshots = pgTable(
+  "prediction_price_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    marketId: uuid("market_id")
+      .notNull()
+      .references(() => predictionMarkets.id, { onDelete: "cascade" }),
+    yesPriceBps: integer("yes_price_bps").notNull(),
+    source: varchar("source", { length: 24 }).notNull(),
+    volumeMicros: bigint("volume_micros", { mode: "number" })
+      .notNull()
+      .default(0),
+    recordedAt: timestamp("recorded_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    createdAt,
+  },
+  (table) => [
+    index("prediction_price_market_time_idx").on(
+      table.marketId,
+      table.recordedAt,
+    ),
+    check(
+      "prediction_price_snapshot_valid",
+      sql`${table.yesPriceBps} BETWEEN 0 AND 10000 AND ${table.volumeMicros} >= 0`,
+    ),
+    check(
+      "prediction_price_snapshot_source_valid",
+      sql`${table.source} IN ('model', 'trade', 'settlement')`,
+    ),
+  ],
+);
+
+export const predictionCreditLedger = pgTable(
+  "prediction_credit_ledger",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => predictionCreditAccounts.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    deltaMicros: bigint("delta_micros", { mode: "number" }).notNull(),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    marketId: uuid("market_id").references(() => predictionMarkets.id),
+    orderId: uuid("order_id").references(() => predictionOrders.id),
+    positionId: uuid("position_id").references(() => predictionPositions.id),
+    periodKey: varchar("period_key", { length: 16 }),
+    idempotencyKey: varchar("idempotency_key", { length: 160 })
+      .notNull()
+      .unique(),
+    note: text("note").notNull(),
+    metadata: jsonb("metadata")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    occurredAt: timestamp("occurred_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    createdAt,
+  },
+  (table) => [
+    index("prediction_credit_ledger_account_time_idx").on(
+      table.accountId,
+      table.occurredAt,
+    ),
+    index("prediction_credit_ledger_market_idx").on(table.marketId),
+    check(
+      "prediction_credit_ledger_delta_valid",
+      sql`${table.deltaMicros} <> 0`,
+    ),
+    check(
+      "prediction_credit_ledger_kind_valid",
+      sql`${table.kind} IN ('initial-grant', 'monthly-grant', 'order-reserve', 'price-improvement-refund', 'settlement', 'void-refund', 'admin-adjustment')`,
+    ),
+  ],
+);
+
 export const worldRankings = pgTable(
   "world_rankings",
   {

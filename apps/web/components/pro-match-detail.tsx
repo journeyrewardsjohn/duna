@@ -1,4 +1,9 @@
-import type { PublicProMatchDetail, VideoSummary } from "@duna/api";
+import type {
+  PredictionMarketView,
+  PredictionWallet,
+  PublicProMatchDetail,
+  VideoSummary,
+} from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowLeft,
@@ -15,7 +20,7 @@ import {
 import Link from "next/link";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
 import { ProfessionalMatchCard } from "@/components/professional-match-card";
-import { ProMatchCommunityPicker } from "@/components/pro-prediction-picker";
+import { PredictionMarketDetail } from "@/components/prediction-market";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { professionalMatchJsonLd, serializeJsonLd } from "@/lib/pro-seo";
@@ -81,9 +86,13 @@ function TeamCard({
 
 export function ProMatchDetail({
   detail,
+  predictionMarket,
+  predictionWallet,
   videos = [],
 }: {
   readonly detail: PublicProMatchDetail;
+  readonly predictionMarket?: PredictionMarketView;
+  readonly predictionWallet?: PredictionWallet;
   readonly videos?: readonly VideoSummary[];
 }) {
   const { event, match } = detail;
@@ -233,8 +242,20 @@ export function ProMatchDetail({
                   ? "Probability is derived from the latest mapped Duna Sand Ratings. It is a forecast, not a guarantee."
                   : "Both teams currently have an even prior because mapped rating data is incomplete."}
           </p>
-          <ProMatchCommunityPicker eventSlug={event.slug} match={match} />
         </section>
+
+        {predictionMarket && (
+          <PredictionMarketDetail
+            market={predictionMarket}
+            returnTo={match.canonicalPath}
+            target={{
+              kind: "pro-match",
+              eventSlug: event.slug,
+              matchId: match.id,
+            }}
+            wallet={predictionWallet}
+          />
+        )}
 
         <section className="pro-match-panel pro-head-to-head">
           <header>

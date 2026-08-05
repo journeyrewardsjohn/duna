@@ -81,10 +81,24 @@ export default async function ProfessionalMatchPage({
 }) {
   const { slug, matchId } = await params;
   const caller = await getServerCaller();
-  const [detail, videos] = await Promise.all([
-    caller.public.proMatch({ eventSlug: slug, matchId }).catch(() => undefined),
-    caller.public.videos({ matchId }).catch(() => []),
-  ]);
+  const [detail, videos, predictionMarket, predictionWallet] =
+    await Promise.all([
+      caller.public
+        .proMatch({ eventSlug: slug, matchId })
+        .catch(() => undefined),
+      caller.public.videos({ matchId }).catch(() => []),
+      caller.public
+        .proMatchPredictionMarket({ eventSlug: slug, matchId })
+        .catch(() => undefined),
+      caller.player.predictionWallet().catch(() => undefined),
+    ]);
   if (!detail) notFound();
-  return <ProMatchDetail detail={detail} videos={videos} />;
+  return (
+    <ProMatchDetail
+      detail={detail}
+      predictionMarket={predictionMarket}
+      predictionWallet={predictionWallet}
+      videos={videos}
+    />
+  );
 }

@@ -165,6 +165,7 @@ export function CalendarDatePicker({
   maxDate,
   minDate,
   onChange,
+  selectionActive = true,
   value,
 }: {
   readonly calendarTitle?: string;
@@ -173,6 +174,7 @@ export function CalendarDatePicker({
   readonly maxDate?: string;
   readonly minDate?: string;
   readonly onChange: (value: string) => void;
+  readonly selectionActive?: boolean;
   readonly value: string;
 }) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -312,7 +314,9 @@ export function CalendarDatePicker({
             const dateMarkers = markersByDate.get(date) ?? [];
             return (
               <button
-                aria-current={date === value ? "date" : undefined}
+                aria-current={
+                  selectionActive && date === value ? "date" : undefined
+                }
                 aria-label={`${fullDateLabel(date)}${dateMarkers.length ? `, ${dateMarkers.length} scheduled` : ""}`}
                 className="calendar-picker__pill"
                 key={date}
