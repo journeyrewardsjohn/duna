@@ -2777,6 +2777,81 @@ export const sessionAttendance = pgTable(
   ],
 );
 
+// Arrival signals deliberately retain only short-lived derived travel data.
+// Raw device coordinates are used to calculate distance/ETA, then discarded.
+export const sessionArrivalSignals = pgTable(
+  "session_arrival_signals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    registrationId: uuid("registration_id").references(() => registrations.id, {
+      onDelete: "cascade",
+    }),
+    role: varchar("role", { length: 16 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull(),
+    distanceMeters: integer("distance_meters").notNull(),
+    travelDurationSeconds: integer("travel_duration_seconds").notNull(),
+    leaveBy: timestamp("leave_by", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    routeSource: varchar("route_source", { length: 24 }).notNull(),
+    accuracyMeters: doublePrecision("accuracy_meters"),
+    consentedAt: timestamp("consented_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    observedAt: timestamp("observed_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("session_arrival_signal_session_person_unique").on(
+      table.sessionId,
+      table.personId,
+    ),
+    index("session_arrival_signal_session_expiry_idx").on(
+      table.sessionId,
+      table.expiresAt,
+    ),
+    index("session_arrival_signal_person_expiry_idx").on(
+      table.personId,
+      table.expiresAt,
+    ),
+    check(
+      "session_arrival_signal_role_valid",
+      sql`${table.role} IN ('player', 'coach')`,
+    ),
+    check(
+      "session_arrival_signal_status_valid",
+      sql`${table.status} IN ('on-time', 'leave-now', 'running-late', 'arrived')`,
+    ),
+    check(
+      "session_arrival_signal_distance_valid",
+      sql`${table.distanceMeters} >= 0 AND ${table.travelDurationSeconds} >= 0 AND (${table.accuracyMeters} IS NULL OR ${table.accuracyMeters} >= 0)`,
+    ),
+    check(
+      "session_arrival_signal_expiry_valid",
+      sql`${table.expiresAt} > ${table.observedAt}`,
+    ),
+  ],
+);
+
 export const sessionNotes = pgTable(
   "session_notes",
   {
@@ -6995,6 +7070,7 @@ export const liveActivitySubscriptions = pgTable(
       .references(() => people.id, { onDelete: "cascade" }),
     subjectType: varchar("subject_type", { length: 24 }).notNull(),
     subjectId: uuid("subject_id").notNull(),
+    app: varchar("app", { length: 16 }).notNull().default("player"),
     activityId: varchar("activity_id", { length: 128 }).notNull(),
     pushToken: text("push_token").notNull(),
     environment: varchar("environment", { length: 16 })
@@ -7023,8 +7099,9 @@ export const liveActivitySubscriptions = pgTable(
     index("live_activity_person_status_idx").on(table.personId, table.status),
     check(
       "live_activity_subject_type_valid",
-      sql`${table.subjectType} IN ('upcoming', 'match')`,
+      sql`${table.subjectType} IN ('upcoming', 'match', 'event', 'player', 'coach')`,
     ),
+    check("live_activity_app_valid", sql`${table.app} IN ('player', 'pro')`),
     check(
       "live_activity_environment_valid",
       sql`${table.environment} IN ('sandbox', 'production')`,

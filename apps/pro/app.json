@@ -16,10 +16,14 @@
       },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
+        "NSSupportsLiveActivities": true,
+        "NSSupportsLiveActivitiesFrequentUpdates": true,
         "NSCameraUsageDescription": "Duna Pro uses the camera to photograph products, scan check-ins, and support club operations.",
         "NSMicrophoneUsageDescription": "Duna Pro uses the microphone only when a coach records a LiveKit session note.",
         "NSPhotoLibraryUsageDescription": "Duna Pro uses selected photos for product and member media.",
-        "NSLocationWhenInUseUsageDescription": "Duna Pro uses location while connecting to secure in-person payment readers.",
+        "NSLocationWhenInUseUsageDescription": "Duna Pro uses location for secure in-person payment readers and, when you choose, a private session arrival reminder active only from 60 minutes before until 30 minutes after start time.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "After you choose a session arrival reminder, background location keeps the coach Lock Screen ETA current only during the private arrival window. Duna Pro stops it automatically 30 minutes after start.",
+        "UIBackgroundModes": ["location", "remote-notification"],
         "NSBluetoothAlwaysUsageDescription": "Duna Pro uses Bluetooth to connect to supported payment readers.",
         "NSBluetoothPeripheralUsageDescription": "Duna Pro uses Bluetooth to connect to supported payment readers.",
         "NSLocalNetworkUsageDescription": "Duna Pro uses the local network to connect to supported payment readers."
@@ -83,6 +87,16 @@
         }
       ],
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Duna Pro uses location for secure in-person payment readers and, when you choose, a private session arrival reminder active only from 60 minutes before until 30 minutes after start time.",
+          "locationAlwaysAndWhenInUsePermission": "After you choose a session arrival reminder, background location keeps the coach Lock Screen ETA current only during the private arrival window. Duna Pro stops it automatically 30 minutes after start.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/splash.png",
@@ -102,6 +116,16 @@
             "compileSdkVersion": 36,
             "targetSdkVersion": 35
           }
+        }
+      ],
+      [
+        "expo-widgets",
+        {
+          "bundleIdentifier": "com.duna.pro.widgets",
+          "groupIdentifier": "group.com.duna.pro",
+          "enablePushNotifications": true,
+          "frequentUpdates": true,
+          "widgets": []
         }
       ]
     ],

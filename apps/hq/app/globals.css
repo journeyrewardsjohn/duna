@@ -6743,6 +6743,183 @@ button {
   line-height: 1.35;
 }
 
+.event-live-arrivals {
+  background:
+    radial-gradient(circle at 92% 0%, rgb(95 185 229 / 22%), transparent 34%),
+    #10263d;
+  border: 1px solid rgb(134 201 239 / 18%);
+  border-radius: 24px;
+  color: #fff;
+  margin: 0 auto 1rem;
+  max-width: 1440px;
+  overflow: hidden;
+  padding: 1rem;
+}
+
+.event-live-arrivals > header {
+  align-items: center;
+  display: flex;
+  gap: 0.7rem;
+}
+
+.event-live-arrivals__pulse {
+  background: #77d89b;
+  border: 5px solid rgb(119 216 155 / 14%);
+  border-radius: 999px;
+  box-sizing: content-box;
+  height: 8px;
+  width: 8px;
+}
+
+.event-live-arrivals > header > span:nth-child(2) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.event-live-arrivals > header small {
+  color: #86c9ef;
+  font-size: 0.625rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.event-live-arrivals h2 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  letter-spacing: -0.04em;
+  margin: 0.15rem 0 0;
+}
+
+.event-live-arrivals__summary {
+  align-items: baseline;
+  color: #c8d6e2;
+  display: flex;
+  font-size: 0.65rem;
+  gap: 0.22rem;
+}
+
+.event-live-arrivals__summary strong {
+  color: #fff;
+  font-size: 0.82rem;
+}
+
+.event-live-arrivals__summary i {
+  color: #59758b;
+  font-style: normal;
+  margin: 0 0.2rem;
+}
+
+.event-live-arrivals__grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 0.85rem;
+}
+
+.event-live-arrivals__grid > article {
+  align-items: center;
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 15px;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  padding: 0.65rem;
+}
+
+.event-live-arrivals__grid > article[data-status="running-late"] {
+  border-color: rgb(235 112 91 / 34%);
+}
+
+.event-live-arrivals__grid > article[data-status="leave-now"] {
+  border-color: rgb(235 191 101 / 30%);
+}
+
+.event-live-arrivals__avatar {
+  align-items: center;
+  background: #294a65;
+  border-radius: 12px;
+  display: flex;
+  font-size: 0.625rem;
+  font-weight: 850;
+  height: 34px;
+  justify-content: center;
+  overflow: hidden;
+  width: 34px;
+}
+
+.event-live-arrivals__avatar img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.event-live-arrivals__grid > article > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.event-live-arrivals__grid > article > span:nth-child(2) strong {
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-live-arrivals__grid > article > span:nth-child(2) small {
+  color: #a9bdcc;
+  font-size: 0.625rem;
+  margin-top: 0.12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.event-live-arrivals__eta {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+}
+
+.event-live-arrivals__eta strong {
+  color: #86c9ef;
+  font-size: 0.72rem;
+}
+
+.event-live-arrivals__eta small {
+  color: #718ca0 !important;
+  font-size: 0.625rem !important;
+}
+
+.event-live-arrivals__empty {
+  background: rgb(255 255 255 / 5%);
+  border-radius: 15px;
+  color: #c8d6e2;
+  font-size: 0.65rem;
+  margin: 0.85rem 0 0;
+  padding: 0.85rem;
+}
+
+.event-live-arrivals > footer {
+  align-items: center;
+  color: #91a9ba;
+  display: flex;
+  font-size: 0.625rem;
+  gap: 0.35rem;
+  line-height: 1.45;
+  margin-top: 0.7rem;
+}
+
+.event-live-arrivals > footer svg {
+  color: #77d89b;
+  flex: 0 0 auto;
+}
+
 .member-profile-metrics article[data-tone="high"] {
   background: rgb(var(--warning-rgb) / 7%);
   border-color: rgb(var(--warning-rgb) / 16%);
@@ -8201,6 +8378,10 @@ button {
   .event-history-list__metric:nth-of-type(3) {
     display: none;
   }
+
+  .event-live-arrivals__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -8355,6 +8536,20 @@ button {
     border-radius: 18px;
     height: 64px;
     width: 64px;
+  }
+
+  .event-live-arrivals > header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .event-live-arrivals__summary {
+    flex-basis: 100%;
+    margin-left: 1.85rem;
+  }
+
+  .event-live-arrivals__grid {
+    grid-template-columns: 1fr;
   }
 
   .member-profile-hero__actions,

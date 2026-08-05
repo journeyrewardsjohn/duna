@@ -2067,6 +2067,36 @@ export const operatorEventAudienceSchema = z.object({
   size: z.number().int().nonnegative(),
 });
 
+export const sessionArrivalSignalSchema = z.object({
+  sessionId: z.string().uuid(),
+  personId: z.string().uuid(),
+  displayName: z.string(),
+  avatarUrl: z.string().optional(),
+  role: z.enum(["player", "coach"]),
+  status: z.enum(["on-time", "leave-now", "running-late", "arrived"]),
+  distanceMeters: z.number().int().nonnegative(),
+  travelDurationSeconds: z.number().int().nonnegative(),
+  leaveBy: z.iso.datetime(),
+  routeSource: z.enum(["google-routes", "distance-estimate"]),
+  accuracyMeters: z.number().nonnegative().optional(),
+  observedAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime(),
+});
+
+export const sessionArrivalBoardSchema = z.object({
+  sessionId: z.string().uuid(),
+  venueName: z.string().optional(),
+  startsAt: z.iso.datetime(),
+  expectedPlayers: z.number().int().nonnegative(),
+  sharingWindow: z.object({
+    opensAt: z.iso.datetime(),
+    closesAt: z.iso.datetime(),
+    active: z.boolean(),
+    phase: z.enum(["early", "active", "closed"]),
+  }),
+  signals: z.array(sessionArrivalSignalSchema).readonly(),
+});
+
 export const operatorMessageRecipientSchema = z.object({
   id: z.string().uuid(),
   displayName: z.string(),
@@ -2500,6 +2530,7 @@ export const operatorMemberProfileSchema = z.object({
 
 export const operatorSessionDetailSchema = z.object({
   session: operatorSessionSchema,
+  arrivalBoard: sessionArrivalBoardSchema,
   coaches: z
     .array(
       z.object({
