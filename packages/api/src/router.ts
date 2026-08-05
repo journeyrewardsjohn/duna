@@ -42,6 +42,7 @@ import {
   catalogOfferEligibilitySchema,
   consentRecordResultSchema,
   courtScheduleProposalSchema,
+  discoveryMapSchema,
   availabilityAlertResultSchema,
   courtAvailabilitySchema,
   courtBookingInviteSummarySchema,
@@ -117,6 +118,7 @@ import {
   visionTimelineEventSchema,
 } from "./contracts";
 import { loadPublicImportedMatchSummary } from "./database-repository";
+import { loadDiscoveryMap } from "./discovery-service";
 import {
   createOperatorTerminalConnectionToken,
   finalizeOperatorPaymentCollection,
@@ -1339,6 +1341,9 @@ const publicRouter = router({
   venues: publicProcedure
     .output(z.array(venueSummarySchema).readonly())
     .query(() => getRepository().public.venues()),
+  discoveryMap: publicProcedure
+    .output(discoveryMapSchema)
+    .query(() => loadDiscoveryMap()),
   courtBookingInventory: publicProcedure
     .input(z.object({ venueId: z.string().uuid() }))
     .output(courtBookingInventorySchema)

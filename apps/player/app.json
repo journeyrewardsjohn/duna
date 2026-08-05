@@ -35,7 +35,11 @@
         "backgroundColor": "#F7F3EA"
       },
       "package": "com.duna.player",
-      "permissions": ["ACCESS_COARSE_LOCATION", "READ_CONTACTS"]
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "READ_CONTACTS"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -45,7 +49,14 @@
       "./plugins/with-watch-platforms",
       "./plugins/with-ios-release-compatibility",
       "@bacons/apple-targets",
+      "@rnmapbox/maps",
       "expo-contacts",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Duna uses your location to show nearby courts, events, and coaches on the discovery map."
+        }
+      ],
       [
         "expo-widgets",
         {

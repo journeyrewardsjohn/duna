@@ -4017,6 +4017,8 @@ export async function loadPublicProCoverage(now = new Date()) {
         slug: professionalEventSlug(event),
         name: event.effective.name,
         location: event.effective.location,
+        ...(editorial.venueName ? { venueName: editorial.venueName } : {}),
+        ...(editorial.venue ? { venue: editorial.venue } : {}),
         category: event.effective.category,
         genderCategory: event.genderCategory,
         startsOn: event.effective.startsOn,

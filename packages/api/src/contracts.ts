@@ -2919,6 +2919,38 @@ export const publicCoachSchema = z.object({
     .readonly(),
 });
 
+export const discoveryEntityTypeSchema = z.enum([
+  "event",
+  "venue",
+  "coach",
+  "pro-tour",
+]);
+
+export const discoveryMapItemSchema = z.object({
+  id: z.string(),
+  entityType: discoveryEntityTypeSchema,
+  kind: z.string(),
+  title: z.string(),
+  subtitle: z.string(),
+  href: z.string(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  organizationId: z.string().uuid().optional(),
+  startsAt: z.iso.datetime().optional(),
+  endsAt: z.iso.datetime().optional(),
+  imageUrl: z.string().optional(),
+  live: z.boolean().optional(),
+  openNow: z.boolean().optional(),
+  courtCount: z.number().int().nonnegative().optional(),
+  price: moneySchema.optional(),
+  tags: z.array(z.string()).readonly(),
+});
+
+export const discoveryMapSchema = z.object({
+  generatedAt: z.iso.datetime(),
+  items: z.array(discoveryMapItemSchema).readonly(),
+});
+
 export const organizationWalletSummarySchema = z.object({
   organizationId: z.string().uuid(),
   organizationSlug: z.string(),
@@ -3175,6 +3207,9 @@ export type PublicOrganizationStorefront = z.infer<
   typeof publicOrganizationStorefrontSchema
 >;
 export type PublicCoach = z.infer<typeof publicCoachSchema>;
+export type DiscoveryEntityType = z.infer<typeof discoveryEntityTypeSchema>;
+export type DiscoveryMapItem = z.infer<typeof discoveryMapItemSchema>;
+export type DiscoveryMap = z.infer<typeof discoveryMapSchema>;
 export type OperatorMutationResult = z.infer<
   typeof operatorMutationResultSchema
 >;

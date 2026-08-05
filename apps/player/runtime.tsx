@@ -51,6 +51,9 @@ type PublicProCoverage = Awaited<
 type PublicCoaches = Awaited<
   ReturnType<DunaApiClient["public"]["coaches"]["query"]>
 >;
+type PublicDiscoveryMap = Awaited<
+  ReturnType<DunaApiClient["public"]["discoveryMap"]["query"]>
+>;
 type OrganizationWallets = Awaited<
   ReturnType<DunaApiClient["player"]["organizationWallets"]["query"]>
 >;
@@ -68,6 +71,7 @@ export interface PlayerRuntime {
   readonly venues?: PublicVenues;
   readonly proCoverage?: PublicProCoverage;
   readonly coaches?: PublicCoaches;
+  readonly discoveryMap?: PublicDiscoveryMap;
   readonly organizationWallets?: OrganizationWallets;
   readonly refresh: () => Promise<void>;
   readonly signOut?: () => Promise<void>;
@@ -246,6 +250,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   const [venues, setVenues] = useState<PublicVenues>();
   const [proCoverage, setProCoverage] = useState<PublicProCoverage>();
   const [coaches, setCoaches] = useState<PublicCoaches>();
+  const [discoveryMap, setDiscoveryMap] = useState<PublicDiscoveryMap>();
   const [organizationWallets, setOrganizationWallets] =
     useState<OrganizationWallets>();
   const [error, setError] = useState<string>();
@@ -265,6 +270,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         nextVenues,
         nextProCoverage,
         nextCoaches,
+        nextDiscoveryMap,
         nextOrganizationWallets,
       ] = await Promise.all([
         client.player.dashboard.query(),
@@ -276,6 +282,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         client.public.venues.query().catch(() => []),
         client.public.proCoverage.query().catch(() => undefined),
         client.public.coaches.query().catch(() => []),
+        client.public.discoveryMap.query().catch(() => undefined),
         client.player.organizationWallets.query().catch(() => []),
       ]);
       setDashboard(nextDashboard);
@@ -287,6 +294,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       setVenues(nextVenues);
       setProCoverage(nextProCoverage);
       setCoaches(nextCoaches);
+      setDiscoveryMap(nextDiscoveryMap);
       setOrganizationWallets(nextOrganizationWallets);
     } catch (reason) {
       setError(
@@ -363,6 +371,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         venues,
         proCoverage,
         coaches,
+        discoveryMap,
         organizationWallets,
         refresh,
         signOut,
@@ -376,12 +385,19 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
 function PreviewRuntime({ children }: { readonly children: ReactNode }) {
   const publicClient = useMemo(() => createDunaApiClient(async () => null), []);
   const [proCoverage, setProCoverage] = useState<PublicProCoverage>();
+  const [discoveryMap, setDiscoveryMap] = useState<PublicDiscoveryMap>();
   useEffect(() => {
     let active = true;
     void publicClient.public.proCoverage
       .query()
       .then((coverage) => {
         if (active) setProCoverage(coverage);
+      })
+      .catch(() => undefined);
+    void publicClient.public.discoveryMap
+      .query()
+      .then((map) => {
+        if (active) setDiscoveryMap(map);
       })
       .catch(() => undefined);
     return () => {
@@ -393,9 +409,10 @@ function PreviewRuntime({ children }: { readonly children: ReactNode }) {
       mode: "preview",
       publicClient,
       proCoverage,
+      discoveryMap,
       refresh: async () => undefined,
     }),
-    [proCoverage],
+    [discoveryMap, proCoverage],
   );
   return (
     <RuntimeContext.Provider value={value}>{children}</RuntimeContext.Provider>

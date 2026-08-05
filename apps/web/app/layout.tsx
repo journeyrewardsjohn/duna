@@ -2,6 +2,7 @@ import "@fontsource/archivo/500.css";
 import "@fontsource/archivo/700.css";
 import "@fontsource/archivo/800.css";
 import "@duna/ui/styles.css";
+import "mapbox-gl/dist/mapbox-gl.css";
 import "./globals.css";
 
 import { themeBootScript } from "@duna/ui/theme";
