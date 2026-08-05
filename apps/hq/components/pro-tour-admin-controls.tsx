@@ -54,6 +54,7 @@ import { PlayerCombobox, type PlayerComboboxOption } from "./player-combobox";
 import {
   eventBroadcastCoverage,
   filterProfessionalEvents,
+  professionalEventDivisionLabel,
   professionalEventTour,
   type ProfessionalEvent,
   type ProfessionalStatusFilter,
@@ -1004,7 +1005,8 @@ function EditorialWorkspace({
             >
               {events.map((event) => (
                 <option key={event.id} value={event.id}>
-                  {event.name} · {dateLabel(event.startsOn)}
+                  {event.name} · {professionalEventDivisionLabel(event)} ·{" "}
+                  {dateLabel(event.startsOn)}
                 </option>
               ))}
             </select>
@@ -1334,6 +1336,7 @@ function ResearchWorkspace({
                       <Badge tone={eventTone(event)}>
                         {event.live ? "live" : event.status}
                       </Badge>
+                      <Badge>{professionalEventDivisionLabel(event)}</Badge>
                       {event.research.latest && (
                         <Badge
                           tone={

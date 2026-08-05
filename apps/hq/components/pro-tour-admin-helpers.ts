@@ -11,6 +11,15 @@ export function professionalEventTour(
   return event.sourceSlug === "avp-league" ? "avp" : "fivb";
 }
 
+export function professionalEventDivisionLabel(
+  event: ProfessionalEvent,
+): string {
+  const gender = event.genderCategory.trim().toLowerCase();
+  if (gender.includes("women") || gender === "female") return "Women";
+  if (gender.includes("men") || gender === "male") return "Men";
+  return event.genderCategory.trim() || "Open";
+}
+
 function eventStatusOrder(event: ProfessionalEvent): number {
   if (event.live || event.status === "live") return 0;
   if (event.status === "upcoming") return 1;
