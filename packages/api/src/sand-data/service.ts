@@ -11,6 +11,8 @@ import {
   people,
   playerSourceConnections,
   professionalEvents,
+  ratingBacktestPredictions,
+  ratingBacktestRuns,
   profileMergeRecords,
   ratingConfigurations,
   ratingEvaluations,
@@ -26,7 +28,9 @@ import {
   defaultRatingConfig,
   evaluatePredictions,
   performanceEvidenceFromSetScores,
+  runRatingBacktest,
   worldRankingSignal,
+  type RatingBacktestMatch,
 } from "@duna/rating";
 import {
   and,
@@ -1612,6 +1616,8 @@ export async function loadSandDataOverview() {
     rankingDates,
     configurations,
     evaluations,
+    backtests,
+    claimReviewRows,
     truVolleyRows,
     historyDisputeRows,
     professionalMatchRows,
@@ -1717,6 +1723,22 @@ export async function loadSandDataOverview() {
       .from(ratingEvaluations)
       .orderBy(desc(ratingEvaluations.createdAt))
       .limit(20),
+    database
+      .select()
+      .from(ratingBacktestRuns)
+      .orderBy(desc(ratingBacktestRuns.createdAt))
+      .limit(20),
+    database
+      .select()
+      .from(workflowJobs)
+      .where(
+        and(
+          eq(workflowJobs.kind, "sand.profile-claim-review"),
+          eq(workflowJobs.status, "review-required"),
+        ),
+      )
+      .orderBy(asc(workflowJobs.createdAt))
+      .limit(100),
     database
       .select({
         personId: externalPlayerProfiles.personId,
@@ -1857,6 +1879,45 @@ export async function loadSandDataOverview() {
           }
         : undefined,
     ]),
+  );
+  const claimIdentities = claimReviewRows.map((job) => {
+    const payload = unknownRecord(job.payload);
+    return {
+      job,
+      payload,
+      subjectPersonId:
+        typeof payload.subjectPersonId === "string"
+          ? payload.subjectPersonId
+          : undefined,
+      targetPersonId:
+        typeof payload.targetPersonId === "string"
+          ? payload.targetPersonId
+          : undefined,
+    };
+  });
+  const claimPersonIds = [
+    ...new Set(
+      claimIdentities.flatMap((claim) =>
+        [claim.subjectPersonId, claim.targetPersonId].filter(
+          (personId): personId is string => Boolean(personId),
+        ),
+      ),
+    ),
+  ];
+  const claimPeople = claimPersonIds.length
+    ? await database
+        .select({
+          id: people.id,
+          displayName: people.displayName,
+          handle: people.handle,
+          isProfessional: people.isProfessional,
+          profileClaimStatus: people.profileClaimStatus,
+        })
+        .from(people)
+        .where(inArray(people.id, claimPersonIds))
+    : [];
+  const claimPersonById = new Map(
+    claimPeople.map((person) => [person.id, person]),
   );
   return {
     sources: sources.map((source) => ({
@@ -2056,6 +2117,74 @@ export async function loadSandDataOverview() {
       ...evaluation,
       createdAt: evaluation.createdAt.toISOString(),
     })),
+    backtests: backtests.map((backtest) => ({
+      ...backtest,
+      dateFrom: backtest.dateFrom?.toISOString(),
+      dateTo: backtest.dateTo?.toISOString(),
+      startedAt: backtest.startedAt.toISOString(),
+      completedAt: backtest.completedAt?.toISOString(),
+      createdAt: backtest.createdAt.toISOString(),
+      updatedAt: backtest.updatedAt.toISOString(),
+    })),
+    profileClaimReviews: claimIdentities.flatMap((claim) => {
+      const subject = claim.subjectPersonId
+        ? claimPersonById.get(claim.subjectPersonId)
+        : undefined;
+      const target = claim.targetPersonId
+        ? claimPersonById.get(claim.targetPersonId)
+        : undefined;
+      if (!subject || !target) return [];
+      const evidence = unknownRecord(claim.payload.evidence);
+      return [
+        {
+          jobId: claim.job.id,
+          subject,
+          target,
+          nameMatched: evidence.nameMatched === true,
+          birthDateMatched: evidence.birthDateMatched === true,
+          birthDateEvidenceAvailable:
+            evidence.birthDateEvidenceAvailable === true,
+          professionalClaim: evidence.professionalClaim === true,
+          verificationTier:
+            typeof evidence.verificationTier === "string"
+              ? evidence.verificationTier
+              : "standard-manual",
+          officialSourceProfiles: Array.isArray(evidence.officialSourceProfiles)
+            ? evidence.officialSourceProfiles.flatMap((value) => {
+                const source = unknownRecord(value);
+                return typeof source.profileUrl === "string" &&
+                  typeof source.sourceName === "string"
+                  ? [
+                      {
+                        sourceName: source.sourceName,
+                        profileUrl: source.profileUrl,
+                        displayName:
+                          typeof source.displayName === "string"
+                            ? source.displayName
+                            : target.displayName,
+                      },
+                    ]
+                  : [];
+              })
+            : [],
+          worldRanking: (() => {
+            const ranking = unknownRecord(evidence.worldRanking);
+            return typeof ranking.rank === "number" &&
+              typeof ranking.rankingDate === "string"
+              ? {
+                  rank: ranking.rank,
+                  rankingDate: ranking.rankingDate,
+                  countryCode:
+                    typeof ranking.countryCode === "string"
+                      ? ranking.countryCode
+                      : undefined,
+                }
+              : undefined;
+          })(),
+          createdAt: claim.job.createdAt.toISOString(),
+        },
+      ];
+    }),
     historyDisputes: historyDisputeRows.map((dispute) => ({
       ...dispute,
       details: dispute.details ?? undefined,
@@ -2759,9 +2888,17 @@ export async function mergeUnclaimedProfile(input: {
   readonly sourcePersonId: string;
   readonly targetPersonId: string;
   readonly reason: string;
+  readonly requestId?: string;
+  readonly ipAddress?: string;
   readonly now?: Date;
 }) {
   requireDatabase();
+  if (!input.actor.roles.includes("super-admin")) {
+    throw new SandDataServiceError(
+      "SUPER_ADMIN_REQUIRED",
+      "Only a super administrator can merge player identities.",
+    );
+  }
   if (input.sourcePersonId === input.targetPersonId) {
     throw new SandDataServiceError(
       "MERGE_CONFLICT",
@@ -2792,18 +2929,16 @@ export async function mergeUnclaimedProfile(input: {
       "One or both profiles were not found.",
     );
   }
-  if (source.profileClaimStatus !== "unclaimed") {
+  if (
+    source.profileClaimStatus !== "unclaimed" &&
+    source.profileClaimStatus !== "claim-pending"
+  ) {
     throw new SandDataServiceError(
       "MERGE_CONFLICT",
-      "Only an unclaimed source profile can be merged automatically.",
+      "Only an unclaimed or identity-reviewed source profile can be merged.",
     );
   }
-  if (sourceEvents.length > 0 && targetEvents.length > 0) {
-    throw new SandDataServiceError(
-      "MERGE_CONFLICT",
-      "Both profiles have rating history. Run a Ratings Lab replay before merging them.",
-    );
-  }
+  const needsRatingReplay = sourceEvents.length > 0 && targetEvents.length > 0;
   const sourceTeamRows = await database
     .select({ teamId: teamMembers.teamId })
     .from(teamMembers)
@@ -2871,24 +3006,28 @@ export async function mergeUnclaimedProfile(input: {
       .update(worldRankings)
       .set({ personId: target.id })
       .where(eq(worldRankings.personId, source.id)),
-    database
-      .update(ratingEvents)
-      .set({ personId: target.id })
-      .where(eq(ratingEvents.personId, source.id)),
-    database.delete(ratings).where(
-      and(
-        eq(ratings.personId, source.id),
-        sql`NOT EXISTS (
-            SELECT 1 FROM ${ratings} target_rating
-            WHERE target_rating.person_id = ${target.id}::uuid
-              AND target_rating.discipline = ${ratings.discipline}
-          )`,
-      ),
-    ),
-    database
-      .update(ratings)
-      .set({ personId: target.id })
-      .where(eq(ratings.personId, source.id)),
+    ...(needsRatingReplay
+      ? [database.delete(ratings).where(eq(ratings.personId, source.id))]
+      : [
+          database
+            .update(ratingEvents)
+            .set({ personId: target.id })
+            .where(eq(ratingEvents.personId, source.id)),
+          database.delete(ratings).where(
+            and(
+              eq(ratings.personId, source.id),
+              sql`NOT EXISTS (
+                  SELECT 1 FROM ${ratings} target_rating
+                  WHERE target_rating.person_id = ${target.id}::uuid
+                    AND target_rating.discipline = ${ratings.discipline}
+                )`,
+            ),
+          ),
+          database
+            .update(ratings)
+            .set({ personId: target.id })
+            .where(eq(ratings.personId, source.id)),
+        ]),
     database
       .update(people)
       .set({
@@ -2905,6 +3044,7 @@ export async function mergeUnclaimedProfile(input: {
       movedCounts: {
         teams: sourceTeamRows.length,
         ratingEvents: sourceEvents.length,
+        ratingReplay: needsRatingReplay ? 1 : 0,
       },
       performedByPersonId: input.actor.personId,
       createdAt: now,
@@ -2921,10 +3061,20 @@ export async function mergeUnclaimedProfile(input: {
     }),
   ];
   for (const operation of operations) await operation;
+  const ratingReplay = needsRatingReplay
+    ? await rebuildSandRatingProjection({
+        actor: input.actor,
+        reason: `${input.reason} Duplicate player histories were rebuilt chronologically after identity consolidation.`,
+        requestId: input.requestId ?? crypto.randomUUID(),
+        ipAddress: input.ipAddress,
+        now,
+      })
+    : undefined;
   return {
     sourcePersonId: source.id,
     targetPersonId: target.id,
     status: "completed" as const,
+    ratingReplay,
   };
 }
 
@@ -2956,45 +3106,233 @@ async function ensureRatingConfiguration(actor: ApiActor, now: Date) {
   return created;
 }
 
+function backtestSetScores(value: unknown): readonly {
+  readonly a: number;
+  readonly b: number;
+}[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((score) => {
+    const row = unknownRecord(score);
+    const a =
+      typeof row.a === "number" && Number.isFinite(row.a) ? row.a : undefined;
+    const b =
+      typeof row.b === "number" && Number.isFinite(row.b) ? row.b : undefined;
+    return a !== undefined &&
+      b !== undefined &&
+      Number.isSafeInteger(a) &&
+      Number.isSafeInteger(b) &&
+      a >= 0 &&
+      b >= 0 &&
+      a !== b
+      ? [{ a, b }]
+      : [];
+  });
+}
+
+async function loadRatingBacktestMatches(): Promise<
+  readonly RatingBacktestMatch[]
+> {
+  const database = getDatabase();
+  const matchRows = await database
+    .select({
+      id: matches.id,
+      teamAId: matches.teamAId,
+      teamBId: matches.teamBId,
+      completedAt: matches.completedAt,
+      startedAt: matches.startedAt,
+      scheduledAt: matches.scheduledAt,
+      ratingAppliedAt: matches.ratingAppliedAt,
+      verificationWeightBps: matches.verificationWeightBps,
+      ratingEvidence: matches.ratingEvidence,
+      format: matches.format,
+    })
+    .from(matches)
+    .where(
+      and(isNotNull(matches.ratingAppliedAt), eq(matches.ratingEligible, true)),
+    );
+  const teamIds = [
+    ...new Set(
+      matchRows.flatMap((match) =>
+        [match.teamAId, match.teamBId].filter((teamId): teamId is string =>
+          Boolean(teamId),
+        ),
+      ),
+    ),
+  ];
+  const memberRows = teamIds.length
+    ? await database
+        .select({
+          teamId: teamMembers.teamId,
+          personId: teamMembers.personId,
+        })
+        .from(teamMembers)
+        .where(inArray(teamMembers.teamId, teamIds))
+    : [];
+  const membersByTeam = new Map<string, string[]>();
+  for (const member of memberRows) {
+    const current = membersByTeam.get(member.teamId) ?? [];
+    current.push(member.personId);
+    membersByTeam.set(member.teamId, current);
+  }
+  return matchRows.flatMap((match) => {
+    if (!match.teamAId || !match.teamBId) return [];
+    const teamA = [...(membersByTeam.get(match.teamAId) ?? [])].sort();
+    const teamB = [...(membersByTeam.get(match.teamBId) ?? [])].sort();
+    if (teamA.length !== 2 || teamB.length !== 2) return [];
+    const evidence = unknownRecord(match.ratingEvidence);
+    const format = unknownRecord(match.format);
+    const setScores = backtestSetScores(evidence.setScores);
+    const fallbackSetScores = backtestSetScores(format.sets);
+    const usableScores = setScores.length > 0 ? setScores : fallbackSetScores;
+    if (usableScores.length === 0) return [];
+    const occurredAt =
+      match.completedAt ??
+      match.startedAt ??
+      match.scheduledAt ??
+      match.ratingAppliedAt;
+    if (!occurredAt) return [];
+    return [
+      {
+        id: match.id,
+        occurredAt,
+        teamA: teamA as [string, string],
+        teamB: teamB as [string, string],
+        setScores: usableScores,
+        verificationWeight: (match.verificationWeightBps ?? 10_000) / 10_000,
+      },
+    ];
+  });
+}
+
 export async function evaluateCurrentRating(input: {
   readonly actor: ApiActor;
   readonly now?: Date;
 }) {
   requireDatabase();
+  if (!input.actor.roles.includes("super-admin")) {
+    throw new SandDataServiceError(
+      "SUPER_ADMIN_REQUIRED",
+      "Only a super administrator can run and publish a ratings backtest.",
+    );
+  }
   const now = input.now ?? new Date();
   const database = getDatabase();
   const configuration = await ensureRatingConfiguration(input.actor, now);
-  const rows = await database
-    .select({ explanation: ratingEvents.explanation })
-    .from(ratingEvents)
-    .orderBy(asc(ratingEvents.createdAt));
-  const evaluation = evaluatePredictions(
-    rows.flatMap((row) => {
-      const expected = row.explanation.expectedWinProbability;
-      const actual = row.explanation.actualResult;
-      return typeof expected === "number" && (actual === 0 || actual === 1)
-        ? [{ expectedTeamA: expected, actualTeamA: actual }]
-        : [];
-    }),
+  const historicalMatches = await loadRatingBacktestMatches();
+  const report = runRatingBacktest(historicalMatches, now);
+  const champion = report.models.find(
+    (model) => model.modelId === report.championModelId,
   );
-  const [saved] = await database
-    .insert(ratingEvaluations)
+  const [run] = await database
+    .insert(ratingBacktestRuns)
     .values({
       configurationId: configuration.id,
-      sampleSize: evaluation.sampleSize,
-      predictionAccuracy: evaluation.accuracy,
-      brierScore: evaluation.brierScore,
-      calibration: evaluation.calibration,
+      methodologyVersion: report.methodologyVersion,
+      status: "running",
+      matchesProcessed: report.matches,
+      playersProcessed: report.players,
+      dateFrom: report.dateFrom ? new Date(report.dateFrom) : null,
+      dateTo: report.dateTo ? new Date(report.dateTo) : null,
+      championModelId: report.championModelId,
+      modelSummaries: report.models,
       createdByPersonId: input.actor.personId,
+      startedAt: now,
       createdAt: now,
+      updatedAt: now,
     })
     .returning();
-  return {
-    id: saved?.id ?? "",
-    configurationId: configuration.id,
-    ...evaluation,
-    createdAt: now.toISOString(),
-  };
+  if (!run) throw new Error("Could not save the ratings backtest run");
+  try {
+    for (let offset = 0; offset < report.predictions.length; offset += 400) {
+      await database.insert(ratingBacktestPredictions).values(
+        report.predictions.slice(offset, offset + 400).map((prediction) => ({
+          runId: run.id,
+          matchId: prediction.matchId,
+          occurredAt: new Date(prediction.occurredAt),
+          actualTeamA: prediction.actualTeamA,
+          probabilities: prediction.probabilities,
+          ensembleWeights: prediction.ensembleWeights,
+          preMatchRatings: prediction.dunaPreMatchRatings,
+          createdAt: now,
+        })),
+      );
+    }
+    const evaluation = champion
+      ? {
+          sampleSize: champion.sampleSize,
+          accuracy: champion.accuracy,
+          brierScore: champion.brierScore,
+          calibration: champion.calibration,
+        }
+      : evaluatePredictions([]);
+    const [saved] = await database
+      .insert(ratingEvaluations)
+      .values({
+        configurationId: configuration.id,
+        sampleSize: evaluation.sampleSize,
+        predictionAccuracy: evaluation.accuracy,
+        brierScore: evaluation.brierScore,
+        calibration: evaluation.calibration,
+        createdByPersonId: input.actor.personId,
+        createdAt: now,
+      })
+      .returning();
+    const completedAt = new Date();
+    await database.batch([
+      database
+        .update(ratingBacktestRuns)
+        .set({ status: "completed", completedAt, updatedAt: completedAt })
+        .where(eq(ratingBacktestRuns.id, run.id)),
+      database.insert(auditLog).values({
+        actorPersonId: input.actor.personId,
+        actorType: "person",
+        action: "rating.backtest.completed",
+        entityType: "rating-backtest-run",
+        entityId: run.id,
+        afterHash: stableHash({
+          methodologyVersion: report.methodologyVersion,
+          matches: report.matches,
+          players: report.players,
+          championModelId: report.championModelId,
+          models: report.models.map((model) => ({
+            modelId: model.modelId,
+            brierScore: model.brierScore,
+            logLoss: model.logLoss,
+          })),
+        }),
+        reason:
+          "Chronological pre-match predictions were replayed and compared without future-result leakage.",
+        createdAt: completedAt,
+      }),
+    ]);
+    return {
+      id: saved?.id ?? "",
+      runId: run.id,
+      configurationId: configuration.id,
+      ...evaluation,
+      methodologyVersion: report.methodologyVersion,
+      matches: report.matches,
+      players: report.players,
+      championModelId: report.championModelId,
+      models: report.models,
+      createdAt: completedAt.toISOString(),
+    };
+  } catch (error) {
+    const failedAt = new Date();
+    await database
+      .update(ratingBacktestRuns)
+      .set({
+        status: "failed",
+        failureReason: (error instanceof Error
+          ? error.message
+          : "Backtest failed"
+        ).slice(0, 2_000),
+        completedAt: failedAt,
+        updatedAt: failedAt,
+      })
+      .where(eq(ratingBacktestRuns.id, run.id));
+    throw error;
+  }
 }
 
 export async function createRatingConfiguration(input: {
@@ -3057,6 +3395,241 @@ export async function createRatingConfiguration(input: {
   return {
     ...configuration,
     createdAt: configuration.createdAt.toISOString(),
+  };
+}
+
+export async function loadPublicRatingLab() {
+  requireDatabase();
+  const database = getDatabase();
+  const run = await database.query.ratingBacktestRuns.findFirst({
+    where: eq(ratingBacktestRuns.status, "completed"),
+    orderBy: [desc(ratingBacktestRuns.completedAt)],
+  });
+  if (!run) return undefined;
+  const examples = await database
+    .select({
+      matchId: ratingBacktestPredictions.matchId,
+      occurredAt: ratingBacktestPredictions.occurredAt,
+      actualTeamA: ratingBacktestPredictions.actualTeamA,
+      probabilities: ratingBacktestPredictions.probabilities,
+      preMatchRatings: ratingBacktestPredictions.preMatchRatings,
+      title: importedMatches.title,
+      participants: importedMatches.participants,
+      sets: importedMatches.sets,
+    })
+    .from(ratingBacktestPredictions)
+    .leftJoin(
+      importedMatches,
+      and(
+        eq(importedMatches.canonicalMatchId, ratingBacktestPredictions.matchId),
+        eq(importedMatches.importState, "approved"),
+      ),
+    )
+    .where(eq(ratingBacktestPredictions.runId, run.id))
+    .orderBy(desc(ratingBacktestPredictions.occurredAt))
+    .limit(12);
+  return {
+    id: run.id,
+    methodologyVersion: run.methodologyVersion,
+    matchesProcessed: run.matchesProcessed,
+    playersProcessed: run.playersProcessed,
+    dateFrom: run.dateFrom?.toISOString(),
+    dateTo: run.dateTo?.toISOString(),
+    championModelId: run.championModelId ?? undefined,
+    models: run.modelSummaries,
+    examples: examples.map((example) => ({
+      ...example,
+      occurredAt: example.occurredAt.toISOString(),
+      title: example.title ?? "Duna rated match",
+      participants: example.participants ?? [],
+      sets: example.sets ?? [],
+    })),
+    completedAt: run.completedAt?.toISOString() ?? run.createdAt.toISOString(),
+  };
+}
+
+export async function searchPublicPlayers(input: {
+  readonly query: string;
+  readonly limit?: number;
+}) {
+  requireDatabase();
+  const query = input.query.trim().toLowerCase().replaceAll("%", "");
+  if (query.length < 2) return [];
+  const pattern = `%${query}%`;
+  return getDatabase()
+    .select({
+      id: people.id,
+      displayName: people.displayName,
+      handle: people.handle,
+      avatarUrl: people.avatarUrl,
+      homeMarket: people.homeMarket,
+      isProfessional: people.isProfessional,
+      profileClaimStatus: people.profileClaimStatus,
+      sandRating: ratings.display,
+      confidence: ratings.confidence,
+      ratedMatches: ratings.ratedMatches,
+    })
+    .from(people)
+    .leftJoin(
+      ratings,
+      and(eq(ratings.personId, people.id), eq(ratings.discipline, "beach-2s")),
+    )
+    .where(
+      and(
+        eq(people.status, "active"),
+        eq(people.profileVisibility, "public"),
+        eq(people.isMinor, false),
+        sql`(lower(${people.displayName}) LIKE ${pattern} OR lower(${people.handle}) LIKE ${pattern})`,
+      ),
+    )
+    .orderBy(
+      desc(people.isProfessional),
+      desc(ratings.display),
+      asc(people.displayName),
+    )
+    .limit(Math.min(50, Math.max(1, input.limit ?? 20)));
+}
+
+export async function loadPublicWorldRankings() {
+  requireDatabase();
+  const database = getDatabase();
+  const genders = ["men", "women"] as const;
+  const latestDates = Object.fromEntries(
+    await Promise.all(
+      genders.map(async (genderCategory) => {
+        const [latest] = await database
+          .select({ rankingDate: worldRankings.rankingDate })
+          .from(worldRankings)
+          .where(eq(worldRankings.genderCategory, genderCategory))
+          .orderBy(desc(worldRankings.rankingDate))
+          .limit(1);
+        return [genderCategory, latest?.rankingDate] as const;
+      }),
+    ),
+  ) as Record<(typeof genders)[number], string | undefined>;
+  const worldRows = (
+    await Promise.all(
+      genders.map(async (genderCategory) => {
+        const rankingDate = latestDates[genderCategory];
+        if (!rankingDate) return [];
+        return database
+          .select({
+            genderCategory: worldRankings.genderCategory,
+            rankingDate: worldRankings.rankingDate,
+            rank: worldRankings.rank,
+            previousRank: worldRankings.previousRank,
+            points: worldRankings.points,
+            displayName: worldRankings.displayName,
+            countryCode: worldRankings.countryCode,
+            personId: worldRankings.personId,
+            handle: people.handle,
+            avatarUrl: people.avatarUrl,
+            profileVisibility: people.profileVisibility,
+            personStatus: people.status,
+            isMinor: people.isMinor,
+            sandRating: ratings.display,
+            ratedMatches: ratings.ratedMatches,
+          })
+          .from(worldRankings)
+          .leftJoin(people, eq(worldRankings.personId, people.id))
+          .leftJoin(
+            ratings,
+            and(
+              eq(ratings.personId, worldRankings.personId),
+              eq(ratings.discipline, "beach-2s"),
+            ),
+          )
+          .where(
+            and(
+              eq(worldRankings.genderCategory, genderCategory),
+              eq(worldRankings.rankingDate, rankingDate),
+            ),
+          )
+          .orderBy(asc(worldRankings.rank))
+          .limit(200);
+      }),
+    )
+  ).flat();
+  const worldRankByPerson = new Map(
+    worldRows.flatMap((row) =>
+      row.personId
+        ? [
+            [
+              `${row.genderCategory}:${row.personId}`,
+              { rank: row.rank, points: row.points },
+            ] as const,
+          ]
+        : [],
+    ),
+  );
+  const dunaRows = await database
+    .select({
+      personId: people.id,
+      displayName: people.displayName,
+      handle: people.handle,
+      avatarUrl: people.avatarUrl,
+      genderCategory: people.genderCategory,
+      sandRating: ratings.display,
+      confidence: ratings.confidence,
+      ratedMatches: ratings.ratedMatches,
+    })
+    .from(ratings)
+    .innerJoin(people, eq(ratings.personId, people.id))
+    .where(
+      and(
+        eq(ratings.discipline, "beach-2s"),
+        eq(people.status, "active"),
+        eq(people.profileVisibility, "public"),
+        eq(people.isMinor, false),
+        inArray(people.genderCategory, genders),
+      ),
+    )
+    .orderBy(desc(ratings.display), desc(ratings.ratedMatches), asc(people.id));
+  const dunaFor = (genderCategory: (typeof genders)[number]) =>
+    dunaRows
+      .filter((row) => row.genderCategory === genderCategory)
+      .slice(0, 200)
+      .map((row, index) => ({
+        rank: index + 1,
+        personId: row.personId,
+        displayName: row.displayName,
+        handle: row.handle,
+        avatarUrl: row.avatarUrl ?? undefined,
+        sandRating: row.sandRating,
+        confidence: row.confidence,
+        ratedMatches: row.ratedMatches,
+        worldRanking: worldRankByPerson.get(
+          `${genderCategory}:${row.personId}`,
+        ),
+      }));
+  const worldFor = (genderCategory: (typeof genders)[number]) =>
+    worldRows
+      .filter((row) => row.genderCategory === genderCategory)
+      .map((row) => {
+        const publicProfile =
+          row.personStatus === "active" &&
+          row.profileVisibility === "public" &&
+          row.isMinor === false;
+        return {
+          rank: row.rank,
+          previousRank: row.previousRank ?? undefined,
+          points: row.points,
+          displayName: row.displayName,
+          countryCode: row.countryCode ?? undefined,
+          personId: row.personId ?? undefined,
+          handle: publicProfile ? (row.handle ?? undefined) : undefined,
+          avatarUrl: publicProfile ? (row.avatarUrl ?? undefined) : undefined,
+          sandRating: row.sandRating ?? undefined,
+          ratedMatches: row.ratedMatches ?? undefined,
+        };
+      });
+  const duna = { men: dunaFor("men"), women: dunaFor("women") };
+  const world = { men: worldFor("men"), women: worldFor("women") };
+  return {
+    latestDates,
+    limitPerGender: 200,
+    world,
+    duna,
   };
 }
 
@@ -5699,7 +6272,10 @@ export async function loadPublicPlayerPerformance(personId: string) {
       .leftJoin(matches, eq(matches.id, ratingEvents.matchId))
       .leftJoin(
         importedMatches,
-        eq(importedMatches.canonicalMatchId, ratingEvents.matchId),
+        and(
+          eq(importedMatches.canonicalMatchId, ratingEvents.matchId),
+          eq(importedMatches.importState, "approved"),
+        ),
       )
       .where(eq(ratingEvents.personId, personId))
       .orderBy(desc(ratingEvents.createdAt))
@@ -5729,6 +6305,33 @@ export async function loadPublicPlayerPerformance(personId: string) {
       .orderBy(desc(worldRankings.rankingDate), asc(worldRankings.rank))
       .limit(1),
   ]);
+  const latestBacktest = await database.query.ratingBacktestRuns.findFirst({
+    where: eq(ratingBacktestRuns.status, "completed"),
+    orderBy: [desc(ratingBacktestRuns.completedAt)],
+  });
+  const backtestPredictions =
+    latestBacktest && eventRows.length > 0
+      ? await database
+          .select({
+            matchId: ratingBacktestPredictions.matchId,
+            actualTeamA: ratingBacktestPredictions.actualTeamA,
+            probabilities: ratingBacktestPredictions.probabilities,
+            preMatchRatings: ratingBacktestPredictions.preMatchRatings,
+          })
+          .from(ratingBacktestPredictions)
+          .where(
+            and(
+              eq(ratingBacktestPredictions.runId, latestBacktest.id),
+              inArray(
+                ratingBacktestPredictions.matchId,
+                eventRows.map((event) => event.matchId),
+              ),
+            ),
+          )
+      : [];
+  const backtestByMatchId = new Map(
+    backtestPredictions.map((prediction) => [prediction.matchId, prediction]),
+  );
   const participantPersonIds = [
     ...new Set(
       eventRows.flatMap((event) =>
@@ -5759,42 +6362,75 @@ export async function loadPublicPlayerPerformance(personId: string) {
       : [];
   const world = latestRanking[0];
   return {
-    history: eventRows.map((event) => ({
-      id: event.id,
-      matchId: event.matchId,
-      beforeDisplay:
-        typeof event.before.display === "number" ? event.before.display : 3,
-      afterDisplay:
-        typeof event.after.display === "number" ? event.after.display : 3,
-      delta:
-        typeof event.explanation.displayDelta === "number"
-          ? event.explanation.displayDelta
-          : 0,
-      expectedWinProbability:
-        typeof event.explanation.expectedWinProbability === "number"
-          ? event.explanation.expectedWinProbability
-          : 0.5,
-      actualResult:
-        typeof event.explanation.actualResult === "number"
-          ? event.explanation.actualResult
-          : 0,
-      pointShare:
-        typeof event.explanation.pointShare === "number"
-          ? event.explanation.pointShare
-          : 0,
-      verificationWeightBps: event.verificationWeightBps,
-      occurredAt: (
-        event.completedAt ??
-        event.startedAt ??
-        event.scheduledAt ??
-        event.matchCreatedAt ??
-        event.createdAt
-      ).toISOString(),
-      matchTitle: event.matchTitle ?? "Duna match",
-      sourceUrl: event.sourceUrl ?? undefined,
-      sets: event.sets ?? [],
-      participants: event.participants ?? [],
-    })),
+    history: eventRows.map((event) => {
+      const backtest = backtestByMatchId.get(event.matchId);
+      const side = (event.participants ?? []).find(
+        (participant) => participant.personId === personId,
+      )?.side;
+      const scoreAwareProbability =
+        typeof backtest?.probabilities["duna-score-aware"] === "number"
+          ? backtest.probabilities["duna-score-aware"]
+          : undefined;
+      const walkForwardWinProbability =
+        scoreAwareProbability === undefined || !side
+          ? undefined
+          : side === "A"
+            ? scoreAwareProbability
+            : 1 - scoreAwareProbability;
+      const walkForwardActualWin =
+        backtest && side
+          ? side === "A"
+            ? backtest.actualTeamA === 1
+            : backtest.actualTeamA === 0
+          : undefined;
+      return {
+        id: event.id,
+        matchId: event.matchId,
+        beforeDisplay:
+          typeof event.before.display === "number" ? event.before.display : 3,
+        afterDisplay:
+          typeof event.after.display === "number" ? event.after.display : 3,
+        delta:
+          typeof event.explanation.displayDelta === "number"
+            ? event.explanation.displayDelta
+            : 0,
+        expectedWinProbability:
+          typeof event.explanation.expectedWinProbability === "number"
+            ? event.explanation.expectedWinProbability
+            : 0.5,
+        actualResult:
+          typeof event.explanation.actualResult === "number"
+            ? event.explanation.actualResult
+            : 0,
+        pointShare:
+          typeof event.explanation.pointShare === "number"
+            ? event.explanation.pointShare
+            : 0,
+        verificationWeightBps: event.verificationWeightBps,
+        occurredAt: (
+          event.completedAt ??
+          event.startedAt ??
+          event.scheduledAt ??
+          event.matchCreatedAt ??
+          event.createdAt
+        ).toISOString(),
+        matchTitle: event.matchTitle ?? "Duna match",
+        sourceUrl: event.sourceUrl ?? undefined,
+        sets: event.sets ?? [],
+        participants: event.participants ?? [],
+        ...(walkForwardWinProbability === undefined
+          ? {}
+          : {
+              walkForwardPrediction: {
+                methodologyVersion: latestBacktest?.methodologyVersion ?? "",
+                winProbability: walkForwardWinProbability,
+                actualWin: walkForwardActualWin ?? false,
+                preMatchRating:
+                  backtest?.preMatchRatings.players?.[personId] ?? undefined,
+              },
+            }),
+      };
+    }),
     sources: externalRows.map((source) => ({
       ...source,
       profileUrl: source.profileUrl ?? undefined,
@@ -6182,15 +6818,47 @@ export async function requestProfileClaim(input: {
     );
   }
 
-  const targetSources = await database
-    .select({
-      normalizedName: externalPlayerProfiles.normalizedName,
-      displayName: externalPlayerProfiles.displayName,
-      birthDate: externalPlayerProfiles.birthDate,
-    })
-    .from(externalPlayerProfiles)
-    .where(eq(externalPlayerProfiles.personId, target.id));
-  const subjectNames = personNameVariants(subject);
+  const [targetSources, targetRanking] = await Promise.all([
+    database
+      .select({
+        normalizedName: externalPlayerProfiles.normalizedName,
+        displayName: externalPlayerProfiles.displayName,
+        birthDate: externalPlayerProfiles.birthDate,
+        profileUrl: externalPlayerProfiles.profileUrl,
+        sourceSlug: importSources.slug,
+        sourceName: importSources.name,
+        isProfessional: externalPlayerProfiles.isProfessional,
+      })
+      .from(externalPlayerProfiles)
+      .innerJoin(
+        importSources,
+        eq(externalPlayerProfiles.sourceId, importSources.id),
+      )
+      .where(eq(externalPlayerProfiles.personId, target.id)),
+    database
+      .select({
+        rank: worldRankings.rank,
+        rankingDate: worldRankings.rankingDate,
+        displayName: worldRankings.displayName,
+        countryCode: worldRankings.countryCode,
+      })
+      .from(worldRankings)
+      .where(eq(worldRankings.personId, target.id))
+      .orderBy(desc(worldRankings.rankingDate), asc(worldRankings.rank))
+      .limit(1),
+  ]);
+  const subjectNames = new Set(
+    [
+      [subject.legalGivenName, subject.legalFamilyName]
+        .filter(Boolean)
+        .join(" "),
+      [subject.legalGivenName, subject.legalMiddleName, subject.legalFamilyName]
+        .filter(Boolean)
+        .join(" "),
+    ]
+      .map((value) => normalizePersonName(value))
+      .filter((value) => value.length > 0),
+  );
   const targetNames = personNameVariants(target);
   for (const source of targetSources) {
     const normalized =
@@ -6206,12 +6874,35 @@ export async function requestProfileClaim(input: {
   );
   const birthDateMatched =
     Boolean(subject.birthDate) && targetBirthDates.has(subject.birthDate!);
-  if (!nameMatched || !birthDateMatched) {
+  const birthDateEvidenceAvailable = targetBirthDates.size > 0;
+  const professionalClaim =
+    target.isProfessional ||
+    targetSources.some((source) => source.isProfessional) ||
+    targetRanking.length > 0;
+  const birthDateConflict = birthDateEvidenceAvailable && !birthDateMatched;
+  if (
+    !nameMatched ||
+    !subject.birthDate ||
+    birthDateConflict ||
+    (!professionalClaim && !birthDateMatched)
+  ) {
     throw new SandDataServiceError(
       "CLAIM_CONFLICT",
-      "We could not verify an exact legal-name and birth-date match. Check your player details or send this profile to Duna support for a manual review.",
+      "We could not verify the required legal-name and birth-date evidence. Check your player details or send this profile to Duna support for a manual review.",
     );
   }
+  const officialSourceProfiles = targetSources.flatMap((source) =>
+    source.profileUrl
+      ? [
+          {
+            source: source.sourceSlug,
+            sourceName: source.sourceName,
+            profileUrl: source.profileUrl,
+            displayName: source.displayName,
+          },
+        ]
+      : [],
+  );
 
   const existingRequest = await database.query.workflowJobs.findFirst({
     where: and(
@@ -6235,6 +6926,10 @@ export async function requestProfileClaim(input: {
     targetPersonId: target.id,
     nameMatched,
     birthDateMatched,
+    birthDateEvidenceAvailable,
+    professionalClaim,
+    officialSourceProfiles,
+    worldRanking: targetRanking[0],
   });
   const jobId = crypto.randomUUID();
   await database.batch([
@@ -6251,6 +6946,13 @@ export async function requestProfileClaim(input: {
         evidence: {
           nameMatched,
           birthDateMatched,
+          birthDateEvidenceAvailable,
+          verificationTier: professionalClaim
+            ? "professional-manual"
+            : "standard-manual",
+          professionalClaim,
+          officialSourceProfiles,
+          worldRanking: targetRanking[0],
           evidenceHash,
         },
         requestId: input.requestId,
@@ -6280,8 +6982,9 @@ export async function requestProfileClaim(input: {
       entityType: "person",
       entityId: target.id,
       afterHash: evidenceHash,
-      reason:
-        "A signed-in player requested an identity-reviewed claim after exact legal-name and birth-date matching.",
+      reason: professionalClaim
+        ? "A professional player requested a claim after exact legal-name and birth-date matching; official source pages require super-admin comparison before approval."
+        : "A signed-in player requested an identity-reviewed claim after exact legal-name and birth-date matching.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,
@@ -6293,6 +6996,134 @@ export async function requestProfileClaim(input: {
     targetPersonId: target.id,
     targetHandle: target.handle,
   };
+}
+
+export async function reviewProfileClaim(input: {
+  readonly actor: ApiActor;
+  readonly jobId: string;
+  readonly decision: "approved" | "rejected";
+  readonly officialProfileMatched: boolean;
+  readonly reason: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}) {
+  requireDatabase();
+  if (!input.actor.roles.includes("super-admin")) {
+    throw new SandDataServiceError(
+      "SUPER_ADMIN_REQUIRED",
+      "Only a super administrator can resolve a player profile claim.",
+    );
+  }
+  const database = getDatabase();
+  const job = await database.query.workflowJobs.findFirst({
+    where: and(
+      eq(workflowJobs.id, input.jobId),
+      eq(workflowJobs.kind, "sand.profile-claim-review"),
+      eq(workflowJobs.status, "review-required"),
+    ),
+  });
+  if (!job) {
+    throw new SandDataServiceError(
+      "PLAYER_NOT_FOUND",
+      "That profile claim is no longer waiting for review.",
+    );
+  }
+  const payload = unknownRecord(job.payload);
+  const evidence = unknownRecord(payload.evidence);
+  const subjectPersonId =
+    typeof payload.subjectPersonId === "string" ? payload.subjectPersonId : "";
+  const targetPersonId =
+    typeof payload.targetPersonId === "string" ? payload.targetPersonId : "";
+  if (!subjectPersonId || !targetPersonId) {
+    throw new SandDataServiceError(
+      "PLAYER_NOT_FOUND",
+      "The profile claim is missing its identity subjects.",
+    );
+  }
+  const professionalClaim = evidence.professionalClaim === true;
+  const officialSourceProfiles = Array.isArray(evidence.officialSourceProfiles)
+    ? evidence.officialSourceProfiles
+    : [];
+  if (
+    input.decision === "approved" &&
+    professionalClaim &&
+    (!input.officialProfileMatched || officialSourceProfiles.length === 0)
+  ) {
+    throw new SandDataServiceError(
+      "CLAIM_CONFLICT",
+      "Professional claims require a matching official player page before approval.",
+    );
+  }
+
+  const merge =
+    input.decision === "approved"
+      ? await mergeUnclaimedProfile({
+          actor: input.actor,
+          sourcePersonId: targetPersonId,
+          targetPersonId: subjectPersonId,
+          reason: input.reason,
+          requestId: input.requestId,
+          ipAddress: input.ipAddress,
+          now: input.now,
+        })
+      : undefined;
+  await database.batch([
+    database
+      .update(workflowJobs)
+      .set({
+        status: "completed",
+        payload: {
+          ...payload,
+          review: {
+            decision: input.decision,
+            officialProfileMatched: input.officialProfileMatched,
+            reviewedByPersonId: input.actor.personId,
+            reason: input.reason,
+            reviewedAt: input.now.toISOString(),
+          },
+        },
+        completedAt: input.now,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(workflowJobs.id, job.id),
+          eq(workflowJobs.status, "review-required"),
+        ),
+      ),
+    ...(input.decision === "rejected"
+      ? [
+          database
+            .update(people)
+            .set({ profileClaimStatus: "unclaimed", updatedAt: input.now })
+            .where(
+              and(
+                eq(people.id, targetPersonId),
+                eq(people.profileClaimStatus, "claim-pending"),
+              ),
+            ),
+        ]
+      : []),
+    database.insert(auditLog).values({
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: `sand-data.profile-claim.${input.decision}`,
+      entityType: "workflow-job",
+      entityId: job.id,
+      beforeHash: stableHash(evidence),
+      afterHash: stableHash({
+        decision: input.decision,
+        officialProfileMatched: input.officialProfileMatched,
+        merge,
+      }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return { jobId: job.id, decision: input.decision, merge };
 }
 
 export async function processPlayerSourceConnection(
@@ -6776,4 +7607,8 @@ export type PublicProMatchDetail = NonNullable<
 >;
 export type PublicPlayerPerformance = Awaited<
   ReturnType<typeof loadPublicPlayerPerformance>
+>;
+export type PublicRatingLab = Awaited<ReturnType<typeof loadPublicRatingLab>>;
+export type PublicWorldRankings = Awaited<
+  ReturnType<typeof loadPublicWorldRankings>
 >;

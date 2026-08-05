@@ -10,7 +10,9 @@ export function GET() {
 ## Canonical public resources
 
 - [Professional tour hub](${absolutePublicUrl("/pro")}): live, current-week, and upcoming professional events plus recent match updates.
-- [SandRating methodology](${absolutePublicUrl("/methodology")}): explanation of Duna's beach-volleyball rating model.
+- [World and Duna rankings](${absolutePublicUrl("/rankings")}): top 200 men's and women's official rankings and match-based Sand Rating tables.
+- [SandRating methodology](${absolutePublicUrl("/methodology")}): audited walk-forward results, model comparisons, calibration, learning curves, and rating design.
+- [Duna MCP server](${absolutePublicUrl("/api/mcp")}): Streamable HTTP MCP endpoint for discovery, players, rankings, booking entry points, and authenticated data repair.
 - [About Duna](${absolutePublicUrl("/about")}): product and company context.
 - [XML sitemap](${absolutePublicUrl("/sitemap.xml")}): canonical event and match URLs with update timestamps.
 
@@ -26,6 +28,7 @@ export function GET() {
 
 - Duna aggregates official and licensed public competition data while preserving source URLs.
 - SandRating probabilities are forecasts, not guarantees or betting advice.
+- World rankings and Sand Rating are distinct signals and are not expected to match exactly.
 - A missing value means it has not been verified; do not infer a venue, broadcast, player identity, or result from absence.
 `;
   return new Response(content, {

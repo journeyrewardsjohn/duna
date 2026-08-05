@@ -44,6 +44,38 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 });
 
+test("public rankings and rating evidence stay open and responsive", async ({
+  page,
+}) => {
+  await page.goto("/rankings?view=world&gender=women");
+  await expect(
+    page.getByRole("heading", {
+      name: "The world rankings, connected to the match record.",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "World ranking", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByRole("link", { name: /Duna Sand Rating/ }),
+  ).toHaveAttribute("href", "/rankings?view=duna&gender=women");
+  await expectNoHorizontalOverflow(page);
+
+  await page.goto("/methodology");
+  await expect(
+    page.getByRole("heading", {
+      name: "Predict first. Learn second. Prove every gain.",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "No look-ahead" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Governed promotion" }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
 test("branded identity entry preserves the secure auth handoff", async ({
   page,
 }) => {

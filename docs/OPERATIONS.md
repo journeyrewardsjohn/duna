@@ -153,6 +153,24 @@ The same snapshot can be refreshed through the authorized sand cron endpoint
 with `mode=sandrating`. Scheduled refreshes stage changes only; they never
 approve new rating evidence automatically.
 
+## Rating backtests and agent access
+
+Duna HQ's Ratings Lab runs a true chronological backtest across approved
+doubles history. It persists pre-match probabilities for every compared model,
+the players' historical pre-match ratings, calibration, Brier score, log loss,
+AUC, confidence intervals, and cumulative curves. Run it after a material data
+repair or before proposing a rating configuration change. A winning backtest
+does not activate a model automatically.
+
+The public methodology and rankings pages read only the latest completed run.
+Apply the backtest migration before release, run the first evaluation from Duna
+HQ, then verify `/methodology` and both genders on `/rankings`.
+
+`/api/mcp` provides discovery and booking-entry tools publicly, participant
+issue reporting for authenticated players, and audited repair tools for WorkOS
+super admins. See [`API.md`](API.md) and [`MCP.md`](MCP.md). Never give an agent
+database credentials or bypass the identity and evidence gates with direct SQL.
+
 ## External launch gates
 
 The repository is technically ready for previews, but public production launch

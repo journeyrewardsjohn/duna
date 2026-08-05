@@ -630,3 +630,5 @@ export function evaluatePredictions(
     calibration,
   };
 }
+
+export * from "./backtest";

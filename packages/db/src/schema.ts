@@ -3805,6 +3805,124 @@ export const ratingEvaluations = pgTable(
   ],
 );
 
+export const ratingBacktestRuns = pgTable(
+  "rating_backtest_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    configurationId: uuid("configuration_id")
+      .notNull()
+      .references(() => ratingConfigurations.id),
+    methodologyVersion: varchar("methodology_version", {
+      length: 48,
+    }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("running"),
+    matchesProcessed: integer("matches_processed").notNull().default(0),
+    playersProcessed: integer("players_processed").notNull().default(0),
+    dateFrom: timestamp("date_from", { withTimezone: true, mode: "date" }),
+    dateTo: timestamp("date_to", { withTimezone: true, mode: "date" }),
+    championModelId: varchar("champion_model_id", { length: 48 }),
+    modelSummaries: jsonb("model_summaries")
+      .notNull()
+      .$type<
+        readonly {
+          readonly modelId: string;
+          readonly label: string;
+          readonly family: string;
+          readonly sampleSize: number;
+          readonly accuracy: number;
+          readonly accuracyInterval95: readonly [number, number];
+          readonly brierScore: number;
+          readonly logLoss: number;
+          readonly expectedCalibrationError: number;
+          readonly areaUnderRocCurve: number;
+          readonly calibration: readonly {
+            readonly lowerBound: number;
+            readonly upperBound: number;
+            readonly predictions: number;
+            readonly averageExpected: number;
+            readonly observedWinRate: number;
+          }[];
+          readonly curve: readonly {
+            readonly matches: number;
+            readonly brierScore: number;
+            readonly logLoss: number;
+          }[];
+        }[]
+      >()
+      .default([]),
+    failureReason: text("failure_reason"),
+    createdByPersonId: uuid("created_by_person_id").references(() => people.id),
+    startedAt: timestamp("started_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("rating_backtest_status_completed_idx").on(
+      table.status,
+      table.completedAt,
+    ),
+    index("rating_backtest_configuration_idx").on(
+      table.configurationId,
+      table.createdAt,
+    ),
+    check(
+      "rating_backtest_status_valid",
+      sql`${table.status} IN ('running', 'completed', 'failed')`,
+    ),
+  ],
+);
+
+export const ratingBacktestPredictions = pgTable(
+  "rating_backtest_predictions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => ratingBacktestRuns.id, { onDelete: "cascade" }),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id),
+    occurredAt: timestamp("occurred_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    actualTeamA: integer("actual_team_a").notNull(),
+    probabilities: jsonb("probabilities")
+      .notNull()
+      .$type<Readonly<Record<string, number>>>(),
+    ensembleWeights: jsonb("ensemble_weights")
+      .notNull()
+      .$type<Readonly<Record<string, number>>>(),
+    preMatchRatings: jsonb("pre_match_ratings").notNull().$type<{
+      readonly teamA: readonly [number, number];
+      readonly teamB: readonly [number, number];
+      readonly players: Readonly<Record<string, number>>;
+    }>(),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("rating_backtest_prediction_run_match_unique").on(
+      table.runId,
+      table.matchId,
+    ),
+    index("rating_backtest_prediction_match_idx").on(table.matchId),
+    index("rating_backtest_prediction_run_time_idx").on(
+      table.runId,
+      table.occurredAt,
+    ),
+    check(
+      "rating_backtest_prediction_actual_valid",
+      sql`${table.actualTeamA} IN (0, 1)`,
+    ),
+  ],
+);
+
 export const profileMergeRecords = pgTable(
   "profile_merge_records",
   {
