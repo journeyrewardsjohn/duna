@@ -57,6 +57,11 @@ import {
   formSubmissionResultSchema,
   guardianReviewItemSchema,
   guardianReviewResultSchema,
+  healthCategorySchema,
+  healthDashboardSchema,
+  healthProfileSchema,
+  healthSampleInputSchema,
+  healthSharingScopeSchema,
   matchSummarySchema,
   matchScoringStateSchema,
   operatorDashboardSchema,
@@ -94,6 +99,9 @@ import {
   videoSummarySchema,
   videoUploadPartUrlSchema,
   videoUploadSessionSchema,
+  visionSessionSchema,
+  visionSessionSettingsSchema,
+  visionTimelineEventSchema,
 } from "./contracts";
 import {
   getCatalogOfferEligibility,
@@ -164,6 +172,15 @@ import {
   submitFormResponse,
 } from "./forms-service";
 import {
+  createHealthSharingGrant,
+  disconnectHealth,
+  HealthServiceError,
+  loadHealthDashboard,
+  loadHealthProfile,
+  revokeHealthSharingGrant,
+  syncHealthSamples,
+} from "./health-service";
+import {
   FamilyWalletError,
   loadFamilyWallets,
   transferFamilyCredits,
@@ -220,6 +237,18 @@ import {
   updateVideoQuotaPolicy,
   VideoServiceError,
 } from "./video-service";
+import {
+  appendVisionTimelineEvents,
+  attachVisionSessionToVideo,
+  createVisionSession,
+  loadOwnedVisionSession,
+  loadRemoteVisionSession,
+  revokeVisionRemote,
+  updateOwnedVisionSession,
+  updateRemoteVisionSession,
+  updateVisionPreview,
+  VisionServiceError,
+} from "./vision-service";
 import {
   activateCourt,
   blockCourtTime,
@@ -805,6 +834,32 @@ function throwDomainError(error: unknown): never {
               : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
+  if (error instanceof VisionServiceError) {
+    const code =
+      error.code === "SESSION_NOT_FOUND" ||
+      error.code === "VIDEO_NOT_FOUND" ||
+      error.code === "MATCH_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "VERSION_CONFLICT"
+          ? "CONFLICT"
+          : error.code === "INVALID_EVENT"
+            ? "BAD_REQUEST"
+            : error.code === "REMOTE_EXPIRED"
+              ? "FORBIDDEN"
+              : "INTERNAL_SERVER_ERROR";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof HealthServiceError) {
+    const code =
+      error.code === "HEALTH_NOT_FOUND" || error.code === "GRANT_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "ACCESS_DENIED" || error.code === "ADULT_REQUIRED"
+          ? "FORBIDDEN"
+          : error.code === "INVALID_GRANT"
+            ? "BAD_REQUEST"
+            : "INTERNAL_SERVER_ERROR";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
   if (error instanceof PrivacyError) {
     const code =
       error.code === "REQUEST_NOT_FOUND"
@@ -989,6 +1044,8 @@ const publicRouter = router({
         return await loadVideoPlayback({
           ...input,
           actor: ctx.actor,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
           now: ctx.now,
         });
       } catch (error) {
@@ -1030,6 +1087,52 @@ const publicRouter = router({
     .query(async ({ input }) => {
       try {
         return await loadPublicMatchScoringState(input.matchId);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  visionRemoteSession: publicProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "vision-remote-read",
+        capacity: 180,
+        refillPerMinute: 120,
+        scope: "ip",
+      }),
+    )
+    .input(z.object({ token: z.string().trim().min(32).max(160) }))
+    .output(visionSessionSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadRemoteVisionSession({
+          token: input.token,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  updateVisionRemoteSession: publicProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "vision-remote-update",
+        capacity: 90,
+        refillPerMinute: 60,
+        scope: "ip",
+      }),
+    )
+    .input(
+      z.object({
+        token: z.string().trim().min(32).max(160),
+        settings: visionSessionSettingsSchema.optional(),
+        status: z.enum(["setup", "ready", "recording", "ended"]).optional(),
+        expectedVersion: z.number().int().positive().optional(),
+      }),
+    )
+    .output(visionSessionSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await updateRemoteVisionSession({ ...input, now: ctx.now });
       } catch (error) {
         return throwDomainError(error);
       }
@@ -1262,6 +1365,208 @@ const publicRouter = router({
 });
 
 const playerRouter = router({
+  healthDashboard: adultProcedure
+    .output(healthDashboardSchema)
+    .query(async ({ ctx }) => {
+      try {
+        return await loadHealthDashboard({
+          actor: ctx.actor!,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  healthProfile: adultProcedure
+    .input(z.object({ personId: z.string().uuid() }))
+    .output(healthProfileSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadHealthProfile({
+          actor: ctx.actor!,
+          subjectPersonId: input.personId,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  syncHealthSamples: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "health-sync",
+        capacity: 30,
+        refillPerMinute: 10,
+      }),
+    )
+    .input(
+      z.object({
+        categories: z.array(healthCategorySchema).min(1).max(4),
+        timezone: z.string().trim().min(1).max(64),
+        earliestAuthorizedAt: z.iso.datetime().optional(),
+        samples: z.array(healthSampleInputSchema).max(500),
+        deletedExternalIds: z.array(z.string().uuid()).max(500),
+      }),
+    )
+    .output(
+      z.object({
+        imported: z.number().int().nonnegative(),
+        deleted: z.number().int().nonnegative(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await syncHealthSamples({
+          actor: ctx.actor!,
+          categories: input.categories,
+          timezone: input.timezone,
+          earliestAuthorizedAt: input.earliestAuthorizedAt
+            ? new Date(input.earliestAuthorizedAt)
+            : undefined,
+          samples: input.samples,
+          deletedExternalIds: input.deletedExternalIds,
+          syncedAt: ctx.now,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  createHealthSharingGrant: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "health-sharing-grant",
+        capacity: 20,
+        refillPerMinute: 5,
+      }),
+    )
+    .input(
+      z
+        .object({
+          kind: z.enum(["player", "coach", "organization"]),
+          personId: z.string().uuid().optional(),
+          organizationId: z.string().uuid().optional(),
+          categories: z.array(healthCategorySchema).min(1).max(4),
+          scopes: z.array(healthSharingScopeSchema).min(1).max(3),
+          expiresAt: z.iso.datetime(),
+          idempotencyKey: z.string().uuid(),
+        })
+        .refine(
+          (value) =>
+            value.kind === "organization"
+              ? Boolean(value.organizationId && !value.personId)
+              : Boolean(value.personId && !value.organizationId),
+          {
+            message: "Choose exactly one eligible Health recipient.",
+            path: ["kind"],
+          },
+        ),
+    )
+    .output(z.object({ id: z.string().uuid() }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.createHealthSharingGrant",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createHealthSharingGrant({
+              actor: ctx.actor!,
+              candidate: {
+                kind: input.kind,
+                personId: input.personId,
+                organizationId: input.organizationId,
+              },
+              categories: input.categories,
+              scopes: input.scopes,
+              expiresAt: new Date(input.expiresAt),
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  revokeHealthSharingGrant: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "health-sharing-revoke",
+        capacity: 30,
+        refillPerMinute: 10,
+      }),
+    )
+    .input(
+      z.object({
+        grantId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(z.object({ revoked: z.literal(true) }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.revokeHealthSharingGrant",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await revokeHealthSharingGrant({
+              actor: ctx.actor!,
+              grantId: input.grantId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  disconnectHealth: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "health-disconnect",
+        capacity: 5,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(z.object({ idempotencyKey: z.string().uuid() }))
+    .output(
+      z.object({
+        deletedSamples: z.number().int().nonnegative(),
+        revokedGrants: z.number().int().nonnegative(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.disconnectHealth",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await disconnectHealth({
+              actor: ctx.actor!,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   videoStudio: protectedProcedure
     .output(videoStudioSchema)
     .query(async ({ ctx }) => {
@@ -1289,6 +1594,206 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
+  createVisionSession: protectedProcedure
+    .use(requireScope("social:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "vision-session-create",
+        capacity: 12,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        title: z.string().trim().min(2).max(180),
+        matchId: z.string().uuid().optional(),
+        settings: visionSessionSettingsSchema,
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        session: visionSessionSchema,
+        remoteUrl: z.url(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.createVisionSession",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createVisionSession({
+              ...input,
+              actor: ctx.actor!,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  visionSession: protectedProcedure
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .output(visionSessionSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadOwnedVisionSession({
+          actor: ctx.actor!,
+          sessionId: input.sessionId,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  updateVisionSession: protectedProcedure
+    .use(requireScope("social:write"))
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        settings: visionSessionSettingsSchema.optional(),
+        status: z.enum(["setup", "ready", "recording", "ended"]).optional(),
+        expectedVersion: z.number().int().positive().optional(),
+      }),
+    )
+    .output(visionSessionSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await updateOwnedVisionSession({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  updateVisionPreview: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "vision-preview",
+        capacity: 90,
+        refillPerMinute: 45,
+      }),
+    )
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        jpegBase64: z
+          .string()
+          .min(32)
+          .max(280_000)
+          .regex(/^[A-Za-z0-9+/]+={0,2}$/),
+        capturedAt: z.iso.datetime(),
+      }),
+    )
+    .output(z.object({ accepted: z.literal(true) }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await updateVisionPreview({
+          actor: ctx.actor!,
+          sessionId: input.sessionId,
+          jpegBase64: input.jpegBase64,
+          capturedAt: new Date(input.capturedAt),
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  appendVisionTimelineEvents: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "vision-timeline",
+        capacity: 300,
+        refillPerMinute: 240,
+      }),
+    )
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        events: z.array(visionTimelineEventSchema).min(1).max(100),
+      }),
+    )
+    .output(z.object({ accepted: z.number().int().nonnegative() }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await appendVisionTimelineEvents({
+          actor: ctx.actor!,
+          sessionId: input.sessionId,
+          events: input.events,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  attachVisionSessionToVideo: protectedProcedure
+    .use(requireScope("social:write"))
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        videoId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(visionSessionSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.attachVisionSessionToVideo",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await attachVisionSessionToVideo({
+              ...input,
+              actor: ctx.actor!,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  revokeVisionRemote: protectedProcedure
+    .use(requireScope("social:write"))
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(z.object({ revoked: z.literal(true) }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.revokeVisionRemote",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await revokeVisionRemote({
+              actor: ctx.actor!,
+              sessionId: input.sessionId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   videoMetrics: protectedProcedure
     .output(z.array(videoMetricsSchema).readonly())
     .query(async ({ ctx }) => {

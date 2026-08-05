@@ -25,6 +25,10 @@ import {
   fulfillPaidCatalogOrder,
   releaseCatalogOrderInventory,
 } from "./catalog-checkout";
+import {
+  containAccountMedia,
+  permanentlyDeleteAccount,
+} from "./account-deletion";
 import { issueOrganizationCredits } from "./catalog-service";
 import { synchronizeIdentityVerification } from "./identity-verification";
 import {
@@ -741,7 +745,10 @@ async function claimWorkflowJob(
       and(
         eq(workflowJobs.id, id),
         or(
-          eq(workflowJobs.status, "queued"),
+          and(
+            eq(workflowJobs.status, "queued"),
+            lte(workflowJobs.availableAt, now),
+          ),
           and(
             eq(workflowJobs.status, "retry"),
             lte(workflowJobs.availableAt, now),
@@ -789,6 +796,19 @@ export async function processWorkflowJobById(
       await processPlayerSourceConnection(claimed.payload);
     } else if (claimed.kind === "sand.auto-approve-match") {
       await processSandAutoApproveMatch(claimed.payload);
+    } else if (claimed.kind === "privacy.account-containment") {
+      await containAccountMedia({
+        requestId: stringField(claimed.payload, "requestId"),
+        personId: stringField(claimed.payload, "personId"),
+        now,
+      });
+    } else if (claimed.kind === "privacy.account-deletion") {
+      await permanentlyDeleteAccount({
+        requestId: stringField(claimed.payload, "requestId"),
+        personId: stringField(claimed.payload, "personId"),
+        workflowJobId: claimed.id,
+        now,
+      });
     } else {
       throw new Error(`No workflow handler is registered for ${claimed.kind}`);
     }
@@ -857,7 +877,10 @@ export async function recoverReadyWorkflowJobs(input?: {
     .where(
       and(
         or(
-          eq(workflowJobs.status, "queued"),
+          and(
+            eq(workflowJobs.status, "queued"),
+            lte(workflowJobs.availableAt, now),
+          ),
           and(
             eq(workflowJobs.status, "retry"),
             lte(workflowJobs.availableAt, now),

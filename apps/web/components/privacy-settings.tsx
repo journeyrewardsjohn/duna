@@ -35,11 +35,16 @@ export function PrivacySettings({
   const active = requests.find((request) =>
     ["queued", "identity-review", "legal-hold"].includes(request.status),
   );
+  const scheduledDeletion = active
+    ? new Date(
+        new Date(active.requestedAt).getTime() + 7 * 24 * 60 * 60 * 1_000,
+      )
+    : undefined;
 
   const requestDeletion = () => {
     setError(undefined);
     if (confirmation !== "DELETE") {
-      setError('Type "DELETE" to confirm this irreversible request.');
+      setError('Type "DELETE" to confirm this account-deletion request.');
       return;
     }
     if (readiness.totalOrganizationCredits > 0 && !forfeitOrganizationCredits) {
@@ -59,7 +64,7 @@ export function PrivacySettings({
       }
       setConfirming(false);
       setNotice(
-        "Deletion request queued for identity and retention review. No data has been deleted yet.",
+        "Deletion is scheduled in seven days. Health sharing, remote controls, public video visibility, share links, and live updates have been revoked now.",
       );
     });
   };
@@ -72,7 +77,9 @@ export function PrivacySettings({
         setError(response.error);
         return;
       }
-      setNotice("The account-deletion request was cancelled.");
+      setNotice(
+        "The account-deletion request was cancelled. Previously revoked sharing and public access stay off until you choose to enable them again.",
+      );
     });
   };
 
@@ -116,8 +123,14 @@ export function PrivacySettings({
                 dateStyle: "medium",
                 timeStyle: "short",
               }).format(new Date(active.requestedAt))}
-              . Identity, tax, safety, and audit retention are reviewed before
-              irreversible deletion.
+              .{" "}
+              {active.status === "queued" && scheduledDeletion
+                ? `Permanent deletion is scheduled for ${new Intl.DateTimeFormat(
+                    "en-US",
+                    { dateStyle: "medium", timeStyle: "short" },
+                  ).format(scheduledDeletion)}.`
+                : "A blocker or required legal hold must be resolved before permanent deletion."}{" "}
+              Public sharing and connected remote access are already off.
             </small>
           </span>
           {active.status !== "legal-hold" && (
@@ -133,8 +146,9 @@ export function PrivacySettings({
             <div>
               <strong>Request permanent account deletion?</strong>
               <p>
-                Duna rechecks balances and account obligations on the server
-                before accepting this request.
+                Duna rechecks balances and account obligations, immediately
+                turns off sharing and remote access, and gives you seven days to
+                cancel before permanent deletion.
               </p>
             </div>
           </div>
@@ -222,10 +236,14 @@ export function PrivacySettings({
           )}
 
           <p>
-            This starts a reviewed deletion process. Required financial, tax,
-            fraud-prevention, safety, dispute, and consent records may be
-            retained only for their applicable legal or operational period. See
-            the <a href="/legal/privacy">Privacy Policy</a> and{" "}
+            After seven days, Duna deletes your sign-in identity, imported
+            Health records, videos and provider copies, posts, messages, forms,
+            connected accounts, and other sensitive service data. Required
+            financial, tax, fraud-prevention, safety, dispute, consent, and
+            security records are retained only in restricted, de-identified form
+            for their applicable period. Cancelling does not automatically
+            restore links or grants that were revoked for safety. See the{" "}
+            <a href="/legal/privacy">Privacy Policy</a> and{" "}
             <a href="/legal/terms">Terms of Service</a>.
           </p>
           <label>
@@ -259,7 +277,7 @@ export function PrivacySettings({
               onClick={requestDeletion}
               type="button"
             >
-              {isPending ? "Queuing…" : "Queue request"}
+              {isPending ? "Scheduling…" : "Delete account"}
             </button>
             <button
               disabled={isPending}

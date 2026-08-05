@@ -49,6 +49,7 @@ import {
   type WatchScoreDraft,
 } from "./watch-scoring";
 import { VideoStudioScreen } from "./video-studio";
+import { HealthScreen } from "./health-screen";
 
 // Metro requires a static module reference so the campaign image ships in the native bundle.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -151,7 +152,7 @@ function ThemeButton() {
   );
 }
 
-type Tab = "home" | "discover" | "play" | "video" | "wallet" | "you";
+type Tab = "home" | "discover" | "play" | "video" | "wallet" | "you" | "health";
 
 type CourtInventory = Awaited<
   ReturnType<DunaApiClient["public"]["courtBookingInventory"]["query"]>
@@ -2896,7 +2897,7 @@ function WalletScreen() {
   );
 }
 
-function ProfileScreen() {
+function ProfileScreen({ onHealth }: { readonly onHealth: () => void }) {
   const { dashboard, mode, settings, signOut } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
   const matches = dashboard?.recentMatches ?? demoMatches;
@@ -3085,6 +3086,36 @@ function ProfileScreen() {
           </ScrollView>
         </>
       )}
+      <Pressable
+        accessibilityHint="Opens your private Apple Health performance timeline"
+        accessibilityLabel="Open Duna Health"
+        onPress={() => {
+          selectionHaptic();
+          onHealth();
+        }}
+        style={styles.healthProfileCard}
+      >
+        <View style={styles.healthProfileTop}>
+          <View style={styles.healthProfileMark}>
+            <Text style={styles.healthProfileMarkText}>♥</Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.eyebrow}>PRIVATE PERFORMANCE CONTEXT</Text>
+            <Text style={styles.healthProfileTitle}>Health</Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </View>
+        <Text style={styles.bodyText}>
+          Connect selected Apple Health signals, compare recovery with your
+          matches, and align heart rate with Duna Vision.
+        </Text>
+        <View style={styles.healthProfileSignals}>
+          <Text style={styles.healthProfileSignal}>☾ SLEEP</Text>
+          <Text style={styles.healthProfileSignal}>♥ HEART</Text>
+          <Text style={styles.healthProfileSignal}>↗ LOAD</Text>
+          <Text style={styles.healthProfileSignal}>◇ PRIVATE</Text>
+        </View>
+      </Pressable>
       <View style={styles.profileMenu}>
         {[
           ["Player details + identity", "#playing-profile"],
@@ -4043,12 +4074,13 @@ function TabBar({
   readonly active: Tab;
   readonly onChange: (tab: Tab) => void;
 }) {
+  const selectedTab = active === "health" ? "you" : active;
   return (
     <View style={styles.tabBar}>
       {tabs.map((tab) => (
         <Pressable
           accessibilityRole="tab"
-          accessibilityState={{ selected: active === tab.key }}
+          accessibilityState={{ selected: selectedTab === tab.key }}
           key={tab.key}
           onPress={() => {
             selectionHaptic();
@@ -4057,16 +4089,22 @@ function TabBar({
           style={styles.tabItem}
         >
           <Text
-            style={[styles.tabIcon, active === tab.key && styles.tabActive]}
+            style={[
+              styles.tabIcon,
+              selectedTab === tab.key && styles.tabActive,
+            ]}
           >
             {tab.icon}
           </Text>
           <Text
-            style={[styles.tabLabel, active === tab.key && styles.tabActive]}
+            style={[
+              styles.tabLabel,
+              selectedTab === tab.key && styles.tabActive,
+            ]}
           >
             {tab.label}
           </Text>
-          {active === tab.key && <View style={styles.tabIndicator} />}
+          {selectedTab === tab.key && <View style={styles.tabIndicator} />}
         </Pressable>
       ))}
     </View>
@@ -4224,7 +4262,12 @@ function DunaApp() {
             {tab === "play" && <PlayScreen />}
             {tab === "video" && <VideoStudioScreen runtime={runtime} />}
             {tab === "wallet" && <WalletScreen />}
-            {tab === "you" && <ProfileScreen />}
+            {tab === "you" && (
+              <ProfileScreen onHealth={() => setTab("health")} />
+            )}
+            {tab === "health" && (
+              <HealthScreen onBack={() => setTab("you")} theme={theme} />
+            )}
           </Animated.View>
           <TabBar active={tab} onChange={setTab} />
           <BookingModal
@@ -6080,6 +6123,55 @@ function createStyles(palette: Palette) {
       width: 155,
     },
     achievementIcon: { color: colors.aqua, fontSize: 22, marginBottom: 20 },
+    healthProfileCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.accentRgb, 0.2),
+      borderRadius: 20,
+      borderWidth: 1,
+      gap: 12,
+      marginTop: 14,
+      padding: 16,
+    },
+    healthProfileTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+    },
+    healthProfileMark: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.dangerRgb, 0.1),
+      borderRadius: 16,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    healthProfileMarkText: {
+      color: colors.danger,
+      fontSize: 22,
+      fontWeight: "900",
+    },
+    healthProfileTitle: {
+      color: colors.bone,
+      fontSize: 24,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+    },
+    healthProfileSignals: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+    },
+    healthProfileSignal: {
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderRadius: 10,
+      color: colors.aqua,
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+      overflow: "hidden",
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
     profileMenu: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.07),

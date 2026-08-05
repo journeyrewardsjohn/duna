@@ -74,6 +74,7 @@ export async function processStripeWebhook(event: Stripe.Event): Promise<{
   const payload = JSON.parse(JSON.stringify(event)) as Record<string, unknown>;
   const webhookEventId = crypto.randomUUID();
   const workflowJobId = crypto.randomUUID();
+  const queuedAt = new Date();
   const [insertedEvents] = await db.batch([
     db
       .insert(webhookEvents)
@@ -85,6 +86,7 @@ export async function processStripeWebhook(event: Stripe.Event): Promise<{
         payload,
         signatureVerified: true,
         status: "queued",
+        createdAt: queuedAt,
       })
       .onConflictDoNothing()
       .returning({ id: webhookEvents.id }),
@@ -100,7 +102,10 @@ export async function processStripeWebhook(event: Stripe.Event): Promise<{
           eventType: event.type,
           action,
         },
+        availableAt: queuedAt,
         traceId: event.id,
+        createdAt: queuedAt,
+        updatedAt: queuedAt,
       })
       .onConflictDoNothing()
       .returning({ id: workflowJobs.id }),
