@@ -4813,7 +4813,7 @@ function createStyles(palette: Palette) {
     },
     bookingDateToolbarLabel: {
       color: colors.aqua,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -4861,7 +4861,7 @@ function createStyles(palette: Palette) {
     },
     bookingDateCalendarText: {
       color: colors.bone,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "800",
     },
     bookingDateRow: {
@@ -4900,7 +4900,7 @@ function createStyles(palette: Palette) {
     },
     bookingDateMonth: {
       color: colors.muted,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "800",
       marginTop: 1,
     },
@@ -4931,7 +4931,7 @@ function createStyles(palette: Palette) {
     },
     bookingCalendarEyebrow: {
       color: colors.sand,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -5016,7 +5016,7 @@ function createStyles(palette: Palette) {
     bookingCalendarWeekday: {
       color: colors.muted,
       flex: 1,
-      fontSize: 6,
+      fontSize: 10,
       fontWeight: "900",
       paddingBottom: 7,
       textAlign: "center",
@@ -5050,7 +5050,7 @@ function createStyles(palette: Palette) {
     bookingCalendarDayDisabled: { opacity: 0.28 },
     bookingCalendarDayText: {
       color: colors.bone,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "900",
     },
     bookingCalendarDayTextSelected: { color: "#ffffff" },
@@ -5081,7 +5081,7 @@ function createStyles(palette: Palette) {
     },
     bookingCalendarLegendText: {
       color: colors.muted,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "700",
     },
     bookingDurationRow: {
