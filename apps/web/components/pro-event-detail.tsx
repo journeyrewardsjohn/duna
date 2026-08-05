@@ -9,6 +9,7 @@ import {
   MapPin,
   Radio,
   Sparkles,
+  Ticket,
   Tv,
   Trophy,
   UsersRound,
@@ -19,6 +20,7 @@ import { ProfessionalMatchCard } from "@/components/professional-match-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { countryFlag } from "@/lib/country-flag";
+import { professionalEventJsonLd, serializeJsonLd } from "@/lib/pro-seo";
 
 type ProMatch = PublicProEvent["matches"][number];
 type ProTeam = ProMatch["teamA"];
@@ -251,36 +253,39 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
   const featuredMedia =
     event.editorial.media.find((media) => media.featured) ??
     event.editorial.media[0];
-  const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "SportsEvent",
-    name: event.name,
-    startDate: event.startsOn,
-    endDate: event.endsOn,
-    eventStatus: event.live
-      ? "https://schema.org/EventInProgress"
-      : event.status === "completed"
-        ? "https://schema.org/EventCompleted"
-        : "https://schema.org/EventScheduled",
-    image: featuredMedia?.url,
-    description: event.editorial.summary,
-    location:
-      event.location || event.editorial.venueName
-        ? {
-            "@type": "Place",
-            name: event.editorial.venueName ?? event.location,
-            address: event.editorial.venueAddress ?? event.location,
-          }
-        : undefined,
-    sport: "Beach volleyball",
-    url: `/events/${event.slug}`,
-  };
+  const venue = event.editorial.venue;
+  const structuredVenueAddress = [
+    venue?.addressLine1,
+    venue?.locality,
+    venue?.administrativeArea,
+    venue?.postalCode,
+    venue?.countryCode,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const venueAddress =
+    venue?.formattedAddress ||
+    structuredVenueAddress ||
+    event.editorial.venueAddress;
+  const venueMapParameters = new URLSearchParams();
+  if (venue?.latitude !== undefined && venue.longitude !== undefined) {
+    venueMapParameters.set("latitude", String(venue.latitude));
+    venueMapParameters.set("longitude", String(venue.longitude));
+  } else if (venueAddress) {
+    venueMapParameters.set("address", venueAddress);
+  }
+  const venueMapHref =
+    venue?.googleMapsUri ??
+    (venueAddress
+      ? `https://www.google.com/maps/search/?${new URLSearchParams({ api: "1", query: venueAddress }).toString()}`
+      : undefined);
+  const structuredData = professionalEventJsonLd(event);
 
   return (
     <main className="pro-event-page">
       <SiteHeader />
       <script
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
         type="application/ld+json"
       />
 
@@ -323,13 +328,24 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
           {event.editorial.summary && (
             <p className="pro-event-hero__summary">{event.editorial.summary}</p>
           )}
-          {event.editorial.venueAddress && (
+          {venueAddress && (
             <p className="pro-event-hero__address">
               <MapPin aria-hidden size={15} />
-              {event.editorial.venueAddress}
+              {venueAddress}
             </p>
           )}
           <div className="pro-event-hero__actions">
+            {event.editorial.ticketUrl && (
+              <a
+                className="pro-event-ticket-link"
+                href={event.editorial.ticketUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <Ticket aria-hidden size={15} /> Tickets and event access
+                <ExternalLink aria-hidden size={14} />
+              </a>
+            )}
             {event.sibling && (
               <Link href={`/events/${event.sibling.slug}`}>
                 See {event.sibling.genderCategory}&apos;s division
@@ -391,6 +407,37 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
       </section>
 
       <div className="pro-event-content">
+        {venueAddress && venueMapHref && (
+          <section className="pro-event-section pro-event-venue">
+            <a
+              aria-label={`Open ${event.editorial.venueName ?? venueAddress} in Google Maps`}
+              className="pro-event-venue__map"
+              href={venueMapHref}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <img
+                alt={`Map showing ${event.editorial.venueName ?? venueAddress}`}
+                loading="lazy"
+                src={`/api/places/map?${venueMapParameters.toString()}`}
+              />
+              <span>
+                Explore the venue <ExternalLink aria-hidden size={14} />
+              </span>
+            </a>
+            <div className="pro-event-venue__details">
+              <span className="page-eyebrow">Event location</span>
+              <h2>{event.editorial.venueName ?? event.location}</h2>
+              <p>{venueAddress}</p>
+              {event.editorial.timezone && (
+                <small>Schedule shown in {event.editorial.timezone}</small>
+              )}
+              <a href={venueMapHref} rel="noreferrer" target="_blank">
+                Directions <ArrowRight aria-hidden size={14} />
+              </a>
+            </div>
+          </section>
+        )}
         <section className="pro-event-section pro-watch">
           <header>
             <div>

@@ -43,6 +43,11 @@ import {
   sourceMatchFingerprint,
 } from "./normalize";
 import {
+  createProfessionalEventResearchProposal,
+  parseProfessionalEventResearchProposal,
+  type ProfessionalEventResearchProposal,
+} from "./research";
+import {
   importBvbInfoPlayer,
   importFivbTournament,
   importVolleyballLifePlayer,
@@ -119,6 +124,9 @@ function preserveEditorialPayload(
       : {}),
     ...(previous.professionalEditorial
       ? { professionalEditorial: previous.professionalEditorial }
+      : {}),
+    ...(previous.professionalResearch
+      ? { professionalResearch: previous.professionalResearch }
       : {}),
   };
 }
@@ -1593,6 +1601,7 @@ export async function loadSandDataOverview() {
         publicPath: `/events/${professionalEventSlug(event)}`,
         name: effective.name,
         location: effective.location,
+        countryCode: event.countryCode ?? undefined,
         category: effective.category,
         genderCategory: event.genderCategory,
         startsOn: effective.startsOn,
@@ -1611,6 +1620,7 @@ export async function loadSandDataOverview() {
           endsOn: event.endsOn ?? undefined,
         },
         editorial: effective.editorial,
+        research: professionalEventResearchFromPayload(event.rawPayload),
         watchOptions: watchOptionsFromPayload(event.rawPayload),
         matches: professionalMatchRows
           .filter(
@@ -2705,6 +2715,20 @@ type ProfessionalEventMedia = {
   readonly featured: boolean;
 };
 
+type ProfessionalEventVenue = {
+  readonly googlePlaceId?: string;
+  readonly googleMapsUri?: string;
+  readonly formattedAddress?: string;
+  readonly addressLine1?: string;
+  readonly addressLine2?: string;
+  readonly locality?: string;
+  readonly administrativeArea?: string;
+  readonly postalCode?: string;
+  readonly countryCode?: string;
+  readonly latitude?: number;
+  readonly longitude?: number;
+};
+
 type ProfessionalEventEditorial = {
   readonly overrides: {
     readonly name?: string;
@@ -2716,10 +2740,82 @@ type ProfessionalEventEditorial = {
   readonly summary?: string;
   readonly venueName?: string;
   readonly venueAddress?: string;
+  readonly venue?: ProfessionalEventVenue;
   readonly timezone?: string;
+  readonly ticketUrl?: string;
   readonly media: readonly ProfessionalEventMedia[];
   readonly updatedAt?: string;
 };
+
+type ProfessionalEventResearchState = {
+  readonly latest?: ProfessionalEventResearchProposal;
+  readonly history: readonly ProfessionalEventResearchProposal[];
+};
+
+function professionalEventResearchFromPayload(
+  value: unknown,
+): ProfessionalEventResearchState {
+  const payload = unknownRecord(value);
+  const stored = unknownRecord(payload.professionalResearch);
+  const latest = parseProfessionalEventResearchProposal(stored.latest);
+  const history = Array.isArray(stored.history)
+    ? stored.history.flatMap((proposal) => {
+        const parsed = parseProfessionalEventResearchProposal(proposal);
+        return parsed ? [parsed] : [];
+      })
+    : [];
+  return { ...(latest ? { latest } : {}), history };
+}
+
+function professionalEventVenueFromValue(
+  value: unknown,
+): ProfessionalEventVenue | undefined {
+  const venue = unknownRecord(value);
+  const latitude = optionalNumber(venue.latitude);
+  const longitude = optionalNumber(venue.longitude);
+  const coordinatesValid =
+    latitude !== undefined &&
+    longitude !== undefined &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180;
+  const parsed: ProfessionalEventVenue = {
+    ...(optionalSnapshotString(venue.googlePlaceId)
+      ? { googlePlaceId: optionalSnapshotString(venue.googlePlaceId) }
+      : {}),
+    ...(optionalSnapshotString(venue.googleMapsUri)
+      ? { googleMapsUri: optionalSnapshotString(venue.googleMapsUri) }
+      : {}),
+    ...(optionalSnapshotString(venue.formattedAddress)
+      ? { formattedAddress: optionalSnapshotString(venue.formattedAddress) }
+      : {}),
+    ...(optionalSnapshotString(venue.addressLine1)
+      ? { addressLine1: optionalSnapshotString(venue.addressLine1) }
+      : {}),
+    ...(optionalSnapshotString(venue.addressLine2)
+      ? { addressLine2: optionalSnapshotString(venue.addressLine2) }
+      : {}),
+    ...(optionalSnapshotString(venue.locality)
+      ? { locality: optionalSnapshotString(venue.locality) }
+      : {}),
+    ...(optionalSnapshotString(venue.administrativeArea)
+      ? {
+          administrativeArea: optionalSnapshotString(venue.administrativeArea),
+        }
+      : {}),
+    ...(optionalSnapshotString(venue.postalCode)
+      ? { postalCode: optionalSnapshotString(venue.postalCode) }
+      : {}),
+    ...(optionalSnapshotString(venue.countryCode)
+      ? {
+          countryCode: optionalSnapshotString(venue.countryCode)?.toUpperCase(),
+        }
+      : {}),
+    ...(coordinatesValid ? { latitude, longitude } : {}),
+  };
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
 
 function professionalEventEditorialFromPayload(
   value: unknown,
@@ -2788,8 +2884,14 @@ function professionalEventEditorialFromPayload(
     ...(optionalSnapshotString(stored.venueAddress)
       ? { venueAddress: optionalSnapshotString(stored.venueAddress) }
       : {}),
+    ...(professionalEventVenueFromValue(stored.venue)
+      ? { venue: professionalEventVenueFromValue(stored.venue) }
+      : {}),
     ...(optionalSnapshotString(stored.timezone)
       ? { timezone: optionalSnapshotString(stored.timezone) }
+      : {}),
+    ...(optionalSnapshotString(stored.ticketUrl)
+      ? { ticketUrl: optionalSnapshotString(stored.ticketUrl) }
       : {}),
     ...(optionalSnapshotString(stored.updatedAt)
       ? { updatedAt: optionalSnapshotString(stored.updatedAt) }
@@ -3271,7 +3373,9 @@ export async function saveProfessionalEventEditorial(input: {
   readonly summary?: string;
   readonly venueName?: string;
   readonly venueAddress?: string;
+  readonly venue?: ProfessionalEventVenue;
   readonly timezone?: string;
+  readonly ticketUrl?: string;
   readonly reason: string;
   readonly now?: Date;
 }) {
@@ -3299,6 +3403,7 @@ export async function saveProfessionalEventEditorial(input: {
     );
   }
   const previous = professionalEventEditorialFromPayload(event.rawPayload);
+  const venue = professionalEventVenueFromValue(input.venue);
   const professionalEditorial: ProfessionalEventEditorial = {
     overrides: {
       ...(input.overrides.name?.trim()
@@ -3322,8 +3427,12 @@ export async function saveProfessionalEventEditorial(input: {
     ...(input.venueAddress?.trim()
       ? { venueAddress: input.venueAddress.trim() }
       : {}),
+    ...(venue ? { venue } : {}),
     ...(validatedTimeZone(input.timezone)
       ? { timezone: validatedTimeZone(input.timezone) }
+      : {}),
+    ...(input.ticketUrl?.trim()
+      ? { ticketUrl: validatedPublicUrl(input.ticketUrl, "Ticket URL") }
       : {}),
   };
   const rawPayload = unknownRecord(event.rawPayload);
@@ -3346,6 +3455,299 @@ export async function saveProfessionalEventEditorial(input: {
     createdAt: now,
   });
   return professionalEditorial;
+}
+
+export async function researchProfessionalEvent(input: {
+  readonly professionalEventId: string;
+  readonly actor?: ApiActor;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  if (input.actor) requireSuperAdmin(input.actor);
+  const now = input.now ?? new Date();
+  const database = getDatabase();
+  const event = await database.query.professionalEvents.findFirst({
+    where: eq(professionalEvents.id, input.professionalEventId),
+  });
+  if (!event) {
+    throw new SandDataServiceError(
+      "MATCH_NOT_FOUND",
+      "The professional event was not found.",
+    );
+  }
+  const effective = effectiveProfessionalEvent(event);
+  const year = Number.parseInt(
+    (
+      effective.startsOn ??
+      event.startsOn ??
+      String(now.getUTCFullYear())
+    ).slice(0, 4),
+    10,
+  );
+  const proposal = await createProfessionalEventResearchProposal(
+    {
+      name: effective.name,
+      year: Number.isInteger(year) ? year : now.getUTCFullYear(),
+      currentLocation: effective.location,
+      currentStartsOn: effective.startsOn,
+      currentEndsOn: effective.endsOn,
+      sourceUrl: event.sourceUrl,
+    },
+    { now },
+  );
+  const previous = professionalEventResearchFromPayload(event.rawPayload);
+  const professionalResearch: ProfessionalEventResearchState = {
+    latest: proposal,
+    history: [
+      ...(previous.latest ? [previous.latest] : []),
+      ...previous.history,
+    ].slice(0, 5),
+  };
+  await database
+    .update(professionalEvents)
+    .set({
+      rawPayload: {
+        ...unknownRecord(event.rawPayload),
+        professionalResearch,
+      },
+      updatedAt: now,
+    })
+    .where(eq(professionalEvents.id, event.id));
+  await database.insert(auditLog).values({
+    actorPersonId: input.actor?.personId,
+    actorType: input.actor ? "person" : "system",
+    action: "professional-event.research.completed",
+    entityType: "professional-event",
+    entityId: event.id,
+    afterHash: stableHash(proposal),
+    reason: input.actor
+      ? "Super administrator requested evidence-backed event research."
+      : "Scheduled evidence-backed event research completed.",
+    createdAt: now,
+  });
+  return proposal;
+}
+
+export async function researchUpcomingProfessionalEvents(
+  input: {
+    readonly limit?: number;
+    readonly now?: Date;
+  } = {},
+) {
+  requireDatabase();
+  const database = getDatabase();
+  const now = input.now ?? new Date();
+  const today = now.toISOString().slice(0, 10);
+  const freshSince = now.getTime() - 7 * 24 * 60 * 60 * 1_000;
+  const limit = Math.min(5, Math.max(1, input.limit ?? 3));
+  const rows = await database
+    .select()
+    .from(professionalEvents)
+    .where(inArray(professionalEvents.status, ["live", "upcoming"]))
+    .orderBy(asc(professionalEvents.startsOn))
+    .limit(40);
+  const candidates = rows
+    .filter((event) => {
+      const editorial = professionalEventEditorialFromPayload(event.rawPayload);
+      const research = professionalEventResearchFromPayload(event.rawPayload);
+      const effective = effectiveProfessionalEvent(event);
+      if ((effective.endsOn ?? effective.startsOn ?? today) < today)
+        return false;
+      if (research.latest?.status === "review") return false;
+      if (
+        research.latest &&
+        Date.parse(research.latest.generatedAt) >= freshSince
+      ) {
+        return false;
+      }
+      return (
+        !research.latest ||
+        (!editorial.venue &&
+          !editorial.ticketUrl &&
+          watchOptionsFromPayload(event.rawPayload).length === 0)
+      );
+    })
+    .slice(0, limit);
+  const results: {
+    readonly professionalEventId: string;
+    readonly status: "completed" | "failed";
+    readonly message?: string;
+  }[] = [];
+  for (const event of candidates) {
+    try {
+      await researchProfessionalEvent({
+        professionalEventId: event.id,
+        now,
+      });
+      results.push({ professionalEventId: event.id, status: "completed" });
+    } catch (error) {
+      results.push({
+        professionalEventId: event.id,
+        status: "failed",
+        message:
+          error instanceof Error ? error.message : "Event research failed.",
+      });
+    }
+  }
+  return { reviewed: candidates.length, results };
+}
+
+export async function applyProfessionalEventResearch(input: {
+  readonly actor: ApiActor;
+  readonly professionalEventId: string;
+  readonly proposalId: string;
+  readonly reason: string;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  requireSuperAdmin(input.actor);
+  const now = input.now ?? new Date();
+  const database = getDatabase();
+  const event = await database.query.professionalEvents.findFirst({
+    where: eq(professionalEvents.id, input.professionalEventId),
+  });
+  if (!event) {
+    throw new SandDataServiceError(
+      "MATCH_NOT_FOUND",
+      "The professional event was not found.",
+    );
+  }
+  const research = professionalEventResearchFromPayload(event.rawPayload);
+  const proposal = research.latest;
+  if (
+    !proposal ||
+    proposal.id !== input.proposalId ||
+    proposal.status !== "review"
+  ) {
+    throw new SandDataServiceError(
+      "INVALID_PROFESSIONAL_EVENT",
+      "That research proposal is no longer available for review.",
+    );
+  }
+  if (
+    proposal.startsOn &&
+    proposal.endsOn &&
+    proposal.endsOn < proposal.startsOn
+  ) {
+    throw new SandDataServiceError(
+      "INVALID_PROFESSIONAL_EVENT",
+      "The researched end date is before the start date.",
+    );
+  }
+  const previousEditorial = professionalEventEditorialFromPayload(
+    event.rawPayload,
+  );
+  const researchedVenue: ProfessionalEventVenue | undefined = proposal.venue
+    ? {
+        googlePlaceId: proposal.venue.googlePlaceId,
+        googleMapsUri: proposal.venue.googleMapsUri,
+        formattedAddress: proposal.venue.formattedAddress,
+        addressLine1: proposal.venue.addressLine1,
+        locality: proposal.venue.locality,
+        administrativeArea: proposal.venue.administrativeArea,
+        postalCode: proposal.venue.postalCode,
+        countryCode: proposal.venue.countryCode,
+        latitude: proposal.venue.latitude,
+        longitude: proposal.venue.longitude,
+      }
+    : undefined;
+  const professionalEditorial: ProfessionalEventEditorial = {
+    ...previousEditorial,
+    overrides: {
+      ...previousEditorial.overrides,
+      ...(!previousEditorial.overrides.startsOn && proposal.startsOn
+        ? { startsOn: proposal.startsOn }
+        : {}),
+      ...(!previousEditorial.overrides.endsOn && proposal.endsOn
+        ? { endsOn: proposal.endsOn }
+        : {}),
+      ...(!previousEditorial.overrides.location && proposal.venue?.locality
+        ? { location: proposal.venue.locality }
+        : {}),
+    },
+    ...(!previousEditorial.summary && proposal.overview
+      ? { summary: proposal.overview }
+      : {}),
+    ...(!previousEditorial.venueName && proposal.venueName
+      ? { venueName: proposal.venueName }
+      : {}),
+    ...(!previousEditorial.venueAddress &&
+    (proposal.venueAddress || proposal.venue?.formattedAddress)
+      ? {
+          venueAddress:
+            proposal.venue?.formattedAddress ?? proposal.venueAddress,
+        }
+      : {}),
+    ...(!previousEditorial.venue && researchedVenue
+      ? { venue: researchedVenue }
+      : {}),
+    ...(!previousEditorial.timezone && proposal.venue?.timezone
+      ? { timezone: validatedTimeZone(proposal.venue.timezone) }
+      : {}),
+    ...(!previousEditorial.ticketUrl && proposal.ticketUrl
+      ? { ticketUrl: validatedPublicUrl(proposal.ticketUrl, "Ticket URL") }
+      : {}),
+    updatedAt: now.toISOString(),
+  };
+  const existingWatchOptions = watchOptionsFromPayload(event.rawPayload);
+  const signatures = new Set(
+    existingWatchOptions.map(
+      (option) =>
+        `${option.kind}:${option.url ?? ""}:${option.channelName ?? ""}`,
+    ),
+  );
+  const researchedWatchOptions = proposal.watchOptions.flatMap((option) => {
+    const url = validatedWatchUrl(option.url, option.kind);
+    const signature = `${option.kind}:${url ?? ""}:${option.channelName ?? ""}`;
+    if (signatures.has(signature)) return [];
+    signatures.add(signature);
+    return [
+      {
+        id: crypto.randomUUID(),
+        kind: option.kind,
+        label: option.label,
+        ...(url ? { url } : {}),
+        ...(option.channelName ? { channelName: option.channelName } : {}),
+      } satisfies PublicWatchOption,
+    ];
+  });
+  const appliedProposal: ProfessionalEventResearchProposal = {
+    ...proposal,
+    status: "applied",
+    appliedAt: now.toISOString(),
+  };
+  const professionalResearch: ProfessionalEventResearchState = {
+    latest: appliedProposal,
+    history: research.history,
+  };
+  await database
+    .update(professionalEvents)
+    .set({
+      rawPayload: {
+        ...unknownRecord(event.rawPayload),
+        professionalEditorial,
+        professionalResearch,
+        watchOptions: [...existingWatchOptions, ...researchedWatchOptions],
+      },
+      updatedAt: now,
+    })
+    .where(eq(professionalEvents.id, event.id));
+  await database.insert(auditLog).values({
+    actorPersonId: input.actor.personId,
+    actorType: "person",
+    action: "professional-event.research.applied",
+    entityType: "professional-event",
+    entityId: event.id,
+    beforeHash: stableHash(previousEditorial),
+    afterHash: stableHash({ professionalEditorial, researchedWatchOptions }),
+    reason: input.reason,
+    createdAt: now,
+  });
+  return {
+    professionalEditorial,
+    addedWatchOptions: researchedWatchOptions.length,
+    proposal: appliedProposal,
+  };
 }
 
 export async function saveProfessionalEventMedia(input: {
@@ -4511,7 +4913,9 @@ export async function loadPublicProEvent(slug: string) {
       summary: effective.editorial.summary,
       venueName: effective.editorial.venueName,
       venueAddress: effective.editorial.venueAddress,
+      venue: effective.editorial.venue,
       timezone: effective.editorial.timezone,
+      ticketUrl: effective.editorial.ticketUrl,
       media: effective.editorial.media,
     },
     watchOptions: eventWatchOptions,

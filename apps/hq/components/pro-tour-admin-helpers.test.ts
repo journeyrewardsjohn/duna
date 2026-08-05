@@ -12,6 +12,7 @@ function event(
 ): ProfessionalEvent {
   return {
     category: "Elite16",
+    countryCode: undefined,
     endsOn: "2026-08-09",
     editorial: { overrides: {}, media: [] },
     externalEventId: overrides.id,
@@ -22,6 +23,7 @@ function event(
     matchCount: 0,
     matches: [],
     publicPath: `/events/${overrides.id}`,
+    research: { history: [] },
     sourceName: "FIVB",
     sourceSlug: "fivb-12ndr",
     sourceUrl: "https://example.com",

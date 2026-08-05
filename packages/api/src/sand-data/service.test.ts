@@ -23,6 +23,9 @@ describe("FIVB event detail refresh", () => {
             overrides: { startsOn: "2026-08-07" },
             media: [{ id: "dallas-poster", kind: "poster" }],
           },
+          professionalResearch: {
+            latest: { id: "research-proposal", status: "review" },
+          },
           watchOptions: [{ id: "vbtv" }],
         },
         syncedAt,
@@ -35,6 +38,9 @@ describe("FIVB event detail refresh", () => {
       professionalEditorial: {
         overrides: { startsOn: "2026-08-07" },
         media: [{ id: "dallas-poster", kind: "poster" }],
+      },
+      professionalResearch: {
+        latest: { id: "research-proposal", status: "review" },
       },
       watchOptions: [{ id: "vbtv" }],
     });

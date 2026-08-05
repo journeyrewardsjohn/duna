@@ -6,29 +6,38 @@ import type { PersonSummary } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowUpRight,
+  Bot,
   CalendarDays,
   CheckCircle2,
   CircleAlert,
+  CloudUpload,
   ExternalLink,
+  FileVideo2,
   ImageIcon,
+  Link2,
   LoaderCircle,
   MapPin,
   Radio,
   RefreshCw,
+  ScanSearch,
   Search,
   ShieldCheck,
   Trash2,
   Trophy,
+  TicketCheck,
   Tv,
   UsersRound,
+  X,
 } from "lucide-react";
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import {
+  applyProfessionalEventResearchAction,
   linkSandPlayerAction,
   refreshAvpLeagueAction,
   refreshFivbIndexAction,
   removeProfessionalEventMediaAction,
   removeProfessionalWatchOptionAction,
+  researchProfessionalEventAction,
   saveAvpRosterAssignmentAction,
   saveProfessionalEventEditorialAction,
   saveProfessionalEventMediaAction,
@@ -40,6 +49,7 @@ import {
   createProfessionalEventMediaPath,
   optimizeImageUpload,
 } from "@/lib/media-storage";
+import { AddressEntry, type AddressValue } from "./place-address-fields";
 import { PlayerCombobox, type PlayerComboboxOption } from "./player-combobox";
 import {
   eventBroadcastCoverage,
@@ -49,6 +59,7 @@ import {
   type ProfessionalStatusFilter,
   type ProfessionalTourFilter,
 } from "./pro-tour-admin-helpers";
+import { TimezoneSelect } from "./timezone-select";
 
 const initialState: SandActionState = { status: "idle", message: "" };
 const webOrigin =
@@ -61,6 +72,7 @@ export type ProfessionalTourTool =
   | "overview"
   | "events"
   | "editorial"
+  | "research"
   | "schedule"
   | "broadcasts"
   | "rosters"
@@ -537,6 +549,16 @@ function ProfessionalMediaForm({
     "poster",
   );
   const [url, setUrl] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [fileSummary, setFileSummary] = useState<{
+    readonly name: string;
+    readonly size: number;
+    readonly width?: number;
+    readonly height?: number;
+  }>();
+  const [dragActive, setDragActive] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [uploadState, setUploadState] = useState<
     "idle" | "uploading" | "ready" | "error"
   >("idle");
@@ -545,11 +567,41 @@ function ProfessionalMediaForm({
     saveProfessionalEventMediaAction,
     initialState,
   );
+
+  const clearMedia = () => {
+    if (previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl("");
+    setUrl("");
+    setFileSummary(undefined);
+    setUploadProgress(0);
+    setUploadMessage("");
+    setUploadState("idle");
+    if (fileInput.current) fileInput.current.value = "";
+  };
+
   const uploadMedia = async (file?: File) => {
     if (!file) return;
+    if (previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+    const localPreview = URL.createObjectURL(file);
+    setPreviewUrl(localPreview);
+    setFileSummary({ name: file.name, size: file.size });
+    setUploadProgress(0);
     setUploadState("uploading");
     setUploadMessage("Preparing media…");
     try {
+      if (file.type.startsWith("image/")) {
+        const bitmap = await createImageBitmap(file);
+        setFileSummary({
+          name: file.name,
+          size: file.size,
+          width: bitmap.width,
+          height: bitmap.height,
+        });
+        setKind(bitmap.width / bitmap.height < 0.9 ? "poster" : "hero-image");
+        bitmap.close();
+      } else {
+        setKind("hero-video");
+      }
       const prepared = file.type.startsWith("image/")
         ? await optimizeImageUpload(file)
         : file;
@@ -568,15 +620,19 @@ function ProfessionalMediaForm({
           contentType: prepared.type,
           handleUploadUrl: "/api/admin/pro-media/upload",
           multipart: prepared.size > 100_000_000,
-          onUploadProgress: ({ percentage }) =>
-            setUploadMessage(`Uploading… ${Math.round(percentage)}%`),
+          onUploadProgress: ({ percentage }) => {
+            setUploadProgress(Math.round(percentage));
+            setUploadMessage(`Uploading… ${Math.round(percentage)}%`);
+          },
         },
       );
       if (!stored.url) throw new Error("Storage did not return a media URL.");
+      URL.revokeObjectURL(localPreview);
+      setPreviewUrl(stored.url);
       setUrl(stored.url);
-      if (prepared.type.startsWith("video/")) setKind("hero-video");
+      setUploadProgress(100);
       setUploadState("ready");
-      setUploadMessage("Upload ready to publish.");
+      setUploadMessage("Ready to publish");
     } catch (error) {
       setUploadState("error");
       setUploadMessage(
@@ -589,59 +645,172 @@ function ProfessionalMediaForm({
       <input name="professionalEventId" type="hidden" value={event.id} />
       <header>
         <div>
-          <span className="hq-eyebrow">Promotion library</span>
-          <h3>Add a poster, hero image, or video</h3>
+          <span className="hq-eyebrow">Event creative</span>
+          <h3>Build the event&apos;s visual story</h3>
+          <p>
+            Upload once, preview the final treatment, then choose where it
+            belongs.
+          </p>
         </div>
-        <ImageIcon aria-hidden size={20} />
+        <Badge>{event.editorial.media.length} published</Badge>
       </header>
-      <label className="pro-admin-media-drop">
-        <ImageIcon aria-hidden size={24} />
-        <span>
-          <strong>Upload original media</strong>
-          <small>Images up to 15 MB · video up to 250 MB</small>
-        </span>
-        <input
-          accept="image/avif,image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
-          disabled={uploadState === "uploading"}
-          onChange={(event) => void uploadMedia(event.target.files?.[0])}
-          type="file"
-        />
-      </label>
-      {uploadMessage && (
-        <p
-          className={`sand-action-feedback sand-action-feedback--${uploadState === "error" ? "error" : "success"}`}
+      <input
+        accept="image/avif,image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
+        className="pro-admin-media-file-input"
+        disabled={uploadState === "uploading"}
+        onChange={(input) => void uploadMedia(input.target.files?.[0])}
+        ref={fileInput}
+        type="file"
+      />
+      <div
+        className={`pro-admin-media-studio${dragActive ? " is-dragging" : ""}${previewUrl ? " has-preview" : ""}`}
+        onDragEnter={(drag) => {
+          drag.preventDefault();
+          setDragActive(true);
+        }}
+        onDragLeave={(drag) => {
+          drag.preventDefault();
+          if (drag.currentTarget === drag.target) setDragActive(false);
+        }}
+        onDragOver={(drag) => drag.preventDefault()}
+        onDrop={(drag) => {
+          drag.preventDefault();
+          setDragActive(false);
+          void uploadMedia(drag.dataTransfer.files[0]);
+        }}
+      >
+        <div
+          className={`pro-admin-media-preview pro-admin-media-preview--${kind}`}
         >
-          {uploadMessage}
-        </p>
-      )}
-      <div className="pro-admin-media-form__grid">
-        <label>
-          <span>Placement</span>
-          <select
-            name="kind"
-            onChange={(event) =>
-              setKind(
-                event.target.value as "poster" | "hero-image" | "hero-video",
-              )
-            }
-            value={kind}
-          >
-            <option value="poster">Promotional poster</option>
-            <option value="hero-image">Hero image</option>
-            <option value="hero-video">Hero video</option>
-          </select>
-        </label>
+          {previewUrl ? (
+            kind === "hero-video" ? (
+              <video controls muted playsInline src={previewUrl} />
+            ) : (
+              <img alt="Selected event media preview" src={previewUrl} />
+            )
+          ) : (
+            <div className="pro-admin-media-preview__empty">
+              <CloudUpload aria-hidden size={30} />
+              <strong>Drop a poster, photo, or video</strong>
+              <span>or choose an original file from your computer</span>
+            </div>
+          )}
+          {previewUrl && (
+            <span className="pro-admin-media-preview__placement">
+              {kind === "poster"
+                ? "Poster preview"
+                : kind === "hero-video"
+                  ? "Hero video preview"
+                  : "Hero image preview"}
+            </span>
+          )}
+        </div>
+        <div className="pro-admin-media-studio__controls">
+          <span className="hq-eyebrow">Original asset</span>
+          <h4>{fileSummary?.name ?? "Choose media to begin"}</h4>
+          {fileSummary ? (
+            <p>
+              {(fileSummary.size / 1_048_576).toFixed(1)} MB
+              {fileSummary.width && fileSummary.height
+                ? ` · ${fileSummary.width} × ${fileSummary.height}px`
+                : ""}
+            </p>
+          ) : (
+            <p>JPG, PNG, WebP, AVIF, MP4, MOV, or WebM</p>
+          )}
+          <div className="pro-admin-media-studio__actions">
+            <button
+              disabled={uploadState === "uploading"}
+              onClick={() => fileInput.current?.click()}
+              type="button"
+            >
+              <CloudUpload aria-hidden size={16} />
+              {previewUrl ? "Replace media" : "Browse files"}
+            </button>
+            {previewUrl && uploadState !== "uploading" && (
+              <button onClick={clearMedia} type="button">
+                <X aria-hidden size={16} /> Remove
+              </button>
+            )}
+          </div>
+          <small>Images up to 15 MB · video up to 250 MB</small>
+          {uploadState === "uploading" && (
+            <div
+              aria-label={`Upload ${uploadProgress}% complete`}
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={uploadProgress}
+              className="pro-admin-media-progress"
+              role="progressbar"
+            >
+              <span style={{ width: `${uploadProgress}%` }} />
+            </div>
+          )}
+          {uploadMessage && (
+            <p
+              className={`pro-admin-media-status pro-admin-media-status--${uploadState}`}
+              role={uploadState === "error" ? "alert" : "status"}
+            >
+              {uploadState === "ready" && (
+                <CheckCircle2 aria-hidden size={15} />
+              )}
+              {uploadState === "uploading" && (
+                <LoaderCircle aria-hidden className="spin" size={15} />
+              )}
+              {uploadMessage}
+            </p>
+          )}
+        </div>
+      </div>
+      <fieldset className="pro-admin-media-placement">
+        <legend>Choose placement</legend>
+        {(
+          [
+            ["poster", "Promotional poster", "Portrait · event campaign"],
+            ["hero-image", "Hero image", "Wide · event overview"],
+            ["hero-video", "Hero video", "Wide motion · muted autoplay"],
+          ] as const
+        ).map(([value, label, helper]) => (
+          <label className={kind === value ? "is-selected" : ""} key={value}>
+            <input
+              checked={kind === value}
+              name="kind"
+              onChange={() => setKind(value)}
+              type="radio"
+              value={value}
+            />
+            {value === "hero-video" ? (
+              <FileVideo2 aria-hidden size={18} />
+            ) : (
+              <ImageIcon aria-hidden size={18} />
+            )}
+            <span>
+              <strong>{label}</strong>
+              <small>{helper}</small>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      <details className="pro-admin-media-url">
+        <summary>
+          <Link2 aria-hidden size={15} /> Use a hosted media URL instead
+        </summary>
         <label>
           <span>Media URL</span>
           <input
             name="url"
-            onChange={(event) => setUrl(event.target.value)}
-            placeholder="Upload above or paste a public URL"
+            onChange={(input) => {
+              setUrl(input.target.value);
+              if (!fileSummary) setPreviewUrl(input.target.value);
+            }}
+            placeholder="https://…"
             required
             type="url"
             value={url}
           />
         </label>
+      </details>
+      <div className="pro-admin-media-form__grid">
         <label>
           <span>Video poster URL</span>
           <input
@@ -676,13 +845,124 @@ function ProfessionalMediaForm({
           />
         </label>
       </div>
+      <button
+        className="hq-button hq-button--primary pro-admin-media-publish"
+        disabled={pending || uploadState === "uploading" || !url}
+      >
+        {pending ? (
+          <LoaderCircle className="spin" size={16} />
+        ) : (
+          <CheckCircle2 size={16} />
+        )}
+        Publish to event
+      </button>
+      <ActionFeedback state={state} />
+    </form>
+  );
+}
+
+function EventEditorialForm({ event }: { readonly event: ProfessionalEvent }) {
+  const [state, action, pending] = useActionState(
+    saveProfessionalEventEditorialAction,
+    initialState,
+  );
+  const [venueName, setVenueName] = useState(event.editorial.venueName ?? "");
+  const [timeZone, setTimeZone] = useState(event.editorial.timezone ?? "");
+  const [recommendedTimeZone, setRecommendedTimeZone] = useState(
+    event.editorial.timezone ?? "",
+  );
+  const initialAddress: AddressValue = event.editorial.venue ?? {
+    formattedAddress: event.editorial.venueAddress,
+    countryCode: event.countryCode,
+  };
+
+  return (
+    <form action={action} className="pro-admin-editorial-form">
+      <input name="professionalEventId" type="hidden" value={event.id} />
+      {(
+        [
+          ["Name", "name", "overrideName", "text"],
+          ["Location", "location", "overrideLocation", "text"],
+          ["Category", "category", "overrideCategory", "text"],
+          ["Start date", "startsOn", "overrideStartsOn", "date"],
+          ["End date", "endsOn", "overrideEndsOn", "date"],
+        ] as const
+      ).map(([label, field, toggle, type]) => (
+        <label className="pro-admin-override-field" key={field}>
+          <span>
+            <input
+              defaultChecked={Boolean(event.editorial.overrides[field])}
+              name={toggle}
+              type="checkbox"
+            />
+            Override {label.toLowerCase()}
+          </span>
+          <input defaultValue={event[field] ?? ""} name={field} type={type} />
+          <small>Source: {event.scraped[field] ?? "Not provided"}</small>
+        </label>
+      ))}
+      <label className="pro-admin-editorial-form__wide">
+        <span>Event overview</span>
+        <textarea
+          defaultValue={event.editorial.summary ?? ""}
+          name="summary"
+          placeholder="A concise public introduction to this stop"
+          rows={4}
+        />
+      </label>
+      <label>
+        <span>Venue name</span>
+        <input
+          name="venueName"
+          onChange={(input) => setVenueName(input.target.value)}
+          placeholder="e.g. Comerica Center"
+          value={venueName}
+        />
+      </label>
+      <TimezoneSelect
+        onChange={setTimeZone}
+        recommended={recommendedTimeZone || undefined}
+        value={timeZone}
+      />
+      <label>
+        <span>Public ticket URL</span>
+        <input
+          defaultValue={event.editorial.ticketUrl ?? ""}
+          name="ticketUrl"
+          placeholder="Official event or verified ticket page"
+          type="url"
+        />
+      </label>
+      <div className="pro-admin-editorial-form__wide">
+        <AddressEntry
+          initial={initialAddress}
+          label="Search for the event venue"
+          onPlaceResolved={(place) => {
+            if (!place.timeZone) return;
+            setRecommendedTimeZone(place.timeZone);
+            setTimeZone(place.timeZone);
+          }}
+          onVenueName={(name) => {
+            if (name) setVenueName(name);
+          }}
+          required={false}
+        />
+      </div>
+      <label className="pro-admin-editorial-form__reason">
+        <span>Review note</span>
+        <input
+          name="reason"
+          placeholder="Source and reason for these Duna-managed details"
+          required
+        />
+      </label>
       <button className="hq-button hq-button--primary" disabled={pending}>
         {pending ? (
           <LoaderCircle className="spin" size={16} />
         ) : (
-          <ImageIcon size={16} />
+          <ShieldCheck size={16} />
         )}
-        Publish media
+        Save editorial details
       </button>
       <ActionFeedback state={state} />
     </form>
@@ -700,10 +980,6 @@ function EditorialWorkspace({
 }) {
   const selectedEvent =
     events.find((event) => event.id === selectedEventId) ?? events[0];
-  const [state, action, pending] = useActionState(
-    saveProfessionalEventEditorialAction,
-    initialState,
-  );
   return (
     <section className="hq-card pro-admin-editorial">
       <header className="hq-card-heading">
@@ -733,97 +1009,7 @@ function EditorialWorkspace({
               ))}
             </select>
           </label>
-          <form
-            action={action}
-            className="pro-admin-editorial-form"
-            key={selectedEvent.id}
-          >
-            <input
-              name="professionalEventId"
-              type="hidden"
-              value={selectedEvent.id}
-            />
-            {(
-              [
-                ["Name", "name", "overrideName", "text"],
-                ["Location", "location", "overrideLocation", "text"],
-                ["Category", "category", "overrideCategory", "text"],
-                ["Start date", "startsOn", "overrideStartsOn", "date"],
-                ["End date", "endsOn", "overrideEndsOn", "date"],
-              ] as const
-            ).map(([label, field, toggle, type]) => (
-              <label className="pro-admin-override-field" key={field}>
-                <span>
-                  <input
-                    defaultChecked={Boolean(
-                      selectedEvent.editorial.overrides[field],
-                    )}
-                    name={toggle}
-                    type="checkbox"
-                  />
-                  Override {label.toLowerCase()}
-                </span>
-                <input
-                  defaultValue={selectedEvent[field] ?? ""}
-                  name={field}
-                  type={type}
-                />
-                <small>
-                  Source: {selectedEvent.scraped[field] ?? "Not provided"}
-                </small>
-              </label>
-            ))}
-            <label className="pro-admin-editorial-form__wide">
-              <span>Event overview</span>
-              <textarea
-                defaultValue={selectedEvent.editorial.summary ?? ""}
-                name="summary"
-                placeholder="A concise public introduction to this stop"
-                rows={4}
-              />
-            </label>
-            <label>
-              <span>Venue name</span>
-              <input
-                defaultValue={selectedEvent.editorial.venueName ?? ""}
-                name="venueName"
-                placeholder="e.g. Comerica Center"
-              />
-            </label>
-            <label>
-              <span>Venue address</span>
-              <input
-                defaultValue={selectedEvent.editorial.venueAddress ?? ""}
-                name="venueAddress"
-                placeholder="Street address, city, state"
-              />
-            </label>
-            <label>
-              <span>Event timezone</span>
-              <input
-                defaultValue={selectedEvent.editorial.timezone ?? ""}
-                name="timezone"
-                placeholder="America/Chicago"
-              />
-            </label>
-            <label className="pro-admin-editorial-form__reason">
-              <span>Review note</span>
-              <input
-                name="reason"
-                placeholder="Source and reason for these Duna-managed details"
-                required
-              />
-            </label>
-            <button className="hq-button hq-button--primary" disabled={pending}>
-              {pending ? (
-                <LoaderCircle className="spin" size={16} />
-              ) : (
-                <ShieldCheck size={16} />
-              )}
-              Save editorial details
-            </button>
-            <ActionFeedback state={state} />
-          </form>
+          <EventEditorialForm event={selectedEvent} key={selectedEvent.id} />
           <ProfessionalMediaForm event={selectedEvent} key={selectedEvent.id} />
           <div className="pro-admin-media-library">
             {selectedEvent.editorial.media.map((media) => (
@@ -840,6 +1026,356 @@ function EditorialWorkspace({
         </>
       ) : (
         <p className="hq-empty">Sync a professional event first.</p>
+      )}
+    </section>
+  );
+}
+
+function ResearchRequestForm({ event }: { readonly event: ProfessionalEvent }) {
+  const [state, action, pending] = useActionState(
+    researchProfessionalEventAction,
+    initialState,
+  );
+  return (
+    <form action={action} className="pro-admin-research-request">
+      <input name="professionalEventId" type="hidden" value={event.id} />
+      <button className="hq-button hq-button--primary" disabled={pending}>
+        {pending ? (
+          <LoaderCircle aria-hidden className="spin" size={16} />
+        ) : (
+          <ScanSearch aria-hidden size={16} />
+        )}
+        {event.research.latest
+          ? "Refresh verified research"
+          : "Research this event"}
+      </button>
+      <small>
+        Firecrawl searches the current event year. The Vercel AI Gateway turns
+        cited evidence into a proposal for human review.
+      </small>
+      <ActionFeedback state={state} />
+    </form>
+  );
+}
+
+function confidenceFor(
+  proposal: NonNullable<ProfessionalEvent["research"]["latest"]>,
+  fields: readonly string[],
+) {
+  const scores = proposal.claims
+    .filter((claim) => fields.includes(claim.field))
+    .map((claim) => claim.confidence);
+  return scores.length ? Math.max(...scores) : undefined;
+}
+
+function Confidence({ value }: { readonly value?: number }) {
+  if (value === undefined) return <Badge>Not verified</Badge>;
+  return (
+    <Badge
+      tone={value >= 85 ? "positive" : value >= 65 ? "warning" : "neutral"}
+    >
+      {value}% confidence
+    </Badge>
+  );
+}
+
+function ResearchProposalReview({
+  event,
+}: {
+  readonly event: ProfessionalEvent;
+}) {
+  const proposal = event.research.latest;
+  const [state, action, pending] = useActionState(
+    applyProfessionalEventResearchAction,
+    initialState,
+  );
+  if (!proposal) {
+    return (
+      <div className="pro-admin-research-empty">
+        <Bot aria-hidden size={26} />
+        <div>
+          <h3>No research proposal yet</h3>
+          <p>
+            Run research to look for a verified venue, local timezone, dates,
+            tickets, and broadcast options for this year&apos;s event.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  const venueAddress =
+    proposal.venue?.formattedAddress ?? proposal.venueAddress;
+  const dateConfidence = confidenceFor(proposal, ["startsOn", "endsOn"]);
+  const venueConfidence = confidenceFor(proposal, [
+    "venueName",
+    "venueAddress",
+  ]);
+  return (
+    <article className="pro-admin-research-proposal">
+      <header>
+        <div>
+          <span className="hq-eyebrow">Evidence-backed proposal</span>
+          <h3>{event.name}</h3>
+          <p>
+            Generated {syncedLabel(proposal.generatedAt)} · {proposal.model}
+          </p>
+        </div>
+        <Badge tone={proposal.status === "applied" ? "positive" : "warning"}>
+          {proposal.status === "applied" ? "Applied" : "Needs review"}
+        </Badge>
+      </header>
+
+      {proposal.overview && (
+        <section className="pro-admin-research-summary">
+          <span>
+            <strong>Public overview</strong>
+            <Confidence value={confidenceFor(proposal, ["overview"])} />
+          </span>
+          <p>{proposal.overview}</p>
+        </section>
+      )}
+
+      <div className="pro-admin-research-facts">
+        <section>
+          <span>
+            <CalendarDays aria-hidden size={17} /> Dates
+          </span>
+          <strong>
+            {proposal.startsOn
+              ? `${dateLabel(proposal.startsOn)}${proposal.endsOn && proposal.endsOn !== proposal.startsOn ? ` – ${dateLabel(proposal.endsOn)}` : ""}`
+              : "Not verified"}
+          </strong>
+          <Confidence value={dateConfidence} />
+        </section>
+        <section>
+          <span>
+            <MapPin aria-hidden size={17} /> Venue
+          </span>
+          <strong>{proposal.venueName ?? "Not verified"}</strong>
+          <small>{venueAddress ?? "No verified address"}</small>
+          {proposal.venue?.timezone && <small>{proposal.venue.timezone}</small>}
+          <Confidence value={venueConfidence} />
+        </section>
+        <section>
+          <span>
+            <TicketCheck aria-hidden size={17} /> Tickets
+          </span>
+          {proposal.ticketUrl ? (
+            <a href={proposal.ticketUrl} rel="noreferrer" target="_blank">
+              Open verified ticket page <ExternalLink aria-hidden size={13} />
+            </a>
+          ) : (
+            <strong>Not verified</strong>
+          )}
+          <Confidence value={confidenceFor(proposal, ["ticketUrl"])} />
+        </section>
+      </div>
+
+      <section className="pro-admin-research-broadcasts">
+        <header>
+          <div>
+            <strong>Proposed How to Watch</strong>
+            <small>Only options supported by a cited source are shown.</small>
+          </div>
+          <Badge>{proposal.watchOptions.length}</Badge>
+        </header>
+        {proposal.watchOptions.length ? (
+          <div>
+            {proposal.watchOptions.map((option, index) => (
+              <article key={`${option.kind}-${option.url ?? index}`}>
+                <Tv aria-hidden size={16} />
+                <span>
+                  <strong>{option.channelName ?? option.label}</strong>
+                  <small>{option.label}</small>
+                </span>
+                <Confidence value={option.confidence} />
+                {option.url && (
+                  <a href={option.url} rel="noreferrer" target="_blank">
+                    Open <ExternalLink aria-hidden size={12} />
+                  </a>
+                )}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="hq-empty">No broadcast information was verified.</p>
+        )}
+      </section>
+
+      <section className="pro-admin-research-evidence">
+        <header>
+          <div>
+            <strong>Sources to review</strong>
+            <small>
+              Official tour, venue, broadcaster, and reputable ticketing pages
+              are preferred.
+            </small>
+          </div>
+          <Badge>{proposal.evidence.length}</Badge>
+        </header>
+        <div>
+          {proposal.evidence.map((source) => (
+            <a
+              href={source.url}
+              key={source.url}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <span>
+                <strong>{source.title}</strong>
+                <small>
+                  {new URL(source.url).hostname.replace(/^www\./, "")}
+                </small>
+              </span>
+              <ExternalLink aria-hidden size={14} />
+            </a>
+          ))}
+        </div>
+      </section>
+
+      {proposal.status === "review" ? (
+        <form action={action} className="pro-admin-research-approval">
+          <input name="professionalEventId" type="hidden" value={event.id} />
+          <input name="proposalId" type="hidden" value={proposal.id} />
+          <label>
+            <span>Approval note</span>
+            <input
+              minLength={10}
+              name="reason"
+              placeholder="What you reviewed and why these details are trusted"
+              required
+            />
+          </label>
+          <button className="hq-button hq-button--primary" disabled={pending}>
+            {pending ? (
+              <LoaderCircle aria-hidden className="spin" size={16} />
+            ) : (
+              <ShieldCheck aria-hidden size={16} />
+            )}
+            Approve and publish verified details
+          </button>
+          <small>
+            This publishes supported details as Duna-managed editorial values.
+            Existing staff edits remain visible in the Details + media tool.
+          </small>
+          <ActionFeedback state={state} />
+        </form>
+      ) : (
+        <p className="pro-admin-research-applied">
+          <CheckCircle2 aria-hidden size={16} /> This proposal has been reviewed
+          and applied. Run a fresh search if the event changes.
+        </p>
+      )}
+    </article>
+  );
+}
+
+function ResearchWorkspace({
+  events,
+  selectedEventId,
+  setSelectedEventId,
+}: {
+  readonly events: readonly ProfessionalEvent[];
+  readonly selectedEventId: string;
+  readonly setSelectedEventId: (eventId: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [tour, setTour] = useState<ProfessionalTourFilter>("all");
+  const [status, setStatus] = useState<ProfessionalStatusFilter>("active");
+  const [page, setPage] = useState(0);
+  const pageSize = 8;
+  const filtered = useMemo(
+    () => filterProfessionalEvents(events, { query, status, tour }),
+    [events, query, status, tour],
+  );
+  useEffect(() => setPage(0), [query, status, tour]);
+  const selectedEvent =
+    filtered.find((event) => event.id === selectedEventId) ?? filtered[0];
+
+  return (
+    <section className="hq-card pro-admin-research">
+      <header className="hq-card-heading">
+        <div>
+          <span className="hq-eyebrow">Verified event discovery</span>
+          <h2>Research upcoming event details</h2>
+        </div>
+        <ScanSearch aria-hidden size={21} />
+      </header>
+      <p>
+        Search this year&apos;s public web for venue, dates, tickets, and
+        broadcast details. Every suggestion stays private until a super admin
+        reviews its sources and approves it.
+      </p>
+      <EventFilters
+        query={query}
+        setQuery={setQuery}
+        setStatus={setStatus}
+        setTour={setTour}
+        status={status}
+        tour={tour}
+      />
+      {selectedEvent ? (
+        <div className="pro-admin-research-workspace">
+          <aside>
+            <div className="pro-admin-research-event-list">
+              {filtered
+                .slice(page * pageSize, (page + 1) * pageSize)
+                .map((event) => (
+                  <button
+                    aria-pressed={selectedEvent.id === event.id}
+                    className={
+                      selectedEvent.id === event.id ? "active" : undefined
+                    }
+                    key={event.id}
+                    onClick={() => setSelectedEventId(event.id)}
+                    type="button"
+                  >
+                    <span>
+                      <Badge tone={eventTone(event)}>
+                        {event.live ? "live" : event.status}
+                      </Badge>
+                      {event.research.latest && (
+                        <Badge
+                          tone={
+                            event.research.latest.status === "applied"
+                              ? "positive"
+                              : "warning"
+                          }
+                        >
+                          {event.research.latest.status === "applied"
+                            ? "Applied"
+                            : "Review"}
+                        </Badge>
+                      )}
+                    </span>
+                    <strong>{event.name}</strong>
+                    <small>
+                      {dateRange(event)} ·{" "}
+                      {event.location ?? "Location pending"}
+                    </small>
+                  </button>
+                ))}
+            </div>
+            <Pagination
+              count={filtered.length}
+              page={page}
+              pageSize={pageSize}
+              setPage={setPage}
+            />
+          </aside>
+          <main>
+            <ResearchRequestForm
+              event={selectedEvent}
+              key={`request-${selectedEvent.id}`}
+            />
+            <ResearchProposalReview
+              event={selectedEvent}
+              key={`proposal-${selectedEvent.id}`}
+            />
+          </main>
+        </div>
+      ) : (
+        <p className="hq-empty">No events match these filters.</p>
       )}
     </section>
   );
@@ -1038,16 +1574,11 @@ function AvpScheduleWorkspace({
                   value={localStartsAt}
                 />
               </label>
-              <label>
-                <span>Timezone</span>
-                <input
-                  name="timezone"
-                  onChange={(event) => setScheduleTimeZone(event.target.value)}
-                  placeholder="America/Chicago"
-                  required
-                  value={scheduleTimeZone}
-                />
-              </label>
+              <TimezoneSelect
+                onChange={setScheduleTimeZone}
+                recommended={selectedEvent.editorial.timezone}
+                value={scheduleTimeZone}
+              />
               <label>
                 <span>Round or week label</span>
                 <input
@@ -1895,6 +2426,7 @@ export function ProfessionalTourAdminPanel({
   }[] = [
     { id: "overview", label: "Overview", icon: Trophy },
     { id: "events", label: "Event library", icon: CalendarDays },
+    { id: "research", label: "Event research", icon: ScanSearch },
     { id: "editorial", label: "Details + media", icon: ImageIcon },
     { id: "schedule", label: "AVP schedules", icon: CalendarDays },
     { id: "broadcasts", label: "How to Watch", icon: Tv },
@@ -1981,6 +2513,13 @@ export function ProfessionalTourAdminPanel({
       )}
       {tool === "editorial" && (
         <EditorialWorkspace
+          events={data.events}
+          selectedEventId={selectedEventId}
+          setSelectedEventId={setSelectedEventId}
+        />
+      )}
+      {tool === "research" && (
+        <ResearchWorkspace
           events={data.events}
           selectedEventId={selectedEventId}
           setSelectedEventId={setSelectedEventId}

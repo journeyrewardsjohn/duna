@@ -19,6 +19,7 @@ import {
   Waves,
 } from "lucide-react";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
 import { SiteFooter } from "@/components/site-footer";
@@ -28,6 +29,11 @@ import { MarkdownContent } from "@/components/markdown-content";
 import { PickupEventActions } from "@/components/pickup-event-actions";
 import { WeatherForecastCard } from "@/components/weather-forecast";
 import { getServerCaller } from "@/lib/api";
+import {
+  professionalEventDescription,
+  professionalEventImages,
+  professionalOgImageUrl,
+} from "@/lib/pro-seo";
 
 function words(value: string | undefined, fallback = "Configured") {
   return value
@@ -50,39 +56,74 @@ export async function generateMetadata({
   params,
 }: {
   readonly params: Promise<{ slug: string }>;
-}) {
+}): Promise<Metadata> {
   const { slug } = await params;
   const caller = await getServerCaller();
   const [event, proEvent] = await Promise.all([
     caller.public.eventBySlug({ slug }).catch(() => undefined),
     caller.public.proEvent({ slug }).catch(() => undefined),
   ]);
-  const proSocialImage =
-    proEvent?.editorial.media.find((item) => item.kind !== "hero-video")?.url ??
-    proEvent?.editorial.media.find((item) => item.posterUrl)?.posterUrl;
+  const proImages = proEvent ? professionalEventImages(proEvent) : [];
+  const proSocialImage = proImages[0];
+  const title = event?.title ?? proEvent?.name ?? "Event";
+  const description =
+    event?.shortSummary ??
+    event?.description ??
+    (proEvent ? professionalEventDescription(proEvent) : undefined);
+  const eventImage = event
+    ? (event.media?.find((item) => item.kind === "image")?.url ??
+      event.imageUrl ??
+      defaultEventMedia(event.kind, event.id).path)
+    : undefined;
+  const image =
+    proSocialImage?.url ??
+    eventImage ??
+    (proEvent
+      ? professionalOgImageUrl({
+          title: proEvent.name,
+          eyebrow: `${proEvent.source === "avp" ? "AVP League" : "Beach Pro Tour"} · ${proEvent.genderCategory}`,
+          detail: [proEvent.category, proEvent.location, proEvent.startsOn]
+            .filter(Boolean)
+            .join(" · "),
+        })
+      : undefined);
   return {
-    title: event?.title ?? proEvent?.name ?? "Event",
-    description:
-      event?.shortSummary ??
-      event?.description ??
-      proEvent?.editorial.summary ??
-      (proEvent
-        ? `Live standings, pools, bracket, results, and predictions for ${proEvent.name}.`
-        : undefined),
+    title,
+    description,
     alternates: {
       canonical: `/events/${slug}`,
     },
-    openGraph: event
-      ? {
-          images: [
-            event.media?.find((item) => item.kind === "image")?.url ??
-              event.imageUrl ??
-              defaultEventMedia(event.kind, event.id).path,
-          ],
-        }
-      : proSocialImage
-        ? { images: [proSocialImage] }
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      url: `/events/${slug}`,
+      siteName: "Duna",
+      images: image
+        ? [
+            {
+              url: image,
+              alt: proSocialImage?.alt ?? `${title} event artwork`,
+            },
+          ]
         : undefined,
+    },
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title,
+      description,
+      images: image ? [image] : undefined,
+    },
+    robots: { index: true, follow: true },
+    ...(proEvent?.editorial.venue?.latitude !== undefined &&
+    proEvent.editorial.venue.longitude !== undefined
+      ? {
+          other: {
+            "geo.position": `${proEvent.editorial.venue.latitude};${proEvent.editorial.venue.longitude}`,
+            ICBM: `${proEvent.editorial.venue.latitude}, ${proEvent.editorial.venue.longitude}`,
+          },
+        }
+      : {}),
   };
 }
 

@@ -3,6 +3,7 @@ import {
   refreshActiveFivbEvents,
   refreshFivbEventIndex,
   refreshWorldRankings,
+  researchUpcomingProfessionalEvents,
 } from "@duna/api";
 import { NextResponse } from "next/server";
 
@@ -31,6 +32,11 @@ export async function GET(request: Request) {
     }
     if (mode === "avp") {
       return NextResponse.json(await refreshAvpLeague({}));
+    }
+    if (mode === "research") {
+      return NextResponse.json(
+        await researchUpcomingProfessionalEvents({ limit: 2 }),
+      );
     }
     return NextResponse.json({ error: "Unknown mode" }, { status: 400 });
   } catch (error) {

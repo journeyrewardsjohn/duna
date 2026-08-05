@@ -49,23 +49,25 @@ async function generateProfessionalEditorial(
   fallback: string,
   _contentHash: string,
 ) {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey || facts.length === 0) return fallback;
+  const gatewayCredential =
+    process.env.AI_GATEWAY_API_KEY?.trim() ||
+    process.env.VERCEL_OIDC_TOKEN?.trim();
+  if (!gatewayCredential || facts.length === 0) return fallback;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 18_000);
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const response = await fetch("https://ai-gateway.vercel.sh/v1/responses", {
       method: "POST",
       headers: {
-        authorization: `Bearer ${apiKey}`,
+        authorization: `Bearer ${gatewayCredential}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({
         model:
-          process.env.OPENAI_SPORTSWRITER_MODEL?.trim() ||
-          process.env.OPENAI_PROFILE_MODEL?.trim() ||
-          "gpt-5.6",
+          process.env.AI_GATEWAY_SPORTSWRITER_MODEL?.trim() ||
+          "openai/gpt-5.6-luna",
+        store: false,
         input: [
           {
             role: "system",

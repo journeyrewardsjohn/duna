@@ -66,6 +66,18 @@ directly. If Gateway normalization fails, the validated deterministic parse is
 kept and the ingestion checkpoint records the fallback instead of clearing
 stored results.
 
+Upcoming-event research also requires `FIRECRAWL_API_KEY`. It searches for the
+current event year, asks the configured Gateway model
+(`AI_GATEWAY_EVENT_RESEARCH_MODEL`) to return evidence-linked facts, validates
+the venue through Google Places, and keeps the result as a review proposal.
+Automation never publishes the proposal directly: a super admin approves it,
+and approval fills only editorial fields that staff have not already set.
+
+Player-profile synthesis and professional sportswriting use the same Gateway
+credential with `AI_GATEWAY_PROFILE_MODEL` and
+`AI_GATEWAY_SPORTSWRITER_MODEL`. Duna does not call an OpenAI provider endpoint
+directly.
+
 Event and match broadcast options, including match overrides, are audited
 super-admin changes. Seasonal AVP team mappings and date-bounded substitutions
 are also audited; approved historical matches are not silently rewritten.

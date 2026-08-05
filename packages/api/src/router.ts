@@ -285,6 +285,7 @@ import {
 } from "./profile-onboarding";
 import {
   approveImportedMatch,
+  applyProfessionalEventResearch,
   createRatingConfiguration,
   evaluateCurrentRating,
   importSandSource,
@@ -301,6 +302,7 @@ import {
   refreshActiveFivbEvents,
   refreshFivbEventIndex,
   refreshWorldRankings,
+  researchProfessionalEvent,
   rejectImportedMatch,
   requestProfileClaim,
   reviewPlayerSourceConnection,
@@ -6359,13 +6361,74 @@ const adminRouter = router({
         summary: z.string().trim().max(1_500).optional(),
         venueName: z.string().trim().max(180).optional(),
         venueAddress: z.string().trim().max(300).optional(),
+        venue: z
+          .object({
+            googlePlaceId: z.string().trim().max(256).optional(),
+            googleMapsUri: z.url().optional(),
+            formattedAddress: z.string().trim().max(320).optional(),
+            addressLine1: z.string().trim().max(180).optional(),
+            addressLine2: z.string().trim().max(180).optional(),
+            locality: z.string().trim().max(120).optional(),
+            administrativeArea: z.string().trim().max(120).optional(),
+            postalCode: z.string().trim().max(32).optional(),
+            countryCode: z.string().trim().length(2).optional(),
+            latitude: z.number().min(-90).max(90).optional(),
+            longitude: z.number().min(-180).max(180).optional(),
+          })
+          .refine(
+            (value) =>
+              (value.latitude === undefined) ===
+              (value.longitude === undefined),
+            "Latitude and longitude must be supplied together.",
+          )
+          .optional(),
         timezone: z.string().trim().max(80).optional(),
+        ticketUrl: z.url().optional(),
         reason: z.string().trim().min(10).max(500),
       }),
     )
     .mutation(async ({ input, ctx }) => {
       try {
         return await saveProfessionalEventEditorial({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  researchProfessionalEvent: adminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-professional-event-research",
+        capacity: 8,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(z.object({ professionalEventId: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await researchProfessionalEvent({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  applyProfessionalEventResearch: adminProcedure
+    .input(
+      z.object({
+        professionalEventId: z.string().uuid(),
+        proposalId: z.string().uuid(),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await applyProfessionalEventResearch({
           ...input,
           actor: ctx.actor!,
           now: ctx.now,

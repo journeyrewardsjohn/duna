@@ -2,6 +2,7 @@ import type { PublicProCoverage } from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
 import { Activity, CalendarDays, Globe2, Radio, Trophy } from "lucide-react";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { DatePillFilter } from "@/components/date-pill-filter";
 import { ProfessionalMatchCard } from "@/components/professional-match-card";
 import { SiteFooter } from "@/components/site-footer";
@@ -14,11 +15,45 @@ import {
   isoDay as currentIsoDay,
   parseIsoDay,
 } from "@/lib/date-filter";
+import {
+  absolutePublicUrl,
+  professionalOgImageUrl,
+  serializeJsonLd,
+} from "@/lib/pro-seo";
 
-export const metadata = {
+const proTourSocialImage = professionalOgImageUrl({
+  title: "The world’s game, in one live view.",
+  eyebrow: "Professional beach volleyball",
+  detail: "Beach Pro Tour · AVP League · live scores · SandRating",
+});
+
+export const metadata: Metadata = {
   title: "Pro beach volleyball",
   description:
     "Live FIVB and AVP events, recent results, seasonal rosters, and Volleyball World rankings on Duna.",
+  alternates: { canonical: "/pro" },
+  openGraph: {
+    title: "Pro beach volleyball live events and results",
+    description:
+      "Follow Beach Pro Tour and AVP events, teams, schedules, scores, broadcasts, rankings, and SandRating context on Duna.",
+    type: "website",
+    url: "/pro",
+    siteName: "Duna",
+    images: [
+      {
+        url: proTourSocialImage,
+        alt: "Professional beach volleyball coverage on Duna",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Pro beach volleyball on Duna",
+    description:
+      "Beach Pro Tour and AVP events, teams, schedules, scores, broadcasts, and rankings.",
+    images: [proTourSocialImage],
+  },
+  robots: { index: true, follow: true },
 };
 
 type ProEvent = PublicProCoverage["events"][number];
@@ -198,10 +233,39 @@ export default async function ProTourPage({
         timeZone: "UTC",
       }).format(new Date(`${selectedDate}T12:00:00Z`))
     : undefined;
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        "@id": `${absolutePublicUrl("/pro")}#webpage`,
+        url: absolutePublicUrl("/pro"),
+        name: "Pro beach volleyball",
+        description: metadata.description,
+        mainEntity: { "@id": `${absolutePublicUrl("/pro")}#events` },
+      },
+      {
+        "@type": "ItemList",
+        "@id": `${absolutePublicUrl("/pro")}#events`,
+        name: "Professional beach volleyball events",
+        numberOfItems: coverage?.events.length ?? 0,
+        itemListElement: (coverage?.events ?? []).map((event, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          name: event.name,
+          url: absolutePublicUrl(`/events/${event.slug}`),
+        })),
+      },
+    ],
+  };
 
   return (
     <main className="pro-tour-page">
       <SiteHeader />
+      <script
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
+        type="application/ld+json"
+      />
       <section className="pro-tour-hero">
         <div>
           <Badge tone={liveEvents.length ? "danger" : "neutral"}>

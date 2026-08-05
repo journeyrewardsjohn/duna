@@ -37,6 +37,7 @@ export function AddressEntry({
   includeFormFields = true,
   onChange,
   onVenueName,
+  onPlaceResolved,
 }: {
   readonly initial?: AddressValue;
   readonly label?: string;
@@ -46,6 +47,7 @@ export function AddressEntry({
   readonly includeFormFields?: boolean;
   readonly onChange?: (value: AddressValue) => void;
   readonly onVenueName?: (value: string) => void;
+  readonly onPlaceResolved?: (details: PlaceDetails) => void;
 }) {
   const startingAddress = normalizeAddress(initial);
   const initiallySelected =
@@ -96,6 +98,7 @@ export function AddressEntry({
       longitude: details.longitude,
     });
     setSearch(formatAddress(next));
+    onPlaceResolved?.(details);
 
     if (structuredFields && !isStructuredAddressComplete(next)) {
       setError(
@@ -152,6 +155,16 @@ export function AddressEntry({
             name="googlePlaceId"
             type="hidden"
             value={address.googlePlaceId ?? ""}
+          />
+          <input
+            name="googleMapsUri"
+            type="hidden"
+            value={address.googleMapsUri ?? ""}
+          />
+          <input
+            name="formattedAddress"
+            type="hidden"
+            value={address.formattedAddress ?? ""}
           />
           <input
             name="addressLine1"
