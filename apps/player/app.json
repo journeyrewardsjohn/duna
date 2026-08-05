@@ -20,6 +20,7 @@
         "NSMicrophoneUsageDescription": "Duna uses the microphone only when you choose to include audio in a recording or live stream.",
         "NSPhotoLibraryUsageDescription": "Duna lets you choose volleyball videos to add to your private archive or profile.",
         "NSHealthShareUsageDescription": "Duna reads the Apple Health categories you choose to build your private performance timeline, compare recovery with matches, and align heart rate with your Duna Vision recordings.",
+        "NSHealthUpdateUsageDescription": "Duna does not write to or change your Apple Health data. This read-only version includes HealthKit access only so you can choose which Health data Duna may use for your private performance timeline and video overlays.",
         "NSContactsUsageDescription": "Duna uses contacts you select to find frequent partners or send a one-time game invitation.",
         "NSLocationWhenInUseUsageDescription": "Duna uses your location to show nearby play and venues."
       },
