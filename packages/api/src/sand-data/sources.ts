@@ -309,7 +309,6 @@ export async function importBvbInfoPlayer(
         }));
         if (sets.length === 0) {
           scorelessRows += 1;
-          continue;
         }
         const roundLabel =
           row
@@ -325,6 +324,7 @@ export async function importBvbInfoPlayer(
             tournament.partnerId,
             opponents.map((opponent) => opponent.externalPersonId).join("-"),
             roundLabel,
+            resultMatch[1]?.toLowerCase(),
             sets.map((set) => `${set.a}-${set.b}`).join(","),
           ].join("|"),
         );
@@ -355,7 +355,12 @@ export async function importBvbInfoPlayer(
           ],
           sets,
           winnerSide: resultMatch[1]?.toLowerCase() === "l" ? "B" : "A",
-          raw: { season, roundLabel, scoreText },
+          raw: {
+            season,
+            roundLabel,
+            scoreText,
+            scoreAvailable: sets.length > 0,
+          },
         });
       }
     }
@@ -369,7 +374,9 @@ export async function importBvbInfoPlayer(
     });
   }
   const objectiveStatus =
-    failedPages.length === 0 && matches.length > 0
+    failedPages.length === 0 &&
+    matches.length > 0 &&
+    matches.length === resultRows
       ? "met"
       : matches.length > 0
         ? "partial"
