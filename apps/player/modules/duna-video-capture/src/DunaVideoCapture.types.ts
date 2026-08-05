@@ -14,6 +14,17 @@ export interface CaptureGuidance {
   readonly acceptable: boolean;
   readonly warnings: readonly string[];
   readonly corners?: readonly CapturePoint[];
+  readonly horizonY?: number;
+  readonly projectionSource?: "lidar" | "arkit" | "vision" | "estimated";
+  readonly lidarAvailable?: boolean;
+  readonly groundPlaneDetected?: boolean;
+  readonly courtDetected?: boolean;
+  readonly cameraHeightMeters?: number;
+  readonly preferredOrientation?: "landscape" | "portrait";
+  readonly deviceOrientation?: "landscape" | "portrait" | "unknown";
+  readonly orientationMatches?: boolean;
+  readonly trackingState?:
+    "initializing" | "limited" | "normal" | "unavailable";
   readonly deviceAttitude?: {
     readonly pitch: number;
     readonly roll: number;
@@ -28,6 +39,7 @@ export interface DunaCourtCalibration extends CaptureGuidance {
   readonly courtWidthMeters: number;
   readonly courtLengthMeters: number;
   readonly netHeightMeters: number;
+  readonly preferredOrientation: "landscape" | "portrait";
 }
 
 export interface PreparedVideo {
@@ -44,6 +56,7 @@ export interface DunaVideoCaptureViewProps {
   readonly courtWidthMeters: number;
   readonly courtLengthMeters: number;
   readonly netHeightMeters: number;
+  readonly preferredOrientation: "landscape" | "portrait";
   readonly onGuidance?: (event: {
     readonly nativeEvent: CaptureGuidance;
   }) => void;

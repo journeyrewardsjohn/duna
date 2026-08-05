@@ -1,4 +1,5 @@
 import muxReactNativeVideo from "@mux/mux-data-react-native-video";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
 import {
@@ -11,6 +12,7 @@ import {
 } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -18,6 +20,7 @@ import {
   Share,
   StyleSheet,
   Switch,
+  type LayoutChangeEvent,
   View,
 } from "react-native";
 import Video from "react-native-video";
@@ -30,6 +33,10 @@ import VideoCapture, {
 } from "./modules/duna-video-capture";
 import { dunaWebUrl, type DunaApiClient } from "./mobile-api";
 import type { PlayerRuntime } from "./runtime";
+import {
+  MobilePlacePicker,
+  type MobilePlaceSelection,
+} from "./components/mobile-place-picker";
 import {
   FellixText as Text,
   FellixTextInput as TextInput,
@@ -55,15 +62,9 @@ type VideoPlayback = Awaited<
 type VideoCategory = "practice" | "event" | "match" | "social";
 type RecordingVisibility = "public" | "private";
 type LiveVisibility = "public" | "link-only";
+type CaptureOrientation = "landscape" | "portrait";
 
-interface VenueSelection {
-  readonly venueId?: string;
-  readonly name: string;
-  readonly address?: string;
-  readonly googlePlaceId?: string;
-  readonly latitude?: number;
-  readonly longitude?: number;
-}
+type VenueSelection = MobilePlaceSelection;
 
 interface CaptureForm {
   readonly title: string;
@@ -77,6 +78,7 @@ interface CaptureForm {
   readonly courtWidthMeters: number;
   readonly courtLengthMeters: number;
   readonly netHeightMeters: number;
+  readonly orientation: CaptureOrientation;
 }
 
 const initialCaptureForm: CaptureForm = {
@@ -89,7 +91,61 @@ const initialCaptureForm: CaptureForm = {
   courtWidthMeters: 8,
   courtLengthMeters: 16,
   netHeightMeters: 2.43,
+  orientation: "landscape",
 };
+
+interface StoredCaptureDefaults {
+  readonly category?: VideoCategory;
+  readonly venue?: VenueSelection;
+  readonly hasAudio?: boolean;
+  readonly liveVisibility?: LiveVisibility;
+  readonly recordingVisibility?: RecordingVisibility;
+  readonly publishedToProfile?: boolean;
+  readonly courtWidthMeters?: number;
+  readonly courtLengthMeters?: number;
+  readonly netHeightMeters?: number;
+  readonly orientation?: CaptureOrientation;
+}
+
+const captureDefaultsKey = "duna.video.capture-defaults.v2";
+
+function captureFormFromDefaults(
+  stored: StoredCaptureDefaults | undefined,
+  overrides: Partial<CaptureForm> = {},
+): CaptureForm {
+  const category = overrides.category ?? stored?.category ?? "match";
+  const recordingVisibility =
+    category === "practice"
+      ? "private"
+      : (overrides.recordingVisibility ??
+        stored?.recordingVisibility ??
+        "private");
+  return {
+    ...initialCaptureForm,
+    ...stored,
+    ...overrides,
+    category,
+    recordingVisibility,
+    publishedToProfile:
+      recordingVisibility === "public" &&
+      Boolean(overrides.publishedToProfile ?? stored?.publishedToProfile),
+  };
+}
+
+function storedDefaults(form: CaptureForm): StoredCaptureDefaults {
+  return {
+    category: form.category,
+    venue: form.venue,
+    hasAudio: form.hasAudio,
+    liveVisibility: form.liveVisibility,
+    recordingVisibility: form.recordingVisibility,
+    publishedToProfile: form.publishedToProfile,
+    courtWidthMeters: form.courtWidthMeters,
+    courtLengthMeters: form.courtLengthMeters,
+    netHeightMeters: form.netHeightMeters,
+    orientation: form.orientation,
+  };
+}
 
 const palette = {
   canvas: "#f8f7f3",
@@ -119,9 +175,19 @@ function formatBytes(bytes: number): string {
 }
 
 function displayError(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : "Duna could not complete that video request.";
+  if (!(error instanceof Error)) {
+    return "Duna could not complete that video request.";
+  }
+  const message = error.message.trim();
+  if (
+    message.includes("new_asset_settings.passthrough") ||
+    /^\d{3}\s*\{/.test(message)
+  ) {
+    return "Duna could not open the video provider. Please try again in a moment.";
+  }
+  return message.length > 280
+    ? "Duna could not complete that video request. Please try again."
+    : message;
 }
 
 function qualityLabel(grade: CaptureGuidance["qualityGrade"]): string {
@@ -147,22 +213,27 @@ function associationInput(association: VideoAssociation | undefined): {
 }
 
 function ChoiceRow<Value extends string>({
+  body,
   label,
   onChange,
   options,
   value,
 }: {
   readonly label: string;
+  readonly body?: string;
   readonly value: Value;
   readonly onChange: (value: Value) => void;
   readonly options: readonly {
     readonly label: string;
     readonly value: Value;
+    readonly body?: string;
+    readonly recommended?: boolean;
   }[];
 }) {
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
+      {!!body && <Text style={styles.fieldDescription}>{body}</Text>}
       <View style={styles.choiceRow}>
         {options.map((option) => (
           <Pressable
@@ -181,6 +252,19 @@ function ChoiceRow<Value extends string>({
             >
               {option.label}
             </Text>
+            {!!option.body && (
+              <Text
+                style={[
+                  styles.choiceBody,
+                  value === option.value && styles.choiceBodyActive,
+                ]}
+              >
+                {option.body}
+              </Text>
+            )}
+            {option.recommended && (
+              <Text style={styles.recommendedLabel}>RECOMMENDED</Text>
+            )}
           </Pressable>
         ))}
       </View>
@@ -318,127 +402,6 @@ function AssociationPicker({
   );
 }
 
-interface PlaceSuggestion {
-  readonly placeId: string;
-  readonly text: string;
-  readonly mainText: string;
-  readonly secondaryText: string;
-}
-
-function VenuePicker({
-  onChange,
-  value,
-}: {
-  readonly value?: VenueSelection;
-  readonly onChange: (value: VenueSelection | undefined) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [options, setOptions] = useState<readonly PlaceSuggestion[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (query.trim().length < 3 || value) {
-      setOptions([]);
-      return;
-    }
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      setLoading(true);
-      void fetch(
-        `${dunaWebUrl}/api/places/autocomplete?q=${encodeURIComponent(query.trim())}`,
-      )
-        .then(async (response) => {
-          if (!response.ok) throw new Error("Venue search unavailable");
-          return (await response.json()) as {
-            readonly suggestions?: readonly PlaceSuggestion[];
-          };
-        })
-        .then((result) => {
-          if (!cancelled) setOptions(result.suggestions ?? []);
-        })
-        .catch(() => {
-          if (!cancelled) setOptions([]);
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
-        });
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [query, value]);
-
-  const select = async (option: PlaceSuggestion) => {
-    setLoading(true);
-    try {
-      const response = await fetch(
-        `${dunaWebUrl}/api/places/details?placeId=${encodeURIComponent(option.placeId)}`,
-      );
-      if (!response.ok) throw new Error("Venue details unavailable");
-      const place = (await response.json()) as VenueSelection & {
-        readonly placeId?: string;
-      };
-      onChange({
-        name: place.name || option.mainText,
-        address: place.address || option.secondaryText,
-        googlePlaceId: place.placeId ?? option.placeId,
-        latitude: place.latitude,
-        longitude: place.longitude,
-      });
-      setQuery("");
-      setOptions([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <View style={styles.field}>
-      <Text style={styles.fieldLabel}>Venue (optional)</Text>
-      {value ? (
-        <View style={styles.selectedAssociation}>
-          <View style={styles.flex}>
-            <Text style={styles.associationTitle}>{value.name}</Text>
-            {!!value.address && (
-              <Text style={styles.associationMeta}>{value.address}</Text>
-            )}
-          </View>
-          <Pressable onPress={() => onChange(undefined)}>
-            <Text style={styles.textAction}>Change</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <>
-          <TextInput
-            autoCapitalize="words"
-            onChangeText={setQuery}
-            placeholder="Search Google Places"
-            placeholderTextColor="#98a2b3"
-            style={styles.input}
-            value={query}
-          />
-          {loading && <ActivityIndicator color={palette.aqua} />}
-          {options.map((option) => (
-            <Pressable
-              key={option.placeId}
-              onPress={() => void select(option)}
-              style={styles.option}
-            >
-              <View style={styles.flex}>
-                <Text style={styles.associationTitle}>{option.mainText}</Text>
-                <Text style={styles.associationMeta}>
-                  {option.secondaryText}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </>
-      )}
-    </View>
-  );
-}
-
 function VideoDetailsForm({
   client,
   form,
@@ -450,7 +413,7 @@ function VideoDetailsForm({
 }: {
   readonly client?: DunaApiClient;
   readonly form: CaptureForm;
-  readonly mode: "live" | "upload";
+  readonly mode: "live" | "record" | "upload";
   readonly preparedVideo?: PreparedVideo;
   readonly onChange: (form: CaptureForm) => void;
   readonly onCancel: () => void;
@@ -461,179 +424,437 @@ function VideoDetailsForm({
   const valid =
     form.title.trim().length >= 2 &&
     (!associationRequired || Boolean(form.association));
+  const captureSetup = mode !== "upload";
+  const applyAssociation = (association: VideoAssociation | undefined) => {
+    if (!association) {
+      onChange({ ...form, association: undefined });
+      return;
+    }
+    onChange({
+      ...form,
+      association,
+      title: form.title.trim() || association.title,
+      venue: association.venue ?? form.venue,
+      courtWidthMeters:
+        association.captureDefaults?.courtWidthMeters ?? form.courtWidthMeters,
+      courtLengthMeters:
+        association.captureDefaults?.courtLengthMeters ??
+        form.courtLengthMeters,
+      netHeightMeters:
+        association.captureDefaults?.netHeightMeters ?? form.netHeightMeters,
+      orientation: association.captureDefaults?.orientation ?? form.orientation,
+    });
+  };
   return (
-    <SafeAreaView style={styles.modalSafe}>
-      <View style={styles.modalHeader}>
-        <Pressable onPress={onCancel}>
-          <Text style={styles.headerAction}>Cancel</Text>
-        </Pressable>
-        <Text style={styles.modalTitle}>
-          {mode === "live" ? "Set up live stream" : "Add video details"}
-        </Text>
-        <View style={styles.headerSpacer} />
-      </View>
-      <ScrollView
-        contentContainerStyle={styles.formContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        {preparedVideo && (
-          <View style={styles.fileSummary}>
-            <Text style={styles.fileSummaryTitle}>Ready to upload</Text>
-            <Text style={styles.helper}>
-              {formatDuration(preparedVideo.durationSeconds)} ·{" "}
-              {formatBytes(preparedVideo.bytes)} · MP4
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={styles.modalSafe}
+    >
+      <SafeAreaView style={styles.modalSafe}>
+        <View style={styles.modalHeader}>
+          <Pressable hitSlop={12} onPress={onCancel} style={styles.headerTap}>
+            <Text style={styles.headerAction}>Cancel</Text>
+          </Pressable>
+          <Text style={styles.modalTitle}>Duna Video</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+        <ScrollView
+          contentContainerStyle={styles.formContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.formHero}>
+            <Text style={styles.formStep}>
+              {captureSetup ? "STEP 1 OF 2 · SETUP" : "VIDEO DETAILS"}
+            </Text>
+            <Text style={styles.formTitle}>
+              {mode === "live"
+                ? "Set up your live stream."
+                : mode === "record"
+                  ? "Set up your recording."
+                  : "Give this video a home."}
+            </Text>
+            <Text style={styles.formIntro}>
+              {captureSetup
+                ? "Duna remembers your last camera choices and can inherit court settings from the match you select."
+                : "A confirmed venue and match make this video easier to find later."}
             </Text>
           </View>
-        )}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Title</Text>
-          <TextInput
-            autoCapitalize="sentences"
-            maxLength={180}
-            onChangeText={(title) => onChange({ ...form, title })}
-            placeholder="e.g. AVP qualifier — Court 2"
-            placeholderTextColor="#98a2b3"
-            style={styles.input}
-            value={form.title}
-          />
-        </View>
-        <ChoiceRow
-          label="What is this?"
-          onChange={(category) =>
-            onChange({ ...form, category, association: undefined })
-          }
-          options={[
-            { label: "Practice", value: "practice" },
-            { label: "Event", value: "event" },
-            { label: "Match", value: "match" },
-            { label: "Social", value: "social" },
-          ]}
-          value={form.category}
-        />
-        <AssociationPicker
-          category={form.category}
-          client={client}
-          onChange={(association) => onChange({ ...form, association })}
-          value={form.association}
-        />
-        <VenuePicker
-          onChange={(venue) => onChange({ ...form, venue })}
-          value={form.venue}
-        />
-        {mode === "live" && (
-          <ChoiceRow
-            label="Who can watch live?"
-            onChange={(liveVisibility) => onChange({ ...form, liveVisibility })}
-            options={[
-              { label: "Public", value: "public" },
-              { label: "Link only", value: "link-only" },
-            ]}
-            value={form.liveVisibility}
-          />
-        )}
-        <ChoiceRow
-          label={mode === "live" ? "After the stream" : "Recording privacy"}
-          onChange={(recordingVisibility) =>
-            onChange({
-              ...form,
-              recordingVisibility,
-              publishedToProfile:
-                recordingVisibility === "public" && form.publishedToProfile,
-            })
-          }
-          options={[
-            { label: "Keep private", value: "private" },
-            { label: "Public", value: "public" },
-          ]}
-          value={form.recordingVisibility}
-        />
-        {mode === "upload" && form.recordingVisibility === "public" && (
-          <ToggleRow
-            body="Show it in the public video section on your player profile."
-            label="Publish to profile"
-            onChange={(publishedToProfile) =>
-              onChange({ ...form, publishedToProfile })
-            }
-            value={form.publishedToProfile}
-          />
-        )}
-        <ToggleRow
-          body="Turn this off for a silent stream or recording."
-          label="Include audio"
-          onChange={(hasAudio) => onChange({ ...form, hasAudio })}
-          value={form.hasAudio}
-        />
-        {mode === "live" && (
-          <>
-            <ChoiceRow
-              label="Court"
-              onChange={(court) =>
-                onChange({
-                  ...form,
-                  courtLengthMeters: court === "full" ? 16 : 12,
-                  courtWidthMeters: court === "full" ? 8 : 6,
-                })
-              }
-              options={[
-                { label: "Full · 16×8m", value: "full" },
-                { label: "Short · 12×6m", value: "short" },
-              ]}
-              value={form.courtLengthMeters === 16 ? "full" : "short"}
-            />
-            <ChoiceRow
-              label="Net height"
-              onChange={(net) =>
-                onChange({
-                  ...form,
-                  netHeightMeters:
-                    net === "men" ? 2.43 : net === "women" ? 2.24 : 2.12,
-                })
-              }
-              options={[
-                { label: "Men · 2.43m", value: "men" },
-                { label: "Women · 2.24m", value: "women" },
-                { label: "Juniors · 2.12m", value: "juniors" },
-              ]}
-              value={
-                form.netHeightMeters === 2.43
-                  ? "men"
-                  : form.netHeightMeters === 2.24
-                    ? "women"
-                    : "juniors"
-              }
-            />
-            <Text style={styles.disclosure}>
-              Junior net heights vary by age and division. Confirm the event’s
-              setting when it differs from this calibration default.
+
+          {preparedVideo && (
+            <View style={styles.fileSummary}>
+              <View style={styles.fileSummaryIcon}>
+                <Text style={styles.fileSummaryIconText}>✓</Text>
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.fileSummaryTitle}>Video ready</Text>
+                <Text style={styles.helper}>
+                  {formatDuration(preparedVideo.durationSeconds)} ·{" "}
+                  {formatBytes(preparedVideo.bytes)} · MP4
+                </Text>
+              </View>
+            </View>
+          )}
+
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>Title</Text>
+            <Text style={styles.fieldDescription}>
+              Make it recognizable in your archive and on a match page.
             </Text>
-          </>
-        )}
-      </ScrollView>
-      <View style={styles.modalFooter}>
-        <Pressable
-          disabled={!valid}
-          onPress={onContinue}
-          style={[styles.primaryButton, !valid && styles.disabled]}
-        >
-          <Text style={styles.primaryButtonText}>
-            {mode === "live" ? "Open camera guide" : "Upload video"}
-          </Text>
-        </Pressable>
-      </View>
-    </SafeAreaView>
+            <TextInput
+              autoCapitalize="sentences"
+              maxLength={180}
+              onChangeText={(title) => onChange({ ...form, title })}
+              placeholder="AVP qualifier · Court 2"
+              placeholderTextColor="#8b96a7"
+              style={styles.input}
+              value={form.title}
+            />
+          </View>
+
+          <ChoiceRow
+            body="This controls where Duna files the video and which defaults it uses."
+            label="What are you capturing?"
+            onChange={(category) =>
+              onChange({
+                ...form,
+                category,
+                association: undefined,
+                recordingVisibility:
+                  category === "practice"
+                    ? "private"
+                    : form.recordingVisibility,
+                publishedToProfile:
+                  category === "practice" ? false : form.publishedToProfile,
+              })
+            }
+            options={[
+              {
+                label: "Practice",
+                value: "practice",
+                body: "Private archive by default",
+              },
+              {
+                label: "Event",
+                value: "event",
+                body: "Connect to event history",
+              },
+              {
+                label: "Match",
+                value: "match",
+                body: "Show on the match page",
+                recommended: true,
+              },
+              {
+                label: "Social",
+                value: "social",
+                body: "A moment beyond competition",
+              },
+            ]}
+            value={form.category}
+          />
+
+          <AssociationPicker
+            category={form.category}
+            client={client}
+            onChange={applyAssociation}
+            value={form.association}
+          />
+
+          <MobilePlacePicker
+            baseUrl={dunaWebUrl}
+            label="Venue (optional)"
+            onChange={(venue) => onChange({ ...form, venue })}
+            value={form.venue}
+          />
+
+          {mode === "live" && (
+            <ChoiceRow
+              body="Public streams appear across Duna. Link-only streams open only for people with your share link."
+              label="Who can watch live?"
+              onChange={(liveVisibility) =>
+                onChange({ ...form, liveVisibility })
+              }
+              options={[
+                {
+                  label: "Public",
+                  value: "public",
+                  body: "Discoverable on Duna",
+                },
+                {
+                  label: "Link only",
+                  value: "link-only",
+                  body: "Anyone with your link",
+                },
+              ]}
+              value={form.liveVisibility}
+            />
+          )}
+
+          {form.category === "practice" ? (
+            <View style={styles.privatePracticeCard}>
+              <View style={styles.privateIcon}>
+                <Text style={styles.privateIconText}>✓</Text>
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.toggleTitle}>Practice starts private</Text>
+                <Text style={styles.toggleBody}>
+                  It goes to your private archive. You can publish it later.
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <ChoiceRow
+              body="You can change this later from your archive."
+              label={mode === "live" ? "After the stream" : "Recording privacy"}
+              onChange={(recordingVisibility) =>
+                onChange({
+                  ...form,
+                  recordingVisibility,
+                  publishedToProfile:
+                    recordingVisibility === "public" && form.publishedToProfile,
+                })
+              }
+              options={[
+                {
+                  label: "Keep private",
+                  value: "private",
+                  body: "Only you can find it",
+                },
+                {
+                  label: "Public",
+                  value: "public",
+                  body: "Eligible for Duna pages",
+                },
+              ]}
+              value={form.recordingVisibility}
+            />
+          )}
+
+          {mode === "upload" && form.recordingVisibility === "public" && (
+            <ToggleRow
+              body="Show it in the public video section on your player profile."
+              label="Publish to profile"
+              onChange={(publishedToProfile) =>
+                onChange({ ...form, publishedToProfile })
+              }
+              value={form.publishedToProfile}
+            />
+          )}
+
+          <ToggleRow
+            body="Turn this off for a silent stream or recording."
+            label="Include audio"
+            onChange={(hasAudio) => onChange({ ...form, hasAudio })}
+            value={form.hasAudio}
+          />
+
+          {captureSetup && (
+            <>
+              <ChoiceRow
+                body="We guide you if the iPhone is held the wrong way. Landscape captures more of a full court."
+                label="How will you hold the phone?"
+                onChange={(orientation) => onChange({ ...form, orientation })}
+                options={[
+                  {
+                    label: "Landscape",
+                    value: "landscape",
+                    body: "Best for full-court video",
+                    recommended: true,
+                  },
+                  {
+                    label: "Portrait",
+                    value: "portrait",
+                    body: "Best for social viewing",
+                  },
+                ]}
+                value={form.orientation}
+              />
+              <ChoiceRow
+                body="Official beach is 16 × 8 meters. Short court is useful for junior or adapted play."
+                label="Court"
+                onChange={(court) =>
+                  onChange({
+                    ...form,
+                    courtLengthMeters: court === "full" ? 16 : 12,
+                    courtWidthMeters: court === "full" ? 8 : 6,
+                  })
+                }
+                options={[
+                  { label: "Full · 16×8m", value: "full" },
+                  { label: "Short · 12×6m", value: "short" },
+                ]}
+                value={form.courtLengthMeters === 16 ? "full" : "short"}
+              />
+              <ChoiceRow
+                body="Match settings are applied automatically when Duna has them."
+                label="Net height"
+                onChange={(net) =>
+                  onChange({
+                    ...form,
+                    netHeightMeters:
+                      net === "men" ? 2.43 : net === "women" ? 2.24 : 2.12,
+                  })
+                }
+                options={[
+                  { label: "Men · 2.43m", value: "men" },
+                  { label: "Women · 2.24m", value: "women" },
+                  { label: "Juniors · 2.12m", value: "juniors" },
+                ]}
+                value={
+                  form.netHeightMeters === 2.43
+                    ? "men"
+                    : form.netHeightMeters === 2.24
+                      ? "women"
+                      : "juniors"
+                }
+              />
+              <Text style={styles.disclosure}>
+                Junior net heights vary by age and division. Confirm the event’s
+                setting when it differs from this default.
+              </Text>
+            </>
+          )}
+        </ScrollView>
+        <View style={styles.modalFooter}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={!valid}
+            onPress={onContinue}
+            style={[styles.primaryButton, !valid && styles.disabled]}
+          >
+            <Text style={styles.primaryButtonText}>
+              {mode === "upload" ? "Upload video" : "Continue to camera guide"}
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 
-function CourtOverlay({ acceptable }: { readonly acceptable: boolean }) {
-  const color = acceptable ? "#67d391" : "rgba(255,255,255,0.78)";
+function CourtLine({
+  color,
+  dashed = false,
+  end,
+  size,
+  start,
+}: {
+  readonly color: string;
+  readonly dashed?: boolean;
+  readonly start: { readonly x: number; readonly y: number };
+  readonly end: { readonly x: number; readonly y: number };
+  readonly size: { readonly width: number; readonly height: number };
+}) {
+  const startX = start.x * size.width;
+  const startY = start.y * size.height;
+  const endX = end.x * size.width;
+  const endY = end.y * size.height;
+  const deltaX = endX - startX;
+  const deltaY = endY - startY;
+  const length = Math.sqrt(deltaX ** 2 + deltaY ** 2);
+  const angle = `${(Math.atan2(deltaY, deltaX) * 180) / Math.PI}deg`;
   return (
-    <View pointerEvents="none" style={styles.courtOverlay}>
-      <View style={[styles.courtOutline, { borderColor: color }]}>
-        <View style={[styles.netLine, { backgroundColor: color }]} />
-        <View style={[styles.centerMark, { backgroundColor: color }]} />
-        <View style={[styles.safeMargin, { borderColor: color }]} />
-      </View>
-      <View style={[styles.horizon, { backgroundColor: color }]} />
+    <View
+      style={[
+        styles.dynamicCourtLine,
+        {
+          backgroundColor: dashed ? "transparent" : color,
+          borderColor: color,
+          borderStyle: dashed ? "dashed" : "solid",
+          left: (startX + endX) / 2 - length / 2,
+          top: (startY + endY) / 2 - 1,
+          transform: [{ rotate: angle }],
+          width: length,
+        },
+      ]}
+    />
+  );
+}
+
+function interpolatePoint(
+  from: { readonly x: number; readonly y: number },
+  to: { readonly x: number; readonly y: number },
+  amount: number,
+) {
+  return {
+    x: from.x + (to.x - from.x) * amount,
+    y: from.y + (to.y - from.y) * amount,
+  };
+}
+
+function CourtOverlay({ guidance }: { readonly guidance?: CaptureGuidance }) {
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const onLayout = (event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setSize({ width, height });
+  };
+  const color = guidance?.acceptable
+    ? "#67d391"
+    : guidance?.groundPlaneDetected
+      ? "#f7c86b"
+      : "rgba(255,255,255,0.82)";
+  const fallback = [
+    { x: 0.33, y: 0.26 },
+    { x: 0.67, y: 0.26 },
+    { x: 0.92, y: 0.77 },
+    { x: 0.08, y: 0.77 },
+  ] as const;
+  const points = guidance?.corners?.length === 4 ? guidance.corners : fallback;
+  const [topLeft, topRight, bottomRight, bottomLeft] = points;
+  const netLeft = interpolatePoint(topLeft!, bottomLeft!, 0.5);
+  const netRight = interpolatePoint(topRight!, bottomRight!, 0.5);
+  const centerFar = interpolatePoint(topLeft!, topRight!, 0.5);
+  const centerNear = interpolatePoint(bottomLeft!, bottomRight!, 0.5);
+  const courtCenter = interpolatePoint(centerFar, centerNear, 0.5);
+  const safePoints = points.map((point) =>
+    interpolatePoint(point, courtCenter, 0.09),
+  );
+  return (
+    <View
+      onLayout={onLayout}
+      pointerEvents="none"
+      style={StyleSheet.absoluteFill}
+    >
+      {size.width > 0 && (
+        <>
+          {points.map((point, index) => (
+            <CourtLine
+              color={color}
+              end={points[(index + 1) % points.length]!}
+              key={`outside-${index}`}
+              size={size}
+              start={point}
+            />
+          ))}
+          <CourtLine color={color} end={netRight} size={size} start={netLeft} />
+          <CourtLine
+            color={color}
+            end={centerNear}
+            size={size}
+            start={centerFar}
+          />
+          {safePoints.map((point, index) => (
+            <CourtLine
+              color={color}
+              dashed
+              end={safePoints[(index + 1) % safePoints.length]!}
+              key={`safe-${index}`}
+              size={size}
+              start={point}
+            />
+          ))}
+          <View
+            style={[
+              styles.dynamicHorizon,
+              {
+                backgroundColor: color,
+                top: (guidance?.horizonY ?? 0.16) * size.height,
+              },
+            ]}
+          />
+        </>
+      )}
     </View>
   );
 }
@@ -651,7 +872,10 @@ function CaptureExperience({
   readonly mode: "live" | "record";
   readonly onClose: () => void;
   readonly onFinished: () => Promise<void>;
-  readonly onRecorded: (video: PreparedVideo) => void;
+  readonly onRecorded: (
+    video: PreparedVideo,
+    calibration: DunaCourtCalibration,
+  ) => void;
 }) {
   const [permissionsReady, setPermissionsReady] = useState(false);
   const [guidance, setGuidance] = useState<CaptureGuidance>();
@@ -713,11 +937,21 @@ function CaptureExperience({
         courtWidthMeters: form.courtWidthMeters,
         courtLengthMeters: form.courtLengthMeters,
         netHeightMeters: form.netHeightMeters,
+        preferredOrientation: form.orientation,
         qualityGrade: guidance?.qualityGrade ?? "poor",
         qualityScore: guidance?.qualityScore ?? 0,
         confidence: guidance?.confidence ?? 0,
         warnings: guidance?.warnings ?? ["Camera calibration was unavailable"],
         corners: guidance?.corners,
+        horizonY: guidance?.horizonY,
+        projectionSource: guidance?.projectionSource,
+        lidarAvailable: guidance?.lidarAvailable,
+        groundPlaneDetected: guidance?.groundPlaneDetected,
+        courtDetected: guidance?.courtDetected,
+        cameraHeightMeters: guidance?.cameraHeightMeters,
+        deviceOrientation: guidance?.deviceOrientation,
+        orientationMatches: guidance?.orientationMatches,
+        trackingState: guidance?.trackingState,
         deviceAttitude: guidance?.deviceAttitude,
         lens: guidance?.lens,
         zoomFactor: guidance?.zoomFactor,
@@ -731,6 +965,7 @@ function CaptureExperience({
     if (!VideoCapture) return;
     setBusy(true);
     setCaptureError(undefined);
+    let createdSession: LiveVideoSession | undefined;
     try {
       if (mode === "record") {
         await VideoCapture.startRecording(form.hasAudio);
@@ -750,6 +985,7 @@ function CaptureExperience({
           courtCalibration: calibration(),
           idempotencyKey: idempotencyKey(),
         });
+        createdSession = created;
         setSession(created);
         await VideoCapture.startStream(
           created.streamUrl,
@@ -758,6 +994,12 @@ function CaptureExperience({
         );
       }
     } catch (error) {
+      if (createdSession) {
+        void client.player.finishLiveVideo.mutate({
+          videoId: createdSession.video.id,
+          idempotencyKey: idempotencyKey(),
+        });
+      }
       setCaptureError(displayError(error));
     } finally {
       setBusy(false);
@@ -769,9 +1011,10 @@ function CaptureExperience({
     setBusy(true);
     try {
       if (mode === "record") {
+        const lockedCalibration = calibration();
         const video = await VideoCapture.stopRecording();
         setRecording(false);
-        onRecorded(video);
+        onRecorded(video, lockedCalibration);
         return;
       }
       await VideoCapture.stopStream();
@@ -903,12 +1146,13 @@ function CaptureExperience({
         courtLengthMeters={form.courtLengthMeters}
         courtWidthMeters={form.courtWidthMeters}
         netHeightMeters={form.netHeightMeters}
+        preferredOrientation={form.orientation}
         onCaptureError={(event) => setCaptureError(event.nativeEvent.message)}
         onGuidance={(event) => setGuidance(event.nativeEvent)}
         onStreamState={(event) => setStreamState(event.nativeEvent.state)}
         style={StyleSheet.absoluteFill}
       />
-      <CourtOverlay acceptable={guidance?.acceptable ?? false} />
+      <CourtOverlay guidance={guidance} />
       <SafeAreaView pointerEvents="box-none" style={styles.captureChrome}>
         <View style={styles.captureTop}>
           <Pressable
@@ -935,6 +1179,20 @@ function CaptureExperience({
         <View style={styles.captureBottom}>
           {!isActive && (
             <View style={styles.guidanceCard}>
+              {guidance?.orientationMatches === false && (
+                <View style={styles.orientationWarning}>
+                  <Text style={styles.orientationWarningIcon}>↻</Text>
+                  <View style={styles.flex}>
+                    <Text style={styles.orientationWarningTitle}>
+                      Rotate to {form.orientation}
+                    </Text>
+                    <Text style={styles.orientationWarningBody}>
+                      You chose {form.orientation} video. Duna will keep
+                      checking before capture begins.
+                    </Text>
+                  </View>
+                </View>
+              )}
               <View style={styles.guidanceTop}>
                 <Text
                   style={[
@@ -955,8 +1213,11 @@ function CaptureExperience({
                   "Keep the four corners, net line, and both service areas visible."}
               </Text>
               <Text style={styles.guidanceNote}>
-                A poor angle will not block recording; it may limit future
-                trajectory and height estimates.
+                {guidance?.projectionSource === "lidar"
+                  ? "LiDAR ground lock · court bounds adjust as you move"
+                  : guidance?.groundPlaneDetected
+                    ? "Ground lock · move gradually while Duna refines the court"
+                    : "Point toward the sand and move slowly to find the ground plane"}
               </Text>
             </View>
           )}
@@ -1016,10 +1277,12 @@ const MuxVideo = muxReactNativeVideo<VideoComponentProps>(Video);
 
 function VideoPlayerModal({
   client,
+  metric,
   onClose,
   video,
 }: {
   readonly client: DunaApiClient;
+  readonly metric?: VideoMetric;
   readonly video: VideoSummary;
   readonly onClose: () => void;
 }) {
@@ -1074,12 +1337,13 @@ function VideoPlayerModal({
         style: styles.player,
       }
     : undefined;
+  const portrait = video.courtCalibration?.preferredOrientation === "portrait";
 
   return (
     <Modal animationType="slide" onRequestClose={onClose} visible>
       <SafeAreaView style={styles.playerModal}>
         <View style={styles.modalHeaderDark}>
-          <Pressable onPress={onClose}>
+          <Pressable hitSlop={12} onPress={onClose} style={styles.playerDone}>
             <Text style={styles.headerActionLight}>Done</Text>
           </Pressable>
           <Text numberOfLines={1} style={styles.modalTitleLight}>
@@ -1087,7 +1351,9 @@ function VideoPlayerModal({
           </Text>
           <View style={styles.headerSpacer} />
         </View>
-        <View style={styles.playerStage}>
+        <View
+          style={[styles.playerStage, portrait && styles.playerStagePortrait]}
+        >
           {!uri && !error && <ActivityIndicator color="#63e3db" size="large" />}
           {!!error && <Text style={styles.playerError}>{error}</Text>}
           {commonProps &&
@@ -1114,15 +1380,53 @@ function VideoPlayerModal({
             ))}
         </View>
         <View style={styles.playerInfo}>
+          <View style={styles.playerKickerRow}>
+            {video.status === "live" && <View style={styles.liveDot} />}
+            <Text style={styles.playerPrivacy}>
+              {video.status === "live" ? "LIVE NOW" : "DUNA VIDEO"} ·{" "}
+              {video.recordingVisibility === "public" ? "PUBLIC" : "PRIVATE"}
+            </Text>
+          </View>
           <Text style={styles.playerTitle}>{video.title}</Text>
           <Text style={styles.playerMeta}>
             {video.owner.displayName} · {video.category}
             {video.event ? ` · ${video.event.title}` : ""}
           </Text>
-          <Text style={styles.playerPrivacy}>
-            {video.status === "live" ? "LIVE NOW" : "DUNA VIDEO"} ·{" "}
-            {video.hasAudio ? "Audio" : "Silent"}
-          </Text>
+          {!!video.venue && (
+            <View style={styles.playerVenue}>
+              <Text style={styles.playerVenueIcon}>⌖</Text>
+              <View style={styles.flex}>
+                <Text style={styles.playerVenueName}>{video.venue.name}</Text>
+                {!!video.venue.address && (
+                  <Text style={styles.playerVenueAddress}>
+                    {video.venue.address}
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
+          {metric && (
+            <View style={styles.playerMetricCard}>
+              <View style={styles.playerMetricItem}>
+                <Text style={styles.playerMetricValue}>{metric.views}</Text>
+                <Text style={styles.playerMetricLabel}>VIEWS</Text>
+              </View>
+              <View style={styles.playerMetricDivider} />
+              <View style={styles.playerMetricItem}>
+                <Text style={styles.playerMetricValue}>
+                  {formatDuration(metric.watchedSeconds)}
+                </Text>
+                <Text style={styles.playerMetricLabel}>WATCHED</Text>
+              </View>
+              <View style={styles.playerMetricDivider} />
+              <View style={styles.playerMetricItem}>
+                <Text style={styles.playerMetricValue}>
+                  {Math.round(metric.completionRate * 100)}%
+                </Text>
+                <Text style={styles.playerMetricLabel}>COMPLETION</Text>
+              </View>
+            </View>
+          )}
         </View>
       </SafeAreaView>
     </Modal>
@@ -1191,10 +1495,17 @@ export function VideoStudioScreen({
   const [metrics, setMetrics] = useState<readonly VideoMetric[]>([]);
   const [loading, setLoading] = useState(Boolean(client));
   const [error, setError] = useState<string>();
-  const [detailsMode, setDetailsMode] = useState<"live" | "upload">();
+  const [detailsMode, setDetailsMode] = useState<
+    "live" | "record" | "upload"
+  >();
   const [captureMode, setCaptureMode] = useState<"live" | "record">();
   const [form, setForm] = useState<CaptureForm>(initialCaptureForm);
+  const [savedCaptureDefaults, setSavedCaptureDefaults] =
+    useState<StoredCaptureDefaults>();
   const [preparedVideo, setPreparedVideo] = useState<PreparedVideo>();
+  const [preparedCalibration, setPreparedCalibration] =
+    useState<DunaCourtCalibration>();
+  const [preparingVideo, setPreparingVideo] = useState(false);
   const [showUploadChoices, setShowUploadChoices] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -1222,13 +1533,43 @@ export function VideoStudioScreen({
     void load();
   }, [load]);
 
+  useEffect(() => {
+    let active = true;
+    void AsyncStorage.getItem(captureDefaultsKey).then((stored) => {
+      if (!active || !stored) return;
+      try {
+        const parsed = JSON.parse(stored) as StoredCaptureDefaults;
+        if (
+          parsed.orientation &&
+          parsed.orientation !== "landscape" &&
+          parsed.orientation !== "portrait"
+        ) {
+          return;
+        }
+        setSavedCaptureDefaults(parsed);
+      } catch {
+        // Ignore a stale local preference and use safe Duna defaults.
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const rememberCaptureDefaults = (nextForm: CaptureForm) => {
+    const defaults = storedDefaults(nextForm);
+    setSavedCaptureDefaults(defaults);
+    void AsyncStorage.setItem(captureDefaultsKey, JSON.stringify(defaults));
+  };
+
   const metricByVideo = useMemo(
     () => new Map(metrics.map((metric) => [metric.video.id, metric])),
     [metrics],
   );
 
   const openLive = () => {
-    setForm(initialCaptureForm);
+    setPreparedCalibration(undefined);
+    setForm(captureFormFromDefaults(savedCaptureDefaults));
     setDetailsMode("live");
   };
 
@@ -1238,25 +1579,37 @@ export function VideoStudioScreen({
       setError("Video upload requires the Duna iOS app.");
       return;
     }
+    setPreparingVideo(true);
     try {
       const selected = await VideoCapture.pickVideo();
       if (!selected) return;
       setPreparedVideo(selected);
-      setForm({ ...initialCaptureForm, category: "practice" });
+      setPreparedCalibration(undefined);
+      setForm(
+        captureFormFromDefaults(savedCaptureDefaults, {
+          category: "practice",
+          title: "",
+        }),
+      );
       setDetailsMode("upload");
     } catch (reason) {
       setError(displayError(reason));
+    } finally {
+      setPreparingVideo(false);
     }
   };
 
   const recordNew = () => {
     setShowUploadChoices(false);
-    setForm({
-      ...initialCaptureForm,
-      title: "New court recording",
-      category: "practice",
-    });
-    setCaptureMode("record");
+    setPreparedVideo(undefined);
+    setPreparedCalibration(undefined);
+    setForm(
+      captureFormFromDefaults(savedCaptureDefaults, {
+        title: "New court recording",
+        category: "practice",
+      }),
+    );
+    setDetailsMode("record");
   };
 
   const upload = async () => {
@@ -1264,6 +1617,7 @@ export function VideoStudioScreen({
     setUploading(true);
     setUploadProgress(0);
     setError(undefined);
+    let videoId: string | undefined;
     try {
       const session = await client.player.beginVideoUpload.mutate({
         title: form.title,
@@ -1277,8 +1631,10 @@ export function VideoStudioScreen({
         mimeType: preparedVideo.mimeType,
         bytes: preparedVideo.bytes,
         durationSeconds: preparedVideo.durationSeconds,
+        courtCalibration: preparedCalibration,
         idempotencyKey: idempotencyKey(),
       });
+      videoId = session.videoId;
       for (let partNumber = 1; partNumber <= session.totalParts; partNumber++) {
         const offset = (partNumber - 1) * session.partSizeBytes;
         const length = Math.min(
@@ -1309,10 +1665,18 @@ export function VideoStudioScreen({
       });
       setDetailsMode(undefined);
       setPreparedVideo(undefined);
-      setForm(initialCaptureForm);
+      setPreparedCalibration(undefined);
+      rememberCaptureDefaults(form);
+      setForm(captureFormFromDefaults(savedCaptureDefaults));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await load();
     } catch (reason) {
+      if (videoId) {
+        void client.player.abortVideoUpload.mutate({
+          videoId,
+          idempotencyKey: idempotencyKey(),
+        });
+      }
       setError(displayError(reason));
     } finally {
       setUploading(false);
@@ -1534,9 +1898,13 @@ export function VideoStudioScreen({
             }}
             onChange={setForm}
             onContinue={() => {
+              rememberCaptureDefaults(form);
               if (detailsMode === "live") {
                 setDetailsMode(undefined);
                 setCaptureMode("live");
+              } else if (detailsMode === "record") {
+                setDetailsMode(undefined);
+                setCaptureMode("record");
               } else {
                 void upload();
               }
@@ -1578,9 +1946,10 @@ export function VideoStudioScreen({
               setCaptureMode(undefined);
             }}
             onFinished={load}
-            onRecorded={(video) => {
+            onRecorded={(video, calibration) => {
               VideoCapture?.releasePreview();
               setPreparedVideo(video);
+              setPreparedCalibration(calibration);
               setCaptureMode(undefined);
               setDetailsMode("upload");
             }}
@@ -1627,9 +1996,21 @@ export function VideoStudioScreen({
       {selectedVideo && client && (
         <VideoPlayerModal
           client={client}
+          metric={metricByVideo.get(selectedVideo.id)}
           onClose={() => setSelectedVideo(undefined)}
           video={selectedVideo}
         />
+      )}
+
+      {preparingVideo && (
+        <View style={styles.uploadOverlay}>
+          <ActivityIndicator color="#ffffff" size="large" />
+          <Text style={styles.uploadOverlayTitle}>Preparing your video</Text>
+          <Text style={styles.uploadOverlayBody}>
+            Duna is converting it to a reliable upload format. Long videos can
+            take a moment.
+          </Text>
+        </View>
       )}
     </>
   );
@@ -1883,61 +2264,103 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
-    minHeight: 56,
+    minHeight: 62,
     paddingHorizontal: 18,
   },
-  modalTitle: { color: palette.ink, fontSize: 15, fontWeight: "800" },
-  headerAction: { color: palette.aqua, fontSize: 13, fontWeight: "700" },
-  headerSpacer: { width: 48 },
-  formContent: { gap: 18, padding: 18, paddingBottom: 120 },
-  field: { gap: 8 },
-  fieldLabel: { color: palette.ink, fontSize: 12, fontWeight: "800" },
+  modalTitle: { color: palette.ink, fontSize: 17, fontWeight: "800" },
+  headerAction: { color: palette.aqua, fontSize: 15, fontWeight: "700" },
+  headerTap: { justifyContent: "center", minHeight: 44, minWidth: 56 },
+  headerSpacer: { width: 56 },
+  formContent: { gap: 24, padding: 20, paddingBottom: 126 },
+  formHero: { gap: 8, paddingBottom: 4 },
+  formStep: {
+    color: palette.aqua,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+  },
+  formTitle: {
+    color: palette.ink,
+    fontSize: 31,
+    fontWeight: "800",
+    letterSpacing: -1,
+    lineHeight: 35,
+  },
+  formIntro: { color: palette.muted, fontSize: 14, lineHeight: 21 },
+  field: { gap: 9 },
+  fieldLabel: { color: palette.ink, fontSize: 16, fontWeight: "800" },
+  fieldDescription: { color: palette.muted, fontSize: 13, lineHeight: 19 },
   input: {
     backgroundColor: "#ffffff",
     borderColor: "#d7dce3",
-    borderRadius: 13,
+    borderRadius: 18,
     borderWidth: 1,
     color: palette.ink,
-    fontSize: 14,
-    minHeight: 48,
-    paddingHorizontal: 14,
+    fontSize: 16,
+    minHeight: 62,
+    paddingHorizontal: 16,
   },
-  choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   choice: {
     backgroundColor: "#ffffff",
     borderColor: "#d7dce3",
-    borderRadius: 12,
+    borderRadius: 17,
     borderWidth: 1,
-    paddingHorizontal: 11,
-    paddingVertical: 10,
+    flexBasis: "47%",
+    flexGrow: 1,
+    justifyContent: "center",
+    minHeight: 70,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   choiceActive: {
     backgroundColor: palette.aquaSoft,
     borderColor: palette.aqua,
   },
-  choiceText: { color: palette.muted, fontSize: 11, fontWeight: "700" },
+  choiceText: { color: palette.ink, fontSize: 14, fontWeight: "800" },
   choiceTextActive: { color: palette.aqua },
+  choiceBody: {
+    color: palette.muted,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 4,
+  },
+  choiceBodyActive: { color: "#526c8e" },
+  recommendedLabel: {
+    color: palette.positive,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    marginTop: 7,
+  },
   selectedAssociation: {
     alignItems: "center",
     backgroundColor: "#ffffff",
     borderColor: palette.aqua,
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: 1,
     flexDirection: "row",
     gap: 10,
-    padding: 13,
+    minHeight: 72,
+    padding: 15,
   },
-  associationTitle: { color: palette.ink, fontSize: 12, fontWeight: "800" },
-  associationMeta: { color: palette.muted, fontSize: 10, marginTop: 2 },
+  associationTitle: { color: palette.ink, fontSize: 14, fontWeight: "800" },
+  associationMeta: {
+    color: palette.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3,
+  },
   optionList: { gap: 7 },
   option: {
     alignItems: "center",
     backgroundColor: "#ffffff",
     borderColor: palette.line,
-    borderRadius: 13,
+    borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
-    padding: 12,
+    minHeight: 64,
+    padding: 14,
   },
   yoursBadge: {
     backgroundColor: "#e8f5ee",
@@ -1949,35 +2372,71 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 4,
   },
-  helper: { color: palette.muted, fontSize: 10, lineHeight: 15 },
+  helper: { color: palette.muted, fontSize: 12, lineHeight: 17 },
   toggleRow: {
     alignItems: "center",
     backgroundColor: "#ffffff",
     borderColor: palette.line,
-    borderRadius: 15,
+    borderRadius: 18,
     borderWidth: 1,
     flexDirection: "row",
     gap: 14,
-    padding: 14,
+    minHeight: 82,
+    padding: 16,
   },
-  toggleTitle: { color: palette.ink, fontSize: 12, fontWeight: "800" },
+  toggleTitle: { color: palette.ink, fontSize: 15, fontWeight: "800" },
   toggleBody: {
     color: palette.muted,
-    fontSize: 10,
-    lineHeight: 15,
-    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 4,
   },
-  disclosure: { color: palette.warning, fontSize: 10, lineHeight: 15 },
+  privatePracticeCard: {
+    alignItems: "center",
+    backgroundColor: "#eef5f2",
+    borderColor: "#b9d9ca",
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 13,
+    minHeight: 82,
+    padding: 16,
+  },
+  privateIcon: {
+    alignItems: "center",
+    backgroundColor: "#d9ede4",
+    borderRadius: 19,
+    height: 38,
+    justifyContent: "center",
+    width: 38,
+  },
+  privateIconText: { color: palette.positive, fontSize: 16, fontWeight: "900" },
+  disclosure: { color: palette.warning, fontSize: 12, lineHeight: 18 },
   fileSummary: {
+    alignItems: "center",
     backgroundColor: "#eaf4ef",
-    borderRadius: 14,
-    gap: 4,
-    padding: 14,
+    borderRadius: 18,
+    flexDirection: "row",
+    gap: 12,
+    padding: 16,
   },
   fileSummaryTitle: {
     color: palette.positive,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
+  },
+  fileSummaryIcon: {
+    alignItems: "center",
+    backgroundColor: "#d4eadf",
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  fileSummaryIconText: {
+    color: palette.positive,
+    fontSize: 16,
+    fontWeight: "900",
   },
   modalFooter: {
     backgroundColor: "rgba(248,247,243,0.96)",
@@ -1985,19 +2444,19 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     bottom: 0,
     left: 0,
-    padding: 14,
+    padding: 16,
     position: "absolute",
     right: 0,
   },
   primaryButton: {
     alignItems: "center",
     backgroundColor: palette.aqua,
-    borderRadius: 14,
+    borderRadius: 18,
     justifyContent: "center",
-    minHeight: 50,
+    minHeight: 58,
     paddingHorizontal: 18,
   },
-  primaryButtonText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
+  primaryButtonText: { color: "#ffffff", fontSize: 16, fontWeight: "800" },
   secondaryButton: {
     alignItems: "center",
     borderColor: palette.aqua,
@@ -2008,6 +2467,18 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: { color: palette.aqua, fontSize: 12, fontWeight: "800" },
   captureRoot: { backgroundColor: "#050708", flex: 1 },
+  dynamicCourtLine: {
+    borderTopWidth: 2,
+    height: 2,
+    position: "absolute",
+  },
+  dynamicHorizon: {
+    height: 1,
+    left: "3%",
+    opacity: 0.6,
+    position: "absolute",
+    right: "3%",
+  },
   courtOverlay: {
     bottom: "24%",
     left: "8%",
@@ -2106,6 +2577,34 @@ const styles = StyleSheet.create({
     gap: 5,
     padding: 13,
   },
+  orientationWarning: {
+    alignItems: "center",
+    backgroundColor: "rgba(247,200,107,0.15)",
+    borderColor: "rgba(247,200,107,0.7)",
+    borderRadius: 13,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 7,
+    padding: 11,
+  },
+  orientationWarningIcon: {
+    color: "#f7c86b",
+    fontSize: 24,
+    fontWeight: "900",
+  },
+  orientationWarningTitle: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "800",
+    textTransform: "capitalize",
+  },
+  orientationWarningBody: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 2,
+  },
   guidanceTop: {
     alignItems: "center",
     flexDirection: "row",
@@ -2192,6 +2691,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   headerActionLight: { color: "#63e3db", fontSize: 13, fontWeight: "800" },
+  playerDone: { justifyContent: "center", minHeight: 44, minWidth: 52 },
   modalTitleLight: {
     color: "#ffffff",
     flex: 1,
@@ -2207,12 +2707,60 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: "100%",
   },
+  playerStagePortrait: {
+    alignSelf: "center",
+    aspectRatio: 9 / 16,
+    maxHeight: "58%",
+    width: "72%",
+  },
   player: { height: "100%", width: "100%" },
   playerError: { color: "#f27878", padding: 20, textAlign: "center" },
-  playerInfo: { gap: 8, padding: 20 },
-  playerTitle: { color: "#ffffff", fontSize: 22, fontWeight: "800" },
-  playerMeta: { color: "#aaa79e", fontSize: 12 },
+  playerInfo: { gap: 12, padding: 20 },
+  playerKickerRow: { alignItems: "center", flexDirection: "row", gap: 7 },
+  playerTitle: {
+    color: "#ffffff",
+    fontSize: 25,
+    fontWeight: "800",
+    letterSpacing: -0.6,
+  },
+  playerMeta: { color: "#aaa79e", fontSize: 13, lineHeight: 18 },
   playerPrivacy: { color: "#63e3db", fontSize: 10, fontWeight: "800" },
+  playerVenue: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderRadius: 16,
+    flexDirection: "row",
+    gap: 11,
+    minHeight: 68,
+    padding: 13,
+  },
+  playerVenueIcon: { color: "#63e3db", fontSize: 22, fontWeight: "900" },
+  playerVenueName: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
+  playerVenueAddress: {
+    color: "#aaaeb6",
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 2,
+  },
+  playerMetricCard: {
+    backgroundColor: "rgba(99,227,219,0.09)",
+    borderColor: "rgba(99,227,219,0.22)",
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: "row",
+    minHeight: 74,
+    paddingVertical: 12,
+  },
+  playerMetricItem: { alignItems: "center", flex: 1, justifyContent: "center" },
+  playerMetricValue: { color: "#ffffff", fontSize: 17, fontWeight: "800" },
+  playerMetricLabel: {
+    color: "#63e3db",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    marginTop: 4,
+  },
+  playerMetricDivider: { backgroundColor: "rgba(255,255,255,0.12)", width: 1 },
   uploadOverlay: {
     alignItems: "center",
     backgroundColor: "rgba(10,20,28,0.92)",
