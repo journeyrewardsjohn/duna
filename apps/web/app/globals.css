@@ -4280,22 +4280,33 @@ a.professional-match-card:hover {
 
 /* Verified professional event venue */
 
-.pro-event-venue {
+.pro-event-section.pro-event-venue {
   align-items: stretch;
   display: grid;
   gap: 0;
-  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+  grid-template-columns: minmax(190px, 32%) minmax(0, 1fr);
+  min-height: 220px;
   overflow: hidden;
   padding: 0;
 }
 
 .pro-event-venue__map {
-  min-height: 360px;
+  appearance: none;
+  background: #e8f0ec;
+  border: 0;
+  color: inherit;
+  cursor: zoom-in;
+  min-height: 220px;
+  min-width: 0;
   overflow: hidden;
+  padding: 0;
   position: relative;
+  text-align: left;
+  width: 100%;
 }
 
 .pro-event-venue__map img {
+  display: block;
   height: 100%;
   object-fit: cover;
   transition: transform 320ms ease;
@@ -4304,6 +4315,11 @@ a.professional-match-card:hover {
 
 .pro-event-venue__map:hover img {
   transform: scale(1.02);
+}
+
+.pro-event-venue__map:focus-visible {
+  box-shadow: inset 0 0 0 3px var(--color-aqua);
+  outline: 0;
 }
 
 .pro-event-venue__map > span {
@@ -4321,6 +4337,7 @@ a.professional-match-card:hover {
   left: 1rem;
   padding: 0.65rem 0.8rem;
   position: absolute;
+  white-space: nowrap;
 }
 
 .pro-event-venue__details {
@@ -4333,22 +4350,41 @@ a.professional-match-card:hover {
     ),
     var(--color-surface);
   display: grid;
-  padding: clamp(1.5rem, 3vw, 2.5rem);
+  min-width: 0;
+  padding: clamp(1.15rem, 2.5vw, 2rem);
 }
 
-.pro-event-venue__details h2 {
+.pro-event-section.pro-event-venue .pro-event-venue__details h2 {
   font-family: var(--font-display);
-  font-size: clamp(1.75rem, 3vw, 2.7rem);
+  font-size: clamp(1.35rem, 2.4vw, 2rem);
   letter-spacing: -0.045em;
-  line-height: 1;
-  margin: 0.55rem 0 0.8rem;
+  line-height: 1.05;
+  margin: 0.45rem 0 0;
 }
 
-.pro-event-venue__details p {
+.pro-event-venue__address {
+  align-items: flex-start;
   color: var(--color-bone-muted);
-  font-size: max(0.82rem, 12px);
-  line-height: 1.6;
-  margin: 0;
+  display: inline-flex;
+  font-size: max(0.9rem, 13px);
+  font-weight: 650;
+  gap: 0.4rem;
+  line-height: 1.45;
+  margin-top: 0.6rem;
+  max-width: 42rem;
+  text-decoration: none;
+  width: fit-content;
+}
+
+.pro-event-venue__address:hover {
+  color: var(--color-aqua);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pro-event-venue__address svg {
+  flex: 0 0 auto;
+  margin-top: 0.16rem;
 }
 
 .pro-event-venue__details small {
@@ -4357,23 +4393,169 @@ a.professional-match-card:hover {
   margin-top: 0.65rem;
 }
 
-.pro-event-venue__details a {
+.pro-event-venue__actions {
   align-items: center;
-  color: var(--color-aqua);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+
+.pro-event-venue__actions button,
+.pro-event-venue__actions a,
+.pro-event-map-dialog footer button,
+.pro-event-map-dialog footer a {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  color: var(--color-bone);
+  cursor: pointer;
   display: inline-flex;
-  font-size: max(0.76rem, 11px);
+  font: inherit;
+  font-size: max(0.72rem, 11px);
   font-weight: 780;
   gap: 0.4rem;
-  margin-top: 1.4rem;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0.55rem 0.8rem;
+  text-decoration: none;
+}
+
+.pro-event-venue__actions a,
+.pro-event-map-dialog footer a {
+  background: var(--color-aqua);
+  border-color: var(--color-aqua);
+  color: #fff;
+}
+
+.pro-event-venue__actions button:hover,
+.pro-event-map-dialog footer button:hover {
+  border-color: var(--color-aqua);
+  color: var(--color-aqua);
+}
+
+.pro-event-map-dialog__backdrop {
+  align-items: center;
+  background: rgb(4 14 21 / 76%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: clamp(0.75rem, 3vw, 2rem);
+  position: fixed;
+  z-index: 1000;
+}
+
+.pro-event-map-dialog {
+  background: var(--color-surface);
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 24px;
+  box-shadow: 0 28px 90px rgb(0 0 0 / 38%);
+  display: grid;
+  max-height: calc(100dvh - 2rem);
+  max-width: 1100px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.pro-event-map-dialog > header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1.1rem 1.2rem;
+}
+
+.pro-event-map-dialog > header h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.2rem, 2vw, 1.7rem);
+  letter-spacing: -0.04em;
+  margin: 0.3rem 0 0.2rem;
+}
+
+.pro-event-map-dialog > header a {
+  color: var(--color-bone-muted);
+  font-size: max(0.76rem, 11px);
+  line-height: 1.4;
+}
+
+.pro-event-map-dialog > header > button {
+  align-items: center;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  color: var(--color-bone);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.pro-event-map-dialog iframe {
+  background: #e8f0ec;
+  border: 0;
+  height: min(66vh, 700px);
+  min-height: 360px;
+  width: 100%;
+}
+
+.pro-event-map-dialog footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: flex-end;
+  padding: 0.85rem 1.2rem 1.05rem;
 }
 
 @media (max-width: 760px) {
-  .pro-event-venue {
-    grid-template-columns: 1fr;
+  .pro-event-section.pro-event-venue {
+    grid-template-columns: minmax(112px, 31%) minmax(0, 1fr);
+    min-height: 190px;
   }
 
   .pro-event-venue__map {
-    min-height: 260px;
+    min-height: 190px;
+  }
+
+  .pro-event-venue__map > span {
+    bottom: 0.7rem;
+    font-size: 10px;
+    left: 0.7rem;
+    padding: 0.5rem 0.58rem;
+  }
+
+  .pro-event-venue__details {
+    padding: 1rem;
+  }
+
+  .pro-event-section.pro-event-venue .pro-event-venue__details h2 {
+    font-size: clamp(1.08rem, 5vw, 1.4rem);
+  }
+
+  .pro-event-venue__address {
+    font-size: max(0.76rem, 12px);
+  }
+
+  .pro-event-venue__actions {
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+  }
+
+  .pro-event-venue__actions button,
+  .pro-event-venue__actions a {
+    min-height: 34px;
+    padding: 0.45rem 0.65rem;
+  }
+
+  .pro-event-map-dialog {
+    border-radius: 18px;
+  }
+
+  .pro-event-map-dialog iframe {
+    height: 58vh;
+    min-height: 280px;
   }
 }
 

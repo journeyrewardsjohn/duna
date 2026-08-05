@@ -1,4 +1,5 @@
 import type { PublicProEvent } from "@duna/api";
+import { googleMapsSearchUrl } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   Activity,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { ProfessionalMatchCard } from "@/components/professional-match-card";
+import { ProEventVenueCard } from "@/components/pro-event-venue-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { countryFlag } from "@/lib/country-flag";
@@ -260,6 +262,7 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
   const venue = event.editorial.venue;
   const structuredVenueAddress = [
     venue?.addressLine1,
+    venue?.addressLine2,
     venue?.locality,
     venue?.administrativeArea,
     venue?.postalCode,
@@ -278,11 +281,12 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
   } else if (venueAddress) {
     venueMapParameters.set("address", venueAddress);
   }
-  const venueMapHref =
-    venue?.googleMapsUri ??
-    (venueAddress
-      ? `https://www.google.com/maps/search/?${new URLSearchParams({ api: "1", query: venueAddress }).toString()}`
-      : undefined);
+  const venueMapHref = venueAddress
+    ? googleMapsSearchUrl({
+        address: venueAddress,
+        googlePlaceId: venue?.googlePlaceId,
+      })
+    : undefined;
   const structuredData = professionalEventJsonLd(event);
 
   return (
@@ -412,35 +416,13 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
 
       <div className="pro-event-content">
         {venueAddress && venueMapHref && (
-          <section className="pro-event-section pro-event-venue">
-            <a
-              aria-label={`Open ${event.editorial.venueName ?? venueAddress} in Google Maps`}
-              className="pro-event-venue__map"
-              href={venueMapHref}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <img
-                alt={`Map showing ${event.editorial.venueName ?? venueAddress}`}
-                loading="lazy"
-                src={`/api/places/map?${venueMapParameters.toString()}`}
-              />
-              <span>
-                Explore the venue <ExternalLink aria-hidden size={14} />
-              </span>
-            </a>
-            <div className="pro-event-venue__details">
-              <span className="page-eyebrow">Event location</span>
-              <h2>{event.editorial.venueName ?? event.location}</h2>
-              <p>{venueAddress}</p>
-              {event.editorial.timezone && (
-                <small>Schedule shown in {event.editorial.timezone}</small>
-              )}
-              <a href={venueMapHref} rel="noreferrer" target="_blank">
-                Directions <ArrowRight aria-hidden size={14} />
-              </a>
-            </div>
-          </section>
+          <ProEventVenueCard
+            address={venueAddress}
+            mapHref={venueMapHref}
+            mapImageSrc={`/api/places/map?${venueMapParameters.toString()}`}
+            timezone={event.editorial.timezone}
+            title={event.editorial.venueName ?? event.location ?? venueAddress}
+          />
         )}
         <section className="pro-event-section pro-watch">
           <header>
