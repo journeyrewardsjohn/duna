@@ -3630,6 +3630,8 @@ export async function loadPublicWorldRankings() {
   requireDatabase();
   const database = getDatabase();
   const genders = ["men", "women"] as const;
+  const limitPerGender = 200;
+  const fetchBufferPerGender = 500;
   const latestDates = Object.fromEntries(
     await Promise.all(
       genders.map(async (genderCategory) => {
@@ -3686,7 +3688,7 @@ export async function loadPublicWorldRankings() {
             ),
           )
           .orderBy(asc(worldRankings.rank))
-          .limit(200);
+          .limit(fetchBufferPerGender);
       }),
     ).then((rows) => rows.flat()),
   );
@@ -3764,6 +3766,7 @@ export async function loadPublicWorldRankings() {
   const worldFor = (genderCategory: (typeof genders)[number]) =>
     worldRows
       .filter((row) => row.genderCategory === genderCategory)
+      .slice(0, limitPerGender)
       .map((row) => {
         const publicProfile =
           row.personStatus === "active" &&
@@ -3798,7 +3801,7 @@ export async function loadPublicWorldRankings() {
   const world = { men: worldFor("men"), women: worldFor("women") };
   return {
     latestDates,
-    limitPerGender: 200,
+    limitPerGender,
     world,
     duna,
   };
