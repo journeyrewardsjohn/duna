@@ -39,8 +39,10 @@ const entityColors: Record<DiscoveryEntityType, string> = {
 };
 
 let publicTokenRequest: Promise<string | undefined> | undefined;
+const embeddedPublicToken = process.env.EXPO_PUBLIC_MAPBOX_API_TOKEN?.trim();
 
 async function publicMapboxToken(): Promise<string | undefined> {
+  if (embeddedPublicToken?.startsWith("pk.")) return embeddedPublicToken;
   publicTokenRequest ??= fetch(`${dunaWebUrl}/api/mapbox/token`)
     .then(async (response) => {
       if (!response.ok) return undefined;
