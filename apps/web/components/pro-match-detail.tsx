@@ -16,6 +16,7 @@ import { DunaVideoGallery } from "@/components/duna-video-gallery";
 import { ProfessionalMatchCard } from "@/components/professional-match-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { professionalMatchJsonLd, serializeJsonLd } from "@/lib/pro-seo";
 
 type MatchTeam = PublicProMatchDetail["match"]["teamA"];
 
@@ -93,32 +94,12 @@ export function ProMatchDetail({
         : match.time
           ? `Starts ${match.time}`
           : "Scheduled";
-  const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "SportsEvent",
-    name: `${match.teamA.label} vs ${match.teamB.label}`,
-    superEvent: {
-      "@type": "SportsEvent",
-      name: event.name,
-      url: `/events/${event.slug}`,
-    },
-    startDate: match.playedAt,
-    eventStatus:
-      match.status === "completed"
-        ? "https://schema.org/EventCompleted"
-        : match.status === "live"
-          ? "https://schema.org/EventInProgress"
-          : "https://schema.org/EventScheduled",
-    location: event.location
-      ? { "@type": "Place", name: event.location }
-      : undefined,
-    sport: "Beach volleyball",
-  };
+  const structuredData = professionalMatchJsonLd(detail);
   return (
     <main className="pro-match-page">
       <SiteHeader />
       <script
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
         type="application/ld+json"
       />
       <section className="pro-match-hero">

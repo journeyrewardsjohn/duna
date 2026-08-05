@@ -251,6 +251,12 @@ export async function saveProfessionalEventEditorialAction(
   const enabled = (name: string) => formData.get(name) === "on";
   const field = (name: string) =>
     String(formData.get(name) ?? "").trim() || undefined;
+  const numberField = (name: string) => {
+    const raw = field(name);
+    if (!raw) return undefined;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
   const reason = field("reason") ?? "";
   if (!professionalEventId || reason.length < 10) {
     return {
@@ -281,8 +287,25 @@ export async function saveProfessionalEventEditorialAction(
       },
       summary: field("summary"),
       venueName: field("venueName"),
-      venueAddress: field("venueAddress"),
+      venueAddress: field("formattedAddress") ?? field("venueAddress"),
+      venue:
+        field("googlePlaceId") || field("addressLine1")
+          ? {
+              googlePlaceId: field("googlePlaceId"),
+              googleMapsUri: field("googleMapsUri"),
+              formattedAddress: field("formattedAddress"),
+              addressLine1: field("addressLine1"),
+              addressLine2: field("addressLine2"),
+              locality: field("locality"),
+              administrativeArea: field("administrativeArea"),
+              postalCode: field("postalCode"),
+              countryCode: field("countryCode"),
+              latitude: numberField("latitude"),
+              longitude: numberField("longitude"),
+            }
+          : undefined,
       timezone: field("timezone"),
+      ticketUrl: field("ticketUrl"),
       reason,
     });
     refreshSandAdmin();
@@ -292,6 +315,63 @@ export async function saveProfessionalEventEditorialAction(
     };
   } catch (error) {
     return failure(error, "The event details could not be saved.");
+  }
+}
+
+export async function researchProfessionalEventAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const professionalEventId = String(
+    formData.get("professionalEventId") ?? "",
+  ).trim();
+  if (!professionalEventId) {
+    return { status: "error", message: "Choose an event to research." };
+  }
+  try {
+    const caller = await getServerCaller();
+    const proposal = await caller.admin.researchProfessionalEvent({
+      professionalEventId,
+    });
+    refreshSandAdmin();
+    return {
+      status: "success",
+      message: `Research ready for review with ${proposal.evidence.length} cited sources.`,
+    };
+  } catch (error) {
+    return failure(error, "Event research could not be completed.");
+  }
+}
+
+export async function applyProfessionalEventResearchAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const professionalEventId = String(
+    formData.get("professionalEventId") ?? "",
+  ).trim();
+  const proposalId = String(formData.get("proposalId") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!professionalEventId || !proposalId || reason.length < 10) {
+    return {
+      status: "error",
+      message: "Review the proposal and add a meaningful approval note.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.applyProfessionalEventResearch({
+      professionalEventId,
+      proposalId,
+      reason,
+    });
+    refreshSandAdmin();
+    return {
+      status: "success",
+      message: `Verified research applied; ${result.addedWatchOptions} broadcast option${result.addedWatchOptions === 1 ? "" : "s"} added.`,
+    };
+  } catch (error) {
+    return failure(error, "The research proposal could not be applied.");
   }
 }
 

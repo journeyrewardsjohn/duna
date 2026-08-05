@@ -23,6 +23,7 @@ import { RatingOrbit } from "@/components/rating-orbit";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
+import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
 import {
   getProfessionalEditorialSummary,
   professionalEditorialHash,
@@ -92,8 +93,17 @@ export async function generateMetadata({
       title: `${player.displayName} · Sand Rating ${player.rating.display.toFixed(2)}`,
       description: `Match history and performance trends for ${player.displayName}.`,
       type: "profile",
+      url: `/players/${player.handle}`,
+      siteName: "Duna",
       images: player.avatarUrl ? [player.avatarUrl] : undefined,
     },
+    twitter: {
+      card: player.avatarUrl ? "summary_large_image" : "summary",
+      title: `${player.displayName} · Sand Rating ${player.rating.display.toFixed(2)}`,
+      description: `Verified beach volleyball match history and performance trends for ${player.displayName}.`,
+      images: player.avatarUrl ? [player.avatarUrl] : undefined,
+    },
+    robots: { index: true, follow: true },
   };
 }
 
@@ -236,7 +246,8 @@ export default async function PublicPlayerPage({
     "@context": "https://schema.org",
     "@type": "Person",
     name: player.displayName,
-    url: `/players/${player.handle}`,
+    "@id": `${absolutePublicUrl(`/players/${player.handle}`)}#person`,
+    url: absolutePublicUrl(`/players/${player.handle}`),
     image: player.avatarUrl,
     homeLocation: player.homeMarket
       ? { "@type": "Place", name: player.homeMarket }
@@ -249,7 +260,7 @@ export default async function PublicPlayerPage({
     <main className="public-detail">
       <SiteHeader />
       <script
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
         type="application/ld+json"
       />
       <section className="public-profile-hero">

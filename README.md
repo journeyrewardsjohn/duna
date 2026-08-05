@@ -45,8 +45,9 @@ entire product can still be explored and tested.
 
 Player onboarding is available at `/app/onboarding` on the web and from the
 Profile tab in the Duna mobile app. The typed flow always works. Connecting
-`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and `OPENAI_API_KEY`
-adds the optional voice conversation:
+`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and Vercel AI Gateway
+through `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` adds the optional voice
+conversation:
 
 ```bash
 pnpm --filter @duna/voice-agent dev

@@ -17,6 +17,39 @@ interface GooglePlaceDetails {
   }[];
 }
 
+interface GoogleTimeZoneResponse {
+  readonly status?: string;
+  readonly timeZoneId?: string;
+}
+
+async function resolveTimeZone(
+  key: string,
+  latitude: number | undefined,
+  longitude: number | undefined,
+): Promise<string | undefined> {
+  if (latitude === undefined || longitude === undefined) return undefined;
+  const parameters = new URLSearchParams({
+    location: `${latitude},${longitude}`,
+    timestamp: String(Math.floor(Date.now() / 1_000)),
+    key,
+  });
+  try {
+    const response = await fetch(
+      `https://maps.googleapis.com/maps/api/timezone/json?${parameters.toString()}`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) return undefined;
+    const payload = (await response.json()) as GoogleTimeZoneResponse;
+    if (payload.status !== "OK" || !payload.timeZoneId) return undefined;
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: payload.timeZoneId,
+    }).format(new Date());
+    return payload.timeZoneId;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function GET(request: Request) {
   const key = process.env.GOOGLE_PLACES_API_KEY;
   if (!key) {
@@ -48,6 +81,11 @@ export async function GET(request: Request) {
     );
   }
   const place = (await response.json()) as GooglePlaceDetails;
+  const timeZone = await resolveTimeZone(
+    key,
+    place.location?.latitude,
+    place.location?.longitude,
+  );
   const component = (type: string, short = false) => {
     const value = place.addressComponents?.find((entry) =>
       entry.types?.includes(type),
@@ -68,6 +106,7 @@ export async function GET(request: Request) {
     longitude: place.location?.longitude,
     primaryType: place.primaryType,
     googleMapsUri: place.googleMapsUri,
+    timeZone,
     addressLine1: street || place.formattedAddress,
     locality:
       component("locality") ??
