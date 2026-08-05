@@ -3399,7 +3399,7 @@ type ProfessionalEventVenue = {
   readonly longitude?: number;
 };
 
-type ProfessionalEventEditorial = {
+export type ProfessionalEventEditorial = {
   readonly overrides: {
     readonly name?: string;
     readonly location?: string;
@@ -3565,6 +3565,38 @@ function professionalEventEditorialFromPayload(
       : {}),
     ...(optionalSnapshotString(stored.updatedAt)
       ? { updatedAt: optionalSnapshotString(stored.updatedAt) }
+      : {}),
+  };
+}
+
+export function inheritProfessionalEventEditorial(
+  primary: ProfessionalEventEditorial,
+  sibling?: ProfessionalEventEditorial,
+): ProfessionalEventEditorial {
+  if (!sibling) return primary;
+  return {
+    overrides: primary.overrides,
+    media: primary.media.length > 0 ? primary.media : sibling.media,
+    ...((primary.summary ?? sibling.summary)
+      ? { summary: primary.summary ?? sibling.summary }
+      : {}),
+    ...((primary.venueName ?? sibling.venueName)
+      ? { venueName: primary.venueName ?? sibling.venueName }
+      : {}),
+    ...((primary.venueAddress ?? sibling.venueAddress)
+      ? { venueAddress: primary.venueAddress ?? sibling.venueAddress }
+      : {}),
+    ...((primary.venue ?? sibling.venue)
+      ? { venue: primary.venue ?? sibling.venue }
+      : {}),
+    ...((primary.timezone ?? sibling.timezone)
+      ? { timezone: primary.timezone ?? sibling.timezone }
+      : {}),
+    ...((primary.ticketUrl ?? sibling.ticketUrl)
+      ? { ticketUrl: primary.ticketUrl ?? sibling.ticketUrl }
+      : {}),
+    ...((primary.updatedAt ?? sibling.updatedAt)
+      ? { updatedAt: primary.updatedAt ?? sibling.updatedAt }
       : {}),
   };
 }
@@ -5294,6 +5326,22 @@ export async function loadPublicProEvent(slug: string) {
     .limit(1);
   const sourceSlug = sourceRows[0]?.slug ?? "fivb-12ndr";
   const effective = effectiveProfessionalEvent(event);
+  const sibling = eventRows.find(
+    (candidate) =>
+      candidate.id !== event.id &&
+      candidate.startsOn === event.startsOn &&
+      slugSegment(proEventBaseName(candidate.name)) ===
+        slugSegment(proEventBaseName(event.name)) &&
+      normalizedProGender(candidate.genderCategory) !==
+        normalizedProGender(event.genderCategory),
+  );
+  const siblingEffective = sibling
+    ? effectiveProfessionalEvent(sibling)
+    : undefined;
+  const publicEditorial = inheritProfessionalEventEditorial(
+    effective.editorial,
+    siblingEffective?.editorial,
+  );
 
   const matchRows = await database
     .select()
@@ -5401,7 +5449,13 @@ export async function loadPublicProEvent(slug: string) {
       }
     : undefined;
   const eventSlug = professionalEventSlug(event);
-  const eventWatchOptions = watchOptionsFromPayload(event.rawPayload);
+  const ownEventWatchOptions = watchOptionsFromPayload(event.rawPayload);
+  const eventWatchOptions =
+    ownEventWatchOptions.length > 0
+      ? ownEventWatchOptions
+      : sibling
+        ? watchOptionsFromPayload(sibling.rawPayload)
+        : [];
   const toTeam = (
     participants: (typeof matchRows)[number]["participants"],
     side: "A" | "B",
@@ -5546,15 +5600,6 @@ export async function loadPublicProEvent(slug: string) {
       });
     }
   }
-  const sibling = eventRows.find(
-    (candidate) =>
-      candidate.id !== event.id &&
-      candidate.startsOn === event.startsOn &&
-      slugSegment(proEventBaseName(candidate.name)) ===
-        slugSegment(proEventBaseName(event.name)) &&
-      normalizedProGender(candidate.genderCategory) !==
-        normalizedProGender(event.genderCategory),
-  );
   return {
     id: event.id,
     slug: eventSlug,
@@ -5580,13 +5625,13 @@ export async function loadPublicProEvent(slug: string) {
     teamEntries: publicTeamEntries,
     avpLeague,
     editorial: {
-      summary: effective.editorial.summary,
-      venueName: effective.editorial.venueName,
-      venueAddress: effective.editorial.venueAddress,
-      venue: effective.editorial.venue,
-      timezone: effective.editorial.timezone,
-      ticketUrl: effective.editorial.ticketUrl,
-      media: effective.editorial.media,
+      summary: publicEditorial.summary,
+      venueName: publicEditorial.venueName,
+      venueAddress: publicEditorial.venueAddress,
+      venue: publicEditorial.venue,
+      timezone: publicEditorial.timezone,
+      ticketUrl: publicEditorial.ticketUrl,
+      media: publicEditorial.media,
     },
     watchOptions: eventWatchOptions,
     sibling: sibling
