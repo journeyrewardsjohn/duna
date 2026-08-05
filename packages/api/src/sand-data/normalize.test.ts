@@ -3,6 +3,8 @@ import {
   crossSourceMatchFingerprint,
   matchMappingConfidence,
   normalizePersonName,
+  parseDate,
+  parseDateSpan,
   sourceMatchFingerprint,
 } from "./normalize";
 import type { ExternalMatchRecord } from "./types";
@@ -39,6 +41,19 @@ describe("sand data normalization", () => {
       sourceMatchFingerprint("volleyball-life", match),
     );
     expect(crossSourceMatchFingerprint(match)).toHaveLength(64);
+  });
+
+  it("anchors partner event ranges without pretending the import date is play time", () => {
+    expect(parseDate("7/1-3/2022")).toBe("2022-07-01");
+    expect(parseDateSpan("6/30-7/2/2023")).toEqual({
+      start: "2023-06-30",
+      end: "2023-07-02",
+    });
+    expect(parseDateSpan("12/30-1/2/2023")).toEqual({
+      start: "2022-12-30",
+      end: "2023-01-02",
+    });
+    expect(parseDate("2/30/2023")).toBeUndefined();
   });
 
   it("uses conservative confidence bands for identity suggestions", () => {
