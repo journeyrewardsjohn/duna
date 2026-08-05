@@ -23,6 +23,7 @@ import {
   type LayoutChangeEvent,
   View,
 } from "react-native";
+import QRCode from "react-native-qrcode-svg";
 import Video from "react-native-video";
 import { SafeAreaView } from "react-native-safe-area-context";
 import VideoCapture, {
@@ -41,6 +42,14 @@ import {
   FellixText as Text,
   FellixTextInput as TextInput,
 } from "./fellix-text";
+import {
+  acknowledgeWatchVisionEvents,
+  getPendingWatchVisionEvents,
+  subscribeToWatchVisionEvents,
+  syncVisionSessionToWatch,
+  type WatchScoreSnapshot,
+  type WatchVisionEvent,
+} from "./watch-scoring";
 
 type VideoStudioData = Awaited<
   ReturnType<DunaApiClient["player"]["videoStudio"]["query"]>
@@ -58,6 +67,21 @@ type LiveVideoSession = Awaited<
 type VideoPlayback = Awaited<
   ReturnType<DunaApiClient["public"]["videoPlayback"]["query"]>
 >;
+type VisionSessionAccess = Awaited<
+  ReturnType<DunaApiClient["player"]["createVisionSession"]["mutate"]>
+>;
+type VisionSession = VisionSessionAccess["session"];
+type VisionSettings = VisionSession["settings"];
+type VisionScore = NonNullable<VideoPlayback["liveScore"]>;
+type VisionTimelineEvent = NonNullable<
+  NonNullable<VideoPlayback["vision"]>["events"]
+>[number];
+type MatchScoringState = Awaited<
+  ReturnType<DunaApiClient["player"]["matchScoringState"]["query"]>
+>;
+type MatchScoreEvent = Parameters<
+  DunaApiClient["player"]["appendMatchEvents"]["mutate"]
+>[0]["events"][number]["event"];
 
 type VideoCategory = "practice" | "event" | "match" | "social";
 type RecordingVisibility = "public" | "private";
@@ -169,6 +193,16 @@ function formatDuration(seconds: number): string {
   return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
 
+function formatClock(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(whole / 3_600);
+  const minutes = Math.floor((whole % 3_600) / 60);
+  const remainder = whole % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`
+    : `${minutes}:${String(remainder).padStart(2, "0")}`;
+}
+
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   return `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
@@ -210,6 +244,143 @@ function associationInput(association: VideoAssociation | undefined): {
     return { eventId: association.eventId, matchId: association.id };
   }
   return association?.type === "event" ? { eventId: association.id } : {};
+}
+
+function teamLabels(form: CaptureForm): {
+  readonly teamA: string;
+  readonly teamB: string;
+} {
+  if (form.association?.type !== "match") {
+    return { teamA: "Side A", teamB: "Side B" };
+  }
+  const separators = /\s+(?:vs\.?|v\.?|—|–|-)\s+/i;
+  const [left, right] = form.association.title.split(separators);
+  return {
+    teamA: left?.trim() || "Side A",
+    teamB: right?.trim() || "Side B",
+  };
+}
+
+function matchLabelTeams(label: string | undefined): {
+  readonly teamA: string;
+  readonly teamB: string;
+} {
+  if (!label) return { teamA: "Side A", teamB: "Side B" };
+  const [left, right] = label.split(/\s+(?:vs\.?|v\.?|—|–|-)\s+/i);
+  return {
+    teamA: left?.trim() || "Side A",
+    teamB: right?.trim() || "Side B",
+  };
+}
+
+function scoreAtTime(
+  playback: VideoPlayback | undefined,
+  seconds: number,
+): VisionScore | undefined {
+  if (playback?.video.status === "live" && playback.liveScore) {
+    return playback.liveScore;
+  }
+
+  const events = playback?.vision?.events ?? [];
+  let score: VisionScore | undefined;
+  for (const event of events) {
+    if (event.elapsedMs > seconds * 1_000) break;
+    if (event.score) score = event.score;
+  }
+  return score;
+}
+
+function heartRateAtTime(
+  playback: VideoPlayback | undefined,
+  playbackSeconds: number,
+): number | undefined {
+  const points = playback?.healthOverlay?.points;
+  if (!points?.length) return undefined;
+  const elapsedMs = Math.max(0, playbackSeconds * 1_000);
+  let low = 0;
+  let high = points.length - 1;
+  let selected = points[0];
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const point = points[middle]!;
+    if (point.elapsedMs <= elapsedMs) {
+      selected = point;
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return selected?.beatsPerMinute;
+}
+
+function compactScore(
+  score: MatchScoringState["score"] | WatchScoreSnapshot,
+): VisionScore {
+  return {
+    setIndex: score.setIndex,
+    sets: score.sets.map((set) => ({ a: set.a, b: set.b })),
+    serving: score.serving,
+    status: score.status,
+  };
+}
+
+function VisionScoreboard({
+  compact = false,
+  score,
+  teamA,
+  teamB,
+}: {
+  readonly compact?: boolean;
+  readonly score: VisionScore;
+  readonly teamA: string;
+  readonly teamB: string;
+}) {
+  const current = score.sets[
+    Math.min(score.setIndex, score.sets.length - 1)
+  ] ?? {
+    a: 0,
+    b: 0,
+  };
+  const setsWon = score.sets.reduce(
+    (total, set, index) => {
+      if (index >= score.setIndex && score.status !== "complete") return total;
+      if (set.a > set.b) total.a += 1;
+      if (set.b > set.a) total.b += 1;
+      return total;
+    },
+    { a: 0, b: 0 },
+  );
+  return (
+    <View
+      style={[
+        styles.visionScoreboard,
+        compact && styles.visionScoreboardCompact,
+      ]}
+    >
+      <View style={styles.visionScoreHeader}>
+        <Text style={styles.visionScoreBrand}>DUNA</Text>
+        <Text style={styles.visionScoreSet}>SET {score.setIndex + 1}</Text>
+      </View>
+      {[
+        { key: "A", label: teamA, point: current.a, sets: setsWon.a },
+        { key: "B", label: teamB, point: current.b, sets: setsWon.b },
+      ].map((team) => (
+        <View key={team.key} style={styles.visionScoreRow}>
+          <View
+            style={[
+              styles.visionServeDot,
+              score.serving !== team.key && styles.visionServeDotOff,
+            ]}
+          />
+          <Text numberOfLines={1} style={styles.visionTeamName}>
+            {team.label}
+          </Text>
+          <Text style={styles.visionSetCount}>{team.sets}</Text>
+          <Text style={styles.visionPointCount}>{team.point}</Text>
+        </View>
+      ))}
+    </View>
+  );
 }
 
 function ChoiceRow<Value extends string>({
@@ -783,7 +954,13 @@ function interpolatePoint(
   };
 }
 
-function CourtOverlay({ guidance }: { readonly guidance?: CaptureGuidance }) {
+function CourtOverlay({
+  corners,
+  guidance,
+}: {
+  readonly corners?: VisionSettings["corners"];
+  readonly guidance?: CaptureGuidance;
+}) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -800,7 +977,12 @@ function CourtOverlay({ guidance }: { readonly guidance?: CaptureGuidance }) {
     { x: 0.92, y: 0.77 },
     { x: 0.08, y: 0.77 },
   ] as const;
-  const points = guidance?.corners?.length === 4 ? guidance.corners : fallback;
+  const points =
+    corners?.length === 4
+      ? corners
+      : guidance?.corners?.length === 4
+        ? guidance.corners
+        : fallback;
   const [topLeft, topRight, bottomRight, bottomLeft] = points;
   const netLeft = interpolatePoint(topLeft!, bottomLeft!, 0.5);
   const netRight = interpolatePoint(topRight!, bottomRight!, 0.5);
@@ -875,11 +1057,24 @@ function CaptureExperience({
   readonly onRecorded: (
     video: PreparedVideo,
     calibration: DunaCourtCalibration,
+    visionSessionId?: string,
   ) => void;
 }) {
+  const labels = useMemo(() => teamLabels(form), [form]);
+  const matchId =
+    form.association?.type === "match" ? form.association.id : undefined;
+  const initialScore = useMemo<VisionScore>(
+    () => ({
+      setIndex: 0,
+      sets: [{ a: 0, b: 0 }],
+      status: "not-started",
+    }),
+    [],
+  );
   const [permissionsReady, setPermissionsReady] = useState(false);
   const [guidance, setGuidance] = useState<CaptureGuidance>();
   const [captureError, setCaptureError] = useState<string>();
+  const [visionNotice, setVisionNotice] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [streamState, setStreamState] = useState<
     "preview" | "connecting" | "live" | "stopped"
@@ -892,6 +1087,78 @@ function CaptureExperience({
   const [publishProfile, setPublishProfile] = useState(form.publishedToProfile);
   const [removeMusic, setRemoveMusic] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [visionAccess, setVisionAccess] = useState<VisionSessionAccess>();
+  const [visionSession, setVisionSession] = useState<VisionSession>();
+  const [visionSettings, setVisionSettings] = useState<VisionSettings>({
+    courtWidthMeters: form.courtWidthMeters,
+    courtLengthMeters: form.courtLengthMeters,
+    netHeightMeters: form.netHeightMeters,
+    cameraHeightMeters: 2.1,
+    overlayScoreboard: true,
+    teamA: labels.teamA,
+    teamB: labels.teamB,
+  });
+  const [visionScore, setVisionScore] = useState<VisionScore>(initialScore);
+  const [matchScoring, setMatchScoring] = useState<MatchScoringState>();
+  const [showRemote, setShowRemote] = useState(false);
+  const activeRef = useRef(false);
+  const busyRef = useRef(false);
+  const permissionRef = useRef(false);
+  const sessionRef = useRef<VisionSession | undefined>(undefined);
+  const settingsRef = useRef(visionSettings);
+  const scoreRef = useRef<VisionScore>(initialScore);
+  const elapsedRef = useRef(0);
+  const captureStartedAtMs = useRef<number | undefined>(undefined);
+  const previewUploadBusy = useRef(false);
+  const watchEventChain = useRef<Promise<void>>(Promise.resolve());
+  const visionCreation = useRef<Promise<void> | undefined>(undefined);
+  const remoteCommand = useRef<string | undefined>(undefined);
+  const startRef = useRef<() => void>(() => undefined);
+  const stopRef = useRef<() => void>(() => undefined);
+
+  sessionRef.current = visionSession;
+  settingsRef.current = visionSettings;
+  scoreRef.current = visionScore;
+  elapsedRef.current = elapsedSeconds;
+  permissionRef.current = permissionsReady;
+  busyRef.current = busy;
+
+  const updateSessionState = useCallback((next: VisionSession) => {
+    sessionRef.current = next;
+    settingsRef.current = next.settings;
+    setVisionSession(next);
+    setVisionSettings(next.settings);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const creation = client.player.createVisionSession
+      .mutate({
+        title: form.title,
+        matchId,
+        settings: visionSettings,
+        idempotencyKey: idempotencyKey(),
+      })
+      .then((created) => {
+        if (!active) return;
+        setVisionAccess(created);
+        updateSessionState(created.session);
+      })
+      .catch((error) => {
+        if (active) {
+          setVisionNotice(
+            `Remote, Watch tagging, and timed overlays are unavailable: ${displayError(error)}`,
+          );
+        }
+      });
+    visionCreation.current = creation;
+    void creation;
+    return () => {
+      active = false;
+    };
+    // The capture form is frozen while this screen is mounted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, matchId, updateSessionState]);
 
   useEffect(() => {
     if (!VideoCapture) {
@@ -930,45 +1197,127 @@ function CaptureExperience({
     return () => clearInterval(timer);
   }, [recording, streamState]);
 
+  useEffect(() => {
+    if (!matchId) return;
+    let active = true;
+    const loadScore = async () => {
+      try {
+        const next = await client.player.matchScoringState.query({ matchId });
+        if (!active) return;
+        setMatchScoring(next);
+        const compact = compactScore(next.score);
+        scoreRef.current = compact;
+        setVisionScore(compact);
+      } catch {
+        // A linked match may not have entered live scoring yet. Watch scoring
+        // still remains durable in the Duna Vision timeline.
+      }
+    };
+    void loadScore();
+    const timer = setInterval(() => void loadScore(), 3_000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [client, matchId]);
+
   const calibration = (): DunaCourtCalibration => {
     const locked = VideoCapture?.lockCalibration();
-    return (
-      locked ?? {
-        courtWidthMeters: form.courtWidthMeters,
-        courtLengthMeters: form.courtLengthMeters,
-        netHeightMeters: form.netHeightMeters,
-        preferredOrientation: form.orientation,
-        qualityGrade: guidance?.qualityGrade ?? "poor",
-        qualityScore: guidance?.qualityScore ?? 0,
-        confidence: guidance?.confidence ?? 0,
-        warnings: guidance?.warnings ?? ["Camera calibration was unavailable"],
-        corners: guidance?.corners,
-        horizonY: guidance?.horizonY,
-        projectionSource: guidance?.projectionSource,
-        lidarAvailable: guidance?.lidarAvailable,
-        groundPlaneDetected: guidance?.groundPlaneDetected,
-        courtDetected: guidance?.courtDetected,
-        cameraHeightMeters: guidance?.cameraHeightMeters,
-        deviceOrientation: guidance?.deviceOrientation,
-        orientationMatches: guidance?.orientationMatches,
-        trackingState: guidance?.trackingState,
-        deviceAttitude: guidance?.deviceAttitude,
-        lens: guidance?.lens,
-        zoomFactor: guidance?.zoomFactor,
-        calibratedAt: guidance?.calibratedAt ?? new Date().toISOString(),
-        acceptable: guidance?.acceptable ?? false,
-      }
-    );
+    const settings = settingsRef.current;
+    const base = locked ?? {
+      courtWidthMeters: form.courtWidthMeters,
+      courtLengthMeters: form.courtLengthMeters,
+      netHeightMeters: form.netHeightMeters,
+      preferredOrientation: form.orientation,
+      qualityGrade: guidance?.qualityGrade ?? "poor",
+      qualityScore: guidance?.qualityScore ?? 0,
+      confidence: guidance?.confidence ?? 0,
+      warnings: guidance?.warnings ?? ["Camera calibration was unavailable"],
+      corners: guidance?.corners,
+      horizonY: guidance?.horizonY,
+      projectionSource: guidance?.projectionSource,
+      lidarAvailable: guidance?.lidarAvailable,
+      groundPlaneDetected: guidance?.groundPlaneDetected,
+      courtDetected: guidance?.courtDetected,
+      cameraHeightMeters: guidance?.cameraHeightMeters,
+      deviceOrientation: guidance?.deviceOrientation,
+      orientationMatches: guidance?.orientationMatches,
+      trackingState: guidance?.trackingState,
+      deviceAttitude: guidance?.deviceAttitude,
+      lens: guidance?.lens,
+      zoomFactor: guidance?.zoomFactor,
+      calibratedAt: guidance?.calibratedAt ?? new Date().toISOString(),
+      acceptable: guidance?.acceptable ?? false,
+    };
+    return {
+      ...base,
+      courtWidthMeters: settings.courtWidthMeters,
+      courtLengthMeters: settings.courtLengthMeters,
+      netHeightMeters: settings.netHeightMeters,
+      preferredOrientation: form.orientation,
+      corners: settings.corners ?? base.corners,
+    };
+  };
+
+  const appendPhoneEvent = async (
+    type: "recording-started" | "favorite" | "recording-stopped",
+    label?: string,
+    occurredAt = new Date(),
+  ) => {
+    const current = sessionRef.current;
+    if (!current) return;
+    const event: VisionTimelineEvent = {
+      id: Crypto.randomUUID(),
+      sessionId: current.id,
+      source: "iphone",
+      type,
+      elapsedMs:
+        type === "recording-started" || !captureStartedAtMs.current
+          ? 0
+          : Math.min(
+              43_200_000,
+              Math.max(0, occurredAt.getTime() - captureStartedAtMs.current),
+            ),
+      occurredAt: occurredAt.toISOString(),
+      score: scoreRef.current,
+      label,
+    };
+    await client.player.appendVisionTimelineEvents.mutate({
+      sessionId: current.id,
+      events: [event],
+    });
+  };
+
+  const updateVisionStatus = async (
+    status: "recording" | "ended",
+  ): Promise<void> => {
+    const current = sessionRef.current;
+    if (!current) return;
+    try {
+      const next = await client.player.updateVisionSession.mutate({
+        sessionId: current.id,
+        status,
+      });
+      updateSessionState(next);
+    } catch (error) {
+      setVisionNotice(`Vision status did not sync: ${displayError(error)}`);
+    }
   };
 
   const start = async () => {
-    if (!VideoCapture) return;
+    if (!VideoCapture || busyRef.current || activeRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setCaptureError(undefined);
     let createdSession: LiveVideoSession | undefined;
     try {
+      if (!sessionRef.current) await visionCreation.current;
+      setElapsedSeconds(0);
+      let startedAt: Date;
       if (mode === "record") {
         await VideoCapture.startRecording(form.hasAudio);
+        startedAt = new Date();
+        activeRef.current = true;
         setRecording(true);
         void Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success,
@@ -987,12 +1336,31 @@ function CaptureExperience({
         });
         createdSession = created;
         setSession(created);
+        const currentVision = sessionRef.current;
+        if (currentVision) {
+          const attached =
+            await client.player.attachVisionSessionToVideo.mutate({
+              sessionId: currentVision.id,
+              videoId: created.video.id,
+              idempotencyKey: idempotencyKey(),
+            });
+          updateSessionState(attached);
+        }
         await VideoCapture.startStream(
           created.streamUrl,
           created.streamKey,
           form.hasAudio,
         );
+        startedAt = new Date();
+        activeRef.current = true;
       }
+      captureStartedAtMs.current = startedAt.getTime();
+      await updateVisionStatus("recording");
+      await appendPhoneEvent(
+        "recording-started",
+        "Duna Vision recording started",
+        startedAt,
+      );
     } catch (error) {
       if (createdSession) {
         void client.player.finishLiveVideo.mutate({
@@ -1002,34 +1370,256 @@ function CaptureExperience({
       }
       setCaptureError(displayError(error));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
 
   const stop = async () => {
-    if (!VideoCapture) return;
+    if (!VideoCapture || busyRef.current || !activeRef.current) return;
+    busyRef.current = true;
     setBusy(true);
+    const stoppedAt = new Date();
     try {
       if (mode === "record") {
         const lockedCalibration = calibration();
         const video = await VideoCapture.stopRecording();
+        activeRef.current = false;
         setRecording(false);
-        onRecorded(video, lockedCalibration);
+        await appendPhoneEvent(
+          "recording-stopped",
+          "Duna Vision recording stopped",
+          stoppedAt,
+        );
+        await updateVisionStatus("ended");
+        onRecorded(video, lockedCalibration, sessionRef.current?.id);
         return;
       }
       await VideoCapture.stopStream();
+      activeRef.current = false;
       if (session) {
         await client.player.finishLiveVideo.mutate({
           videoId: session.video.id,
           idempotencyKey: idempotencyKey(),
         });
       }
+      await appendPhoneEvent(
+        "recording-stopped",
+        "Duna Vision stream ended",
+        stoppedAt,
+      );
+      await updateVisionStatus("ended");
       setReviewing(true);
     } catch (error) {
       setCaptureError(displayError(error));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
+  };
+
+  startRef.current = () => void start();
+  stopRef.current = () => void stop();
+
+  useEffect(() => {
+    const sessionId = visionSession?.id;
+    if (!sessionId) return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const next = await client.player.visionSession.query({ sessionId });
+        if (!active) return;
+        updateSessionState(next);
+        const commandKey = `${next.controlVersion}:${next.status}`;
+        if (
+          next.status === "recording" &&
+          !activeRef.current &&
+          !busyRef.current &&
+          permissionRef.current &&
+          remoteCommand.current !== commandKey
+        ) {
+          remoteCommand.current = commandKey;
+          startRef.current();
+        } else if (
+          next.status === "ended" &&
+          activeRef.current &&
+          !busyRef.current &&
+          remoteCommand.current !== commandKey
+        ) {
+          remoteCommand.current = commandKey;
+          stopRef.current();
+        }
+      } catch {
+        // Keep capture usable during a temporary network interruption.
+      }
+    };
+    const timer = setInterval(() => void poll(), 2_500);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [client, updateSessionState, visionSession?.id]);
+
+  const processWatchEvents = useCallback(
+    async (events: readonly WatchVisionEvent[], sessionId: string) => {
+      const applicable = events.filter(
+        (event) => event.sessionId === sessionId,
+      );
+      if (applicable.length === 0) return;
+      const timeline: VisionTimelineEvent[] = applicable.map((event) => ({
+        id: event.eventId,
+        sessionId,
+        source: "apple-watch",
+        type: event.eventType,
+        winnerSide: event.winnerSide,
+        targetEventId: event.targetEventId,
+        elapsedMs: event.elapsedMs,
+        occurredAt: event.occurredAt,
+        score: event.score,
+        label: event.label,
+      }));
+      await client.player.appendVisionTimelineEvents.mutate({
+        sessionId,
+        events: timeline,
+      });
+      const latest = applicable.at(-1)?.score;
+      if (latest) {
+        const compact = compactScore(latest);
+        scoreRef.current = compact;
+        setVisionScore(compact);
+      }
+      acknowledgeWatchVisionEvents(applicable.map((event) => event.eventId));
+
+      if (!matchId) return;
+      const scoreEvents: MatchScoreEvent[] = [];
+      for (const event of applicable) {
+        if (event.eventType === "rally-won" && event.winnerSide) {
+          scoreEvents.push({
+            id: event.eventId,
+            type: "rally-won",
+            winner: event.winnerSide,
+            occurredAt: event.occurredAt,
+          });
+        }
+        if (event.eventType === "undo" && event.targetEventId) {
+          scoreEvents.push({
+            id: event.eventId,
+            type: "undo",
+            targetEventId: event.targetEventId,
+            occurredAt: event.occurredAt,
+          });
+        }
+      }
+      if (scoreEvents.length === 0) return;
+      try {
+        const current = await client.player.matchScoringState.query({
+          matchId,
+        });
+        const result = await client.player.appendMatchEvents.mutate({
+          matchId,
+          deviceId: current.deviceId,
+          events: scoreEvents.map((event, index) => ({
+            sequence: current.nextSequence + index,
+            monotonicCounter: current.nextMonotonicCounter + index,
+            event,
+          })),
+          idempotencyKey: idempotencyKey(),
+        });
+        setMatchScoring(result.scoring);
+        const compact = compactScore(result.scoring.score);
+        scoreRef.current = compact;
+        setVisionScore(compact);
+      } catch (error) {
+        setVisionNotice(
+          `Moment saved to Duna Vision; linked match scoring did not update: ${displayError(error)}`,
+        );
+      }
+    },
+    [client, matchId],
+  );
+
+  useEffect(() => {
+    const sessionId = visionSession?.id;
+    if (!sessionId) return;
+    const enqueue = (events: readonly WatchVisionEvent[]) => {
+      watchEventChain.current = watchEventChain.current
+        .then(() => processWatchEvents(events, sessionId))
+        .catch((error) => {
+          setVisionNotice(
+            `Watch moments are waiting to sync: ${displayError(error)}`,
+          );
+        });
+    };
+    enqueue(getPendingWatchVisionEvents());
+    return subscribeToWatchVisionEvents((event) => enqueue([event]));
+  }, [processWatchEvents, visionSession?.id]);
+
+  useEffect(() => {
+    const current = visionSession;
+    if (!current || current.status === "expired") return;
+    syncVisionSessionToWatch({
+      sessionId: current.id,
+      videoId: current.videoId,
+      matchId: current.matchId,
+      teamA: visionSettings.teamA,
+      teamB: visionSettings.teamB,
+      recordingStartedAt: current.recordingStartedAt,
+      status: current.status,
+      score: visionScore,
+      format: matchScoring
+        ? {
+            setsToWin: matchScoring.format.setsToWin,
+            maximumSets: matchScoring.format.maximumSets,
+            pointTargets: matchScoring.format.pointTargets,
+            winBy: matchScoring.format.winBy,
+            hardCaps: matchScoring.format.hardCaps.map((cap) => cap ?? 0),
+            sideSwitchIntervals: matchScoring.format.sideSwitchIntervals,
+          }
+        : undefined,
+    });
+  }, [
+    matchScoring?.format,
+    visionScore,
+    visionSession,
+    visionSettings.teamA,
+    visionSettings.teamB,
+  ]);
+
+  const uploadPreview = (jpegBase64: string, capturedAt: string) => {
+    const current = sessionRef.current;
+    if (!current || previewUploadBusy.current) return;
+    previewUploadBusy.current = true;
+    void client.player.updateVisionPreview
+      .mutate({ sessionId: current.id, jpegBase64, capturedAt })
+      .catch(() => undefined)
+      .finally(() => {
+        previewUploadBusy.current = false;
+      });
+  };
+
+  const favoriteMoment = async () => {
+    try {
+      await appendPhoneEvent("favorite", "Favorite moment");
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setVisionNotice(`Moment saved at ${formatClock(elapsedRef.current)}`);
+    } catch (error) {
+      setVisionNotice(`Favorite is waiting to sync: ${displayError(error)}`);
+    }
+  };
+
+  const closeCapture = async () => {
+    const current = sessionRef.current;
+    if (current && current.status !== "ended" && current.status !== "expired") {
+      try {
+        await client.player.revokeVisionRemote.mutate({
+          sessionId: current.id,
+          idempotencyKey: idempotencyKey(),
+        });
+      } catch {
+        // The remote is time-limited even if explicit revocation cannot sync.
+      }
+    }
+    onClose();
   };
 
   const saveReview = async () => {
@@ -1050,7 +1640,7 @@ function CaptureExperience({
         });
       }
       await onFinished();
-      onClose();
+      await closeCapture();
     } catch (error) {
       setCaptureError(displayError(error));
     } finally {
@@ -1143,21 +1733,41 @@ function CaptureExperience({
     <View style={styles.captureRoot}>
       <DunaVideoCaptureView
         audioEnabled={form.hasAudio}
-        courtLengthMeters={form.courtLengthMeters}
-        courtWidthMeters={form.courtWidthMeters}
-        netHeightMeters={form.netHeightMeters}
+        courtLengthMeters={visionSettings.courtLengthMeters}
+        courtWidthMeters={visionSettings.courtWidthMeters}
+        netHeightMeters={visionSettings.netHeightMeters}
         preferredOrientation={form.orientation}
         onCaptureError={(event) => setCaptureError(event.nativeEvent.message)}
         onGuidance={(event) => setGuidance(event.nativeEvent)}
-        onStreamState={(event) => setStreamState(event.nativeEvent.state)}
+        onPreview={(event) =>
+          uploadPreview(
+            event.nativeEvent.jpegBase64,
+            event.nativeEvent.capturedAt,
+          )
+        }
+        onStreamState={(event) => {
+          const next = event.nativeEvent.state;
+          setStreamState(next);
+          if (next === "connecting" || next === "live")
+            activeRef.current = true;
+          if (next === "stopped" && mode === "live") activeRef.current = false;
+        }}
         style={StyleSheet.absoluteFill}
       />
-      <CourtOverlay guidance={guidance} />
+      <CourtOverlay corners={visionSettings.corners} guidance={guidance} />
+      {visionSettings.overlayScoreboard && (matchId || isActive) && (
+        <VisionScoreboard
+          compact
+          score={matchScoring ? compactScore(matchScoring.score) : visionScore}
+          teamA={visionSettings.teamA}
+          teamB={visionSettings.teamB}
+        />
+      )}
       <SafeAreaView pointerEvents="box-none" style={styles.captureChrome}>
         <View style={styles.captureTop}>
           <Pressable
             disabled={isActive}
-            onPress={onClose}
+            onPress={() => void closeCapture()}
             style={styles.captureClose}
           >
             <Text style={styles.captureCloseText}>×</Text>
@@ -1174,7 +1784,14 @@ function CaptureExperience({
                     : "COURT ALIGNMENT"}
             </Text>
           </View>
-          <View style={styles.captureClose} />
+          <Pressable
+            disabled={!visionAccess}
+            onPress={() => setShowRemote(true)}
+            style={styles.remoteButton}
+          >
+            <Text style={styles.remoteButtonIcon}>⌁</Text>
+            <Text style={styles.remoteButtonText}>REMOTE</Text>
+          </Pressable>
         </View>
         <View style={styles.captureBottom}>
           {!isActive && (
@@ -1226,6 +1843,40 @@ function CaptureExperience({
               <Text style={styles.captureErrorText}>{captureError}</Text>
             </View>
           )}
+          {!!visionNotice && (
+            <View style={styles.visionNotice}>
+              <Text numberOfLines={2} style={styles.visionNoticeText}>
+                {visionNotice}
+              </Text>
+            </View>
+          )}
+          {isActive && visionSession && (
+            <View style={styles.captureMomentActions}>
+              <Pressable
+                onPress={() => void favoriteMoment()}
+                style={styles.favoriteMomentButton}
+              >
+                <Text style={styles.favoriteMomentStar}>★</Text>
+                <Text style={styles.favoriteMomentText}>Favorite moment</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setShowRemote(true)}
+                style={styles.remoteStatusPill}
+              >
+                <View
+                  style={[
+                    styles.remoteStatusDot,
+                    visionSession.remoteConnected && styles.remoteStatusDotLive,
+                  ]}
+                />
+                <Text style={styles.remoteStatusText}>
+                  {visionSession.remoteConnected
+                    ? "Remote connected"
+                    : "Connect remote"}
+                </Text>
+              </Pressable>
+            </View>
+          )}
           {session && streamState === "live" && (
             <Pressable onPress={() => void share()} style={styles.sharePill}>
               <Text style={styles.sharePillText}>Share live link</Text>
@@ -1268,6 +1919,80 @@ function CaptureExperience({
           </Pressable>
         </View>
       </SafeAreaView>
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setShowRemote(false)}
+        transparent
+        visible={showRemote}
+      >
+        <Pressable
+          onPress={() => setShowRemote(false)}
+          style={styles.remoteBackdrop}
+        >
+          <Pressable
+            onPress={(event) => event.stopPropagation()}
+            style={styles.remoteCard}
+          >
+            <View style={styles.remoteCardHeader}>
+              <View style={styles.flex}>
+                <Text style={styles.remoteEyebrow}>DUNA VISION REMOTE</Text>
+                <Text style={styles.remoteTitle}>
+                  Scan to control this camera
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setShowRemote(false)}
+                style={styles.remoteClose}
+              >
+                <Text style={styles.remoteCloseText}>×</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.remoteBody}>
+              A trusted second device can align court corners, set heights,
+              confirm teams, watch the low-resolution preview, and start or end
+              this recording. The link expires automatically.
+            </Text>
+            {visionAccess ? (
+              <View style={styles.qrFrame}>
+                <QRCode
+                  backgroundColor="#ffffff"
+                  color={palette.navy}
+                  size={214}
+                  value={visionAccess.remoteUrl}
+                />
+              </View>
+            ) : (
+              <ActivityIndicator color={palette.aqua} size="large" />
+            )}
+            <View style={styles.remoteConnectionRow}>
+              <View
+                style={[
+                  styles.remoteStatusDot,
+                  visionSession?.remoteConnected && styles.remoteStatusDotLive,
+                ]}
+              />
+              <Text style={styles.remoteConnectionText}>
+                {visionSession?.remoteConnected
+                  ? "Remote is connected"
+                  : "Waiting for a remote device"}
+              </Text>
+            </View>
+            {!!visionAccess && (
+              <Pressable
+                onPress={() =>
+                  void Share.share({
+                    message: `Control ${form.title} in Duna Vision: ${visionAccess.remoteUrl}`,
+                    url: visionAccess.remoteUrl,
+                  })
+                }
+                style={styles.remoteShareButton}
+              >
+                <Text style={styles.remoteShareText}>Share secure link</Text>
+              </Pressable>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1288,7 +2013,9 @@ function VideoPlayerModal({
 }) {
   const [playback, setPlayback] = useState<VideoPlayback>();
   const [error, setError] = useState<string>();
+  const [playbackSeconds, setPlaybackSeconds] = useState(0);
   const lastHeartbeat = useRef(0);
+  const fallbackTeams = matchLabelTeams(video.match?.label);
 
   useEffect(() => {
     let active = true;
@@ -1304,6 +2031,33 @@ function VideoPlayerModal({
       active = false;
     };
   }, [client, video.id]);
+
+  useEffect(() => {
+    if (video.status !== "live" || !video.match?.id) return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const scoring = await client.public.liveMatch.query({
+          matchId: video.match!.id,
+        });
+        if (active) {
+          setPlayback((current) =>
+            current
+              ? { ...current, liveScore: compactScore(scoring.score) }
+              : current,
+          );
+        }
+      } catch {
+        // Keep playing if live scoring briefly becomes unavailable.
+      }
+    };
+    void refresh();
+    const timer = setInterval(() => void refresh(), 3_000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [client, video.match, video.status]);
 
   const heartbeat = useCallback(
     (seconds: number, completed = false) => {
@@ -1330,13 +2084,24 @@ function VideoPlayerModal({
     ? {
         controls: true,
         onEnd: () => heartbeat(video.durationSeconds ?? 0, true),
-        onProgress: (progress) => heartbeat(progress.currentTime),
+        onProgress: (progress) => {
+          setPlaybackSeconds(progress.currentTime);
+          heartbeat(progress.currentTime);
+        },
         poster: playback?.posterUrl,
         resizeMode: "contain",
         source: { uri },
         style: styles.player,
       }
     : undefined;
+  const playbackScore = playback
+    ? scoreAtTime(playback, playbackSeconds)
+    : undefined;
+  const playbackScoreboardEnabled = playback
+    ? (playback.vision?.settings.overlayScoreboard ??
+      (video.status === "live" && Boolean(video.match)))
+    : false;
+  const playbackHeartRate = heartRateAtTime(playback, playbackSeconds);
   const portrait = video.courtCalibration?.preferredOrientation === "portrait";
 
   return (
@@ -1378,6 +2143,24 @@ function VideoPlayerModal({
             ) : (
               <Video {...commonProps} />
             ))}
+          {playback && playbackScoreboardEnabled && playbackScore && (
+            <VisionScoreboard
+              score={playbackScore}
+              teamA={playback.vision?.settings.teamA ?? fallbackTeams.teamA}
+              teamB={playback.vision?.settings.teamB ?? fallbackTeams.teamB}
+            />
+          )}
+          {playbackHeartRate !== undefined && (
+            <View style={styles.healthVideoOverlay}>
+              <Text style={styles.healthVideoHeart}>♥</Text>
+              <View>
+                <Text style={styles.healthVideoValue}>
+                  {Math.round(playbackHeartRate)} BPM
+                </Text>
+                <Text style={styles.healthVideoLabel}>PRIVATE DUNA HEALTH</Text>
+              </View>
+            </View>
+          )}
         </View>
         <View style={styles.playerInfo}>
           <View style={styles.playerKickerRow}>
@@ -1503,6 +2286,7 @@ export function VideoStudioScreen({
   const [savedCaptureDefaults, setSavedCaptureDefaults] =
     useState<StoredCaptureDefaults>();
   const [preparedVideo, setPreparedVideo] = useState<PreparedVideo>();
+  const [visionSessionId, setVisionSessionId] = useState<string>();
   const [preparedCalibration, setPreparedCalibration] =
     useState<DunaCourtCalibration>();
   const [preparingVideo, setPreparingVideo] = useState(false);
@@ -1568,6 +2352,8 @@ export function VideoStudioScreen({
   );
 
   const openLive = () => {
+    setPreparedVideo(undefined);
+    setVisionSessionId(undefined);
     setPreparedCalibration(undefined);
     setForm(captureFormFromDefaults(savedCaptureDefaults));
     setDetailsMode("live");
@@ -1584,6 +2370,7 @@ export function VideoStudioScreen({
       const selected = await VideoCapture.pickVideo();
       if (!selected) return;
       setPreparedVideo(selected);
+      setVisionSessionId(undefined);
       setPreparedCalibration(undefined);
       setForm(
         captureFormFromDefaults(savedCaptureDefaults, {
@@ -1602,6 +2389,7 @@ export function VideoStudioScreen({
   const recordNew = () => {
     setShowUploadChoices(false);
     setPreparedVideo(undefined);
+    setVisionSessionId(undefined);
     setPreparedCalibration(undefined);
     setForm(
       captureFormFromDefaults(savedCaptureDefaults, {
@@ -1635,6 +2423,13 @@ export function VideoStudioScreen({
         idempotencyKey: idempotencyKey(),
       });
       videoId = session.videoId;
+      if (visionSessionId) {
+        await client.player.attachVisionSessionToVideo.mutate({
+          sessionId: visionSessionId,
+          videoId: session.videoId,
+          idempotencyKey: idempotencyKey(),
+        });
+      }
       for (let partNumber = 1; partNumber <= session.totalParts; partNumber++) {
         const offset = (partNumber - 1) * session.partSizeBytes;
         const length = Math.min(
@@ -1665,6 +2460,7 @@ export function VideoStudioScreen({
       });
       setDetailsMode(undefined);
       setPreparedVideo(undefined);
+      setVisionSessionId(undefined);
       setPreparedCalibration(undefined);
       rememberCaptureDefaults(form);
       setForm(captureFormFromDefaults(savedCaptureDefaults));
@@ -1946,10 +2742,11 @@ export function VideoStudioScreen({
               setCaptureMode(undefined);
             }}
             onFinished={load}
-            onRecorded={(video, calibration) => {
+            onRecorded={(video, calibration, nextVisionSessionId) => {
               VideoCapture?.releasePreview();
               setPreparedVideo(video);
               setPreparedCalibration(calibration);
+              setVisionSessionId(nextVisionSessionId);
               setCaptureMode(undefined);
               setDetailsMode("upload");
             }}
@@ -2546,6 +3343,23 @@ const styles = StyleSheet.create({
     width: 40,
   },
   captureCloseText: { color: "#ffffff", fontSize: 28, lineHeight: 30 },
+  remoteButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderColor: "rgba(255,255,255,0.28)",
+    borderRadius: 20,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: "center",
+    width: 58,
+  },
+  remoteButtonIcon: { color: "#8cece5", fontSize: 15, fontWeight: "900" },
+  remoteButtonText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
   captureStatus: {
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.46)",
@@ -2625,6 +3439,21 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   captureErrorText: { color: "#ffffff", fontSize: 11, textAlign: "center" },
+  visionNotice: {
+    alignSelf: "stretch",
+    backgroundColor: "rgba(19,58,103,0.88)",
+    borderColor: "rgba(140,236,229,0.3)",
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  visionNoticeText: {
+    color: "#ffffff",
+    fontSize: 11,
+    lineHeight: 15,
+    textAlign: "center",
+  },
   sharePill: {
     backgroundColor: "rgba(255,255,255,0.92)",
     borderRadius: 18,
@@ -2632,6 +3461,43 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   sharePillText: { color: palette.navy, fontSize: 11, fontWeight: "800" },
+  captureMomentActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  favoriteMomentButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(4,10,13,0.82)",
+    borderColor: "rgba(255,255,255,0.28)",
+    borderRadius: 22,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 7,
+    minHeight: 42,
+    paddingHorizontal: 14,
+  },
+  favoriteMomentStar: { color: "#f7c86b", fontSize: 19 },
+  favoriteMomentText: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
+  remoteStatusPill: {
+    alignItems: "center",
+    backgroundColor: "rgba(4,10,13,0.82)",
+    borderColor: "rgba(255,255,255,0.2)",
+    borderRadius: 22,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 7,
+    minHeight: 42,
+    paddingHorizontal: 12,
+  },
+  remoteStatusDot: {
+    backgroundColor: "#98a2b3",
+    borderRadius: 4,
+    height: 8,
+    width: 8,
+  },
+  remoteStatusDotLive: { backgroundColor: "#67d391" },
+  remoteStatusText: { color: "#ffffff", fontSize: 10, fontWeight: "800" },
   captureButton: {
     alignItems: "center",
     backgroundColor: "rgba(222,104,66,0.94)",
@@ -2652,6 +3518,164 @@ const styles = StyleSheet.create({
   },
   captureButtonCoreStop: { borderRadius: 4, height: 20, width: 20 },
   captureButtonText: { color: "#ffffff", fontSize: 13, fontWeight: "900" },
+  visionScoreboard: {
+    backgroundColor: "rgba(5,9,13,0.9)",
+    borderColor: "rgba(255,255,255,0.24)",
+    borderRadius: 10,
+    borderWidth: 1,
+    bottom: 12,
+    minWidth: 176,
+    overflow: "hidden",
+    paddingBottom: 6,
+    position: "absolute",
+    right: 12,
+    zIndex: 6,
+  },
+  visionScoreboardCompact: { bottom: 142, minWidth: 184, right: 16 },
+  visionScoreHeader: {
+    alignItems: "center",
+    backgroundColor: "rgba(23,58,103,0.92)",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  visionScoreBrand: {
+    color: "#8cece5",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+  visionScoreSet: { color: "#ffffff", fontSize: 10, fontWeight: "800" },
+  visionScoreRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    minHeight: 25,
+    paddingHorizontal: 8,
+  },
+  visionServeDot: {
+    backgroundColor: "#67d391",
+    borderRadius: 3,
+    height: 6,
+    width: 6,
+  },
+  visionServeDotOff: { opacity: 0 },
+  visionTeamName: {
+    color: "#ffffff",
+    flex: 1,
+    fontSize: 10,
+    fontWeight: "800",
+    maxWidth: 102,
+  },
+  visionSetCount: {
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 10,
+    fontWeight: "700",
+    minWidth: 12,
+    textAlign: "center",
+  },
+  visionPointCount: {
+    color: "#ffffff",
+    fontSize: 17,
+    fontVariant: ["tabular-nums"],
+    fontWeight: "900",
+    minWidth: 24,
+    textAlign: "right",
+  },
+  healthVideoOverlay: {
+    alignItems: "center",
+    backgroundColor: "rgba(5,9,13,0.88)",
+    borderColor: "rgba(255,255,255,0.22)",
+    borderRadius: 11,
+    borderWidth: 1,
+    bottom: 12,
+    flexDirection: "row",
+    gap: 8,
+    left: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    position: "absolute",
+    zIndex: 6,
+  },
+  healthVideoHeart: { color: "#ff6a5f", fontSize: 16 },
+  healthVideoValue: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontVariant: ["tabular-nums"],
+    fontWeight: "900",
+  },
+  healthVideoLabel: {
+    color: "rgba(255,255,255,0.58)",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    marginTop: 1,
+  },
+  remoteBackdrop: {
+    alignItems: "center",
+    backgroundColor: "rgba(2,5,8,0.76)",
+    flex: 1,
+    justifyContent: "center",
+    padding: 20,
+  },
+  remoteCard: {
+    backgroundColor: palette.canvas,
+    borderRadius: 24,
+    gap: 16,
+    maxWidth: 430,
+    padding: 22,
+    width: "100%",
+  },
+  remoteCardHeader: { alignItems: "flex-start", flexDirection: "row", gap: 12 },
+  remoteEyebrow: {
+    color: palette.aqua,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.3,
+  },
+  remoteTitle: {
+    color: palette.ink,
+    fontSize: 21,
+    fontWeight: "900",
+    letterSpacing: -0.4,
+    marginTop: 4,
+  },
+  remoteClose: {
+    alignItems: "center",
+    backgroundColor: "#e9e8e3",
+    borderRadius: 17,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  remoteCloseText: { color: palette.ink, fontSize: 23, lineHeight: 25 },
+  remoteBody: { color: palette.muted, fontSize: 12, lineHeight: 18 },
+  qrFrame: {
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: "#ffffff",
+    borderColor: palette.line,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 14,
+  },
+  remoteConnectionRow: {
+    alignItems: "center",
+    alignSelf: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  remoteConnectionText: { color: palette.ink, fontSize: 12, fontWeight: "800" },
+  remoteShareButton: {
+    alignItems: "center",
+    backgroundColor: palette.aqua,
+    borderRadius: 14,
+    justifyContent: "center",
+    minHeight: 48,
+  },
+  remoteShareText: { color: "#ffffff", fontSize: 13, fontWeight: "900" },
   reviewContent: {
     alignItems: "stretch",
     gap: 18,

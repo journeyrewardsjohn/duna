@@ -2,6 +2,7 @@ import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   S3Client,
   UploadPartCommand,
@@ -155,6 +156,16 @@ export async function abortR2VideoUpload(input: {
       Bucket: configuration.bucket,
       Key: input.objectKey,
       UploadId: input.uploadId,
+    }),
+  );
+}
+
+export async function deleteR2VideoObject(objectKey: string): Promise<void> {
+  const { client, configuration } = getR2Client();
+  await client.send(
+    new DeleteObjectCommand({
+      Bucket: configuration.bucket,
+      Key: objectKey,
     }),
   );
 }
@@ -338,6 +349,36 @@ export async function completeMuxLiveVideo(
   liveStreamId: string,
 ): Promise<void> {
   await getMuxClient().video.liveStreams.complete(liveStreamId);
+}
+
+function providerResourceMissing(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as {
+    readonly status?: number;
+    readonly statusCode?: number;
+    readonly response?: { readonly status?: number };
+  };
+  return (
+    candidate.status === 404 ||
+    candidate.statusCode === 404 ||
+    candidate.response?.status === 404
+  );
+}
+
+export async function deleteMuxLiveVideo(liveStreamId: string): Promise<void> {
+  try {
+    await getMuxClient().video.liveStreams.delete(liveStreamId);
+  } catch (error) {
+    if (!providerResourceMissing(error)) throw error;
+  }
+}
+
+export async function deleteMuxVideoAsset(assetId: string): Promise<void> {
+  try {
+    await getMuxClient().video.assets.delete(assetId);
+  } catch (error) {
+    if (!providerResourceMissing(error)) throw error;
+  }
 }
 
 export async function replaceMuxLivePlaybackPolicy(input: {

@@ -625,6 +625,311 @@ export const courtCalibrationSchema = z.object({
   warnings: z.array(z.string().max(240)).max(12).readonly(),
   calibratedAt: z.iso.datetime(),
 });
+export const visionSessionSettingsSchema = z.object({
+  courtWidthMeters: z.number().positive().max(30),
+  courtLengthMeters: z.number().positive().max(40),
+  netHeightMeters: z.number().positive().max(4),
+  cameraHeightMeters: z.number().positive().max(20).optional(),
+  overlayScoreboard: z.boolean(),
+  teamA: z.string().trim().min(1).max(80),
+  teamB: z.string().trim().min(1).max(80),
+  corners: z
+    .array(
+      z.object({
+        x: z.number().min(0).max(1),
+        y: z.number().min(0).max(1),
+      }),
+    )
+    .length(4)
+    .readonly()
+    .optional(),
+});
+export const visionScoreSnapshotSchema = z
+  .object({
+    setIndex: z.number().int().nonnegative(),
+    sets: z
+      .array(
+        z.object({
+          a: z.number().int().nonnegative(),
+          b: z.number().int().nonnegative(),
+        }),
+      )
+      .min(1)
+      .max(5)
+      .readonly(),
+    serving: z.enum(["A", "B"]).optional(),
+    status: z.enum(["not-started", "live", "complete", "forfeit"]),
+  })
+  .refine((score) => score.setIndex < score.sets.length, {
+    message: "The active set must exist in the score snapshot.",
+    path: ["setIndex"],
+  });
+export const visionTimelineEventSchema = z
+  .object({
+    id: z.string().uuid(),
+    sessionId: z.string().uuid(),
+    source: z.enum(["apple-watch", "iphone", "remote", "match"]),
+    type: z.enum([
+      "recording-started",
+      "rally-won",
+      "favorite",
+      "undo",
+      "side-change",
+      "set-ended",
+      "recording-stopped",
+      "calibration-updated",
+    ]),
+    winnerSide: z.enum(["A", "B"]).optional(),
+    targetEventId: z.string().uuid().optional(),
+    elapsedMs: z
+      .number()
+      .int()
+      .min(0)
+      .max(12 * 60 * 60 * 1_000),
+    occurredAt: z.iso.datetime(),
+    score: visionScoreSnapshotSchema.optional(),
+    label: z.string().trim().min(1).max(160).optional(),
+    payload: z.record(z.string(), z.unknown()).optional(),
+  })
+  .superRefine((event, context) => {
+    if (event.type === "rally-won" && !event.winnerSide) {
+      context.addIssue({
+        code: "custom",
+        message: "A rally event requires the winning side.",
+        path: ["winnerSide"],
+      });
+    }
+    if (event.type === "undo" && !event.targetEventId) {
+      context.addIssue({
+        code: "custom",
+        message: "An undo event must reference the event it reverses.",
+        path: ["targetEventId"],
+      });
+    }
+  });
+export const visionSessionSchema = z.object({
+  id: z.string().uuid(),
+  videoId: z.string().uuid().optional(),
+  matchId: z.string().uuid().optional(),
+  title: z.string(),
+  status: z.enum(["setup", "ready", "recording", "ended", "expired"]),
+  settings: visionSessionSettingsSchema,
+  controlVersion: z.number().int().positive(),
+  previewDataUrl: z.string().max(300_000).optional(),
+  previewCapturedAt: z.iso.datetime().optional(),
+  recordingStartedAt: z.iso.datetime().optional(),
+  recordingEndedAt: z.iso.datetime().optional(),
+  remoteExpiresAt: z.iso.datetime(),
+  remoteConnected: z.boolean(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export const visionPlaybackSchema = z.object({
+  sessionId: z.string().uuid(),
+  settings: visionSessionSettingsSchema,
+  recordingStartedAt: z.iso.datetime().optional(),
+  events: z.array(visionTimelineEventSchema).readonly(),
+});
+export const healthCategorySchema = z.enum([
+  "heart",
+  "recovery",
+  "activity",
+  "body",
+]);
+export const healthMetricSchema = z.enum([
+  "heart-rate",
+  "resting-heart-rate",
+  "heart-rate-variability",
+  "walking-heart-rate",
+  "vo2-max",
+  "respiratory-rate",
+  "oxygen-saturation",
+  "body-temperature",
+  "sleep",
+  "active-energy",
+  "basal-energy",
+  "steps",
+  "distance",
+  "exercise-minutes",
+  "stand-minutes",
+  "workout",
+  "weight",
+  "body-fat",
+  "lean-body-mass",
+]);
+const healthSampleBaseSchema = z.object({
+  externalId: z.string().uuid(),
+  metric: healthMetricSchema,
+  kind: z.enum(["quantity", "category", "workout"]),
+  startedAt: z.iso.datetime(),
+  endedAt: z.iso.datetime(),
+  value: z.number().finite().min(-1_000_000).max(1_000_000).optional(),
+  unit: z.string().trim().min(1).max(32).optional(),
+  categoryValue: z.string().trim().min(1).max(80).optional(),
+  workout: z
+    .object({
+      activityType: z.number().int().nonnegative(),
+      durationSeconds: z
+        .number()
+        .finite()
+        .nonnegative()
+        .max(7 * 24 * 60 * 60),
+      activeEnergyKcal: z.number().finite().nonnegative().optional(),
+      distanceKilometers: z.number().finite().nonnegative().optional(),
+    })
+    .optional(),
+});
+export const healthSampleInputSchema = healthSampleBaseSchema.superRefine(
+  (sample, context) => {
+    if (new Date(sample.endedAt) < new Date(sample.startedAt)) {
+      context.addIssue({
+        code: "custom",
+        message: "A health sample cannot end before it starts.",
+        path: ["endedAt"],
+      });
+    }
+    if (sample.kind === "quantity" && sample.value === undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "A quantity health sample requires a value.",
+        path: ["value"],
+      });
+    }
+    if (sample.kind === "category" && !sample.categoryValue) {
+      context.addIssue({
+        code: "custom",
+        message: "A category health sample requires a category value.",
+        path: ["categoryValue"],
+      });
+    }
+    if (sample.kind === "workout" && !sample.workout) {
+      context.addIssue({
+        code: "custom",
+        message: "A workout health sample requires workout details.",
+        path: ["workout"],
+      });
+    }
+  },
+);
+export const healthTimelineEntrySchema = healthSampleBaseSchema
+  .omit({ externalId: true })
+  .extend({ id: z.string().uuid(), category: healthCategorySchema });
+export const healthSharingScopeSchema = z.enum([
+  "summary",
+  "timeline",
+  "video-overlay",
+]);
+export const healthSharingCandidateSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["player", "coach", "organization"]),
+  label: z.string(),
+  detail: z.string(),
+  personId: z.string().uuid().optional(),
+  organizationId: z.string().uuid().optional(),
+});
+export const healthSharingGrantSchema = z.object({
+  id: z.string().uuid(),
+  audience: healthSharingCandidateSchema,
+  categories: z.array(healthCategorySchema).min(1).readonly(),
+  scopes: z.array(healthSharingScopeSchema).min(1).readonly(),
+  expiresAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+});
+export const healthConnectionSchema = z.object({
+  provider: z.literal("apple-health"),
+  status: z.enum(["active", "paused", "revoked"]),
+  enabledCategories: z.array(healthCategorySchema).readonly(),
+  consentVersion: z.string(),
+  timezone: z.string(),
+  earliestAuthorizedAt: z.iso.datetime().optional(),
+  lastSyncedAt: z.iso.datetime().optional(),
+});
+export const healthDailySummarySchema = z.object({
+  date: z.string(),
+  sleepHours: z.number().nonnegative().optional(),
+  averageHeartRate: z.number().nonnegative().optional(),
+  restingHeartRate: z.number().nonnegative().optional(),
+  heartRateVariabilityMs: z.number().nonnegative().optional(),
+  activeEnergyKcal: z.number().nonnegative().optional(),
+  steps: z.number().nonnegative().optional(),
+  weightKilograms: z.number().positive().optional(),
+});
+export const healthSummarySchema = z.object({
+  latestHeartRate: z.number().nonnegative().optional(),
+  restingHeartRate: z.number().nonnegative().optional(),
+  heartRateVariabilityMs: z.number().nonnegative().optional(),
+  lastSleepHours: z.number().nonnegative().optional(),
+  sevenDayActiveEnergyKcal: z.number().nonnegative().optional(),
+  weightKilograms: z.number().positive().optional(),
+  recoveryContext: z
+    .object({
+      score: z.number().int().min(0).max(100),
+      label: z.enum([
+        "limited-data",
+        "below-baseline",
+        "near-baseline",
+        "above-baseline",
+      ]),
+      inputs: z.array(z.string()).readonly(),
+    })
+    .optional(),
+});
+export const healthMatchContextSchema = z.object({
+  matchId: z.string().uuid(),
+  label: z.string(),
+  occurredAt: z.iso.datetime(),
+  result: z.enum(["won", "lost", "unknown"]),
+  sleepHours: z.number().nonnegative().optional(),
+  activeEnergyKcalBefore: z.number().nonnegative().optional(),
+  restingHeartRate: z.number().nonnegative().optional(),
+  heartRateVariabilityMs: z.number().nonnegative().optional(),
+  averageMatchHeartRate: z.number().nonnegative().optional(),
+  weightKilograms: z.number().positive().optional(),
+});
+export const healthCorrelationSchema = z.object({
+  metric: z.enum([
+    "sleep-hours",
+    "active-energy-before",
+    "resting-heart-rate",
+    "heart-rate-variability",
+    "match-heart-rate",
+  ]),
+  coefficient: z.number().min(-1).max(1),
+  sampleSize: z.number().int().min(5),
+  interpretation: z.string(),
+});
+export const healthProfileSchema = z.object({
+  subject: z.object({ id: z.string().uuid(), displayName: z.string() }),
+  access: z.object({
+    owner: z.boolean(),
+    categories: z.array(healthCategorySchema).readonly(),
+    scopes: z.array(healthSharingScopeSchema).readonly(),
+  }),
+  summary: healthSummarySchema,
+  daily: z.array(healthDailySummarySchema).max(31).readonly(),
+  timeline: z.array(healthTimelineEntrySchema).max(500).readonly(),
+  matches: z.array(healthMatchContextSchema).max(30).readonly(),
+  correlations: z.array(healthCorrelationSchema).readonly(),
+  disclaimer: z.string(),
+});
+export const healthDashboardSchema = healthProfileSchema.extend({
+  connection: healthConnectionSchema.optional(),
+  grants: z.array(healthSharingGrantSchema).readonly(),
+  candidates: z.array(healthSharingCandidateSchema).readonly(),
+});
+export const healthVideoOverlaySchema = z.object({
+  subjectPersonId: z.string().uuid(),
+  points: z
+    .array(
+      z.object({
+        elapsedMs: z.number().int().nonnegative(),
+        beatsPerMinute: z.number().nonnegative(),
+      }),
+    )
+    .max(10_000)
+    .readonly(),
+  averageBeatsPerMinute: z.number().nonnegative().optional(),
+});
 export const videoSummarySchema = z.object({
   id: z.string().uuid(),
   owner: personSummarySchema,
@@ -739,6 +1044,9 @@ export const videoPlaybackSchema = z.object({
   dataEnvironmentKey: z.string().optional(),
   viewSessionId: z.string().uuid(),
   isOwner: z.boolean(),
+  vision: visionPlaybackSchema.optional(),
+  liveScore: visionScoreSnapshotSchema.optional(),
+  healthOverlay: healthVideoOverlaySchema.optional(),
 });
 export const liveVideoSessionSchema = z.object({
   video: videoSummarySchema,
@@ -2827,5 +3135,22 @@ export type VideoStudio = z.infer<typeof videoStudioSchema>;
 export type VideoUsage = z.infer<typeof videoUsageSchema>;
 export type VideoPlayback = z.infer<typeof videoPlaybackSchema>;
 export type VideoMetrics = z.infer<typeof videoMetricsSchema>;
+export type VisionSession = z.infer<typeof visionSessionSchema>;
+export type VisionSessionSettings = z.infer<typeof visionSessionSettingsSchema>;
+export type VisionTimelineEvent = z.infer<typeof visionTimelineEventSchema>;
+export type VisionScoreSnapshot = z.infer<typeof visionScoreSnapshotSchema>;
+export type HealthCategory = z.infer<typeof healthCategorySchema>;
+export type HealthMetric = z.infer<typeof healthMetricSchema>;
+export type HealthSampleInput = z.infer<typeof healthSampleInputSchema>;
+export type HealthTimelineEntry = z.infer<typeof healthTimelineEntrySchema>;
+export type HealthSharingScope = z.infer<typeof healthSharingScopeSchema>;
+export type HealthSharingCandidate = z.infer<
+  typeof healthSharingCandidateSchema
+>;
+export type HealthSharingGrant = z.infer<typeof healthSharingGrantSchema>;
+export type HealthProfile = z.infer<typeof healthProfileSchema>;
+export type HealthDashboard = z.infer<typeof healthDashboardSchema>;
+export type HealthVideoOverlay = z.infer<typeof healthVideoOverlaySchema>;
+export type HealthCorrelation = z.infer<typeof healthCorrelationSchema>;
 export type AdminVideoOverview = z.infer<typeof adminVideoOverviewSchema>;
 export type DunaPlusGrant = z.infer<typeof dunaPlusGrantSchema>;

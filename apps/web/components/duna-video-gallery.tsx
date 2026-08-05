@@ -1,10 +1,14 @@
 "use client";
 
-import type { VideoPlayback, VideoSummary } from "@duna/api";
+import type {
+  VideoPlayback,
+  VideoSummary,
+  VisionScoreSnapshot,
+} from "@duna/api";
 import MuxPlayer from "@mux/mux-player-react";
 import { Badge } from "@duna/ui";
 import { Clock3, Eye, LockKeyhole, Play, Radio, UserRound } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function durationLabel(seconds: number | undefined) {
   if (!seconds) return "Recording";
@@ -23,6 +27,101 @@ function statusLabel(video: VideoSummary) {
 function muxCurrentTime(event: Event) {
   const target = event.target as { readonly currentTime?: number } | null;
   return typeof target?.currentTime === "number" ? target.currentTime : 0;
+}
+
+function matchLabelTeams(label: string | undefined) {
+  if (!label) return { teamA: "Side A", teamB: "Side B" };
+  const [left, right] = label.split(/\s+(?:vs\.?|v\.?|—|–|-)\s+/i);
+  return {
+    teamA: left?.trim() || "Side A",
+    teamB: right?.trim() || "Side B",
+  };
+}
+
+function scoreAtTime(
+  playback: VideoPlayback,
+  seconds: number,
+): VisionScoreSnapshot | undefined {
+  if (playback.video.status === "live" && playback.liveScore) {
+    return playback.liveScore;
+  }
+
+  let score: VisionScoreSnapshot | undefined;
+  for (const event of playback.vision?.events ?? []) {
+    if (event.elapsedMs > seconds * 1_000) break;
+    if (event.score) score = event.score;
+  }
+  return score;
+}
+
+function heartRateAtTime(
+  playback: VideoPlayback,
+  seconds: number,
+): number | undefined {
+  const points = playback.healthOverlay?.points;
+  if (!points?.length) return undefined;
+  const elapsedMs = Math.max(0, seconds * 1_000);
+  let low = 0;
+  let high = points.length - 1;
+  let selected = points[0];
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const point = points[middle]!;
+    if (point.elapsedMs <= elapsedMs) {
+      selected = point;
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return selected?.beatsPerMinute;
+}
+
+function ScoreOverlay({
+  score,
+  teamA,
+  teamB,
+}: {
+  readonly score: VisionScoreSnapshot;
+  readonly teamA: string;
+  readonly teamB: string;
+}) {
+  const current = score.sets[
+    Math.min(score.setIndex, score.sets.length - 1)
+  ] ?? {
+    a: 0,
+    b: 0,
+  };
+  const setsWon = score.sets.reduce(
+    (total, set, index) => {
+      if (index >= score.setIndex && score.status !== "complete") return total;
+      if (set.a > set.b) total.a += 1;
+      if (set.b > set.a) total.b += 1;
+      return total;
+    },
+    { a: 0, b: 0 },
+  );
+  return (
+    <aside aria-label="Live match score" className="duna-video-score">
+      <header>
+        <strong>DUNA</strong>
+        <span>SET {score.setIndex + 1}</span>
+      </header>
+      {[
+        { key: "A", label: teamA, points: current.a, sets: setsWon.a },
+        { key: "B", label: teamB, points: current.b, sets: setsWon.b },
+      ].map((team) => (
+        <div key={team.key}>
+          <i
+            className={score.serving === team.key ? "is-serving" : undefined}
+          />
+          <span>{team.label}</span>
+          <small>{team.sets}</small>
+          <strong>{team.points}</strong>
+        </div>
+      ))}
+    </aside>
+  );
 }
 
 export function DunaVideoGallery({
@@ -45,7 +144,55 @@ export function DunaVideoGallery({
   );
   const [loadingId, setLoadingId] = useState<string>();
   const [message, setMessage] = useState<string>();
+  const [currentTime, setCurrentTime] = useState(0);
+  const [liveScore, setLiveScore] = useState<VisionScoreSnapshot>();
   const lastHeartbeat = useRef(0);
+
+  useEffect(() => {
+    const matchId = playback?.video.match?.id;
+    if (!matchId || playback.video.status !== "live") {
+      setLiveScore(undefined);
+      return;
+    }
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch(
+          `/api/matches/live?matchId=${encodeURIComponent(matchId)}`,
+          { cache: "no-store" },
+        );
+        const payload = (await response.json()) as {
+          readonly score?: VisionScoreSnapshot;
+        };
+        if (active && response.ok && payload.score) setLiveScore(payload.score);
+      } catch {
+        // Playback remains available if scoring is temporarily offline.
+      }
+    };
+    void refresh();
+    const timer = setInterval(() => void refresh(), 3_000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [playback?.video.match?.id, playback?.video.status]);
+
+  const overlayScore = useMemo(() => {
+    if (!playback) return undefined;
+    const enabled =
+      playback.vision?.settings.overlayScoreboard ??
+      (playback.video.status === "live" && Boolean(playback.video.match));
+    if (!enabled) return undefined;
+    return liveScore ?? scoreAtTime(playback, currentTime);
+  }, [currentTime, liveScore, playback]);
+  const overlayTeams = useMemo(
+    () => matchLabelTeams(playback?.video.match?.label),
+    [playback?.video.match?.label],
+  );
+  const overlayHeartRate = useMemo(
+    () => (playback ? heartRateAtTime(playback, currentTime) : undefined),
+    [currentTime, playback],
+  );
 
   const reportView = useCallback(
     (watchedSeconds: number, completed: boolean) => {
@@ -87,6 +234,8 @@ export function DunaVideoGallery({
           );
         }
         lastHeartbeat.current = 0;
+        setCurrentTime(0);
+        setLiveScore(undefined);
         setPlayback(payload.playback);
       } catch (error) {
         setMessage(
@@ -144,7 +293,11 @@ export function DunaVideoGallery({
               }
               onEnded={(event) => reportView(muxCurrentTime(event), true)}
               onPause={(event) => reportView(muxCurrentTime(event), false)}
-              onTimeUpdate={(event) => reportView(muxCurrentTime(event), false)}
+              onTimeUpdate={(event) => {
+                const seconds = muxCurrentTime(event);
+                setCurrentTime(seconds);
+                reportView(seconds, false);
+              }}
             />
           ) : playback.sourceUrl ? (
             <video
@@ -159,11 +312,31 @@ export function DunaVideoGallery({
               onPause={(event) =>
                 reportView(event.currentTarget.currentTime, false)
               }
-              onTimeUpdate={(event) =>
-                reportView(event.currentTarget.currentTime, false)
-              }
+              onTimeUpdate={(event) => {
+                setCurrentTime(event.currentTarget.currentTime);
+                reportView(event.currentTarget.currentTime, false);
+              }}
             />
           ) : null}
+          {overlayScore && (
+            <ScoreOverlay
+              score={overlayScore}
+              teamA={playback.vision?.settings.teamA ?? overlayTeams.teamA}
+              teamB={playback.vision?.settings.teamB ?? overlayTeams.teamB}
+            />
+          )}
+          {overlayHeartRate !== undefined && (
+            <aside
+              aria-label="Private heart rate overlay"
+              className="duna-video-health"
+            >
+              <b aria-hidden>♥</b>
+              <span>
+                <strong>{Math.round(overlayHeartRate)} BPM</strong>
+                <small>PRIVATE DUNA HEALTH</small>
+              </span>
+            </aside>
+          )}
           <div className="duna-video-gallery__now-playing">
             <span>
               {playback.video.status === "live" ? (

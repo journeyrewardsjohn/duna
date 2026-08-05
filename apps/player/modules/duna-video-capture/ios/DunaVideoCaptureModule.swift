@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreImage
 import ARKit
 import CoreMotion
 import ExpoModulesCore
@@ -20,6 +21,7 @@ private final class DunaVideoCaptureController: NSObject {
     label: "co.duna.video.vision",
     qos: .userInitiated
   )
+  private let previewContext = CIContext(options: [.useSoftwareRenderer: false])
 
   weak var activeView: DunaVideoCaptureView?
   private var camera: AVCaptureDevice?
@@ -27,6 +29,7 @@ private final class DunaVideoCaptureController: NSObject {
   var audioEnabled = true
   private var pendingStreamKey: String?
   private var lastVisionAt = CFAbsoluteTimeGetCurrent()
+  private var lastPreviewAt = CFAbsoluteTimeGetCurrent()
   private var lastARAt = CFAbsoluteTimeGetCurrent()
   private var recorder: IOStreamRecorder?
   private var recordingPromise: Promise?
@@ -440,6 +443,10 @@ private final class DunaVideoCaptureController: NSObject {
       }
       let pose = poseRequest.results?.first
       publishGuidance(rectangle: rectangle, pose: pose)
+      if now - lastPreviewAt >= 2 {
+        lastPreviewAt = now
+        publishPreview(pixelBuffer)
+      }
     } catch {
       // A missed Vision frame is normal while the capture pipeline is busy.
     }
@@ -681,6 +688,38 @@ private final class DunaVideoCaptureController: NSObject {
       self?.activeView?.onGuidance(payload)
     }
   }
+
+  private func publishPreview(_ pixelBuffer: CVPixelBuffer) {
+    var image = CIImage(cvPixelBuffer: pixelBuffer)
+    let sourceWidth = image.extent.width
+    let scale = min(1, 320 / max(sourceWidth, 1))
+    image = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+    guard
+      let cgImage = previewContext.createCGImage(image, from: image.extent),
+      let jpeg = UIImage(cgImage: cgImage).jpegData(compressionQuality: 0.28),
+      jpeg.count <= 220_000
+    else {
+      return
+    }
+    let capturedAt = ISO8601DateFormatter().string(from: Date())
+    let base64 = jpeg.base64EncodedString()
+    let guidance = latestGuidance ?? [:]
+    DispatchQueue.main.async { [weak self] in
+      self?.activeView?.onPreview([
+        "jpegBase64": base64,
+        "capturedAt": capturedAt
+      ])
+      NotificationCenter.default.post(
+        name: Notification.Name("co.duna.watch.camera-preview"),
+        object: nil,
+        userInfo: [
+          "jpeg": jpeg,
+          "capturedAt": capturedAt,
+          "guidance": guidance
+        ]
+      )
+    }
+  }
 }
 
 extension DunaVideoCaptureController: ARSessionDelegate {
@@ -917,6 +956,7 @@ public final class DunaVideoCaptureView: ExpoView {
   let onGuidance = ExpoModulesCore.EventDispatcher()
   let onStreamState = ExpoModulesCore.EventDispatcher()
   let onCaptureError = ExpoModulesCore.EventDispatcher()
+  let onPreview = ExpoModulesCore.EventDispatcher()
 
   public required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -1204,7 +1244,7 @@ public final class DunaVideoCaptureModule: Module {
     }
 
     View(DunaVideoCaptureView.self) {
-      Events("onGuidance", "onStreamState", "onCaptureError")
+      Events("onGuidance", "onStreamState", "onCaptureError", "onPreview")
 
       Prop("audioEnabled") {
         (_: DunaVideoCaptureView, enabled: Bool) in
