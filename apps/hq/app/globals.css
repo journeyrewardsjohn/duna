@@ -17040,7 +17040,7 @@ button {
 
 .pro-admin-jump-nav a.active {
   background: var(--color-white);
-  color: var(--color-depth);
+  color: var(--color-ink);
 }
 
 .pro-admin-metrics {
