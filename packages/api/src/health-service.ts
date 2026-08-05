@@ -13,6 +13,7 @@ import {
   follows,
   getDatabase,
   healthConnections,
+  healthDailyCheckIns,
   healthSamples,
   healthSharingGrants,
   matches,
@@ -41,8 +42,11 @@ import {
 import type { ApiActor } from "./context";
 import type {
   HealthCategory,
+  HealthCheckIn,
+  HealthCheckInInput,
   HealthCorrelation,
   HealthDashboard,
+  HealthIntelligence,
   HealthMetric,
   HealthProfile,
   HealthSampleInput,
@@ -52,6 +56,7 @@ import type {
   HealthTimelineEntry,
   HealthVideoOverlay,
 } from "./contracts";
+import { buildHealthIntelligence } from "./health-intelligence";
 
 export const HEALTH_CONSENT_VERSION = "duna-health-v1";
 export const HEALTH_CONSENT_TEXT =
@@ -93,21 +98,34 @@ const METRIC_CATEGORY: Readonly<Record<HealthMetric, HealthCategory>> = {
 };
 
 const ALL_HEALTH_METRICS = Object.keys(METRIC_CATEGORY) as HealthMetric[];
-const HEALTH_TIMELINE_ROW_LIMIT = 500;
 // HealthKit can produce tens of thousands of heart-rate samples for one
 // player. Profile views need a representative recent window for summaries,
 // not a bulk export. Per-metric caps prevent a high-volume metric from both
 // starving lower-volume recovery data and forcing a serverless request to
-// decrypt an unbounded history.
+// decrypt an unbounded history. Longer-lived, low-frequency metrics retain
+// enough history for personalized baselines while dense heart-rate data stays
+// bounded to the recent analysis window.
 const HEALTH_PROFILE_METRIC_LIMITS = [
-  ["heart-rate", 2_048],
-  ["resting-heart-rate", 64],
-  ["heart-rate-variability", 64],
-  ["sleep", 256],
-  ["active-energy", 512],
-  ["steps", 128],
-  ["weight", 64],
-] as const satisfies readonly (readonly [HealthMetric, number])[];
+  ["heart-rate", 120, 8_192],
+  ["resting-heart-rate", 400, 512],
+  ["heart-rate-variability", 400, 512],
+  ["walking-heart-rate", 400, 512],
+  ["vo2-max", 400, 256],
+  ["respiratory-rate", 400, 512],
+  ["oxygen-saturation", 400, 512],
+  ["body-temperature", 400, 512],
+  ["sleep", 400, 4_096],
+  ["active-energy", 400, 1_024],
+  ["basal-energy", 400, 1_024],
+  ["steps", 400, 512],
+  ["distance", 400, 1_024],
+  ["exercise-minutes", 400, 512],
+  ["stand-minutes", 400, 512],
+  ["workout", 400, 1_024],
+  ["weight", 730, 256],
+  ["body-fat", 730, 256],
+  ["lean-body-mass", 730, 256],
+] as const satisfies readonly (readonly [HealthMetric, number, number])[];
 
 type HealthPayload = Pick<
   HealthSampleInput,
@@ -122,6 +140,7 @@ type EncryptedHealthPayload = {
 };
 
 const COMPRESSED_HEALTH_PAYLOAD_PREFIX = "z1:";
+type HealthCheckInPayload = Omit<HealthCheckInInput, "date">;
 
 type HealthAccess = {
   readonly owner: boolean;
@@ -159,6 +178,34 @@ export function healthAccessAllows(
     access?.categories.includes(category) &&
     (access.owner || access.scopes.includes(scope)),
   );
+}
+
+export function healthCheckInContextAllowed(access: HealthAccess): boolean {
+  return access.owner || access.categories.includes("recovery");
+}
+
+export function redactHealthIntelligenceForViewer(
+  intelligence: HealthIntelligence,
+  owner: boolean,
+): HealthIntelligence {
+  if (owner) return intelligence;
+  return {
+    ...intelligence,
+    readiness: {
+      ...intelligence.readiness,
+      factors: intelligence.readiness.factors.map((factor) =>
+        factor.id === "self-report"
+          ? {
+              ...factor,
+              summary:
+                factor.score === undefined
+                  ? "No athlete-reported context contributed to this summary."
+                  : "An athlete-reported context signal contributed to this derived factor; the private answers and note are not shared.",
+            }
+          : factor,
+      ),
+    },
+  };
 }
 
 export class HealthServiceError extends Error {
@@ -242,9 +289,7 @@ function derivedKey(purpose: "payload" | "external-id"): Buffer {
     .digest();
 }
 
-export function encryptHealthPayload(
-  payload: HealthPayload,
-): EncryptedHealthPayload {
+function encryptHealthJson(payload: unknown): EncryptedHealthPayload {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", derivedKey("payload"), iv);
   const cleartext = Buffer.from(JSON.stringify(payload), "utf8");
@@ -264,9 +309,13 @@ export function encryptHealthPayload(
   };
 }
 
-export function decryptHealthPayload(
-  encrypted: EncryptedHealthPayload,
-): HealthPayload {
+export function encryptHealthPayload(
+  payload: HealthPayload,
+): EncryptedHealthPayload {
+  return encryptHealthJson(payload);
+}
+
+function decryptHealthJson<Value>(encrypted: EncryptedHealthPayload): Value {
   if (encrypted.keyVersion !== 1) {
     throw new HealthServiceError(
       "ENCRYPTION_REQUIRED",
@@ -292,7 +341,13 @@ export function decryptHealthPayload(
   const cleartext = (compressed ? inflateRawSync(decoded) : decoded).toString(
     "utf8",
   );
-  return JSON.parse(cleartext) as HealthPayload;
+  return JSON.parse(cleartext) as Value;
+}
+
+export function decryptHealthPayload(
+  encrypted: EncryptedHealthPayload,
+): HealthPayload {
+  return decryptHealthJson<HealthPayload>(encrypted);
 }
 
 function externalIdHash(personId: string, externalId: string): string {
@@ -618,7 +673,7 @@ export async function syncHealthSamples(input: {
         consentVersion: HEALTH_CONSENT_VERSION,
         enabledCategories: categories,
         timezone: input.timezone,
-        earliestAuthorizedAt: sql`LEAST(${healthConnections.earliestAuthorizedAt}, excluded.earliest_authorized_at)`,
+        earliestAuthorizedAt: sql`COALESCE(LEAST(${healthConnections.earliestAuthorizedAt}, excluded.earliest_authorized_at), ${healthConnections.earliestAuthorizedAt}, excluded.earliest_authorized_at)`,
         lastSyncedAt: input.syncedAt,
         revokedAt: null,
         updatedAt: input.syncedAt,
@@ -669,6 +724,93 @@ export async function syncHealthSamples(input: {
     deleted = removed.length;
   }
   return { imported: rows.length, deleted, protocolVersion: 2 };
+}
+
+function serializeHealthCheckIn(
+  row: typeof healthDailyCheckIns.$inferSelect,
+): HealthCheckIn {
+  const payload = decryptHealthJson<HealthCheckInPayload>({
+    encryptedPayload: row.encryptedPayload,
+    encryptionIv: row.encryptionIv,
+    authTag: row.authTag,
+    keyVersion: row.keyVersion,
+  });
+  return {
+    date: row.localDate,
+    ...payload,
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+async function loadHealthCheckIns(
+  personId: string,
+  limit = 90,
+): Promise<HealthCheckIn[]> {
+  const rows = await getDatabase()
+    .select()
+    .from(healthDailyCheckIns)
+    .where(eq(healthDailyCheckIns.personId, personId))
+    .orderBy(desc(healthDailyCheckIns.localDate))
+    .limit(limit);
+  return rows.map(serializeHealthCheckIn);
+}
+
+export async function saveHealthCheckIn(input: {
+  readonly actor: ApiActor;
+  readonly checkIn: HealthCheckInInput;
+  readonly requestId?: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{ readonly saved: true }> {
+  requireDatabase();
+  requireAdult(input.actor);
+  await requireNoPendingAccountDeletion(input.actor.personId);
+  masterKey();
+  const dateAtNoon = new Date(`${input.checkIn.date}T12:00:00.000Z`);
+  if (
+    Number.isNaN(dateAtNoon.getTime()) ||
+    dateAtNoon.getTime() > input.now.getTime() + 24 * 60 * 60 * 1_000 ||
+    dateAtNoon.getTime() < input.now.getTime() - 7 * 24 * 60 * 60 * 1_000
+  ) {
+    throw new HealthServiceError(
+      "INVALID_GRANT",
+      "A Duna Health check-in must describe today or one of the last seven days.",
+    );
+  }
+  const { date, ...payload } = input.checkIn;
+  const encrypted = encryptHealthJson(payload);
+  const database = getDatabase();
+  await database.batch([
+    database
+      .insert(healthDailyCheckIns)
+      .values({
+        personId: input.actor.personId,
+        localDate: date,
+        ...encrypted,
+        createdAt: input.now,
+        updatedAt: input.now,
+      })
+      .onConflictDoUpdate({
+        target: [healthDailyCheckIns.personId, healthDailyCheckIns.localDate],
+        set: {
+          ...encrypted,
+          updatedAt: input.now,
+        },
+      }),
+    database.insert(auditLog).values({
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "health.check_in_saved",
+      entityType: "health-profile",
+      entityId: input.actor.personId,
+      reason:
+        "The player saved an encrypted private daily check-in for personalized readiness context.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return { saved: true };
 }
 
 async function loadSharingCandidates(
@@ -1033,18 +1175,69 @@ function round(value: number | undefined, digits = 1): number | undefined {
   return Math.round(value * factor) / factor;
 }
 
-function sampleDurationHours(sample: HealthTimelineEntry): number {
-  return (
-    (new Date(sample.endedAt).getTime() -
-      new Date(sample.startedAt).getTime()) /
-    3_600_000
-  );
-}
-
 function isAsleepSample(sample: HealthTimelineEntry): boolean {
   return (
     sample.metric === "sleep" &&
     Boolean(sample.categoryValue?.startsWith("asleep"))
+  );
+}
+
+function unionDurationHours(samples: readonly HealthTimelineEntry[]): number {
+  const intervals = samples
+    .map((sample) => ({
+      start: new Date(sample.startedAt).getTime(),
+      end: new Date(sample.endedAt).getTime(),
+    }))
+    .filter((interval) => interval.end > interval.start)
+    .sort((left, right) => left.start - right.start);
+  let total = 0;
+  let currentStart: number | undefined;
+  let currentEnd: number | undefined;
+  for (const interval of intervals) {
+    if (currentStart === undefined || currentEnd === undefined) {
+      currentStart = interval.start;
+      currentEnd = interval.end;
+    } else if (interval.start <= currentEnd) {
+      currentEnd = Math.max(currentEnd, interval.end);
+    } else {
+      total += currentEnd - currentStart;
+      currentStart = interval.start;
+      currentEnd = interval.end;
+    }
+  }
+  if (currentStart !== undefined && currentEnd !== undefined) {
+    total += currentEnd - currentStart;
+  }
+  return total / 3_600_000;
+}
+
+function sleepDurationHours(samples: readonly HealthTimelineEntry[]): number {
+  const asleep = samples.filter(isAsleepSample);
+  const bySource = new Map<string, HealthTimelineEntry[]>();
+  for (const sample of asleep) {
+    const key = [
+      sample.source?.bundleIdentifier ?? "unknown",
+      sample.source?.device?.model ?? sample.source?.productType ?? "device",
+    ].join(":");
+    bySource.set(key, [...(bySource.get(key) ?? []), sample]);
+  }
+  const candidates = [...bySource.values()].map((sourceSamples) => {
+    const staged = sourceSamples.filter((sample) =>
+      ["asleep-core", "asleep-deep", "asleep-rem"].includes(
+        sample.categoryValue ?? "",
+      ),
+    );
+    return {
+      staged: staged.length > 0,
+      duration: unionDurationHours(staged.length > 0 ? staged : sourceSamples),
+    };
+  });
+  return (
+    candidates.sort(
+      (left, right) =>
+        Number(right.staged) - Number(left.staged) ||
+        right.duration - left.duration,
+    )[0]?.duration ?? 0
   );
 }
 
@@ -1053,56 +1246,6 @@ function latestValue(
   metric: HealthMetric,
 ): number | undefined {
   return samples.find((sample) => sample.metric === metric)?.value;
-}
-
-function recoveryContext(samples: readonly HealthTimelineEntry[]) {
-  const sleep = samples.find(isAsleepSample);
-  const resting = latestValue(samples, "resting-heart-rate");
-  const hrv = latestValue(samples, "heart-rate-variability");
-  const inputs: string[] = [];
-  let score = 50;
-  if (sleep) {
-    const hours = sampleDurationHours(sleep);
-    inputs.push("recent sleep duration");
-    score += hours >= 8 ? 20 : hours >= 7 ? 10 : hours < 6 ? -20 : -5;
-  }
-  const restingValues = samples
-    .filter((sample) => sample.metric === "resting-heart-rate")
-    .slice(0, 7)
-    .flatMap((sample) => (sample.value === undefined ? [] : [sample.value]));
-  const restingBaseline = average(restingValues);
-  if (resting !== undefined && restingBaseline !== undefined) {
-    inputs.push("resting heart rate versus recent baseline");
-    score +=
-      resting <= restingBaseline
-        ? 10
-        : resting > restingBaseline * 1.05
-          ? -10
-          : 0;
-  }
-  const hrvValues = samples
-    .filter((sample) => sample.metric === "heart-rate-variability")
-    .slice(0, 7)
-    .flatMap((sample) => (sample.value === undefined ? [] : [sample.value]));
-  const hrvBaseline = average(hrvValues);
-  if (hrv !== undefined && hrvBaseline !== undefined) {
-    inputs.push("heart-rate variability versus recent baseline");
-    score += hrv >= hrvBaseline ? 10 : -10;
-  }
-  if (inputs.length === 0) return undefined;
-  const bounded = Math.max(0, Math.min(100, Math.round(score)));
-  return {
-    score: bounded,
-    label:
-      inputs.length < 2
-        ? ("limited-data" as const)
-        : bounded < 40
-          ? ("below-baseline" as const)
-          : bounded > 65
-            ? ("above-baseline" as const)
-            : ("near-baseline" as const),
-    inputs,
-  };
 }
 
 function pearson(
@@ -1211,6 +1354,7 @@ function decryptRows(
 async function loadBoundedProfileSampleRows(input: {
   readonly personId: string;
   readonly categories: readonly HealthCategory[];
+  readonly now: Date;
 }): Promise<(typeof healthSamples.$inferSelect)[]> {
   const allowedMetrics = ALL_HEALTH_METRICS.filter((metric) =>
     input.categories.includes(metricCategory(metric)),
@@ -1218,42 +1362,34 @@ async function loadBoundedProfileSampleRows(input: {
   if (allowedMetrics.length === 0) return [];
 
   const database = getDatabase();
-  const metricQueries = HEALTH_PROFILE_METRIC_LIMITS.filter(([metric]) =>
-    allowedMetrics.includes(metric),
-  ).map(([metric, limit]) =>
-    database
-      .select()
-      .from(healthSamples)
-      .where(
-        and(
-          eq(healthSamples.personId, input.personId),
-          eq(healthSamples.metric, metric),
-        ),
-      )
-      .orderBy(desc(healthSamples.startedAt))
-      .limit(limit),
+  const rows = await Promise.all(
+    HEALTH_PROFILE_METRIC_LIMITS.filter(([metric]) =>
+      allowedMetrics.includes(metric),
+    ).map(([metric, lookbackDays, limit]) =>
+      database
+        .select()
+        .from(healthSamples)
+        .where(
+          and(
+            eq(healthSamples.personId, input.personId),
+            eq(healthSamples.metric, metric),
+            gte(
+              healthSamples.startedAt,
+              new Date(
+                input.now.getTime() - lookbackDays * 24 * 60 * 60 * 1_000,
+              ),
+            ),
+          ),
+        )
+        .orderBy(desc(healthSamples.startedAt))
+        .limit(limit),
+    ),
   );
-  const [timelineRows, ...summaryRows] = await Promise.all([
-    database
-      .select()
-      .from(healthSamples)
-      .where(
-        and(
-          eq(healthSamples.personId, input.personId),
-          inArray(healthSamples.metric, allowedMetrics),
-        ),
-      )
-      .orderBy(desc(healthSamples.startedAt))
-      .limit(HEALTH_TIMELINE_ROW_LIMIT),
-    ...metricQueries,
-  ]);
-
-  const uniqueRows = new Map(
-    [...timelineRows, ...summaryRows.flat()].map((row) => [row.id, row]),
-  );
-  return [...uniqueRows.values()].sort(
-    (left, right) => right.startedAt.getTime() - left.startedAt.getTime(),
-  );
+  return rows
+    .flat()
+    .sort(
+      (left, right) => right.startedAt.getTime() - left.startedAt.getTime(),
+    );
 }
 
 function buildDaily(
@@ -1281,9 +1417,7 @@ function buildDaily(
           ? undefined
           : entries.reduce((sum, value) => sum + value, 0);
       };
-      const sleep = day
-        .filter(isAsleepSample)
-        .reduce((sum, sample) => sum + sampleDurationHours(sample), 0);
+      const sleep = sleepDurationHours(day);
       return {
         date,
         sleepHours: sleep > 0 ? round(sleep, 1) : undefined,
@@ -1364,15 +1498,15 @@ async function buildMatchContexts(
     if (!occurredAt) return [];
     const endedAt =
       match.completedAt ?? new Date(occurredAt.getTime() + 3 * 60 * 60 * 1_000);
-    const sleepHours = samples
-      .filter(
+    const sleepHours = sleepDurationHours(
+      samples.filter(
         (sample) =>
           isAsleepSample(sample) &&
           new Date(sample.endedAt) <= occurredAt &&
           new Date(sample.endedAt).getTime() >=
             occurredAt.getTime() - 36 * 3_600_000,
-      )
-      .reduce((sum, sample) => sum + sampleDurationHours(sample), 0);
+      ),
+    );
     const energy = samples
       .filter(
         (sample) =>
@@ -1448,7 +1582,7 @@ async function buildProfile(input: {
     );
   }
   const database = getDatabase();
-  const [subject, connection, rows] = await Promise.all([
+  const [subject, connection, rows, checkIns] = await Promise.all([
     database
       .select({ id: people.id, displayName: people.displayName })
       .from(people)
@@ -1462,7 +1596,9 @@ async function buildProfile(input: {
     loadBoundedProfileSampleRows({
       personId: input.subjectPersonId,
       categories: access.categories,
+      now: input.now,
     }),
+    loadHealthCheckIns(input.subjectPersonId),
   ]);
   if (!subject[0]) {
     throw new HealthServiceError("HEALTH_NOT_FOUND", "Player not found.");
@@ -1476,7 +1612,6 @@ async function buildProfile(input: {
   const heartValues = samples
     .filter((sample) => sample.metric === "heart-rate")
     .flatMap((sample) => (sample.value === undefined ? [] : [sample.value]));
-  const sleep = samples.find(isAsleepSample);
   const sevenDaysAgo = input.now.getTime() - 7 * 24 * 3_600_000;
   const activeEnergy = samples
     .filter(
@@ -1487,6 +1622,17 @@ async function buildProfile(input: {
     )
     .reduce((sum, sample) => sum + (sample.value ?? 0), 0);
   const timezone = connection[0]?.timezone ?? "UTC";
+  const intelligence = buildHealthIntelligence({
+    samples,
+    checkIns: healthCheckInContextAllowed(access) ? checkIns : [],
+    timezone,
+    now: input.now,
+  });
+  const intelligenceForViewer = redactHealthIntelligenceForViewer(
+    intelligence,
+    access.owner,
+  );
+  const readiness = intelligence.readiness;
   if (!access.owner && input.audit !== false) {
     await recordHealthAudit({
       actorPersonId: input.viewer.personId,
@@ -1510,18 +1656,35 @@ async function buildProfile(input: {
         latestValue(samples, "heart-rate-variability"),
         0,
       ),
-      lastSleepHours: sleep ? round(sampleDurationHours(sleep), 1) : undefined,
+      lastSleepHours: intelligence.sleep?.durationHours,
       sevenDayActiveEnergyKcal:
         activeEnergy > 0 ? round(activeEnergy, 0) : undefined,
       weightKilograms: round(latestValue(samples, "weight"), 1),
-      recoveryContext: recoveryContext(samples),
+      recoveryContext:
+        readiness.score === undefined
+          ? undefined
+          : {
+              score: Math.round(readiness.score * 10),
+              label:
+                readiness.confidence === "low"
+                  ? ("limited-data" as const)
+                  : readiness.score < 4.5
+                    ? ("below-baseline" as const)
+                    : readiness.score >= 7.8
+                      ? ("above-baseline" as const)
+                      : ("near-baseline" as const),
+              inputs: readiness.factors
+                .filter((factor) => factor.score !== undefined)
+                .map((factor) => factor.label),
+            },
     },
     daily: buildDaily(samples, timezone),
     timeline,
     matches,
     correlations: computeHealthCorrelations(matches),
+    intelligence: intelligenceForViewer,
     disclaimer:
-      "Duna shows descriptive performance context, not medical advice or a diagnosis. Correlations describe this player's available sample and do not establish cause.",
+      "Duna Readiness and Strain are individualized performance context—not medical advice, diagnosis, injury prediction, or a direction to train. Wearable sleep stages are estimates. Correlations describe this player's available sample and do not establish cause.",
   };
 }
 
@@ -1539,7 +1702,7 @@ export async function loadHealthDashboard(input: {
     ipAddress: input.ipAddress,
   });
   const database = getDatabase();
-  const [connectionRows, sampleStats] = await Promise.all([
+  const [connectionRows, sampleStats, checkInRows] = await Promise.all([
     database
       .select()
       .from(healthConnections)
@@ -1557,6 +1720,12 @@ export async function loadHealthDashboard(input: {
       })
       .from(healthSamples)
       .where(eq(healthSamples.personId, input.actor.personId)),
+    database
+      .select()
+      .from(healthDailyCheckIns)
+      .where(eq(healthDailyCheckIns.personId, input.actor.personId))
+      .orderBy(desc(healthDailyCheckIns.localDate))
+      .limit(1),
   ]);
   const candidates = await loadSharingCandidates(input.actor.personId);
   const grants = await serializeActiveGrants({
@@ -1587,6 +1756,9 @@ export async function loadHealthDashboard(input: {
       : undefined,
     grants,
     candidates,
+    latestCheckIn: checkInRows[0]
+      ? serializeHealthCheckIn(checkInRows[0])
+      : undefined,
   };
 }
 
@@ -1689,16 +1861,21 @@ export async function disconnectHealth(input: {
   readonly now: Date;
 }): Promise<{
   readonly deletedSamples: number;
+  readonly deletedCheckIns: number;
   readonly revokedGrants: number;
 }> {
   requireDatabase();
   requireAdult(input.actor);
   const database = getDatabase();
-  const [deleted, revoked] = await database.batch([
+  const [deleted, deletedCheckIns, revoked] = await database.batch([
     database
       .delete(healthSamples)
       .where(eq(healthSamples.personId, input.actor.personId))
       .returning({ id: healthSamples.id }),
+    database
+      .delete(healthDailyCheckIns)
+      .where(eq(healthDailyCheckIns.personId, input.actor.personId))
+      .returning({ id: healthDailyCheckIns.id }),
     database
       .update(healthSharingGrants)
       .set({ revokedAt: input.now, updatedAt: input.now })
@@ -1738,7 +1915,7 @@ export async function disconnectHealth(input: {
       entityType: "health-connection",
       entityId: input.actor.personId,
       reason:
-        "The player disconnected Duna Health, requested deletion of every imported record, and revoked every active display grant.",
+        "The player disconnected Duna Health, requested deletion of every imported record and private check-in, and revoked every active display grant.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,
@@ -1746,6 +1923,7 @@ export async function disconnectHealth(input: {
   ]);
   return {
     deletedSamples: deleted.length,
+    deletedCheckIns: deletedCheckIns.length,
     revokedGrants: revoked.length,
   };
 }
@@ -1754,7 +1932,7 @@ export async function exportHealthDataForPerson(
   personId: string,
 ): Promise<Record<string, unknown>> {
   requireDatabase();
-  const [connection, sampleRows, grantRows] = await Promise.all([
+  const [connection, sampleRows, checkInRows, grantRows] = await Promise.all([
     getDatabase()
       .select()
       .from(healthConnections)
@@ -1767,6 +1945,11 @@ export async function exportHealthDataForPerson(
       .orderBy(desc(healthSamples.startedAt)),
     getDatabase()
       .select()
+      .from(healthDailyCheckIns)
+      .where(eq(healthDailyCheckIns.personId, personId))
+      .orderBy(desc(healthDailyCheckIns.localDate)),
+    getDatabase()
+      .select()
       .from(healthSharingGrants)
       .where(eq(healthSharingGrants.ownerPersonId, personId))
       .orderBy(desc(healthSharingGrants.createdAt)),
@@ -1774,6 +1957,7 @@ export async function exportHealthDataForPerson(
   return {
     connection: connection[0] ?? null,
     samples: decryptRows(sampleRows, ALL_CATEGORIES),
+    dailyCheckIns: checkInRows.map(serializeHealthCheckIn),
     sharingGrants: grantRows.map((grant) => ({
       id: grant.id,
       audienceKind: grant.audienceKind,

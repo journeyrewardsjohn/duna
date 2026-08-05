@@ -59,6 +59,7 @@ import {
   guardianReviewItemSchema,
   guardianReviewResultSchema,
   healthCategorySchema,
+  healthCheckInInputSchema,
   healthDashboardSchema,
   healthProfileSchema,
   healthSampleInputSchema,
@@ -216,6 +217,7 @@ import {
   loadHealthDashboard,
   loadHealthProfile,
   revokeHealthSharingGrant,
+  saveHealthCheckIn,
   syncHealthSamples,
 } from "./health-service";
 import {
@@ -1617,6 +1619,42 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
+  saveHealthCheckIn: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "health-check-in",
+        capacity: 12,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        checkIn: healthCheckInInputSchema,
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(z.object({ saved: z.literal(true) }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.saveHealthCheckIn",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await saveHealthCheckIn({
+              actor: ctx.actor!,
+              checkIn: input.checkIn,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   createHealthSharingGrant: adultProcedure
     .use(
       rateLimitMiddleware({
@@ -1724,6 +1762,7 @@ const playerRouter = router({
     .output(
       z.object({
         deletedSamples: z.number().int().nonnegative(),
+        deletedCheckIns: z.number().int().nonnegative(),
         revokedGrants: z.number().int().nonnegative(),
       }),
     )

@@ -16,6 +16,7 @@ import {
   guardianInvitations,
   guardianships,
   healthConnections,
+  healthDailyCheckIns,
   healthSamples,
   healthSharingGrants,
   idempotencyRecords,
@@ -370,6 +371,9 @@ export async function permanentlyDeleteAccount(input: {
     database
       .delete(healthSamples)
       .where(eq(healthSamples.personId, input.personId)),
+    database
+      .delete(healthDailyCheckIns)
+      .where(eq(healthDailyCheckIns.personId, input.personId)),
     database
       .delete(healthConnections)
       .where(eq(healthConnections.personId, input.personId)),

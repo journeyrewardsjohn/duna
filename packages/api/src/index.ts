@@ -11,6 +11,7 @@ export * from "./commerce";
 export * from "./feature-flags";
 export * from "./forms-service";
 export * from "./health-service";
+export * from "./health-intelligence";
 export * from "./identity";
 export * from "./identity-verification";
 export * from "./family-wallet";

@@ -915,6 +915,142 @@ export const healthDailySummarySchema = z.object({
   steps: z.number().nonnegative().optional(),
   weightKilograms: z.number().positive().optional(),
 });
+export const healthCheckInInputSchema = z
+  .object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    perceivedRecovery: z.number().int().min(1).max(5),
+    energy: z.number().int().min(1).max(5),
+    stress: z.number().int().min(1).max(5),
+    soreness: z.number().int().min(1).max(5),
+    practiceRpe: z.number().min(0).max(10).optional(),
+    practiceMinutes: z.number().int().min(0).max(600).optional(),
+    note: z.string().trim().max(280).optional(),
+  })
+  .refine(
+    (value) =>
+      (value.practiceRpe === undefined) ===
+      (value.practiceMinutes === undefined),
+    {
+      message: "Practice effort and duration must be recorded together.",
+      path: ["practiceRpe"],
+    },
+  );
+export const healthCheckInSchema = healthCheckInInputSchema.extend({
+  updatedAt: z.iso.datetime(),
+});
+export const healthResearchCitationSchema = z.object({
+  id: z.string(),
+  section: z.enum(["readiness", "hrv", "sleep", "strain", "privacy"]),
+  title: z.string(),
+  authors: z.string(),
+  year: z.number().int().min(1900).max(2100),
+  url: z.url(),
+  takeaway: z.string(),
+  caveat: z.string().optional(),
+});
+export const healthReadinessFactorSchema = z.object({
+  id: z.enum([
+    "hrv-balance",
+    "resting-heart-rate",
+    "sleep-quality",
+    "strain-balance",
+    "self-report",
+  ]),
+  label: z.string(),
+  score: z.number().min(0).max(10).optional(),
+  weight: z.number().min(0).max(1),
+  status: z.enum(["supporting", "typical", "watch", "insufficient"]),
+  summary: z.string(),
+  referenceIds: z.array(z.string()).readonly(),
+});
+export const healthTrendSeriesSchema = z.object({
+  metric: z.enum([
+    "readiness",
+    "hrv-sdnn",
+    "resting-heart-rate",
+    "sleep-duration",
+    "sleep-continuity",
+    "strain",
+  ]),
+  label: z.string(),
+  unit: z.string(),
+  description: z.string(),
+  average: z.number().optional(),
+  latest: z.number().optional(),
+  typicalLow: z.number().optional(),
+  typicalHigh: z.number().optional(),
+  points: z
+    .array(
+      z.object({
+        date: z.string(),
+        value: z.number(),
+        typicalLow: z.number().optional(),
+        typicalHigh: z.number().optional(),
+        anomaly: z.enum(["low", "high"]).optional(),
+      }),
+    )
+    .max(90)
+    .readonly(),
+  referenceIds: z.array(z.string()).readonly(),
+});
+export const healthIntelligenceSchema = z.object({
+  generatedAt: z.iso.datetime(),
+  modelVersion: z.string(),
+  analysisWindowDays: z.number().int().positive(),
+  sourceNote: z.string(),
+  readiness: z.object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    score: z.number().min(0).max(10).optional(),
+    label: z.enum([
+      "primed",
+      "balanced",
+      "building",
+      "recovery-favored",
+      "limited-data",
+    ]),
+    confidence: z.enum(["low", "medium", "high"]),
+    dataDays: z.number().int().nonnegative(),
+    summary: z.string(),
+    recommendation: z.string().optional(),
+    factors: z.array(healthReadinessFactorSchema).readonly(),
+  }),
+  sleep: z
+    .object({
+      date: z.string(),
+      durationHours: z.number().nonnegative(),
+      awakeMinutes: z.number().nonnegative().optional(),
+      coreMinutes: z.number().nonnegative().optional(),
+      deepMinutes: z.number().nonnegative().optional(),
+      remMinutes: z.number().nonnegative().optional(),
+      efficiencyPercent: z.number().min(0).max(100).optional(),
+      interruptions: z.number().int().nonnegative().optional(),
+      regularityMinutes: z.number().nonnegative().optional(),
+      label: z.enum(["restorative", "typical", "restless", "limited-data"]),
+      summary: z.string(),
+      estimateNote: z.string(),
+      referenceIds: z.array(z.string()).readonly(),
+    })
+    .optional(),
+  strain: z.object({
+    date: z.string(),
+    score: z.number().min(0).max(10).optional(),
+    label: z.enum(["light", "moderate", "high", "very-high", "limited-data"]),
+    load: z.number().nonnegative().optional(),
+    recentThreeDayAverage: z.number().nonnegative().optional(),
+    baselineTwentyEightDayAverage: z.number().nonnegative().optional(),
+    source: z.enum([
+      "heart-rate",
+      "workout",
+      "session-rpe",
+      "mixed",
+      "limited",
+    ]),
+    summary: z.string(),
+    referenceIds: z.array(z.string()).readonly(),
+  }),
+  trends: z.array(healthTrendSeriesSchema).readonly(),
+  citations: z.array(healthResearchCitationSchema).readonly(),
+});
 export const healthSummarySchema = z.object({
   latestHeartRate: z.number().nonnegative().optional(),
   restingHeartRate: z.number().nonnegative().optional(),
@@ -971,12 +1107,14 @@ export const healthProfileSchema = z.object({
   timeline: z.array(healthTimelineEntrySchema).max(500).readonly(),
   matches: z.array(healthMatchContextSchema).max(30).readonly(),
   correlations: z.array(healthCorrelationSchema).readonly(),
+  intelligence: healthIntelligenceSchema,
   disclaimer: z.string(),
 });
 export const healthDashboardSchema = healthProfileSchema.extend({
   connection: healthConnectionSchema.optional(),
   grants: z.array(healthSharingGrantSchema).readonly(),
   candidates: z.array(healthSharingCandidateSchema).readonly(),
+  latestCheckIn: healthCheckInSchema.optional(),
 });
 export const healthVideoOverlaySchema = z.object({
   subjectPersonId: z.string().uuid(),
@@ -2058,6 +2196,20 @@ export const operatorHealthSnapshotSchema = z.object({
   observedAt: z.iso.datetime().optional(),
   metrics: z
     .object({
+      readinessScore: z.number().min(0).max(10).optional(),
+      readinessLabel: z
+        .enum([
+          "primed",
+          "balanced",
+          "building",
+          "recovery-favored",
+          "limited-data",
+        ])
+        .optional(),
+      readinessConfidence: z.enum(["low", "medium", "high"]).optional(),
+      readinessSummary: z.string().optional(),
+      strainScore: z.number().min(0).max(10).optional(),
+      sleepContinuityPercent: z.number().min(0).max(100).optional(),
       restingHeartRate: z.number().nonnegative().optional(),
       heartRateVariabilityMs: z.number().nonnegative().optional(),
       sleepHours: z.number().nonnegative().optional(),
@@ -3668,6 +3820,9 @@ export type HealthSharingCandidate = z.infer<
   typeof healthSharingCandidateSchema
 >;
 export type HealthSharingGrant = z.infer<typeof healthSharingGrantSchema>;
+export type HealthCheckInInput = z.infer<typeof healthCheckInInputSchema>;
+export type HealthCheckIn = z.infer<typeof healthCheckInSchema>;
+export type HealthIntelligence = z.infer<typeof healthIntelligenceSchema>;
 export type HealthProfile = z.infer<typeof healthProfileSchema>;
 export type HealthDashboard = z.infer<typeof healthDashboardSchema>;
 export type HealthVideoOverlay = z.infer<typeof healthVideoOverlaySchema>;

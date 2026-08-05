@@ -351,6 +351,13 @@
       "when": 1785911442192,
       "tag": "0049_melodic_ink",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1785935273769,
+      "tag": "0050_wealthy_zodiak",
+      "breakpoints": true
     }
   ]
 }

@@ -3442,6 +3442,44 @@ export const healthSamples = pgTable(
   ],
 );
 
+// Athlete-reported context is health-adjacent sensitive data. Values and notes
+// use the same envelope encryption as imported HealthKit samples; only the
+// owner/date metadata remains indexable for one private check-in per day.
+export const healthDailyCheckIns = pgTable(
+  "health_daily_check_ins",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    localDate: varchar("local_date", { length: 10 }).notNull(),
+    encryptedPayload: text("encrypted_payload").notNull(),
+    encryptionIv: varchar("encryption_iv", { length: 32 }).notNull(),
+    authTag: varchar("auth_tag", { length: 32 }).notNull(),
+    keyVersion: integer("key_version").notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("health_daily_check_in_person_date_unique").on(
+      table.personId,
+      table.localDate,
+    ),
+    index("health_daily_check_in_person_date_idx").on(
+      table.personId,
+      table.localDate,
+    ),
+    check(
+      "health_daily_check_in_date_valid",
+      sql`${table.localDate} ~ '^\\d{4}-\\d{2}-\\d{2}$'`,
+    ),
+    check(
+      "health_daily_check_in_key_version_valid",
+      sql`${table.keyVersion} > 0`,
+    ),
+  ],
+);
+
 export const healthSharingGrants = pgTable(
   "health_sharing_grants",
   {

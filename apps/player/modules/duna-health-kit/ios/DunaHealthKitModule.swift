@@ -306,7 +306,18 @@ public final class DunaHealthKitModule: Module {
       var nextCursors = cursors
       var hasMore = false
       var metricsWithMore: [String] = []
-      let definitions = try DunaHealthStore.shared.selectedDefinitions(categoriesJSON: categoriesJSON)
+      let selectedDefinitions = try DunaHealthStore.shared.selectedDefinitions(categoriesJSON: categoriesJSON)
+      // A single high-volume type (usually heart rate) must never prevent
+      // sleep, HRV, workouts, or body history from reaching Duna. Rotate the
+      // starting type on every resumable page and reserve a fair share of the
+      // remaining page for every type that has not been queried yet.
+      let storedRotation = Int(cursors["__dunaRotation"] ?? "0") ?? 0
+      let rotation = selectedDefinitions.isEmpty
+        ? 0
+        : storedRotation % selectedDefinitions.count
+      let definitions = selectedDefinitions.isEmpty
+        ? []
+        : Array(selectedDefinitions[rotation...] + selectedDefinitions[..<rotation])
       for (index, definition) in definitions.enumerated() {
         let consumed = samples.count + deletedIDs.count
         let remaining = limit - consumed
@@ -315,11 +326,13 @@ public final class DunaHealthKitModule: Module {
           metricsWithMore.append(contentsOf: definitions[index...].map(\.metric))
           break
         }
+        let definitionsRemaining = max(1, definitions.count - index)
+        let fairLimit = max(1, remaining / definitionsRemaining)
         let anchor = try DunaHealthStore.shared.decodeAnchor(cursors[definition.metric])
         let result = try await DunaHealthStore.shared.anchoredQuery(
           definition: definition,
           anchor: anchor,
-          limit: remaining
+          limit: fairLimit
         )
         samples.append(contentsOf: result.samples)
         deletedIDs.append(contentsOf: result.deletedIDs)
@@ -329,11 +342,10 @@ public final class DunaHealthKitModule: Module {
         if result.hasMore {
           hasMore = true
           metricsWithMore.append(definition.metric)
-          if index + 1 < definitions.count {
-            metricsWithMore.append(contentsOf: definitions[(index + 1)...].map(\.metric))
-          }
-          break
         }
+      }
+      if !selectedDefinitions.isEmpty {
+        nextCursors["__dunaRotation"] = String((rotation + 1) % selectedDefinitions.count)
       }
       let payload: [String: Any] = [
         "samples": samples,

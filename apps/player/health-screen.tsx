@@ -1,5 +1,6 @@
 import type {
   HealthCategory,
+  HealthCheckInInput,
   HealthDashboard,
   HealthSharingScope,
   HealthTimelineEntry,
@@ -18,8 +19,18 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
+  Linking,
 } from "react-native";
+import Svg, {
+  Circle,
+  Defs,
+  LinearGradient,
+  Path,
+  Rect,
+  Stop,
+} from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   clearAppleHealthCursor,
@@ -69,6 +80,40 @@ function daysAgo(days: number, hour = 8): string {
   date.setHours(hour, 0, 0, 0);
   return date.toISOString();
 }
+
+const demoResearch: HealthDashboard["intelligence"]["citations"] = [
+  {
+    id: "plews-2013-hrv",
+    section: "hrv",
+    title: "Evaluating training adaptation with heart-rate measures",
+    authors: "Plews et al.",
+    year: 2013,
+    url: "https://pubmed.ncbi.nlm.nih.gov/23479420/",
+    takeaway:
+      "Rolling HRV and resting-heart-rate trends carry more context than one isolated reading.",
+  },
+  {
+    id: "roberts-2024-sleep",
+    section: "sleep",
+    title: "Consumer sleep trackers compared with polysomnography",
+    authors: "Roberts et al.",
+    year: 2024,
+    url: "https://pubmed.ncbi.nlm.nih.gov/39460013/",
+    takeaway:
+      "Wearable sleep-wake estimates can be useful, but stage accuracy varies.",
+    caveat: "Duna labels stages as wearable estimates, not clinical staging.",
+  },
+  {
+    id: "dugan-2022-beach-load",
+    section: "strain",
+    title: "Session RPE training load in Division I beach volleyball",
+    authors: "Dugan et al.",
+    year: 2022,
+    url: "https://pubmed.ncbi.nlm.nih.gov/35916748/",
+    takeaway:
+      "Session effort was a practical load measure in collegiate beach volleyball.",
+  },
+];
 
 const demoHealth: HealthDashboard = {
   subject: { id: demoPersonId, displayName: "Maya Rivera" },
@@ -225,6 +270,167 @@ const demoHealth: HealthDashboard = {
         "Your sleep was associated with more wins in this 8-match sample. This is an association, not a cause or medical conclusion.",
     },
   ],
+  intelligence: {
+    generatedAt: new Date().toISOString(),
+    modelVersion: "duna-readiness-personal-v1.0.0",
+    analysisWindowDays: 90,
+    sourceNote:
+      "Duna compares encrypted HealthKit signals with your own recent history. Raw Health data is not sent to a generative-AI provider.",
+    readiness: {
+      date: new Date().toISOString().slice(0, 10),
+      score: 8.4,
+      label: "balanced",
+      confidence: "high",
+      dataDays: 62,
+      summary:
+        "Your HRV balance is supporting you, sleep continuity is inside your usual range, and yesterday’s load was meaningful without being unusual for you.",
+      recommendation:
+        "Experiment: keep today’s warm-up easy for ten minutes and note whether your energy catches up before adding intensity.",
+      factors: [
+        {
+          id: "hrv-balance",
+          label: "HRV balance",
+          score: 8.8,
+          weight: 0.3,
+          status: "supporting",
+          summary:
+            "Your seven-day SDNN median is 9% above your prior baseline.",
+          referenceIds: ["plews-2013-hrv"],
+        },
+        {
+          id: "sleep-quality",
+          label: "Sleep continuity",
+          score: 7.9,
+          weight: 0.3,
+          status: "supporting",
+          summary: "7.7 hours asleep with timing close to your usual window.",
+          referenceIds: ["roberts-2024-sleep"],
+        },
+        {
+          id: "resting-heart-rate",
+          label: "Resting heart rate",
+          score: 8.1,
+          weight: 0.15,
+          status: "supporting",
+          summary: "54 bpm versus your 56 bpm recent baseline.",
+          referenceIds: ["plews-2013-hrv"],
+        },
+        {
+          id: "strain-balance",
+          label: "Recent load",
+          score: 6.8,
+          weight: 0.15,
+          status: "typical",
+          summary: "Your three-day load is 106% of your prior daily average.",
+          referenceIds: ["dugan-2022-beach-load"],
+        },
+        {
+          id: "self-report",
+          label: "How you feel",
+          score: 7.5,
+          weight: 0.1,
+          status: "typical",
+          summary: "Energy 4/5 · stress 2/5 · soreness 3/5.",
+          referenceIds: [],
+        },
+      ],
+    },
+    sleep: {
+      date: daysAgo(0).slice(0, 10),
+      durationHours: 7.7,
+      awakeMinutes: 31,
+      coreMinutes: 253,
+      deepMinutes: 82,
+      remMinutes: 96,
+      efficiencyPercent: 93,
+      interruptions: 3,
+      regularityMinutes: 18,
+      label: "restorative",
+      summary: "7.7 hours asleep with timing close to your usual window.",
+      estimateNote:
+        "Apple Watch estimated these stages. Duna uses their trend, not clinical sleep staging.",
+      referenceIds: ["roberts-2024-sleep"],
+    },
+    strain: {
+      date: daysAgo(0).slice(0, 10),
+      score: 6.7,
+      label: "high",
+      load: 328,
+      recentThreeDayAverage: 281,
+      baselineTwentyEightDayAverage: 265,
+      source: "heart-rate",
+      summary:
+        "High for you, based on workout heart rate. Duna does not turn this into an injury-risk prediction.",
+      referenceIds: ["dugan-2022-beach-load"],
+    },
+    trends: [
+      {
+        metric: "readiness",
+        label: "Readiness",
+        unit: "score",
+        description: "Your score with a personal typical band.",
+        average: 7.6,
+        latest: 8.4,
+        typicalLow: 6.8,
+        typicalHigh: 8.2,
+        points: [7.1, 7.6, 6.9, 7.8, 8.1, 7.7, 8.4].map((value, index) => ({
+          date: daysAgo(6 - index).slice(0, 10),
+          value,
+          typicalLow: 6.8,
+          typicalHigh: 8.2,
+          anomaly: value > 8.2 ? ("high" as const) : undefined,
+        })),
+        referenceIds: ["plews-2013-hrv"],
+      },
+      {
+        metric: "hrv-sdnn",
+        label: "HRV balance",
+        unit: "ms SDNN",
+        description: "Daily median versus your personal range.",
+        average: 53,
+        latest: 58,
+        typicalLow: 48,
+        typicalHigh: 57,
+        points: [49, 52, 51, 54, 56, 55, 58].map((value, index) => ({
+          date: daysAgo(6 - index).slice(0, 10),
+          value,
+          typicalLow: 48,
+          typicalHigh: 57,
+          anomaly: value > 57 ? ("high" as const) : undefined,
+        })),
+        referenceIds: ["plews-2013-hrv"],
+      },
+      {
+        metric: "sleep-duration",
+        label: "Sleep duration",
+        unit: "hours",
+        description: "Compared with your history—not a fixed target.",
+        average: 7.3,
+        latest: 7.7,
+        typicalLow: 6.8,
+        typicalHigh: 7.9,
+        points: [7.1, 6.9, 7.8, 7.4, 6.6, 7.2, 7.7].map((value, index) => ({
+          date: daysAgo(6 - index).slice(0, 10),
+          value,
+          typicalLow: 6.8,
+          typicalHigh: 7.9,
+          anomaly: value < 6.8 ? ("low" as const) : undefined,
+        })),
+        referenceIds: ["roberts-2024-sleep"],
+      },
+    ],
+    citations: demoResearch,
+  },
+  latestCheckIn: {
+    date: daysAgo(0).slice(0, 10),
+    perceivedRecovery: 4,
+    energy: 4,
+    stress: 2,
+    soreness: 3,
+    practiceRpe: 7,
+    practiceMinutes: 75,
+    updatedAt: new Date().toISOString(),
+  },
   grants: [
     {
       id: demoGrantId,
@@ -340,6 +546,14 @@ export function HealthScreen({
   const [historySyncQueued, setHistorySyncQueued] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [checkInOpen, setCheckInOpen] = useState(false);
+  const [checkIn, setCheckIn] = useState<HealthCheckInInput>({
+    date: new Date().toISOString().slice(0, 10),
+    perceivedRecovery: 3,
+    energy: 3,
+    stress: 3,
+    soreness: 3,
+  });
   const [selectedCategories, setSelectedCategories] = useState<
     HealthCategory[]
   >(["heart", "recovery", "activity", "body"]);
@@ -389,6 +603,20 @@ export function HealthScreen({
 
   const enabledCategories = dashboard?.connection?.enabledCategories;
   useEffect(() => {
+    if (!dashboard?.latestCheckIn) return;
+    const saved = dashboard.latestCheckIn;
+    setCheckIn({
+      date: saved.date,
+      perceivedRecovery: saved.perceivedRecovery,
+      energy: saved.energy,
+      stress: saved.stress,
+      soreness: saved.soreness,
+      practiceRpe: saved.practiceRpe,
+      practiceMinutes: saved.practiceMinutes,
+      note: saved.note,
+    });
+  }, [dashboard?.latestCheckIn]);
+  useEffect(() => {
     if (!enabledCategories?.length || mode === "preview") return;
     let stop: (() => void) | undefined;
     void startAppleHealthMonitoring(enabledCategories).then((cleanup) => {
@@ -434,7 +662,9 @@ export function HealthScreen({
             ? (progress) =>
                 setImportStatus({
                   phase:
-                    progress.phase === "reading" ? "reading" : "protecting",
+                    progress.phase === "reading" && progress.recordsFound === 0
+                      ? "reading"
+                      : "protecting",
                   imported: progress.imported,
                   deleted: progress.deleted,
                   recordsFound: progress.recordsFound,
@@ -622,6 +852,35 @@ export function HealthScreen({
     }
   }
 
+  async function saveCheckIn() {
+    if (mode === "preview" || !client) {
+      setCheckInOpen(false);
+      setNotice("Preview only · your check-in was not saved.");
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    try {
+      await client.player.saveHealthCheckIn.mutate({
+        checkIn,
+        idempotencyKey: Crypto.randomUUID(),
+      });
+      setCheckInOpen(false);
+      setNotice(
+        "Today’s private check-in is now part of your readiness context.",
+      );
+      await reload();
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Your Health check-in could not be saved.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function revoke(grantId: string, label: string) {
     if (mode === "preview" || !client) {
       setNotice("Preview only · sharing was not changed.");
@@ -689,7 +948,7 @@ export function HealthScreen({
   }
 
   const summary = dashboard?.summary;
-  const recovery = summary?.recoveryContext;
+  const intelligence = dashboard?.intelligence;
   const connected = dashboard?.connection?.status === "active";
   const confirmedSampleCount = dashboard?.connection?.importedSampleCount;
   const historyRecordCount = Math.max(
@@ -798,27 +1057,82 @@ export function HealthScreen({
           </View>
         ) : (
           <>
-            <View style={styles.recoveryCard}>
-              <View style={styles.recoveryScore}>
-                <View style={styles.scoreArc} />
-                <Text style={styles.scoreNumber}>{recovery?.score ?? "—"}</Text>
-                <Text style={styles.scoreLabel}>CONTEXT</Text>
-              </View>
-              <View style={styles.recoveryCopy}>
-                <Text style={styles.eyebrow}>TODAY</Text>
-                <Text style={styles.heroTitle}>
-                  {recovery?.label === "above-baseline"
-                    ? "You’re trending above baseline."
-                    : recovery?.label === "below-baseline"
-                      ? "Your signals are below baseline."
-                      : "Your recovery signals are taking shape."}
-                </Text>
-                <Text style={styles.heroBody}>
-                  Built from {recovery?.inputs.length ?? 0} available
-                  signals—not a diagnosis or readiness order.
+            <ReadinessHero intelligence={intelligence} styles={styles} />
+
+            <View style={styles.factorCard}>
+              <View style={styles.factorHeading}>
+                <View>
+                  <Text style={styles.eyebrow}>YOUR SIGNALS</Text>
+                  <Text style={styles.sectionTitle}>
+                    Why today feels this way.
+                  </Text>
+                </View>
+                <Text style={styles.confidencePill}>
+                  {intelligence?.readiness.confidence.toUpperCase() ?? "LOW"}{" "}
+                  CONFIDENCE
                 </Text>
               </View>
+              {(intelligence?.readiness.factors ?? []).map((factor) => (
+                <View key={factor.id} style={styles.factorRow}>
+                  <View style={styles.factorCopy}>
+                    <View style={styles.factorLabelRow}>
+                      <Text style={styles.factorLabel}>{factor.label}</Text>
+                      <Text style={styles.factorValue}>
+                        {factor.score?.toFixed(1) ?? "—"}
+                      </Text>
+                    </View>
+                    <View style={styles.factorTrack}>
+                      <View
+                        style={[
+                          styles.factorFill,
+                          {
+                            width: `${Math.max(0, Math.min(100, (factor.score ?? 0) * 10))}%`,
+                          },
+                          factor.status === "watch" && styles.factorFillWatch,
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.factorSummary}>{factor.summary}</Text>
+                  </View>
+                </View>
+              ))}
             </View>
+
+            <Pressable
+              onPress={() => setCheckInOpen(true)}
+              style={styles.checkInCard}
+            >
+              <View style={styles.checkInMark}>
+                <Text style={styles.checkInMarkText}>✦</Text>
+              </View>
+              <View style={styles.checkInCopy}>
+                <Text style={styles.eyebrow}>10-SECOND CHECK-IN</Text>
+                <Text style={styles.checkInTitle}>
+                  {dashboard?.latestCheckIn
+                    ? "Update how you feel today"
+                    : "Give the sensors your context"}
+                </Text>
+                <Text style={styles.checkInBody}>
+                  Raw answers and notes stay private. Only their derived factor
+                  can join a summary you explicitly share.
+                </Text>
+              </View>
+              <Text style={styles.checkInArrow}>›</Text>
+            </Pressable>
+
+            {intelligence?.readiness.recommendation && (
+              <View style={styles.recommendationCard}>
+                <Text style={styles.recommendationMark}>↗</Text>
+                <View style={styles.checkInCopy}>
+                  <Text style={styles.recommendationEyebrow}>
+                    ONE SMALL EXPERIMENT
+                  </Text>
+                  <Text style={styles.recommendationText}>
+                    {intelligence.readiness.recommendation}
+                  </Text>
+                </View>
+              </View>
+            )}
 
             {syncState && (
               <View
@@ -908,6 +1222,31 @@ export function HealthScreen({
                 styles={styles}
               />
             </View>
+
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.eyebrow}>PERSONAL BANDS</Text>
+                <Text style={styles.sectionTitle}>Trend, range, anomaly.</Text>
+              </View>
+            </View>
+            {(intelligence?.trends ?? []).slice(0, 3).map((trend) => (
+              <HealthTrendCard
+                key={trend.metric}
+                styles={styles}
+                trend={trend}
+              />
+            ))}
+
+            {intelligence?.sleep && (
+              <SleepIntelligenceCard
+                sleep={intelligence.sleep}
+                styles={styles}
+              />
+            )}
+            <StrainIntelligenceCard
+              strain={intelligence?.strain}
+              styles={styles}
+            />
 
             {!loading && (dashboard?.timeline.length ?? 0) === 0 && (
               <View style={styles.emptyHealthCard}>
@@ -1154,6 +1493,33 @@ export function HealthScreen({
                 </Text>
               </Pressable>
             </View>
+            <View style={styles.researchCard}>
+              <Text style={styles.eyebrow}>METHOD + RESEARCH</Text>
+              <Text style={styles.researchTitle}>
+                Transparent enough to challenge.
+              </Text>
+              <Text style={styles.researchBody}>
+                Duna uses explainable personal baselines, not a population
+                wellness target. Open the evidence behind each signal.
+              </Text>
+              {(intelligence?.citations ?? []).map((citation) => (
+                <Pressable
+                  key={citation.id}
+                  onPress={() => void Linking.openURL(citation.url)}
+                  style={styles.researchRow}
+                >
+                  <View style={styles.checkInCopy}>
+                    <Text style={styles.researchCitationTitle}>
+                      {citation.title}
+                    </Text>
+                    <Text style={styles.timelineMeta}>
+                      {citation.authors} · {citation.year} · {citation.section}
+                    </Text>
+                  </View>
+                  <Text style={styles.checkInArrow}>↗</Text>
+                </Pressable>
+              ))}
+            </View>
             <Text style={styles.disclaimer}>{dashboard?.disclaimer}</Text>
           </>
         )}
@@ -1200,7 +1566,459 @@ export function HealthScreen({
         styles={styles}
         visible={shareOpen}
       />
+      <CheckInModal
+        busy={busy}
+        checkIn={checkIn}
+        onChange={setCheckIn}
+        onClose={() => setCheckInOpen(false)}
+        onSave={() => void saveCheckIn()}
+        styles={styles}
+        visible={checkInOpen}
+      />
     </View>
+  );
+}
+
+function ReadinessHero({
+  intelligence,
+  styles,
+}: {
+  readonly intelligence?: HealthDashboard["intelligence"];
+  readonly styles: ReturnType<typeof createHealthStyles>;
+}) {
+  const readiness = intelligence?.readiness;
+  const status = readiness?.label.replace("-", " ") ?? "building baseline";
+  const today = new Date().toISOString().slice(0, 10);
+  const readinessWhen =
+    !readiness || readiness.date === today
+      ? "TODAY"
+      : `AS OF ${new Date(`${readiness.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase()}`;
+  return (
+    <View style={styles.readinessHero}>
+      <View style={styles.readinessGlowA} />
+      <View style={styles.readinessGlowB} />
+      <Text style={styles.readinessEyebrow}>
+        DUNA READINESS · {readinessWhen}
+      </Text>
+      <View style={styles.readinessScoreRow}>
+        <Text style={styles.readinessNumber}>
+          {readiness?.score?.toFixed(1) ?? "—"}
+        </Text>
+        <Text style={styles.readinessScale}>/ 10.0</Text>
+      </View>
+      <View style={styles.readinessStatusRow}>
+        <View style={styles.readinessStatusDot} />
+        <Text style={styles.readinessStatus}>{status}</Text>
+      </View>
+      <Text style={styles.readinessSummary}>{readiness?.summary}</Text>
+      <Text style={styles.readinessMeta}>
+        {readiness?.dataDays ?? 0} personal data days ·{" "}
+        {readiness?.confidence ?? "low"} confidence · model{" "}
+        {intelligence?.modelVersion ?? "forming"}
+      </Text>
+    </View>
+  );
+}
+
+function HealthTrendCard({
+  styles,
+  trend,
+}: {
+  readonly styles: ReturnType<typeof createHealthStyles>;
+  readonly trend: HealthDashboard["intelligence"]["trends"][number];
+}) {
+  const width = 330;
+  const height = 138;
+  const inset = 12;
+  const available = trend.points.map((point) => point.value);
+  const rangeValues = [
+    ...available,
+    ...(trend.typicalLow === undefined ? [] : [trend.typicalLow]),
+    ...(trend.typicalHigh === undefined ? [] : [trend.typicalHigh]),
+  ];
+  const minimum = Math.min(...rangeValues, 0);
+  const maximum = Math.max(...rangeValues, 1);
+  const padding = Math.max((maximum - minimum) * 0.15, 0.5);
+  const floor = minimum - padding;
+  const ceiling = maximum + padding;
+  const x = (index: number) =>
+    inset +
+    (index / Math.max(1, trend.points.length - 1)) * (width - inset * 2);
+  const y = (value: number) =>
+    inset +
+    ((ceiling - value) / Math.max(0.001, ceiling - floor)) *
+      (height - inset * 2);
+  const path = trend.points
+    .map(
+      (point, index) =>
+        `${index === 0 ? "M" : "L"} ${x(index).toFixed(1)} ${y(point.value).toFixed(1)}`,
+    )
+    .join(" ");
+  const fillPath = path
+    ? `${path} L ${x(trend.points.length - 1).toFixed(1)} ${height - inset} L ${inset} ${height - inset} Z`
+    : "";
+  const bandTop =
+    trend.typicalHigh === undefined ? undefined : y(trend.typicalHigh);
+  const bandBottom =
+    trend.typicalLow === undefined ? undefined : y(trend.typicalLow);
+  return (
+    <View style={styles.trendCard}>
+      <View style={styles.trendHeader}>
+        <View>
+          <Text style={styles.trendLabel}>{trend.label}</Text>
+          <Text style={styles.trendDescription}>{trend.description}</Text>
+        </View>
+        <View style={styles.trendLatest}>
+          <Text style={styles.trendLatestValue}>
+            {trend.latest?.toFixed(trend.unit === "score" ? 1 : 0) ?? "—"}
+          </Text>
+          <Text style={styles.trendUnit}>{trend.unit}</Text>
+        </View>
+      </View>
+      {trend.points.length > 1 ? (
+        <Svg height={height} viewBox={`0 0 ${width} ${height}`} width="100%">
+          <Defs>
+            <LinearGradient
+              id={`trend-${trend.metric}`}
+              x1="0"
+              x2="0"
+              y1="0"
+              y2="1"
+            >
+              <Stop offset="0" stopColor="#49d7ca" stopOpacity="0.32" />
+              <Stop offset="1" stopColor="#dffb83" stopOpacity="0.02" />
+            </LinearGradient>
+          </Defs>
+          {bandTop !== undefined && bandBottom !== undefined && (
+            <Rect
+              fill="#49d7ca"
+              height={Math.max(2, bandBottom - bandTop)}
+              opacity={0.13}
+              rx={5}
+              width={width - inset * 2}
+              x={inset}
+              y={bandTop}
+            />
+          )}
+          <Path d={fillPath} fill={`url(#trend-${trend.metric})`} />
+          <Path
+            d={path}
+            fill="none"
+            stroke="#132427"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2.3}
+          />
+          {trend.points.map((point, index) => (
+            <Circle
+              cx={x(index)}
+              cy={y(point.value)}
+              fill={point.anomaly ? "#ff846f" : "#f8f6ef"}
+              key={`${point.date}-${index}`}
+              r={point.anomaly ? 4.2 : 2.8}
+              stroke="#132427"
+              strokeWidth={1.5}
+            />
+          ))}
+        </Svg>
+      ) : (
+        <Text style={styles.trendEmpty}>
+          More days will reveal your personal band.
+        </Text>
+      )}
+      <View style={styles.trendFooter}>
+        <Text style={styles.trendBandLabel}>TYPICAL BAND</Text>
+        <Text style={styles.trendBandValue}>
+          avg {trend.average?.toFixed(1) ?? "—"} ·{" "}
+          {trend.typicalLow?.toFixed(1) ?? "—"}–
+          {trend.typicalHigh?.toFixed(1) ?? "—"} {trend.unit}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function SleepIntelligenceCard({
+  sleep,
+  styles,
+}: {
+  readonly sleep: NonNullable<HealthDashboard["intelligence"]["sleep"]>;
+  readonly styles: ReturnType<typeof createHealthStyles>;
+}) {
+  const stageTotal =
+    (sleep.coreMinutes ?? 0) +
+    (sleep.deepMinutes ?? 0) +
+    (sleep.remMinutes ?? 0) +
+    (sleep.awakeMinutes ?? 0);
+  const stages = [
+    ["Awake", sleep.awakeMinutes, "#ffb39f"],
+    ["Core", sleep.coreMinutes, "#7fded5"],
+    ["Deep", sleep.deepMinutes, "#736dff"],
+    ["REM", sleep.remMinutes, "#e889dd"],
+  ] as const;
+  return (
+    <View style={styles.sleepCard}>
+      <View style={styles.sleepHeader}>
+        <View>
+          <Text style={styles.eyebrow}>SLEEP · WEARABLE ESTIMATE</Text>
+          <Text style={styles.sleepTitle}>
+            {sleep.durationHours.toFixed(1)} hours asleep
+          </Text>
+        </View>
+        <Text style={styles.sleepBadge}>{sleep.label.replace("-", " ")}</Text>
+      </View>
+      {stageTotal > 0 && (
+        <View style={styles.sleepStageTrack}>
+          {stages.map(([label, minutes, color]) =>
+            minutes === undefined || minutes <= 0 ? null : (
+              <View
+                accessibilityLabel={`${label} ${Math.round(minutes)} minutes`}
+                key={label}
+                style={{
+                  backgroundColor: color,
+                  flex: minutes / stageTotal,
+                  minWidth: 4,
+                }}
+              />
+            ),
+          )}
+        </View>
+      )}
+      <View style={styles.sleepStageLegend}>
+        {stages.map(([label, minutes, color]) => (
+          <View key={label} style={styles.sleepStageItem}>
+            <View style={[styles.sleepStageDot, { backgroundColor: color }]} />
+            <Text style={styles.sleepStageName}>{label}</Text>
+            <Text style={styles.sleepStageValue}>
+              {minutes === undefined ? "—" : `${Math.round(minutes)}m`}
+            </Text>
+          </View>
+        ))}
+      </View>
+      <View style={styles.sleepStats}>
+        <View>
+          <Text style={styles.sleepStatValue}>
+            {sleep.efficiencyPercent ?? "—"}%
+          </Text>
+          <Text style={styles.sleepStatLabel}>continuity</Text>
+        </View>
+        <View>
+          <Text style={styles.sleepStatValue}>
+            {sleep.interruptions ?? "—"}
+          </Text>
+          <Text style={styles.sleepStatLabel}>interruptions</Text>
+        </View>
+        <View>
+          <Text style={styles.sleepStatValue}>
+            {sleep.regularityMinutes ?? "—"}m
+          </Text>
+          <Text style={styles.sleepStatLabel}>from usual</Text>
+        </View>
+      </View>
+      <Text style={styles.sleepSummary}>{sleep.summary}</Text>
+      <Text style={styles.sleepEstimate}>{sleep.estimateNote}</Text>
+    </View>
+  );
+}
+
+function StrainIntelligenceCard({
+  strain,
+  styles,
+}: {
+  readonly strain?: HealthDashboard["intelligence"]["strain"];
+  readonly styles: ReturnType<typeof createHealthStyles>;
+}) {
+  const score = strain?.score ?? 0;
+  return (
+    <View style={styles.strainCard}>
+      <View style={styles.strainTop}>
+        <View>
+          <Text style={styles.eyebrow}>DUNA STRAIN</Text>
+          <View style={styles.strainScoreRow}>
+            <Text style={styles.strainNumber}>
+              {strain?.score?.toFixed(1) ?? "—"}
+            </Text>
+            <Text style={styles.strainScale}>/ 10.0</Text>
+          </View>
+        </View>
+        <View style={styles.strainArc}>
+          <View style={[styles.strainArcFill, { width: `${score * 10}%` }]} />
+        </View>
+      </View>
+      <Text style={styles.strainSummary}>{strain?.summary}</Text>
+      <View style={styles.strainCompare}>
+        <View>
+          <Text style={styles.strainCompareValue}>
+            {strain?.recentThreeDayAverage ?? "—"}
+          </Text>
+          <Text style={styles.strainCompareLabel}>3-day load</Text>
+        </View>
+        <Text style={styles.strainVersus}>vs</Text>
+        <View>
+          <Text style={styles.strainCompareValue}>
+            {strain?.baselineTwentyEightDayAverage ?? "—"}
+          </Text>
+          <Text style={styles.strainCompareLabel}>28-day average</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function CheckInModal({
+  busy,
+  checkIn,
+  onChange,
+  onClose,
+  onSave,
+  styles,
+  visible,
+}: {
+  readonly busy: boolean;
+  readonly checkIn: HealthCheckInInput;
+  readonly onChange: (value: HealthCheckInInput) => void;
+  readonly onClose: () => void;
+  readonly onSave: () => void;
+  readonly styles: ReturnType<typeof createHealthStyles>;
+  readonly visible: boolean;
+}) {
+  const questions = [
+    ["perceivedRecovery", "How recovered do you feel?", "Low", "Great"],
+    ["energy", "Energy right now", "Flat", "High"],
+    ["stress", "Stress today", "Low", "High"],
+    ["soreness", "Body soreness", "None", "High"],
+  ] as const;
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      transparent
+      visible={visible}
+    >
+      <View style={styles.modalBackdrop}>
+        <SafeAreaView edges={["bottom"]} style={styles.checkInSheet}>
+          <View style={styles.modalHeader}>
+            <Pressable onPress={onClose}>
+              <Text style={styles.modalClose}>Close</Text>
+            </Pressable>
+            <Text style={styles.modalEyebrow}>PRIVATE CHECK-IN</Text>
+            <View style={styles.modalSpacer} />
+          </View>
+          <ScrollView contentContainerStyle={styles.checkInContent}>
+            <Text style={styles.modalTitle}>
+              Add the part sensors cannot know.
+            </Text>
+            <Text style={styles.modalBody}>
+              This takes about ten seconds. Duna encrypts the answers and uses
+              them only as context for your personal trend.
+            </Text>
+            {questions.map(([key, label, low, high]) => (
+              <View key={key} style={styles.checkInQuestion}>
+                <Text style={styles.checkInQuestionLabel}>{label}</Text>
+                <View style={styles.ratingRow}>
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <Pressable
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: checkIn[key] === value }}
+                      key={value}
+                      onPress={() => onChange({ ...checkIn, [key]: value })}
+                      style={[
+                        styles.ratingButton,
+                        checkIn[key] === value && styles.ratingButtonActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.ratingText,
+                          checkIn[key] === value && styles.ratingTextActive,
+                        ]}
+                      >
+                        {value}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <View style={styles.ratingEnds}>
+                  <Text style={styles.ratingEnd}>{low}</Text>
+                  <Text style={styles.ratingEnd}>{high}</Text>
+                </View>
+              </View>
+            ))}
+            <View style={styles.checkInQuestion}>
+              <Text style={styles.checkInQuestionLabel}>
+                Practice effort today
+              </Text>
+              <View style={styles.effortRow}>
+                {[
+                  ["None", undefined],
+                  ["Easy", 3],
+                  ["Solid", 6],
+                  ["Hard", 9],
+                ].map(([label, value]) => (
+                  <Pressable
+                    key={label}
+                    onPress={() =>
+                      onChange({
+                        ...checkIn,
+                        practiceRpe: value as number | undefined,
+                        practiceMinutes:
+                          value === undefined
+                            ? undefined
+                            : (checkIn.practiceMinutes ?? 75),
+                      })
+                    }
+                    style={[
+                      styles.effortButton,
+                      checkIn.practiceRpe === value &&
+                        styles.effortButtonActive,
+                    ]}
+                  >
+                    <Text style={styles.effortText}>{label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              {checkIn.practiceRpe !== undefined && (
+                <View style={styles.durationRow}>
+                  {[45, 75, 105].map((minutes) => (
+                    <Pressable
+                      key={minutes}
+                      onPress={() =>
+                        onChange({ ...checkIn, practiceMinutes: minutes })
+                      }
+                      style={[
+                        styles.durationButton,
+                        checkIn.practiceMinutes === minutes &&
+                          styles.durationButtonActive,
+                      ]}
+                    >
+                      <Text style={styles.durationText}>{minutes} min</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+            <TextInput
+              maxLength={280}
+              multiline
+              onChangeText={(note) => onChange({ ...checkIn, note })}
+              placeholder="Anything worth remembering? Optional."
+              placeholderTextColor="#7b8584"
+              style={styles.checkInNote}
+              value={checkIn.note}
+            />
+            <Pressable
+              disabled={busy}
+              onPress={onSave}
+              style={[styles.primaryButton, busy && styles.disabled]}
+            >
+              <Text style={styles.primaryButtonText}>
+                {busy ? "Saving securely…" : "Save private check-in"}
+              </Text>
+            </Pressable>
+          </ScrollView>
+        </SafeAreaView>
+      </View>
+    </Modal>
   );
 }
 
@@ -1487,7 +2305,10 @@ function ConnectModal({
             <Text style={styles.modalBody}>
               Select only the categories you want Duna to read. Apple will show
               its official permission sheet next; Duna cannot see which read
-              permissions you deny.
+              permissions you deny. Your choices can unlock a personal 0–10
+              Readiness score, estimated sleep continuity, Duna Strain,
+              match-pattern insights, and timestamp-aligned heart rate on Duna
+              Vision.
             </Text>
             <View style={styles.categoryList}>
               {(Object.keys(healthCategoryDetails) as HealthCategory[]).map(
@@ -1538,7 +2359,8 @@ function ConnectModal({
               <Text style={styles.promiseTitle}>Duna’s Health promise</Text>
               <Text style={styles.promiseBody}>
                 No ads. No sale. No medical diagnosis. No Apple Health writes.
-                Imported values are encrypted before database storage.
+                Imported values are encrypted before database storage, and raw
+                Health data is not sent to a generative-AI provider.
               </Text>
             </View>
             <Pressable
@@ -1664,7 +2486,7 @@ function ShareModal({
                   [
                     "summary",
                     "Summary",
-                    "Current headline values + match context",
+                    "Readiness factors + headline values + match context",
                   ],
                   [
                     "timeline",
@@ -1703,7 +2525,8 @@ function ShareModal({
               <Text style={styles.promiseBody}>
                 By tapping below, you direct Duna to display only the selected
                 categories and uses to this recipient until the grant expires.
-                You can revoke it immediately here.
+                Private check-in answers and notes are excluded. You can revoke
+                access immediately here.
               </Text>
             </View>
             <Pressable
@@ -2056,6 +2879,464 @@ function createHealthStyles(colors: HealthPalette) {
       color: colors.muted,
       fontSize: 10,
       fontWeight: "800",
+    },
+    readinessHero: {
+      backgroundColor: "#F8F6EF",
+      borderColor: "#E1E1D8",
+      borderRadius: 30,
+      borderWidth: 1,
+      minHeight: 390,
+      overflow: "hidden",
+      padding: 24,
+      position: "relative",
+    },
+    readinessGlowA: {
+      backgroundColor: "rgba(74, 218, 205, 0.42)",
+      borderRadius: 140,
+      height: 250,
+      position: "absolute",
+      right: -58,
+      top: -28,
+      transform: [{ rotate: "-18deg" }],
+      width: 210,
+    },
+    readinessGlowB: {
+      backgroundColor: "rgba(215, 242, 115, 0.45)",
+      borderRadius: 105,
+      bottom: 74,
+      height: 150,
+      position: "absolute",
+      right: 54,
+      transform: [{ rotate: "22deg" }],
+      width: 175,
+    },
+    readinessEyebrow: {
+      color: "#172225",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.4,
+    },
+    readinessScoreRow: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      marginTop: 42,
+    },
+    readinessNumber: {
+      color: "#0C1112",
+      fontSize: 88,
+      fontWeight: "300",
+      letterSpacing: -6,
+      lineHeight: 94,
+    },
+    readinessScale: {
+      color: "#3A4443",
+      fontSize: 14,
+      fontWeight: "700",
+      marginBottom: 15,
+      marginLeft: 10,
+    },
+    readinessStatusRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 7,
+      marginTop: 4,
+    },
+    readinessStatusDot: {
+      backgroundColor: "#9DD62D",
+      borderRadius: 5,
+      height: 9,
+      width: 9,
+    },
+    readinessStatus: {
+      color: "#172225",
+      fontSize: 12,
+      fontWeight: "800",
+      textTransform: "capitalize",
+    },
+    readinessSummary: {
+      color: "#172225",
+      fontSize: 17,
+      fontWeight: "700",
+      lineHeight: 24,
+      marginTop: 38,
+      maxWidth: 315,
+    },
+    readinessMeta: {
+      color: "#68716E",
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 13,
+    },
+    factorCard: {
+      backgroundColor: colors.surface,
+      borderColor: colors.line,
+      borderRadius: 24,
+      borderWidth: 1,
+      padding: 18,
+    },
+    factorHeading: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+      marginBottom: 8,
+    },
+    confidencePill: {
+      backgroundColor: colors.aquaSoft,
+      borderRadius: 999,
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      overflow: "hidden",
+      paddingHorizontal: 9,
+      paddingVertical: 6,
+    },
+    factorRow: {
+      borderTopColor: colors.line,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      paddingVertical: 13,
+    },
+    factorCopy: { flex: 1 },
+    factorLabelRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    factorLabel: { color: colors.ink, fontSize: 13, fontWeight: "800" },
+    factorValue: { color: colors.ink, fontSize: 15, fontWeight: "900" },
+    factorTrack: {
+      backgroundColor: colors.surfaceSoft,
+      borderRadius: 4,
+      height: 6,
+      marginTop: 8,
+      overflow: "hidden",
+    },
+    factorFill: {
+      backgroundColor: colors.aqua,
+      borderRadius: 4,
+      height: 6,
+    },
+    factorFillWatch: { backgroundColor: colors.coral },
+    factorSummary: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 7,
+    },
+    checkInCard: {
+      alignItems: "center",
+      backgroundColor: colors.surface,
+      borderColor: colors.line,
+      borderRadius: 20,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      padding: 15,
+    },
+    checkInMark: {
+      alignItems: "center",
+      backgroundColor: colors.aquaSoft,
+      borderRadius: 15,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    checkInMarkText: { color: colors.aqua, fontSize: 22, fontWeight: "900" },
+    checkInCopy: { flex: 1, minWidth: 0 },
+    checkInTitle: { color: colors.ink, fontSize: 14, fontWeight: "900" },
+    checkInBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 4,
+    },
+    checkInArrow: { color: colors.ink, fontSize: 24, fontWeight: "500" },
+    recommendationCard: {
+      backgroundColor: "#121919",
+      borderRadius: 22,
+      flexDirection: "row",
+      gap: 13,
+      padding: 18,
+    },
+    recommendationMark: { color: "#BEEB71", fontSize: 23 },
+    recommendationEyebrow: {
+      color: "#79DED6",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+      marginBottom: 5,
+    },
+    recommendationText: {
+      color: "#F7F5EE",
+      fontSize: 13,
+      fontWeight: "700",
+      lineHeight: 19,
+    },
+    trendCard: {
+      backgroundColor: "#F8F6EF",
+      borderColor: "#E1E1D8",
+      borderRadius: 22,
+      borderWidth: 1,
+      overflow: "hidden",
+      padding: 17,
+    },
+    trendHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+    },
+    trendLabel: { color: "#142123", fontSize: 16, fontWeight: "900" },
+    trendDescription: {
+      color: "#67716F",
+      fontSize: 10,
+      lineHeight: 13,
+      marginTop: 4,
+      maxWidth: 210,
+    },
+    trendLatest: { alignItems: "flex-end" },
+    trendLatestValue: {
+      color: "#111819",
+      fontSize: 28,
+      fontWeight: "400",
+      letterSpacing: -1,
+    },
+    trendUnit: { color: "#68716E", fontSize: 10, fontWeight: "700" },
+    trendEmpty: { color: "#68716E", fontSize: 11, marginVertical: 36 },
+    trendFooter: {
+      alignItems: "center",
+      borderTopColor: "#DFE1DA",
+      borderTopWidth: StyleSheet.hairlineWidth,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingTop: 10,
+    },
+    trendBandLabel: {
+      color: "#67716F",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1,
+    },
+    trendBandValue: { color: "#142123", fontSize: 10, fontWeight: "800" },
+    sleepCard: {
+      backgroundColor: colors.surface,
+      borderColor: colors.line,
+      borderRadius: 24,
+      borderWidth: 1,
+      padding: 18,
+    },
+    sleepHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    sleepTitle: { color: colors.ink, fontSize: 24, fontWeight: "800" },
+    sleepBadge: {
+      backgroundColor: colors.aquaSoft,
+      borderRadius: 999,
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      overflow: "hidden",
+      paddingHorizontal: 9,
+      paddingVertical: 6,
+      textTransform: "capitalize",
+    },
+    sleepStageTrack: {
+      borderRadius: 7,
+      flexDirection: "row",
+      height: 14,
+      marginTop: 22,
+      overflow: "hidden",
+    },
+    sleepStageLegend: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 12,
+    },
+    sleepStageItem: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 4,
+      width: "47%",
+    },
+    sleepStageDot: { borderRadius: 4, height: 7, width: 7 },
+    sleepStageName: { color: colors.muted, flex: 1, fontSize: 10 },
+    sleepStageValue: { color: colors.ink, fontSize: 10, fontWeight: "800" },
+    sleepStats: {
+      borderBottomColor: colors.line,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.line,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 17,
+      paddingVertical: 14,
+    },
+    sleepStatValue: { color: colors.ink, fontSize: 17, fontWeight: "900" },
+    sleepStatLabel: { color: colors.muted, fontSize: 10, marginTop: 2 },
+    sleepSummary: {
+      color: colors.ink,
+      fontSize: 13,
+      fontWeight: "700",
+      lineHeight: 19,
+      marginTop: 14,
+    },
+    sleepEstimate: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 7,
+    },
+    strainCard: {
+      backgroundColor: "#111A1A",
+      borderRadius: 24,
+      padding: 19,
+    },
+    strainTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 18,
+      justifyContent: "space-between",
+    },
+    strainScoreRow: { alignItems: "flex-end", flexDirection: "row" },
+    strainNumber: {
+      color: "#F8F6EF",
+      fontSize: 50,
+      fontWeight: "300",
+      letterSpacing: -3,
+    },
+    strainScale: { color: "#A8B4B1", fontSize: 10, marginBottom: 9 },
+    strainArc: {
+      backgroundColor: "#263433",
+      borderRadius: 5,
+      height: 10,
+      overflow: "hidden",
+      width: 125,
+    },
+    strainArcFill: {
+      backgroundColor: "#BEEB71",
+      borderRadius: 5,
+      height: 10,
+    },
+    strainSummary: {
+      color: "#DCE3DF",
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 10,
+    },
+    strainCompare: {
+      alignItems: "center",
+      borderTopColor: "#2C3C3A",
+      borderTopWidth: StyleSheet.hairlineWidth,
+      flexDirection: "row",
+      justifyContent: "space-around",
+      marginTop: 15,
+      paddingTop: 14,
+    },
+    strainCompareValue: { color: "#F8F6EF", fontSize: 17, fontWeight: "900" },
+    strainCompareLabel: { color: "#97A6A2", fontSize: 10, marginTop: 2 },
+    strainVersus: { color: "#657572", fontSize: 10, fontWeight: "900" },
+    researchCard: {
+      backgroundColor: colors.surface,
+      borderColor: colors.line,
+      borderRadius: 20,
+      borderWidth: 1,
+      padding: 17,
+    },
+    researchTitle: { color: colors.ink, fontSize: 19, fontWeight: "900" },
+    researchBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 17,
+      marginBottom: 8,
+      marginTop: 6,
+    },
+    researchRow: {
+      alignItems: "center",
+      borderTopColor: colors.line,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      flexDirection: "row",
+      gap: 10,
+      paddingVertical: 12,
+    },
+    researchCitationTitle: {
+      color: colors.ink,
+      fontSize: 11,
+      fontWeight: "800",
+      lineHeight: 15,
+    },
+    checkInSheet: {
+      backgroundColor: colors.canvas,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      maxHeight: "94%",
+      overflow: "hidden",
+    },
+    checkInContent: { gap: 15, padding: 22, paddingBottom: 44 },
+    checkInQuestion: {
+      backgroundColor: colors.surface,
+      borderColor: colors.line,
+      borderRadius: 17,
+      borderWidth: 1,
+      padding: 14,
+    },
+    checkInQuestionLabel: {
+      color: colors.ink,
+      fontSize: 13,
+      fontWeight: "900",
+      marginBottom: 11,
+    },
+    ratingRow: { flexDirection: "row", gap: 7 },
+    ratingButton: {
+      alignItems: "center",
+      backgroundColor: colors.surfaceSoft,
+      borderRadius: 12,
+      flex: 1,
+      height: 42,
+      justifyContent: "center",
+    },
+    ratingButtonActive: { backgroundColor: colors.aqua },
+    ratingText: { color: colors.ink, fontSize: 13, fontWeight: "800" },
+    ratingTextActive: { color: colors.onAccent },
+    ratingEnds: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 6,
+    },
+    ratingEnd: { color: colors.muted, fontSize: 10 },
+    effortRow: { flexDirection: "row", gap: 7 },
+    effortButton: {
+      alignItems: "center",
+      backgroundColor: colors.surfaceSoft,
+      borderRadius: 11,
+      flex: 1,
+      paddingVertical: 10,
+    },
+    effortButtonActive: { backgroundColor: colors.aquaSoft },
+    effortText: { color: colors.ink, fontSize: 10, fontWeight: "800" },
+    durationRow: { flexDirection: "row", gap: 7, marginTop: 9 },
+    durationButton: {
+      alignItems: "center",
+      borderColor: colors.line,
+      borderRadius: 999,
+      borderWidth: 1,
+      flex: 1,
+      paddingVertical: 8,
+    },
+    durationButtonActive: { borderColor: colors.aqua },
+    durationText: { color: colors.muted, fontSize: 10, fontWeight: "800" },
+    checkInNote: {
+      backgroundColor: colors.surface,
+      borderColor: colors.line,
+      borderRadius: 16,
+      borderWidth: 1,
+      color: colors.ink,
+      fontSize: 12,
+      minHeight: 82,
+      padding: 14,
+      textAlignVertical: "top",
     },
     recoveryCard: {
       backgroundColor: colors.surface,
