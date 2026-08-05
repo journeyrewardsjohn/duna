@@ -1,8 +1,8 @@
 import type { AppRouter } from "@duna/api";
 import { createTRPCClient, httpBatchLink, type TRPCClient } from "@trpc/client";
 
-const defaultApiUrl = "https://duna-web.vercel.app/api/trpc";
-const defaultWebUrl = "https://duna-web.vercel.app";
+const defaultApiUrl = "https://duna.coach/api/trpc";
+const defaultWebUrl = "https://duna.coach";
 
 function normalizeApiUrl(value: string | undefined): string {
   const candidate = value?.trim() || defaultApiUrl;

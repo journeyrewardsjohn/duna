@@ -1,7 +1,5 @@
 import { Platform } from "react-native";
-import DunaLiveActivity, {
-  type DunaLiveActivityProps,
-} from "./DunaLiveActivity";
+import type { DunaLiveActivityProps } from "./DunaLiveActivity";
 
 export type LiveActivityPushToken = {
   readonly activityId: string;
@@ -14,8 +12,18 @@ type StartOptions = {
   readonly onPushToken?: (token: LiveActivityPushToken) => void;
 };
 
+async function loadDunaLiveActivity() {
+  try {
+    return (await import("./DunaLiveActivity")).default;
+  } catch {
+    return null;
+  }
+}
+
 async function endExistingActivities() {
-  const existing = DunaLiveActivity.getInstances();
+  const liveActivity = await loadDunaLiveActivity();
+  if (!liveActivity) return;
+  const existing = liveActivity.getInstances();
   await Promise.all(
     existing.map((instance) =>
       instance.end("immediate").catch(() => undefined),
@@ -30,7 +38,9 @@ export async function startDunaLiveActivity(
   if (Platform.OS !== "ios") return null;
 
   await endExistingActivities();
-  const activity = DunaLiveActivity.start(
+  const liveActivity = await loadDunaLiveActivity();
+  if (!liveActivity) return null;
+  const activity = liveActivity.start(
     { ...props, updatedAt: new Date().toISOString() },
     `duna://live/${props.kind}/${encodeURIComponent(props.subjectId)}`,
   );
@@ -60,7 +70,9 @@ export async function updateDunaLiveActivity(
   props: Omit<DunaLiveActivityProps, "updatedAt">,
 ) {
   if (Platform.OS !== "ios") return;
-  const instances = DunaLiveActivity.getInstances();
+  const liveActivity = await loadDunaLiveActivity();
+  if (!liveActivity) return;
+  const instances = liveActivity.getInstances();
   await Promise.all(
     instances.map((instance) =>
       instance.update({ ...props, updatedAt: new Date().toISOString() }),

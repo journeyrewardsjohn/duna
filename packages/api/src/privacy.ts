@@ -5,6 +5,9 @@ import {
   getDatabase,
   guardianConsents,
   guardianships,
+  healthConnections,
+  healthSharingGrants,
+  liveActivitySubscriptions,
   memberships,
   membershipTiers,
   organizationMemberships,
@@ -17,13 +20,19 @@ import {
   privacyRequests,
   ratings,
   registrations,
+  videoShareLinks,
+  videos,
+  visionSessions,
   walletAccounts,
   walletLedger,
+  workflowJobs,
 } from "@duna/db";
 import { foldWalletLedger } from "@duna/core";
-import { and, desc, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import type { ApiActor } from "./context";
 import type { AccountDeletionReadiness } from "./repository-contract";
+import { exportHealthDataForPerson } from "./health-service";
+import { accountDeletionScheduledFor } from "./account-deletion";
 
 export class PrivacyError extends Error {
   constructor(
@@ -215,6 +224,7 @@ export async function buildPersonDataExport(input: {
     responseRows,
     walletAccount,
     auditRows,
+    healthData,
   ] = await Promise.all([
     database.query.people.findFirst({ where: eq(people.id, personId) }),
     database.select().from(ratings).where(eq(ratings.personId, personId)),
@@ -312,6 +322,7 @@ export async function buildPersonDataExport(input: {
       .from(auditLog)
       .where(eq(auditLog.actorPersonId, personId))
       .orderBy(desc(auditLog.createdAt)),
+    exportHealthDataForPerson(personId),
   ]);
   if (!person) throw new Error("Player profile was not found");
 
@@ -376,6 +387,7 @@ export async function buildPersonDataExport(input: {
         }
       : null,
     auditEventsInitiatedByYou: auditRows,
+    health: healthData,
   };
 }
 
@@ -438,6 +450,94 @@ export async function requestAccountDeletion(input: {
     ),
   });
   if (existing) {
+    const scheduledFor = accountDeletionScheduledFor(existing.createdAt);
+    await database.batch([
+      database
+        .insert(workflowJobs)
+        .values([
+          {
+            kind: "privacy.account-containment",
+            idempotencyKey: existing.id,
+            payload: {
+              requestId: existing.id,
+              personId: input.actor.personId,
+            },
+            maximumAttempts: 24,
+            availableAt: input.now,
+            traceId: input.requestId,
+            createdAt: input.now,
+            updatedAt: input.now,
+          },
+          {
+            kind: "privacy.account-deletion",
+            idempotencyKey: existing.id,
+            payload: {
+              requestId: existing.id,
+              personId: input.actor.personId,
+            },
+            maximumAttempts: 48,
+            availableAt: scheduledFor,
+            traceId: input.requestId,
+            createdAt: input.now,
+            updatedAt: input.now,
+          },
+        ])
+        .onConflictDoNothing(),
+      database
+        .update(healthSharingGrants)
+        .set({ revokedAt: input.now, updatedAt: input.now })
+        .where(
+          and(
+            or(
+              eq(healthSharingGrants.ownerPersonId, input.actor.personId),
+              eq(healthSharingGrants.audiencePersonId, input.actor.personId),
+            ),
+            isNull(healthSharingGrants.revokedAt),
+          ),
+        ),
+      database
+        .update(healthConnections)
+        .set({
+          status: "revoked",
+          enabledCategories: [],
+          revokedAt: input.now,
+          updatedAt: input.now,
+        })
+        .where(eq(healthConnections.personId, input.actor.personId)),
+      database
+        .update(visionSessions)
+        .set({
+          status: "expired",
+          revokedAt: input.now,
+          updatedAt: input.now,
+        })
+        .where(eq(visionSessions.ownerPersonId, input.actor.personId)),
+      database
+        .update(videoShareLinks)
+        .set({ revokedAt: input.now })
+        .where(
+          inArray(
+            videoShareLinks.videoId,
+            database
+              .select({ id: videos.id })
+              .from(videos)
+              .where(eq(videos.ownerPersonId, input.actor.personId)),
+          ),
+        ),
+      database
+        .update(videos)
+        .set({
+          liveVisibility: "link-only",
+          recordingVisibility: "private",
+          publishedToProfile: false,
+          updatedAt: input.now,
+        })
+        .where(eq(videos.ownerPersonId, input.actor.personId)),
+      database
+        .update(liveActivitySubscriptions)
+        .set({ status: "revoked", revokedAt: input.now, updatedAt: input.now })
+        .where(eq(liveActivitySubscriptions.personId, input.actor.personId)),
+    ]);
     return {
       id: existing.id,
       status:
@@ -449,6 +549,7 @@ export async function requestAccountDeletion(input: {
     };
   }
   const id = crypto.randomUUID();
+  const scheduledFor = accountDeletionScheduledFor(input.now);
   await database.batch([
     database.insert(privacyRequests).values({
       id,
@@ -466,16 +567,93 @@ export async function requestAccountDeletion(input: {
       createdAt: input.now,
       updatedAt: input.now,
     }),
+    database
+      .update(healthSharingGrants)
+      .set({ revokedAt: input.now, updatedAt: input.now })
+      .where(
+        and(
+          or(
+            eq(healthSharingGrants.ownerPersonId, input.actor.personId),
+            eq(healthSharingGrants.audiencePersonId, input.actor.personId),
+          ),
+          isNull(healthSharingGrants.revokedAt),
+        ),
+      ),
+    database
+      .update(healthConnections)
+      .set({
+        status: "revoked",
+        enabledCategories: [],
+        revokedAt: input.now,
+        updatedAt: input.now,
+      })
+      .where(eq(healthConnections.personId, input.actor.personId)),
+    database
+      .update(visionSessions)
+      .set({
+        status: "expired",
+        revokedAt: input.now,
+        updatedAt: input.now,
+      })
+      .where(eq(visionSessions.ownerPersonId, input.actor.personId)),
+    database
+      .update(videoShareLinks)
+      .set({ revokedAt: input.now })
+      .where(
+        inArray(
+          videoShareLinks.videoId,
+          database
+            .select({ id: videos.id })
+            .from(videos)
+            .where(eq(videos.ownerPersonId, input.actor.personId)),
+        ),
+      ),
+    database
+      .update(videos)
+      .set({
+        liveVisibility: "link-only",
+        recordingVisibility: "private",
+        publishedToProfile: false,
+        updatedAt: input.now,
+      })
+      .where(eq(videos.ownerPersonId, input.actor.personId)),
+    database
+      .update(liveActivitySubscriptions)
+      .set({ status: "revoked", revokedAt: input.now, updatedAt: input.now })
+      .where(eq(liveActivitySubscriptions.personId, input.actor.personId)),
+    database.insert(workflowJobs).values([
+      {
+        kind: "privacy.account-containment",
+        idempotencyKey: id,
+        payload: { requestId: id, personId: input.actor.personId },
+        maximumAttempts: 24,
+        availableAt: input.now,
+        traceId: input.requestId,
+        createdAt: input.now,
+        updatedAt: input.now,
+      },
+      {
+        kind: "privacy.account-deletion",
+        idempotencyKey: id,
+        payload: { requestId: id, personId: input.actor.personId },
+        maximumAttempts: 48,
+        availableAt: scheduledFor,
+        traceId: input.requestId,
+        createdAt: input.now,
+        updatedAt: input.now,
+      },
+    ]),
     database.insert(auditLog).values({
       actorPersonId: input.actor.personId,
       actorType: "person",
       action: "privacy.account_deletion_requested",
       entityType: "privacy-request",
       entityId: id,
-      reason:
+      reason: `${
         readiness.totalOrganizationCredits > 0
-          ? `Account deletion was requested with explicit consent to forfeit ${readiness.totalOrganizationCredits} eligible non-cash organization credits. Cash, subscription, and organization-ownership blockers were rechecked server-side.`
-          : "Account deletion was requested after cash, subscription, and organization-ownership blockers were rechecked server-side.",
+          ? `Account deletion was requested with explicit consent to forfeit ${readiness.totalOrganizationCredits} eligible non-cash organization credits. `
+          : "Account deletion was requested. "
+      }Cash, subscription, and organization-ownership blockers were rechecked server-side. Health sharing, remote controls, public video visibility, share links, and live updates were revoked immediately. Permanent deletion is scheduled for ${scheduledFor.toISOString()}.`,
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,
@@ -516,13 +694,34 @@ export async function cancelAccountDeletion(input: {
       .update(privacyRequests)
       .set({ status: "cancelled", updatedAt: input.now })
       .where(eq(privacyRequests.id, request.id)),
+    database
+      .update(workflowJobs)
+      .set({
+        status: "succeeded",
+        completedAt: input.now,
+        lockedAt: null,
+        lockToken: null,
+        lastError: null,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          inArray(workflowJobs.kind, [
+            "privacy.account-containment",
+            "privacy.account-deletion",
+          ]),
+          eq(workflowJobs.idempotencyKey, request.id),
+          inArray(workflowJobs.status, ["queued", "retry"]),
+        ),
+      ),
     database.insert(auditLog).values({
       actorPersonId: input.actor.personId,
       actorType: "person",
       action: "privacy.account_deletion_cancelled",
       entityType: "privacy-request",
       entityId: request.id,
-      reason: "Account deletion request was cancelled by the account holder.",
+      reason:
+        "Account deletion was cancelled during the recovery window. Previously revoked Health grants, share links, remote controls, and public visibility were not automatically restored.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,

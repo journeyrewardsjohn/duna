@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const hqBaseUrl = process.env.PLAYWRIGHT_HQ_BASE_URL ?? "http://127.0.0.1:3001";
+const hqBaseUrl =
+  process.env.PLAYWRIGHT_HQ_BASE_URL ??
+  `http://127.0.0.1:${process.env.PLAYWRIGHT_HQ_PORT ?? "3001"}`;
 
 async function expectNoHorizontalOverflow(page: Page) {
   const dimensions = await page.evaluate(() => ({

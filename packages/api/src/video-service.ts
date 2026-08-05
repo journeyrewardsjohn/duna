@@ -45,6 +45,8 @@ import type {
   VideoUsage,
 } from "./contracts";
 import { getDunaPlusEntitlement } from "./membership";
+import { loadPublicMatchScoringState } from "./match-service";
+import { loadHealthVideoOverlay } from "./health-service";
 import {
   abortR2VideoUpload,
   completeMuxLiveVideo,
@@ -63,6 +65,7 @@ import {
   replaceMuxLivePlaybackPolicy,
   signMuxPlayback,
 } from "./video-providers";
+import { loadVisionPlayback } from "./vision-service";
 
 const DEFAULT_MONTHLY_LIVE_SECONDS = 4 * 60 * 60;
 const DEFAULT_MONTHLY_UPLOAD_SECONDS = 24 * 60 * 60;
@@ -1641,6 +1644,8 @@ export async function loadVideoPlayback(input: {
   readonly actor?: ApiActor;
   readonly platform: "ios" | "web";
   readonly now: Date;
+  readonly requestId?: string;
+  readonly ipAddress?: string;
 }): Promise<VideoPlayback> {
   requireDatabase();
   const database = getDatabase();
@@ -1728,8 +1733,25 @@ export async function loadVideoPlayback(input: {
     startedAt: input.now,
     lastHeartbeatAt: input.now,
   });
+  const [summary, vision, scoring, healthOverlay] = await Promise.all([
+    loadVideoSummary(video.id),
+    loadVisionPlayback(video.id),
+    video.matchId
+      ? loadPublicMatchScoringState(video.matchId).catch(() => undefined)
+      : Promise.resolve(undefined),
+    loadHealthVideoOverlay({
+      ownerPersonId: video.ownerPersonId,
+      actor: input.actor,
+      startedAt: video.startedAt,
+      endedAt: video.endedAt,
+      durationSeconds: video.durationSeconds,
+      requestId: input.requestId,
+      ipAddress: input.ipAddress,
+      now: input.now,
+    }).catch(() => undefined),
+  ]);
   return {
-    video: await loadVideoSummary(video.id),
+    video: summary,
     provider,
     playbackId,
     playbackToken,
@@ -1738,6 +1760,16 @@ export async function loadVideoPlayback(input: {
     dataEnvironmentKey: muxDataEnvironmentKey(),
     viewSessionId,
     isOwner,
+    vision,
+    liveScore: scoring
+      ? {
+          setIndex: scoring.score.setIndex,
+          sets: scoring.score.sets.map((set) => ({ a: set.a, b: set.b })),
+          serving: scoring.score.serving,
+          status: scoring.score.status,
+        }
+      : undefined,
+    healthOverlay,
   };
 }
 

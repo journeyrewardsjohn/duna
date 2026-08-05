@@ -2108,12 +2108,14 @@ function MatchPicker({
   deviceId,
   busy,
   error,
+  onExit,
   onOpen,
 }: {
   readonly matches: OperatorMatches;
   readonly deviceId?: string;
   readonly busy: boolean;
   readonly error?: string;
+  readonly onExit: () => void;
   readonly onOpen: (match: OperatorMatch) => void;
 }) {
   return (
@@ -2121,6 +2123,19 @@ function MatchPicker({
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
+      <Pressable
+        accessibilityLabel="Exit live scoring"
+        accessibilityRole="button"
+        hitSlop={8}
+        onPress={onExit}
+        style={[styles.scorerExitButton, styles.matchPickerExit]}
+      >
+        <Text style={styles.scorerExitIcon}>‹</Text>
+        <View>
+          <Text style={styles.scorerExitText}>Exit scoring</Text>
+          <Text style={styles.scorerExitMeta}>Back to Today</Text>
+        </View>
+      </Pressable>
       <Header context="AUTHORIZED MATCH SCORING" />
       <PageTitle eyebrow="SELECT A MATCH" title="Score." />
       <Text style={styles.subhead}>
@@ -2199,8 +2214,10 @@ function MatchPicker({
   );
 }
 
-function ScorerScreen() {
+function ScorerScreen({ onExit }: { readonly onExit: () => void }) {
   const { client, matches = [], mode } = useProRuntime();
+  const { width: scorerWidth } = useWindowDimensions();
+  const expandedScorer = scorerWidth >= 700;
   const [previewSystem, setPreviewSystem] = useState<ScoringSystem>("rally");
   const [events, setEvents] = useState<readonly ScoreEvent[]>(initialEvents);
   const [pending, setPending] = useState<readonly PendingScoreEvent[]>([]);
@@ -2236,12 +2253,16 @@ function ScorerScreen() {
   }, [scoreComplete]);
 
   useEffect(() => {
+    if (mode === "preview") {
+      setDeviceId("duna-pro-preview");
+      return;
+    }
     loadDeviceId()
       .then(setDeviceId)
       .catch((reason) => {
         setError(displayError(reason));
       });
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     const key =
@@ -2437,6 +2458,7 @@ function ScorerScreen() {
         deviceId={deviceId}
         error={error}
         matches={matches}
+        onExit={onExit}
         onOpen={(match) => void openMatch(match)}
       />
     );
@@ -2445,80 +2467,139 @@ function ScorerScreen() {
   return (
     <View style={styles.scorer}>
       <View style={styles.scorerTop}>
-        <View>
-          <Text style={styles.eyebrow}>
+        <Pressable
+          accessibilityLabel="Exit live scoring"
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={onExit}
+          style={[
+            styles.scorerExitButton,
+            expandedScorer && styles.scorerExitButtonExpanded,
+          ]}
+        >
+          <Text
+            style={[
+              styles.scorerExitIcon,
+              expandedScorer && styles.scorerExitIconExpanded,
+            ]}
+          >
+            ‹
+          </Text>
+          <View>
+            <Text
+              style={[
+                styles.scorerExitText,
+                expandedScorer && styles.scorerExitTextExpanded,
+              ]}
+            >
+              Exit scoring
+            </Text>
+            <Text
+              style={[
+                styles.scorerExitMeta,
+                expandedScorer && styles.scorerExitMetaExpanded,
+              ]}
+            >
+              Progress is saved
+            </Text>
+          </View>
+        </Pressable>
+        <View style={styles.scorerIdentity}>
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.scorerMatch,
+              expandedScorer && styles.scorerMatchExpanded,
+            ]}
+          >
             {selectedMatch
               ? `${selectedMatch.teamA.name} · ${selectedMatch.teamB.name}`
               : "PREVIEW MATCH · EXHIBITION"}
           </Text>
-          <Text style={styles.scorerVenue}>
+          <Text
+            style={[
+              styles.scorerVenue,
+              expandedScorer && styles.scorerVenueExpanded,
+            ]}
+          >
             {serverState?.venueName ?? "Manhattan Beach · Court 4"}
           </Text>
         </View>
-        <Pill tone={scoreComplete ? "positive" : "live"}>
-          {scoreComplete
-            ? "Complete"
-            : mode === "preview"
-              ? "Preview"
-              : "Live scoring"}
-        </Pill>
-        <Pressable
-          disabled={busy}
-          onPress={() => void synchronize()}
-          style={styles.syncButton}
-        >
-          <Text style={[styles.syncIcon, offline && { color: colors.warning }]}>
-            {offline ? "◌" : "●"}
-          </Text>
-          <Text style={styles.syncText}>
-            {mode === "preview"
-              ? "Preview"
-              : offline
-                ? "On device"
+        <View style={styles.scorerStatusGroup}>
+          <Pill tone={scoreComplete ? "positive" : "live"}>
+            {scoreComplete
+              ? "Complete"
+              : mode === "preview"
+                ? "Preview"
+                : "Live"}
+          </Pill>
+          <Pressable
+            disabled={busy}
+            onPress={() => void synchronize()}
+            style={styles.syncButton}
+          >
+            <Text
+              style={[styles.syncIcon, offline && { color: colors.warning }]}
+            >
+              {offline ? "◌" : "●"}
+            </Text>
+            <Text style={styles.syncText}>
+              {offline
+                ? `${pending.length} saved`
                 : busy
                   ? "Syncing"
                   : "Synced"}
-          </Text>
-        </Pressable>
-      </View>
-      <View style={styles.scorerFormat}>
-        <View style={styles.segmented}>
-          <Pressable
-            disabled={mode === "live"}
-            onPress={() => setPreviewSystem("rally")}
-            style={[
-              styles.segmentButton,
-              system === "rally" && styles.segmentActive,
-            ]}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                system === "rally" && styles.segmentTextActive,
-              ]}
-            >
-              Rally
-            </Text>
-          </Pressable>
-          <Pressable
-            disabled={mode === "live"}
-            onPress={() => setPreviewSystem("sideout")}
-            style={[
-              styles.segmentButton,
-              system === "sideout" && styles.segmentActive,
-            ]}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                system === "sideout" && styles.segmentTextActive,
-              ]}
-            >
-              Sideout
             </Text>
           </Pressable>
         </View>
-        <Text style={styles.metaText}>
+      </View>
+      <View style={styles.scorerFormat}>
+        {mode === "preview" && (
+          <View style={styles.segmented}>
+            <Pressable
+              onPress={() => setPreviewSystem("rally")}
+              style={[
+                styles.segmentButton,
+                expandedScorer && styles.segmentButtonExpanded,
+                system === "rally" && styles.segmentActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  expandedScorer && styles.segmentTextExpanded,
+                  system === "rally" && styles.segmentTextActive,
+                ]}
+              >
+                Rally
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setPreviewSystem("sideout")}
+              style={[
+                styles.segmentButton,
+                expandedScorer && styles.segmentButtonExpanded,
+                system === "sideout" && styles.segmentActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  expandedScorer && styles.segmentTextExpanded,
+                  system === "sideout" && styles.segmentTextActive,
+                ]}
+              >
+                Sideout
+              </Text>
+            </Pressable>
+          </View>
+        )}
+        <Text
+          style={[
+            styles.scorerFormatText,
+            expandedScorer && styles.scorerFormatTextExpanded,
+          ]}
+        >
           Set {state.setIndex + 1} · best of 3 · to{" "}
           {standardBeachFormat.pointTargets[state.setIndex] ?? 21}
         </Text>
@@ -2529,7 +2610,7 @@ function ScorerScreen() {
           <Text style={styles.scoreNoticeTitle}>
             {state.technicalTimeoutDue ? "Technical timeout" : "Switch sides"}
           </Text>
-          <Text style={styles.metaText}>
+          <Text style={styles.scoreNoticeBody}>
             Confirm when both teams are ready.
           </Text>
         </View>
@@ -2544,25 +2625,65 @@ function ScorerScreen() {
             <View
               style={[styles.serveDot, state.serving !== "A" && { opacity: 0 }]}
             />
-            <Text style={styles.serveText}>
+            <Text
+              style={[
+                styles.serveText,
+                expandedScorer && styles.serveTextExpanded,
+              ]}
+            >
               {state.serving === "A" ? "SERVING" : "RECEIVING"}
             </Text>
           </View>
           <View style={styles.teamPeople}>
-            <View style={styles.scoreAvatar}>
-              <Text style={styles.scoreAvatarText}>
+            <View
+              style={[
+                styles.scoreAvatar,
+                expandedScorer && styles.scoreAvatarExpanded,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.scoreAvatarText,
+                  expandedScorer && styles.scoreAvatarTextExpanded,
+                ]}
+              >
                 {teamA?.people[0]?.initials ?? "ML"}
               </Text>
             </View>
-            <View style={styles.scoreAvatar}>
-              <Text style={styles.scoreAvatarText}>
+            <View
+              style={[
+                styles.scoreAvatar,
+                expandedScorer && styles.scoreAvatarExpanded,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.scoreAvatarText,
+                  expandedScorer && styles.scoreAvatarTextExpanded,
+                ]}
+              >
                 {teamA?.people[1]?.initials ?? "TP"}
               </Text>
             </View>
-            <Text style={styles.teamName}>{teamA?.name ?? "Mara / Theo"}</Text>
+            <Text
+              style={[
+                styles.teamName,
+                expandedScorer && styles.teamNameExpanded,
+              ]}
+            >
+              {teamA?.name ?? "Mara / Theo"}
+            </Text>
           </View>
-          <Text style={styles.bigScore}>{current.a}</Text>
-          <Text style={styles.tapHint}>TAP ANYWHERE FOR POINT</Text>
+          <Text
+            style={[styles.bigScore, expandedScorer && styles.bigScoreExpanded]}
+          >
+            {current.a}
+          </Text>
+          <Text
+            style={[styles.tapHint, expandedScorer && styles.tapHintExpanded]}
+          >
+            TAP ANYWHERE FOR POINT
+          </Text>
         </Pressable>
         <View style={styles.versus}>
           <Text style={styles.versusText}>VS</Text>
@@ -2576,25 +2697,65 @@ function ScorerScreen() {
             <View
               style={[styles.serveDot, state.serving !== "B" && { opacity: 0 }]}
             />
-            <Text style={styles.serveText}>
+            <Text
+              style={[
+                styles.serveText,
+                expandedScorer && styles.serveTextExpanded,
+              ]}
+            >
               {state.serving === "B" ? "SERVING" : "RECEIVING"}
             </Text>
           </View>
           <View style={styles.teamPeople}>
-            <View style={styles.scoreAvatar}>
-              <Text style={styles.scoreAvatarText}>
+            <View
+              style={[
+                styles.scoreAvatar,
+                expandedScorer && styles.scoreAvatarExpanded,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.scoreAvatarText,
+                  expandedScorer && styles.scoreAvatarTextExpanded,
+                ]}
+              >
                 {teamB?.people[0]?.initials ?? "NW"}
               </Text>
             </View>
-            <View style={styles.scoreAvatar}>
-              <Text style={styles.scoreAvatarText}>
+            <View
+              style={[
+                styles.scoreAvatar,
+                expandedScorer && styles.scoreAvatarExpanded,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.scoreAvatarText,
+                  expandedScorer && styles.scoreAvatarTextExpanded,
+                ]}
+              >
                 {teamB?.people[1]?.initials ?? "ET"}
               </Text>
             </View>
-            <Text style={styles.teamName}>{teamB?.name ?? "Noa / Elena"}</Text>
+            <Text
+              style={[
+                styles.teamName,
+                expandedScorer && styles.teamNameExpanded,
+              ]}
+            >
+              {teamB?.name ?? "Noa / Elena"}
+            </Text>
           </View>
-          <Text style={styles.bigScore}>{current.b}</Text>
-          <Text style={styles.tapHint}>TAP ANYWHERE FOR POINT</Text>
+          <Text
+            style={[styles.bigScore, expandedScorer && styles.bigScoreExpanded]}
+          >
+            {current.b}
+          </Text>
+          <Text
+            style={[styles.tapHint, expandedScorer && styles.tapHintExpanded]}
+          >
+            TAP ANYWHERE FOR POINT
+          </Text>
         </Pressable>
       </View>
       <View style={styles.scorerBottom}>
@@ -2614,33 +2775,13 @@ function ScorerScreen() {
           >
             {offline ? "◌" : "●"}
           </Text>
-          <View>
-            <Text style={styles.rowTitle}>
-              {mode === "preview"
-                ? "Preview score only"
-                : offline
-                  ? "Saved on this device"
-                  : busy
-                    ? "Sending score event"
-                    : "Server and device agree"}
-            </Text>
-            <Text style={styles.metaText}>
-              {mode === "preview"
-                ? "No live match or server record is changed"
-                : offline
-                  ? `${pending.length} events pending upload`
-                  : `${Math.max(0, events.length - 1)} score events synced`}
-            </Text>
-            {mode !== "preview" && serverState?.reporting.lastReporter ? (
-              <Text style={styles.metaText}>
-                Last reported by{" "}
-                {serverState.reporting.lastReporter.displayName}
-                {serverState.reporting.reporters.length > 1
-                  ? ` · ${serverState.reporting.reporters.length} scorers`
-                  : ""}
-              </Text>
-            ) : null}
-          </View>
+          <Text style={styles.syncSummaryText}>
+            {mode === "preview"
+              ? "Preview only"
+              : offline
+                ? `${pending.length} waiting`
+                : "Score saved"}
+          </Text>
         </View>
         <View style={styles.sets}>
           {state.sets.map((set, index) => (
@@ -2911,15 +3052,10 @@ function ProApp() {
               />
             )}
             {tab === "people" && <PeopleScreen />}
-            {tab === "score" && <ScorerScreen />}
+            {tab === "score" && <ScorerScreen onExit={() => setTab("today")} />}
             {tab === "more" && <MoreScreen onCalendar={() => openCalendar()} />}
           </Animated.View>
           {tab !== "score" && <TabBar active={tab} onChange={changeTab} />}
-          {tab === "score" && (
-            <Pressable onPress={() => setTab("today")} style={styles.exitScore}>
-              <Text style={styles.exitScoreText}>‹ Exit</Text>
-            </Pressable>
-          )}
         </View>
       </SafeAreaView>
     </ThemeContext.Provider>
@@ -4188,33 +4324,77 @@ function createStyles(palette: Palette) {
       borderBottomColor: rgba(colors.overlayRgb, 0.07),
       borderBottomWidth: 1,
       flexDirection: "row",
-      gap: 10,
+      gap: 14,
       justifyContent: "space-between",
-      padding: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
     },
+    scorerExitButton: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.06),
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 14,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 7,
+      minHeight: 48,
+      paddingHorizontal: 12,
+    },
+    scorerExitButtonExpanded: { minHeight: 56, paddingHorizontal: 16 },
+    scorerExitIcon: {
+      color: colors.aqua,
+      fontSize: 27,
+      fontWeight: "500",
+      lineHeight: 28,
+    },
+    scorerExitIconExpanded: { fontSize: 32, lineHeight: 33 },
+    scorerExitText: { color: colors.bone, fontSize: 13, fontWeight: "800" },
+    scorerExitTextExpanded: { fontSize: 16 },
+    scorerExitMeta: { color: colors.muted, fontSize: 10, marginTop: 1 },
+    scorerExitMetaExpanded: { fontSize: 12 },
+    matchPickerExit: { alignSelf: "flex-start", marginBottom: 12 },
+    scorerIdentity: { flex: 1, minWidth: 0 },
+    scorerMatch: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.4,
+    },
+    scorerMatchExpanded: { fontSize: 15 },
     scorerVenue: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 14,
       fontWeight: "700",
-      marginTop: 3,
+      marginTop: 4,
+    },
+    scorerVenueExpanded: { fontSize: 18 },
+    scorerStatusGroup: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      gap: 8,
     },
     syncButton: {
       alignItems: "center",
       backgroundColor: rgba(colors.overlayRgb, 0.04),
-      borderRadius: 16,
+      borderRadius: 18,
       flexDirection: "row",
-      gap: 4,
-      paddingHorizontal: 8,
-      paddingVertical: 6,
+      gap: 6,
+      minHeight: 38,
+      paddingHorizontal: 11,
+      paddingVertical: 8,
     },
-    syncIcon: { color: colors.positive, fontSize: 10 },
-    syncText: { color: colors.muted, fontSize: 10 },
+    syncIcon: { color: colors.positive, fontSize: 11 },
+    syncText: { color: colors.muted, fontSize: 11, fontWeight: "700" },
     scorerFormat: {
       alignItems: "center",
       flexDirection: "row",
-      justifyContent: "space-between",
-      padding: 8,
+      justifyContent: "center",
+      minHeight: 44,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
     },
+    scorerFormatText: { color: colors.muted, fontSize: 13, fontWeight: "700" },
+    scorerFormatTextExpanded: { fontSize: 16 },
     segmented: {
       backgroundColor: rgba(colors.overlayRgb, 0.05),
       borderRadius: 18,
@@ -4226,22 +4406,26 @@ function createStyles(palette: Palette) {
       paddingHorizontal: 11,
       paddingVertical: 6,
     },
+    segmentButtonExpanded: { paddingHorizontal: 16, paddingVertical: 8 },
     segmentActive: { backgroundColor: colors.aqua },
-    segmentText: { color: colors.muted, fontSize: 10, fontWeight: "700" },
+    segmentText: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+    segmentTextExpanded: { fontSize: 14 },
     segmentTextActive: { color: colors.onAccent },
     scoreNotice: {
       alignItems: "center",
       backgroundColor: colors.warning,
       flexDirection: "row",
       gap: 8,
-      padding: 7,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
     },
-    scoreNoticeIcon: { color: colors.onAccent, fontSize: 14 },
+    scoreNoticeIcon: { color: colors.onAccent, fontSize: 18 },
     scoreNoticeTitle: {
       color: colors.onAccent,
-      fontSize: 10,
+      fontSize: 13,
       fontWeight: "900",
     },
+    scoreNoticeBody: { color: colors.onAccent, fontSize: 12 },
     court: { flex: 1, flexDirection: "row", minHeight: 0 },
     teamButton: {
       alignItems: "center",
@@ -4261,7 +4445,7 @@ function createStyles(palette: Palette) {
       flexDirection: "row",
       gap: 4,
       position: "absolute",
-      top: 12,
+      top: 15,
     },
     serveDot: {
       backgroundColor: colors.aqua,
@@ -4269,26 +4453,39 @@ function createStyles(palette: Palette) {
       height: 6,
       width: 6,
     },
-    serveText: { color: colors.muted, fontSize: 10, letterSpacing: 0.7 },
+    serveText: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.7,
+    },
+    serveTextExpanded: { fontSize: 14 },
     teamPeople: { alignItems: "center", flexDirection: "row" },
     scoreAvatar: {
       alignItems: "center",
       backgroundColor: colors.navyLift,
       borderColor: colors.depth,
-      borderRadius: 13,
+      borderRadius: 18,
       borderWidth: 2,
-      height: 26,
+      height: 36,
       justifyContent: "center",
       marginLeft: -4,
-      width: 26,
+      width: 36,
+    },
+    scoreAvatarExpanded: {
+      borderRadius: 24,
+      height: 48,
+      width: 48,
     },
     scoreAvatarText: { color: colors.bone, fontSize: 10, fontWeight: "900" },
+    scoreAvatarTextExpanded: { fontSize: 13 },
     teamName: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 16,
       fontWeight: "800",
-      marginLeft: 6,
+      marginLeft: 9,
     },
+    teamNameExpanded: { fontSize: 22, marginLeft: 12 },
     bigScore: {
       color: colors.bone,
       fontSize: 124,
@@ -4297,7 +4494,19 @@ function createStyles(palette: Palette) {
       lineHeight: 130,
       marginVertical: 4,
     },
-    tapHint: { color: colors.muted, fontSize: 10, letterSpacing: 0.6 },
+    bigScoreExpanded: {
+      fontSize: 184,
+      letterSpacing: -14,
+      lineHeight: 192,
+      marginVertical: 12,
+    },
+    tapHint: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.5,
+    },
+    tapHintExpanded: { fontSize: 14, letterSpacing: 0.7 },
     versus: {
       alignItems: "center",
       backgroundColor: colors.ink,
@@ -4322,41 +4531,43 @@ function createStyles(palette: Palette) {
       flexDirection: "row",
       gap: 8,
       justifyContent: "space-between",
-      padding: 8,
+      minHeight: 62,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
     },
     secondaryAction: {
       backgroundColor: rgba(colors.overlayRgb, 0.05),
       borderColor: rgba(colors.overlayRgb, 0.08),
       borderRadius: 17,
       borderWidth: 1,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
+      minHeight: 42,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
     },
     secondaryActionText: {
       color: colors.bone,
-      fontSize: 10,
-      fontWeight: "700",
+      fontSize: 13,
+      fontWeight: "800",
     },
     syncSummary: { alignItems: "center", flexDirection: "row", gap: 6 },
+    syncSummaryText: { color: colors.muted, fontSize: 11, fontWeight: "700" },
     sets: { flexDirection: "row", gap: 4 },
     setBox: {
       backgroundColor: rgba(colors.overlayRgb, 0.04),
-      borderRadius: 7,
-      paddingHorizontal: 7,
-      paddingVertical: 4,
+      borderRadius: 9,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
     },
     setBoxActive: { backgroundColor: rgba(colors.accentRgb, 0.09) },
-    setLabel: { color: colors.muted, fontSize: 10 },
+    setLabel: { color: colors.muted, fontSize: 10, fontWeight: "700" },
     setScore: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 13,
       fontWeight: "800",
       marginTop: 2,
     },
     moreScore: { padding: 6 },
     moreScoreText: { color: colors.muted },
-    exitScore: { left: 9, position: "absolute", top: 12, zIndex: 8 },
-    exitScoreText: { color: colors.aqua, fontSize: 10, fontWeight: "700" },
     balanceCard: {
       backgroundColor: colors.navy,
       borderColor: rgba(colors.warningRgb, 0.16),

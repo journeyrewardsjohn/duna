@@ -6,6 +6,8 @@ import {
   videoPlaybackSchema,
   videoAssociationOptionSchema,
   videoUsageSchema,
+  visionSessionSettingsSchema,
+  visionTimelineEventSchema,
 } from "./contracts";
 import {
   buildMuxLiveStreamInput,
@@ -164,6 +166,76 @@ describe("Duna Video contracts", () => {
     });
     expect(() =>
       videoPlaybackSchema.parse({ ...base, provider: "unknown" }),
+    ).toThrow();
+  });
+
+  it("keeps remote calibration normalized and explicitly controls score overlays", () => {
+    const settings = visionSessionSettingsSchema.parse({
+      courtWidthMeters: 8,
+      courtLengthMeters: 16,
+      netHeightMeters: 2.43,
+      cameraHeightMeters: 2.1,
+      overlayScoreboard: true,
+      teamA: "Duna Blue",
+      teamB: "Duna Sand",
+      corners: [
+        { x: 0.08, y: 0.89 },
+        { x: 0.92, y: 0.89 },
+        { x: 0.72, y: 0.22 },
+        { x: 0.28, y: 0.22 },
+      ],
+    });
+    expect(settings).toMatchObject({
+      overlayScoreboard: true,
+      cameraHeightMeters: 2.1,
+    });
+    expect(() =>
+      visionSessionSettingsSchema.parse({
+        ...settings,
+        corners: settings.corners?.map((corner, index) =>
+          index === 0 ? { x: -0.1, y: corner.y } : corner,
+        ),
+      }),
+    ).toThrow();
+  });
+
+  it("accepts append-only Watch moments with an overlay-ready score snapshot", () => {
+    const sessionId = crypto.randomUUID();
+    const event = visionTimelineEventSchema.parse({
+      id: crypto.randomUUID(),
+      sessionId,
+      source: "apple-watch",
+      type: "rally-won",
+      winnerSide: "A",
+      elapsedMs: 84_000,
+      occurredAt: "2026-08-04T18:01:24.000Z",
+      score: {
+        setIndex: 0,
+        sets: [{ a: 8, b: 6 }],
+        serving: "A",
+        status: "live",
+      },
+    });
+    expect(event).toMatchObject({
+      sessionId,
+      type: "rally-won",
+      elapsedMs: 84_000,
+      score: { sets: [{ a: 8, b: 6 }] },
+    });
+    expect(() =>
+      visionTimelineEventSchema.parse({
+        ...event,
+        id: crypto.randomUUID(),
+        type: "undo",
+        targetEventId: undefined,
+      }),
+    ).toThrow();
+    expect(() =>
+      visionTimelineEventSchema.parse({
+        ...event,
+        id: crypto.randomUUID(),
+        score: { ...event.score, setIndex: 4 },
+      }),
     ).toThrow();
   });
 

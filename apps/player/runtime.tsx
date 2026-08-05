@@ -67,7 +67,9 @@ export interface PlayerRuntime {
 const RuntimeContext = createContext<PlayerRuntime | undefined>(undefined);
 const workosClientId = process.env.EXPO_PUBLIC_WORKOS_CLIENT_ID?.trim();
 const authBaseUrl = (
-  process.env.EXPO_PUBLIC_DUNA_WEB_URL?.trim() || "https://duna-web.vercel.app"
+  process.env.EXPO_PUBLIC_DUNA_AUTH_URL?.trim() ||
+  process.env.EXPO_PUBLIC_DUNA_WEB_URL?.trim() ||
+  "https://duna.coach"
 ).replace(/\/+$/, "");
 const previewEnabled = process.env.EXPO_PUBLIC_DUNA_PREVIEW === "true";
 // Metro requires static module references so both hero assets ship in the native bundle.

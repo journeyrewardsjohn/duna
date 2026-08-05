@@ -68,6 +68,12 @@ export interface DunaVideoCaptureViewProps {
   readonly onCaptureError?: (event: {
     readonly nativeEvent: { readonly message: string };
   }) => void;
+  readonly onPreview?: (event: {
+    readonly nativeEvent: {
+      readonly jpegBase64: string;
+      readonly capturedAt: string;
+    };
+  }) => void;
 }
 
 export type DunaVideoCaptureModuleEvents = Record<string, never>;
