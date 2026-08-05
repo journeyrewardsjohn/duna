@@ -756,6 +756,7 @@ export async function createTerminalPaymentIntent(input: {
       capture_method: "automatic",
       payment_method_types: ["card_present"],
       application_fee_amount: input.applicationFeeMinor,
+      on_behalf_of: input.connectedAccountId,
       transfer_data: { destination: input.connectedAccountId },
       metadata: {
         dunaOrderId: input.orderId,

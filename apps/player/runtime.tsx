@@ -265,11 +265,11 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         client.player.wallet.query(),
         client.player.settings.query(),
         client.player.coachingNotes.query().catch(() => []),
-        client.public.players.query({ limit: 50 }),
-        client.public.venues.query(),
+        client.public.players.query({ limit: 50 }).catch(() => []),
+        client.public.venues.query().catch(() => []),
         client.public.proCoverage.query().catch(() => undefined),
-        client.public.coaches.query(),
-        client.player.organizationWallets.query(),
+        client.public.coaches.query().catch(() => []),
+        client.player.organizationWallets.query().catch(() => []),
       ]);
       setDashboard(nextDashboard);
       setWallet(nextWallet);
@@ -282,9 +282,11 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       setOrganizationWallets(nextOrganizationWallets);
     } catch (reason) {
       setError(
-        reason instanceof Error
-          ? reason.message
-          : "Duna could not load your account.",
+        reason instanceof Error && /abort|timed? out/i.test(reason.message)
+          ? "Duna took too long to reach the secure account service. Check your connection and try again."
+          : reason instanceof Error
+            ? reason.message
+            : "Duna could not load your account.",
       );
     } finally {
       setLoading(false);
