@@ -3,6 +3,7 @@ import {
   refreshAvpLeague,
   refreshActiveFivbEvents,
   refreshFivbEventIndex,
+  refreshRankedPlayerHistories,
   refreshSandRatingNetwork,
   refreshWorldRankings,
   researchRankedPlayers,
@@ -42,11 +43,12 @@ export async function GET(request: Request) {
       );
     }
     if (mode === "players") {
+      const histories = await refreshRankedPlayerHistories({ limit: 2 });
       const [research, notifications] = await Promise.all([
         researchRankedPlayers({ limit: 2 }),
         dispatchPlayerFollowNotifications({ limit: 50 }),
       ]);
-      return NextResponse.json({ research, notifications });
+      return NextResponse.json({ histories, research, notifications });
     }
     if (mode === "sandrating") {
       return NextResponse.json(

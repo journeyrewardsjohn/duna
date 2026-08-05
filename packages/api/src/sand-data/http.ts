@@ -170,12 +170,17 @@ export async function scrapeJson<T>(
   options: {
     readonly method?: "GET" | "POST";
     readonly body?: unknown;
+    readonly headers?: Readonly<Record<string, string>>;
+    readonly timeoutMs?: number;
   } = {},
 ): Promise<T> {
   try {
     return await withRetry(source, async () => {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 45_000);
+      const timer = setTimeout(
+        () => controller.abort(),
+        options.timeoutMs ?? 45_000,
+      );
       try {
         const hasBody = options.body !== undefined;
         const response = await fetch(url, {
@@ -183,6 +188,7 @@ export async function scrapeJson<T>(
             Accept: "application/json",
             ...(hasBody ? { "Content-Type": "application/json" } : {}),
             "User-Agent": "DunaSandData/1.0 (+https://duna.sport)",
+            ...options.headers,
           },
           method: options.method ?? (hasBody ? "POST" : "GET"),
           body: hasBody ? JSON.stringify(options.body) : undefined,

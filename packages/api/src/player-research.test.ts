@@ -26,6 +26,16 @@ describe("player research evidence workflow", () => {
                   markdown: "Alex Rivera represents the United States.",
                 },
                 {
+                  title: "Alex Rivera : Career",
+                  url: "http://www.bvbinfo.com/player.asp?ID=13454",
+                  description: "Alex Rivera career results and match history.",
+                },
+                {
+                  title: "Alex Rivera | Volleyball Life",
+                  url: "https://volleyballlife.com/player/14063",
+                  description: "Alex Rivera event history.",
+                },
+                {
                   title: "Legacy rating profile",
                   url: "https://sandrating.com/profile/649",
                   description: "This source must never reach synthesis.",
@@ -108,8 +118,24 @@ describe("player research evidence workflow", () => {
       shortBio: "Alex Rivera is a United States beach-volleyball player.",
       countryCode: "US",
       careerStats: { events: 18 },
-      evidence: [{ url: officialUrl }],
+      sourceProfiles: [
+        {
+          source: "bvbinfo",
+          externalId: "13454",
+          url: "http://www.bvbinfo.com/player.asp?ID=13454",
+          confidence: 98,
+        },
+        {
+          source: "volleyball-life",
+          externalId: "14063",
+          url: "https://volleyballlife.com/player/14063",
+          confidence: 98,
+        },
+      ],
     });
+    expect(proposal.evidence).toEqual(
+      expect.arrayContaining([expect.objectContaining({ url: officialUrl })]),
+    );
     expect(proposal.collegeName).toBeUndefined();
     expect(proposal.claims).toHaveLength(3);
     expect(fetchMock).toHaveBeenCalledTimes(2);

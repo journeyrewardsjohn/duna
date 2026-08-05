@@ -68,6 +68,7 @@ import {
   safeExternalHandle,
   sourceMatchFingerprint,
 } from "./normalize";
+import { dedupeWorldRankingRows } from "./rankings";
 import {
   createProfessionalEventResearchProposal,
   parseProfessionalEventResearchProposal,
@@ -252,6 +253,27 @@ export function shouldCreateUnclaimedSourceProfile(input: {
     return false;
   }
   return true;
+}
+
+export function shouldAutoLinkProfessionalSource(input: {
+  readonly source: SandDataSource;
+  readonly externalName: string;
+  readonly candidateName: string;
+  readonly candidateClaimStatus: string;
+  readonly scoreBps: number;
+  readonly tied: boolean;
+  readonly isProfessional: boolean;
+}): boolean {
+  return (
+    (input.source === "bvbinfo" || input.source === "volleyball-life") &&
+    input.isProfessional &&
+    !input.tied &&
+    input.scoreBps === 9_500 &&
+    input.candidateClaimStatus === "unclaimed" &&
+    normalizePersonName(input.externalName).split(" ").length >= 2 &&
+    normalizePersonName(input.externalName) ===
+      normalizePersonName(input.candidateName)
+  );
 }
 
 function optionalSnapshotString(value: unknown): string | undefined {
@@ -556,6 +578,29 @@ async function persistExternalPlayers(input: {
       const createClaimableRankingSeed =
         input.source === "sandrating" && external.raw.rankingSeed === true;
       if (
+        best &&
+        shouldAutoLinkProfessionalSource({
+          source: input.source,
+          externalName: external.displayName,
+          candidateName: best.candidate.displayName,
+          candidateClaimStatus: best.candidate.profileClaimStatus,
+          scoreBps: best.score,
+          tied: Boolean(tied),
+          isProfessional: external.isProfessional === true,
+        })
+      ) {
+        personId = best.candidate.id;
+        mappingState = "linked";
+        mappingScoreBps = 9_850;
+        evidence = {
+          method: "professional-exact-name-unclaimed",
+          candidatePersonId: best.candidate.id,
+          candidateHandle: best.candidate.handle,
+          candidateDisplayName: best.candidate.displayName,
+          source: input.source,
+        };
+        linked += 1;
+      } else if (
         best &&
         !tied &&
         input.source === "sandrating" &&
@@ -1223,20 +1268,22 @@ async function persistWorldRankings(input: {
       ranking,
     ]),
   );
-  const rankingRows = [...rankingByIdentity.values()].map((ranking) => ({
-    sourceId: input.sourceId,
-    rankingDate: ranking.rankingDate,
-    genderCategory: ranking.genderCategory,
-    rank: ranking.rank,
-    points: ranking.points,
-    externalPersonId: ranking.externalPersonId,
-    displayName: ranking.displayName,
-    countryCode: storedCountryCode(ranking.countryCode),
-    personId: peopleByExternalId.get(ranking.externalPersonId),
-    previousRank: ranking.previousRank,
-    rawPayload: ranking.raw,
-    createdAt: input.now,
-  }));
+  const rankingRows = dedupeWorldRankingRows(
+    [...rankingByIdentity.values()].map((ranking) => ({
+      sourceId: input.sourceId,
+      rankingDate: ranking.rankingDate,
+      genderCategory: ranking.genderCategory,
+      rank: ranking.rank,
+      points: ranking.points,
+      externalPersonId: ranking.externalPersonId,
+      displayName: ranking.displayName,
+      countryCode: storedCountryCode(ranking.countryCode),
+      personId: peopleByExternalId.get(ranking.externalPersonId),
+      previousRank: ranking.previousRank,
+      rawPayload: ranking.raw,
+      createdAt: input.now,
+    })),
+  );
   if (rankingRows.length === 0) return 0;
   const snapshotKeys = new Map(
     rankingRows.map((ranking) => [
@@ -1348,11 +1395,16 @@ async function executeImport(input: {
       events: eventCount,
       rankings: rankingCount,
     };
+    const objectiveStatus = unknownRecord(result.checkpoint).objectiveStatus;
+    const runStatus =
+      objectiveStatus === "partial" || objectiveStatus === "degraded"
+        ? ("partial" as const)
+        : ("succeeded" as const);
     await database.batch([
       database
         .update(sandIngestionRuns)
         .set({
-          status: "succeeded",
+          status: runStatus,
           requestedUrl: result.requestedUrl,
           counters,
           checkpoint: result.checkpoint ?? {},
@@ -1370,7 +1422,7 @@ async function executeImport(input: {
         entityType: "sand-ingestion-run",
         entityId: run.id,
         afterHash: stableHash(counters),
-        reason: `${source.name} import completed into the staged evidence pipeline.`,
+        reason: `${source.name} import completed into the staged evidence pipeline with ${String(objectiveStatus || "met")} objective coverage.`,
         traceId: run.id,
         createdAt: input.now,
       }),
@@ -1389,7 +1441,7 @@ async function executeImport(input: {
         now: input.now,
       }).catch(() => undefined);
     }
-    return { runId: run.id, status: "succeeded" as const, counters };
+    return { runId: run.id, status: runStatus, counters };
   } catch (error) {
     const upstream = error instanceof SandDataUpstreamError ? error : undefined;
     await database
@@ -3525,7 +3577,7 @@ export async function loadPublicWorldRankings() {
       }),
     ),
   ) as Record<(typeof genders)[number], string | undefined>;
-  const worldRows = (
+  const worldRows = dedupeWorldRankingRows(
     await Promise.all(
       genders.map(async (genderCategory) => {
         const rankingDate = latestDates[genderCategory];
@@ -3537,6 +3589,7 @@ export async function loadPublicWorldRankings() {
             rank: worldRankings.rank,
             previousRank: worldRankings.previousRank,
             points: worldRankings.points,
+            externalPersonId: worldRankings.externalPersonId,
             displayName: worldRankings.displayName,
             countryCode: worldRankings.countryCode,
             personId: worldRankings.personId,
@@ -3568,8 +3621,8 @@ export async function loadPublicWorldRankings() {
           .orderBy(asc(worldRankings.rank))
           .limit(200);
       }),
-    )
-  ).flat();
+    ).then((rows) => rows.flat()),
+  );
   const worldRankByPerson = new Map(
     worldRows.flatMap((row) =>
       row.personId

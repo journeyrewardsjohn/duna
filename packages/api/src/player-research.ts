@@ -114,6 +114,13 @@ export interface PlayerResearchEvidence {
   readonly markdown?: string;
 }
 
+export interface PlayerSourceProfileDiscovery {
+  readonly source: "bvbinfo" | "volleyball-life";
+  readonly externalId: string;
+  readonly url: string;
+  readonly confidence: number;
+}
+
 export interface PlayerResearchProposal extends Record<string, unknown> {
   readonly id: string;
   readonly query: string;
@@ -150,6 +157,7 @@ export interface PlayerResearchProposal extends Record<string, unknown> {
   }[];
   readonly claims: readonly z.infer<typeof claimSchema>[];
   readonly evidence: readonly Omit<PlayerResearchEvidence, "markdown">[];
+  readonly sourceProfiles: readonly PlayerSourceProfileDiscovery[];
   readonly appliedAt?: string;
 }
 
@@ -199,6 +207,16 @@ const storedProposalSchema = z.object({
       description: z.string().trim().max(1_000).optional(),
     }),
   ),
+  sourceProfiles: z
+    .array(
+      z.object({
+        source: z.enum(["bvbinfo", "volleyball-life"]),
+        externalId: z.string().trim().regex(/^\d+$/),
+        url: z.url(),
+        confidence: z.number().int().min(0).max(100),
+      }),
+    )
+    .default([]),
   appliedAt: z.iso.datetime().optional(),
 });
 
@@ -228,6 +246,65 @@ function validHttpUrl(value: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function normalizedResearchName(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replaceAll(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replaceAll(/\s+/g, " ");
+}
+
+export function discoverPlayerSourceProfiles(
+  displayName: string,
+  evidence: readonly PlayerResearchEvidence[],
+): readonly PlayerSourceProfileDiscovery[] {
+  const targetName = normalizedResearchName(displayName);
+  if (targetName.split(" ").length < 2) return [];
+  const discoveries = new Map<string, PlayerSourceProfileDiscovery>();
+  for (const item of evidence) {
+    const evidenceText = normalizedResearchName(
+      [item.title, item.description, item.markdown].filter(Boolean).join(" "),
+    );
+    if (!evidenceText.includes(targetName)) continue;
+    let url: URL;
+    try {
+      url = new URL(item.url);
+    } catch {
+      continue;
+    }
+    const hostname = url.hostname.toLowerCase();
+    if (/(^|\.)bvbinfo\.com$/.test(hostname)) {
+      const externalId =
+        url.searchParams.get("ID") ?? url.searchParams.get("id");
+      if (externalId && /^\d+$/.test(externalId)) {
+        discoveries.set(`bvbinfo:${externalId}`, {
+          source: "bvbinfo",
+          externalId,
+          url: `http://www.bvbinfo.com/player.asp?ID=${externalId}`,
+          confidence: 98,
+        });
+      }
+      continue;
+    }
+    if (/(^|\.)volleyballlife\.com$/.test(hostname)) {
+      const externalId = url.pathname.match(
+        /\/(?:player|playerprofile)\/(\d+)/i,
+      )?.[1];
+      if (externalId) {
+        discoveries.set(`volleyball-life:${externalId}`, {
+          source: "volleyball-life",
+          externalId,
+          url: `https://volleyballlife.com/player/${externalId}`,
+          confidence: 98,
+        });
+      }
+    }
+  }
+  return [...discoveries.values()];
 }
 
 function normalizeEvidence(value: unknown): readonly PlayerResearchEvidence[] {
@@ -425,7 +502,7 @@ export async function createPlayerResearchProposal(
   const query = [
     `"${input.displayName}" beach volleyball`,
     input.countryCode,
-    "official bio hometown college height earnings medals interview",
+    "official bio hometown college height earnings medals interview BVBInfo VolleyballLife profile match history",
   ]
     .filter(Boolean)
     .join(" ");
@@ -469,6 +546,10 @@ export async function createPlayerResearchProposal(
       : [];
   });
   const heightMillimeters = integerClaim(claims, "heightMillimeters", 2_600);
+  const sourceProfiles = discoverPlayerSourceProfiles(
+    input.displayName,
+    evidence,
+  );
   const now = options.now ?? new Date();
   return {
     id: crypto.randomUUID(),
@@ -518,6 +599,7 @@ export async function createPlayerResearchProposal(
     ],
     news,
     claims,
+    sourceProfiles,
     evidence: evidence.map((item) => ({
       title: item.title,
       url: item.url,
