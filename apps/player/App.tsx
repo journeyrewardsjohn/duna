@@ -13,7 +13,14 @@ import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
 import { StatusBar } from "expo-status-bar";
 import * as WebBrowser from "expo-web-browser";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Animated,
   Easing,
@@ -1099,6 +1106,296 @@ function localDateValue(date: Date): string {
   return local.toISOString().slice(0, 10);
 }
 
+function localDateAnchor(value: string): Date {
+  return new Date(`${value}T12:00:00`);
+}
+
+function addLocalDateDays(value: string, amount: number): string {
+  const date = localDateAnchor(value);
+  date.setDate(date.getDate() + amount);
+  return localDateValue(date);
+}
+
+function localDateDistance(start: string, end: string): number {
+  return Math.max(
+    0,
+    Math.round(
+      (localDateAnchor(end).getTime() - localDateAnchor(start).getTime()) /
+        86_400_000,
+    ),
+  );
+}
+
+function startOfLocalMonth(value: string): string {
+  const date = localDateAnchor(value);
+  date.setDate(1);
+  return localDateValue(date);
+}
+
+function addLocalMonths(value: string, amount: number): string {
+  const date = localDateAnchor(startOfLocalMonth(value));
+  date.setMonth(date.getMonth() + amount);
+  return localDateValue(date);
+}
+
+function localMonthCells(value: string): readonly (string | undefined)[] {
+  const monthStart = localDateAnchor(startOfLocalMonth(value));
+  const leading = monthStart.getDay();
+  const lastDay = new Date(
+    monthStart.getFullYear(),
+    monthStart.getMonth() + 1,
+    0,
+  ).getDate();
+  return [
+    ...Array.from({ length: leading }, () => undefined),
+    ...Array.from({ length: lastDay }, (_, index) =>
+      addLocalDateDays(startOfLocalMonth(value), index),
+    ),
+  ];
+}
+
+function shortLocalWeekday(value: string): string {
+  const weekday = localDateAnchor(value).getDay();
+  return ["Sun", "Mon", "Tues", "Wed", "Thu", "Fri", "Sat"][weekday] ?? "";
+}
+
+function localMonthLabel(value: string): string {
+  return localDateAnchor(value).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function instantLocalDateValue(instant: string, timezone?: string): string {
+  if (!timezone) return localDateValue(new Date(instant));
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: timezone,
+    year: "numeric",
+  }).formatToParts(new Date(instant));
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+type MobileCalendarMarker = {
+  readonly booking: boolean;
+  readonly event: boolean;
+  readonly count: number;
+};
+
+function BookingCalendarModal({
+  markers,
+  maxDate,
+  minDate,
+  onClose,
+  onExtendRange,
+  onSelect,
+  selectedDate,
+  visible,
+}: {
+  readonly markers: ReadonlyMap<string, MobileCalendarMarker>;
+  readonly maxDate: string;
+  readonly minDate: string;
+  readonly onClose: () => void;
+  readonly onExtendRange: (requiredEnd?: string) => void;
+  readonly onSelect: (date: string) => void;
+  readonly selectedDate: string;
+  readonly visible: boolean;
+}) {
+  const { width } = useWindowDimensions();
+  const [visibleMonth, setVisibleMonth] = useState(() =>
+    startOfLocalMonth(selectedDate),
+  );
+  const today = localDateValue(new Date());
+  const months = [visibleMonth, addLocalMonths(visibleMonth, 1)] as const;
+
+  useEffect(() => {
+    if (visible) setVisibleMonth(startOfLocalMonth(selectedDate));
+  }, [selectedDate, visible]);
+
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="pageSheet"
+      visible={visible}
+    >
+      <SafeAreaView
+        edges={["top", "bottom"]}
+        style={styles.bookingCalendarSafe}
+      >
+        <View style={styles.bookingCalendarHeader}>
+          <View style={styles.flex}>
+            <Text style={styles.bookingCalendarEyebrow}>TWO-MONTH VIEW</Text>
+            <Text style={styles.bookingCalendarTitle}>
+              When do you want to play?
+            </Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Close full calendar"
+            onPress={onClose}
+            style={styles.bookingCalendarClose}
+          >
+            <Text style={styles.bookingCalendarCloseText}>×</Text>
+          </Pressable>
+        </View>
+        <View style={styles.bookingCalendarToolbar}>
+          <Pressable
+            accessibilityLabel="Previous month"
+            disabled={visibleMonth <= startOfLocalMonth(minDate)}
+            onPress={() =>
+              setVisibleMonth((current) => addLocalMonths(current, -1))
+            }
+            style={styles.bookingCalendarNav}
+          >
+            <Text style={styles.bookingCalendarNavText}>‹</Text>
+          </Pressable>
+          <Text style={styles.bookingCalendarRange}>
+            {localMonthLabel(visibleMonth)} – {localMonthLabel(months[1])}
+          </Text>
+          <Pressable
+            accessibilityLabel="Next month"
+            onPress={() => {
+              const nextMonth = addLocalMonths(visibleMonth, 1);
+              const endOfSecondMonth = addLocalDateDays(
+                addLocalMonths(nextMonth, 2),
+                -1,
+              );
+              onExtendRange(endOfSecondMonth);
+              setVisibleMonth(nextMonth);
+            }}
+            style={styles.bookingCalendarNav}
+          >
+            <Text style={styles.bookingCalendarNavText}>›</Text>
+          </Pressable>
+        </View>
+        <ScrollView
+          contentContainerStyle={styles.bookingCalendarScroll}
+          showsVerticalScrollIndicator={false}
+        >
+          <View
+            style={[
+              styles.bookingCalendarMonths,
+              width >= 720 && styles.bookingCalendarMonthsWide,
+            ]}
+          >
+            {months.map((month) => (
+              <View key={month} style={styles.bookingCalendarMonth}>
+                <Text style={styles.bookingCalendarMonthTitle}>
+                  {localMonthLabel(month)}
+                </Text>
+                <View style={styles.bookingCalendarWeekdayRow}>
+                  {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map(
+                    (weekday) => (
+                      <Text key={weekday} style={styles.bookingCalendarWeekday}>
+                        {weekday}
+                      </Text>
+                    ),
+                  )}
+                </View>
+                <View style={styles.bookingCalendarGrid}>
+                  {localMonthCells(month).map((date, index) => {
+                    if (!date) {
+                      return (
+                        <View
+                          key={`blank-${month}-${index}`}
+                          style={styles.bookingCalendarBlank}
+                        />
+                      );
+                    }
+                    const marker = markers.get(date);
+                    const disabled = date < minDate || date > maxDate;
+                    const selected = date === selectedDate;
+                    return (
+                      <Pressable
+                        accessibilityLabel={`${localDateAnchor(
+                          date,
+                        ).toLocaleDateString("en-US", {
+                          weekday: "long",
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        })}${marker ? `, ${marker.count} scheduled` : ""}`}
+                        disabled={disabled}
+                        key={date}
+                        onPress={() => {
+                          selectionHaptic();
+                          onSelect(date);
+                          onClose();
+                        }}
+                        style={[
+                          styles.bookingCalendarDay,
+                          date === today && styles.bookingCalendarDayToday,
+                          selected && styles.bookingCalendarDaySelected,
+                          disabled && styles.bookingCalendarDayDisabled,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.bookingCalendarDayText,
+                            selected && styles.bookingCalendarDayTextSelected,
+                          ]}
+                        >
+                          {localDateAnchor(date).getDate()}
+                        </Text>
+                        {marker && (
+                          <View style={styles.bookingCalendarMarkers}>
+                            {marker.booking && (
+                              <View
+                                style={[
+                                  styles.bookingCalendarMarker,
+                                  styles.bookingCalendarMarkerBooking,
+                                ]}
+                              />
+                            )}
+                            {marker.event && (
+                              <View
+                                style={[
+                                  styles.bookingCalendarMarker,
+                                  styles.bookingCalendarMarkerEvent,
+                                ]}
+                              />
+                            )}
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
+          </View>
+          <View style={styles.bookingCalendarLegend}>
+            <View style={styles.bookingCalendarLegendItem}>
+              <View
+                style={[
+                  styles.bookingCalendarMarker,
+                  styles.bookingCalendarMarkerBooking,
+                ]}
+              />
+              <Text style={styles.bookingCalendarLegendText}>Your plans</Text>
+            </View>
+            <View style={styles.bookingCalendarLegendItem}>
+              <View
+                style={[
+                  styles.bookingCalendarMarker,
+                  styles.bookingCalendarMarkerEvent,
+                ]}
+              />
+              <Text style={styles.bookingCalendarLegendText}>
+                Events to explore
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 function localSlotTime(value: string): string {
   const [hourValue = "0", minuteValue = "00"] = value.slice(11, 16).split(":");
   const hour = Number(hourValue);
@@ -1122,12 +1419,16 @@ function VenueBookingModal({
   readonly visible: boolean;
   readonly onClose: () => void;
 }) {
-  const { client, mode, people, refresh } = usePlayerRuntime();
+  const { width } = useWindowDimensions();
+  const { client, dashboard, mode, people, refresh } = usePlayerRuntime();
+  const [todayValue] = useState(() => localDateValue(new Date()));
   const [inventory, setInventory] = useState<CourtInventory>();
   const [availability, setAvailability] = useState<CourtAvailability>();
-  const [selectedDate, setSelectedDate] = useState(() =>
-    localDateValue(new Date()),
+  const [selectedDate, setSelectedDate] = useState(todayValue);
+  const [dateRangeEnd, setDateRangeEnd] = useState(() =>
+    addLocalDateDays(todayValue, 90),
   );
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState(90);
   const [selectedSlot, setSelectedSlot] =
     useState<CourtAvailability["slots"][number]>();
@@ -1144,14 +1445,60 @@ function VenueBookingModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const bookingDateScrollRef = useRef<ScrollView>(null);
+  const bookingDateScrollX = useRef(0);
+  const dateRailPositioned = useRef(false);
 
-  const selectedDateAnchor = new Date(`${selectedDate}T12:00:00`);
-  const todayValue = localDateValue(new Date());
-  const dates = Array.from({ length: 11 }, (_, index) => {
-    const date = new Date(selectedDateAnchor);
-    date.setDate(selectedDateAnchor.getDate() + index - 4);
-    return date;
-  });
+  const dates = Array.from(
+    { length: localDateDistance(todayValue, dateRangeEnd) + 1 },
+    (_, index) => addLocalDateDays(todayValue, index),
+  );
+
+  const extendDateRange = (requiredEnd?: string) => {
+    setDateRangeEnd((current) => {
+      if (requiredEnd && requiredEnd <= current) return current;
+      let next = addLocalDateDays(current, 90);
+      while (requiredEnd && next < requiredEnd) {
+        next = addLocalDateDays(next, 90);
+      }
+      return next;
+    });
+  };
+  const calendarMarkers = useMemo(() => {
+    const next = new Map<string, MobileCalendarMarker>();
+    const addMarker = (date: string, tone: "booking" | "event") => {
+      const current = next.get(date) ?? {
+        booking: false,
+        event: false,
+        count: 0,
+      };
+      next.set(date, {
+        booking: current.booking || tone === "booking",
+        event: current.event || tone === "event",
+        count: current.count + 1,
+      });
+    };
+    for (const booking of dashboard?.bookings ?? []) {
+      addMarker(
+        instantLocalDateValue(booking.startsAt, "America/Los_Angeles"),
+        "booking",
+      );
+    }
+    for (const event of dashboard?.events ?? []) {
+      if (event.lifecycleStatus === "cancelled") continue;
+      if (
+        dashboard?.bookings.some(
+          (booking) =>
+            booking.title === event.title &&
+            booking.startsAt === event.startsAt,
+        )
+      ) {
+        continue;
+      }
+      addMarker(instantLocalDateValue(event.startsAt, event.timezone), "event");
+    }
+    return next;
+  }, [dashboard]);
   const durations = [
     ...new Set(
       inventory?.courts.flatMap((court) => court.durationOptionsMinutes) ?? [
@@ -1173,6 +1520,25 @@ function VenueBookingModal({
   const selectedForecastDay = availability?.forecast?.days.find(
     (day) => day.date === selectedDate,
   );
+
+  useEffect(() => {
+    if (!visible) {
+      dateRailPositioned.current = false;
+      return;
+    }
+    if (dateRailPositioned.current) return;
+    if (selectedDate < todayValue || selectedDate > dateRangeEnd) return;
+    const index = localDateDistance(todayValue, selectedDate);
+    const frame = requestAnimationFrame(() => {
+      const target = Math.max(0, index * 72 - (width - 64) / 2);
+      bookingDateScrollRef.current?.scrollTo({
+        animated: false,
+        x: target,
+      });
+      dateRailPositioned.current = true;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [dateRangeEnd, selectedDate, todayValue, visible, width]);
 
   useEffect(() => {
     if (!visible || !venueId || !client) return;
@@ -1405,52 +1771,147 @@ function VenueBookingModal({
           )}
           {!selectedSlot ? (
             <>
+              <View style={styles.bookingDateToolbar}>
+                <View style={styles.flex}>
+                  <Text style={styles.bookingDateToolbarLabel}>
+                    WHEN DO YOU WANT TO PLAY?
+                  </Text>
+                  <Text style={styles.bookingDateToolbarTitle}>
+                    {localDateAnchor(selectedDate).toLocaleDateString("en-US", {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </Text>
+                </View>
+                <View style={styles.bookingDateToolbarActions}>
+                  <Pressable
+                    accessibilityLabel="Show earlier dates"
+                    onPress={() =>
+                      bookingDateScrollRef.current?.scrollTo({
+                        animated: true,
+                        x: Math.max(0, bookingDateScrollX.current - 252),
+                      })
+                    }
+                    style={styles.bookingDateNavButton}
+                  >
+                    <Text style={styles.bookingDateNavText}>‹</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityLabel="Open full calendar"
+                    onPress={() => {
+                      selectionHaptic();
+                      setCalendarOpen(true);
+                    }}
+                    style={styles.bookingDateCalendarButton}
+                  >
+                    <Text style={styles.bookingDateCalendarIcon}>▦</Text>
+                    <Text style={styles.bookingDateCalendarText}>Calendar</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityLabel="Show later dates"
+                    onPress={() => {
+                      const target = bookingDateScrollX.current + 252;
+                      if (target + width >= dates.length * 72 - width) {
+                        extendDateRange();
+                      }
+                      bookingDateScrollRef.current?.scrollTo({
+                        animated: true,
+                        x: target,
+                      });
+                    }}
+                    style={styles.bookingDateNavButton}
+                  >
+                    <Text style={styles.bookingDateNavText}>›</Text>
+                  </Pressable>
+                </View>
+              </View>
               <ScrollView
+                contentContainerStyle={styles.bookingDateRow}
                 horizontal
+                onScroll={(event) => {
+                  const { contentOffset, contentSize, layoutMeasurement } =
+                    event.nativeEvent;
+                  bookingDateScrollX.current = contentOffset.x;
+                  if (
+                    contentOffset.x + layoutMeasurement.width >=
+                    contentSize.width - layoutMeasurement.width
+                  ) {
+                    extendDateRange();
+                  }
+                }}
+                ref={bookingDateScrollRef}
+                scrollEventThrottle={16}
                 showsHorizontalScrollIndicator={false}
                 style={styles.horizontalBleed}
               >
-                <View style={styles.bookingDateRow}>
-                  {dates.map((date) => {
-                    const value = localDateValue(date);
-                    const active = value === selectedDate;
-                    const unavailable = value < todayValue;
-                    return (
-                      <Pressable
-                        disabled={unavailable}
-                        key={value}
-                        onPress={() => {
-                          selectionHaptic();
-                          setSelectedDate(value);
-                        }}
+                {dates.map((value) => {
+                  const date = localDateAnchor(value);
+                  const active = value === selectedDate;
+                  const marker = calendarMarkers.get(value);
+                  return (
+                    <Pressable
+                      accessibilityLabel={`${date.toLocaleDateString("en-US", {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })}${marker ? `, ${marker.count} scheduled` : ""}`}
+                      key={value}
+                      onPress={() => {
+                        selectionHaptic();
+                        setSelectedDate(value);
+                      }}
+                      style={[
+                        styles.bookingDate,
+                        active && styles.bookingDateActive,
+                      ]}
+                    >
+                      <Text
                         style={[
-                          styles.bookingDate,
-                          active && styles.bookingDateActive,
-                          unavailable && styles.bookingDateUnavailable,
+                          styles.bookingDateDay,
+                          active && styles.bookingDateTextActive,
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.bookingDateDay,
-                            active && styles.bookingDateTextActive,
-                          ]}
-                        >
-                          {date
-                            .toLocaleDateString("en-US", { weekday: "short" })
-                            .toUpperCase()}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.bookingDateNumber,
-                            active && styles.bookingDateTextActive,
-                          ]}
-                        >
-                          {date.getDate()}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                        {shortLocalWeekday(value)}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.bookingDateNumber,
+                          active && styles.bookingDateTextActive,
+                        ]}
+                      >
+                        {date.getDate()}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.bookingDateMonth,
+                          active && styles.bookingDateTextActive,
+                        ]}
+                      >
+                        {date.toLocaleDateString("en-US", { month: "short" })}
+                      </Text>
+                      <View style={styles.bookingDateDots}>
+                        {marker?.booking && (
+                          <View
+                            style={[
+                              styles.bookingDateDot,
+                              styles.bookingDateDotBooking,
+                            ]}
+                          />
+                        )}
+                        {marker?.event && (
+                          <View
+                            style={[
+                              styles.bookingDateDot,
+                              styles.bookingDateDotEvent,
+                            ]}
+                          />
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
               <View style={styles.bookingDurationRow}>
                 {durations.map((duration) => (
@@ -1818,6 +2279,16 @@ function VenueBookingModal({
           {notice && <Text style={styles.bookingNotice}>{notice}</Text>}
           {error && <Text style={styles.formError}>{error}</Text>}
         </ScrollView>
+        <BookingCalendarModal
+          markers={calendarMarkers}
+          maxDate={dateRangeEnd}
+          minDate={todayValue}
+          onClose={() => setCalendarOpen(false)}
+          onExtendRange={extendDateRange}
+          onSelect={setSelectedDate}
+          selectedDate={selectedDate}
+          visible={calendarOpen}
+        />
       </SafeAreaView>
     </Modal>
   );
@@ -4333,22 +4804,82 @@ function createStyles(palette: Palette) {
       letterSpacing: -1.6,
       lineHeight: 35,
     },
+    bookingDateToolbar: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+      marginTop: 22,
+    },
+    bookingDateToolbarLabel: {
+      color: colors.aqua,
+      fontSize: 7,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    bookingDateToolbarTitle: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
+      marginTop: 5,
+    },
+    bookingDateToolbarActions: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 5,
+    },
+    bookingDateNavButton: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 18,
+      borderWidth: 1,
+      height: 34,
+      justifyContent: "center",
+      width: 34,
+    },
+    bookingDateNavText: {
+      color: colors.bone,
+      fontSize: 22,
+      lineHeight: 23,
+    },
+    bookingDateCalendarButton: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 4,
+      height: 34,
+      paddingHorizontal: 9,
+    },
+    bookingDateCalendarIcon: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    bookingDateCalendarText: {
+      color: colors.bone,
+      fontSize: 8,
+      fontWeight: "800",
+    },
     bookingDateRow: {
       flexDirection: "row",
       gap: 8,
       paddingHorizontal: 18,
       paddingRight: 36,
-      paddingVertical: 18,
+      paddingVertical: 15,
     },
     bookingDate: {
       alignItems: "center",
       backgroundColor: colors.depth,
-      borderColor: rgba(colors.overlayRgb, 0.09),
-      borderRadius: 25,
+      borderColor: rgba(colors.overlayRgb, 0.14),
+      borderRadius: 34,
       borderWidth: 1,
-      height: 64,
+      height: 92,
       justifyContent: "center",
-      width: 52,
+      width: 64,
     },
     bookingDateActive: {
       backgroundColor: colors.aquaDeep,
@@ -4362,11 +4893,197 @@ function createStyles(palette: Palette) {
     },
     bookingDateNumber: {
       color: colors.bone,
+      fontSize: 21,
+      fontWeight: "900",
+      lineHeight: 24,
+      marginTop: 4,
+    },
+    bookingDateMonth: {
+      color: colors.muted,
+      fontSize: 8,
+      fontWeight: "800",
+      marginTop: 1,
+    },
+    bookingDateDots: {
+      flexDirection: "row",
+      gap: 3,
+      height: 4,
+      marginTop: 5,
+    },
+    bookingDateDot: {
+      borderRadius: 3,
+      height: 4,
+      width: 4,
+    },
+    bookingDateDotBooking: { backgroundColor: "#7eb9f0" },
+    bookingDateDotEvent: { backgroundColor: colors.flare },
+    bookingDateTextActive: { color: "#ffffff" },
+    bookingCalendarSafe: {
+      backgroundColor: colors.canvas,
+      flex: 1,
+    },
+    bookingCalendarHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 12,
+      paddingHorizontal: 18,
+      paddingTop: 8,
+    },
+    bookingCalendarEyebrow: {
+      color: colors.sand,
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 1,
+    },
+    bookingCalendarTitle: {
+      color: colors.bone,
+      fontSize: 28,
+      fontWeight: "900",
+      letterSpacing: -1.5,
+      lineHeight: 31,
+      marginTop: 7,
+    },
+    bookingCalendarClose: {
+      alignItems: "center",
+      borderColor: colors.sand,
+      borderRadius: 22,
+      borderWidth: 1.5,
+      height: 42,
+      justifyContent: "center",
+      width: 42,
+    },
+    bookingCalendarCloseText: {
+      color: colors.bone,
+      fontSize: 28,
+      fontWeight: "300",
+      lineHeight: 30,
+    },
+    bookingCalendarToolbar: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingHorizontal: 18,
+      paddingVertical: 16,
+    },
+    bookingCalendarNav: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 20,
+      borderWidth: 1,
+      height: 40,
+      justifyContent: "center",
+      width: 40,
+    },
+    bookingCalendarNavText: {
+      color: colors.bone,
+      fontSize: 24,
+      lineHeight: 25,
+    },
+    bookingCalendarRange: {
+      color: colors.bone,
+      flex: 1,
+      fontSize: 10,
+      fontWeight: "900",
+      paddingHorizontal: 8,
+      textAlign: "center",
+    },
+    bookingCalendarScroll: {
+      paddingBottom: 28,
+      paddingHorizontal: 14,
+    },
+    bookingCalendarMonths: { gap: 14 },
+    bookingCalendarMonthsWide: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+    },
+    bookingCalendarMonth: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 20,
+      borderWidth: 1,
+      flex: 1,
+      padding: 10,
+    },
+    bookingCalendarMonthTitle: {
+      color: colors.bone,
       fontSize: 16,
       fontWeight: "900",
-      marginTop: 3,
+      letterSpacing: -0.5,
+      marginBottom: 10,
     },
-    bookingDateTextActive: { color: "#ffffff" },
+    bookingCalendarWeekdayRow: { flexDirection: "row" },
+    bookingCalendarWeekday: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 6,
+      fontWeight: "900",
+      paddingBottom: 7,
+      textAlign: "center",
+    },
+    bookingCalendarGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+    },
+    bookingCalendarBlank: {
+      aspectRatio: 0.95,
+      width: "14.285714%",
+    },
+    bookingCalendarDay: {
+      alignItems: "flex-start",
+      aspectRatio: 0.95,
+      backgroundColor: colors.depth,
+      borderColor: "transparent",
+      borderRadius: 10,
+      borderWidth: 1,
+      justifyContent: "space-between",
+      padding: 6,
+      width: "14.285714%",
+    },
+    bookingCalendarDayToday: {
+      borderColor: colors.aqua,
+    },
+    bookingCalendarDaySelected: {
+      backgroundColor: colors.aquaDeep,
+      borderColor: colors.aquaDeep,
+    },
+    bookingCalendarDayDisabled: { opacity: 0.28 },
+    bookingCalendarDayText: {
+      color: colors.bone,
+      fontSize: 9,
+      fontWeight: "900",
+    },
+    bookingCalendarDayTextSelected: { color: "#ffffff" },
+    bookingCalendarMarkers: {
+      flexDirection: "row",
+      gap: 3,
+    },
+    bookingCalendarMarker: {
+      borderRadius: 3,
+      height: 5,
+      width: 5,
+    },
+    bookingCalendarMarkerBooking: { backgroundColor: "#4b8fc9" },
+    bookingCalendarMarkerEvent: { backgroundColor: colors.flare },
+    bookingCalendarLegend: {
+      alignItems: "center",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 14,
+      justifyContent: "flex-end",
+      paddingHorizontal: 4,
+      paddingTop: 12,
+    },
+    bookingCalendarLegendItem: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 5,
+    },
+    bookingCalendarLegendText: {
+      color: colors.muted,
+      fontSize: 8,
+      fontWeight: "700",
+    },
     bookingDurationRow: {
       flexDirection: "row",
       gap: 8,

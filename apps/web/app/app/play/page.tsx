@@ -3,8 +3,6 @@ import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowRight,
   Building2,
-  CalendarDays,
-  CalendarPlus,
   CheckCircle2,
   Clock3,
   MapPin,
@@ -15,6 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getServerCaller } from "@/lib/api";
+import { PlayerScheduleCalendar } from "@/components/player-schedule-calendar";
 
 export const metadata = { title: "Play" };
 
@@ -27,19 +26,7 @@ export default async function PlayPage() {
   const pickups = dashboard.events.filter((event) => event.kind === "pickup");
   const featuredPickup = pickups[0];
   const featuredVenue = venues[0];
-  const today = new Date();
-  const calendarDays = Array.from({ length: 9 }, (_, index) => {
-    const date = new Date(today);
-    date.setDate(today.getDate() + index);
-    return {
-      day: new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(date),
-      date: String(date.getDate()).padStart(2, "0"),
-      month: new Intl.DateTimeFormat("en-US", { month: "short" }).format(date),
-      active: index === 0,
-      iso: date.toISOString(),
-    };
-  });
-  const nextBooking = dashboard.bookings[0];
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <main className="standard-page play-page">
@@ -64,96 +51,11 @@ export default async function PlayPage() {
 
       <section className="play-planner">
         <article className="play-agenda">
-          <div className="play-agenda__heading">
-            <div>
-              <span className="page-eyebrow">Your calendar</span>
-              <h2>When do you want to play?</h2>
-            </div>
-            <span className="play-agenda__count">
-              <CalendarDays aria-hidden size={17} />
-              {dashboard.bookings.length} scheduled
-            </span>
-          </div>
-
-          <div aria-label="Choose a day" className="play-date-strip">
-            {calendarDays.map((item) => (
-              <div
-                aria-current={item.active ? "date" : undefined}
-                className={item.active ? "active" : undefined}
-                key={item.iso}
-              >
-                <small>{item.day}</small>
-                <Numeric>{item.date}</Numeric>
-                <span>{item.month}</span>
-                {dashboard.bookings.some(
-                  (booking) =>
-                    new Date(booking.startsAt).toDateString() ===
-                    new Date(item.iso).toDateString(),
-                ) ? (
-                  <i />
-                ) : null}
-              </div>
-            ))}
-          </div>
-
-          <div className="play-day">
-            <div className="play-day__header">
-              <div>
-                <strong>Today</strong>
-                <span>
-                  {today.toLocaleDateString("en-US", {
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </span>
-              </div>
-              <button aria-label="Connect another calendar" type="button">
-                <CalendarPlus aria-hidden size={18} />
-                Add calendar
-              </button>
-            </div>
-            {nextBooking ? (
-              <div className="play-day__booking">
-                <span className="play-day__time">
-                  <Numeric>
-                    {formatVenueTime(
-                      nextBooking.startsAt,
-                      "America/Los_Angeles",
-                      "en-US",
-                      { hour: "numeric", minute: "2-digit" },
-                    )}
-                  </Numeric>
-                  <small>
-                    {formatVenueTime(
-                      nextBooking.endsAt,
-                      "America/Los_Angeles",
-                      "en-US",
-                      { hour: "numeric", minute: "2-digit" },
-                    )}
-                  </small>
-                </span>
-                <span className="play-day__booking-copy">
-                  <Badge tone="positive">{nextBooking.status}</Badge>
-                  <strong>{nextBooking.title}</strong>
-                  <small>
-                    <MapPin aria-hidden size={13} /> {nextBooking.venueName}
-                  </small>
-                </span>
-                <ArrowRight aria-hidden size={19} />
-              </div>
-            ) : (
-              <div className="play-day__empty">
-                <span>
-                  <CalendarDays aria-hidden size={22} />
-                </span>
-                <div>
-                  <strong>Your day is open.</strong>
-                  <p>Reserve a court or host a match for nearby players.</p>
-                </div>
-                <Link href="/app/discover">See what’s available</Link>
-              </div>
-            )}
-          </div>
+          <PlayerScheduleCalendar
+            bookings={dashboard.bookings}
+            events={dashboard.events}
+            initialDate={today}
+          />
         </article>
 
         <aside className="play-create-card">
