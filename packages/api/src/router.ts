@@ -359,6 +359,7 @@ import {
   PlayerIntelligenceError,
   researchPlayerProfile,
   researchRankedPlayers,
+  resolvePublicPlayerRoute,
   reviewPlayerMediaWorkflow,
   savePlayerPublicProfile,
   setPlayerFollow,
@@ -1408,6 +1409,28 @@ const publicRouter = router({
       const player = await getRepository().public.playerByHandle(input.handle);
       if (!player) throw new TRPCError({ code: "NOT_FOUND" });
       return player;
+    }),
+  playerRoute: publicProcedure
+    .input(z.object({ identifier: z.string().trim().min(1).max(240) }))
+    .output(
+      z.object({
+        player: personSummarySchema,
+        canonicalPath: z.string().startsWith("/players/"),
+      }),
+    )
+    .query(async ({ input }) => {
+      if (!process.env.DATABASE_URL) {
+        const player = await getRepository().public.playerByHandle(
+          input.identifier,
+        );
+        if (!player) throw new TRPCError({ code: "NOT_FOUND" });
+        return { player, canonicalPath: `/players/${player.handle}` };
+      }
+      const route = await resolvePublicPlayerRoute(input.identifier);
+      if (!route) throw new TRPCError({ code: "NOT_FOUND" });
+      const player = await getRepository().public.playerByHandle(route.handle);
+      if (!player) throw new TRPCError({ code: "NOT_FOUND" });
+      return { player, canonicalPath: route.canonicalPath };
     }),
   playerPerformance: publicProcedure
     .input(z.object({ handle: z.string().trim().min(1).max(48) }))

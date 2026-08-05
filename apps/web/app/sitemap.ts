@@ -57,11 +57,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const playerEntries: MetadataRoute.Sitemap = [
     ...new Map(
       rankedProfiles.flatMap((player) =>
-        player.handle ? [[player.handle, player] as const] : [],
+        player.publicPath ? [[player.publicPath, player] as const] : [],
       ),
     ).keys(),
-  ].map((handle) => ({
-    url: absolutePublicUrl(`/players/${handle}`),
+  ].map((publicPath) => ({
+    url: absolutePublicUrl(publicPath),
     changeFrequency: "weekly",
     priority: 0.7,
   }));

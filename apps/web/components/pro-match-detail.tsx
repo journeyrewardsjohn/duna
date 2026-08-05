@@ -52,8 +52,10 @@ function TeamCard({
               <span>{player.name.slice(0, 1)}</span>
             )}
             <div>
-              {player.handle ? (
-                <Link href={`/players/${player.handle}`}>{player.name}</Link>
+              {(player.publicPath ?? player.handle) ? (
+                <Link href={player.publicPath ?? `/players/${player.handle}`}>
+                  {player.name}
+                </Link>
               ) : (
                 <strong>{player.name}</strong>
               )}

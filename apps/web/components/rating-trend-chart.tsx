@@ -206,14 +206,13 @@ export function RatingTrendChart({
         {points.map((point) => (
           <g key={point.id}>
             <circle
+              aria-label={`${formatDate(point.occurredAt)}: ${formatRating(point.rating)}`}
               className="rating-trend-chart__point"
               cx={point.x}
               cy={point.y}
               r="4.5"
+              role="img"
             />
-            <title>
-              {formatDate(point.occurredAt)}: {formatRating(point.rating)}
-            </title>
           </g>
         ))}
         <text

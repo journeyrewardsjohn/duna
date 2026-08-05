@@ -34,6 +34,7 @@ type Experience = "amateur" | "high-school" | "collegiate" | "professional";
 type ClaimCandidate = {
   readonly id: string;
   readonly handle: string;
+  readonly publicPath?: string;
   readonly displayName: string;
   readonly avatarUrl?: string;
   readonly profileClaimStatus: "unclaimed" | "claim-pending";
@@ -772,7 +773,12 @@ export function PlayerOnboarding({
                       entered, then send the claim to identity review.
                     </span>
                   </label>
-                  <Link href={`/players/${claimCandidate.handle}`}>
+                  <Link
+                    href={
+                      claimCandidate.publicPath ??
+                      `/players/${claimCandidate.handle}`
+                    }
+                  >
                     Review the public profile <ExternalLink />
                   </Link>
                 </article>

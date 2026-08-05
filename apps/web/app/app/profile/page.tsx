@@ -172,7 +172,10 @@ export default async function ProfilePage() {
               .filter((person) => person.id !== player.id)
               .slice(0, 3)
               .map((person) => (
-                <Link href={`/players/${person.handle}`} key={person.id}>
+                <Link
+                  href={person.publicPath ?? `/players/${person.handle}`}
+                  key={person.id}
+                >
                   <span className="avatar">{person.initials}</span>
                   <span>
                     <strong>{person.displayName}</strong>
