@@ -10,7 +10,10 @@ import { planHealthUploadBatches } from "./health-sync-utils";
 const HEALTH_CURSOR_KEY = "duna.healthkit.cursor.v1";
 const HEALTH_DIRTY_KEY = "duna.healthkit.changes.v1";
 const HEALTHKIT_PAGE_LIMIT_PER_TYPE = 20;
-const MAX_HEALTHKIT_PAGES_PER_SYNC = 50;
+// Stay below the original production sync guard while a large backfill is in
+// progress. A remaining anchor is retained and the next foreground/manual sync
+// continues exactly where this session stopped.
+const MAX_HEALTHKIT_PAGES_PER_SYNC = 25;
 
 export type HealthSyncProgress = {
   readonly phase: "reading" | "uploading";
