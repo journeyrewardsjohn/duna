@@ -21,11 +21,12 @@ Duna uses a central limit order book:
 
 1. A member chooses a side, a maximum price, and a whole-credit allocation.
 2. Duna reserves the allocation on the immutable prediction-credit ledger.
-3. The order matches against the best compatible resting orders, with price-time priority and execution at the resting order's price.
+3. A buy order first matches same-side shares listed for sale, then compatible opposite-side buy orders, with price-time priority and execution at the resting order's price.
 4. Partial fills remain open; price-improvement and rounding remainder are returned to the member.
 5. A member cannot match their own opposite order.
 6. Writes are serialized per market to prevent two takers from consuming the same resting shares.
-7. When the official result is final, unmatched reserves are returned and winning shares settle to one credit each.
+7. A member may list matched shares for internal prediction credits. Unsold shares remain theirs and are released from the listing when the market closes.
+8. When the official result is final, unmatched credit reserves are returned and winning shares settle to one credit each.
 
 The displayed crowd price uses the bid/ask midpoint when both sides exist and the spread is no more than 10 percentage points. It uses the last matched price when the spread is wider or the book is one-sided. This mirrors the presentation rule documented by Polymarket while keeping Duna's implementation independent.
 
@@ -34,15 +35,20 @@ The displayed crowd price uses the bid/ask midpoint when both sides exist and th
 - All public event and match pages use the same canonical match card.
 - A compact two-line market summary belongs on the card; detailed charts and order entry belong in the match center.
 - Match centers show a touch- or pointer-scrubbable probability history, volume, participant count, model context, positions, and open orders.
-- Tournament pages show every team as a trend row and let a member open either the win or not-win side.
+- Tournament pages chart every team together, then expose expandable win/not-win contracts and prices.
 - Wallets keep prediction credits visually and technically separate from Stripe cash and organization credits.
+- Wallet positions and open orders link back to their canonical match or tournament market.
+- A member's existing position appears on every Duna surface that renders the same market.
 - Order entry always has an explicit review step that states the order cannot be edited or withdrawn.
 - Settled positions remain visible as won, lost, or void; open positions and unmatched orders remain separately identifiable.
 
 ## Integrity and resolution
 
 - Market creation is deterministic by subject type and subject ID.
-- Ledger grants, reservations, refunds, and settlements have unique idempotency keys.
+- Ledger grants, reservations, sale proceeds, refunds, and settlements have unique idempotency keys.
+- Every account ledger is an append-only SHA-256 hash chain with a server-assigned sequence, previous-entry hash, and deterministic entry hash.
+- Integrity checks recompute the complete chain and reconcile its net deltas against the account's available-credit balance. The wallet exposes the entry count and current head hash.
+- SHA-256 is a standard cryptographic primitive; Duna does not invent a proprietary cipher. A future public anchoring format can publish signed chain heads or commit them to a blockchain without changing historical entries.
 - Market settlement is idempotent and rejects a conflicting second result.
 - Official Duna/FIVB/AVP result ingestion is the resolution source. A correction requires a controlled administrator workflow and audit trail; it must never silently rewrite the ledger.
 - A postponed, abandoned, or materially changed event should be voided under a published resolution policy and all unmatched reserves returned.

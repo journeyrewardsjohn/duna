@@ -6,7 +6,7 @@ import {
   Building2,
   CircleDollarSign,
   Coins,
-  LockKeyhole,
+  Fingerprint,
   Plus,
   ReceiptText,
   ShieldCheck,
@@ -105,8 +105,8 @@ export default async function WalletPage() {
             <h2>Prediction credits</h2>
           </div>
           <p>
-            Free play credits with no cash value, purchase, transfer, prizes, or
-            redemption.
+            Free play credits with no cash value, purchase, prizes, external
+            transfer, or redemption.
           </p>
         </div>
         <div className="prediction-wallet-summary">
@@ -146,13 +146,22 @@ export default async function WalletPage() {
           </article>
           <article className="prediction-wallet-summary__rules">
             <span className="prediction-wallet-summary__icon">
-              <LockKeyhole aria-hidden size={24} />
+              <Fingerprint aria-hidden size={24} />
             </span>
-            <small>Immutable ledger</small>
-            <strong>Positions cannot be changed.</strong>
+            <small>SHA-256 hash chain</small>
+            <strong>
+              {predictionWallet.integrity.verified
+                ? "Ledger integrity verified."
+                : "Integrity check needs attention."}
+            </strong>
             <p>
-              Every allocation, match, refund, and settlement remains in a
-              separate prediction-credit ledger.
+              {predictionWallet.integrity.entryCount.toLocaleString("en-US")}{" "}
+              append-only entries
+              {predictionWallet.integrity.headHash && (
+                <> · head {predictionWallet.integrity.headHash.slice(0, 12)}…</>
+              )}
+              . Orders, trades, refunds, and settlements remain independently
+              auditable.
             </p>
           </article>
         </div>
@@ -165,7 +174,11 @@ export default async function WalletPage() {
             </header>
             {predictionWallet.positions.length ? (
               predictionWallet.positions.map((position) => (
-                <article key={position.id}>
+                <Link
+                  className="prediction-wallet-position-row"
+                  href={position.marketPath}
+                  key={position.id}
+                >
                   <div>
                     <small>
                       {position.status === "open"
@@ -177,11 +190,13 @@ export default async function WalletPage() {
                   </div>
                   <div>
                     <Numeric>
-                      {position.costCredits.toLocaleString("en-US", {
-                        maximumFractionDigits: 1,
+                      {position.shares.toLocaleString("en-US", {
+                        maximumFractionDigits: 2,
                       })}
                     </Numeric>
-                    <small>credits allocated</small>
+                    <small>
+                      shares{position.listedShares > 0 ? " · listed" : ""}
+                    </small>
                   </div>
                   <Badge
                     tone={
@@ -194,7 +209,8 @@ export default async function WalletPage() {
                   >
                     {position.status}
                   </Badge>
-                </article>
+                  <ArrowUpRight aria-hidden size={17} />
+                </Link>
               ))
             ) : (
               <p className="profile-empty">
@@ -209,9 +225,16 @@ export default async function WalletPage() {
             </header>
             {predictionWallet.openOrders.length ? (
               predictionWallet.openOrders.map((order) => (
-                <article key={order.id}>
+                <Link
+                  className="prediction-wallet-position-row"
+                  href={order.marketPath}
+                  key={order.id}
+                >
                   <div>
-                    <small>{order.status.replace("-", " ")}</small>
+                    <small>
+                      {order.intent === "sell" ? "Sell" : "Buy"} ·{" "}
+                      {order.status.replace("-", " ")}
+                    </small>
                     <strong>{order.title}</strong>
                     <span>
                       {order.selectedLabel} ·{" "}
@@ -220,14 +243,20 @@ export default async function WalletPage() {
                   </div>
                   <div>
                     <Numeric>
-                      {order.reservedCredits.toLocaleString("en-US", {
-                        maximumFractionDigits: 1,
-                      })}
+                      {(order.intent === "sell"
+                        ? order.openShares
+                        : order.reservedCredits
+                      ).toLocaleString("en-US", { maximumFractionDigits: 2 })}
                     </Numeric>
-                    <small>credits reserved</small>
+                    <small>
+                      {order.intent === "sell"
+                        ? "shares listed"
+                        : "credits reserved"}
+                    </small>
                   </div>
                   <Badge tone="warning">Open</Badge>
-                </article>
+                  <ArrowUpRight aria-hidden size={17} />
+                </Link>
               ))
             ) : (
               <p className="profile-empty">No unmatched orders.</p>

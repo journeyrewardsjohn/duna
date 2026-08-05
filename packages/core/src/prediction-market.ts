@@ -18,6 +18,17 @@ export function predictionMicrosToCredits(micros: number): number {
   return micros / PREDICTION_CREDIT_SCALE;
 }
 
+export function predictionSharesToMicros(shares: number): number {
+  const micros = Math.round(shares * PREDICTION_CREDIT_SCALE);
+  if (!Number.isSafeInteger(micros) || micros <= 0) {
+    throw new Error("Prediction shares must be a positive number");
+  }
+  if (Math.abs(shares * PREDICTION_CREDIT_SCALE - micros) > 1e-7) {
+    throw new Error("Prediction shares support up to three decimal places");
+  }
+  return micros;
+}
+
 export function validatePredictionPrice(priceBps: number): number {
   if (!Number.isInteger(priceBps) || priceBps < 100 || priceBps > 9_900) {
     throw new Error("Prediction prices must be between 1% and 99%");
@@ -87,6 +98,39 @@ export function predictionOrdersCross(input: {
   return (
     input.yesLimitPriceBps + input.noLimitPriceBps >= PREDICTION_PRICE_SCALE
   );
+}
+
+export function predictionShareOrdersCross(input: {
+  readonly buyLimitPriceBps: number;
+  readonly sellLimitPriceBps: number;
+}): boolean {
+  validatePredictionPrice(input.buyLimitPriceBps);
+  validatePredictionPrice(input.sellLimitPriceBps);
+  return input.buyLimitPriceBps >= input.sellLimitPriceBps;
+}
+
+export function predictionSaleCostBasisMicros(input: {
+  readonly positionSharesMicros: number;
+  readonly positionCostMicros: number;
+  readonly soldSharesMicros: number;
+}): number {
+  if (
+    !Number.isSafeInteger(input.positionSharesMicros) ||
+    !Number.isSafeInteger(input.positionCostMicros) ||
+    !Number.isSafeInteger(input.soldSharesMicros) ||
+    input.positionSharesMicros <= 0 ||
+    input.positionCostMicros < 0 ||
+    input.soldSharesMicros <= 0 ||
+    input.soldSharesMicros > input.positionSharesMicros
+  ) {
+    throw new Error("Prediction sale cost basis inputs are invalid");
+  }
+  return input.soldSharesMicros === input.positionSharesMicros
+    ? input.positionCostMicros
+    : Math.floor(
+        (input.positionCostMicros * input.soldSharesMicros) /
+          input.positionSharesMicros,
+      );
 }
 
 export function predictionExecutionPrices(input: {
