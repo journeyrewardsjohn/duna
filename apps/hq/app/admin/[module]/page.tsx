@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { AdminAccessDenied } from "@/components/admin-access-denied";
 import { AdminPanel } from "@/components/admin-panels";
 import { adminModules, type AdminModule } from "@/components/navigation";
@@ -24,6 +24,7 @@ export async function generateMetadata({
   readonly params: Promise<{ module: string }>;
 }) {
   const { module } = await params;
+  if (module === "profile-merge") return { title: "Player mapping" };
   const item = adminModules.find((entry) => entry.slug === module);
   return { title: item?.label ?? "Admin" };
 }
@@ -44,6 +45,8 @@ export default async function AdminModulePage({
   }>;
 }) {
   const { module } = await params;
+  if (module === "profile-merge")
+    redirect("/admin/player-mapping#profile-merge");
   const {
     event,
     gender: rawGender,
@@ -83,7 +86,6 @@ export default async function AdminModulePage({
     "pro-tour",
     "player-mapping",
     "ratings-lab",
-    "profile-merge",
   ].includes(module);
   const result = await Promise.all([
     caller.admin.overview(),

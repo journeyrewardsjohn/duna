@@ -385,6 +385,7 @@ import {
   loadPublicProCoverage,
   loadPublicWorldRankings,
   loadProfessionalEventMediaUploadContext,
+  loadPlayerMergePreview,
   loadSandDataOverview,
   mergeUnclaimedProfile,
   queuePlayerSourceConnection,
@@ -9191,11 +9192,34 @@ const adminRouter = router({
         return throwDomainError(error);
       }
     }),
+  previewSandProfileMerge: adminProcedure
+    .input(
+      z.object({
+        profileAId: z.string().uuid(),
+        profileBId: z.string().uuid(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadPlayerMergePreview({
+          ...input,
+          actor: ctx.actor!,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   mergeSandProfiles: adminProcedure
     .input(
       z.object({
         sourcePersonId: z.string().uuid(),
         targetPersonId: z.string().uuid(),
+        fieldChoices: z
+          .record(
+            z.string(),
+            z.enum(["source", "target", "combine", "discard"]),
+          )
+          .optional(),
         reason: z.string().trim().min(10).max(500),
       }),
     )

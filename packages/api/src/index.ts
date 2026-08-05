@@ -27,6 +27,7 @@ export * from "./organization-billing";
 export * from "./privacy";
 export * from "./risk";
 export * from "./sand-data/service";
+export * from "./sand-data/profile-merge";
 export * from "./sand-data/types";
 export * from "./payments";
 export * from "./pickup-service";

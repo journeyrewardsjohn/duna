@@ -2,6 +2,7 @@ import {
   adminRoles,
   auditLog,
   externalPlayerProfiles,
+  follows,
   getDatabase,
   importedMatches,
   importLinks,
@@ -9,6 +10,9 @@ import {
   matchHistoryDisputes,
   matches,
   people,
+  playerFollowDeliveries,
+  playerFollowPreferences,
+  playerMediaWorkflows,
   playerPublicProfiles,
   playerSourceConnections,
   professionalEventPredictionHistory,
@@ -48,6 +52,7 @@ import {
   isNotNull,
   lte,
   ne,
+  or,
   sql,
 } from "drizzle-orm";
 import { stableHash } from "../canonical";
@@ -68,6 +73,16 @@ import {
   safeExternalHandle,
   sourceMatchFingerprint,
 } from "./normalize";
+import {
+  buildPlayerMergePlan,
+  planMergedMatchDeduplication,
+  resolvePlayerMergeFields,
+  type PlayerMergeCandidate,
+  type PlayerMergeFieldChoice,
+  type PlayerMergeFieldKey,
+  type PlayerMergeFieldValue,
+  type PlayerMergePlan,
+} from "./profile-merge";
 import { dedupeWorldRankingRows } from "./rankings";
 import {
   createProfessionalEventResearchProposal,
@@ -97,6 +112,15 @@ const sourceNames: Readonly<Record<SandDataSource, string>> = {
   sandrating: "SandRating",
   "volleyball-life": "VolleyballLife",
   "volleyball-world": "Volleyball World Rankings",
+};
+
+const sandSourcePriority: Readonly<Record<string, number>> = {
+  "fivb-12ndr": 0,
+  "avp-league": 1,
+  "volleyball-world": 2,
+  bvbinfo: 3,
+  "volleyball-life": 4,
+  sandrating: 5,
 };
 
 export class SandDataServiceError extends Error {
@@ -3008,98 +3032,788 @@ export async function rejectImportedMatch(input: {
   return { id: updated.id, status: input.decision };
 }
 
-export async function mergeUnclaimedProfile(input: {
+type MergePerson = typeof people.$inferSelect;
+type MergePublicProfile = typeof playerPublicProfiles.$inferSelect;
+
+export interface PlayerMergePreview {
+  readonly plan: PlayerMergePlan;
+  readonly impact: {
+    readonly externalProfiles: number;
+    readonly importLinks: number;
+    readonly sourceConnections: number;
+    readonly rankings: number;
+    readonly teamMemberships: number;
+    readonly importedMatches: number;
+    readonly ratingEvents: number;
+    readonly followers: number;
+    readonly mediaWorkflows: number;
+    readonly duplicateGroups: number;
+    readonly duplicateImportedMatches: number;
+    readonly duplicateCanonicalMatches: number;
+  };
+}
+
+function mergeProfileValues(
+  person: MergePerson,
+  profile?: MergePublicProfile,
+): Partial<Record<PlayerMergeFieldKey, PlayerMergeFieldValue>> {
+  const stats = profile?.careerStats ?? {};
+  return {
+    displayName: person.displayName,
+    handle: person.handle,
+    givenName: person.givenName,
+    familyName: person.familyName,
+    avatarUrl: person.avatarUrl,
+    homeMarket: person.homeMarket,
+    genderCategory: person.genderCategory,
+    birthDate: person.birthDate,
+    heightMillimeters: person.heightMillimeters,
+    professionalSince: person.professionalSince,
+    professionalDefinition: person.professionalDefinition,
+    playingExperience:
+      person.playingExperience === "not-set" ? null : person.playingExperience,
+    playedIndoorPrior: person.playedIndoorPrior,
+    yearsPlaying: person.yearsPlaying,
+    collegeName: person.collegeName,
+    experienceSummary: person.experienceSummary,
+    shortBio: profile?.shortBio,
+    biography: profile?.biography,
+    countryCode: profile?.countryCode,
+    hometown: profile?.hometown,
+    profileCollegeName: profile?.collegeName,
+    collegeLogoUrl: profile?.collegeLogoUrl,
+    playingRole: profile?.playingRole,
+    cutoutImageUrl: profile?.cutoutImageUrl,
+    heroImageUrl: profile?.heroImageUrl,
+    heroVideoUrl: profile?.heroVideoUrl,
+    imageAlt: profile?.imageAlt,
+    careerEvents: stats.events,
+    careerWins: stats.wins,
+    careerPodiums: stats.podiums,
+    careerGold: stats.gold,
+    careerSilver: stats.silver,
+    careerBronze: stats.bronze,
+    careerEarningsMinor: stats.earningsMinor,
+    careerEarningsCurrency: stats.earningsCurrency,
+    links: profile?.links as readonly Record<string, unknown>[] | undefined,
+    news: profile?.news as readonly Record<string, unknown>[] | undefined,
+    researchEvidence: profile?.researchEvidence as
+      readonly Record<string, unknown>[] | undefined,
+  };
+}
+
+function mergeValuePresent(value: PlayerMergeFieldValue | undefined): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value === "boolean") return true;
+  return value.length > 0;
+}
+
+function mergeCandidate(input: {
+  readonly person: MergePerson;
+  readonly profile?: MergePublicProfile;
+  readonly sourceConnections: number;
+  readonly importedMatches: number;
+  readonly ratingEvents: number;
+}): PlayerMergeCandidate {
+  const values = mergeProfileValues(input.person, input.profile);
+  return {
+    id: input.person.id,
+    displayName: input.person.displayName,
+    handle: input.person.handle,
+    profileClaimStatus: input.person.profileClaimStatus,
+    profileVisibility: input.person.profileVisibility,
+    status: input.person.status,
+    isMinor: input.person.isMinor,
+    hasAccount: Boolean(
+      input.person.workosUserId ||
+      input.person.clerkUserId ||
+      input.person.phoneE164 ||
+      input.person.email,
+    ),
+    publicationStatus: input.profile?.publicationStatus,
+    completeness: Object.values(values).filter(mergeValuePresent).length,
+    sourceConnections: input.sourceConnections,
+    importedMatches: input.importedMatches,
+    ratingEvents: input.ratingEvents,
+    values,
+  };
+}
+
+function matchContainsPerson(
+  match: { readonly participants: readonly { readonly personId?: string }[] },
+  personId: string,
+): boolean {
+  return match.participants.some(
+    (participant) => participant.personId === personId,
+  );
+}
+
+export async function loadPlayerMergePreview(input: {
   readonly actor: ApiActor;
-  readonly sourcePersonId: string;
-  readonly targetPersonId: string;
-  readonly reason: string;
-  readonly requestId?: string;
-  readonly ipAddress?: string;
-  readonly now?: Date;
-}) {
+  readonly profileAId: string;
+  readonly profileBId: string;
+  readonly preferredTargetPersonId?: string;
+}): Promise<PlayerMergePreview> {
   requireDatabase();
   if (!input.actor.roles.includes("super-admin")) {
     throw new SandDataServiceError(
       "SUPER_ADMIN_REQUIRED",
-      "Only a super administrator can merge player identities.",
+      "Only a super administrator can preview player identity merges.",
     );
   }
-  if (input.sourcePersonId === input.targetPersonId) {
+  if (input.profileAId === input.profileBId) {
     throw new SandDataServiceError(
       "MERGE_CONFLICT",
       "Choose two different profiles.",
     );
   }
-  const now = input.now ?? new Date();
   const database = getDatabase();
-  const [source, target, sourceEvents, targetEvents] = await Promise.all([
-    database.query.people.findFirst({
-      where: eq(people.id, input.sourcePersonId),
-    }),
-    database.query.people.findFirst({
-      where: eq(people.id, input.targetPersonId),
-    }),
+  const personIds = [input.profileAId, input.profileBId];
+  const participantA = JSON.stringify([{ personId: input.profileAId }]);
+  const participantB = JSON.stringify([{ personId: input.profileBId }]);
+  const [
+    personRows,
+    profileRows,
+    connectionRows,
+    externalRows,
+    importLinkRows,
+    rankingRows,
+    teamRows,
+    ratingRows,
+    mediaRows,
+    preferenceRows,
+    followRows,
+    importedRows,
+  ] = await Promise.all([
+    database.select().from(people).where(inArray(people.id, personIds)),
     database
-      .select({ id: ratingEvents.id })
-      .from(ratingEvents)
-      .where(eq(ratingEvents.personId, input.sourcePersonId)),
+      .select()
+      .from(playerPublicProfiles)
+      .where(inArray(playerPublicProfiles.personId, personIds)),
     database
-      .select({ id: ratingEvents.id })
+      .select()
+      .from(playerSourceConnections)
+      .where(inArray(playerSourceConnections.personId, personIds)),
+    database
+      .select()
+      .from(externalPlayerProfiles)
+      .where(inArray(externalPlayerProfiles.personId, personIds)),
+    database
+      .select()
+      .from(importLinks)
+      .where(inArray(importLinks.personId, personIds)),
+    database
+      .select()
+      .from(worldRankings)
+      .where(inArray(worldRankings.personId, personIds)),
+    database
+      .select()
+      .from(teamMembers)
+      .where(inArray(teamMembers.personId, personIds)),
+    database
+      .select()
       .from(ratingEvents)
-      .where(eq(ratingEvents.personId, input.targetPersonId)),
+      .where(inArray(ratingEvents.personId, personIds)),
+    database
+      .select()
+      .from(playerMediaWorkflows)
+      .where(inArray(playerMediaWorkflows.personId, personIds)),
+    database
+      .select()
+      .from(playerFollowPreferences)
+      .where(inArray(playerFollowPreferences.playerPersonId, personIds)),
+    database
+      .select()
+      .from(follows)
+      .where(
+        and(
+          eq(follows.entityType, "person"),
+          inArray(follows.entityId, personIds),
+        ),
+      ),
+    database
+      .select({ match: importedMatches, sourceSlug: importSources.slug })
+      .from(importedMatches)
+      .innerJoin(importSources, eq(importedMatches.sourceId, importSources.id))
+      .where(
+        or(
+          sql`${importedMatches.participants} @> ${participantA}::jsonb`,
+          sql`${importedMatches.participants} @> ${participantB}::jsonb`,
+        ),
+      ),
   ]);
-  if (!source || !target) {
+  const profileA = personRows.find((person) => person.id === input.profileAId);
+  const profileB = personRows.find((person) => person.id === input.profileBId);
+  if (!profileA || !profileB) {
     throw new SandDataServiceError(
       "PLAYER_NOT_FOUND",
-      "One or both profiles were not found.",
+      "One or both player profiles were not found.",
+    );
+  }
+  const canonicalTeamIds = [...new Set(teamRows.map((row) => row.teamId))];
+  const canonicalMatches = canonicalTeamIds.length
+    ? await database
+        .select({
+          id: matches.id,
+          teamAId: matches.teamAId,
+          teamBId: matches.teamBId,
+        })
+        .from(matches)
+        .where(
+          or(
+            inArray(matches.teamAId, canonicalTeamIds),
+            inArray(matches.teamBId, canonicalTeamIds),
+          ),
+        )
+    : [];
+  const teamsFor = (personId: string) =>
+    new Set(
+      teamRows
+        .filter((row) => row.personId === personId)
+        .map((row) => row.teamId),
+    );
+  const aTeams = teamsFor(profileA.id);
+  const bTeams = teamsFor(profileB.id);
+  const sharedCanonicalMatches = canonicalMatches.filter((match) => {
+    const teamIds = [match.teamAId, match.teamBId];
+    return (
+      teamIds.some((teamId) => teamId && aTeams.has(teamId)) &&
+      teamIds.some((teamId) => teamId && bTeams.has(teamId))
+    );
+  });
+  const sharedImportedMatches = importedRows.filter(
+    ({ match }) =>
+      matchContainsPerson(match, profileA.id) &&
+      matchContainsPerson(match, profileB.id),
+  );
+  const additionalBlockers =
+    sharedCanonicalMatches.length + sharedImportedMatches.length > 0
+      ? [
+          `These profiles appear together in ${sharedCanonicalMatches.length + sharedImportedMatches.length} match records. Resolve that identity conflict before merging them.`,
+        ]
+      : [];
+  const candidateFor = (person: MergePerson) => {
+    const profile = profileRows.find((row) => row.personId === person.id);
+    return mergeCandidate({
+      person,
+      profile,
+      sourceConnections:
+        connectionRows.filter((row) => row.personId === person.id).length +
+        externalRows.filter((row) => row.personId === person.id).length,
+      importedMatches: importedRows.filter(({ match }) =>
+        matchContainsPerson(match, person.id),
+      ).length,
+      ratingEvents: ratingRows.filter((row) => row.personId === person.id)
+        .length,
+    });
+  };
+  const plan = buildPlayerMergePlan({
+    profileA: candidateFor(profileA),
+    profileB: candidateFor(profileB),
+    preferredTargetPersonId: input.preferredTargetPersonId,
+    additionalBlockers,
+  });
+  const deduplication = planMergedMatchDeduplication({
+    sourcePersonId: plan.source.id,
+    targetPersonId: plan.target.id,
+    matches: importedRows.map(({ match, sourceSlug }) => ({
+      id: match.id,
+      participants: match.participants,
+      sets: match.sets,
+      playedAt: match.playedAt?.toISOString(),
+      importState: match.importState,
+      canonicalMatchId: match.canonicalMatchId ?? undefined,
+      sourcePriority: sandSourcePriority[sourceSlug] ?? 99,
+    })),
+  });
+  const sourceId = plan.source.id;
+  return {
+    plan,
+    impact: {
+      externalProfiles: externalRows.filter((row) => row.personId === sourceId)
+        .length,
+      importLinks: importLinkRows.filter((row) => row.personId === sourceId)
+        .length,
+      sourceConnections: connectionRows.filter(
+        (row) => row.personId === sourceId,
+      ).length,
+      rankings: rankingRows.filter((row) => row.personId === sourceId).length,
+      teamMemberships: teamRows.filter((row) => row.personId === sourceId)
+        .length,
+      importedMatches: importedRows.filter(({ match }) =>
+        matchContainsPerson(match, sourceId),
+      ).length,
+      ratingEvents: ratingRows.filter((row) => row.personId === sourceId)
+        .length,
+      followers:
+        preferenceRows.filter((row) => row.playerPersonId === sourceId).length +
+        followRows.filter((row) => row.entityId === sourceId).length,
+      mediaWorkflows: mediaRows.filter((row) => row.personId === sourceId)
+        .length,
+      duplicateGroups: deduplication.length,
+      duplicateImportedMatches: deduplication.reduce(
+        (total, group) => total + group.duplicates.length,
+        0,
+      ),
+      duplicateCanonicalMatches: deduplication.reduce(
+        (total, group) =>
+          total +
+          group.duplicates.filter((match) => Boolean(match.canonicalMatchId))
+            .length,
+        0,
+      ),
+    },
+  };
+}
+
+function textMergeValue(
+  fields: Readonly<Record<PlayerMergeFieldKey, PlayerMergeFieldValue>>,
+  key: PlayerMergeFieldKey,
+): string | null {
+  const value = fields[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function numberMergeValue(
+  fields: Readonly<Record<PlayerMergeFieldKey, PlayerMergeFieldValue>>,
+  key: PlayerMergeFieldKey,
+): number | null {
+  const value = fields[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function booleanMergeValue(
+  fields: Readonly<Record<PlayerMergeFieldKey, PlayerMergeFieldValue>>,
+  key: PlayerMergeFieldKey,
+): boolean | null {
+  const value = fields[key];
+  return typeof value === "boolean" ? value : null;
+}
+
+function collectionMergeValue(
+  fields: Readonly<Record<PlayerMergeFieldKey, PlayerMergeFieldValue>>,
+  key: PlayerMergeFieldKey,
+): readonly Record<string, unknown>[] {
+  const value = fields[key];
+  return Array.isArray(value) ? value : [];
+}
+
+function highestProfileStatus(
+  left: string | undefined,
+  right: string | undefined,
+  ordered: readonly string[],
+): string {
+  return (
+    [left, right]
+      .filter((value): value is string => Boolean(value))
+      .sort((a, b) => ordered.indexOf(b) - ordered.indexOf(a))[0] ?? ordered[0]!
+  );
+}
+
+export async function mergeUnclaimedProfile(input: {
+  readonly actor: ApiActor;
+  readonly sourcePersonId: string;
+  readonly targetPersonId: string;
+  readonly reason: string;
+  readonly fieldChoices?: Readonly<
+    Partial<Record<string, PlayerMergeFieldChoice>>
+  >;
+  readonly requestId?: string;
+  readonly ipAddress?: string;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  const now = input.now ?? new Date();
+  const requestId = input.requestId ?? crypto.randomUUID();
+  const database = getDatabase();
+  const preview = await loadPlayerMergePreview({
+    actor: input.actor,
+    profileAId: input.sourcePersonId,
+    profileBId: input.targetPersonId,
+    preferredTargetPersonId: input.targetPersonId,
+  });
+  if (!preview.plan.canMerge) {
+    throw new SandDataServiceError(
+      "MERGE_CONFLICT",
+      preview.plan.blockers.join(" ") ||
+        "These profiles cannot be merged safely.",
     );
   }
   if (
-    source.profileClaimStatus !== "unclaimed" &&
-    source.profileClaimStatus !== "claim-pending"
+    preview.plan.source.id !== input.sourcePersonId ||
+    preview.plan.target.id !== input.targetPersonId
   ) {
     throw new SandDataServiceError(
       "MERGE_CONFLICT",
-      "Only an unclaimed or identity-reviewed source profile can be merged.",
+      "The selected canonical survivor is not safe. Preview the profiles again.",
     );
   }
-  const needsRatingReplay = sourceEvents.length > 0 && targetEvents.length > 0;
-  const sourceTeamRows = await database
-    .select({ teamId: teamMembers.teamId })
-    .from(teamMembers)
-    .where(eq(teamMembers.personId, source.id));
-  const targetTeamRows = await database
-    .select({ teamId: teamMembers.teamId })
-    .from(teamMembers)
-    .where(eq(teamMembers.personId, target.id));
-  const targetTeams = new Set(targetTeamRows.map((row) => row.teamId));
-  const operations = [
-    ...sourceTeamRows
-      .filter((row) => !targetTeams.has(row.teamId))
-      .map((row) =>
-        database
+  const resolved = resolvePlayerMergeFields(
+    preview.plan,
+    (input.fieldChoices ?? {}) as Partial<
+      Record<PlayerMergeFieldKey, PlayerMergeFieldChoice>
+    >,
+  );
+  const transactionResult = await database.transaction(async (transaction) => {
+    const [source, target, sourceProfile, targetProfile] = await Promise.all([
+      transaction.query.people.findFirst({
+        where: eq(people.id, input.sourcePersonId),
+      }),
+      transaction.query.people.findFirst({
+        where: eq(people.id, input.targetPersonId),
+      }),
+      transaction.query.playerPublicProfiles.findFirst({
+        where: eq(playerPublicProfiles.personId, input.sourcePersonId),
+      }),
+      transaction.query.playerPublicProfiles.findFirst({
+        where: eq(playerPublicProfiles.personId, input.targetPersonId),
+      }),
+    ]);
+    if (!source || !target) {
+      throw new SandDataServiceError(
+        "PLAYER_NOT_FOUND",
+        "One or both profiles were not found.",
+      );
+    }
+    const mergedHandle = textMergeValue(resolved, "handle") ?? target.handle;
+    await transaction
+      .update(people)
+      .set({
+        handle: `merged-${source.id}`.slice(0, 48),
+        profileClaimStatus: "merged",
+        profileVisibility: "private",
+        status: "restricted",
+        updatedAt: now,
+      })
+      .where(eq(people.id, source.id));
+    await transaction
+      .update(people)
+      .set({
+        displayName:
+          textMergeValue(resolved, "displayName") ?? target.displayName,
+        handle: mergedHandle,
+        givenName: textMergeValue(resolved, "givenName"),
+        familyName: textMergeValue(resolved, "familyName"),
+        avatarUrl: textMergeValue(resolved, "avatarUrl"),
+        homeMarket: textMergeValue(resolved, "homeMarket"),
+        genderCategory: textMergeValue(resolved, "genderCategory"),
+        birthDate: textMergeValue(resolved, "birthDate"),
+        heightMillimeters: numberMergeValue(resolved, "heightMillimeters"),
+        isProfessional: source.isProfessional || target.isProfessional,
+        professionalSince: textMergeValue(resolved, "professionalSince"),
+        professionalDefinition: textMergeValue(
+          resolved,
+          "professionalDefinition",
+        ),
+        playingExperience:
+          textMergeValue(resolved, "playingExperience") ?? "not-set",
+        playedIndoorPrior: booleanMergeValue(resolved, "playedIndoorPrior"),
+        yearsPlaying: numberMergeValue(resolved, "yearsPlaying"),
+        collegeName: textMergeValue(resolved, "collegeName"),
+        experienceSummary: textMergeValue(resolved, "experienceSummary"),
+        updatedAt: now,
+      })
+      .where(eq(people.id, target.id));
+
+    if (sourceProfile || targetProfile) {
+      const researchSource =
+        (sourceProfile?.researchedAt?.getTime() ?? 0) >
+        (targetProfile?.researchedAt?.getTime() ?? 0)
+          ? sourceProfile
+          : (targetProfile ?? sourceProfile);
+      const publicationSource =
+        (sourceProfile?.publishedAt?.getTime() ?? 0) >
+        (targetProfile?.publishedAt?.getTime() ?? 0)
+          ? sourceProfile
+          : (targetProfile ?? sourceProfile);
+      await transaction
+        .insert(playerPublicProfiles)
+        .values({
+          personId: target.id,
+          publicationStatus: highestProfileStatus(
+            sourceProfile?.publicationStatus,
+            targetProfile?.publicationStatus,
+            ["draft", "review", "published"],
+          ),
+          shortBio: textMergeValue(resolved, "shortBio"),
+          biography: textMergeValue(resolved, "biography"),
+          countryCode: textMergeValue(resolved, "countryCode"),
+          hometown: textMergeValue(resolved, "hometown"),
+          collegeName: textMergeValue(resolved, "profileCollegeName"),
+          collegeLogoUrl: textMergeValue(resolved, "collegeLogoUrl"),
+          playingRole: textMergeValue(resolved, "playingRole"),
+          cutoutImageUrl: textMergeValue(resolved, "cutoutImageUrl"),
+          heroImageUrl: textMergeValue(resolved, "heroImageUrl"),
+          heroVideoUrl: textMergeValue(resolved, "heroVideoUrl"),
+          imageAlt: textMergeValue(resolved, "imageAlt"),
+          careerStats: {
+            events: numberMergeValue(resolved, "careerEvents") ?? undefined,
+            wins: numberMergeValue(resolved, "careerWins") ?? undefined,
+            podiums: numberMergeValue(resolved, "careerPodiums") ?? undefined,
+            gold: numberMergeValue(resolved, "careerGold") ?? undefined,
+            silver: numberMergeValue(resolved, "careerSilver") ?? undefined,
+            bronze: numberMergeValue(resolved, "careerBronze") ?? undefined,
+            earningsMinor:
+              numberMergeValue(resolved, "careerEarningsMinor") ?? undefined,
+            earningsCurrency:
+              textMergeValue(resolved, "careerEarningsCurrency") ?? undefined,
+          },
+          links: collectionMergeValue(
+            resolved,
+            "links",
+          ) as MergePublicProfile["links"],
+          news: collectionMergeValue(
+            resolved,
+            "news",
+          ) as MergePublicProfile["news"],
+          researchStatus: highestProfileStatus(
+            sourceProfile?.researchStatus,
+            targetProfile?.researchStatus,
+            [
+              "not-started",
+              "failed",
+              "queued",
+              "researching",
+              "review",
+              "published",
+            ],
+          ),
+          researchProposal: researchSource?.researchProposal ?? {},
+          researchEvidence: collectionMergeValue(
+            resolved,
+            "researchEvidence",
+          ) as MergePublicProfile["researchEvidence"],
+          researchModel: researchSource?.researchModel,
+          researchedAt: researchSource?.researchedAt,
+          reviewedByPersonId: publicationSource?.reviewedByPersonId,
+          reviewedAt: publicationSource?.reviewedAt,
+          publishedAt: publicationSource?.publishedAt,
+          createdAt:
+            targetProfile?.createdAt ?? sourceProfile?.createdAt ?? now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: playerPublicProfiles.personId,
+          set: {
+            publicationStatus: highestProfileStatus(
+              sourceProfile?.publicationStatus,
+              targetProfile?.publicationStatus,
+              ["draft", "review", "published"],
+            ),
+            shortBio: textMergeValue(resolved, "shortBio"),
+            biography: textMergeValue(resolved, "biography"),
+            countryCode: textMergeValue(resolved, "countryCode"),
+            hometown: textMergeValue(resolved, "hometown"),
+            collegeName: textMergeValue(resolved, "profileCollegeName"),
+            collegeLogoUrl: textMergeValue(resolved, "collegeLogoUrl"),
+            playingRole: textMergeValue(resolved, "playingRole"),
+            cutoutImageUrl: textMergeValue(resolved, "cutoutImageUrl"),
+            heroImageUrl: textMergeValue(resolved, "heroImageUrl"),
+            heroVideoUrl: textMergeValue(resolved, "heroVideoUrl"),
+            imageAlt: textMergeValue(resolved, "imageAlt"),
+            careerStats: {
+              events: numberMergeValue(resolved, "careerEvents") ?? undefined,
+              wins: numberMergeValue(resolved, "careerWins") ?? undefined,
+              podiums: numberMergeValue(resolved, "careerPodiums") ?? undefined,
+              gold: numberMergeValue(resolved, "careerGold") ?? undefined,
+              silver: numberMergeValue(resolved, "careerSilver") ?? undefined,
+              bronze: numberMergeValue(resolved, "careerBronze") ?? undefined,
+              earningsMinor:
+                numberMergeValue(resolved, "careerEarningsMinor") ?? undefined,
+              earningsCurrency:
+                textMergeValue(resolved, "careerEarningsCurrency") ?? undefined,
+            },
+            links: collectionMergeValue(
+              resolved,
+              "links",
+            ) as MergePublicProfile["links"],
+            news: collectionMergeValue(
+              resolved,
+              "news",
+            ) as MergePublicProfile["news"],
+            researchStatus: highestProfileStatus(
+              sourceProfile?.researchStatus,
+              targetProfile?.researchStatus,
+              [
+                "not-started",
+                "failed",
+                "queued",
+                "researching",
+                "review",
+                "published",
+              ],
+            ),
+            researchProposal: researchSource?.researchProposal ?? {},
+            researchEvidence: collectionMergeValue(
+              resolved,
+              "researchEvidence",
+            ) as MergePublicProfile["researchEvidence"],
+            researchModel: researchSource?.researchModel,
+            researchedAt: researchSource?.researchedAt,
+            reviewedByPersonId: publicationSource?.reviewedByPersonId,
+            reviewedAt: publicationSource?.reviewedAt,
+            publishedAt: publicationSource?.publishedAt,
+            updatedAt: now,
+          },
+        });
+      await transaction
+        .delete(playerPublicProfiles)
+        .where(eq(playerPublicProfiles.personId, source.id));
+    }
+
+    const [sourceTeams, targetTeams, sourceConnections, targetConnections] =
+      await Promise.all([
+        transaction
+          .select()
+          .from(teamMembers)
+          .where(eq(teamMembers.personId, source.id)),
+        transaction
+          .select()
+          .from(teamMembers)
+          .where(eq(teamMembers.personId, target.id)),
+        transaction
+          .select()
+          .from(playerSourceConnections)
+          .where(eq(playerSourceConnections.personId, source.id)),
+        transaction
+          .select()
+          .from(playerSourceConnections)
+          .where(eq(playerSourceConnections.personId, target.id)),
+      ]);
+    const targetTeamIds = new Set(targetTeams.map((row) => row.teamId));
+    for (const membership of sourceTeams) {
+      if (targetTeamIds.has(membership.teamId)) {
+        await transaction
+          .delete(teamMembers)
+          .where(
+            and(
+              eq(teamMembers.teamId, membership.teamId),
+              eq(teamMembers.personId, source.id),
+            ),
+          );
+      } else {
+        await transaction
           .update(teamMembers)
           .set({ personId: target.id })
           .where(
             and(
-              eq(teamMembers.teamId, row.teamId),
+              eq(teamMembers.teamId, membership.teamId),
               eq(teamMembers.personId, source.id),
             ),
-          ),
-      ),
-    ...sourceTeamRows
-      .filter((row) => targetTeams.has(row.teamId))
-      .map((row) =>
-        database
-          .delete(teamMembers)
-          .where(
-            and(
-              eq(teamMembers.teamId, row.teamId),
-              eq(teamMembers.personId, source.id),
+          );
+      }
+    }
+    const targetConnectionsBySource = new Map(
+      targetConnections.map((connection) => [connection.source, connection]),
+    );
+    for (const connection of sourceConnections) {
+      const existing = targetConnectionsBySource.get(connection.source);
+      if (existing) {
+        await transaction
+          .update(playerSourceConnections)
+          .set({
+            profileSnapshot: {
+              ...connection.profileSnapshot,
+              ...existing.profileSnapshot,
+            },
+            matchesFound: Math.max(
+              existing.matchesFound,
+              connection.matchesFound,
             ),
-          ),
-      ),
-    database
+            profilesFound: Math.max(
+              existing.profilesFound,
+              connection.profilesFound,
+            ),
+            updatedAt: now,
+          })
+          .where(eq(playerSourceConnections.id, existing.id));
+        await transaction
+          .delete(playerSourceConnections)
+          .where(eq(playerSourceConnections.id, connection.id));
+      } else {
+        await transaction
+          .update(playerSourceConnections)
+          .set({ personId: target.id, updatedAt: now })
+          .where(eq(playerSourceConnections.id, connection.id));
+      }
+    }
+
+    await transaction
+      .update(playerMediaWorkflows)
+      .set({ personId: target.id, updatedAt: now })
+      .where(eq(playerMediaWorkflows.personId, source.id));
+    const sourcePreferences = await transaction
+      .select()
+      .from(playerFollowPreferences)
+      .where(eq(playerFollowPreferences.playerPersonId, source.id));
+    for (const preference of sourcePreferences) {
+      if (preference.followerPersonId === target.id) continue;
+      await transaction
+        .insert(playerFollowPreferences)
+        .values({
+          ...preference,
+          playerPersonId: target.id,
+          notifyRegistrations: preference.notifyRegistrations,
+          notifyWatch: preference.notifyWatch,
+          notifyResults: preference.notifyResults,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [
+            playerFollowPreferences.followerPersonId,
+            playerFollowPreferences.playerPersonId,
+          ],
+          set: {
+            notifyRegistrations: sql`${playerFollowPreferences.notifyRegistrations} OR ${preference.notifyRegistrations}`,
+            notifyWatch: sql`${playerFollowPreferences.notifyWatch} OR ${preference.notifyWatch}`,
+            notifyResults: sql`${playerFollowPreferences.notifyResults} OR ${preference.notifyResults}`,
+            updatedAt: now,
+          },
+        });
+    }
+    await transaction
+      .delete(playerFollowPreferences)
+      .where(eq(playerFollowPreferences.playerPersonId, source.id));
+    const sourceFollows = await transaction
+      .select()
+      .from(follows)
+      .where(
+        and(eq(follows.entityType, "person"), eq(follows.entityId, source.id)),
+      );
+    for (const follow of sourceFollows) {
+      if (follow.followerPersonId === target.id) continue;
+      await transaction
+        .insert(follows)
+        .values({ ...follow, entityId: target.id })
+        .onConflictDoNothing();
+    }
+    await transaction
+      .delete(follows)
+      .where(
+        and(eq(follows.entityType, "person"), eq(follows.entityId, source.id)),
+      );
+    const sourceDeliveries = await transaction
+      .select()
+      .from(playerFollowDeliveries)
+      .where(eq(playerFollowDeliveries.playerPersonId, source.id));
+    for (const delivery of sourceDeliveries) {
+      if (delivery.followerPersonId === target.id) continue;
+      await transaction
+        .insert(playerFollowDeliveries)
+        .values({
+          ...delivery,
+          id: crypto.randomUUID(),
+          playerPersonId: target.id,
+        })
+        .onConflictDoNothing();
+    }
+    await transaction
+      .delete(playerFollowDeliveries)
+      .where(eq(playerFollowDeliveries.playerPersonId, source.id));
+
+    await transaction
       .update(externalPlayerProfiles)
       .set({
         personId: target.id,
@@ -3112,8 +3826,8 @@ export async function mergeUnclaimedProfile(input: {
         },
         updatedAt: now,
       })
-      .where(eq(externalPlayerProfiles.personId, source.id)),
-    database
+      .where(eq(externalPlayerProfiles.personId, source.id));
+    await transaction
       .update(importLinks)
       .set({
         personId: target.id,
@@ -3126,81 +3840,189 @@ export async function mergeUnclaimedProfile(input: {
         },
         updatedAt: now,
       })
-      .where(eq(importLinks.personId, source.id)),
-    database
+      .where(eq(importLinks.personId, source.id));
+    await transaction
       .update(worldRankings)
       .set({ personId: target.id })
-      .where(eq(worldRankings.personId, source.id)),
-    ...(needsRatingReplay
-      ? [database.delete(ratings).where(eq(ratings.personId, source.id))]
-      : [
-          database
-            .update(ratingEvents)
-            .set({ personId: target.id })
-            .where(eq(ratingEvents.personId, source.id)),
-          database.delete(ratings).where(
-            and(
-              eq(ratings.personId, source.id),
-              sql`NOT EXISTS (
-                  SELECT 1 FROM ${ratings} target_rating
-                  WHERE target_rating.person_id = ${target.id}::uuid
-                    AND target_rating.discipline = ${ratings.discipline}
-                )`,
-            ),
-          ),
-          database
-            .update(ratings)
-            .set({ personId: target.id })
-            .where(eq(ratings.personId, source.id)),
-        ]),
-    database
-      .update(people)
-      .set({
-        profileClaimStatus: "merged",
-        profileVisibility: "private",
-        status: "restricted",
-        updatedAt: now,
-      })
-      .where(eq(people.id, source.id)),
-    database.insert(profileMergeRecords).values({
+      .where(eq(worldRankings.personId, source.id));
+
+    const participantSource = JSON.stringify([{ personId: source.id }]);
+    const participantTarget = JSON.stringify([{ personId: target.id }]);
+    const relatedImportedRows = await transaction
+      .select({ match: importedMatches, sourceSlug: importSources.slug })
+      .from(importedMatches)
+      .innerJoin(importSources, eq(importedMatches.sourceId, importSources.id))
+      .where(
+        or(
+          sql`${importedMatches.participants} @> ${participantSource}::jsonb`,
+          sql`${importedMatches.participants} @> ${participantTarget}::jsonb`,
+        ),
+      );
+    for (const { match } of relatedImportedRows) {
+      const participants = match.participants.map((participant) =>
+        participant.personId === source.id
+          ? { ...participant, personId: target.id }
+          : participant,
+      );
+      await transaction
+        .update(importedMatches)
+        .set({ participants, updatedAt: now })
+        .where(eq(importedMatches.id, match.id));
+    }
+    const deduplication = planMergedMatchDeduplication({
       sourcePersonId: source.id,
       targetPersonId: target.id,
-      reason: input.reason,
-      movedCounts: {
-        teams: sourceTeamRows.length,
-        ratingEvents: sourceEvents.length,
-        ratingReplay: needsRatingReplay ? 1 : 0,
-      },
-      performedByPersonId: input.actor.personId,
-      createdAt: now,
-    }),
-    database.insert(auditLog).values({
+      matches: relatedImportedRows.map(({ match, sourceSlug }) => ({
+        id: match.id,
+        participants: match.participants,
+        sets: match.sets,
+        playedAt: match.playedAt?.toISOString(),
+        importState: match.importState,
+        canonicalMatchId: match.canonicalMatchId ?? undefined,
+        sourcePriority: sandSourcePriority[sourceSlug] ?? 99,
+      })),
+    });
+    let duplicateCanonicalMatches = 0;
+    for (const group of deduplication) {
+      for (const duplicate of group.duplicates) {
+        await transaction
+          .update(importedMatches)
+          .set({
+            importState: "duplicate",
+            possibleDuplicateOfId: group.primary.id,
+            exclusionReason:
+              "Canonical identity merge revealed duplicate match evidence.",
+            updatedAt: now,
+          })
+          .where(eq(importedMatches.id, duplicate.id));
+        if (
+          duplicate.canonicalMatchId &&
+          duplicate.canonicalMatchId !== group.primary.canonicalMatchId
+        ) {
+          duplicateCanonicalMatches += 1;
+          await transaction
+            .update(matches)
+            .set({
+              status: "cancelled",
+              ratingEligible: false,
+              ratingEvidence: {
+                deduplicatedByProfileMerge: true,
+                duplicateOfImportedMatchId: group.primary.id,
+                sourcePersonId: source.id,
+                targetPersonId: target.id,
+              },
+              updatedAt: now,
+            })
+            .where(eq(matches.id, duplicate.canonicalMatchId));
+        }
+      }
+    }
+
+    const [mergeRecord] = await transaction
+      .insert(profileMergeRecords)
+      .values({
+        sourcePersonId: source.id,
+        targetPersonId: target.id,
+        status: "replay-pending",
+        reason: input.reason,
+        movedCounts: {
+          externalProfiles: preview.impact.externalProfiles,
+          importLinks: preview.impact.importLinks,
+          sourceConnections: preview.impact.sourceConnections,
+          rankings: preview.impact.rankings,
+          teams: sourceTeams.length,
+          importedMatches: preview.impact.importedMatches,
+          ratingEvents: preview.impact.ratingEvents,
+          followers: preview.impact.followers,
+          mediaWorkflows: preview.impact.mediaWorkflows,
+          duplicateImportedMatches: deduplication.reduce(
+            (total, group) => total + group.duplicates.length,
+            0,
+          ),
+          duplicateCanonicalMatches,
+          ratingReplay: 1,
+        },
+        performedByPersonId: input.actor.personId,
+        createdAt: now,
+      })
+      .returning({ id: profileMergeRecords.id });
+    await transaction.insert(auditLog).values({
       actorPersonId: input.actor.personId,
       actorType: "person",
-      action: "sand-data.profile.merged",
+      action: "sand-data.profile.merge-prepared",
       entityType: "person",
       entityId: source.id,
-      afterHash: stableHash({ targetPersonId: target.id }),
+      beforeHash: stableHash({ source, target }),
+      afterHash: stableHash({
+        targetPersonId: target.id,
+        duplicateCanonicalMatches,
+      }),
       reason: input.reason,
+      traceId: requestId,
+      ipAddress: input.ipAddress,
       createdAt: now,
-    }),
-  ];
-  for (const operation of operations) await operation;
-  const ratingReplay = needsRatingReplay
-    ? await rebuildSandRatingProjection({
-        actor: input.actor,
-        reason: `${input.reason} Duplicate player histories were rebuilt chronologically after identity consolidation.`,
-        requestId: input.requestId ?? crypto.randomUUID(),
+    });
+    if (!mergeRecord)
+      throw new Error("The merge audit record was not created.");
+    return {
+      mergeRecordId: mergeRecord.id,
+      sourcePersonId: source.id,
+      targetPersonId: target.id,
+      duplicateImportedMatches: deduplication.reduce(
+        (total, group) => total + group.duplicates.length,
+        0,
+      ),
+      duplicateCanonicalMatches,
+    };
+  });
+
+  try {
+    const ratingReplay = await rebuildSandRatingProjection({
+      actor: input.actor,
+      reason: `${input.reason} All consolidated match evidence was de-duplicated and the Sand Rating projection was rebuilt chronologically.`,
+      requestId,
+      ipAddress: input.ipAddress,
+      now,
+    });
+    await database.batch([
+      database
+        .update(profileMergeRecords)
+        .set({ status: "completed" })
+        .where(eq(profileMergeRecords.id, transactionResult.mergeRecordId)),
+      database.insert(auditLog).values({
+        actorPersonId: input.actor.personId,
+        actorType: "person",
+        action: "sand-data.profile.merged",
+        entityType: "person",
+        entityId: transactionResult.sourcePersonId,
+        afterHash: stableHash({
+          targetPersonId: transactionResult.targetPersonId,
+          duplicateImportedMatches: transactionResult.duplicateImportedMatches,
+          duplicateCanonicalMatches:
+            transactionResult.duplicateCanonicalMatches,
+          ratingReplay,
+        }),
+        reason: input.reason,
+        traceId: requestId,
         ipAddress: input.ipAddress,
-        now,
-      })
-    : undefined;
-  return {
-    sourcePersonId: source.id,
-    targetPersonId: target.id,
-    status: "completed" as const,
-    ratingReplay,
-  };
+        createdAt: now,
+      }),
+    ]);
+    return {
+      ...transactionResult,
+      status: "completed" as const,
+      ratingReplay,
+    };
+  } catch (error) {
+    await database
+      .update(profileMergeRecords)
+      .set({ status: "replay-required" })
+      .where(eq(profileMergeRecords.id, transactionResult.mergeRecordId));
+    throw new SandDataServiceError(
+      "MERGE_CONFLICT",
+      `The profiles were consolidated, but rating replay needs attention: ${error instanceof Error ? error.message : "unknown replay error"}`,
+    );
+  }
 }
 
 async function ensureRatingConfiguration(actor: ApiActor, now: Date) {
