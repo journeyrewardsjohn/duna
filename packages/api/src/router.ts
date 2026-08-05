@@ -321,9 +321,11 @@ import {
   importSandSource,
   linkExternalPlayer,
   loadPublicPlayerPerformanceByHandle,
+  loadPublicRatingLab,
   loadPublicProEvent,
   loadPublicProMatch,
   loadPublicProCoverage,
+  loadPublicWorldRankings,
   loadProfessionalEventMediaUploadContext,
   loadSandDataOverview,
   mergeUnclaimedProfile,
@@ -336,6 +338,7 @@ import {
   researchProfessionalEvent,
   rejectImportedMatch,
   requestProfileClaim,
+  reviewProfileClaim,
   reviewPlayerSourceConnection,
   SandDataServiceError,
   saveAvpRosterAssignment,
@@ -343,6 +346,7 @@ import {
   saveProfessionalEventMedia,
   saveProfessionalMatchSchedule,
   saveProfessionalWatchOption,
+  searchPublicPlayers,
   searchDunaPlayers,
   removeProfessionalEventMedia,
   removeProfessionalWatchOption,
@@ -1296,6 +1300,14 @@ const publicRouter = router({
     )
     .output(z.array(personSummarySchema).readonly())
     .query(({ input }) => getRepository().public.players(input?.limit ?? 12)),
+  searchPlayers: publicProcedure
+    .input(
+      z.object({
+        query: z.string().trim().min(2).max(100),
+        limit: z.number().int().min(1).max(50).default(20),
+      }),
+    )
+    .query(({ input }) => searchPublicPlayers(input)),
   playerProfile: publicProcedure
     .input(z.object({ handle: z.string().min(1) }))
     .output(personSummarySchema)
@@ -1313,6 +1325,8 @@ const publicRouter = router({
       if (!performance) throw new TRPCError({ code: "NOT_FOUND" });
       return performance;
     }),
+  ratingLab: publicProcedure.query(() => loadPublicRatingLab()),
+  worldRankings: publicProcedure.query(() => loadPublicWorldRankings()),
   proCoverage: publicProcedure.query(() => loadPublicProCoverage()),
   proEvent: publicProcedure
     .input(z.object({ slug: z.string().trim().min(1).max(180) }))
@@ -7212,6 +7226,30 @@ const adminRouter = router({
         return await mergeUnclaimedProfile({
           ...input,
           actor: ctx.actor!,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  reviewProfileClaim: adminProcedure
+    .input(
+      z.object({
+        jobId: z.string().uuid(),
+        decision: z.enum(["approved", "rejected"]),
+        officialProfileMatched: z.boolean(),
+        reason: z.string().trim().min(12).max(1_000),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await reviewProfileClaim({
+          ...input,
+          actor: ctx.actor!,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
           now: ctx.now,
         });
       } catch (error) {

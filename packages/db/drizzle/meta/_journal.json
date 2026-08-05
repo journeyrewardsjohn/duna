@@ -330,6 +330,13 @@
       "when": 1785886532714,
       "tag": "0046_odd_korg",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1785898623597,
+      "tag": "0047_wild_valkyrie",
+      "breakpoints": true
     }
   ]
 }

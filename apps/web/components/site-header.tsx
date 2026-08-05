@@ -19,7 +19,7 @@ export function SiteHeader() {
           <Link href="/create">Create an event</Link>
           <Link href="/pro">Pro tour</Link>
           <Link href="/run-your-club">For clubs + coaches</Link>
-          <Link href="/app/profile">Sand Rating</Link>
+          <Link href="/rankings">Sand Rating</Link>
         </nav>
         <div className="site-header__actions">
           <ThemeToggle />

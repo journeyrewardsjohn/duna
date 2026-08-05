@@ -714,10 +714,50 @@ export async function evaluateRatingAction(
     refreshSandAdmin();
     return {
       status: "success",
-      message: `${result.sampleSize} outcomes evaluated · ${(result.accuracy * 100).toFixed(1)}% prediction accuracy.`,
+      message: `${result.matches} pre-match predictions across ${result.players} players · ${result.championModelId ?? "no champion"} led this run.`,
     };
   } catch (error) {
     return failure(error, "The evaluation could not be completed.");
+  }
+}
+
+export async function reviewProfileClaimAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const jobId = String(formData.get("jobId") ?? "").trim();
+  const decision = String(formData.get("decision") ?? "");
+  const officialProfileMatched =
+    formData.get("officialProfileMatched") === "on";
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (
+    !jobId ||
+    !["approved", "rejected"].includes(decision) ||
+    reason.length < 12
+  ) {
+    return {
+      status: "error",
+      message: "Choose a decision and document the identity evidence reviewed.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    await caller.admin.reviewProfileClaim({
+      jobId,
+      decision: decision as "approved" | "rejected",
+      officialProfileMatched,
+      reason,
+    });
+    refreshSandAdmin();
+    return {
+      status: "success",
+      message:
+        decision === "approved"
+          ? "The verified claim was approved and its profile history consolidated."
+          : "The claim was rejected and the public profile reopened for a future claim.",
+    };
+  } catch (error) {
+    return failure(error, "The profile claim review could not be completed.");
   }
 }
 

@@ -544,9 +544,22 @@ export default async function PublicPlayerPage({
                   </div>
                   <div className="match-rating-result">
                     <small>
-                      {(event.expectedWinProbability * 100).toFixed(0)}%
-                      expected
+                      {(
+                        (event.walkForwardPrediction?.winProbability ??
+                          event.expectedWinProbability) * 100
+                      ).toFixed(0)}
+                      %{" "}
+                      {event.walkForwardPrediction
+                        ? "walk-forward"
+                        : "expected"}
                     </small>
+                    {event.walkForwardPrediction?.preMatchRating !==
+                      undefined && (
+                      <small>
+                        {event.walkForwardPrediction.preMatchRating.toFixed(2)}
+                        {" pre-match"}
+                      </small>
+                    )}
                     <strong className={event.delta >= 0 ? "up" : "down"}>
                       {event.delta >= 0 ? "+" : ""}
                       {event.delta.toFixed(2)}
@@ -586,7 +599,9 @@ export default async function PublicPlayerPage({
           <p>
             Duna stores source provenance, identity mapping, expected result,
             actual result, score margin, and verification weight for each
-            approved movement.
+            approved movement. When a completed backtest covers the match, the
+            forecast shown here is the probability and player rating captured
+            before that result was learned.
           </p>
           <a href="/methodology">Read the methodology</a>
         </section>

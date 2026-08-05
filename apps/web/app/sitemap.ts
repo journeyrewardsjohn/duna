@@ -7,6 +7,7 @@ export const revalidate = 3_600;
 const publicPages = [
   "",
   "/pro",
+  "/rankings",
   "/about",
   "/methodology",
   "/run-your-club",
@@ -14,9 +15,11 @@ const publicPages = [
 ] as const;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const coverage = await getServerCaller()
-    .then((caller) => caller.public.proCoverage())
-    .catch(() => undefined);
+  const caller = await getServerCaller();
+  const [coverage, rankings] = await Promise.all([
+    caller.public.proCoverage().catch(() => undefined),
+    caller.public.worldRankings().catch(() => undefined),
+  ]);
   const staticEntries: MetadataRoute.Sitemap = publicPages.map((path) => ({
     url: absolutePublicUrl(path || "/"),
     changeFrequency: path === "/pro" ? "hourly" : "weekly",
@@ -45,5 +48,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           ]
         : [],
   );
-  return [...staticEntries, ...eventEntries, ...matchEntries];
+  const rankedProfiles = [
+    ...(rankings?.world.men ?? []),
+    ...(rankings?.world.women ?? []),
+    ...(rankings?.duna.men ?? []),
+    ...(rankings?.duna.women ?? []),
+  ];
+  const playerEntries: MetadataRoute.Sitemap = [
+    ...new Map(
+      rankedProfiles.flatMap((player) =>
+        player.handle ? [[player.handle, player] as const] : [],
+      ),
+    ).keys(),
+  ].map((handle) => ({
+    url: absolutePublicUrl(`/players/${handle}`),
+    changeFrequency: "weekly",
+    priority: 0.7,
+  }));
+  return [...staticEntries, ...eventEntries, ...matchEntries, ...playerEntries];
 }
