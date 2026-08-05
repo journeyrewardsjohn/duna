@@ -5,9 +5,21 @@ import DunaHealthKit, {
   parseHealthKitChanges,
   type HealthKitAuthorizationRequest,
 } from "./modules/duna-health-kit";
+import { planHealthUploadBatches } from "./health-sync-utils";
 
 const HEALTH_CURSOR_KEY = "duna.healthkit.cursor.v1";
 const HEALTH_DIRTY_KEY = "duna.healthkit.changes.v1";
+const HEALTHKIT_PAGE_LIMIT_PER_TYPE = 20;
+const MAX_HEALTHKIT_PAGES_PER_SYNC = 50;
+
+export type HealthSyncProgress = {
+  readonly phase: "reading" | "uploading";
+  readonly pages: number;
+  readonly imported: number;
+  readonly deleted: number;
+  readonly recordsFound: number;
+  readonly pendingRecords: number;
+};
 
 export const healthCategoryDetails: Readonly<
   Record<
@@ -61,44 +73,64 @@ export async function requestAppleHealthAccess(
 export async function syncAppleHealth(input: {
   readonly client: DunaApiClient;
   readonly categories: readonly HealthCategory[];
-  readonly onBatch?: (progress: {
-    readonly batches: number;
-    readonly imported: number;
-    readonly deleted: number;
-  }) => void;
+  readonly onProgress?: (progress: HealthSyncProgress) => void;
 }): Promise<{
-  readonly batches: number;
+  readonly pages: number;
   readonly imported: number;
   readonly deleted: number;
+  readonly complete: boolean;
 }> {
   if (!DunaHealthKit || !DunaHealthKit.isAvailable()) {
     throw new Error("Apple Health is unavailable on this device.");
   }
   let cursor = await SecureStore.getItemAsync(HEALTH_CURSOR_KEY);
-  let batches = 0;
+  let pages = 0;
   let imported = 0;
   let deleted = 0;
+  let recordsFound = 0;
   let hasMore = true;
-  while (hasMore && batches < 50) {
+  while (hasMore && pages < MAX_HEALTHKIT_PAGES_PER_SYNC) {
+    input.onProgress?.({
+      phase: "reading",
+      pages,
+      imported,
+      deleted,
+      recordsFound,
+      pendingRecords: 0,
+    });
     const raw = await DunaHealthKit.readChanges(
       JSON.stringify(input.categories),
       cursor,
-      250,
+      HEALTHKIT_PAGE_LIMIT_PER_TYPE,
     );
     const changes = parseHealthKitChanges(raw);
-    const result = await input.client.player.syncHealthSamples.mutate({
-      categories: [...input.categories],
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-      samples: [...changes.samples],
-      deletedExternalIds: [...changes.deletedExternalIds],
-    });
+    recordsFound += changes.samples.length + changes.deletedExternalIds.length;
+    const uploadBatches = planHealthUploadBatches(
+      changes.samples,
+      changes.deletedExternalIds,
+    );
+    for (const batch of uploadBatches) {
+      input.onProgress?.({
+        phase: "uploading",
+        pages,
+        imported,
+        deleted,
+        recordsFound,
+        pendingRecords: batch.samples.length + batch.deletedExternalIds.length,
+      });
+      const result = await input.client.player.syncHealthSamples.mutate({
+        categories: [...input.categories],
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        samples: [...batch.samples],
+        deletedExternalIds: [...batch.deletedExternalIds],
+      });
+      imported += result.imported;
+      deleted += result.deleted;
+    }
     // The secure local anchor advances only after Duna acknowledges the batch.
     cursor = JSON.stringify(changes.cursors);
     await SecureStore.setItemAsync(HEALTH_CURSOR_KEY, cursor);
-    batches += 1;
-    imported += result.imported;
-    deleted += result.deleted;
-    input.onBatch?.({ batches, imported, deleted });
+    pages += 1;
     hasMore = changes.hasMore;
     if (
       !hasMore ||
@@ -107,8 +139,12 @@ export async function syncAppleHealth(input: {
       break;
     }
   }
-  await SecureStore.deleteItemAsync(HEALTH_DIRTY_KEY);
-  return { batches, imported, deleted };
+  if (hasMore) {
+    await SecureStore.setItemAsync(HEALTH_DIRTY_KEY, new Date().toISOString());
+  } else {
+    await SecureStore.deleteItemAsync(HEALTH_DIRTY_KEY);
+  }
+  return { pages, imported, deleted, complete: !hasMore };
 }
 
 export async function startAppleHealthMonitoring(

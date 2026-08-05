@@ -5,11 +5,14 @@ import type {
   HealthTimelineEntry,
 } from "@duna/api";
 import * as Crypto from "expo-crypto";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Alert,
+  Animated,
   AppState,
+  Easing,
   Modal,
   Pressable,
   ScrollView,
@@ -25,9 +28,28 @@ import {
   startAppleHealthMonitoring,
   syncAppleHealth,
 } from "./health-kit";
+import { healthSyncErrorMessage } from "./health-sync-utils";
 import { usePlayerRuntime } from "./runtime";
 
 type HealthTheme = "light" | "dark";
+type HealthImportPhase =
+  "permission" | "reading" | "protecting" | "processing" | "complete";
+
+type HealthImportStatus = {
+  readonly phase: HealthImportPhase;
+  readonly imported: number;
+  readonly deleted: number;
+  readonly recordsFound: number;
+  readonly complete?: boolean;
+};
+
+const healthImportProgress: Readonly<Record<HealthImportPhase, number>> = {
+  permission: 0.12,
+  reading: 0.34,
+  protecting: 0.64,
+  processing: 0.86,
+  complete: 1,
+};
 
 const demoPersonId = "41a181e8-8103-49f4-bdeb-a71e693295f2";
 const demoCoachId = "41a181e8-8103-49f4-bdeb-a71e693295f3";
@@ -304,6 +326,7 @@ export function HealthScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [importStatus, setImportStatus] = useState<HealthImportStatus>();
   const [connectOpen, setConnectOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<
@@ -318,6 +341,7 @@ export function HealthScreen({
     "summary",
     "timeline",
   ]);
+  const syncInFlight = useRef(false);
 
   const reload = useCallback(async () => {
     if (!client || mode === "preview") {
@@ -358,27 +382,71 @@ export function HealthScreen({
     async (categories: readonly HealthCategory[], announce = true) => {
       if (!client || mode === "preview") {
         if (announce) setNotice("Preview data refreshed.");
-        return;
+        return false;
       }
+      if (syncInFlight.current) return false;
+      syncInFlight.current = true;
       setBusy(true);
       setError(undefined);
+      setNotice(undefined);
+      if (announce) {
+        setImportStatus({
+          phase: "reading",
+          imported: 0,
+          deleted: 0,
+          recordsFound: 0,
+        });
+      }
       try {
-        const result = await syncAppleHealth({ client, categories });
+        const result = await syncAppleHealth({
+          client,
+          categories,
+          onProgress: announce
+            ? (progress) =>
+                setImportStatus({
+                  phase:
+                    progress.phase === "reading" ? "reading" : "protecting",
+                  imported: progress.imported,
+                  deleted: progress.deleted,
+                  recordsFound: progress.recordsFound,
+                })
+            : undefined,
+        });
+        if (announce) {
+          setImportStatus({
+            phase: "processing",
+            imported: result.imported,
+            deleted: result.deleted,
+            recordsFound: result.imported + result.deleted,
+            complete: result.complete,
+          });
+        }
+        await reload();
         if (announce) {
           setNotice(
             result.imported > 0 || result.deleted > 0
-              ? `Apple Health synced · ${result.imported} records updated`
-              : "Apple Health is up to date.",
+              ? result.complete
+                ? `Apple Health synced · ${result.imported} records protected`
+                : `${result.imported} records protected · more history will continue next sync`
+              : "Apple Health is connected. No new records were shared.",
           );
+          setImportStatus({
+            phase: "complete",
+            imported: result.imported,
+            deleted: result.deleted,
+            recordsFound: result.imported + result.deleted,
+            complete: result.complete,
+          });
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          setImportStatus(undefined);
         }
-        await reload();
+        return true;
       } catch (reason) {
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "Apple Health could not sync.",
-        );
+        setImportStatus(undefined);
+        setError(healthSyncErrorMessage(reason));
+        return false;
       } finally {
+        syncInFlight.current = false;
         setBusy(false);
       }
     },
@@ -407,11 +475,19 @@ export function HealthScreen({
     }
     setBusy(true);
     setError(undefined);
+    setNotice(undefined);
+    setImportStatus({
+      phase: "permission",
+      imported: 0,
+      deleted: 0,
+      recordsFound: 0,
+    });
     try {
+      setConnectOpen(false);
       await requestAppleHealthAccess(selectedCategories);
       await performSync(selectedCategories);
-      setConnectOpen(false);
     } catch (reason) {
+      setImportStatus(undefined);
       setError(
         reason instanceof Error
           ? reason.message
@@ -585,7 +661,27 @@ export function HealthScreen({
             </Text>
           </View>
         )}
-        {error && <Text style={styles.error}>{error}</Text>}
+        {error && (
+          <View style={styles.errorCard}>
+            <View style={styles.errorCopy}>
+              <Text style={styles.errorTitle}>Health sync paused</Text>
+              <Text style={styles.error}>{error}</Text>
+            </View>
+            <Pressable
+              disabled={busy}
+              onPress={() =>
+                void performSync(
+                  enabledCategories?.length
+                    ? enabledCategories
+                    : selectedCategories,
+                )
+              }
+              style={styles.errorAction}
+            >
+              <Text style={styles.errorActionText}>Try again</Text>
+            </Pressable>
+          </View>
+        )}
         {notice && <Text style={styles.notice}>{notice}</Text>}
 
         {!connected && !loading ? (
@@ -676,6 +772,46 @@ export function HealthScreen({
                 styles={styles}
               />
             </View>
+
+            {!loading && (dashboard?.timeline.length ?? 0) === 0 && (
+              <View style={styles.emptyHealthCard}>
+                <View style={styles.emptyHealthMark}>
+                  <Text style={styles.emptyHealthMarkText}>↙</Text>
+                </View>
+                <View style={styles.emptyHealthCopy}>
+                  <Text style={styles.emptyHealthTitle}>
+                    Connected. Waiting for Health data.
+                  </Text>
+                  <Text style={styles.emptyHealthBody}>
+                    Apple does not tell Duna which categories you declined. Make
+                    sure at least one selected category contains data, then sync
+                    again.
+                  </Text>
+                  <View style={styles.emptyHealthActions}>
+                    <Pressable
+                      onPress={() => setConnectOpen(true)}
+                      style={styles.emptyHealthButton}
+                    >
+                      <Text style={styles.emptyHealthButtonText}>
+                        Review access
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      disabled={busy}
+                      onPress={() =>
+                        void performSync(
+                          enabledCategories?.length
+                            ? enabledCategories
+                            : selectedCategories,
+                        )
+                      }
+                    >
+                      <Text style={styles.linkText}>Sync again</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            )}
 
             <View style={styles.sectionHeader}>
               <View>
@@ -886,6 +1022,11 @@ export function HealthScreen({
         )}
       </ScrollView>
 
+      <HealthImportOverlay
+        palette={palette}
+        status={importStatus}
+        styles={styles}
+      />
       <ConnectModal
         busy={busy}
         categories={selectedCategories}
@@ -922,6 +1063,200 @@ export function HealthScreen({
         visible={shareOpen}
       />
     </View>
+  );
+}
+
+function HealthImportOverlay({
+  palette,
+  status,
+  styles,
+}: {
+  readonly palette: HealthPalette;
+  readonly status?: HealthImportStatus;
+  readonly styles: ReturnType<typeof createHealthStyles>;
+}) {
+  const spin = useRef(new Animated.Value(0)).current;
+  const progress = useRef(new Animated.Value(0)).current;
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const visible = Boolean(status);
+
+  useEffect(() => {
+    let mounted = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+      if (mounted) setReduceMotion(enabled);
+    });
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      setReduceMotion,
+    );
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!visible || reduceMotion) return;
+    const animation = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: 2_200,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    animation.start();
+    return () => {
+      animation.stop();
+      spin.setValue(0);
+    };
+  }, [reduceMotion, spin, visible]);
+
+  useEffect(() => {
+    Animated.timing(progress, {
+      toValue: status ? healthImportProgress[status.phase] : 0,
+      duration: reduceMotion ? 0 : 420,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [progress, reduceMotion, status?.phase]);
+
+  if (!status) return null;
+
+  const copy =
+    status.phase === "permission"
+      ? {
+          eyebrow: "APPLE HEALTH",
+          title: "Choose what Duna may read.",
+          body: "Apple’s private permission sheet is opening. Duna never receives categories you do not approve.",
+        }
+      : status.phase === "reading"
+        ? {
+            eyebrow: "BRINGING IT IN",
+            title: "Reading your selected signals.",
+            body: "Duna is collecting the Health records you chose directly from this iPhone.",
+          }
+        : status.phase === "protecting"
+          ? {
+              eyebrow: "PROTECTING YOUR DATA",
+              title: "Encrypting every record.",
+              body: "Small secure batches are being encrypted and stored in your private Duna timeline.",
+            }
+          : status.phase === "processing"
+            ? {
+                eyebrow: "BUILDING CONTEXT",
+                title: "Finding the rhythm around your game.",
+                body: "Duna is organizing recovery, heart, activity and body signals around your matches and videos.",
+              }
+            : {
+                eyebrow: "READY",
+                title:
+                  status.imported > 0
+                    ? "Your Health timeline is ready."
+                    : "Apple Health is connected.",
+                body:
+                  status.imported > 0
+                    ? status.complete === false
+                      ? "Your newest timeline is ready. More history will continue securely on the next sync."
+                      : "Your private performance context is ready to explore."
+                    : "No new records were shared. You can review Apple Health access or sync again at any time.",
+              };
+  const stageIndex =
+    status.phase === "permission" || status.phase === "reading"
+      ? 0
+      : status.phase === "protecting"
+        ? 1
+        : status.phase === "processing"
+          ? 2
+          : 3;
+  const recordLabel =
+    status.phase === "permission"
+      ? "Private by default"
+      : status.phase === "reading"
+        ? status.recordsFound > 0
+          ? `${status.recordsFound.toLocaleString()} records found`
+          : "Scanning selected categories"
+        : status.imported > 0
+          ? `${status.imported.toLocaleString()} records protected`
+          : "Secure connection confirmed";
+
+  return (
+    <Modal animationType="fade" statusBarTranslucent transparent visible>
+      <View accessibilityViewIsModal style={styles.importBackdrop}>
+        <View style={styles.importCard}>
+          <View style={styles.importMark}>
+            <Animated.View
+              style={[
+                styles.importOrbit,
+                {
+                  transform: [
+                    {
+                      rotate: spin.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ["0deg", "360deg"],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <View style={styles.importOrbitDot} />
+            </Animated.View>
+            <View style={styles.importHeart}>
+              <Text style={styles.importHeartText}>♥</Text>
+            </View>
+          </View>
+          <Text style={styles.importEyebrow}>{copy.eyebrow}</Text>
+          <Text style={styles.importTitle}>{copy.title}</Text>
+          <Text style={styles.importBody}>{copy.body}</Text>
+          <Text style={styles.importCount}>{recordLabel}</Text>
+          <View
+            accessibilityRole="progressbar"
+            accessibilityValue={{
+              max: 100,
+              min: 0,
+              now: Math.round(healthImportProgress[status.phase] * 100),
+            }}
+            style={styles.importProgressTrack}
+          >
+            <Animated.View
+              style={[
+                styles.importProgressFill,
+                {
+                  width: progress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ["0%", "100%"],
+                  }),
+                },
+              ]}
+            />
+          </View>
+          <View style={styles.importStages}>
+            {["Read", "Protect", "Organize"].map((label, index) => {
+              const active = index <= Math.min(stageIndex, 2);
+              return (
+                <View key={label} style={styles.importStage}>
+                  <View
+                    style={[
+                      styles.importStageDot,
+                      active && { backgroundColor: palette.aqua },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.importStageText,
+                      active && { color: palette.ink },
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -1334,13 +1669,40 @@ function createHealthStyles(colors: HealthPalette) {
       letterSpacing: 1.1,
       textAlign: "center",
     },
+    errorCard: {
+      backgroundColor: `${colors.coral}14`,
+      borderRadius: 16,
+      padding: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      borderWidth: 1,
+      borderColor: `${colors.coral}35`,
+    },
+    errorCopy: { flex: 1 },
+    errorTitle: {
+      color: colors.ink,
+      fontSize: 13,
+      fontWeight: "800",
+      marginBottom: 3,
+    },
     error: {
       color: colors.coral,
-      backgroundColor: `${colors.coral}14`,
-      borderRadius: 12,
-      padding: 12,
       fontSize: 12,
       lineHeight: 18,
+    },
+    errorAction: {
+      minHeight: 38,
+      paddingHorizontal: 12,
+      borderRadius: 12,
+      backgroundColor: colors.coral,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    errorActionText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
     },
     notice: {
       color: colors.aqua,
@@ -1400,6 +1762,125 @@ function createHealthStyles(colors: HealthPalette) {
       fontSize: 10,
       lineHeight: 15,
       textAlign: "center",
+    },
+    importBackdrop: {
+      flex: 1,
+      backgroundColor: colors.overlay,
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 22,
+    },
+    importCard: {
+      width: "100%",
+      maxWidth: 420,
+      borderRadius: 30,
+      backgroundColor: colors.surface,
+      paddingHorizontal: 24,
+      paddingVertical: 28,
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: colors.line,
+    },
+    importMark: {
+      width: 108,
+      height: 108,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 22,
+    },
+    importOrbit: {
+      position: "absolute",
+      width: 106,
+      height: 106,
+      borderRadius: 53,
+      borderWidth: 2,
+      borderColor: colors.aquaSoft,
+    },
+    importOrbitDot: {
+      position: "absolute",
+      width: 13,
+      height: 13,
+      borderRadius: 7,
+      backgroundColor: colors.lime,
+      top: -7,
+      left: 46,
+      shadowColor: colors.lime,
+      shadowOpacity: 0.8,
+      shadowRadius: 8,
+    },
+    importHeart: {
+      width: 70,
+      height: 70,
+      borderRadius: 24,
+      backgroundColor: colors.aquaSoft,
+      alignItems: "center",
+      justifyContent: "center",
+      transform: [{ rotate: "-8deg" }],
+    },
+    importHeartText: {
+      color: colors.coral,
+      fontSize: 34,
+      transform: [{ rotate: "8deg" }],
+    },
+    importEyebrow: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.5,
+      marginBottom: 8,
+    },
+    importTitle: {
+      color: colors.ink,
+      fontSize: 26,
+      lineHeight: 31,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+      textAlign: "center",
+    },
+    importBody: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 20,
+      textAlign: "center",
+      marginTop: 10,
+      maxWidth: 330,
+    },
+    importCount: {
+      color: colors.ink,
+      fontSize: 12,
+      fontWeight: "800",
+      marginTop: 22,
+    },
+    importProgressTrack: {
+      width: "100%",
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: colors.surfaceSoft,
+      overflow: "hidden",
+      marginTop: 12,
+    },
+    importProgressFill: {
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: colors.aqua,
+    },
+    importStages: {
+      width: "100%",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 14,
+    },
+    importStage: { flexDirection: "row", alignItems: "center", gap: 6 },
+    importStageDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor: colors.line,
+    },
+    importStageText: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
     },
     recoveryCard: {
       backgroundColor: colors.surface,
@@ -1472,6 +1953,57 @@ function createHealthStyles(colors: HealthPalette) {
       fontSize: 10,
       fontWeight: "800",
       marginTop: 2,
+    },
+    emptyHealthCard: {
+      backgroundColor: colors.aquaSoft,
+      borderRadius: 20,
+      padding: 16,
+      flexDirection: "row",
+      gap: 13,
+      borderWidth: 1,
+      borderColor: `${colors.aqua}35`,
+    },
+    emptyHealthMark: {
+      width: 42,
+      height: 42,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surface,
+    },
+    emptyHealthMarkText: {
+      color: colors.aqua,
+      fontSize: 22,
+      fontWeight: "900",
+    },
+    emptyHealthCopy: { flex: 1 },
+    emptyHealthTitle: {
+      color: colors.ink,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    emptyHealthBody: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 5,
+    },
+    emptyHealthActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 16,
+      marginTop: 12,
+    },
+    emptyHealthButton: {
+      backgroundColor: colors.aqua,
+      borderRadius: 11,
+      paddingVertical: 8,
+      paddingHorizontal: 11,
+    },
+    emptyHealthButtonText: {
+      color: colors.onAccent,
+      fontSize: 10,
+      fontWeight: "900",
     },
     sectionHeader: {
       marginTop: 8,

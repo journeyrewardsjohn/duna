@@ -1415,8 +1415,11 @@ const playerRouter = router({
     .use(
       rateLimitMiddleware({
         id: "health-sync",
-        capacity: 30,
-        refillPerMinute: 10,
+        // A first-time HealthKit backfill is deliberately paged and encrypted
+        // in small requests. Allow one bounded import session without treating
+        // it like interactive API abuse.
+        capacity: 75,
+        refillPerMinute: 15,
       }),
     )
     .input(
