@@ -14,6 +14,7 @@ import {
 } from "@duna/core";
 import {
   getDatabase,
+  getTransactionalDatabase,
   isDatabaseConfigured,
   divisions,
   importedMatches,
@@ -339,7 +340,7 @@ export async function ensurePredictionCreditAccount(input: {
   readonly now?: Date;
 }) {
   requireDatabase();
-  const database = getDatabase();
+  const database = getTransactionalDatabase();
   const now = input.now ?? new Date();
   const entitlement = await getDunaPlusEntitlement(input.personId, now);
   const monthlyCredits = entitlement.active
@@ -507,7 +508,7 @@ export async function ensurePredictionMarket(
   definition: PredictionMarketDefinition,
 ) {
   requireDatabase();
-  const database = getDatabase();
+  const database = getTransactionalDatabase();
   const initialYesPriceBps = validatePredictionPrice(
     definition.initialYesPriceBps,
   );
@@ -760,7 +761,7 @@ export async function placePredictionOrder(input: {
     stakeMicros,
     limitPriceBps: input.limitPriceBps,
   });
-  const database = getDatabase();
+  const database = getTransactionalDatabase();
   return database.transaction(async (transaction) => {
     // A market is one matching domain. Serializing writes per market prevents
     // two takers from consuming the same resting shares at the same time.
@@ -1077,7 +1078,7 @@ export async function settlePredictionMarket(input: {
   readonly now?: Date;
 }) {
   requireDatabase();
-  const database = getDatabase();
+  const database = getTransactionalDatabase();
   const now = input.now ?? new Date();
   return database.transaction(async (transaction) => {
     await transaction.execute(
