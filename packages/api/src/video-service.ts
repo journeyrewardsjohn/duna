@@ -82,6 +82,8 @@ export class VideoServiceError extends Error {
       | "MUX_REQUIRED"
       | "R2_REQUIRED"
       | "SIGNED_PLAYBACK_REQUIRED"
+      | "LIVE_PROVIDER_FAILED"
+      | "UPLOAD_PROVIDER_FAILED"
       | "DUNA_PLUS_REQUIRED"
       | "ADULT_REQUIRED"
       | "LIVE_QUOTA_EXCEEDED"
@@ -530,6 +532,20 @@ export async function searchVideoAssociations(
     subtitle: string;
     associated: boolean;
     startsAt?: string;
+    venue?: {
+      venueId?: string;
+      name: string;
+      address?: string;
+      googlePlaceId?: string;
+      latitude?: number;
+      longitude?: number;
+    };
+    captureDefaults?: {
+      courtWidthMeters: number;
+      courtLengthMeters: number;
+      netHeightMeters: number;
+      orientation?: "landscape" | "portrait";
+    };
   }[]
 > {
   requireDatabase();
@@ -549,6 +565,7 @@ export async function searchVideoAssociations(
         title: sessions.title,
         startsAt: sessions.startsAt,
         timezone: sessions.timezone,
+        venueId: sessions.venueId,
       })
       .from(sessions)
       .where(eventWhere)
@@ -559,6 +576,10 @@ export async function searchVideoAssociations(
         id: matches.id,
         eventId: sessions.id,
         eventTitle: sessions.title,
+        eventVenueId: sessions.venueId,
+        matchVenueId: matches.venueId,
+        divisionName: divisions.name,
+        divisionSettings: divisions.settings,
         scheduledAt: matches.scheduledAt,
         teamAId: matches.teamAId,
         teamBId: matches.teamBId,
@@ -580,6 +601,52 @@ export async function searchVideoAssociations(
           .from(teams)
           .where(inArray(teams.id, [...new Set(matchTeamIds)]))
       : [];
+  const venueIds = [
+    ...eventRows.map((event) => event.venueId),
+    ...matchRows.flatMap((match) => [match.matchVenueId, match.eventVenueId]),
+  ].filter((id): id is string => Boolean(id));
+  const venueRows =
+    venueIds.length > 0
+      ? await database
+          .select({
+            id: venues.id,
+            name: venues.name,
+            addressLine1: venues.addressLine1,
+            addressLine2: venues.addressLine2,
+            locality: venues.locality,
+            administrativeArea: venues.administrativeArea,
+            postalCode: venues.postalCode,
+            googlePlaceId: venues.googlePlaceId,
+            latitude: venues.latitude,
+            longitude: venues.longitude,
+          })
+          .from(venues)
+          .where(inArray(venues.id, [...new Set(venueIds)]))
+      : [];
+  const venueOptions = new Map(
+    venueRows.map((venue) => {
+      const address = [
+        venue.addressLine1,
+        venue.addressLine2,
+        venue.locality,
+        venue.administrativeArea,
+        venue.postalCode,
+      ]
+        .filter(Boolean)
+        .join(", ");
+      return [
+        venue.id,
+        {
+          venueId: venue.id,
+          name: venue.name,
+          address: address || undefined,
+          googlePlaceId: venue.googlePlaceId ?? undefined,
+          latitude: venue.latitude ?? undefined,
+          longitude: venue.longitude ?? undefined,
+        },
+      ] as const;
+    }),
+  );
   const teamNames = new Map(teamRows.map((team) => [team.id, team.name]));
   const eventsResult = eventRows.map((event) => ({
     type: "event" as const,
@@ -588,6 +655,13 @@ export async function searchVideoAssociations(
     subtitle: `${eventIds.has(event.id) ? "Your event" : "Event"} · ${event.startsAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: event.timezone })}`,
     associated: eventIds.has(event.id),
     startsAt: event.startsAt.toISOString(),
+    venue: event.venueId ? venueOptions.get(event.venueId) : undefined,
+    captureDefaults: {
+      courtWidthMeters: 8,
+      courtLengthMeters: 16,
+      netHeightMeters: 2.43,
+      orientation: "landscape" as const,
+    },
   }));
   const queryLower = normalized.toLowerCase();
   const matchesResult = matchRows
@@ -603,6 +677,38 @@ export async function searchVideoAssociations(
         (match.teamAId ? teamIds.has(match.teamAId) : false) ||
         (match.teamBId ? teamIds.has(match.teamBId) : false) ||
         eventIds.has(match.eventId);
+      const settings = match.divisionSettings;
+      const configuredNetHeight =
+        typeof settings.netHeightMeters === "number" &&
+        settings.netHeightMeters >= 1.8 &&
+        settings.netHeightMeters <= 3
+          ? settings.netHeightMeters
+          : undefined;
+      const divisionLabel = match.divisionName.toLowerCase();
+      const inferredNetHeight =
+        configuredNetHeight ??
+        (/(women|women's|girls|female)/.test(divisionLabel)
+          ? 2.24
+          : /(junior|youth|u1[234]|12u|13u|14u)/.test(divisionLabel)
+            ? 2.12
+            : 2.43);
+      const courtLengthMeters =
+        typeof settings.courtLengthMeters === "number" &&
+        settings.courtLengthMeters >= 8 &&
+        settings.courtLengthMeters <= 40
+          ? settings.courtLengthMeters
+          : 16;
+      const courtWidthMeters =
+        typeof settings.courtWidthMeters === "number" &&
+        settings.courtWidthMeters >= 4 &&
+        settings.courtWidthMeters <= 30
+          ? settings.courtWidthMeters
+          : 8;
+      const configuredOrientation: "portrait" | "landscape" =
+        settings.videoOrientation === "portrait" ||
+        settings.videoOrientation === "landscape"
+          ? settings.videoOrientation
+          : "landscape";
       return {
         type: "match" as const,
         id: match.id,
@@ -611,6 +717,13 @@ export async function searchVideoAssociations(
         subtitle: `${match.eventTitle} · ${match.status}`,
         associated,
         startsAt: match.scheduledAt?.toISOString(),
+        venue: venueOptions.get(match.matchVenueId ?? match.eventVenueId ?? ""),
+        captureDefaults: {
+          courtWidthMeters,
+          courtLengthMeters,
+          netHeightMeters: inferredNetHeight,
+          orientation: configuredOrientation,
+        },
       };
     })
     .filter(
@@ -884,7 +997,11 @@ export async function createLiveVideo(input: {
         updatedAt: input.now,
       })
       .where(eq(videos.id, videoId));
-    throw error;
+    console.error("Duna live provider setup failed", { error, videoId });
+    throw new VideoServiceError(
+      "LIVE_PROVIDER_FAILED",
+      "Duna could not open the live stream. Please try again in a moment.",
+    );
   }
 }
 
@@ -1243,7 +1360,11 @@ export async function beginVideoUpload(input: {
         updatedAt: input.now,
       })
       .where(eq(videos.id, videoId));
-    throw error;
+    console.error("Duna upload provider setup failed", { error, videoId });
+    throw new VideoServiceError(
+      "UPLOAD_PROVIDER_FAILED",
+      "Duna could not open a secure upload. Please try again in a moment.",
+    );
   }
 }
 

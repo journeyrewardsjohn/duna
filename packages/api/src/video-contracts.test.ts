@@ -4,9 +4,11 @@ import {
   courtCalibrationSchema,
   dunaPlusEntitlementSchema,
   videoPlaybackSchema,
+  videoAssociationOptionSchema,
   videoUsageSchema,
 } from "./contracts";
 import {
+  buildMuxLiveStreamInput,
   isMuxSignedPlaybackConfigured,
   isMuxVideoConfigured,
   isR2VideoConfigured,
@@ -60,6 +62,36 @@ describe("Duna Video contracts", () => {
       active: true,
       kind: "complimentary",
       label: "Complimentary Duna+",
+    });
+  });
+
+  it("carries match venue and camera defaults into the mobile setup", () => {
+    const option = videoAssociationOptionSchema.parse({
+      type: "match",
+      id: crypto.randomUUID(),
+      eventId: crypto.randomUUID(),
+      title: "Duna Blue vs Duna Gold",
+      subtitle: "Championship · scheduled",
+      associated: true,
+      venue: {
+        venueId: crypto.randomUUID(),
+        name: "Manhattan Beach Pier",
+        googlePlaceId: "google-place-id",
+        latitude: 33.8847,
+        longitude: -118.4109,
+      },
+      captureDefaults: {
+        courtWidthMeters: 8,
+        courtLengthMeters: 16,
+        netHeightMeters: 2.24,
+        orientation: "landscape",
+      },
+    });
+
+    expect(option).toMatchObject({
+      associated: true,
+      venue: { name: "Manhattan Beach Pier" },
+      captureDefaults: { netHeightMeters: 2.24, orientation: "landscape" },
     });
   });
 
@@ -196,6 +228,27 @@ describe("Duna Video provider readiness", () => {
     vi.stubEnv("CF_ACCESS_KEY_ID", "r2-access-key");
     vi.stubEnv("CE_SECRET_ACCESS_KEY", "r2-secret-key");
     expect(isR2VideoConfigured()).toBe(true);
-    expect(R2_VIDEO_PART_SIZE_BYTES).toBe(64 * 1024 * 1024);
+    expect(R2_VIDEO_PART_SIZE_BYTES).toBe(16 * 1024 * 1024);
+  });
+
+  it("places Duna passthrough on the live stream for inherited asset metadata", () => {
+    const videoId = crypto.randomUUID();
+    const built = buildMuxLiveStreamInput({
+      videoId,
+      title: "Championship match",
+      liveVisibility: "public",
+      recordingVisibility: "private",
+      maximumDurationSeconds: 14_400,
+    });
+
+    expect(built.request).toMatchObject({
+      passthrough: videoId,
+      playback_policies: ["public"],
+      new_asset_settings: {
+        playback_policies: ["signed"],
+        meta: { external_id: videoId },
+      },
+    });
+    expect(built.request.new_asset_settings).not.toHaveProperty("passthrough");
   });
 });

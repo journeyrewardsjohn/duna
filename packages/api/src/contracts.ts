@@ -599,6 +599,20 @@ export const courtCalibrationSchema = z.object({
     .length(4)
     .readonly()
     .optional(),
+  horizonY: z.number().min(0).max(1).optional(),
+  projectionSource: z
+    .enum(["lidar", "arkit", "vision", "estimated"])
+    .optional(),
+  lidarAvailable: z.boolean().optional(),
+  groundPlaneDetected: z.boolean().optional(),
+  courtDetected: z.boolean().optional(),
+  cameraHeightMeters: z.number().nonnegative().max(20).optional(),
+  preferredOrientation: z.enum(["landscape", "portrait"]).optional(),
+  deviceOrientation: z.enum(["landscape", "portrait", "unknown"]).optional(),
+  orientationMatches: z.boolean().optional(),
+  trackingState: z
+    .enum(["initializing", "limited", "normal", "unavailable"])
+    .optional(),
   deviceAttitude: z
     .object({
       pitch: z.number(),
@@ -696,6 +710,24 @@ export const videoAssociationOptionSchema = z.object({
   subtitle: z.string(),
   associated: z.boolean(),
   startsAt: z.iso.datetime().optional(),
+  venue: z
+    .object({
+      venueId: z.string().uuid().optional(),
+      name: z.string(),
+      address: z.string().optional(),
+      googlePlaceId: z.string().optional(),
+      latitude: z.number().optional(),
+      longitude: z.number().optional(),
+    })
+    .optional(),
+  captureDefaults: z
+    .object({
+      courtWidthMeters: z.number().positive().max(30),
+      courtLengthMeters: z.number().positive().max(40),
+      netHeightMeters: z.number().positive().max(4),
+      orientation: z.enum(["landscape", "portrait"]).optional(),
+    })
+    .optional(),
 });
 export const videoPlaybackSchema = z.object({
   video: videoSummarySchema,

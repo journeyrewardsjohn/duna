@@ -806,7 +806,9 @@ function throwDomainError(error: unknown): never {
           : error.code === "DATABASE_REQUIRED" ||
               error.code === "MUX_REQUIRED" ||
               error.code === "R2_REQUIRED" ||
-              error.code === "SIGNED_PLAYBACK_REQUIRED"
+              error.code === "SIGNED_PLAYBACK_REQUIRED" ||
+              error.code === "LIVE_PROVIDER_FAILED" ||
+              error.code === "UPLOAD_PROVIDER_FAILED"
             ? "INTERNAL_SERVER_ERROR"
             : error.code === "INVALID_ASSOCIATION" ||
                 error.code === "UPLOAD_PART_INVALID" ||
