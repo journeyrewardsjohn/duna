@@ -13,7 +13,7 @@ declare class DunaHealthKitNativeModule extends NativeModule<DunaHealthKitModule
   readChanges(
     categoriesJson: string,
     cursorJson: string | null,
-    limitPerType: number,
+    recordLimit: number,
   ): Promise<string>;
   startMonitoring(categoriesJson: string): Promise<boolean>;
   stopMonitoring(): void;

@@ -88,10 +88,10 @@ export function WorkOSMobileAuthProvider({
   readonly requireOrganization?: boolean;
   readonly scheme: string;
 }) {
-  const redirectUri = AuthSession.makeRedirectUri({
-    path: "auth/callback",
-    scheme,
-  });
+  // This package is used by Duna's native apps, whose callback scheme is an
+  // explicit required input. Building the URI directly also keeps clean native
+  // builds independent of Expo's optional embedded manifest resource.
+  const redirectUri = `${scheme}://auth/callback`;
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: clientId || "unconfigured",

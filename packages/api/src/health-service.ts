@@ -93,7 +93,7 @@ const METRIC_CATEGORY: Readonly<Record<HealthMetric, HealthCategory>> = {
 
 type HealthPayload = Pick<
   HealthSampleInput,
-  "value" | "unit" | "categoryValue" | "workout"
+  "value" | "unit" | "categoryValue" | "source" | "workout"
 >;
 
 type EncryptedHealthPayload = {
@@ -507,7 +507,11 @@ export async function syncHealthSamples(input: {
   readonly syncedAt: Date;
   readonly requestId?: string;
   readonly ipAddress?: string;
-}): Promise<{ readonly imported: number; readonly deleted: number }> {
+}): Promise<{
+  readonly imported: number;
+  readonly deleted: number;
+  readonly protocolVersion: 2;
+}> {
   requireDatabase();
   requireAdult(input.actor);
   await requireNoPendingAccountDeletion(input.actor.personId);
@@ -543,6 +547,7 @@ export async function syncHealthSamples(input: {
       value: sample.value,
       unit: sample.unit,
       categoryValue: sample.categoryValue,
+      source: sample.source,
       workout: sample.workout,
     }),
     createdAt: input.syncedAt,
@@ -579,7 +584,7 @@ export async function syncHealthSamples(input: {
         consentVersion: HEALTH_CONSENT_VERSION,
         enabledCategories: categories,
         timezone: input.timezone,
-        earliestAuthorizedAt: input.earliestAuthorizedAt,
+        earliestAuthorizedAt: sql`LEAST(${healthConnections.earliestAuthorizedAt}, excluded.earliest_authorized_at)`,
         lastSyncedAt: input.syncedAt,
         revokedAt: null,
         updatedAt: input.syncedAt,
@@ -629,7 +634,7 @@ export async function syncHealthSamples(input: {
     ]);
     deleted = removed.length;
   }
-  return { imported: rows.length, deleted };
+  return { imported: rows.length, deleted, protocolVersion: 2 };
 }
 
 async function loadSharingCandidates(
@@ -1454,11 +1459,25 @@ export async function loadHealthDashboard(input: {
     ipAddress: input.ipAddress,
   });
   const database = getDatabase();
-  const connectionRows = await database
-    .select()
-    .from(healthConnections)
-    .where(eq(healthConnections.personId, input.actor.personId))
-    .limit(1);
+  const [connectionRows, sampleStats] = await Promise.all([
+    database
+      .select()
+      .from(healthConnections)
+      .where(eq(healthConnections.personId, input.actor.personId))
+      .limit(1),
+    database
+      .select({
+        importedSampleCount: sql<number>`count(*)::int`,
+        earliestSampleAt: sql<
+          string | null
+        >`min(${healthSamples.startedAt})::text`,
+        latestSampleAt: sql<
+          string | null
+        >`max(${healthSamples.startedAt})::text`,
+      })
+      .from(healthSamples)
+      .where(eq(healthSamples.personId, input.actor.personId)),
+  ]);
   const candidates = await loadSharingCandidates(input.actor.personId);
   const grants = await serializeActiveGrants({
     ownerPersonId: input.actor.personId,
@@ -1477,6 +1496,13 @@ export async function loadHealthDashboard(input: {
           timezone: connection.timezone,
           earliestAuthorizedAt: connection.earliestAuthorizedAt?.toISOString(),
           lastSyncedAt: connection.lastSyncedAt?.toISOString(),
+          importedSampleCount: sampleStats[0]?.importedSampleCount ?? 0,
+          earliestSampleAt: sampleStats[0]?.earliestSampleAt
+            ? new Date(sampleStats[0].earliestSampleAt).toISOString()
+            : undefined,
+          latestSampleAt: sampleStats[0]?.latestSampleAt
+            ? new Date(sampleStats[0].latestSampleAt).toISOString()
+            : undefined,
         }
       : undefined,
     grants,

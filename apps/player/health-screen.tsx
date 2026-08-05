@@ -23,12 +23,17 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   clearAppleHealthCursor,
+  getAppleHealthSyncState,
   healthCategoryDetails,
+  isAppleHealthSyncActive,
   requestAppleHealthAccess,
   startAppleHealthMonitoring,
   syncAppleHealth,
 } from "./health-kit";
-import { healthSyncErrorMessage } from "./health-sync-utils";
+import {
+  healthSyncErrorMessage,
+  type AppleHealthSyncState,
+} from "./health-sync-utils";
 import { usePlayerRuntime } from "./runtime";
 
 type HealthTheme = "light" | "dark";
@@ -40,6 +45,9 @@ type HealthImportStatus = {
   readonly imported: number;
   readonly deleted: number;
   readonly recordsFound: number;
+  readonly pages?: number;
+  readonly totalRecordsProcessed?: number;
+  readonly remainingMetrics?: readonly string[];
   readonly complete?: boolean;
 };
 
@@ -327,6 +335,9 @@ export function HealthScreen({
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [importStatus, setImportStatus] = useState<HealthImportStatus>();
+  const [importOverlayHidden, setImportOverlayHidden] = useState(false);
+  const [syncState, setSyncState] = useState<AppleHealthSyncState>();
+  const [historySyncQueued, setHistorySyncQueued] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<
@@ -342,6 +353,14 @@ export function HealthScreen({
     "timeline",
   ]);
   const syncInFlight = useRef(false);
+
+  useEffect(() => {
+    if (mode === "preview") return;
+    void getAppleHealthSyncState().then((state) => {
+      setSyncState(state);
+      if (state && !state.complete) setHistorySyncQueued(true);
+    });
+  }, [mode]);
 
   const reload = useCallback(async () => {
     if (!client || mode === "preview") {
@@ -385,11 +404,20 @@ export function HealthScreen({
         return false;
       }
       if (syncInFlight.current) return false;
+      if (isAppleHealthSyncActive()) {
+        if (announce) {
+          setNotice(
+            "Your Apple Health history is already continuing securely in the background.",
+          );
+        }
+        return false;
+      }
       syncInFlight.current = true;
       setBusy(true);
       setError(undefined);
       setNotice(undefined);
       if (announce) {
+        setImportOverlayHidden(false);
         setImportStatus({
           phase: "reading",
           imported: 0,
@@ -401,6 +429,7 @@ export function HealthScreen({
         const result = await syncAppleHealth({
           client,
           categories,
+          maxPages: announce ? undefined : 15,
           onProgress: announce
             ? (progress) =>
                 setImportStatus({
@@ -409,6 +438,9 @@ export function HealthScreen({
                   imported: progress.imported,
                   deleted: progress.deleted,
                   recordsFound: progress.recordsFound,
+                  pages: progress.pages,
+                  totalRecordsProcessed: progress.totalRecordsProcessed,
+                  remainingMetrics: progress.remainingMetrics,
                 })
             : undefined,
         });
@@ -417,33 +449,49 @@ export function HealthScreen({
             phase: "processing",
             imported: result.imported,
             deleted: result.deleted,
-            recordsFound: result.imported + result.deleted,
+            recordsFound: result.recordsFound,
+            pages: result.pages,
+            totalRecordsProcessed: result.state.recordsProcessed,
+            remainingMetrics: result.state.remainingMetrics,
             complete: result.complete,
           });
         }
+        setSyncState(result.state);
+        if (!result.complete) setHistorySyncQueued(true);
         await reload();
         if (announce) {
           setNotice(
             result.imported > 0 || result.deleted > 0
               ? result.complete
-                ? `Apple Health synced · ${result.imported} records protected`
-                : `${result.imported} records protected · more history will continue next sync`
+                ? `Apple Health history is up to date · ${result.state.recordsProcessed.toLocaleString()} records processed`
+                : `${result.state.recordsProcessed.toLocaleString()} records processed · older history will keep importing automatically`
               : "Apple Health is connected. No new records were shared.",
           );
           setImportStatus({
             phase: "complete",
             imported: result.imported,
             deleted: result.deleted,
-            recordsFound: result.imported + result.deleted,
+            recordsFound: result.recordsFound,
+            pages: result.pages,
+            totalRecordsProcessed: result.state.recordsProcessed,
+            remainingMetrics: result.state.remainingMetrics,
             complete: result.complete,
           });
           await new Promise((resolve) => setTimeout(resolve, 800));
           setImportStatus(undefined);
+        } else if (result.complete) {
+          setNotice(
+            `Apple Health history is up to date · ${result.state.recordsProcessed.toLocaleString()} records processed`,
+          );
         }
         return true;
       } catch (reason) {
-        setImportStatus(undefined);
-        setError(healthSyncErrorMessage(reason));
+        if (announce) {
+          setImportStatus(undefined);
+          setError(healthSyncErrorMessage(reason));
+        } else {
+          setHistorySyncQueued(true);
+        }
         return false;
       } finally {
         syncInFlight.current = false;
@@ -452,6 +500,22 @@ export function HealthScreen({
     },
     [client, mode, reload],
   );
+
+  useEffect(() => {
+    if (
+      !historySyncQueued ||
+      busy ||
+      !enabledCategories?.length ||
+      mode === "preview"
+    ) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setHistorySyncQueued(false);
+      void performSync(enabledCategories, false);
+    }, 60_000);
+    return () => clearTimeout(timer);
+  }, [busy, enabledCategories, historySyncQueued, mode, performSync]);
 
   useEffect(() => {
     if (!enabledCategories?.length || mode === "preview") return;
@@ -608,6 +672,7 @@ export function HealthScreen({
             void client.player.disconnectHealth
               .mutate({ idempotencyKey: Crypto.randomUUID() })
               .then(clearAppleHealthCursor)
+              .then(() => setSyncState(undefined))
               .then(reload)
               .catch((reason: unknown) =>
                 setError(
@@ -626,6 +691,17 @@ export function HealthScreen({
   const summary = dashboard?.summary;
   const recovery = summary?.recoveryContext;
   const connected = dashboard?.connection?.status === "active";
+  const confirmedSampleCount = dashboard?.connection?.importedSampleCount;
+  const historyRecordCount = Math.max(
+    confirmedSampleCount ?? 0,
+    syncState?.recordsProcessed ?? 0,
+  );
+  const earliestSampleLabel = dashboard?.connection?.earliestSampleAt
+    ? new Date(dashboard.connection.earliestSampleAt).toLocaleDateString(
+        "en-US",
+        { month: "short", year: "numeric" },
+      )
+    : undefined;
 
   return (
     <View style={styles.root}>
@@ -743,6 +819,66 @@ export function HealthScreen({
                 </Text>
               </View>
             </View>
+
+            {syncState && (
+              <View
+                style={[
+                  styles.historySyncCard,
+                  syncState.complete && styles.historySyncCardComplete,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.historySyncIcon,
+                    syncState.complete && styles.historySyncIconComplete,
+                  ]}
+                >
+                  <Text style={styles.historySyncIconText}>
+                    {syncState.complete ? "✓" : "↙"}
+                  </Text>
+                </View>
+                <View style={styles.historySyncCopy}>
+                  <Text style={styles.historySyncEyebrow}>
+                    {syncState.complete
+                      ? "HISTORY UP TO DATE"
+                      : "HISTORICAL IMPORT IN PROGRESS"}
+                  </Text>
+                  <Text style={styles.historySyncTitle}>
+                    {historyRecordCount.toLocaleString()} records{" "}
+                    {confirmedSampleCount !== undefined
+                      ? "securely stored"
+                      : "processed"}
+                  </Text>
+                  <Text style={styles.historySyncBody}>
+                    {syncState.complete
+                      ? `Duna has reached the end of the selected Apple Health history${earliestSampleLabel ? ` back to ${earliestSampleLabel}` : ""}. New records continue incrementally.`
+                      : `Older history will resume automatically while Duna is open and whenever you return${syncState.remainingMetrics.length ? ` · ${syncState.remainingMetrics.length} data types still backfilling` : ""}.`}
+                  </Text>
+                  <Text style={styles.historySyncSourceNote}>
+                    Supported samples written to Apple Health by Apple Watch,
+                    WHOOP, and other connected apps keep their source
+                    attribution.
+                  </Text>
+                </View>
+                {!syncState.complete && (
+                  <Pressable
+                    disabled={busy}
+                    onPress={() =>
+                      void performSync(
+                        enabledCategories?.length
+                          ? enabledCategories
+                          : selectedCategories,
+                      )
+                    }
+                    style={styles.historySyncAction}
+                  >
+                    <Text style={styles.historySyncActionText}>
+                      {busy ? "Importing" : "Continue"}
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
 
             <View style={styles.statGrid}>
               <Stat
@@ -946,6 +1082,7 @@ export function HealthScreen({
                         hour: "numeric",
                         minute: "2-digit",
                       })}
+                      {sample.source?.name ? ` · ${sample.source.name}` : ""}
                     </Text>
                   </View>
                   <Text style={styles.timelineValue}>{valueLabel(sample)}</Text>
@@ -1023,8 +1160,9 @@ export function HealthScreen({
       </ScrollView>
 
       <HealthImportOverlay
+        onMinimize={() => setImportOverlayHidden(true)}
         palette={palette}
-        status={importStatus}
+        status={importOverlayHidden ? undefined : importStatus}
         styles={styles}
       />
       <ConnectModal
@@ -1067,10 +1205,12 @@ export function HealthScreen({
 }
 
 function HealthImportOverlay({
+  onMinimize,
   palette,
   status,
   styles,
 }: {
+  readonly onMinimize: () => void;
   readonly palette: HealthPalette;
   readonly status?: HealthImportStatus;
   readonly styles: ReturnType<typeof createHealthStyles>;
@@ -1079,6 +1219,11 @@ function HealthImportOverlay({
   const progress = useRef(new Animated.Value(0)).current;
   const [reduceMotion, setReduceMotion] = useState(false);
   const visible = Boolean(status);
+  const shouldSpin = Boolean(
+    status &&
+    (status.phase === "permission" ||
+      (status.phase === "reading" && status.recordsFound === 0)),
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -1096,7 +1241,10 @@ function HealthImportOverlay({
   }, []);
 
   useEffect(() => {
-    if (!visible || reduceMotion) return;
+    if (!visible || !shouldSpin || reduceMotion) {
+      spin.setValue(0);
+      return;
+    }
     const animation = Animated.loop(
       Animated.timing(spin, {
         toValue: 1,
@@ -1110,7 +1258,7 @@ function HealthImportOverlay({
       animation.stop();
       spin.setValue(0);
     };
-  }, [reduceMotion, spin, visible]);
+  }, [reduceMotion, shouldSpin, spin, visible]);
 
   useEffect(() => {
     Animated.timing(progress, {
@@ -1133,14 +1281,20 @@ function HealthImportOverlay({
       : status.phase === "reading"
         ? {
             eyebrow: "BRINGING IT IN",
-            title: "Reading your selected signals.",
-            body: "Duna is collecting the Health records you chose directly from this iPhone.",
+            title:
+              status.recordsFound > 0
+                ? "Importing your Health history."
+                : "Reading your selected signals.",
+            body:
+              status.recordsFound > 0
+                ? "Your imported data is usable now. Older records continue in resumable secure pages, so years of history never have to finish in one blocking session."
+                : "Duna is collecting the Health records you chose directly from this iPhone.",
           }
         : status.phase === "protecting"
           ? {
               eyebrow: "PROTECTING YOUR DATA",
-              title: "Encrypting every record.",
-              body: "Small secure batches are being encrypted and stored in your private Duna timeline.",
+              title: "Protecting a secure page.",
+              body: "Every record is encrypted and source-aware before it enters your private Duna timeline. You can keep using Duna while history continues.",
             }
           : status.phase === "processing"
             ? {
@@ -1157,7 +1311,7 @@ function HealthImportOverlay({
                 body:
                   status.imported > 0
                     ? status.complete === false
-                      ? "Your newest timeline is ready. More history will continue securely on the next sync."
+                      ? "Your timeline is ready. Older history will continue automatically while Duna is open and resume when you return."
                       : "Your private performance context is ready to explore."
                     : "No new records were shared. You can review Apple Health access or sync again at any time.",
               };
@@ -1174,10 +1328,10 @@ function HealthImportOverlay({
       ? "Private by default"
       : status.phase === "reading"
         ? status.recordsFound > 0
-          ? `${status.recordsFound.toLocaleString()} records found`
+          ? `${(status.totalRecordsProcessed ?? status.recordsFound).toLocaleString()} records processed · page ${(status.pages ?? 0) + 1}`
           : "Scanning selected categories"
         : status.imported > 0
-          ? `${status.imported.toLocaleString()} records protected`
+          ? `${(status.totalRecordsProcessed ?? status.imported).toLocaleString()} total records processed`
           : "Secure connection confirmed";
 
   return (
@@ -1210,6 +1364,13 @@ function HealthImportOverlay({
           <Text style={styles.importTitle}>{copy.title}</Text>
           <Text style={styles.importBody}>{copy.body}</Text>
           <Text style={styles.importCount}>{recordLabel}</Text>
+          {status.phase !== "permission" && status.phase !== "complete" && (
+            <Pressable onPress={onMinimize} style={styles.importMinimizeButton}>
+              <Text style={styles.importMinimizeButtonText}>
+                Keep using Duna
+              </Text>
+            </Pressable>
+          )}
           <View
             accessibilityRole="progressbar"
             accessibilityValue={{
@@ -1851,6 +2012,20 @@ function createHealthStyles(colors: HealthPalette) {
       fontWeight: "800",
       marginTop: 22,
     },
+    importMinimizeButton: {
+      backgroundColor: colors.aquaSoft,
+      borderColor: colors.aqua,
+      borderRadius: 999,
+      borderWidth: 1,
+      marginTop: 13,
+      paddingHorizontal: 18,
+      paddingVertical: 10,
+    },
+    importMinimizeButtonText: {
+      color: colors.aqua,
+      fontSize: 11,
+      fontWeight: "900",
+    },
     importProgressTrack: {
       width: "100%",
       height: 6,
@@ -1925,6 +2100,72 @@ function createHealthStyles(colors: HealthPalette) {
       letterSpacing: 1,
     },
     recoveryCopy: { flex: 1 },
+    historySyncCard: {
+      alignItems: "flex-start",
+      backgroundColor: colors.aquaSoft,
+      borderColor: colors.aqua,
+      borderRadius: 20,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      padding: 15,
+    },
+    historySyncCardComplete: {
+      backgroundColor: colors.surface,
+      borderColor: colors.line,
+    },
+    historySyncIcon: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 14,
+      height: 42,
+      justifyContent: "center",
+      width: 42,
+    },
+    historySyncIconComplete: { backgroundColor: colors.lime },
+    historySyncIconText: {
+      color: colors.onAccent,
+      fontSize: 19,
+      fontWeight: "900",
+    },
+    historySyncCopy: { flex: 1, minWidth: 0 },
+    historySyncEyebrow: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.75,
+    },
+    historySyncTitle: {
+      color: colors.ink,
+      fontSize: 16,
+      fontWeight: "900",
+      letterSpacing: -0.35,
+      marginTop: 4,
+    },
+    historySyncBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 5,
+    },
+    historySyncSourceNote: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 7,
+    },
+    historySyncAction: {
+      borderColor: colors.aqua,
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+    },
+    historySyncActionText: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+    },
     statGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     statCard: {
       width: "48.7%",
