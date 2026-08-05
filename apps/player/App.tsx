@@ -1,4 +1,10 @@
-import { defaultEventMedia, formatMoney, formatVenueTime } from "@duna/core";
+import {
+  defaultEventMedia,
+  formatMoney,
+  formatVenueTime,
+  type EventDivisionSummary,
+  type PersonSummary,
+} from "@duna/core";
 import {
   demoBookings,
   demoEvents,
@@ -13,7 +19,14 @@ import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
 import { StatusBar } from "expo-status-bar";
 import * as WebBrowser from "expo-web-browser";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Animated,
   Easing,
@@ -58,6 +71,111 @@ type MobileCoach = NonNullable<PlayerRuntime["coaches"]>[number];
 type OrganizationWallet = NonNullable<
   PlayerRuntime["organizationWallets"]
 >[number];
+type PlayerCoachingNote = NonNullable<PlayerRuntime["coachingNotes"]>[number];
+type TeammateSearchResult = Awaited<
+  ReturnType<DunaApiClient["player"]["teammateSearch"]["query"]>
+>[number];
+
+interface RegistrationParticipant {
+  readonly person: PersonSummary;
+  readonly label: string;
+  readonly available: boolean;
+  readonly birthDate?: string;
+  readonly ageBand?: "unknown" | "under-13" | "teen" | "adult";
+  readonly genderCategory?: string;
+}
+
+function registrationParticipantEligibility(
+  participant: RegistrationParticipant | undefined,
+  division: EventDivisionSummary | undefined,
+  eligibilityDate: string,
+) {
+  if (!participant?.available) {
+    return { eligible: false, reason: "Guardian verification required" };
+  }
+  const rating = participant.person.rating.display;
+  if (division?.ratingMinimum !== undefined && rating < division.ratingMinimum) {
+    return {
+      eligible: false,
+      reason: `Rating must be ${division.ratingMinimum.toFixed(2)}+`,
+    };
+  }
+  if (division?.ratingMaximum !== undefined && rating > division.ratingMaximum) {
+    return {
+      eligible: false,
+      reason: `Rating must be ${division.ratingMaximum.toFixed(2)} or below`,
+    };
+  }
+  const age = participant.birthDate
+    ? Math.floor(
+        (new Date(eligibilityDate).getTime() -
+          new Date(`${participant.birthDate}T00:00:00Z`).getTime()) /
+          (365.2425 * 24 * 60 * 60_000),
+      )
+    : undefined;
+  if (
+    division?.ageMinimum !== undefined &&
+    (age === undefined || age < division.ageMinimum)
+  ) {
+    return {
+      eligible: false,
+      reason:
+        age === undefined
+          ? "Age verification required"
+          : `Must be ${division.ageMinimum}+`,
+    };
+  }
+  if (
+    division?.ageMaximum !== undefined &&
+    (age === undefined || age > division.ageMaximum)
+  ) {
+    return {
+      eligible: false,
+      reason:
+        age === undefined
+          ? "Age verification required"
+          : `Must be ${division.ageMaximum} or younger`,
+    };
+  }
+  const requiredGender = division?.gender?.toLowerCase() ?? "";
+  const participantGender = participant.genderCategory?.toLowerCase() ?? "";
+  const womenOnly = /women|woman|female|girls?/.test(requiredGender);
+  const menOnly =
+    !womenOnly && /(^|\W)(men|man|male|boys?)(\W|$)/.test(requiredGender);
+  if (womenOnly || menOnly) {
+    const matches = womenOnly
+      ? /women|woman|female|girls?/.test(participantGender)
+      : /(^|\W)(men|man|male|boys?)(\W|$)/.test(participantGender);
+    if (!matches) {
+      return {
+        eligible: false,
+        reason: participantGender
+          ? `Not eligible for ${division?.gender}`
+          : "Gender eligibility not verified",
+      };
+    }
+  }
+  return { eligible: true, reason: "Eligible" };
+}
+
+function registrationParticipantAge(
+  participant: RegistrationParticipant,
+  eligibilityDate: string,
+) {
+  if (participant.birthDate) {
+    return `Age ${Math.max(
+      0,
+      Math.floor(
+        (new Date(eligibilityDate).getTime() -
+          new Date(`${participant.birthDate}T00:00:00Z`).getTime()) /
+          (365.2425 * 24 * 60 * 60_000),
+      ),
+    )}`;
+  }
+  return participant.ageBand && participant.ageBand !== "unknown"
+    ? participant.ageBand.replace("under-13", "Under 13")
+    : "Age not set";
+}
 
 const lightColors = {
   canvas: "#f8f7f3",
@@ -625,6 +743,34 @@ function MemberOrganizationCard({
   );
 }
 
+function CoachingNoteCard({ note }: { readonly note: PlayerCoachingNote }) {
+  return (
+    <View style={styles.coachingNoteCard}>
+      <View style={styles.coachingNoteAccent} />
+      <View style={styles.coachingNoteTop}>
+        <View style={styles.coachingNoteMark}>
+          <Text style={styles.coachingNoteMarkText}>✦</Text>
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.coachingNoteEyebrow}>FROM YOUR COACH</Text>
+          <Text style={styles.coachingNoteTitle}>
+            {note.subject ?? note.sessionTitle}
+          </Text>
+          <Text style={styles.coachingNoteMeta}>
+            {note.coachName} · {note.organizationName} ·{" "}
+            {new Date(note.publishedAt).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            })}
+          </Text>
+        </View>
+      </View>
+      <Text style={styles.coachingNoteSummary}>{note.summary}</Text>
+      <Text style={styles.coachingNoteSession}>{note.sessionTitle}</Text>
+    </View>
+  );
+}
+
 function HomeScreen({
   onBook,
 }: {
@@ -635,6 +781,7 @@ function HomeScreen({
   const {
     client,
     coaches,
+    coachingNotes,
     dashboard,
     organizationWallets,
     people: livePeople,
@@ -727,6 +874,20 @@ function HomeScreen({
         </ImageBackground>
         {homeOrganization && (
           <MemberOrganizationCard organization={homeOrganization} />
+        )}
+        {coachingNotes?.[0] && (
+          <>
+            <SectionHeader
+              eyebrow="COACHING"
+              title="Carry the session forward."
+              action={
+                coachingNotes.length > 1
+                  ? `${coachingNotes.length} notes`
+                  : undefined
+              }
+            />
+            <CoachingNoteCard note={coachingNotes[0]} />
+          </>
         )}
         {homeEvents.length > 0 && (
           <>
@@ -1096,6 +1257,296 @@ function localDateValue(date: Date): string {
   return local.toISOString().slice(0, 10);
 }
 
+function localDateAnchor(value: string): Date {
+  return new Date(`${value}T12:00:00`);
+}
+
+function addLocalDateDays(value: string, amount: number): string {
+  const date = localDateAnchor(value);
+  date.setDate(date.getDate() + amount);
+  return localDateValue(date);
+}
+
+function localDateDistance(start: string, end: string): number {
+  return Math.max(
+    0,
+    Math.round(
+      (localDateAnchor(end).getTime() - localDateAnchor(start).getTime()) /
+        86_400_000,
+    ),
+  );
+}
+
+function startOfLocalMonth(value: string): string {
+  const date = localDateAnchor(value);
+  date.setDate(1);
+  return localDateValue(date);
+}
+
+function addLocalMonths(value: string, amount: number): string {
+  const date = localDateAnchor(startOfLocalMonth(value));
+  date.setMonth(date.getMonth() + amount);
+  return localDateValue(date);
+}
+
+function localMonthCells(value: string): readonly (string | undefined)[] {
+  const monthStart = localDateAnchor(startOfLocalMonth(value));
+  const leading = monthStart.getDay();
+  const lastDay = new Date(
+    monthStart.getFullYear(),
+    monthStart.getMonth() + 1,
+    0,
+  ).getDate();
+  return [
+    ...Array.from({ length: leading }, () => undefined),
+    ...Array.from({ length: lastDay }, (_, index) =>
+      addLocalDateDays(startOfLocalMonth(value), index),
+    ),
+  ];
+}
+
+function shortLocalWeekday(value: string): string {
+  const weekday = localDateAnchor(value).getDay();
+  return ["Sun", "Mon", "Tues", "Wed", "Thu", "Fri", "Sat"][weekday] ?? "";
+}
+
+function localMonthLabel(value: string): string {
+  return localDateAnchor(value).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function instantLocalDateValue(instant: string, timezone?: string): string {
+  if (!timezone) return localDateValue(new Date(instant));
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: timezone,
+    year: "numeric",
+  }).formatToParts(new Date(instant));
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+type MobileCalendarMarker = {
+  readonly booking: boolean;
+  readonly event: boolean;
+  readonly count: number;
+};
+
+function BookingCalendarModal({
+  markers,
+  maxDate,
+  minDate,
+  onClose,
+  onExtendRange,
+  onSelect,
+  selectedDate,
+  visible,
+}: {
+  readonly markers: ReadonlyMap<string, MobileCalendarMarker>;
+  readonly maxDate: string;
+  readonly minDate: string;
+  readonly onClose: () => void;
+  readonly onExtendRange: (requiredEnd?: string) => void;
+  readonly onSelect: (date: string) => void;
+  readonly selectedDate: string;
+  readonly visible: boolean;
+}) {
+  const { width } = useWindowDimensions();
+  const [visibleMonth, setVisibleMonth] = useState(() =>
+    startOfLocalMonth(selectedDate),
+  );
+  const today = localDateValue(new Date());
+  const months = [visibleMonth, addLocalMonths(visibleMonth, 1)] as const;
+
+  useEffect(() => {
+    if (visible) setVisibleMonth(startOfLocalMonth(selectedDate));
+  }, [selectedDate, visible]);
+
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="pageSheet"
+      visible={visible}
+    >
+      <SafeAreaView
+        edges={["top", "bottom"]}
+        style={styles.bookingCalendarSafe}
+      >
+        <View style={styles.bookingCalendarHeader}>
+          <View style={styles.flex}>
+            <Text style={styles.bookingCalendarEyebrow}>TWO-MONTH VIEW</Text>
+            <Text style={styles.bookingCalendarTitle}>
+              When do you want to play?
+            </Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Close full calendar"
+            onPress={onClose}
+            style={styles.bookingCalendarClose}
+          >
+            <Text style={styles.bookingCalendarCloseText}>×</Text>
+          </Pressable>
+        </View>
+        <View style={styles.bookingCalendarToolbar}>
+          <Pressable
+            accessibilityLabel="Previous month"
+            disabled={visibleMonth <= startOfLocalMonth(minDate)}
+            onPress={() =>
+              setVisibleMonth((current) => addLocalMonths(current, -1))
+            }
+            style={styles.bookingCalendarNav}
+          >
+            <Text style={styles.bookingCalendarNavText}>‹</Text>
+          </Pressable>
+          <Text style={styles.bookingCalendarRange}>
+            {localMonthLabel(visibleMonth)} – {localMonthLabel(months[1])}
+          </Text>
+          <Pressable
+            accessibilityLabel="Next month"
+            onPress={() => {
+              const nextMonth = addLocalMonths(visibleMonth, 1);
+              const endOfSecondMonth = addLocalDateDays(
+                addLocalMonths(nextMonth, 2),
+                -1,
+              );
+              onExtendRange(endOfSecondMonth);
+              setVisibleMonth(nextMonth);
+            }}
+            style={styles.bookingCalendarNav}
+          >
+            <Text style={styles.bookingCalendarNavText}>›</Text>
+          </Pressable>
+        </View>
+        <ScrollView
+          contentContainerStyle={styles.bookingCalendarScroll}
+          showsVerticalScrollIndicator={false}
+        >
+          <View
+            style={[
+              styles.bookingCalendarMonths,
+              width >= 720 && styles.bookingCalendarMonthsWide,
+            ]}
+          >
+            {months.map((month) => (
+              <View key={month} style={styles.bookingCalendarMonth}>
+                <Text style={styles.bookingCalendarMonthTitle}>
+                  {localMonthLabel(month)}
+                </Text>
+                <View style={styles.bookingCalendarWeekdayRow}>
+                  {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map(
+                    (weekday) => (
+                      <Text key={weekday} style={styles.bookingCalendarWeekday}>
+                        {weekday}
+                      </Text>
+                    ),
+                  )}
+                </View>
+                <View style={styles.bookingCalendarGrid}>
+                  {localMonthCells(month).map((date, index) => {
+                    if (!date) {
+                      return (
+                        <View
+                          key={`blank-${month}-${index}`}
+                          style={styles.bookingCalendarBlank}
+                        />
+                      );
+                    }
+                    const marker = markers.get(date);
+                    const disabled = date < minDate || date > maxDate;
+                    const selected = date === selectedDate;
+                    return (
+                      <Pressable
+                        accessibilityLabel={`${localDateAnchor(
+                          date,
+                        ).toLocaleDateString("en-US", {
+                          weekday: "long",
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        })}${marker ? `, ${marker.count} scheduled` : ""}`}
+                        disabled={disabled}
+                        key={date}
+                        onPress={() => {
+                          selectionHaptic();
+                          onSelect(date);
+                          onClose();
+                        }}
+                        style={[
+                          styles.bookingCalendarDay,
+                          date === today && styles.bookingCalendarDayToday,
+                          selected && styles.bookingCalendarDaySelected,
+                          disabled && styles.bookingCalendarDayDisabled,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.bookingCalendarDayText,
+                            selected && styles.bookingCalendarDayTextSelected,
+                          ]}
+                        >
+                          {localDateAnchor(date).getDate()}
+                        </Text>
+                        {marker && (
+                          <View style={styles.bookingCalendarMarkers}>
+                            {marker.booking && (
+                              <View
+                                style={[
+                                  styles.bookingCalendarMarker,
+                                  styles.bookingCalendarMarkerBooking,
+                                ]}
+                              />
+                            )}
+                            {marker.event && (
+                              <View
+                                style={[
+                                  styles.bookingCalendarMarker,
+                                  styles.bookingCalendarMarkerEvent,
+                                ]}
+                              />
+                            )}
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
+          </View>
+          <View style={styles.bookingCalendarLegend}>
+            <View style={styles.bookingCalendarLegendItem}>
+              <View
+                style={[
+                  styles.bookingCalendarMarker,
+                  styles.bookingCalendarMarkerBooking,
+                ]}
+              />
+              <Text style={styles.bookingCalendarLegendText}>Your plans</Text>
+            </View>
+            <View style={styles.bookingCalendarLegendItem}>
+              <View
+                style={[
+                  styles.bookingCalendarMarker,
+                  styles.bookingCalendarMarkerEvent,
+                ]}
+              />
+              <Text style={styles.bookingCalendarLegendText}>
+                Events to explore
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 function localSlotTime(value: string): string {
   const [hourValue = "0", minuteValue = "00"] = value.slice(11, 16).split(":");
   const hour = Number(hourValue);
@@ -1119,12 +1570,16 @@ function VenueBookingModal({
   readonly visible: boolean;
   readonly onClose: () => void;
 }) {
-  const { client, mode, people, refresh } = usePlayerRuntime();
+  const { width } = useWindowDimensions();
+  const { client, dashboard, mode, people, refresh } = usePlayerRuntime();
+  const [todayValue] = useState(() => localDateValue(new Date()));
   const [inventory, setInventory] = useState<CourtInventory>();
   const [availability, setAvailability] = useState<CourtAvailability>();
-  const [selectedDate, setSelectedDate] = useState(() =>
-    localDateValue(new Date()),
+  const [selectedDate, setSelectedDate] = useState(todayValue);
+  const [dateRangeEnd, setDateRangeEnd] = useState(() =>
+    addLocalDateDays(todayValue, 90),
   );
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState(90);
   const [selectedSlot, setSelectedSlot] =
     useState<CourtAvailability["slots"][number]>();
@@ -1141,14 +1596,60 @@ function VenueBookingModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const bookingDateScrollRef = useRef<ScrollView>(null);
+  const bookingDateScrollX = useRef(0);
+  const dateRailPositioned = useRef(false);
 
-  const selectedDateAnchor = new Date(`${selectedDate}T12:00:00`);
-  const todayValue = localDateValue(new Date());
-  const dates = Array.from({ length: 11 }, (_, index) => {
-    const date = new Date(selectedDateAnchor);
-    date.setDate(selectedDateAnchor.getDate() + index - 4);
-    return date;
-  });
+  const dates = Array.from(
+    { length: localDateDistance(todayValue, dateRangeEnd) + 1 },
+    (_, index) => addLocalDateDays(todayValue, index),
+  );
+
+  const extendDateRange = (requiredEnd?: string) => {
+    setDateRangeEnd((current) => {
+      if (requiredEnd && requiredEnd <= current) return current;
+      let next = addLocalDateDays(current, 90);
+      while (requiredEnd && next < requiredEnd) {
+        next = addLocalDateDays(next, 90);
+      }
+      return next;
+    });
+  };
+  const calendarMarkers = useMemo(() => {
+    const next = new Map<string, MobileCalendarMarker>();
+    const addMarker = (date: string, tone: "booking" | "event") => {
+      const current = next.get(date) ?? {
+        booking: false,
+        event: false,
+        count: 0,
+      };
+      next.set(date, {
+        booking: current.booking || tone === "booking",
+        event: current.event || tone === "event",
+        count: current.count + 1,
+      });
+    };
+    for (const booking of dashboard?.bookings ?? []) {
+      addMarker(
+        instantLocalDateValue(booking.startsAt, "America/Los_Angeles"),
+        "booking",
+      );
+    }
+    for (const event of dashboard?.events ?? []) {
+      if (event.lifecycleStatus === "cancelled") continue;
+      if (
+        dashboard?.bookings.some(
+          (booking) =>
+            booking.title === event.title &&
+            booking.startsAt === event.startsAt,
+        )
+      ) {
+        continue;
+      }
+      addMarker(instantLocalDateValue(event.startsAt, event.timezone), "event");
+    }
+    return next;
+  }, [dashboard]);
   const durations = [
     ...new Set(
       inventory?.courts.flatMap((court) => court.durationOptionsMinutes) ?? [
@@ -1170,6 +1671,25 @@ function VenueBookingModal({
   const selectedForecastDay = availability?.forecast?.days.find(
     (day) => day.date === selectedDate,
   );
+
+  useEffect(() => {
+    if (!visible) {
+      dateRailPositioned.current = false;
+      return;
+    }
+    if (dateRailPositioned.current) return;
+    if (selectedDate < todayValue || selectedDate > dateRangeEnd) return;
+    const index = localDateDistance(todayValue, selectedDate);
+    const frame = requestAnimationFrame(() => {
+      const target = Math.max(0, index * 72 - (width - 64) / 2);
+      bookingDateScrollRef.current?.scrollTo({
+        animated: false,
+        x: target,
+      });
+      dateRailPositioned.current = true;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [dateRangeEnd, selectedDate, todayValue, visible, width]);
 
   useEffect(() => {
     if (!visible || !venueId || !client) return;
@@ -1310,7 +1830,7 @@ function VenueBookingModal({
       });
       setNotice(
         result.premiumRequired
-          ? "Your free priority alert is active. Duna+ unlocks additional simultaneous alerts."
+          ? "Your free priority alert is active. Premium unlocks additional simultaneous alerts."
           : "Priority alert created. We’ll notify you when a matching court opens.",
       );
     } catch (reason) {
@@ -1402,52 +1922,147 @@ function VenueBookingModal({
           )}
           {!selectedSlot ? (
             <>
+              <View style={styles.bookingDateToolbar}>
+                <View style={styles.flex}>
+                  <Text style={styles.bookingDateToolbarLabel}>
+                    WHEN DO YOU WANT TO PLAY?
+                  </Text>
+                  <Text style={styles.bookingDateToolbarTitle}>
+                    {localDateAnchor(selectedDate).toLocaleDateString("en-US", {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </Text>
+                </View>
+                <View style={styles.bookingDateToolbarActions}>
+                  <Pressable
+                    accessibilityLabel="Show earlier dates"
+                    onPress={() =>
+                      bookingDateScrollRef.current?.scrollTo({
+                        animated: true,
+                        x: Math.max(0, bookingDateScrollX.current - 252),
+                      })
+                    }
+                    style={styles.bookingDateNavButton}
+                  >
+                    <Text style={styles.bookingDateNavText}>‹</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityLabel="Open full calendar"
+                    onPress={() => {
+                      selectionHaptic();
+                      setCalendarOpen(true);
+                    }}
+                    style={styles.bookingDateCalendarButton}
+                  >
+                    <Text style={styles.bookingDateCalendarIcon}>▦</Text>
+                    <Text style={styles.bookingDateCalendarText}>Calendar</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityLabel="Show later dates"
+                    onPress={() => {
+                      const target = bookingDateScrollX.current + 252;
+                      if (target + width >= dates.length * 72 - width) {
+                        extendDateRange();
+                      }
+                      bookingDateScrollRef.current?.scrollTo({
+                        animated: true,
+                        x: target,
+                      });
+                    }}
+                    style={styles.bookingDateNavButton}
+                  >
+                    <Text style={styles.bookingDateNavText}>›</Text>
+                  </Pressable>
+                </View>
+              </View>
               <ScrollView
+                contentContainerStyle={styles.bookingDateRow}
                 horizontal
+                onScroll={(event) => {
+                  const { contentOffset, contentSize, layoutMeasurement } =
+                    event.nativeEvent;
+                  bookingDateScrollX.current = contentOffset.x;
+                  if (
+                    contentOffset.x + layoutMeasurement.width >=
+                    contentSize.width - layoutMeasurement.width
+                  ) {
+                    extendDateRange();
+                  }
+                }}
+                ref={bookingDateScrollRef}
+                scrollEventThrottle={16}
                 showsHorizontalScrollIndicator={false}
                 style={styles.horizontalBleed}
               >
-                <View style={styles.bookingDateRow}>
-                  {dates.map((date) => {
-                    const value = localDateValue(date);
-                    const active = value === selectedDate;
-                    const unavailable = value < todayValue;
-                    return (
-                      <Pressable
-                        disabled={unavailable}
-                        key={value}
-                        onPress={() => {
-                          selectionHaptic();
-                          setSelectedDate(value);
-                        }}
+                {dates.map((value) => {
+                  const date = localDateAnchor(value);
+                  const active = value === selectedDate;
+                  const marker = calendarMarkers.get(value);
+                  return (
+                    <Pressable
+                      accessibilityLabel={`${date.toLocaleDateString("en-US", {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })}${marker ? `, ${marker.count} scheduled` : ""}`}
+                      key={value}
+                      onPress={() => {
+                        selectionHaptic();
+                        setSelectedDate(value);
+                      }}
+                      style={[
+                        styles.bookingDate,
+                        active && styles.bookingDateActive,
+                      ]}
+                    >
+                      <Text
                         style={[
-                          styles.bookingDate,
-                          active && styles.bookingDateActive,
-                          unavailable && styles.bookingDateUnavailable,
+                          styles.bookingDateDay,
+                          active && styles.bookingDateTextActive,
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.bookingDateDay,
-                            active && styles.bookingDateTextActive,
-                          ]}
-                        >
-                          {date
-                            .toLocaleDateString("en-US", { weekday: "short" })
-                            .toUpperCase()}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.bookingDateNumber,
-                            active && styles.bookingDateTextActive,
-                          ]}
-                        >
-                          {date.getDate()}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                        {shortLocalWeekday(value)}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.bookingDateNumber,
+                          active && styles.bookingDateTextActive,
+                        ]}
+                      >
+                        {date.getDate()}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.bookingDateMonth,
+                          active && styles.bookingDateTextActive,
+                        ]}
+                      >
+                        {date.toLocaleDateString("en-US", { month: "short" })}
+                      </Text>
+                      <View style={styles.bookingDateDots}>
+                        {marker?.booking && (
+                          <View
+                            style={[
+                              styles.bookingDateDot,
+                              styles.bookingDateDotBooking,
+                            ]}
+                          />
+                        )}
+                        {marker?.event && (
+                          <View
+                            style={[
+                              styles.bookingDateDot,
+                              styles.bookingDateDotEvent,
+                            ]}
+                          />
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
               <View style={styles.bookingDurationRow}>
                 {durations.map((duration) => (
@@ -1581,7 +2196,7 @@ function VenueBookingModal({
                 <View style={styles.flex}>
                   <Text style={styles.rowTitle}>Priority alert</Text>
                   <Text style={styles.rowMeta}>
-                    One active alert is included. Duna+ unlocks more.
+                    One active alert is included. Premium unlocks more.
                   </Text>
                 </View>
                 <Text style={styles.chevron}>›</Text>
@@ -1815,6 +2430,16 @@ function VenueBookingModal({
           {notice && <Text style={styles.bookingNotice}>{notice}</Text>}
           {error && <Text style={styles.formError}>{error}</Text>}
         </ScrollView>
+        <BookingCalendarModal
+          markers={calendarMarkers}
+          maxDate={dateRangeEnd}
+          minDate={todayValue}
+          onClose={() => setCalendarOpen(false)}
+          onExtendRange={extendDateRange}
+          onSelect={setSelectedDate}
+          selectedDate={selectedDate}
+          visible={calendarOpen}
+        />
       </SafeAreaView>
     </Modal>
   );
@@ -2816,7 +3441,7 @@ function WalletScreen() {
         <View>
           <Text style={styles.eyebrow}>MEMBERSHIP</Text>
           <Text style={styles.cardTitle}>
-            {settings?.membership?.tierName ?? "Duna+"}
+            {settings?.membership?.tierName ?? "Premium"}
           </Text>
           <Text style={styles.bodyText}>
             {settings?.membership
@@ -2922,7 +3547,7 @@ function ProfileScreen() {
               {settings?.membership?.tierName ?? "Player"}
             </Pill>
             {settings?.dunaPlus.kind === "complimentary" && (
-              <Pill tone="positive">Complimentary Duna+</Pill>
+              <Pill tone="positive">Complimentary Premium+</Pill>
             )}
             <Text style={styles.profileName}>{player.displayName}</Text>
             <Text style={styles.profileHandle}>
@@ -3093,7 +3718,7 @@ function ProfileScreen() {
           ["Notifications", "#notifications"],
           ["Privacy + safety", "#privacy"],
           ["Language + units", "#profile"],
-          ["Manage Duna+", "#membership"],
+          ["Manage Premium", "#membership"],
           ["Delete my account", "#privacy"],
         ].map(([item, anchor]) => (
           <Pressable
@@ -3139,7 +3764,8 @@ function BookingModal({
   readonly eventIndex: number | null;
   readonly onClose: () => void;
 }) {
-  const { client, dashboard, mode, refresh, settings } = usePlayerRuntime();
+  const { client, dashboard, mode, people, refresh, settings } =
+    usePlayerRuntime();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [complete, setComplete] = useState<{
@@ -3150,6 +3776,29 @@ function BookingModal({
   const [purchaseKind, setPurchaseKind] = useState<"entry" | "ticket">("entry");
   const [divisionId, setDivisionId] = useState<string>();
   const [ticketTypeId, setTicketTypeId] = useState<string>();
+  const [ticketQuantity, setTicketQuantity] = useState(1);
+  const [teamPaymentMode, setTeamPaymentMode] = useState<"self" | "team">(
+    "self",
+  );
+  const [teamRoster, setTeamRoster] = useState<
+    readonly {
+      readonly personId?: string;
+      readonly inviteTarget?: string;
+      readonly displayName?: string;
+    }[]
+  >([]);
+  const [teammateQuery, setTeammateQuery] = useState("");
+  const [teammateResults, setTeammateResults] = useState<
+    readonly TeammateSearchResult[]
+  >([]);
+  const [inviteTarget, setInviteTarget] = useState("");
+  const [acceptedPolicyIds, setAcceptedPolicyIds] = useState<readonly string[]>(
+    [],
+  );
+  const [selectedParticipantId, setSelectedParticipantId] = useState<string>();
+  const teammateSearchTimeout = useRef<
+    ReturnType<typeof setTimeout> | undefined
+  >(undefined);
   const events = dashboard?.events ?? demoEvents;
   const player = dashboard?.player ?? demoPlayer;
   const event = eventIndex === null ? null : events[eventIndex];
@@ -3161,10 +3810,43 @@ function BookingModal({
   const ticket =
     event.tickets?.find((candidate) => candidate.id === ticketTypeId) ??
     event.tickets?.[0];
+  const participantOptions: readonly RegistrationParticipant[] = settings
+    ? [
+        {
+          person: settings.profile.person,
+          label: "You",
+          available: settings.profile.ageBand === "adult",
+          birthDate: settings.profile.birthDate,
+          ageBand: settings.profile.ageBand,
+          genderCategory: settings.profile.genderCategory,
+        },
+        ...settings.household
+          .filter((member) => member.role === "dependent")
+          .map((member) => ({
+            person: member.person,
+            label: member.relationship,
+            available: member.verified,
+            birthDate: member.birthDate,
+            ageBand: member.ageBand,
+            genderCategory: member.genderCategory,
+          })),
+      ]
+    : [{ person: player, label: "You", available: true }];
+  const selectedParticipant =
+    participantOptions.find(
+      (participant) => participant.person.id === selectedParticipantId,
+    ) ?? participantOptions.find((participant) => participant.available);
+  const selectedParticipantEligibility = registrationParticipantEligibility(
+    selectedParticipant,
+    division,
+    event.startsAt,
+  );
   const listedPrice =
     purchaseKind === "ticket"
       ? (ticket?.price ?? event.price)
-      : (division?.price ?? event.price);
+      : teamPaymentMode === "team"
+        ? (division?.teamPrice ?? division?.price ?? event.price)
+        : (division?.playerPrice ?? division?.price ?? event.price);
   const selectedTeamSize =
     division?.teamSize ??
     {
@@ -3174,10 +3856,56 @@ function BookingModal({
       "four-person": 4,
       "six-person": 6,
     }[division?.teamFormat ?? "solo"];
-  const requiresGuidedCheckout =
-    purchaseKind === "ticket" ||
-    selectedTeamSize > 1 ||
-    Boolean(event.policies?.length);
+  const requiredPolicies =
+    event.policies?.filter(
+      (policy) =>
+        policy.required &&
+        (purchaseKind === "entry" || policy.kind !== "waiver"),
+    ) ?? [];
+  const rosterComplete =
+    selectedTeamSize <= 1 || teamRoster.length >= selectedTeamSize - 1;
+  const policiesComplete = requiredPolicies.every((policy) =>
+    acceptedPolicyIds.includes(policy.id),
+  );
+  const listedSubtotalMinor =
+    listedPrice.amountMinor * (purchaseKind === "ticket" ? ticketQuantity : 1);
+  const teammateCandidates =
+    teammateResults.length > 0
+      ? teammateResults
+      : (people ?? demoPeople)
+          .filter(
+            (candidate) => candidate.id !== selectedParticipant?.person.id,
+          )
+          .slice(0, 8)
+          .map((candidate) => ({
+            person: candidate,
+            relationship:
+              candidate.homeMarket === selectedParticipant?.person.homeMarket
+                ? ("nearby" as const)
+                : ("search" as const),
+            sharedTeams: 0,
+            gender: "Not listed",
+            eligible: true,
+            eligibilityReasons: [],
+          }));
+
+  function searchTeammates(value: string) {
+    setTeammateQuery(value);
+    if (teammateSearchTimeout.current) {
+      clearTimeout(teammateSearchTimeout.current);
+    }
+    teammateSearchTimeout.current = setTimeout(() => {
+      if (!client || mode === "preview") return;
+      void client.player.teammateSearch
+        .query({
+          query: value.trim() || undefined,
+          divisionId: division?.id,
+          limit: 12,
+        })
+        .then(setTeammateResults)
+        .catch((reason) => setError(displayError(reason)));
+    }, 220);
+  }
 
   function close() {
     setError(undefined);
@@ -3185,33 +3913,56 @@ function BookingModal({
     setPurchaseKind("entry");
     setDivisionId(undefined);
     setTicketTypeId(undefined);
+    setTicketQuantity(1);
+    setTeamPaymentMode("self");
+    setTeamRoster([]);
+    setTeammateQuery("");
+    setTeammateResults([]);
+    setInviteTarget("");
+    setAcceptedPolicyIds([]);
+    setSelectedParticipantId(undefined);
     setBusy(false);
     onClose();
   }
 
   async function checkout() {
     if (!client || mode === "preview") return;
+    if (!selectedParticipantEligibility.eligible && purchaseKind === "entry") {
+      setError(
+        `${selectedParticipantEligibility.reason}. Choose a different player or division.`,
+      );
+      return;
+    }
+    if (!rosterComplete) {
+      setError(`Add ${selectedTeamSize - 1} teammates before continuing.`);
+      return;
+    }
+    if (!policiesComplete) {
+      setError("Read and accept every required event agreement.");
+      return;
+    }
     setBusy(true);
     setError(undefined);
     try {
-      if (requiresGuidedCheckout) {
-        const selection =
-          purchaseKind === "ticket" && ticket
-            ? `?ticket=${encodeURIComponent(ticket.id)}`
-            : division
-              ? `?division=${encodeURIComponent(division.id)}`
-              : "";
-        await WebBrowser.openBrowserAsync(
-          `${dunaWebUrl}/app/checkout/${selectedEvent.slug}${selection}`,
-        );
-        await refresh();
-        return;
-      }
       const result = await client.player.startEventCheckout.mutate({
         sessionId: selectedEvent.id,
-        divisionId: division?.id,
+        divisionId: purchaseKind === "entry" ? division?.id : undefined,
+        ticketTypeId: purchaseKind === "ticket" ? ticket?.id : undefined,
+        ticketQuantity: purchaseKind === "ticket" ? ticketQuantity : undefined,
+        teamPaymentMode:
+          purchaseKind === "entry" && selectedTeamSize > 1
+            ? teamPaymentMode
+            : undefined,
+        teamRoster:
+          purchaseKind === "entry" && selectedTeamSize > 1
+            ? [...teamRoster]
+            : undefined,
+        subjectPersonId:
+          purchaseKind === "entry" ? selectedParticipant?.person.id : undefined,
+        acceptedPolicyIds: [...acceptedPolicyIds],
+        readPolicyIds: [...acceptedPolicyIds],
         isDunaPlus: Boolean(settings?.membership),
-        successUrl: `${dunaWebUrl}/app?checkout=success`,
+        successUrl: `${dunaWebUrl}/app/checkout/${selectedEvent.slug}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${dunaWebUrl}/events/${selectedEvent.slug}?checkout=cancelled`,
         idempotencyKey: Crypto.randomUUID(),
       });
@@ -3360,28 +4111,59 @@ function BookingModal({
               event.divisions.length > 0 && (
                 <View style={styles.checkoutSection}>
                   <Text style={styles.eyebrow}>DIVISION</Text>
-                  <View style={styles.filterRow}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.mobileDivisionRail}
+                  >
                     {event.divisions.map((option) => (
                       <Pressable
                         key={option.id}
-                        onPress={() => setDivisionId(option.id)}
+                        onPress={() => {
+                          setDivisionId(option.id);
+                          setTeamPaymentMode("self");
+                          setTeamRoster([]);
+                        }}
                         style={[
-                          styles.filterChip,
-                          division?.id === option.id && styles.filterChipActive,
+                          styles.mobileDivisionOption,
+                          division?.id === option.id &&
+                            styles.mobileDivisionOptionActive,
                         ]}
                       >
                         <Text
                           style={[
-                            styles.filterText,
+                            styles.mobileDivisionOptionName,
                             division?.id === option.id &&
-                              styles.filterTextActive,
+                              styles.mobileDivisionOptionNameActive,
                           ]}
                         >
                           {option.name}
                         </Text>
+                        <Text style={styles.mobileDivisionOptionMeta}>
+                          {option.ageMaximum
+                            ? `${option.ageMaximum}U · `
+                            : "All ages · "}
+                          {option.spotsRemaining} spots
+                        </Text>
+                        <View style={styles.mobileDivisionPrices}>
+                          <Text style={styles.mobileDivisionPrice}>
+                            {formatMoney(
+                              option.playerPrice.amountMinor,
+                              option.playerPrice.currency,
+                            )}{" "}
+                            player
+                          </Text>
+                          <Text style={styles.mobileDivisionPrice}>
+                            {formatMoney(
+                              option.teamPrice.amountMinor,
+                              option.teamPrice.currency,
+                            )}{" "}
+                            team
+                          </Text>
+                        </View>
                       </Pressable>
                     ))}
-                  </View>
+                  </ScrollView>
                   {division && (
                     <View style={styles.mobileDivisionDetail}>
                       <View>
@@ -3412,27 +4194,27 @@ function BookingModal({
             {purchaseKind === "ticket" && event.tickets?.length ? (
               <View style={styles.checkoutSection}>
                 <Text style={styles.eyebrow}>TICKET</Text>
-                <View style={styles.mobileTicketList}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.mobileTicketRail}
+                >
                   {event.tickets
                     .filter((option) => option.availableOnline)
                     .map((option) => (
                       <Pressable
                         key={option.id}
-                        onPress={() => setTicketTypeId(option.id)}
+                        onPress={() => {
+                          setTicketTypeId(option.id);
+                          setTicketQuantity(1);
+                        }}
                         style={[
-                          styles.mobileTicketRow,
+                          styles.mobileTicketCard,
                           ticket?.id === option.id &&
-                            styles.mobileTicketRowActive,
+                            styles.mobileTicketCardActive,
                         ]}
                       >
-                        <View style={styles.flex}>
-                          <Text style={styles.rowTitle}>{option.name}</Text>
-                          <Text numberOfLines={2} style={styles.rowMeta}>
-                            {option.description ??
-                              `${option.remaining ?? "Unlimited"} available`}
-                          </Text>
-                        </View>
-                        <Text style={styles.moneyAmount}>
+                        <Text style={styles.mobileTicketPrice}>
                           {option.price.amountMinor
                             ? formatMoney(
                                 option.price.amountMinor,
@@ -3440,76 +4222,489 @@ function BookingModal({
                               )
                             : "FREE"}
                         </Text>
+                        <View style={styles.mobileTicketCardBody}>
+                          <Text style={styles.mobileTicketName}>
+                            {option.name}
+                          </Text>
+                          <Text
+                            numberOfLines={4}
+                            style={styles.mobileTicketDescription}
+                          >
+                            {option.description ??
+                              `${option.remaining ?? "Unlimited"} available`}
+                          </Text>
+                        </View>
+                        {ticket?.id === option.id && (
+                          <View style={styles.mobileTicketQuantity}>
+                            <Pressable
+                              disabled={ticketQuantity <= 1}
+                              onPress={() =>
+                                setTicketQuantity((current) =>
+                                  Math.max(1, current - 1),
+                                )
+                              }
+                              style={styles.mobileQuantityButton}
+                            >
+                              <Text style={styles.mobileQuantityButtonText}>
+                                −
+                              </Text>
+                            </Pressable>
+                            <Text style={styles.mobileQuantityValue}>
+                              {ticketQuantity}
+                            </Text>
+                            <Pressable
+                              disabled={
+                                ticketQuantity >=
+                                Math.min(10, option.remaining ?? 10)
+                              }
+                              onPress={() =>
+                                setTicketQuantity((current) =>
+                                  Math.min(10, current + 1),
+                                )
+                              }
+                              style={styles.mobileQuantityButton}
+                            >
+                              <Text style={styles.mobileQuantityButtonText}>
+                                +
+                              </Text>
+                            </Pressable>
+                          </View>
+                        )}
                       </Pressable>
                     ))}
-                </View>
+                </ScrollView>
               </View>
             ) : null}
             {purchaseKind === "entry" && (
               <View style={styles.checkoutSection}>
                 <Text style={styles.eyebrow}>WHO’S PLAYING</Text>
-                <View style={styles.checkoutPlayer}>
-                  <View style={styles.miniAvatar}>
-                    <Text style={styles.miniAvatarText}>{player.initials}</Text>
-                  </View>
-                  <View style={styles.flex}>
-                    <Text style={styles.rowTitle}>{player.displayName}</Text>
-                    <Text style={styles.rowMeta}>
-                      {player.rating.display.toFixed(2)} sand rating ·{" "}
-                      {player.rating.confidence}
-                    </Text>
-                  </View>
-                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.mobileParticipantRail}
+                >
+                  {participantOptions.map((participant) => {
+                    const rating = participant.person.rating.display;
+                    const eligibility = registrationParticipantEligibility(
+                      participant,
+                      division,
+                      event.startsAt,
+                    );
+                    const selected =
+                      participant.person.id === selectedParticipant?.person.id;
+                    return (
+                      <Pressable
+                        disabled={!eligibility.eligible}
+                        key={participant.person.id}
+                        onPress={() =>
+                          setSelectedParticipantId(participant.person.id)
+                        }
+                        style={[
+                          styles.mobileParticipantCard,
+                          selected && styles.mobileParticipantCardActive,
+                          !eligibility.eligible &&
+                            styles.mobileParticipantCardDisabled,
+                        ]}
+                      >
+                        {participant.person.avatarUrl ? (
+                          <Image
+                            source={{ uri: participant.person.avatarUrl }}
+                            style={styles.mobileParticipantAvatar}
+                          />
+                        ) : (
+                          <View style={styles.mobileParticipantAvatarFallback}>
+                            <Text style={styles.miniAvatarText}>
+                              {participant.person.initials}
+                            </Text>
+                          </View>
+                        )}
+                        <Text style={styles.mobileParticipantName}>
+                          {participant.person.displayName}
+                        </Text>
+                        <Text style={styles.mobileParticipantMeta}>
+                          {participant.label} ·{" "}
+                          {registrationParticipantAge(
+                            participant,
+                            event.startsAt,
+                          )}{" "}
+                          · {rating.toFixed(2)}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.mobileParticipantEligibility,
+                            eligibility.eligible
+                              ? styles.mobileParticipantEligible
+                              : styles.mobileParticipantIneligible,
+                          ]}
+                        >
+                          {eligibility.reason}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
               </View>
             )}
             {purchaseKind === "entry" && selectedTeamSize > 1 && (
-              <View style={styles.mobileTeamNotice}>
-                <Text style={styles.mobileTeamIcon}>◎</Text>
-                <View style={styles.flex}>
-                  <Text style={styles.rowTitle}>
-                    Build a {selectedTeamSize}-player team
-                  </Text>
-                  <Text style={styles.rowMeta}>
-                    Search Duna, invite by phone or email, and choose who pays
-                    in the guided checkout.
-                  </Text>
+              <View style={styles.checkoutSection}>
+                <Text style={styles.eyebrow}>COMPLETE YOUR TEAM</Text>
+                <Text style={styles.mobileTeamHeading}>
+                  {teamRoster.length + 1} of {selectedTeamSize} players added
+                </Text>
+                <Text style={styles.checkoutSummaryText}>
+                  Registration completes when all {selectedTeamSize} players
+                  claim their spot and the required entries are paid.
+                </Text>
+                <View style={styles.mobileRosterRow}>
+                  <View style={styles.mobileRosterPlayer}>
+                    <View style={styles.miniAvatar}>
+                      <Text style={styles.miniAvatarText}>
+                        {selectedParticipant?.person.initials ??
+                          player.initials}
+                      </Text>
+                    </View>
+                    <Text numberOfLines={1} style={styles.mobileRosterName}>
+                      {selectedParticipant?.person.displayName ??
+                        player.displayName}
+                    </Text>
+                    <Text style={styles.mobileRosterStatus}>Captain</Text>
+                  </View>
+                  {teamRoster.map((member, index) => {
+                    const person = (people ?? demoPeople).find(
+                      (candidate) => candidate.id === member.personId,
+                    );
+                    return (
+                      <View
+                        key={`${member.personId ?? member.inviteTarget}:${index}`}
+                        style={styles.mobileRosterPlayer}
+                      >
+                        <View style={styles.miniAvatar}>
+                          <Text style={styles.miniAvatarText}>
+                            {person?.initials ?? "✉"}
+                          </Text>
+                        </View>
+                        <Text numberOfLines={1} style={styles.mobileRosterName}>
+                          {person?.displayName ??
+                            member.displayName ??
+                            "Invite"}
+                        </Text>
+                        <Pressable
+                          onPress={() =>
+                            setTeamRoster((current) =>
+                              current.filter(
+                                (_, memberIndex) => memberIndex !== index,
+                              ),
+                            )
+                          }
+                        >
+                          <Text style={styles.mobileRosterRemove}>Remove</Text>
+                        </Pressable>
+                      </View>
+                    );
+                  })}
+                  {Array.from({
+                    length: Math.max(
+                      0,
+                      selectedTeamSize - 1 - teamRoster.length,
+                    ),
+                  }).map((_, index) => (
+                    <View
+                      key={`open:${index}`}
+                      style={styles.mobileRosterPlayer}
+                    >
+                      <View style={styles.mobileRosterOpen}>
+                        <Text style={styles.mobileRosterOpenText}>+</Text>
+                      </View>
+                      <Text style={styles.mobileRosterName}>Open</Text>
+                      <Text style={styles.mobileRosterStatus}>Teammate</Text>
+                    </View>
+                  ))}
+                </View>
+                {teamRoster.length < selectedTeamSize - 1 && (
+                  <>
+                    <View style={styles.mobilePlayerSearch}>
+                      <Text style={styles.mobilePlayerSearchIcon}>⌕</Text>
+                      <TextInput
+                        onChangeText={searchTeammates}
+                        placeholder="Player, location, or rating"
+                        placeholderTextColor={colors.muted}
+                        style={styles.mobilePlayerSearchInput}
+                        value={teammateQuery}
+                      />
+                    </View>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.mobileSuggestionRail}
+                    >
+                      {teammateCandidates
+                        .filter(
+                          (candidate) =>
+                            !teamRoster.some(
+                              (member) =>
+                                member.personId === candidate.person.id,
+                            ),
+                        )
+                        .map((candidate) => (
+                          <View
+                            key={candidate.person.id}
+                            style={[
+                              styles.mobileSuggestionCard,
+                              !candidate.eligible &&
+                                styles.mobileSuggestionCardDisabled,
+                            ]}
+                          >
+                            {candidate.person.avatarUrl ? (
+                              <Image
+                                source={{ uri: candidate.person.avatarUrl }}
+                                style={styles.mobileSuggestionAvatar}
+                              />
+                            ) : (
+                              <View
+                                style={styles.mobileSuggestionAvatarFallback}
+                              >
+                                <Text style={styles.miniAvatarText}>
+                                  {candidate.person.initials}
+                                </Text>
+                              </View>
+                            )}
+                            <Text
+                              numberOfLines={1}
+                              style={styles.mobileSuggestionName}
+                            >
+                              {candidate.person.displayName}
+                            </Text>
+                            <Text
+                              numberOfLines={1}
+                              style={styles.mobileSuggestionMeta}
+                            >
+                              {candidate.person.homeMarket}
+                            </Text>
+                            <Text style={styles.mobileSuggestionMeta}>
+                              {candidate.gender.replaceAll("-", " ")} ·{" "}
+                              {candidate.person.rating.display.toFixed(2)}
+                            </Text>
+                            <Pressable
+                              disabled={!candidate.eligible}
+                              onPress={() =>
+                                setTeamRoster((current) => [
+                                  ...current,
+                                  {
+                                    personId: candidate.person.id,
+                                    displayName: candidate.person.displayName,
+                                  },
+                                ])
+                              }
+                              style={styles.mobileSuggestionAdd}
+                            >
+                              <Text style={styles.mobileSuggestionAddText}>
+                                {candidate.eligible ? "Add" : "Not eligible"}
+                              </Text>
+                            </Pressable>
+                          </View>
+                        ))}
+                    </ScrollView>
+                    <View style={styles.mobileInviteRow}>
+                      <TextInput
+                        onChangeText={setInviteTarget}
+                        placeholder="Email or mobile number"
+                        placeholderTextColor={colors.muted}
+                        style={styles.mobileInviteInput}
+                        value={inviteTarget}
+                      />
+                      <Pressable
+                        disabled={inviteTarget.trim().length < 3}
+                        onPress={() => {
+                          const value = inviteTarget.trim();
+                          if (!value) return;
+                          setTeamRoster((current) => [
+                            ...current,
+                            { inviteTarget: value, displayName: value },
+                          ]);
+                          setInviteTarget("");
+                        }}
+                        style={styles.mobileInviteButton}
+                      >
+                        <Text style={styles.mobileInviteButtonText}>
+                          Invite
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </>
+                )}
+                <View style={styles.mobileTeamPaymentChoices}>
+                  <Pressable
+                    onPress={() => setTeamPaymentMode("self")}
+                    style={[
+                      styles.mobileTeamPaymentChoice,
+                      teamPaymentMode === "self" &&
+                        styles.mobileTeamPaymentChoiceActive,
+                    ]}
+                  >
+                    <Text style={styles.rowTitle}>Pay my registration</Text>
+                    <Text style={styles.rowMeta}>Teammates claim + pay</Text>
+                    <Text style={styles.moneyAmount}>
+                      {formatMoney(
+                        division?.playerPrice.amountMinor ??
+                          listedPrice.amountMinor,
+                        division?.playerPrice.currency ?? listedPrice.currency,
+                      )}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setTeamPaymentMode("team")}
+                    style={[
+                      styles.mobileTeamPaymentChoice,
+                      teamPaymentMode === "team" &&
+                        styles.mobileTeamPaymentChoiceActive,
+                    ]}
+                  >
+                    <Text style={styles.rowTitle}>Pay for the team</Text>
+                    <Text style={styles.rowMeta}>You cover every player</Text>
+                    <Text style={styles.moneyAmount}>
+                      {formatMoney(
+                        division?.teamPrice.amountMinor ??
+                          listedPrice.amountMinor,
+                        division?.teamPrice.currency ?? listedPrice.currency,
+                      )}
+                    </Text>
+                  </Pressable>
                 </View>
               </View>
             )}
             {event.features && event.features.length > 0 && (
               <View style={styles.checkoutSection}>
                 <Text style={styles.eyebrow}>EVENT FEATURES</Text>
-                {event.features.map((feature) => (
-                  <View key={feature.id} style={styles.mobileFeatureRow}>
-                    <Text style={styles.mobileFeatureIcon}>
-                      {feature.kind === "guest"
-                        ? "★"
-                        : feature.kind === "activity"
-                          ? "✦"
-                          : "◇"}
-                    </Text>
-                    <View style={styles.flex}>
-                      <Text style={styles.rowTitle}>{feature.title}</Text>
-                      {feature.description && (
-                        <Text style={styles.rowMeta}>
-                          {feature.description}
-                        </Text>
+                {event.features.map((feature) =>
+                  feature.kind === "guest" ? (
+                    <Pressable
+                      disabled={!feature.personHandle}
+                      key={feature.id}
+                      onPress={() =>
+                        feature.personHandle
+                          ? void WebBrowser.openBrowserAsync(
+                              `${dunaWebUrl}/players/${feature.personHandle}`,
+                            )
+                          : undefined
+                      }
+                      style={styles.mobileGuestCard}
+                    >
+                      {feature.imageUrl ? (
+                        <Image
+                          source={{ uri: feature.imageUrl }}
+                          style={styles.mobileGuestImage}
+                        />
+                      ) : (
+                        <View style={styles.mobileGuestImageFallback}>
+                          <Text style={styles.mobileGuestInitials}>
+                            {feature.personInitials ?? "★"}
+                          </Text>
+                        </View>
                       )}
+                      <View style={styles.flex}>
+                        <Text style={styles.mobileGuestLabel}>
+                          FEATURED GUEST
+                        </Text>
+                        <Text style={styles.mobileGuestName}>
+                          {feature.personName ?? feature.title}
+                        </Text>
+                        <Text style={styles.mobileGuestMeta}>
+                          {[
+                            feature.personHomeMarket,
+                            feature.personRating !== undefined
+                              ? `${feature.personRating.toFixed(2)} rating`
+                              : undefined,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </Text>
+                        {feature.description && (
+                          <Text numberOfLines={3} style={styles.rowMeta}>
+                            {feature.description}
+                          </Text>
+                        )}
+                        {feature.personHandle && (
+                          <Text style={styles.mobileGuestLink}>
+                            View profile →
+                          </Text>
+                        )}
+                      </View>
+                    </Pressable>
+                  ) : (
+                    <View key={feature.id} style={styles.mobileFeatureRow}>
+                      <Text style={styles.mobileFeatureIcon}>
+                        {feature.kind === "activity" ? "✦" : "◇"}
+                      </Text>
+                      <View style={styles.flex}>
+                        <Text style={styles.rowTitle}>{feature.title}</Text>
+                        {feature.description && (
+                          <Text style={styles.rowMeta}>
+                            {feature.description}
+                          </Text>
+                        )}
+                      </View>
                     </View>
-                  </View>
-                ))}
+                  ),
+                )}
               </View>
             )}
             {event.policies && event.policies.length > 0 && (
-              <View style={styles.mobilePolicyNotice}>
-                <Text style={styles.mobilePolicyIcon}>✓</Text>
-                <View style={styles.flex}>
-                  <Text style={styles.rowTitle}>
-                    {event.policies.length} policies + waivers
-                  </Text>
-                  <Text style={styles.rowMeta}>
-                    Required waivers unlock only after you read them in full.
-                  </Text>
+              <View style={styles.checkoutSection}>
+                <Text style={styles.eyebrow}>AGREEMENTS</Text>
+                <Text style={styles.checkoutSummaryText}>
+                  Read every required document here. Each acceptance is stored
+                  with the exact version shown to you.
+                </Text>
+                <View style={styles.mobilePolicyList}>
+                  {event.policies
+                    .filter(
+                      (policy) =>
+                        purchaseKind === "entry" || policy.kind !== "waiver",
+                    )
+                    .map((policy) => {
+                      const accepted = acceptedPolicyIds.includes(policy.id);
+                      return (
+                        <View key={policy.id} style={styles.mobilePolicyCard}>
+                          <View style={styles.mobilePolicyHeader}>
+                            <Text style={styles.rowTitle}>{policy.title}</Text>
+                            <Text style={styles.mobilePolicyKind}>
+                              {policy.kind.toUpperCase()}
+                            </Text>
+                          </View>
+                          <ScrollView
+                            nestedScrollEnabled
+                            style={styles.mobilePolicyDocument}
+                          >
+                            <Text style={styles.mobilePolicyDocumentText}>
+                              {policy.markdown}
+                            </Text>
+                          </ScrollView>
+                          <Pressable
+                            onPress={() =>
+                              setAcceptedPolicyIds((current) =>
+                                accepted
+                                  ? current.filter((id) => id !== policy.id)
+                                  : [...current, policy.id],
+                              )
+                            }
+                            style={[
+                              styles.mobilePolicyAccept,
+                              accepted && styles.mobilePolicyAcceptActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.mobilePolicyAcceptText,
+                                accepted && styles.mobilePolicyAcceptTextActive,
+                              ]}
+                            >
+                              {accepted ? "✓ Accepted" : "I read and accept"}
+                              {policy.required ? " · required" : " · optional"}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      );
+                    })}
                 </View>
               </View>
             )}
@@ -3530,17 +4725,23 @@ function BookingModal({
                   </Text>
                 </View>
                 <Text style={styles.moneyAmount}>
-                  {listedPrice.amountMinor
-                    ? formatMoney(listedPrice.amountMinor, listedPrice.currency)
+                  {listedSubtotalMinor
+                    ? formatMoney(listedSubtotalMinor, listedPrice.currency)
                     : "FREE"}
                 </Text>
               </View>
             </View>
             <View style={styles.orderMath}>
               <View>
-                <Text style={styles.bodyText}>Entry</Text>
+                <Text style={styles.bodyText}>
+                  {purchaseKind === "ticket"
+                    ? `${ticketQuantity} ticket${ticketQuantity === 1 ? "" : "s"}`
+                    : teamPaymentMode === "team" && selectedTeamSize > 1
+                      ? "Full team entry"
+                      : "Player entry"}
+                </Text>
                 <Text style={styles.moneyAmount}>
-                  {formatMoney(listedPrice.amountMinor, listedPrice.currency)}
+                  {formatMoney(listedSubtotalMinor, listedPrice.currency)}
                 </Text>
               </View>
               <View>
@@ -3550,17 +4751,30 @@ function BookingModal({
               <View style={styles.totalRow}>
                 <Text style={styles.rowTitle}>Listed price</Text>
                 <Text style={styles.totalAmount}>
-                  {formatMoney(listedPrice.amountMinor, listedPrice.currency)}
+                  {formatMoney(listedSubtotalMinor, listedPrice.currency)}
                 </Text>
               </View>
             </View>
             {error && <Text style={styles.formError}>{error}</Text>}
             <Pressable
-              disabled={mode === "preview" || busy}
+              disabled={
+                mode === "preview" ||
+                busy ||
+                !rosterComplete ||
+                !policiesComplete ||
+                (purchaseKind === "entry" &&
+                  !selectedParticipantEligibility.eligible)
+              }
               onPress={() => void checkout()}
               style={[
                 styles.payButton,
-                (mode === "preview" || busy) && styles.buttonDisabled,
+                (mode === "preview" ||
+                  busy ||
+                  !rosterComplete ||
+                  !policiesComplete ||
+                  (purchaseKind === "entry" &&
+                    !selectedParticipantEligibility.eligible)) &&
+                  styles.buttonDisabled,
               ]}
             >
               <Text style={styles.payButtonText}>
@@ -3568,13 +4782,15 @@ function BookingModal({
                   ? "Preview only · checkout disabled"
                   : busy
                     ? "Opening secure checkout…"
-                    : requiresGuidedCheckout
-                      ? purchaseKind === "ticket"
-                        ? "Choose tickets securely"
-                        : "Complete team + agreements"
-                      : listedPrice.amountMinor
-                        ? "Continue to payment"
-                        : "Confirm free registration"}
+                    : !rosterComplete
+                      ? "Complete your team"
+                      : !policiesComplete
+                        ? "Accept required agreements"
+                        : listedSubtotalMinor
+                          ? "Continue to secure payment"
+                          : purchaseKind === "ticket"
+                            ? "Confirm free tickets"
+                            : "Confirm free registration"}
               </Text>
             </Pressable>
             <Text style={styles.paymentTrust}>
@@ -4325,22 +5541,82 @@ function createStyles(palette: Palette) {
       letterSpacing: -1.6,
       lineHeight: 35,
     },
+    bookingDateToolbar: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+      marginTop: 22,
+    },
+    bookingDateToolbarLabel: {
+      color: colors.aqua,
+      fontSize: 7,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    bookingDateToolbarTitle: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
+      marginTop: 5,
+    },
+    bookingDateToolbarActions: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 5,
+    },
+    bookingDateNavButton: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 18,
+      borderWidth: 1,
+      height: 34,
+      justifyContent: "center",
+      width: 34,
+    },
+    bookingDateNavText: {
+      color: colors.bone,
+      fontSize: 22,
+      lineHeight: 23,
+    },
+    bookingDateCalendarButton: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 4,
+      height: 34,
+      paddingHorizontal: 9,
+    },
+    bookingDateCalendarIcon: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    bookingDateCalendarText: {
+      color: colors.bone,
+      fontSize: 8,
+      fontWeight: "800",
+    },
     bookingDateRow: {
       flexDirection: "row",
       gap: 8,
       paddingHorizontal: 18,
       paddingRight: 36,
-      paddingVertical: 18,
+      paddingVertical: 15,
     },
     bookingDate: {
       alignItems: "center",
       backgroundColor: colors.depth,
-      borderColor: rgba(colors.overlayRgb, 0.09),
-      borderRadius: 25,
+      borderColor: rgba(colors.overlayRgb, 0.14),
+      borderRadius: 34,
       borderWidth: 1,
-      height: 64,
+      height: 92,
       justifyContent: "center",
-      width: 52,
+      width: 64,
     },
     bookingDateActive: {
       backgroundColor: colors.aquaDeep,
@@ -4349,16 +5625,202 @@ function createStyles(palette: Palette) {
     bookingDateUnavailable: { opacity: 0.32 },
     bookingDateDay: {
       color: colors.muted,
-      fontSize: 6,
+      fontSize: 8,
       fontWeight: "800",
     },
     bookingDateNumber: {
       color: colors.bone,
+      fontSize: 21,
+      fontWeight: "900",
+      lineHeight: 24,
+      marginTop: 4,
+    },
+    bookingDateMonth: {
+      color: colors.muted,
+      fontSize: 8,
+      fontWeight: "800",
+      marginTop: 1,
+    },
+    bookingDateDots: {
+      flexDirection: "row",
+      gap: 3,
+      height: 4,
+      marginTop: 5,
+    },
+    bookingDateDot: {
+      borderRadius: 3,
+      height: 4,
+      width: 4,
+    },
+    bookingDateDotBooking: { backgroundColor: "#7eb9f0" },
+    bookingDateDotEvent: { backgroundColor: colors.flare },
+    bookingDateTextActive: { color: "#ffffff" },
+    bookingCalendarSafe: {
+      backgroundColor: colors.canvas,
+      flex: 1,
+    },
+    bookingCalendarHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 12,
+      paddingHorizontal: 18,
+      paddingTop: 8,
+    },
+    bookingCalendarEyebrow: {
+      color: colors.sand,
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 1,
+    },
+    bookingCalendarTitle: {
+      color: colors.bone,
+      fontSize: 28,
+      fontWeight: "900",
+      letterSpacing: -1.5,
+      lineHeight: 31,
+      marginTop: 7,
+    },
+    bookingCalendarClose: {
+      alignItems: "center",
+      borderColor: colors.sand,
+      borderRadius: 22,
+      borderWidth: 1.5,
+      height: 42,
+      justifyContent: "center",
+      width: 42,
+    },
+    bookingCalendarCloseText: {
+      color: colors.bone,
+      fontSize: 28,
+      fontWeight: "300",
+      lineHeight: 30,
+    },
+    bookingCalendarToolbar: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingHorizontal: 18,
+      paddingVertical: 16,
+    },
+    bookingCalendarNav: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 20,
+      borderWidth: 1,
+      height: 40,
+      justifyContent: "center",
+      width: 40,
+    },
+    bookingCalendarNavText: {
+      color: colors.bone,
+      fontSize: 24,
+      lineHeight: 25,
+    },
+    bookingCalendarRange: {
+      color: colors.bone,
+      flex: 1,
+      fontSize: 10,
+      fontWeight: "900",
+      paddingHorizontal: 8,
+      textAlign: "center",
+    },
+    bookingCalendarScroll: {
+      paddingBottom: 28,
+      paddingHorizontal: 14,
+    },
+    bookingCalendarMonths: { gap: 14 },
+    bookingCalendarMonthsWide: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+    },
+    bookingCalendarMonth: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 20,
+      borderWidth: 1,
+      flex: 1,
+      padding: 10,
+    },
+    bookingCalendarMonthTitle: {
+      color: colors.bone,
       fontSize: 16,
       fontWeight: "900",
-      marginTop: 3,
+      letterSpacing: -0.5,
+      marginBottom: 10,
     },
-    bookingDateTextActive: { color: "#ffffff" },
+    bookingCalendarWeekdayRow: { flexDirection: "row" },
+    bookingCalendarWeekday: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 6,
+      fontWeight: "900",
+      paddingBottom: 7,
+      textAlign: "center",
+    },
+    bookingCalendarGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+    },
+    bookingCalendarBlank: {
+      aspectRatio: 0.95,
+      width: "14.285714%",
+    },
+    bookingCalendarDay: {
+      alignItems: "flex-start",
+      aspectRatio: 0.95,
+      backgroundColor: colors.depth,
+      borderColor: "transparent",
+      borderRadius: 10,
+      borderWidth: 1,
+      justifyContent: "space-between",
+      padding: 6,
+      width: "14.285714%",
+    },
+    bookingCalendarDayToday: {
+      borderColor: colors.aqua,
+    },
+    bookingCalendarDaySelected: {
+      backgroundColor: colors.aquaDeep,
+      borderColor: colors.aquaDeep,
+    },
+    bookingCalendarDayDisabled: { opacity: 0.28 },
+    bookingCalendarDayText: {
+      color: colors.bone,
+      fontSize: 9,
+      fontWeight: "900",
+    },
+    bookingCalendarDayTextSelected: { color: "#ffffff" },
+    bookingCalendarMarkers: {
+      flexDirection: "row",
+      gap: 3,
+    },
+    bookingCalendarMarker: {
+      borderRadius: 3,
+      height: 5,
+      width: 5,
+    },
+    bookingCalendarMarkerBooking: { backgroundColor: "#4b8fc9" },
+    bookingCalendarMarkerEvent: { backgroundColor: colors.flare },
+    bookingCalendarLegend: {
+      alignItems: "center",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 14,
+      justifyContent: "flex-end",
+      paddingHorizontal: 4,
+      paddingTop: 12,
+    },
+    bookingCalendarLegendItem: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 5,
+    },
+    bookingCalendarLegendText: {
+      color: colors.muted,
+      fontSize: 8,
+      fontWeight: "700",
+    },
     bookingDurationRow: {
       flexDirection: "row",
       gap: 8,
@@ -4841,6 +6303,70 @@ function createStyles(palette: Palette) {
       color: colors.aqua,
       fontSize: 24,
       fontWeight: "500",
+    },
+    coachingNoteCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.accentRgb, 0.24),
+      borderRadius: 22,
+      borderWidth: 1,
+      gap: 14,
+      marginBottom: 4,
+      overflow: "hidden",
+      padding: 18,
+      position: "relative",
+    },
+    coachingNoteAccent: {
+      backgroundColor: colors.aqua,
+      bottom: 0,
+      left: 0,
+      position: "absolute",
+      top: 0,
+      width: 4,
+    },
+    coachingNoteTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+    },
+    coachingNoteMark: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.12),
+      borderRadius: 15,
+      height: 46,
+      justifyContent: "center",
+      width: 46,
+    },
+    coachingNoteMarkText: {
+      color: colors.aqua,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    coachingNoteEyebrow: {
+      color: colors.aqua,
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
+    coachingNoteTitle: {
+      color: colors.bone,
+      fontSize: 17,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+    coachingNoteMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 4,
+    },
+    coachingNoteSummary: {
+      color: colors.bone,
+      fontSize: 14,
+      lineHeight: 21,
+    },
+    coachingNoteSession: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700",
     },
     coachCardRow: {
       flexDirection: "row",
@@ -6272,6 +7798,39 @@ function createStyles(palette: Palette) {
       marginTop: 9,
       paddingTop: 9,
     },
+    mobileDivisionRail: { marginHorizontal: -13, marginTop: 10 },
+    mobileDivisionOption: {
+      backgroundColor: rgba(colors.overlayRgb, 0.025),
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 15,
+      borderWidth: 1,
+      marginLeft: 10,
+      minHeight: 132,
+      padding: 12,
+      width: 188,
+    },
+    mobileDivisionOptionActive: {
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderColor: colors.aqua,
+    },
+    mobileDivisionOptionName: {
+      color: colors.bone,
+      fontSize: 18,
+      fontWeight: "900",
+      letterSpacing: -0.6,
+    },
+    mobileDivisionOptionNameActive: { color: colors.aqua },
+    mobileDivisionOptionMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 5,
+    },
+    mobileDivisionPrices: { gap: 3, marginTop: "auto" },
+    mobileDivisionPrice: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "800",
+    },
     mobileTicketList: { gap: 8, marginTop: 10 },
     mobileTicketRow: {
       backgroundColor: rgba(colors.overlayRgb, 0.025),
@@ -6284,6 +7843,326 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.accentRgb, 0.08),
       borderColor: rgba(colors.accentRgb, 0.34),
     },
+    mobileTicketRail: { marginHorizontal: -13, marginTop: 10 },
+    mobileTicketCard: {
+      backgroundColor: colors.aquaDeep,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 20,
+      borderWidth: 1,
+      marginLeft: 10,
+      minHeight: 285,
+      padding: 15,
+      width: 260,
+    },
+    mobileTicketCardActive: { borderColor: colors.aqua, borderWidth: 2 },
+    mobileTicketPrice: {
+      alignSelf: "flex-start",
+      backgroundColor: "rgba(255,255,255,0.15)",
+      borderRadius: 999,
+      color: "#ffffff",
+      fontSize: 12,
+      fontWeight: "900",
+      overflow: "hidden",
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    mobileTicketCardBody: { marginTop: "auto" },
+    mobileTicketName: {
+      color: "#ffffff",
+      fontSize: 27,
+      fontWeight: "900",
+      letterSpacing: -1,
+    },
+    mobileTicketDescription: {
+      color: "rgba(255,255,255,0.78)",
+      fontSize: 11,
+      lineHeight: 17,
+      marginTop: 7,
+    },
+    mobileTicketQuantity: {
+      alignItems: "center",
+      backgroundColor: "rgba(255,255,255,0.12)",
+      borderRadius: 13,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 13,
+      padding: 5,
+    },
+    mobileQuantityButton: {
+      alignItems: "center",
+      borderColor: "rgba(255,255,255,0.26)",
+      borderRadius: 18,
+      borderWidth: 1,
+      height: 36,
+      justifyContent: "center",
+      width: 36,
+    },
+    mobileQuantityButtonText: { color: "#ffffff", fontSize: 19 },
+    mobileQuantityValue: { color: "#ffffff", fontSize: 15, fontWeight: "900" },
+    mobileParticipantRail: { marginHorizontal: -13, marginTop: 10 },
+    mobileParticipantCard: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.025),
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 16,
+      borderWidth: 1,
+      marginLeft: 10,
+      minHeight: 178,
+      padding: 12,
+      width: 146,
+    },
+    mobileParticipantCardActive: {
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderColor: colors.aqua,
+    },
+    mobileParticipantCardDisabled: { opacity: 0.38 },
+    mobileParticipantAvatar: { borderRadius: 31, height: 62, width: 62 },
+    mobileParticipantAvatarFallback: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderRadius: 31,
+      height: 62,
+      justifyContent: "center",
+      width: 62,
+    },
+    mobileParticipantName: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "800",
+      marginTop: 9,
+      textAlign: "center",
+    },
+    mobileParticipantMeta: { color: colors.muted, fontSize: 9, marginTop: 3 },
+    mobileParticipantEligibility: {
+      fontSize: 9,
+      fontWeight: "800",
+      marginTop: 7,
+    },
+    mobileParticipantEligible: { color: colors.positive },
+    mobileParticipantIneligible: { color: colors.warning },
+    mobileTeamHeading: {
+      color: colors.bone,
+      fontSize: 19,
+      fontWeight: "900",
+      marginTop: 8,
+    },
+    mobileRosterRow: {
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 14,
+    },
+    mobileRosterPlayer: { alignItems: "center", flex: 1, minWidth: 0 },
+    mobileRosterName: {
+      color: colors.bone,
+      fontSize: 9,
+      fontWeight: "800",
+      marginTop: 5,
+      maxWidth: 72,
+    },
+    mobileRosterStatus: { color: colors.muted, fontSize: 8, marginTop: 2 },
+    mobileRosterRemove: { color: colors.danger, fontSize: 8, marginTop: 2 },
+    mobileRosterOpen: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.03),
+      borderColor: rgba(colors.overlayRgb, 0.14),
+      borderRadius: 25,
+      borderStyle: "dashed",
+      borderWidth: 1,
+      height: 50,
+      justifyContent: "center",
+      width: 50,
+    },
+    mobileRosterOpenText: { color: colors.muted, fontSize: 20 },
+    mobilePlayerSearch: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.04),
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 14,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 15,
+      paddingHorizontal: 11,
+    },
+    mobilePlayerSearchIcon: { color: colors.aqua, fontSize: 20 },
+    mobilePlayerSearchInput: {
+      color: colors.bone,
+      flex: 1,
+      fontSize: 12,
+      minHeight: 48,
+    },
+    mobileSuggestionRail: { marginHorizontal: -13, marginTop: 10 },
+    mobileSuggestionCard: {
+      alignItems: "center",
+      backgroundColor: colors.canvas,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 16,
+      borderWidth: 1,
+      marginLeft: 10,
+      minHeight: 220,
+      padding: 11,
+      width: 166,
+    },
+    mobileSuggestionCardDisabled: { opacity: 0.4 },
+    mobileSuggestionAvatar: { borderRadius: 30, height: 60, width: 60 },
+    mobileSuggestionAvatarFallback: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderRadius: 30,
+      height: 60,
+      justifyContent: "center",
+      width: 60,
+    },
+    mobileSuggestionName: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "800",
+      marginTop: 8,
+      maxWidth: 140,
+    },
+    mobileSuggestionMeta: { color: colors.muted, fontSize: 8, marginTop: 3 },
+    mobileSuggestionAdd: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      justifyContent: "center",
+      marginTop: "auto",
+      minHeight: 38,
+      width: "100%",
+    },
+    mobileSuggestionAddText: {
+      color: colors.onAccent,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    mobileInviteRow: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.08),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 10,
+      paddingTop: 10,
+    },
+    mobileInviteInput: {
+      backgroundColor: rgba(colors.overlayRgb, 0.03),
+      borderRadius: 12,
+      color: colors.bone,
+      flex: 1,
+      fontSize: 11,
+      minHeight: 44,
+      paddingHorizontal: 10,
+    },
+    mobileInviteButton: {
+      backgroundColor: colors.aqua,
+      borderRadius: 12,
+      justifyContent: "center",
+      minHeight: 44,
+      paddingHorizontal: 13,
+    },
+    mobileInviteButtonText: {
+      color: colors.onAccent,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    mobileTeamPaymentChoices: { flexDirection: "row", gap: 8, marginTop: 14 },
+    mobileTeamPaymentChoice: {
+      backgroundColor: rgba(colors.overlayRgb, 0.025),
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 14,
+      borderWidth: 1,
+      flex: 1,
+      padding: 10,
+    },
+    mobileTeamPaymentChoiceActive: {
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderColor: colors.aqua,
+    },
+    mobileGuestCard: {
+      backgroundColor: rgba(colors.accentRgb, 0.06),
+      borderColor: rgba(colors.accentRgb, 0.2),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      marginTop: 10,
+      overflow: "hidden",
+      padding: 9,
+    },
+    mobileGuestImage: { borderRadius: 12, height: 118, width: 96 },
+    mobileGuestImageFallback: {
+      alignItems: "center",
+      backgroundColor: colors.sand,
+      borderRadius: 12,
+      height: 118,
+      justifyContent: "center",
+      width: 96,
+    },
+    mobileGuestInitials: { color: colors.ink, fontSize: 25, fontWeight: "900" },
+    mobileGuestLabel: {
+      color: colors.aqua,
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 1,
+    },
+    mobileGuestName: {
+      color: colors.bone,
+      fontSize: 17,
+      fontWeight: "900",
+      marginTop: 4,
+    },
+    mobileGuestMeta: {
+      color: colors.muted,
+      fontSize: 8,
+      marginBottom: 5,
+      marginTop: 3,
+    },
+    mobileGuestLink: {
+      color: colors.aqua,
+      fontSize: 9,
+      fontWeight: "800",
+      marginTop: 5,
+    },
+    mobilePolicyList: { gap: 9, marginTop: 11 },
+    mobilePolicyCard: {
+      backgroundColor: colors.canvas,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 14,
+      borderWidth: 1,
+      overflow: "hidden",
+      padding: 10,
+    },
+    mobilePolicyHeader: {
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "space-between",
+    },
+    mobilePolicyKind: { color: colors.warning, fontSize: 8, fontWeight: "900" },
+    mobilePolicyDocument: { marginTop: 9, maxHeight: 145 },
+    mobilePolicyDocumentText: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 16,
+    },
+    mobilePolicyAccept: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.12),
+      borderRadius: 11,
+      borderWidth: 1,
+      justifyContent: "center",
+      marginTop: 10,
+      minHeight: 42,
+    },
+    mobilePolicyAcceptActive: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.aqua,
+    },
+    mobilePolicyAcceptText: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    mobilePolicyAcceptTextActive: { color: colors.onAccent },
     mobileTeamNotice: {
       alignItems: "flex-start",
       backgroundColor: rgba(colors.accentRgb, 0.07),

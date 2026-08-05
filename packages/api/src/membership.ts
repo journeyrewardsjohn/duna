@@ -1,4 +1,14 @@
 import {
+  MEMBERSHIP_PLANS,
+  PAID_MEMBERSHIP_PLAN_IDS,
+  PLATFORM_MEMBERSHIP_TIER_CODES,
+  membershipPlanForTierCode,
+  membershipPriceMinor,
+  type MembershipBillingInterval,
+  type MembershipPlanId,
+  type PaidMembershipPlanId,
+} from "@duna/core";
+import {
   auditLog,
   dunaPlusGrants,
   getDatabase,
@@ -11,6 +21,7 @@ import type { ApiActor } from "./context";
 import {
   createBillingPortalSession,
   getStripeClient,
+  isMembershipPriceConfigured,
   isStripeConfigured,
 } from "./payments";
 
@@ -34,9 +45,42 @@ export class MembershipError extends Error {
 export interface DunaPlusEntitlement {
   readonly active: boolean;
   readonly kind: "paid" | "complimentary" | "none";
+  readonly plan: MembershipPlanId;
   readonly label: string;
   readonly startsAt?: string;
   readonly endsAt?: string;
+}
+
+export interface MembershipPlanOffer {
+  readonly plan: PaidMembershipPlanId;
+  readonly name: string;
+  readonly tagline: string;
+  readonly interval: MembershipBillingInterval;
+  readonly priceMinor: number;
+  readonly currency: "USD";
+  readonly configured: boolean;
+  readonly monthlyUploadSeconds: number;
+  readonly monthlyLiveSeconds: number;
+  readonly benefits: readonly string[];
+}
+
+export function membershipPlanOffers(): readonly MembershipPlanOffer[] {
+  const intervals = ["month", "year"] as const;
+  return PAID_MEMBERSHIP_PLAN_IDS.flatMap((plan) => {
+    const definition = MEMBERSHIP_PLANS[plan];
+    return intervals.map((interval) => ({
+      plan,
+      name: definition.name,
+      tagline: definition.tagline,
+      interval,
+      priceMinor: membershipPriceMinor(plan, interval),
+      currency: "USD" as const,
+      configured: isMembershipPriceConfigured(plan, interval),
+      monthlyUploadSeconds: definition.monthlyUploadSeconds,
+      monthlyLiveSeconds: definition.monthlyLiveSeconds,
+      benefits: definition.benefits,
+    }));
+  });
 }
 
 export async function getDunaPlusEntitlement(
@@ -44,7 +88,7 @@ export async function getDunaPlusEntitlement(
   now = new Date(),
 ): Promise<DunaPlusEntitlement> {
   if (!process.env.DATABASE_URL) {
-    return { active: false, kind: "none", label: "Duna+ not active" };
+    return { active: false, kind: "none", plan: "free", label: "Free" };
   }
   const database = getDatabase();
   const [person, paid] = await Promise.all([
@@ -58,6 +102,7 @@ export async function getDunaPlusEntitlement(
         currentPeriodStartsAt: memberships.currentPeriodStartsAt,
         currentPeriodEndsAt: memberships.currentPeriodEndsAt,
         pausedUntil: memberships.pausedUntil,
+        tierCode: membershipTiers.code,
       })
       .from(memberships)
       .innerJoin(membershipTiers, eq(memberships.tierId, membershipTiers.id))
@@ -66,10 +111,7 @@ export async function getDunaPlusEntitlement(
           eq(memberships.personId, personId),
           inArray(memberships.status, ["active", "trialing"]),
           isNull(membershipTiers.organizationId),
-          or(
-            eq(membershipTiers.code, "duna-plus-monthly"),
-            eq(membershipTiers.code, "duna-plus-annual"),
-          ),
+          inArray(membershipTiers.code, [...PLATFORM_MEMBERSHIP_TIER_CODES]),
         ),
       )
       .orderBy(desc(memberships.updatedAt))
@@ -81,16 +123,18 @@ export async function getDunaPlusEntitlement(
     (!paid.pausedUntil || paid.pausedUntil <= now) &&
     (!paid.currentPeriodEndsAt || paid.currentPeriodEndsAt >= now)
   ) {
+    const plan = membershipPlanForTierCode(paid.tierCode);
     return {
       active: true,
       kind: "paid",
-      label: "Duna+",
+      plan,
+      label: MEMBERSHIP_PLANS[plan].name,
       startsAt: paid.currentPeriodStartsAt?.toISOString(),
       endsAt: paid.currentPeriodEndsAt?.toISOString(),
     };
   }
   if (!person) {
-    return { active: false, kind: "none", label: "Duna+ not active" };
+    return { active: false, kind: "none", plan: "free", label: "Free" };
   }
   const identityCondition = person.email
     ? or(
@@ -119,12 +163,13 @@ export async function getDunaPlusEntitlement(
       .limit(1)
   )[0];
   if (!grant) {
-    return { active: false, kind: "none", label: "Duna+ not active" };
+    return { active: false, kind: "none", plan: "free", label: "Free" };
   }
   return {
     active: true,
     kind: "complimentary",
-    label: "Complimentary Duna+",
+    plan: "premium-plus",
+    label: "Complimentary Premium+",
     startsAt: grant.startsAt.toISOString(),
     endsAt: grant.endsAt?.toISOString(),
   };
@@ -151,14 +196,27 @@ async function connectedMembership(personId: string) {
       })
       .from(memberships)
       .innerJoin(membershipTiers, eq(memberships.tierId, membershipTiers.id))
-      .where(eq(memberships.personId, personId))
+      .where(
+        and(
+          eq(memberships.personId, personId),
+          inArray(memberships.status, [
+            "active",
+            "trialing",
+            "past_due",
+            "unpaid",
+            "incomplete",
+          ]),
+          isNull(membershipTiers.organizationId),
+          inArray(membershipTiers.code, [...PLATFORM_MEMBERSHIP_TIER_CODES]),
+        ),
+      )
       .orderBy(desc(memberships.updatedAt))
       .limit(1)
   )[0];
   if (!row) {
     throw new MembershipError(
       "MEMBERSHIP_NOT_FOUND",
-      "No Duna+ membership was found.",
+      "No Premium membership was found.",
     );
   }
   const stripeSubscriptionId = row.stripeSubscriptionId;
@@ -229,7 +287,7 @@ export async function changeDunaPlusMembership(input: {
     if (membership.pauseMonthsUsed >= 4) {
       throw new MembershipError(
         "PAUSE_LIMIT_REACHED",
-        "The four-month Duna+ pause allowance has been used.",
+        "The four-month Premium pause allowance has been used.",
       );
     }
     effectiveAt = new Date(input.now);
@@ -296,10 +354,10 @@ export async function changeDunaPlusMembership(input: {
     entityId: membership.id,
     reason:
       input.action === "pause"
-        ? "Member requested a one-month Duna+ billing pause."
+        ? "Member requested a one-month Premium billing pause."
         : input.action === "cancel"
           ? "Member requested cancellation at the end of the paid period."
-          : "Member resumed Duna+ billing.",
+          : "Member resumed Premium billing.",
     traceId: input.requestId,
     ipAddress: input.ipAddress,
     createdAt: input.now,

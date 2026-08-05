@@ -43,11 +43,17 @@ export function MembershipSettings({
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState(initialNotice);
   const [confirming, setConfirming] = useState<ChangeAction>();
+  const [billingInterval, setBillingInterval] = useState<"month" | "year">(
+    "year",
+  );
 
-  const openCheckout = (interval: "month" | "year") => {
+  const openCheckout = (
+    plan: "premium" | "premium-plus",
+    interval: "month" | "year",
+  ) => {
     setError(undefined);
     startTransition(async () => {
-      const response = await startDunaPlusAction(interval);
+      const response = await startDunaPlusAction(plan, interval);
       if (!response.ok) {
         setError(response.error);
         return;
@@ -79,10 +85,10 @@ export function MembershipSettings({
       setConfirming(undefined);
       setNotice(
         action === "cancel"
-          ? "Duna+ will remain active through the current paid period."
+          ? "Premium access will remain active through the current paid period."
           : action === "pause"
-            ? "Duna+ billing is paused for one month."
-            : "Duna+ billing has resumed.",
+            ? "Premium billing is paused for one month."
+            : "Premium billing has resumed.",
       );
     });
   };
@@ -92,7 +98,7 @@ export function MembershipSettings({
       <div className="settings-section__heading">
         <div>
           <span className="page-eyebrow">Membership</span>
-          <h2>Duna+</h2>
+          <h2>Duna Premium</h2>
         </div>
         {membership ? (
           <Badge tone={membershipTone(membership)}>
@@ -113,7 +119,7 @@ export function MembershipSettings({
         <>
           <article className="membership-card">
             <div>
-              <span>DUNA+</span>
+              <span>{membership.tierName}</span>
               <Badge>
                 {membership.interval === "year" ? "Annual" : "Monthly"}
               </Badge>
@@ -155,14 +161,14 @@ export function MembershipSettings({
                   ? "Cancel after this paid period?"
                   : confirming === "pause"
                     ? "Pause billing for one month?"
-                    : "Resume Duna+ now?"}
+                    : "Resume Premium now?"}
               </strong>
               <p>
                 {confirming === "cancel"
                   ? "Your profile, rating, matches, safety features, and network access remain free."
                   : confirming === "pause"
                     ? "One of four available pause months will be used."
-                    : "Future invoices and Duna+ benefits will continue normally."}
+                    : "Future invoices and Premium benefits will continue normally."}
               </p>
               <div>
                 <button
@@ -185,7 +191,8 @@ export function MembershipSettings({
           ) : (
             <div className="membership-actions">
               <button disabled={isPending} onClick={openPortal} type="button">
-                <ExternalLink aria-hidden size={17} /> Manage payment method
+                <ExternalLink aria-hidden size={17} /> Manage billing or change
+                plan
               </button>
               {membership.pausedUntil || membership.cancelAtPeriodEnd ? (
                 <button
@@ -222,45 +229,73 @@ export function MembershipSettings({
           )}
         </>
       ) : (
-        <div className="membership-plan-grid">
-          {plans.map((plan) => (
-            <article className="membership-card" key={plan.interval}>
-              <div>
-                <span>DUNA+</span>
-                <Badge>{plan.interval === "year" ? "Annual" : "Monthly"}</Badge>
-              </div>
-              <Numeric>{formatMoney(plan.priceMinor, plan.currency)}</Numeric>
-              <p>
-                {plan.interval === "year"
-                  ? "One annual payment."
-                  : "Billed monthly. Cancel at period end."}
-              </p>
-              <ul>
-                <li>
-                  <Check size={15} /> No consumer platform fees
-                </li>
-                <li>
-                  <Check size={15} /> Full rating history
-                </li>
-                <li>
-                  <Check size={15} /> Partner chemistry and analytics
-                </li>
-              </ul>
-              <button
-                className="primary-action"
-                disabled={isPending || !plan.configured}
-                onClick={() => openCheckout(plan.interval)}
-                type="button"
-              >
-                {isPending
-                  ? "Opening secure checkout…"
-                  : plan.configured
-                    ? `Choose ${plan.interval === "year" ? "annual" : "monthly"}`
-                    : "Checkout unavailable"}
-              </button>
-            </article>
-          ))}
-        </div>
+        <>
+          <p>
+            Free includes 4 uploaded-video hours each month. Upgrade for native
+            live broadcasting, higher video limits, and no Duna service fees on
+            eligible purchases.
+          </p>
+          <div className="membership-actions" aria-label="Billing interval">
+            <button
+              aria-pressed={billingInterval === "month"}
+              disabled={isPending}
+              onClick={() => setBillingInterval("month")}
+              type="button"
+            >
+              Monthly
+            </button>
+            <button
+              aria-pressed={billingInterval === "year"}
+              disabled={isPending}
+              onClick={() => setBillingInterval("year")}
+              type="button"
+            >
+              Annual · 2 months free
+            </button>
+          </div>
+          <div className="membership-plan-grid">
+            {plans
+              .filter((plan) => plan.interval === billingInterval)
+              .map((plan) => (
+                <article className="membership-card" key={plan.plan}>
+                  <div>
+                    <span>{plan.name}</span>
+                    <Badge>
+                      {plan.interval === "year" ? "Annual" : "Monthly"}
+                    </Badge>
+                  </div>
+                  <Numeric>
+                    {formatMoney(plan.priceMinor, plan.currency)}
+                  </Numeric>
+                  <p>
+                    {plan.tagline}{" "}
+                    {plan.interval === "year"
+                      ? `${formatMoney(Math.round(plan.priceMinor / 12), plan.currency)} per month, billed annually.`
+                      : "Billed monthly. Cancel at period end."}
+                  </p>
+                  <ul>
+                    {plan.benefits.map((benefit) => (
+                      <li key={benefit}>
+                        <Check size={15} /> {benefit}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    className="primary-action"
+                    disabled={isPending || !plan.configured}
+                    onClick={() => openCheckout(plan.plan, plan.interval)}
+                    type="button"
+                  >
+                    {isPending
+                      ? "Opening secure checkout…"
+                      : plan.configured
+                        ? `Choose ${plan.name}`
+                        : "Checkout unavailable"}
+                  </button>
+                </article>
+              ))}
+          </div>
+        </>
       )}
     </section>
   );

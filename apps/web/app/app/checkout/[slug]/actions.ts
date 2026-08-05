@@ -19,6 +19,7 @@ export async function startEventCheckoutAction(input: {
   readonly ticketTypeId?: string;
   readonly ticketQuantity?: number;
   readonly teamPaymentMode?: "self" | "team";
+  readonly teamClaimToken?: string;
   readonly teamRoster?: readonly {
     readonly personId?: string;
     readonly inviteTarget?: string;
@@ -36,10 +37,13 @@ export async function startEventCheckoutAction(input: {
     incoming.forEach((value, key) => requestHeaders.set(key, value));
     const origin = applicationOrigin(requestHeaders);
     const selectionQuery = input.ticketTypeId
-      ? `&ticket=${encodeURIComponent(input.ticketTypeId)}`
+      ? `&ticket=${encodeURIComponent(input.ticketTypeId)}&quantity=${input.ticketQuantity ?? 1}`
       : input.divisionId
         ? `&division=${encodeURIComponent(input.divisionId)}`
         : "";
+    const teamQuery = input.teamClaimToken
+      ? `&team=${encodeURIComponent(input.teamClaimToken)}`
+      : "";
     const caller = await getServerCaller();
     const result = await caller.player.startEventCheckout({
       sessionId: input.sessionId,
@@ -47,13 +51,14 @@ export async function startEventCheckoutAction(input: {
       ticketTypeId: input.ticketTypeId,
       ticketQuantity: input.ticketQuantity,
       teamPaymentMode: input.teamPaymentMode,
+      teamClaimToken: input.teamClaimToken,
       teamRoster: input.teamRoster ? [...input.teamRoster] : undefined,
       subjectPersonId: input.subjectPersonId,
       acceptedPolicyIds: [...input.acceptedPolicyIds],
       readPolicyIds: [...input.readPolicyIds],
       isDunaPlus: input.isDunaPlus,
-      successUrl: `${origin}/app/checkout/${input.slug}?checkout=success&session_id={CHECKOUT_SESSION_ID}${selectionQuery}`,
-      cancelUrl: `${origin}/app/checkout/${input.slug}?checkout=cancelled${selectionQuery}`,
+      successUrl: `${origin}/app/checkout/${input.slug}?checkout=success&session_id={CHECKOUT_SESSION_ID}${selectionQuery}${teamQuery}`,
+      cancelUrl: `${origin}/app/checkout/${input.slug}?checkout=cancelled${selectionQuery}${teamQuery}`,
       idempotencyKey: input.idempotencyKey,
     });
     return { ok: true as const, result };
@@ -78,6 +83,29 @@ export async function checkoutStatusAction(checkoutSessionId: string) {
         error instanceof Error
           ? error.message
           : "Checkout status is unavailable.",
+    };
+  }
+}
+
+export async function searchTeammatesAction(input: {
+  readonly query?: string;
+  readonly divisionId?: string;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const results = await caller.player.teammateSearch({
+      query: input.query,
+      divisionId: input.divisionId,
+      limit: 12,
+    });
+    return { ok: true as const, results };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Player search is unavailable.",
     };
   }
 }

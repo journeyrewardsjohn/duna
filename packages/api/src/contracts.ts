@@ -1,3 +1,4 @@
+import { MEMBERSHIP_PLAN_IDS } from "@duna/core";
 import { z } from "zod";
 
 export const currencySchema = z.enum(["USD", "CAD", "AUD", "BRL", "EUR"]);
@@ -54,6 +55,27 @@ export const organizationSummarySchema = z.object({
   venueCount: z.number().int().nonnegative(),
   timezone: z.string(),
   stripeStatus: z.enum(["connected", "pending", "restricted"]),
+  effectivePlan: z
+    .enum(["coach", "small-club", "club", "multi-venue"])
+    .optional(),
+  operatorCommissionBps: z.number().int().min(0).max(2_500).optional(),
+  commissionSource: z.enum(["plan-default", "admin-override"]).optional(),
+  stripeFeeMetadataStatus: z
+    .enum(["not-connected", "pending", "synced", "failed"])
+    .optional(),
+});
+export const organizationCommissionPolicySchema = z.object({
+  organizationId: z.string().uuid(),
+  configuredPlan: z.enum(["coach", "small-club", "club", "multi-venue"]),
+  effectivePlan: z.enum(["coach", "small-club", "club", "multi-venue"]),
+  subscriptionStatus: z.string(),
+  defaultRateBps: z.number().int().min(0).max(2_500),
+  overrideRateBps: z.number().int().min(0).max(2_500).optional(),
+  rateBps: z.number().int().min(0).max(2_500),
+  source: z.enum(["plan-default", "admin-override"]),
+  stripeSyncStatus: z.enum(["not-connected", "pending", "synced", "failed"]),
+  stripeSyncedAt: z.iso.datetime().optional(),
+  stripeSyncError: z.string().optional(),
 });
 export const venueSummarySchema = z.object({
   id: z.string(),
@@ -136,6 +158,8 @@ export const eventDivisionSummarySchema = z.object({
   discipline: z.enum(["beach-2s", "beach-4s", "beach-6s", "grass", "indoor"]),
   ratingBasis: z.string(),
   price: moneySchema,
+  teamPrice: moneySchema,
+  playerPrice: moneySchema,
   spotsRemaining: z.number().int().nonnegative(),
   capacity: z.number().int().positive(),
   minimumTeams: z.number().int().positive().optional(),
@@ -215,6 +239,9 @@ export const eventFeatureSchema = z.object({
   personId: z.string().optional(),
   personHandle: z.string().optional(),
   personInitials: z.string().optional(),
+  personName: z.string().optional(),
+  personHomeMarket: z.string().optional(),
+  personRating: z.number().optional(),
   imageUrl: z.string().optional(),
 });
 export const eventPolicySchema = z.object({
@@ -540,6 +567,17 @@ export const playerDashboardSchema = z.object({
   walletBalanceMinor: z.number().int(),
   currency: z.literal("USD"),
 });
+export const playerCoachingNoteSchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  organizationName: z.string(),
+  sessionId: z.string().uuid(),
+  sessionTitle: z.string(),
+  coachName: z.string(),
+  subject: z.string().optional(),
+  summary: z.string(),
+  publishedAt: z.iso.datetime(),
+});
 export const playerWalletSchema = z.object({
   balanceMinor: z.number().int(),
   availableMinor: z.number().int(),
@@ -613,6 +651,7 @@ export const courtCalibrationSchema = z.object({
 });
 export const videoSummarySchema = z.object({
   id: z.string().uuid(),
+  organizationId: z.string().uuid().optional(),
   owner: personSummarySchema,
   source: videoSourceSchema,
   category: videoCategorySchema,
@@ -675,12 +714,22 @@ export const videoUsageSchema = z.object({
 export const dunaPlusEntitlementSchema = z.object({
   active: z.boolean(),
   kind: z.enum(["paid", "complimentary", "none"]),
+  plan: z.enum(MEMBERSHIP_PLAN_IDS),
   label: z.string(),
   startsAt: z.iso.datetime().optional(),
   endsAt: z.iso.datetime().optional(),
 });
 export const videoStudioSchema = z.object({
   entitlement: dunaPlusEntitlementSchema,
+  quotaScope: z.object({
+    type: z.enum(["person", "organization"]),
+    label: z.string(),
+    organizationId: z.string().uuid().optional(),
+    organizationPlan: z
+      .enum(["coach", "small-club", "club", "multi-venue"])
+      .optional(),
+  }),
+  canBroadcast: z.boolean(),
   usage: videoUsageSchema,
   videos: z.array(videoSummarySchema).readonly(),
   liveNow: z.array(videoSummarySchema).readonly(),
@@ -853,6 +902,7 @@ export const playerSettingsSchema = z.object({
     ageBand: z.enum(["unknown", "under-13", "teen", "adult"]),
     ageVerified: z.boolean(),
     birthDate: z.iso.date().optional(),
+    genderCategory: z.string().optional(),
     parentalConsentRecorded: z.boolean(),
     legalGivenName: z.string().optional(),
     legalMiddleName: z.string().optional(),
@@ -943,6 +993,9 @@ export const playerSettingsSchema = z.object({
         verified: z.boolean(),
         emergencyContact: z.boolean(),
         canApproveSpending: z.boolean(),
+        birthDate: z.iso.date().optional(),
+        ageBand: z.enum(["unknown", "under-13", "teen", "adult"]).optional(),
+        genderCategory: z.string().optional(),
         onboardingStatus: z.enum([
           "not-started",
           "in-progress",
@@ -971,10 +1024,16 @@ export const playerSettingsSchema = z.object({
   dunaPlusPlans: z
     .array(
       z.object({
+        plan: z.enum(["premium", "premium-plus"]),
+        name: z.string(),
+        tagline: z.string(),
         interval: z.enum(["month", "year"]),
         priceMinor: z.number().int().nonnegative(),
         currency: currencySchema,
         configured: z.boolean(),
+        monthlyUploadSeconds: z.number().int().nonnegative(),
+        monthlyLiveSeconds: z.number().int().nonnegative(),
+        benefits: z.array(z.string()).readonly(),
       }),
     )
     .readonly(),
@@ -1016,10 +1075,12 @@ export const pricingSchema = z.object({
       z.object({
         id: z.enum([
           "consumer-platform-v2",
+          "consumer-platform-v3",
           "registration-service-v2",
           "operator-online-v2",
           "operator-present-v2",
           "operator-ach-v2",
+          "organization-commission-v1",
           "coach-marketplace-v2",
         ]),
         label: z.string(),
@@ -1062,6 +1123,114 @@ export const operatorDashboardSchema = z.object({
     )
     .readonly(),
 });
+
+export const operatorPaymentCollectionStatusSchema = z.enum([
+  "created",
+  "awaiting-reader",
+  "processing",
+  "succeeded",
+  "declined",
+  "failed",
+  "cancelled",
+]);
+
+export const operatorPaymentCollectionSchema = z.object({
+  id: z.string().uuid(),
+  orderId: z.string().uuid(),
+  payerPersonId: z.string().uuid(),
+  payerName: z.string(),
+  referenceType: z.enum(["session", "catalog-item", "custom"]),
+  referenceId: z.string().uuid().optional(),
+  referenceLabel: z.string(),
+  tender: z.enum(["card-present", "organization-credit", "wallet-cash"]),
+  amountMinor: z.number().int().positive(),
+  currency: currencySchema,
+  applicationFeeMinor: z.number().int().nonnegative(),
+  processingFeeMinor: z.number().int().nonnegative(),
+  commissionMinor: z.number().int().nonnegative(),
+  creditsApplied: z.number().int().nonnegative(),
+  walletCashAppliedMinor: z.number().int().nonnegative(),
+  netMinor: z.number().int(),
+  stripePaymentIntentId: z.string().optional(),
+  status: operatorPaymentCollectionStatusSchema,
+  declineCode: z.string().optional(),
+  failureCode: z.string().optional(),
+  failureMessage: z.string().optional(),
+  receiptUrl: z.string().url().optional(),
+  completedAt: z.iso.datetime().optional(),
+  createdAt: z.iso.datetime(),
+});
+
+export const operatorPaymentWorkspaceSchema = z.object({
+  currency: currencySchema,
+  terminal: z.object({
+    ready: z.boolean(),
+    stripeConfigured: z.boolean(),
+    connectedAccountReady: z.boolean(),
+    organizationAddressReady: z.boolean(),
+    locationId: z.string().optional(),
+    merchantDisplayName: z.string(),
+    reason: z.string().optional(),
+  }),
+  earnings: z.object({
+    todayGrossMinor: z.number().int().nonnegative(),
+    todayNetMinor: z.number().int(),
+    periodGrossMinor: z.number().int().nonnegative(),
+    periodNetMinor: z.number().int(),
+    goal: z
+      .object({
+        id: z.string().uuid(),
+        targetMinor: z.number().int().positive(),
+        period: z.enum(["week", "month", "quarter", "year"]),
+        periodStartsAt: z.iso.datetime(),
+        periodEndsAt: z.iso.datetime(),
+        progressMinor: z.number().int().nonnegative(),
+        progressBps: z.number().int().min(0),
+      })
+      .optional(),
+  }),
+  people: z
+    .array(
+      z.object({
+        personId: z.string().uuid(),
+        displayName: z.string(),
+        avatarUrl: z.string().optional(),
+        isMinor: z.boolean(),
+        creditBalance: z.number().int().nonnegative(),
+        cashAvailableMinor: z.number().int().nonnegative(),
+        cashCurrency: currencySchema.optional(),
+        cashWalletEnabled: z.boolean(),
+      }),
+    )
+    .readonly(),
+  references: z
+    .array(
+      z.object({
+        type: z.enum(["session", "catalog-item"]),
+        id: z.string().uuid(),
+        label: z.string(),
+        detail: z.string(),
+        suggestedAmountMinor: z.number().int().nonnegative().optional(),
+        creditAmount: z.number().int().positive().optional(),
+      }),
+    )
+    .readonly(),
+  recent: z.array(operatorPaymentCollectionSchema).readonly(),
+});
+
+export const operatorPaymentStartSchema = z.object({
+  collection: operatorPaymentCollectionSchema,
+  clientSecret: z.string().optional(),
+  terminalLocationId: z.string().optional(),
+});
+
+export type OperatorPaymentCollection = z.infer<
+  typeof operatorPaymentCollectionSchema
+>;
+export type OperatorPaymentWorkspace = z.infer<
+  typeof operatorPaymentWorkspaceSchema
+>;
+export type OperatorPaymentStart = z.infer<typeof operatorPaymentStartSchema>;
 
 export const courtCancellationPolicySchema = z.object({
   title: z.string(),
@@ -1344,6 +1513,7 @@ export const operatorCatalogItemSchema = z.object({
     .array(
       z.object({
         id: z.string().uuid(),
+        catalogVariantId: z.string().uuid().optional(),
         kind: z.enum(["image", "video"]),
         url: z.string(),
         posterUrl: z.string().optional(),
@@ -1414,15 +1584,20 @@ export const operatorInventoryItemSchema = z.object({
   purpose: z.enum(["sale", "rental", "coach-use", "operations"]),
   trackingMode: z.enum(["quantity", "serialized"]),
   quantityOnHand: z.number().int().nonnegative(),
+  quantityReceived: z.number().int().positive(),
   quantityReserved: z.number().int().nonnegative(),
   reorderPoint: z.number().int().nonnegative(),
   serialNumber: z.string().optional(),
   assetTag: z.string().optional(),
   condition: z.string(),
   unitCostMinor: z.number().int().nonnegative().optional(),
+  totalCostMinor: z.number().int().nonnegative().optional(),
   currency: currencySchema.optional(),
   acquiredAt: z.iso.date().optional(),
   vendorName: z.string().optional(),
+  vendorReference: z.string().optional(),
+  receiptUrl: z.string().optional(),
+  receivedAt: z.iso.datetime(),
   depreciationMethod: z.string().optional(),
   usefulLifeMonths: z.number().int().positive().optional(),
   bookValueMinor: z.number().int().nonnegative().optional(),
@@ -1485,6 +1660,279 @@ export const operatorPersonRelationshipSchema = z.object({
     model: z.literal("activity-v1"),
   }),
   joinedAt: z.iso.datetime(),
+});
+
+export const operatorSessionNoteSchema = z.object({
+  id: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  sessionTitle: z.string(),
+  authorPersonId: z.string().uuid(),
+  authorName: z.string(),
+  subject: z.string().optional(),
+  visibility: z.enum(["private", "player"]),
+  source: z.enum(["typed", "livekit-voice"]),
+  transcript: z.string().optional(),
+  summary: z.string(),
+  status: z.enum(["draft", "published", "archived"]),
+  recipients: z
+    .array(
+      z.object({
+        personId: z.string().uuid(),
+        displayName: z.string(),
+        detected: z.boolean(),
+        sharedAt: z.iso.datetime().optional(),
+      }),
+    )
+    .readonly(),
+  publishedAt: z.iso.datetime().optional(),
+  createdAt: z.iso.datetime(),
+});
+
+export const operatorHealthSnapshotSchema = z.object({
+  source: z.literal("apple-healthkit"),
+  scopes: z.array(z.string()).readonly(),
+  grantedAt: z.iso.datetime(),
+  observedAt: z.iso.datetime().optional(),
+  metrics: z
+    .object({
+      restingHeartRate: z.number().nonnegative().optional(),
+      heartRateVariabilityMs: z.number().nonnegative().optional(),
+      sleepHours: z.number().nonnegative().optional(),
+      steps: z.number().int().nonnegative().optional(),
+      activeEnergyKcal: z.number().nonnegative().optional(),
+      exerciseMinutes: z.number().nonnegative().optional(),
+      latestWorkoutAt: z.iso.datetime().optional(),
+    })
+    .optional(),
+});
+
+export const operatorMemberProfileSchema = z.object({
+  relationship: operatorPersonRelationshipSchema,
+  profile: z.object({
+    handle: z.string(),
+    homeMarket: z.string().optional(),
+    birthDate: z.iso.date().optional(),
+    ageBand: z.string(),
+    profileClaimStatus: z.string(),
+    profileVisibility: z.string(),
+    playingExperience: z.string(),
+    yearsPlaying: z.number().int().nonnegative().optional(),
+    collegeName: z.string().optional(),
+    experienceSummary: z.string().optional(),
+  }),
+  plans: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string(),
+        status: z.string(),
+        interval: z.string(),
+        priceMinor: z.number().int().nonnegative(),
+        currency: currencySchema,
+        currentPeriodEndsAt: z.iso.datetime().optional(),
+        cancelAtPeriodEnd: z.boolean(),
+      }),
+    )
+    .readonly(),
+  creditGrants: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        initialCredits: z.number().int().positive(),
+        remainingCredits: z.number().int().nonnegative(),
+        initialValueMinor: z.number().int().nonnegative(),
+        remainingValueMinor: z.number().int().nonnegative(),
+        currency: currencySchema.optional(),
+        status: z.string(),
+        expiresAt: z.iso.datetime().optional(),
+        createdAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
+  sessions: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        title: z.string(),
+        kind: eventKindSchema,
+        startsAt: z.iso.datetime(),
+        endsAt: z.iso.datetime(),
+        timezone: z.string(),
+        venueName: z.string().optional(),
+        status: z.string(),
+        registrationId: z.string().uuid(),
+        registrationStatus: z.string(),
+        attendanceStatus: z
+          .enum(["scheduled", "attended", "no-show", "cancelled"])
+          .optional(),
+        orderId: z.string().uuid().optional(),
+        noteCount: z.number().int().nonnegative(),
+      }),
+    )
+    .readonly(),
+  purchases: z
+    .array(
+      z.object({
+        orderId: z.string().uuid(),
+        description: z.string(),
+        amountMinor: z.number().int().nonnegative(),
+        refundedMinor: z.number().int().nonnegative(),
+        currency: currencySchema,
+        status: z.string(),
+        purchasedAt: z.iso.datetime(),
+        refunds: z
+          .array(
+            z.object({
+              id: z.string().uuid(),
+              amountMinor: z.number().int().positive(),
+              disposition: z.enum(["original-payment", "organization-credit"]),
+              creditsIssued: z.number().int().positive().optional(),
+              status: z.string(),
+              reason: z.string(),
+              createdAt: z.iso.datetime(),
+            }),
+          )
+          .readonly(),
+      }),
+    )
+    .readonly(),
+  notes: z.array(operatorSessionNoteSchema).readonly(),
+  videos: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        title: z.string(),
+        category: z.string(),
+        status: z.string(),
+        sessionId: z.string().uuid().optional(),
+        sessionTitle: z.string().optional(),
+        durationSeconds: z.number().int().nonnegative().optional(),
+        thumbnailUrl: z.string().optional(),
+        createdAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
+  health: operatorHealthSnapshotSchema.optional(),
+  timeline: z
+    .array(
+      z.object({
+        id: z.string(),
+        kind: z.enum([
+          "session",
+          "purchase",
+          "refund",
+          "note",
+          "credit",
+          "video",
+        ]),
+        title: z.string(),
+        detail: z.string(),
+        occurredAt: z.iso.datetime(),
+        href: z.string().optional(),
+      }),
+    )
+    .readonly(),
+});
+
+export const operatorSessionDetailSchema = z.object({
+  session: operatorSessionSchema,
+  coaches: z
+    .array(
+      z.object({
+        personId: z.string().uuid(),
+        displayName: z.string(),
+        avatarUrl: z.string().optional(),
+      }),
+    )
+    .readonly(),
+  attendees: z
+    .array(
+      operatorEventRegistrationSchema.extend({
+        attendanceStatus: z.enum([
+          "scheduled",
+          "attended",
+          "no-show",
+          "cancelled",
+        ]),
+        paidMinor: z.number().int().nonnegative(),
+        refundedMinor: z.number().int().nonnegative(),
+      }),
+    )
+    .readonly(),
+  teams: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        divisionName: z.string(),
+        captainName: z.string(),
+        expectedTeamSize: z.number().int().min(2).max(6),
+        playersAdded: z.number().int().min(1).max(6),
+        claimedPlayers: z.number().int().min(1).max(6),
+        paidPlayers: z.number().int().min(0).max(6),
+        paymentMode: z.enum(["self", "team"]),
+        status: z.enum([
+          "assembling",
+          "ready",
+          "confirmed",
+          "cancelled",
+          "expired",
+        ]),
+        needsAttention: z.boolean(),
+        expiresAt: z.iso.datetime(),
+        roster: z
+          .array(
+            z.object({
+              displayName: z.string(),
+              status: z.enum(["captain", "selected", "invited", "claimed"]),
+              deliveryStatus: z.enum(["queued", "sent", "failed"]).optional(),
+              paid: z.boolean(),
+            }),
+          )
+          .readonly(),
+      }),
+    )
+    .readonly(),
+  finance: z.object({
+    grossMinor: z.number().int().nonnegative(),
+    refundedMinor: z.number().int().nonnegative(),
+    netMinor: z.number().int(),
+    currency: currencySchema,
+    paidOrders: z.number().int().nonnegative(),
+  }),
+  operations: z.object({
+    cancellationKind: z
+      .enum(["coach", "weather", "operator", "venue", "other"])
+      .optional(),
+    cancellationReason: z.string().optional(),
+    cancelledByName: z.string().optional(),
+    cancelledAt: z.iso.datetime().optional(),
+    weather: z
+      .object({
+        condition: z.string(),
+        temperatureC: z.number().optional(),
+        apparentTemperatureC: z.number().optional(),
+        precipitationProbability: z.number().optional(),
+        windSpeedKph: z.number().optional(),
+        source: z.string(),
+        observedAt: z.iso.datetime(),
+      })
+      .optional(),
+  }),
+  notes: z.array(operatorSessionNoteSchema).readonly(),
+  videos: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        ownerPersonId: z.string().uuid(),
+        ownerName: z.string(),
+        title: z.string(),
+        status: z.string(),
+        durationSeconds: z.number().int().nonnegative().optional(),
+        thumbnailUrl: z.string().optional(),
+        createdAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
 });
 
 export const operatorStaffProfileSchema = z.object({
@@ -1853,6 +2301,13 @@ export const operatorWorkspaceSchema = z.object({
     name: z.string(),
     legalName: z.string().optional(),
     plan: z.enum(["coach", "small-club", "club", "multi-venue"]),
+    effectivePlan: z.enum(["coach", "small-club", "club", "multi-venue"]),
+    planSubscriptionStatus: z.string(),
+    planBillingInterval: z.enum(["month", "year"]).optional(),
+    planCurrentPeriodEndsAt: z.iso.datetime().optional(),
+    planCancelAtPeriodEnd: z.boolean(),
+    billingPortalAvailable: z.boolean(),
+    commission: organizationCommissionPolicySchema,
     currency: currencySchema,
     timezone: z.string(),
     stripeAccountId: z.string().optional(),
@@ -1891,6 +2346,10 @@ export const operatorWorkspaceSchema = z.object({
         catalogItemId: z.string().uuid(),
         paidPurchases: z.number().int().nonnegative(),
         grossBookedMinor: z.number().int().nonnegative(),
+        netSalesMinor: z.number().int().nonnegative(),
+        cogsMinor: z.number().int().nonnegative(),
+        grossProfitMinor: z.number().int(),
+        grossMarginBps: z.number().int().optional(),
         uniqueCustomers: z.number().int().nonnegative(),
         refundedOrders: z.number().int().nonnegative(),
         lastPurchaseAt: z.iso.datetime().optional(),
@@ -2002,6 +2461,11 @@ export const operatorMutationResultSchema = z.object({
     "inventory-reservation",
     "credit-adjustment",
     "refund",
+    "session-note",
+    "session-attendance",
+    "member-profile",
+    "health-snapshot",
+    "health-share",
   ]),
   status: z.string(),
 });
@@ -2065,6 +2529,9 @@ export const ticketApprovalResultSchema = z.object({
 });
 
 export type OperatorWorkspace = z.infer<typeof operatorWorkspaceSchema>;
+export type OperatorMemberProfile = z.infer<typeof operatorMemberProfileSchema>;
+export type OperatorSessionDetail = z.infer<typeof operatorSessionDetailSchema>;
+export type OperatorSessionNote = z.infer<typeof operatorSessionNoteSchema>;
 export type EventDraftEditor = z.infer<typeof eventDraftEditorSchema>;
 export type PublicCatalogItem = z.infer<typeof publicCatalogItemSchema>;
 export type PublicOrganizationStorefront = z.infer<
@@ -2144,11 +2611,21 @@ export const adminOverviewSchema = z.object({
 });
 export const adminOrganizationDetailSchema = z.object({
   organization: organizationSummarySchema,
+  canManageCommission: z.boolean(),
   metrics: z.array(metricSchema).readonly(),
   people: z.array(personSummarySchema).readonly(),
   venues: z.array(venueSummarySchema).readonly(),
   events: z.array(eventSummarySchema).readonly(),
   audit: z.array(auditEventSchema).readonly(),
+  billing: z.object({
+    configuredPlan: z.enum(["coach", "small-club", "club", "multi-venue"]),
+    effectivePlan: z.enum(["coach", "small-club", "club", "multi-venue"]),
+    subscriptionStatus: z.string(),
+    interval: z.enum(["month", "year"]).optional(),
+    currentPeriodEndsAt: z.iso.datetime().optional(),
+    cancelAtPeriodEnd: z.boolean(),
+    commission: organizationCommissionPolicySchema,
+  }),
   commerce: z.object({
     paidOrders: z.number().int().nonnegative(),
     pendingOrders: z.number().int().nonnegative(),
@@ -2752,23 +3229,43 @@ export const eventCheckoutStatusSchema = z.object({
 export const teamClaimSummarySchema = z.object({
   eventTitle: z.string(),
   eventSlug: z.string(),
+  divisionId: z.string().uuid(),
   divisionName: z.string(),
   captainName: z.string(),
   expectedTeamSize: z.number().int().min(2).max(6),
   claimedPlayers: z.number().int().min(1).max(6),
+  paidPlayers: z.number().int().min(0).max(6),
   paymentMode: z.enum(["self", "team"]),
   status: z.enum(["assembling", "ready", "confirmed", "cancelled", "expired"]),
   expiresAt: z.iso.datetime(),
   alreadyClaimed: z.boolean(),
   paymentRequired: z.boolean(),
+  isOrganizer: z.boolean(),
+  canManageRoster: z.boolean(),
+  registrationClosesAt: z.iso.datetime(),
   roster: z
     .array(
       z.object({
+        slot: z.number().int().nonnegative(),
+        personId: z.string().uuid().optional(),
+        inviteTarget: z.string().optional(),
         displayName: z.string(),
         status: z.enum(["captain", "selected", "invited", "claimed"]),
+        deliveryStatus: z.enum(["queued", "sent", "failed"]).optional(),
+        paid: z.boolean(),
+        editable: z.boolean(),
       }),
     )
     .readonly(),
+});
+
+export const teammateSearchResultSchema = z.object({
+  person: personSummarySchema,
+  relationship: z.enum(["recent-partner", "connection", "nearby", "search"]),
+  sharedTeams: z.number().int().nonnegative(),
+  gender: z.string(),
+  eligible: z.boolean(),
+  eligibilityReasons: z.array(z.string()).readonly(),
 });
 
 export const featureFlagSummarySchema = z.object({

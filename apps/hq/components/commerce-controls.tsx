@@ -50,6 +50,7 @@ import {
 } from "@/app/actions";
 import { createBrandMediaPath, optimizeImageUpload } from "@/lib/media-storage";
 import { AddressEntry } from "./place-address-fields";
+import { GuidedProductBuilder } from "./guided-product-builder";
 
 const initialState: OperatorActionState = { status: "idle", message: "" };
 
@@ -198,7 +199,8 @@ const subtypes = {
   ],
 } as const;
 
-function ProductComposer({
+/** @deprecated The tailored guided builders replace the shared dropdown form. */
+export function ProductComposer({
   workspace,
 }: {
   readonly workspace: OperatorWorkspace;
@@ -1217,15 +1219,29 @@ function ProductComposer({
   );
 }
 
-function InventoryComposer({
+export function InventoryComposer({
+  catalogItemId,
   workspace,
 }: {
+  readonly catalogItemId?: string;
   readonly workspace: OperatorWorkspace;
 }) {
-  const goods = workspace.catalog.filter((item) => item.type === "good");
+  const goods = workspace.catalog.filter(
+    (item) =>
+      item.type === "good" && (!catalogItemId || item.id === catalogItemId),
+  );
   const variants = goods.flatMap((item) =>
     item.variants.map((variant) => ({ item, variant })),
   );
+  const receiptHistory = workspace.inventory
+    .filter(
+      (receipt) => !catalogItemId || receipt.catalogItemId === catalogItemId,
+    )
+    .toSorted(
+      (left, right) =>
+        new Date(right.receivedAt).getTime() -
+        new Date(left.receivedAt).getTime(),
+    );
   const [trackingMode, setTrackingMode] = useState<"quantity" | "serialized">(
     "quantity",
   );
@@ -1238,10 +1254,10 @@ function InventoryComposer({
       <header className="hq-card-heading">
         <div>
           <span className="hq-eyebrow">Goods + equipment</span>
-          <h2>Receive inventory</h2>
+          <h2>Receive another cost layer</h2>
           <p>
-            Record stock for sale, rental, coach use, or operations—including
-            cost basis and depreciation details.
+            Record each shipment or contribution separately so quantity, source,
+            and historical cost stay intact.
           </p>
         </div>
         <Boxes aria-hidden size={24} />
@@ -1340,7 +1356,11 @@ function InventoryComposer({
               <option value="repair">Needs repair</option>
             </select>
           </label>
-          <MoneyField label="Price paid per item" name="unitCost" />
+          <MoneyField
+            helper="Enter the invoice or receipt total for this quantity. Duna calculates the per-unit layer."
+            label="Total receipt cost · all units"
+            name="totalCost"
+          />
           <label>
             <span>Date purchased</span>
             <input name="acquiredAt" type="date" />
@@ -1399,6 +1419,64 @@ function InventoryComposer({
           </SubmitButton>
         </div>
       </form>
+      {receiptHistory.length > 0 && (
+        <div className="inventory-receipt-history">
+          <header>
+            <div>
+              <strong>Receipt history</strong>
+              <small>
+                Every row is a distinct cost layer; sold-out layers remain in
+                history.
+              </small>
+            </div>
+            <Badge>{receiptHistory.length} layers</Badge>
+          </header>
+          <div>
+            {receiptHistory.slice(0, 12).map((receipt) => (
+              <article key={receipt.id}>
+                <span>
+                  <strong>{receipt.itemTitle}</strong>
+                  <small>
+                    {receipt.variantTitle} · {receipt.locationName}
+                  </small>
+                </span>
+                <span>
+                  <small>Received</small>
+                  <strong>{receipt.quantityReceived}</strong>
+                </span>
+                <span>
+                  <small>Still on hand</small>
+                  <strong>{receipt.quantityOnHand}</strong>
+                </span>
+                <span>
+                  <small>Unit cost</small>
+                  <strong>
+                    {receipt.unitCostMinor === undefined
+                      ? "Not entered"
+                      : new Intl.NumberFormat("en-US", {
+                          style: "currency",
+                          currency:
+                            receipt.currency ?? workspace.organization.currency,
+                        }).format(receipt.unitCostMinor / 100)}
+                  </strong>
+                </span>
+                <span>
+                  <small>Receipt total</small>
+                  <strong>
+                    {receipt.totalCostMinor === undefined
+                      ? "Not entered"
+                      : new Intl.NumberFormat("en-US", {
+                          style: "currency",
+                          currency:
+                            receipt.currency ?? workspace.organization.currency,
+                        }).format(receipt.totalCostMinor / 100)}
+                  </strong>
+                </span>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -1413,6 +1491,8 @@ function CatalogStatusRow({
     initialState,
   );
   const nextStatus = item.status === "active" ? "draft" : "active";
+  const inventoryOnlyGood =
+    item.type === "good" && item.configuration.saleEnabled === false;
   return (
     <article className="catalog-status-row">
       <div className="catalog-status-row__summary">
@@ -1439,12 +1519,18 @@ function CatalogStatusRow({
           <input name="catalogItemId" type="hidden" value={item.id} />
           <input name="status" type="hidden" value={nextStatus} />
           <input name="confirmed" type="hidden" value="true" />
-          <SubmitButton pending={pending} secondary={item.status !== "draft"}>
-            {item.status === "draft"
-              ? "Publish"
-              : item.status === "active"
-                ? "Move to draft"
-                : "Restore + publish"}
+          <SubmitButton
+            disabled={inventoryOnlyGood}
+            pending={pending}
+            secondary={item.status !== "draft"}
+          >
+            {inventoryOnlyGood
+              ? "Set sales first"
+              : item.status === "draft"
+                ? "Publish"
+                : item.status === "active"
+                  ? "Move to draft"
+                  : "Restore + publish"}
           </SubmitButton>
         </form>
         {item.status !== "archived" && (
@@ -1496,13 +1582,16 @@ function CatalogStatusControls({
 }
 
 export function ProductCatalogControls({
+  focused = false,
   workspace,
 }: {
+  readonly focused?: boolean;
   readonly workspace: OperatorWorkspace;
 }) {
+  if (focused) return <GuidedProductBuilder workspace={workspace} />;
   return (
     <div className="commerce-controls">
-      <ProductComposer workspace={workspace} />
+      <GuidedProductBuilder workspace={workspace} />
       <CatalogStatusControls workspace={workspace} />
       <div className="operator-controls-grid">
         <InventoryComposer workspace={workspace} />

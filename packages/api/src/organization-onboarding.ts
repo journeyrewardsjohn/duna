@@ -5,11 +5,16 @@ import {
   organizationMemberships,
   organizations,
 } from "@duna/db";
+import {
+  ORGANIZATION_PLAN_IDS,
+  ORGANIZATION_PLANS,
+  type OrganizationPlanId,
+} from "@duna/core";
 import type { User } from "@workos-inc/node";
 import { eq } from "drizzle-orm";
 import { organizationSlug, resolveWorkOSPerson } from "./context";
 
-export type HqPlan = "coach" | "small-club" | "club" | "multi-venue";
+export type HqPlan = OrganizationPlanId;
 
 export const HQ_PLAN_OPTIONS: readonly {
   readonly id: HqPlan;
@@ -19,62 +24,28 @@ export const HQ_PLAN_OPTIONS: readonly {
   readonly description: string;
   readonly recommendedFor: string;
   readonly features: readonly string[];
-}[] = [
-  {
-    id: "coach",
-    name: "Coach",
-    priceLabel: "$0",
-    priceMinor: 0,
-    description: "Start a coaching business and pay only when you sell.",
-    recommendedFor: "Independent coaches and new organizers",
-    features: [
-      "Events, services, and client management",
-      "Public coach profile and booking",
-      "0% marketplace take on clients you bring",
-      "12–15% only on Duna-originated bookings",
-    ],
-  },
-  {
-    id: "small-club",
-    name: "Small Club",
-    priceLabel: "$199 / month",
-    priceMinor: 19_900,
-    description: "Run a growing club with memberships, credits, and staff.",
-    recommendedFor: "Clubs with one location or a small team",
-    features: [
-      "Everything in Coach",
-      "Memberships, credit packs, and marketing",
-      "Team roles, facilities, and advanced reporting",
-      "No separate platform take on club GMV",
-    ],
-  },
-  {
-    id: "club",
-    name: "Club",
-    priceLabel: "$499 / month",
-    priceMinor: 49_900,
-    description: "Operate a high-volume facility or established academy.",
-    recommendedFor: "Facilities and mature clubs",
-    features: [
-      "Everything in Small Club",
-      "Court inventory and operational controls",
-      "Priority support and deeper analytics",
-      "No separate platform take on club GMV",
-    ],
-  },
-  {
-    id: "multi-venue",
-    name: "Multi-venue",
-    priceLabel: "Custom",
-    description: "One operating model across several venues or brands.",
-    recommendedFor: "Regional and multi-location operators",
-    features: [
-      "Everything in Club",
-      "Cross-location controls and reporting",
-      "Custom implementation, data, and support",
-    ],
-  },
-] as const;
+}[] = ORGANIZATION_PLAN_IDS.map((id) => {
+  const definition = ORGANIZATION_PLANS[id];
+  return {
+    id,
+    name: id === "coach" ? "Coach & Organizer" : definition.name,
+    priceLabel:
+      definition.monthlyPriceMinor === 0
+        ? "$0"
+        : `$${(definition.monthlyPriceMinor / 100).toLocaleString("en-US")} / month`,
+    priceMinor: definition.monthlyPriceMinor,
+    description: definition.tagline,
+    recommendedFor:
+      id === "coach"
+        ? "Independent coaches and new organizers"
+        : id === "small-club"
+          ? "Growing clubs and academies"
+          : id === "club"
+            ? "Facilities and established operators"
+            : "Regional and multi-location operators",
+    features: definition.features,
+  };
+});
 
 export const HQ_TERMS_VERSION = "2026-08-02";
 

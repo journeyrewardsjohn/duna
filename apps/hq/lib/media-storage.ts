@@ -136,6 +136,22 @@ export function createBrandMediaPath(
   return `brand/${organizationId}/${identifier}.${configuration.extension}`;
 }
 
+export function createProductMediaPath(
+  organizationId: string,
+  contentType: string,
+  identifier = crypto.randomUUID(),
+): string {
+  const configuration = mediaType(contentType);
+  if (
+    !configuration ||
+    !uuidPattern.test(organizationId) ||
+    !uuidPattern.test(identifier)
+  ) {
+    throw new Error("Duna could not create a safe product media path.");
+  }
+  return `products/${organizationId}/${identifier}.${configuration.extension}`;
+}
+
 export function assertEventMediaPath(
   pathname: string,
   organizationId: string,
@@ -205,6 +221,24 @@ export function assertBrandMediaPath(
     pathname !== `${prefix}${identifier}.${extension}`
   ) {
     throw new Error("The brand media destination is invalid.");
+  }
+}
+
+export function assertProductMediaPath(
+  pathname: string,
+  organizationId: string,
+  extension: string,
+): void {
+  const prefix = `products/${organizationId}/`;
+  const identifier = pathname.slice(prefix.length, -(extension.length + 1));
+  if (
+    !uuidPattern.test(organizationId) ||
+    !pathname.startsWith(prefix) ||
+    !pathname.endsWith(`.${extension}`) ||
+    !uuidPattern.test(identifier) ||
+    pathname !== `${prefix}${identifier}.${extension}`
+  ) {
+    throw new Error("The product media destination is invalid.");
   }
 }
 

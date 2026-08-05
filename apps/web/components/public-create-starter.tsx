@@ -42,7 +42,7 @@ export function PublicCreateStarter({ hqUrl }: { readonly hqUrl: string }) {
     <div className="public-create">
       <section className="public-create__intro">
         <Badge>
-          <Sparkles aria-hidden size={12} /> Event-only launch plan
+          <Sparkles aria-hidden size={12} /> Free Coach & Organizer plan
         </Badge>
         <h1>Put your event on Duna.</h1>
         <p>
@@ -55,8 +55,8 @@ export function PublicCreateStarter({ hqUrl }: { readonly hqUrl: string }) {
             <Numeric>$0</Numeric>
           </span>
           <span>
-            <small>On event sales</small>
-            <Numeric>15%</Numeric>
+            <small>Organization transaction fee</small>
+            <Numeric>5%</Numeric>
           </span>
           <ul>
             <li>
@@ -69,6 +69,10 @@ export function PublicCreateStarter({ hqUrl }: { readonly hqUrl: string }) {
               <Check aria-hidden size={15} /> Pools, brackets + live play
             </li>
           </ul>
+          <p>
+            Plus card processing. Players without Duna Premium pay a separate
+            7.5% service fee on eligible purchases.
+          </p>
         </div>
       </section>
 

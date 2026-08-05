@@ -1,4 +1,5 @@
 import {
+  appliedFees,
   auditLog,
   catalogEntitlements,
   catalogFulfillments,
@@ -29,8 +30,11 @@ import {
   type LedgerPosting,
 } from "@duna/core";
 import {
+  calculateOrganizationCommissionFee,
   calculateOperatorProcessingFee,
+  priceConsumerOrder,
   type CurrencyCode,
+  type OrderItemKind,
 } from "@duna/pricing";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
@@ -39,6 +43,8 @@ import {
   issueOrganizationCredits,
 } from "./catalog-service";
 import type { ApiActor } from "./context";
+import { hasActiveDunaPlusMembership } from "./membership";
+import { resolveOrganizationCommissionPolicy } from "./organization-billing";
 import { createCatalogCheckoutSession } from "./payments";
 
 export class CatalogCheckoutError extends Error {
@@ -109,6 +115,16 @@ function currency(value: string): CurrencyCode {
   return value;
 }
 
+export function catalogOrderItemKind(input: {
+  readonly type: "event" | "service" | "good" | "plan";
+  readonly subtype: string;
+}): OrderItemKind {
+  if (input.type === "event") return "registration";
+  if (input.type === "service") return "booking";
+  if (input.type === "good") return "merchandise";
+  return input.subtype === "membership" ? "membership" : "package";
+}
+
 function fulfillmentKind(
   item: typeof catalogItems.$inferSelect,
 ):
@@ -117,13 +133,15 @@ function fulfillmentKind(
   | "pickup"
   | "rental"
   | "membership"
-  | "credit-grant" {
+  | "credit-grant"
+  | "package" {
   if (item.type === "event") return "registration";
   if (item.type === "service") return "appointment";
   if (item.type === "good") {
     return item.subtype === "rental" ? "rental" : "pickup";
   }
-  return item.subtype === "credit-pack" ? "credit-grant" : "membership";
+  if (item.subtype === "credit-pack") return "credit-grant";
+  return item.subtype === "bundle" ? "package" : "membership";
 }
 
 async function hasOrganizationMembership(
@@ -546,14 +564,67 @@ export async function startCatalogCheckout(input: {
     );
   }
   const taxLocation = venue ?? row.organization;
+  const itemKind = catalogOrderItemKind(row.item);
+  const hasDunaPlus =
+    input.paymentMethod === "card" &&
+    amountMinor > 0 &&
+    itemKind !== "merchandise"
+      ? await hasActiveDunaPlusMembership(input.actor.personId, input.now)
+      : false;
+  const priced =
+    input.paymentMethod === "card"
+      ? priceConsumerOrder({
+          currency: orderCurrency,
+          isDunaPlus: hasDunaPlus,
+          items: [
+            {
+              id: row.variant.id,
+              kind: itemKind,
+              description: row.item.title,
+              quantity: input.quantity,
+              unitAmountMinor: price.amountMinor ?? 0,
+            },
+          ],
+        })
+      : {
+          subtotalMinor: amountMinor,
+          fees: [],
+          totalMinor: amountMinor,
+          currency: orderCurrency,
+          dunaPlusSavingsMinor: 0,
+        };
+  const serviceFeeMinor = priced.fees.reduce(
+    (total, fee) => total + fee.amountMinor,
+    0,
+  );
   const operatorFee =
-    input.paymentMethod === "card" && amountMinor > 0
+    input.paymentMethod === "card" && priced.subtotalMinor > 0
       ? calculateOperatorProcessingFee({
-          amountMinor,
+          amountMinor: priced.subtotalMinor,
           currency: orderCurrency,
           method: "online-card",
         })
       : undefined;
+  const commissionPolicy = resolveOrganizationCommissionPolicy(
+    row.organization,
+  );
+  const organizationCommissionFee =
+    input.paymentMethod === "card" && priced.subtotalMinor > 0
+      ? calculateOrganizationCommissionFee({
+          amountMinor: priced.subtotalMinor,
+          currency: orderCurrency,
+          rateBps: commissionPolicy.rateBps,
+          organizationId: row.organization.id,
+          plan: commissionPolicy.effectivePlan,
+          source: commissionPolicy.source,
+        })
+      : undefined;
+  const applicationFeeMinor = Math.min(
+    priced.totalMinor,
+    serviceFeeMinor +
+      (operatorFee?.amountMinor ?? 0) +
+      (organizationCommissionFee?.amountMinor ?? 0),
+  );
 
   const orderId = crypto.randomUUID();
   const orderItemId = crypto.randomUUID();
@@ -566,6 +637,9 @@ export async function startCatalogCheckout(input: {
     input.paymentMethod === "cash"
       ? cashReservationExpiresAt
       : checkoutExpiresAt;
+  const tracksInventory =
+    row.item.type === "good" &&
+    row.item.configuration.inventoryTracked !== false;
   await database.batch([
     database
       .insert(organizationParticipants)
@@ -583,8 +657,9 @@ export async function startCatalogCheckout(input: {
       buyerPersonId: input.actor.personId,
       status: "pending",
       currency: orderCurrency,
-      subtotalMinor: amountMinor,
-      totalMinor: amountMinor,
+      subtotalMinor: priced.subtotalMinor,
+      feeTotalMinor: serviceFeeMinor,
+      totalMinor: priced.totalMinor,
       idempotencyKey: input.idempotencyKey,
       expiresAt:
         input.paymentMethod === "card" || input.paymentMethod === "cash"
@@ -610,12 +685,19 @@ export async function startCatalogCheckout(input: {
       catalogVariantId: row.variant.id,
       personId: input.actor.personId,
       kind: fulfillmentKind(row.item),
-      status: row.item.type === "good" ? "held" : "pending",
+      status: tracksInventory ? "held" : "pending",
       details: {
         paymentMethod: input.paymentMethod,
         creditsApplied,
         quantity: input.quantity,
-        applicationFeeMinor: operatorFee?.amountMinor ?? 0,
+        applicationFeeMinor,
+        consumerServiceFeeMinor: serviceFeeMinor,
+        operatorProcessingFeeMinor: operatorFee?.amountMinor ?? 0,
+        organizationCommissionMinor:
+          organizationCommissionFee?.amountMinor ?? 0,
+        organizationCommissionRateBps: commissionPolicy.rateBps,
+        organizationCommissionSource: commissionPolicy.source,
+        dunaPlusSavingsMinor: priced.dunaPlusSavingsMinor,
         membershipIncluded: Boolean(membershipInclusion),
         membershipId: membershipInclusion?.membershipId,
         membershipPlanCatalogItemId: membershipInclusion?.planCatalogItemId,
@@ -646,9 +728,25 @@ export async function startCatalogCheckout(input: {
       ],
       currency: orderCurrency,
     }),
+    ...[
+      ...priced.fees,
+      ...(operatorFee ? [operatorFee] : []),
+      ...(organizationCommissionFee ? [organizationCommissionFee] : []),
+    ]
+      .filter((fee) => fee.amountMinor > 0)
+      .map((fee) =>
+        database.insert(appliedFees).values({
+          orderId,
+          ruleId: fee.id,
+          payer: fee.payer,
+          amountMinor: fee.amountMinor,
+          currency: fee.currency,
+          ruleInputs: fee.ruleInputs,
+        }),
+      ),
   ]);
 
-  if (row.item.type === "good") {
+  if (tracksInventory) {
     try {
       await holdSaleInventory({
         organizationId: row.organization.id,
@@ -878,10 +976,20 @@ export async function startCatalogCheckout(input: {
       catalogVariantId: row.variant.id,
       stripePriceId: price.stripePriceId!,
       quantity: input.quantity,
-      amountMinor,
-      applicationFeeMinor: Math.min(amountMinor, operatorFee?.amountMinor ?? 0),
+      subtotalMinor: priced.subtotalMinor,
+      serviceFeeMinor,
+      currency: orderCurrency,
+      applicationFeeMinor,
+      organizationCommissionMinor: organizationCommissionFee?.amountMinor ?? 0,
+      organizationCommissionRateBps: commissionPolicy.rateBps,
       connectedAccountId: row.organization.stripeAccountId,
-      recurring: Boolean(price.recurringInterval),
+      recurringInterval:
+        price.recurringInterval === "week" ||
+        price.recurringInterval === "month" ||
+        price.recurringInterval === "year"
+          ? price.recurringInterval
+          : undefined,
+      recurringIntervalCount: price.recurringIntervalCount ?? undefined,
       automaticTaxEnabled:
         row.item.taxable && row.organization.stripeTaxEnabled,
       collectShippingAddress: row.item.type === "good",
@@ -910,7 +1018,7 @@ export async function startCatalogCheckout(input: {
       expiresAt: checkout.expiresAt,
       paymentMethod: "card",
       quantity: input.quantity,
-      amountMinor,
+      amountMinor: priced.totalMinor,
       creditsApplied: 0,
       currency: orderCurrency,
     };
@@ -957,6 +1065,34 @@ async function postPaidCatalogOrderJournal(input: {
     configuredFee > 0
       ? Math.min(input.order.totalMinor, configuredFee)
       : 0;
+  const configuredConsumerServiceFee =
+    input.fulfillment.details.consumerServiceFeeMinor;
+  const consumerServiceFeeMinor =
+    typeof configuredConsumerServiceFee === "number" &&
+    Number.isSafeInteger(configuredConsumerServiceFee) &&
+    configuredConsumerServiceFee >= 0
+      ? Math.min(applicationFeeMinor, configuredConsumerServiceFee)
+      : Math.min(applicationFeeMinor, input.order.feeTotalMinor);
+  const configuredOperatorProcessingFee =
+    input.fulfillment.details.operatorProcessingFeeMinor;
+  const remainingOperatorFees = applicationFeeMinor - consumerServiceFeeMinor;
+  const operatorProcessingFeeMinor =
+    typeof configuredOperatorProcessingFee === "number" &&
+    Number.isSafeInteger(configuredOperatorProcessingFee) &&
+    configuredOperatorProcessingFee >= 0
+      ? Math.min(remainingOperatorFees, configuredOperatorProcessingFee)
+      : remainingOperatorFees;
+  const configuredOrganizationCommission =
+    input.fulfillment.details.organizationCommissionMinor;
+  const organizationCommissionMinor =
+    typeof configuredOrganizationCommission === "number" &&
+    Number.isSafeInteger(configuredOrganizationCommission) &&
+    configuredOrganizationCommission >= 0
+      ? Math.min(
+          remainingOperatorFees - operatorProcessingFeeMinor,
+          configuredOrganizationCommission,
+        )
+      : 0;
   const clearingMinor = input.order.totalMinor - applicationFeeMinor;
   const creditPack =
     input.item.type === "plan" && input.item.subtype === "credit-pack";
@@ -970,61 +1106,77 @@ async function postPaidCatalogOrderJournal(input: {
           : input.item.subtype === "membership"
             ? "MEMBERSHIP_REVENUE"
             : "PLAN_REVENUE";
-  const [clearingId, feeExpenseId, revenueId, taxPayableId] = await Promise.all(
-    [
-      clearingMinor > 0
-        ? ensureLedgerAccount({
-            organizationId: input.order.organizationId,
-            code: "STRIPE_CLEARING",
-            name: "Payment processor clearing",
-            accountType: "asset",
-            normalSide: "debit",
-            unitKind: "money",
-            unit: input.order.currency,
-            currency: input.order.currency,
-          })
-        : Promise.resolve(undefined),
-      applicationFeeMinor > 0
-        ? ensureLedgerAccount({
-            organizationId: input.order.organizationId,
-            code: "DUNA_PLATFORM_FEES",
-            name: "Duna platform fees",
-            accountType: "expense",
-            normalSide: "debit",
-            unitKind: "money",
-            unit: input.order.currency,
-            currency: input.order.currency,
-          })
-        : Promise.resolve(undefined),
-      ensureLedgerAccount({
-        organizationId: input.order.organizationId,
-        code: creditPack ? "DEFERRED_CREDIT_REVENUE" : revenueCode,
-        name: creditPack
-          ? "Deferred organization-credit revenue"
-          : revenueCode
-              .toLowerCase()
-              .replaceAll("_", " ")
-              .replace(/^\w/, (value) => value.toUpperCase()),
-        accountType: creditPack ? "liability" : "revenue",
-        normalSide: "credit",
-        unitKind: "money",
-        unit: input.order.currency,
-        currency: input.order.currency,
-      }),
-      input.order.taxTotalMinor > 0
-        ? ensureLedgerAccount({
-            organizationId: input.order.organizationId,
-            code: "SALES_TAX_PAYABLE",
-            name: "Sales tax payable",
-            accountType: "liability",
-            normalSide: "credit",
-            unitKind: "money",
-            unit: input.order.currency,
-            currency: input.order.currency,
-          })
-        : Promise.resolve(undefined),
-    ],
-  );
+  const [
+    clearingId,
+    processingFeeExpenseId,
+    organizationFeeExpenseId,
+    revenueId,
+    taxPayableId,
+  ] = await Promise.all([
+    clearingMinor > 0
+      ? ensureLedgerAccount({
+          organizationId: input.order.organizationId,
+          code: "STRIPE_CLEARING",
+          name: "Payment processor clearing",
+          accountType: "asset",
+          normalSide: "debit",
+          unitKind: "money",
+          unit: input.order.currency,
+          currency: input.order.currency,
+        })
+      : Promise.resolve(undefined),
+    operatorProcessingFeeMinor > 0
+      ? ensureLedgerAccount({
+          organizationId: input.order.organizationId,
+          code: "PAYMENT_PROCESSING_FEES",
+          name: "Payment processing fees",
+          accountType: "expense",
+          normalSide: "debit",
+          unitKind: "money",
+          unit: input.order.currency,
+          currency: input.order.currency,
+        })
+      : Promise.resolve(undefined),
+    organizationCommissionMinor > 0
+      ? ensureLedgerAccount({
+          organizationId: input.order.organizationId,
+          code: "DUNA_PLATFORM_FEES",
+          name: "Duna platform fees",
+          accountType: "expense",
+          normalSide: "debit",
+          unitKind: "money",
+          unit: input.order.currency,
+          currency: input.order.currency,
+        })
+      : Promise.resolve(undefined),
+    ensureLedgerAccount({
+      organizationId: input.order.organizationId,
+      code: creditPack ? "DEFERRED_CREDIT_REVENUE" : revenueCode,
+      name: creditPack
+        ? "Deferred organization-credit revenue"
+        : revenueCode
+            .toLowerCase()
+            .replaceAll("_", " ")
+            .replace(/^\w/, (value) => value.toUpperCase()),
+      accountType: creditPack ? "liability" : "revenue",
+      normalSide: "credit",
+      unitKind: "money",
+      unit: input.order.currency,
+      currency: input.order.currency,
+    }),
+    input.order.taxTotalMinor > 0
+      ? ensureLedgerAccount({
+          organizationId: input.order.organizationId,
+          code: "SALES_TAX_PAYABLE",
+          name: "Sales tax payable",
+          accountType: "liability",
+          normalSide: "credit",
+          unitKind: "money",
+          unit: input.order.currency,
+          currency: input.order.currency,
+        })
+      : Promise.resolve(undefined),
+  ]);
   const postings: LedgerPosting[] = [];
   if (clearingId && clearingMinor > 0) {
     postings.push({
@@ -1036,11 +1188,21 @@ async function postPaidCatalogOrderJournal(input: {
       currency: input.order.currency,
     });
   }
-  if (feeExpenseId && applicationFeeMinor > 0) {
+  if (processingFeeExpenseId && operatorProcessingFeeMinor > 0) {
     postings.push({
-      accountId: feeExpenseId,
+      accountId: processingFeeExpenseId,
       side: "debit",
-      amount: applicationFeeMinor,
+      amount: operatorProcessingFeeMinor,
+      unit: input.order.currency,
+      unitKind: "money",
+      currency: input.order.currency,
+    });
+  }
+  if (organizationFeeExpenseId && organizationCommissionMinor > 0) {
+    postings.push({
+      accountId: organizationFeeExpenseId,
+      side: "debit",
+      amount: organizationCommissionMinor,
       unit: input.order.currency,
       unitKind: "money",
       currency: input.order.currency,
@@ -1083,6 +1245,9 @@ async function postPaidCatalogOrderJournal(input: {
         catalogItemId: input.item.id,
         catalogVariantId: input.fulfillment.catalogVariantId,
         applicationFeeMinor,
+        consumerServiceFeeMinor,
+        operatorProcessingFeeMinor,
+        organizationCommissionMinor,
         taxTotalMinor: input.order.taxTotalMinor,
         deferredRevenue: creditPack,
       },
@@ -1130,8 +1295,15 @@ export async function fulfillPaidCatalogOrder(
 
   if (item.type === "good") {
     const reservations = await database
-      .select()
+      .select({
+        reservation: inventoryReservations,
+        stock: inventoryStockItems,
+      })
       .from(inventoryReservations)
+      .innerJoin(
+        inventoryStockItems,
+        eq(inventoryReservations.inventoryStockItemId, inventoryStockItems.id),
+      )
       .where(
         and(
           eq(inventoryReservations.organizationId, order.organizationId),
@@ -1140,7 +1312,7 @@ export async function fulfillPaidCatalogOrder(
           eq(inventoryReservations.status, "held"),
         ),
       );
-    for (const reservation of reservations) {
+    for (const { reservation, stock } of reservations) {
       await database.batch([
         database
           .update(inventoryStockItems)
@@ -1157,6 +1329,12 @@ export async function fulfillPaidCatalogOrder(
             inventoryStockItemId: reservation.inventoryStockItemId,
             kind: item.subtype === "rental" ? "rent-out" : "sale",
             quantityDelta: -reservation.quantity,
+            unitCostMinor: stock.unitCostMinor,
+            totalCostMinor:
+              stock.unitCostMinor === null
+                ? undefined
+                : stock.unitCostMinor * reservation.quantity,
+            currency: stock.currency,
             sourceType: "catalog-order",
             sourceId: order.id,
             idempotencyKey: `${order.id}:${reservation.id}:fulfill`,

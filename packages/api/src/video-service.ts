@@ -1,5 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { PersonRole, PersonSummary } from "@duna/core";
+import {
+  MEMBERSHIP_PLANS,
+  ORGANIZATION_PLANS,
+  type MembershipPlanId,
+  type PersonRole,
+  type PersonSummary,
+} from "@duna/core";
 import {
   auditLog,
   divisions,
@@ -7,6 +13,7 @@ import {
   getDatabase,
   matches,
   organizationMemberships,
+  organizations,
   people,
   ratings,
   registrations,
@@ -45,6 +52,7 @@ import type {
   VideoUsage,
 } from "./contracts";
 import { getDunaPlusEntitlement } from "./membership";
+import { resolveOrganizationCommissionPolicy } from "./organization-billing";
 import {
   abortR2VideoUpload,
   completeMuxLiveVideo,
@@ -64,11 +72,43 @@ import {
   signMuxPlayback,
 } from "./video-providers";
 
-const DEFAULT_MONTHLY_LIVE_SECONDS = 4 * 60 * 60;
-const DEFAULT_MONTHLY_UPLOAD_SECONDS = 24 * 60 * 60;
+const DEFAULT_MONTHLY_LIVE_SAFETY_CEILING_SECONDS = 8 * 60 * 60;
+const DEFAULT_MONTHLY_UPLOAD_SAFETY_CEILING_SECONDS = 30 * 60 * 60;
 const VIDEO_UPLOAD_SESSION_SECONDS = 24 * 60 * 60;
 const MAX_VIDEO_BYTES = 5 * 1024 ** 4;
 const PUBLIC_VIDEO_STATUSES = ["live", "ready", "ended", "processing"] as const;
+
+interface VideoQuotaLimits {
+  readonly monthlyLiveSeconds: number;
+  readonly monthlyUploadSeconds: number;
+  readonly enforceLiveLimit: boolean;
+  readonly enforceUploadLimit: boolean;
+}
+
+export function resolveMembershipVideoQuota(input: {
+  readonly plan: MembershipPlanId;
+  readonly personPolicy?: VideoQuotaLimits;
+  readonly globalPolicy?: VideoQuotaLimits;
+}): VideoQuotaLimits {
+  if (input.personPolicy) return input.personPolicy;
+  const plan = MEMBERSHIP_PLANS[input.plan];
+  const globalLiveSeconds =
+    input.globalPolicy?.monthlyLiveSeconds ??
+    DEFAULT_MONTHLY_LIVE_SAFETY_CEILING_SECONDS;
+  const globalUploadSeconds =
+    input.globalPolicy?.monthlyUploadSeconds ??
+    DEFAULT_MONTHLY_UPLOAD_SAFETY_CEILING_SECONDS;
+  return {
+    monthlyLiveSeconds: input.globalPolicy?.enforceLiveLimit
+      ? Math.min(plan.monthlyLiveSeconds, globalLiveSeconds)
+      : plan.monthlyLiveSeconds,
+    monthlyUploadSeconds: input.globalPolicy?.enforceUploadLimit
+      ? Math.min(plan.monthlyUploadSeconds, globalUploadSeconds)
+      : plan.monthlyUploadSeconds,
+    enforceLiveLimit: true,
+    enforceUploadLimit: true,
+  };
+}
 
 type VideoCategory = "practice" | "event" | "match" | "social";
 type LiveVisibility = "public" | "link-only";
@@ -303,6 +343,7 @@ async function loadVideoSummaries(
     return [
       {
         id: video.id,
+        organizationId: video.organizationId ?? undefined,
         owner,
         source: video.source as "live" | "upload",
         category: video.category as VideoCategory,
@@ -360,14 +401,33 @@ async function loadVideoSummary(videoId: string): Promise<VideoSummary> {
   return summary;
 }
 
-async function loadQuotaPolicy(personId?: string): Promise<{
-  readonly monthlyLiveSeconds: number;
-  readonly monthlyUploadSeconds: number;
-  readonly enforceLiveLimit: boolean;
-  readonly enforceUploadLimit: boolean;
-}> {
+async function loadQuotaPolicy(
+  personId?: string,
+  now = new Date(),
+  organizationId?: string,
+): Promise<VideoQuotaLimits> {
   const database = getDatabase();
-  const [personPolicy, globalPolicy] = await Promise.all([
+  if (organizationId) {
+    const organization = await database.query.organizations.findFirst({
+      where: eq(organizations.id, organizationId),
+    });
+    if (!organization) {
+      throw new VideoServiceError(
+        "VIDEO_NOT_FOUND",
+        "Organization video workspace was not found.",
+      );
+    }
+    const effectivePlan =
+      resolveOrganizationCommissionPolicy(organization).effectivePlan;
+    const plan = ORGANIZATION_PLANS[effectivePlan];
+    return {
+      monthlyLiveSeconds: plan.monthlyLiveSeconds,
+      monthlyUploadSeconds: plan.monthlyUploadSeconds,
+      enforceLiveLimit: true,
+      enforceUploadLimit: true,
+    };
+  }
+  const [personPolicy, globalPolicy, entitlement] = await Promise.all([
     personId
       ? database.query.videoQuotaPolicies.findFirst({
           where: eq(videoQuotaPolicies.personId, personId),
@@ -376,27 +436,41 @@ async function loadQuotaPolicy(personId?: string): Promise<{
     database.query.videoQuotaPolicies.findFirst({
       where: isNull(videoQuotaPolicies.personId),
     }),
+    personId
+      ? getDunaPlusEntitlement(personId, now)
+      : Promise.resolve(undefined),
   ]);
-  const policy = personPolicy ?? globalPolicy;
+  const globalLiveSeconds =
+    globalPolicy?.monthlyLiveSeconds ??
+    DEFAULT_MONTHLY_LIVE_SAFETY_CEILING_SECONDS;
+  const globalUploadSeconds =
+    globalPolicy?.monthlyUploadSeconds ??
+    DEFAULT_MONTHLY_UPLOAD_SAFETY_CEILING_SECONDS;
+  if (personId && entitlement) {
+    return resolveMembershipVideoQuota({
+      plan: entitlement.plan,
+      personPolicy,
+      globalPolicy,
+    });
+  }
   return {
-    monthlyLiveSeconds:
-      policy?.monthlyLiveSeconds ?? DEFAULT_MONTHLY_LIVE_SECONDS,
-    monthlyUploadSeconds:
-      policy?.monthlyUploadSeconds ?? DEFAULT_MONTHLY_UPLOAD_SECONDS,
-    enforceLiveLimit: policy?.enforceLiveLimit ?? true,
-    enforceUploadLimit: policy?.enforceUploadLimit ?? false,
+    monthlyLiveSeconds: globalLiveSeconds,
+    monthlyUploadSeconds: globalUploadSeconds,
+    enforceLiveLimit: globalPolicy?.enforceLiveLimit ?? true,
+    enforceUploadLimit: globalPolicy?.enforceUploadLimit ?? true,
   };
 }
 
 export async function loadVideoUsage(
   personId: string,
   now = new Date(),
+  organizationId?: string,
 ): Promise<VideoUsage> {
   requireDatabase();
   const database = getDatabase();
   const { startsAt, endsAt } = monthBounds(now);
   const [policy, rows] = await Promise.all([
-    loadQuotaPolicy(personId),
+    loadQuotaPolicy(personId, now, organizationId),
     database
       .select({
         source: videos.source,
@@ -408,15 +482,18 @@ export async function loadVideoUsage(
       })
       .from(videos)
       .where(
-        and(
-          eq(videos.ownerPersonId, personId),
-          sql`${videos.status} <> 'deleted'`,
-        ),
+        organizationId
+          ? eq(videos.organizationId, organizationId)
+          : and(
+              eq(videos.ownerPersonId, personId),
+              isNull(videos.organizationId),
+            ),
       ),
   ]);
   let liveSeconds = 0;
   let uploadSeconds = 0;
   for (const row of rows) {
+    if (row.status === "failed") continue;
     if (
       row.source === "upload" &&
       row.createdAt >= startsAt &&
@@ -460,25 +537,55 @@ export async function loadVideoUsage(
 export async function loadVideoStudio(
   personId: string,
   now = new Date(),
+  organizationId?: string,
 ): Promise<VideoStudio> {
   requireDatabase();
-  const [entitlement, usage, ownVideos, liveNow] = await Promise.all([
-    getDunaPlusEntitlement(personId, now),
-    loadVideoUsage(personId, now),
-    loadVideoSummaries({
-      where: eq(videos.ownerPersonId, personId),
-      limit: 100,
-    }),
-    loadVideoSummaries({
-      where: and(
-        eq(videos.status, "live"),
-        eq(videos.liveVisibility, "public"),
-      ),
-      limit: 30,
-    }),
-  ]);
+  const [entitlement, usage, ownVideos, liveNow, organization] =
+    await Promise.all([
+      getDunaPlusEntitlement(personId, now),
+      loadVideoUsage(personId, now, organizationId),
+      loadVideoSummaries({
+        where: organizationId
+          ? eq(videos.organizationId, organizationId)
+          : and(
+              eq(videos.ownerPersonId, personId),
+              isNull(videos.organizationId),
+            ),
+        limit: 100,
+      }),
+      loadVideoSummaries({
+        where: and(
+          eq(videos.status, "live"),
+          eq(videos.liveVisibility, "public"),
+        ),
+        limit: 30,
+      }),
+      organizationId
+        ? getDatabase().query.organizations.findFirst({
+            where: eq(organizations.id, organizationId),
+          })
+        : Promise.resolve(undefined),
+    ]);
+  const organizationPlan = organization
+    ? resolveOrganizationCommissionPolicy(organization).effectivePlan
+    : undefined;
   return {
     entitlement,
+    quotaScope: organization
+      ? {
+          type: "organization",
+          label: `${organization.name} · ${ORGANIZATION_PLANS[organizationPlan!].name}`,
+          organizationId: organization.id,
+          organizationPlan,
+        }
+      : {
+          type: "person",
+          label: entitlement.label,
+        },
+    canBroadcast: organizationPlan
+      ? ORGANIZATION_PLANS[organizationPlan].monthlyLiveSeconds > 0
+      : entitlement.active &&
+        MEMBERSHIP_PLANS[entitlement.plan].monthlyLiveSeconds > 0,
     usage,
     videos: ownVideos,
     liveNow,
@@ -695,6 +802,7 @@ async function validateAssociation(input: {
 
 async function recordAudit(input: {
   readonly actorPersonId?: string;
+  readonly organizationId?: string;
   readonly action: string;
   readonly entityType: string;
   readonly entityId: string;
@@ -707,6 +815,7 @@ async function recordAudit(input: {
     .insert(auditLog)
     .values({
       actorPersonId: input.actorPersonId,
+      organizationId: input.organizationId,
       actorType: input.actorPersonId ? "person" : "provider",
       action: input.action,
       entityType: input.entityType,
@@ -789,13 +898,13 @@ export async function createLiveVideo(input: {
   }
   const [entitlement, usage, association] = await Promise.all([
     getDunaPlusEntitlement(input.actor.personId, input.now),
-    loadVideoUsage(input.actor.personId, input.now),
+    loadVideoUsage(input.actor.personId, input.now, input.actor.organizationId),
     validateAssociation(input),
   ]);
-  if (!entitlement.active) {
+  if (!input.actor.organizationId && !entitlement.active) {
     throw new VideoServiceError(
       "DUNA_PLUS_REQUIRED",
-      "Live streaming is available with Duna+.",
+      "Live broadcasting is available with Premium or Premium+.",
     );
   }
   if (usage.live.enforced && usage.live.remainingSeconds < 60) {
@@ -812,6 +921,7 @@ export async function createLiveVideo(input: {
   await database.insert(videos).values({
     id: videoId,
     ownerPersonId: input.actor.personId,
+    organizationId: input.actor.organizationId,
     source: "live",
     category: input.category,
     title: input.title,
@@ -858,6 +968,7 @@ export async function createLiveVideo(input: {
         .where(eq(videos.id, videoId)),
       recordAudit({
         actorPersonId: input.actor.personId,
+        organizationId: input.actor.organizationId,
         action: "video.live-created",
         entityType: "video",
         entityId: videoId,
@@ -1141,7 +1252,7 @@ export async function beginVideoUpload(input: {
     );
   }
   const [usage, association] = await Promise.all([
-    loadVideoUsage(input.actor.personId, input.now),
+    loadVideoUsage(input.actor.personId, input.now, input.actor.organizationId),
     validateAssociation(input),
   ]);
   if (
@@ -1154,7 +1265,9 @@ export async function beginVideoUpload(input: {
     );
   }
   const videoId = randomUUID();
-  const objectKey = `videos/${input.actor.personId}/${videoId}/source.mp4`;
+  const objectKey = input.actor.organizationId
+    ? `videos/organizations/${input.actor.organizationId}/${videoId}/source.mp4`
+    : `videos/people/${input.actor.personId}/${videoId}/source.mp4`;
   const totalParts = Math.ceil(input.bytes / R2_VIDEO_PART_SIZE_BYTES);
   if (totalParts > 10_000) {
     throw new VideoServiceError(
@@ -1174,6 +1287,7 @@ export async function beginVideoUpload(input: {
   await database.insert(videos).values({
     id: videoId,
     ownerPersonId: input.actor.personId,
+    organizationId: input.actor.organizationId,
     source: "upload",
     category: input.category,
     title: input.title,
@@ -1213,6 +1327,7 @@ export async function beginVideoUpload(input: {
         .where(eq(videos.id, videoId)),
       recordAudit({
         actorPersonId: input.actor.personId,
+        organizationId: input.actor.organizationId,
         action: "video.upload-started",
         entityType: "video",
         entityId: videoId,

@@ -44,7 +44,11 @@ export async function OperatorCreatePage({
           </div>
         </header>
         <section className="operator-control-surface">
-          <OperatorControls module={module} workspace={workspace} />
+          <OperatorControls
+            focusedCreate
+            module={module}
+            workspace={workspace}
+          />
         </section>
       </main>
     </OperatorShell>

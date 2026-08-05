@@ -11,7 +11,7 @@ private Cloudflare R2 bucket.
 | Duna iOS    | Go Live, guided camera setup, native recording, library upload, live/on-demand playback, private archive, publishing controls, share links, and owner metrics |
 | Public web  | Mux/R2 playback on player, event, and match pages; multiple stream angles for the same match; link-only playback                                              |
 | Duna Pro    | Associated match video and live angles                                                                                                                        |
-| Super Admin | Provider readiness, global allowances, current streams, usage, storage, watch time, and Complimentary Duna+ grants                                            |
+| Super Admin | Provider readiness, safety ceilings, current streams, usage, storage, watch time, and Complimentary Premium+ grants                                           |
 
 Android capture is intentionally unavailable in this release. Public playback
 continues to work on supported browsers and inside the app.
@@ -21,7 +21,7 @@ continues to work on supported browsers and inside the app.
 ### Live
 
 1. The authenticated iOS client asks Duna for a live session.
-2. Duna verifies Duna+, the enforced monthly allowance, association validity,
+2. Duna verifies Premium access, the enforced monthly allowance, association validity,
    and minor-account privacy rules.
 3. The server creates a Mux live stream and returns the RTMPS ingest information
    only to that player.
@@ -44,9 +44,9 @@ client analytics.
 5. Playback uses a short-lived signed R2 URL; the bucket does not need to be
    public.
 
-There is no application-level upload-duration block in the initial policy. The
-24-hour allowance is reported to the player and Super Admin until enforcement
-is deliberately enabled.
+The API checks the proposed upload duration against the player's remaining
+plan allowance before creating an R2 multipart upload. Upload and live meters
+are enforced independently.
 
 ## Privacy and association rules
 
@@ -66,23 +66,30 @@ is deliberately enabled.
 - Playback authorization is checked before issuing Mux tokens or R2 signed
   URLs. Share-link use is recorded.
 
-## Duna+ and allowances
+## Premium plans and allowances
 
-Live streaming requires an active paid or Complimentary Duna+ entitlement.
-Complimentary grants are local, audit-logged entitlements; they do not create a
-zero-dollar Stripe subscription.
+Live broadcasting requires an active paid Premium or Premium+ entitlement.
+Complimentary Premium+ grants are local, audit-logged entitlements; they do not
+create a zero-dollar Stripe subscription.
 
-The initial global policy is:
+The launch plan allowances are:
 
-- 4 hours of live streaming per calendar billing month, enforced.
-- 24 hours of uploaded video per calendar billing month, reported but not
-  enforced.
+- Free: 4 uploaded-video hours and no native live broadcasting.
+- Premium: 8 uploaded-video hours and 2 live-broadcast hours.
+- Premium+: 30 uploaded-video hours and 8 live-broadcast hours.
 
-Super Admin can change the global numbers and either enforcement state. A
-future person-specific policy can use the existing nullable-person quota model
-without changing the global setting.
+Organization-scoped capture uses a separate pooled meter tied to the effective
+Duna HQ plan: Coach & Organizer includes 4 upload / 2 live hours, Club 100 / 10,
+Facility 500 / 40, and Network 1,000 / 100. Videos created in an organization
+context carry the organization id and do not consume the individual player’s
+meter.
 
-Migration `0044_duna_video.sql` creates an indefinite Complimentary Duna+ grant
+Both meters reset at the beginning of each UTC calendar month and are enforced.
+Super Admin can set platform safety ceilings or a person-specific override. The
+default ceilings are 30 upload hours and 8 live hours so they do not reduce any
+launch plan.
+
+Migration `0044_duna_video.sql` creates an indefinite complimentary grant
 for `john@beachelite.org`. It attaches to the matching person when that identity
 already exists and otherwise remains email-bound until the account is resolved.
 
@@ -178,7 +185,8 @@ models.
 
 ## Release sequence
 
-1. Apply forward-only database migrations through `0044_duna_video.sql`.
+1. Apply forward-only database migrations through
+   `0045_equal_skullbuster.sql`.
 2. Add R2 credentials to Duna Web. The existing sensitive Duna HQ values cannot
    be exported or copied by Vercel CLI.
 3. Install/approve Mux in the account, create API and signing keys, set the
@@ -187,7 +195,7 @@ models.
    module.
 5. Validate one Public and one Link-only live stream, a private recording, a
    public recording, two angles on one match, and an R2 upload.
-6. Confirm the `john@beachelite.org` profile displays Complimentary Duna+ after
+6. Confirm the `john@beachelite.org` profile displays Complimentary Premium+ after
    migration.
 7. Run `pnpm verify`, the connected repository smoke, and an iOS physical-device
    stream before production promotion.

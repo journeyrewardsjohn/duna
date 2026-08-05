@@ -7,6 +7,8 @@ export * from "./import-resolution";
 export * from "./i18n";
 export * from "./reporting";
 export * from "./ledger";
+export * from "./membership-plans";
+export * from "./organization-plans";
 export * from "./ticketing";
 export * from "./trust";
 export * from "./wallet";

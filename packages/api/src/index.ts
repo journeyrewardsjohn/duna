@@ -17,6 +17,7 @@ export * from "./membership";
 export * from "./match-service";
 export * from "./operator-service";
 export * from "./organization-onboarding";
+export * from "./organization-billing";
 export * from "./privacy";
 export * from "./risk";
 export * from "./sand-data/service";

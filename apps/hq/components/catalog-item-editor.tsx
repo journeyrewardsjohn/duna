@@ -2,14 +2,23 @@
 
 import type { OperatorWorkspace } from "@duna/api";
 import { Badge } from "@duna/ui";
-import { ArrowLeft, Check, CircleAlert, Search, UserRound } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  CircleAlert,
+  Search,
+  ShoppingBag,
+  UserRound,
+} from "lucide-react";
 import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
 import {
+  enableInventoryGoodSalesAction,
   setCatalogItemStatusAction,
   updateCatalogItemAction,
   type OperatorActionState,
 } from "@/app/actions";
+import { InventoryComposer } from "./commerce-controls";
 
 const initialState: OperatorActionState = { status: "idle", message: "" };
 
@@ -68,7 +77,13 @@ export function CatalogItemEditor({
     setCatalogItemStatusAction,
     initialState,
   );
+  const [salesState, salesAction, salesPending] = useActionState(
+    enableInventoryGoodSalesAction,
+    initialState,
+  );
   const supportsCoaches = item.type === "event" || item.type === "service";
+  const inventoryOnlyGood =
+    item.type === "good" && configuration.saleEnabled === false;
   const assignedCoachIds =
     coachMode === "all"
       ? eligibleCoaches.map((coach) => coach.personId)
@@ -332,6 +347,80 @@ export function CatalogItemEditor({
         </footer>
       </form>
 
+      {inventoryOnlyGood && (
+        <section className="hq-card catalog-inventory-sale-conversion">
+          <header>
+            <div>
+              <span className="hq-eyebrow">Inventory → storefront</span>
+              <h2>Ready to offer this stock for sale?</h2>
+              <p>
+                Add one sale price across the current variants. Existing
+                receipts, quantities, and historical costs stay unchanged.
+              </p>
+            </div>
+            <ShoppingBag aria-hidden size={24} />
+          </header>
+          <form action={salesAction} className="operator-form">
+            <input name="catalogItemId" type="hidden" value={item.id} />
+            <input name="confirmed" type="hidden" value="true" />
+            <div className="operator-form-grid operator-form-grid--two">
+              <label>
+                <span>Sale price</span>
+                <span className="operator-money-input">
+                  <small>$</small>
+                  <input
+                    inputMode="decimal"
+                    min="0.01"
+                    name="price"
+                    required
+                    step="0.01"
+                    type="number"
+                  />
+                </span>
+              </label>
+              <div className="catalog-sale-payment-options">
+                <label>
+                  <input
+                    defaultChecked
+                    name="allowCard"
+                    type="checkbox"
+                    value="true"
+                  />
+                  Card
+                </label>
+                <label>
+                  <input name="allowCash" type="checkbox" value="true" />
+                  Cash
+                </label>
+                <label>
+                  <input
+                    defaultChecked
+                    name="taxable"
+                    type="checkbox"
+                    value="true"
+                  />
+                  Taxable
+                </label>
+              </div>
+            </div>
+            <footer className="operator-form-footer">
+              {notice(salesState)}
+              <button
+                className="hq-button hq-button--primary"
+                disabled={salesPending}
+                type="submit"
+              >
+                {salesPending ? "Preparing sales…" : "Turn on sales"}
+              </button>
+            </footer>
+          </form>
+        </section>
+      )}
+
+      {item.type === "good" && (
+        <InventoryComposer catalogItemId={item.id} workspace={workspace} />
+      )}
+
       <section className="hq-card catalog-editor__publication">
         <div>
           <span className="hq-eyebrow">Publication</span>
@@ -347,14 +436,16 @@ export function CatalogItemEditor({
             <input name="confirmed" type="hidden" value="true" />
             <button
               className="hq-button hq-button--primary"
-              disabled={statusPending}
+              disabled={statusPending || inventoryOnlyGood}
               type="submit"
             >
-              {statusPending
-                ? "Updating…"
-                : item.status === "active"
-                  ? "Move to draft"
-                  : "Publish offer"}
+              {inventoryOnlyGood
+                ? "Set sales first"
+                : statusPending
+                  ? "Updating…"
+                  : item.status === "active"
+                    ? "Move to draft"
+                    : "Publish offer"}
             </button>
           </form>
           {notice(statusState)}

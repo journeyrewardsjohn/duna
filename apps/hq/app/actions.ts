@@ -168,6 +168,8 @@ export async function createCatalogItemAction(
       throw new Error("Choose a valid billing interval.");
     }
     const optionsValue = optionalField(formData, "options");
+    const mediaValue = optionalField(formData, "media");
+    const initialInventoryValue = optionalField(formData, "initialInventory");
     const configurationValue = optionalField(formData, "configuration");
     const caller = await getServerCaller();
     const created = await caller.operator.createCatalogItem({
@@ -205,6 +207,30 @@ export async function createCatalogItemAction(
             values: string[];
           }[])
         : [],
+      media: mediaValue
+        ? (JSON.parse(mediaValue) as {
+            kind: "image" | "video";
+            url: string;
+            posterUrl?: string;
+            alt?: string;
+            variantIndex?: number;
+          }[])
+        : [],
+      initialInventory: initialInventoryValue
+        ? (JSON.parse(initialInventoryValue) as {
+            variantIndex: number;
+            inventoryLocationId?: string;
+            locationName?: string;
+            purpose: "sale" | "rental" | "coach-use" | "operations";
+            trackingMode: "quantity" | "serialized";
+            quantity: number;
+            unitCostMinor?: number;
+            totalCostMinor?: number;
+            acquiredAt?: string;
+            vendorName?: string;
+            receiptUrl?: string;
+          })
+        : undefined,
       configuration: configurationValue
         ? (JSON.parse(configurationValue) as Record<string, unknown>)
         : {},
@@ -262,6 +288,7 @@ export async function createInventoryStockAction(
       assetTag: optionalField(formData, "assetTag"),
       condition: field(formData, "condition") || "new",
       unitCostMinor: optionalMoneyMinor(formData, "unitCost"),
+      totalCostMinor: optionalMoneyMinor(formData, "totalCost"),
       acquiredAt: optionalField(formData, "acquiredAt"),
       vendorName: optionalField(formData, "vendorName"),
       vendorReference: optionalField(formData, "vendorReference"),
@@ -349,6 +376,33 @@ export async function updateCatalogItemAction(
     revalidateOperator();
     revalidatePath(`/products/${field(formData, "catalogItemId")}`);
     return result("success", "Product and coach availability settings saved.");
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function enableInventoryGoodSalesAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    const catalogItemId = field(formData, "catalogItemId");
+    await caller.operator.enableInventoryGoodSales({
+      catalogItemId,
+      priceMinor: moneyMinor(formData, "price"),
+      allowCard: field(formData, "allowCard") === "true",
+      allowCash: field(formData, "allowCash") === "true",
+      taxable: field(formData, "taxable") === "true",
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    revalidatePath(`/products/${catalogItemId}`);
+    return result(
+      "success",
+      "Sales are ready for review. The inventory history and cost layers were preserved.",
+    );
   } catch (error) {
     return errorState(error);
   }
@@ -630,6 +684,126 @@ export async function refundOrganizationOrderAction(
         : "Refund submitted and the reversal journal posted.",
       undefined,
       created.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function createSessionNoteAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const visibility = field(formData, "visibility");
+    if (visibility !== "private" && visibility !== "player") {
+      throw new Error(
+        "Choose whether this note is private or player-shareable.",
+      );
+    }
+    const source = field(formData, "source");
+    if (source !== "typed" && source !== "livekit-voice") {
+      throw new Error("Choose a valid note source.");
+    }
+    const caller = await getServerCaller();
+    const created = await caller.operator.createSessionNote({
+      sessionId: field(formData, "sessionId"),
+      subject: optionalField(formData, "subject"),
+      visibility,
+      source,
+      transcript: optionalField(formData, "transcript"),
+      summary: optionalField(formData, "summary"),
+      recipientPersonIds: formData
+        .getAll("recipientPersonIds")
+        .map(String)
+        .filter(Boolean),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      visibility === "private"
+        ? "Private session note saved. Players cannot see it."
+        : "Shareable note saved as a draft. Review it before publishing.",
+      undefined,
+      created.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function publishSessionNoteAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.publishSessionNote({
+      noteId: field(formData, "noteId"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result("success", "Reviewed note shared with the selected players.");
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function recordSessionAttendanceAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const status = field(formData, "status");
+    if (
+      status !== "scheduled" &&
+      status !== "attended" &&
+      status !== "no-show" &&
+      status !== "cancelled"
+    ) {
+      throw new Error("Choose a valid attendance state.");
+    }
+    const caller = await getServerCaller();
+    await caller.operator.recordSessionAttendance({
+      registrationId: field(formData, "registrationId"),
+      status,
+      note: optionalField(formData, "note"),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      `Attendance marked ${status.replaceAll("-", " ")}.`,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function updateMemberProfileAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.updateMemberProfile({
+      personId: field(formData, "personId"),
+      displayName: field(formData, "displayName"),
+      email: optionalField(formData, "email"),
+      phoneE164: optionalField(formData, "phoneE164"),
+      homeMarket: optionalField(formData, "homeMarket"),
+      experienceSummary: optionalField(formData, "experienceSummary"),
+      reason:
+        field(formData, "reason") ||
+        "Updated with the customer by an operator.",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Profile details updated and added to the audit trail.",
     );
   } catch (error) {
     return errorState(error);
@@ -1591,6 +1765,61 @@ export async function startStripeOnboardingAction(
       "Stripe’s secure onboarding link is ready. You must personally complete its identity and legal steps.",
       onboarding.onboardingUrl,
     );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function startOrganizationPlanCheckoutAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  void _previous;
+  const plan = field(formData, "plan");
+  const interval = field(formData, "interval");
+  if (
+    !["small-club", "club", "multi-venue"].includes(plan) ||
+    !["month", "year"].includes(interval)
+  ) {
+    return result("error", "Choose a valid organization plan and interval.");
+  }
+  try {
+    const caller = await getServerCaller();
+    const origin = await hqOrigin();
+    const checkout = await caller.operator.startPlanCheckout({
+      plan: plan as "small-club" | "club" | "multi-venue",
+      interval: interval as "month" | "year",
+      successUrl: `${origin}/settings?section=business&billing=success`,
+      cancelUrl: `${origin}/settings?section=business&billing=cancelled`,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    if (!checkout.url) {
+      return result("error", "Stripe did not return a secure checkout link.");
+    }
+    return result(
+      "success",
+      "Your secure organization-plan checkout is ready.",
+      checkout.url,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function openOrganizationBillingPortalAction(
+  _previous: OperatorActionState,
+  _formData: FormData,
+): Promise<OperatorActionState> {
+  void _previous;
+  void _formData;
+  try {
+    const caller = await getServerCaller();
+    const origin = await hqOrigin();
+    const portal = await caller.operator.openPlanBillingPortal({
+      returnUrl: `${origin}/settings?section=business`,
+    });
+    return result("success", "Stripe billing management is ready.", portal.url);
   } catch (error) {
     return errorState(error);
   }

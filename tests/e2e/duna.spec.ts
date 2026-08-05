@@ -42,6 +42,24 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 });
 
+test("public coach profiles stay bookable and responsive", async ({ page }) => {
+  await page.goto("/coaches/theopark");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Theo Park" }),
+  ).toBeVisible();
+  await expect(page.getByText("Duna coach")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Ways to work together." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Find a time that fits." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "South Bay Volleyball Club" }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
 test("branded identity entry preserves the secure auth handoff", async ({
   page,
 }) => {
@@ -92,7 +110,7 @@ test("paid checkout exposes a secure payment handoff and honest wallet state", a
   await expect(
     page.getByRole("button", { name: /Continue to payment/ }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "View Duna+" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "View Premium" })).toBeVisible();
   await expect(page.getByText("Card details never touch Duna.")).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
@@ -105,7 +123,8 @@ test("public event creation carries a clean starter into guided HQ", async ({
     page.getByRole("heading", { name: "Put your event on Duna." }),
   ).toBeVisible();
   await expect(page.getByText("$0")).toBeVisible();
-  await expect(page.getByText("15%")).toBeVisible();
+  await expect(page.getByText("5%", { exact: true })).toBeVisible();
+  await expect(page.getByText(/separate 7.5% service fee/)).toBeVisible();
   await page.getByRole("button", { name: /League/ }).click();
   await page.getByLabel("Name").fill("Hermosa Moonlight League");
   await page
@@ -145,7 +164,7 @@ test("tournament pages and checkout expose divisions, tickets, teams, and waiver
     page.getByRole("heading", { name: "Sunset Open — Qualifier" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Find your division." }),
+    page.getByRole("heading", { name: "Find your best fit." }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Open", exact: true }),
@@ -168,7 +187,12 @@ test("tournament pages and checkout expose divisions, tickets, teams, and waiver
     page.getByRole("heading", { name: "Complete your team" }),
   ).toBeVisible();
   const partner = page.getByLabel("Search Duna players");
-  await partner.selectOption({ index: 1 });
+  await partner.fill("Theo Park");
+  await page
+    .locator(".checkout-team-suggestions article")
+    .filter({ hasText: "Theo Park" })
+    .getByRole("button", { name: "Add" })
+    .click();
   const weatherAgreement = page
     .locator(".checkout-agreement-list article")
     .filter({ hasText: "Weather and event policy" });
@@ -247,6 +271,63 @@ test("pickup host flow publishes a complete listing", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Golden Hour 4s is live." }),
   ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test("player planning keeps selection in place and extends its date rail", async ({
+  page,
+}) => {
+  await page.goto("/app/play");
+  await expect(
+    page.getByRole("heading", { name: "When do you want to play?" }),
+  ).toBeVisible();
+
+  const selectedPill = page.locator(
+    '.calendar-picker__pill[aria-current="date"]',
+  );
+  await expect(selectedPill).toHaveCount(1);
+  await expect(selectedPill.locator(":scope > span")).toHaveCount(1);
+  await expect(selectedPill.locator(":scope > strong")).toHaveCount(1);
+  await expect(selectedPill.locator(":scope > small")).toHaveText(
+    /^[A-Z][a-z]{2}$/,
+  );
+
+  const rail = page.locator(".play-calendar-picker .calendar-picker__rail");
+  const pills = rail.locator(".calendar-picker__pill");
+  const selectedIndex = await pills.evaluateAll((elements) =>
+    elements.findIndex(
+      (element) => element.getAttribute("aria-current") === "date",
+    ),
+  );
+  const nextPill = pills.nth(selectedIndex + 1);
+  const scrollPosition = await rail.evaluate((element) =>
+    Math.round(element.scrollLeft),
+  );
+  await nextPill.click();
+  await expect(nextPill).toHaveAttribute("aria-current", "date");
+  await expect
+    .poll(() => rail.evaluate((element) => Math.round(element.scrollLeft)))
+    .toBe(scrollPosition);
+
+  const initialPillCount = await pills.count();
+  expect(initialPillCount).toBeGreaterThanOrEqual(91);
+  await rail.evaluate((element) => {
+    element.scrollLeft = element.scrollWidth;
+  });
+  await expect.poll(() => pills.count()).toBeGreaterThan(initialPillCount);
+
+  await page.getByRole("button", { name: "Full calendar" }).click();
+  const calendar = page.getByRole("dialog", {
+    name: "When do you want to play?",
+  });
+  await expect(calendar).toBeVisible();
+  await expect(calendar.locator(".calendar-month")).toHaveCount(2);
+  await expect(calendar.getByText("Your plans", { exact: true })).toBeVisible();
+  await expect(
+    calendar.getByText("Events to explore", { exact: true }),
+  ).toBeVisible();
+  await calendar.getByRole("button", { name: "Close full calendar" }).click();
+  await expect(calendar).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 });
 

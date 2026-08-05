@@ -13,6 +13,9 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "dependencies": {
+    "@duna/core": "workspace:*"
+  },
   "devDependencies": {
     "fast-check": "^4.9.0",
     "vitest": "^4.1.10"

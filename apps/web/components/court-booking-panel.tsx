@@ -37,6 +37,7 @@ import {
   loadCourtAvailabilityAction,
   startCourtCheckoutAction,
 } from "@/app/app/venues/[venueId]/actions";
+import { CalendarDatePicker } from "./calendar-date-picker";
 
 type InvitedPlayer = {
   readonly key: string;
@@ -46,13 +47,6 @@ type InvitedPlayer = {
   readonly phoneE164?: string;
   readonly avatarUrl?: string;
 };
-
-function addDays(date: string, days: number): string {
-  const [year, month, day] = date.split("-").map(Number);
-  const next = new Date(Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1));
-  next.setUTCDate(next.getUTCDate() + days);
-  return next.toISOString().slice(0, 10);
-}
 
 function displayDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -149,6 +143,10 @@ export function CourtBookingPanel({
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [isPending, startTransition] = useTransition();
   const policyRef = useRef<HTMLDivElement>(null);
+  const earliestBookableDate = useMemo(
+    () => new Date().toISOString().slice(0, 10),
+    [],
+  );
 
   const durationOptions = useMemo(
     () =>
@@ -158,11 +156,6 @@ export function CourtBookingPanel({
         ),
       ].sort((left, right) => left - right),
     [inventory.courts],
-  );
-  const dates = useMemo(
-    () =>
-      Array.from({ length: 9 }, (_, index) => addDays(selectedDate, index - 4)),
-    [selectedDate],
   );
   const uniqueStarts = useMemo(
     () =>
@@ -356,7 +349,7 @@ export function CourtBookingPanel({
       }
       setNotice(
         response.result.premiumRequired
-          ? "Your free priority alert is already active. Duna+ unlocks unlimited alerts."
+          ? "Your free priority alert is already active. Premium unlocks unlimited alerts."
           : response.result.created
             ? "Priority alert created. We’ll notify you when a matching court opens."
             : "You already have this priority alert.",
@@ -474,20 +467,13 @@ export function CourtBookingPanel({
           <Badge>{inventory.venue.timezone}</Badge>
         </header>
 
-        <div className="venue-date-strip">
-          {dates.map((date) => (
-            <button
-              type="button"
-              className={date === selectedDate ? "selected" : undefined}
-              key={date}
-              onClick={() => setSelectedDate(date)}
-            >
-              <span>{displayDate(date).split(",")[0]}</span>
-              <strong>{date.slice(-2)}</strong>
-              <small>{displayDate(date).split(",")[1]}</small>
-            </button>
-          ))}
-        </div>
+        <CalendarDatePicker
+          calendarTitle={`Choose a date at ${inventory.venue.name}`}
+          className="venue-calendar-picker"
+          minDate={earliestBookableDate}
+          onChange={setSelectedDate}
+          value={selectedDate}
+        />
 
         <div className="venue-duration-row" aria-label="Rental length">
           {durationOptions.map((minutes) => (
@@ -990,7 +976,7 @@ export function CourtBookingPanel({
               </span>
               {isDunaPlus && (
                 <Badge tone="positive">
-                  <Sparkles aria-hidden size={13} /> Duna+ fee waived
+                  <Sparkles aria-hidden size={13} /> Premium fee waived
                 </Badge>
               )}
             </section>

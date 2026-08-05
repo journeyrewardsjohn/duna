@@ -4,8 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx src/agent.ts dev",
-    "start": "tsx src/agent.ts start",
+    "dev": "tsx src/agent.ts dev & tsx src/session-notes-agent.ts dev & wait",
+    "dev:profile": "tsx src/agent.ts dev",
+    "dev:session-notes": "tsx src/session-notes-agent.ts dev",
+    "start": "tsx src/agent.ts start & tsx src/session-notes-agent.ts start & wait",
+    "start:profile": "tsx src/agent.ts start",
+    "start:session-notes": "tsx src/session-notes-agent.ts start",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"

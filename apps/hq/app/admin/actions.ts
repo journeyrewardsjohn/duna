@@ -10,6 +10,7 @@ export interface GuardianReviewActionState {
 
 export type FeatureFlagActionState = GuardianReviewActionState;
 export type VideoAdminActionState = GuardianReviewActionState;
+export type OrganizationCommissionActionState = GuardianReviewActionState;
 
 function parseConfiguration(
   value: FormDataEntryValue | null,
@@ -218,12 +219,12 @@ export async function grantComplimentaryDunaPlusAction(
     revalidatePath("/admin/video");
     return {
       status: "success",
-      message: `${grant.displayName ?? grant.email} now has Complimentary Duna+${grant.endsAt ? ` through ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(grant.endsAt))}` : " indefinitely"}.`,
+      message: `${grant.displayName ?? grant.email} now has Complimentary Premium+${grant.endsAt ? ` through ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(grant.endsAt))}` : " indefinitely"}.`,
     };
   } catch (error) {
     return videoActionError(
       error,
-      "The complimentary Duna+ grant could not be saved.",
+      "The complimentary Premium+ grant could not be saved.",
     );
   }
 }
@@ -253,12 +254,12 @@ export async function revokeComplimentaryDunaPlusAction(
     revalidatePath("/admin/video");
     return {
       status: "success",
-      message: `Complimentary Duna+ was revoked for ${grant.displayName ?? grant.email}.`,
+      message: `Complimentary Premium+ was revoked for ${grant.displayName ?? grant.email}.`,
     };
   } catch (error) {
     return videoActionError(
       error,
-      "The complimentary Duna+ grant could not be revoked.",
+      "The complimentary Premium+ grant could not be revoked.",
     );
   }
 }
@@ -308,5 +309,54 @@ export async function updateVideoQuotaPolicyAction(
       error,
       "The video quota policy could not be saved.",
     );
+  }
+}
+
+export async function updateOrganizationCommissionAction(
+  _previous: OrganizationCommissionActionState,
+  formData: FormData,
+): Promise<OrganizationCommissionActionState> {
+  const organizationId = String(formData.get("organizationId") ?? "");
+  const usePlanDefault = formData.get("usePlanDefault") === "true";
+  const percent = Number(formData.get("overridePercent"));
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  if (
+    !organizationId ||
+    (!usePlanDefault &&
+      (!Number.isFinite(percent) || percent < 0 || percent > 25)) ||
+    reason.length < 10 ||
+    !confirmed
+  ) {
+    return {
+      status: "error",
+      message:
+        "Choose the plan default or a rate from 0% to 25%, add a reason of at least 10 characters, and confirm the change.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const policy = await caller.admin.updateOrganizationCommission({
+      organizationId,
+      usePlanDefault,
+      overrideRateBps: usePlanDefault ? undefined : Math.round(percent * 100),
+      reason,
+      confirmed: true,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath(`/admin/organizations/${organizationId}`);
+    revalidatePath("/admin/organizations");
+    return {
+      status: "success",
+      message: `Organization fee is now ${policy.rateBps / 100}% (${policy.source.replace("-", " ")}). Stripe metadata is ${policy.stripeSyncStatus}.`,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "The organization fee could not be updated.",
+    };
   }
 }

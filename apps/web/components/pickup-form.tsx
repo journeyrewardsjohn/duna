@@ -19,6 +19,7 @@ import {
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { createPickupAction } from "@/app/app/pickup/new/actions";
+import { CalendarDatePicker } from "./calendar-date-picker";
 import { PlaceSearch, type PlaceDetails } from "./place-search";
 
 type PickupFormat = "2s" | "3s" | "4s" | "6s" | "king-queen";
@@ -94,6 +95,7 @@ export function PickupForm() {
   const [minimumAttendance, setMinimumAttendance] = useState(4);
   const [error, setError] = useState<string>();
   const [isPending, startTransition] = useTransition();
+  const minimumDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const startsAt = useMemo(() => {
     const value = new Date(`${date}T${time}:00`);
     return Number.isNaN(value.getTime()) ? undefined : value.toISOString();
@@ -361,16 +363,16 @@ export function PickupForm() {
                     : "Custom locations are shown as approximate until confirmed."}
                 </small>
               </div>
-              <div className="form-grid form-grid--2">
-                <div className="field-group">
-                  <label htmlFor="pickup-date">Date</label>
-                  <input
-                    id="pickup-date"
-                    onChange={(event) => setDate(event.target.value)}
-                    type="date"
-                    value={date}
-                  />
-                </div>
+              <fieldset className="pickup-choice-section pickup-date-section">
+                <legend>When do you want to play?</legend>
+                <CalendarDatePicker
+                  calendarTitle="When do you want to play?"
+                  minDate={minimumDate}
+                  onChange={setDate}
+                  value={date}
+                />
+              </fieldset>
+              <div className="form-grid pickup-time-row">
                 <div className="field-group">
                   <label htmlFor="pickup-time">Start time</label>
                   <input

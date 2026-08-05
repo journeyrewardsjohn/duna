@@ -9,6 +9,8 @@ import {
   isDatabaseConfigured,
   memberships,
   membershipTiers,
+  operatorPaymentCollections,
+  operatorPaymentEvents,
   orders,
   orderTaxContexts,
   organizations,
@@ -20,11 +22,13 @@ import {
   webhookEvents,
   workflowJobs,
 } from "@duna/db";
-import { and, asc, eq, lte, or, sql } from "drizzle-orm";
+import { isOrganizationPlanId } from "@duna/core";
+import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import {
   fulfillPaidCatalogOrder,
   releaseCatalogOrderInventory,
 } from "./catalog-checkout";
+import { reconcileTeamEntryPayment } from "./checkout";
 import { issueOrganizationCredits } from "./catalog-service";
 import { synchronizeIdentityVerification } from "./identity-verification";
 import {
@@ -32,6 +36,8 @@ import {
   processSandAutoApproveMatch,
 } from "./sand-data/service";
 import { connectAccountMoneyReady } from "./stripe-connect";
+import { synchronizeOrganizationFeeMetadata } from "./organization-billing";
+import { organizationPlanForPriceId } from "./payments";
 
 export { connectAccountMoneyReady } from "./stripe-connect";
 
@@ -91,6 +97,160 @@ function unixDate(value: unknown): Date | undefined {
     : undefined;
 }
 
+export function stripeSubscriptionItemPriceId(
+  item: Readonly<Record<string, unknown>>,
+): string | undefined {
+  const price = item.price as Readonly<Record<string, unknown>> | undefined;
+  return typeof price?.id === "string"
+    ? price.id
+    : typeof item.price === "string"
+      ? item.price
+      : undefined;
+}
+
+async function synchronizeOrganizationSubscription(input: {
+  readonly object: Readonly<Record<string, unknown>>;
+  readonly occurredAt: Date;
+  readonly traceId: string;
+}): Promise<void> {
+  const database = getDatabase();
+  const metadata = input.object.metadata as
+    Readonly<Record<string, unknown>> | undefined;
+  const subscriptionId = optionalString(input.object, "id");
+  if (!subscriptionId) {
+    throw new Error("Stripe organization subscription is missing its id");
+  }
+  const existing = await database.query.organizations.findFirst({
+    where: eq(organizations.stripeSubscriptionId, subscriptionId),
+  });
+  const organizationId =
+    typeof metadata?.dunaOrganizationId === "string"
+      ? metadata.dunaOrganizationId
+      : existing?.id;
+  if (!organizationId) {
+    throw new Error(
+      "Stripe subscription is missing Duna organization metadata",
+    );
+  }
+  const organization =
+    existing ??
+    (await database.query.organizations.findFirst({
+      where: eq(organizations.id, organizationId),
+    }));
+  if (!organization) throw new Error("Duna organization was not found");
+  if (
+    organization.stripeSubscriptionId &&
+    organization.stripeSubscriptionId !== subscriptionId &&
+    !["canceled", "cancelled", "incomplete_expired"].includes(
+      organization.stripeSubscriptionStatus ?? "",
+    )
+  ) {
+    throw new Error("Duna organization is bound to another subscription");
+  }
+  const items = input.object.items as
+    | {
+        readonly data?: readonly Readonly<Record<string, unknown>>[];
+      }
+    | undefined;
+  const subscriptionItems = items?.data ?? [];
+  const mappedPlan = subscriptionItems
+    .map(stripeSubscriptionItemPriceId)
+    .flatMap((priceId) =>
+      priceId ? [organizationPlanForPriceId(priceId)] : [],
+    )
+    .find(Boolean);
+  const metadataPlan =
+    typeof metadata?.dunaPlan === "string" &&
+    isOrganizationPlanId(metadata.dunaPlan) &&
+    metadata.dunaPlan !== "coach"
+      ? metadata.dunaPlan
+      : undefined;
+  const selectedPlan = mappedPlan?.plan ?? metadataPlan;
+  if (!selectedPlan) {
+    throw new Error(
+      "Stripe subscription price is not mapped to a Duna HQ plan",
+    );
+  }
+  const selectedItem = subscriptionItems.find(
+    (item) =>
+      organizationPlanForPriceId(stripeSubscriptionItemPriceId(item) ?? "")
+        ?.plan === selectedPlan,
+  );
+  const customer = input.object.customer;
+  const customerId =
+    typeof customer === "string"
+      ? customer
+      : customer && typeof customer === "object" && "id" in customer
+        ? String(customer.id)
+        : organization.stripeBillingCustomerId;
+  const status = optionalString(input.object, "status") ?? "unknown";
+  const currentPeriodStartsAt =
+    unixDate(input.object.current_period_start) ??
+    unixDate(selectedItem?.current_period_start);
+  const currentPeriodEndsAt =
+    unixDate(input.object.current_period_end) ??
+    unixDate(selectedItem?.current_period_end);
+  await database.batch([
+    database
+      .update(organizations)
+      .set({
+        plan: selectedPlan,
+        stripeBillingCustomerId: customerId,
+        stripeSubscriptionId: subscriptionId,
+        stripeSubscriptionStatus: status,
+        planBillingInterval:
+          mappedPlan?.interval ?? organization.planBillingInterval,
+        planCurrentPeriodStartsAt: currentPeriodStartsAt,
+        planCurrentPeriodEndsAt: currentPeriodEndsAt,
+        planCancelAtPeriodEnd: input.object.cancel_at_period_end === true,
+        stripeFeeMetadataStatus: organization.stripeAccountId
+          ? "pending"
+          : "not-connected",
+        stripeFeeMetadataSyncedAt: null,
+        updatedAt: input.occurredAt,
+      })
+      .where(eq(organizations.id, organization.id)),
+    database.insert(auditLog).values({
+      organizationId: organization.id,
+      actorType: "system",
+      action: "organization.plan_synchronized",
+      entityType: "organization",
+      entityId: organization.id,
+      reason: `Stripe synchronized the ${selectedPlan} organization plan as ${status}.`,
+      traceId: input.traceId,
+      createdAt: input.occurredAt,
+    }),
+  ]);
+  await synchronizeOrganizationFeeMetadata({
+    organizationId: organization.id,
+    now: input.occurredAt,
+  });
+}
+
+async function synchronizeSubscription(input: {
+  readonly object: Readonly<Record<string, unknown>>;
+  readonly occurredAt: Date;
+  readonly traceId: string;
+}): Promise<void> {
+  const metadata = input.object.metadata as
+    Readonly<Record<string, unknown>> | undefined;
+  const subscriptionId = optionalString(input.object, "id");
+  const organization = subscriptionId
+    ? await getDatabase().query.organizations.findFirst({
+        where: eq(organizations.stripeSubscriptionId, subscriptionId),
+      })
+    : undefined;
+  if (
+    typeof metadata?.dunaOrganizationId === "string" ||
+    metadata?.product === "duna-hq" ||
+    organization
+  ) {
+    await synchronizeOrganizationSubscription(input);
+    return;
+  }
+  await synchronizeMembership(input);
+}
+
 async function synchronizeMembership(input: {
   readonly object: Readonly<Record<string, unknown>>;
   readonly occurredAt: Date;
@@ -112,30 +272,34 @@ async function synchronizeMembership(input: {
         readonly data?: readonly Readonly<Record<string, unknown>>[];
       }
     | undefined;
-  const firstItem = items?.data?.[0];
-  const price = firstItem?.price as
-    Readonly<Record<string, unknown>> | undefined;
-  const priceId =
-    typeof price?.id === "string"
-      ? price.id
-      : typeof firstItem?.price === "string"
-        ? firstItem.price
-        : undefined;
-  if (!priceId) throw new Error("Stripe subscription price is missing");
+  const subscriptionItems = items?.data ?? [];
+  const priceIds = subscriptionItems
+    .map(stripeSubscriptionItemPriceId)
+    .filter((priceId): priceId is string => Boolean(priceId));
+  if (priceIds.length === 0) {
+    throw new Error("Stripe subscription price is missing");
+  }
   const tier = await database.query.membershipTiers.findFirst({
-    where: eq(membershipTiers.stripePriceId, priceId),
+    where: inArray(membershipTiers.stripePriceId, priceIds),
   });
   if (!tier) {
     throw new Error("Stripe subscription price is not mapped to a Duna tier");
   }
+  const priceId = tier.stripePriceId;
+  if (!priceId) {
+    throw new Error("Duna membership tier is missing its Stripe price");
+  }
+  const membershipItem = subscriptionItems.find(
+    (item) => stripeSubscriptionItemPriceId(item) === priceId,
+  );
   const pauseCollection = input.object.pause_collection as
     Readonly<Record<string, unknown>> | null | undefined;
   const currentPeriodStartsAt =
     unixDate(input.object.current_period_start) ??
-    unixDate(firstItem?.current_period_start);
+    unixDate(membershipItem?.current_period_start);
   const currentPeriodEndsAt =
     unixDate(input.object.current_period_end) ??
-    unixDate(firstItem?.current_period_end);
+    unixDate(membershipItem?.current_period_end);
   const pausedUntil = unixDate(pauseCollection?.resumes_at);
   const status = optionalString(input.object, "status") ?? "unknown";
   const cancelAtPeriodEnd = input.object.cancel_at_period_end === true;
@@ -234,6 +398,40 @@ async function markMembershipPaymentFailed(input: {
     throw new Error("Failed Stripe invoice is missing its subscription");
   }
   const database = getDatabase();
+  const organization = await database.query.organizations.findFirst({
+    where: eq(organizations.stripeSubscriptionId, subscriptionId),
+  });
+  if (organization) {
+    await database.batch([
+      database
+        .update(organizations)
+        .set({
+          stripeSubscriptionStatus: "past_due",
+          stripeFeeMetadataStatus: organization.stripeAccountId
+            ? "pending"
+            : "not-connected",
+          stripeFeeMetadataSyncedAt: null,
+          updatedAt: input.occurredAt,
+        })
+        .where(eq(organizations.id, organization.id)),
+      database.insert(auditLog).values({
+        organizationId: organization.id,
+        actorType: "system",
+        action: "organization.plan_payment_failed",
+        entityType: "organization",
+        entityId: organization.id,
+        reason:
+          "Stripe reported a failed Duna HQ invoice; Free-plan transaction pricing is effective until billing recovers.",
+        traceId: input.traceId,
+        createdAt: input.occurredAt,
+      }),
+    ]);
+    await synchronizeOrganizationFeeMetadata({
+      organizationId: organization.id,
+      now: input.occurredAt,
+    });
+    return;
+  }
   const membership = await database.query.memberships.findFirst({
     where: eq(memberships.stripeSubscriptionId, subscriptionId),
   });
@@ -278,6 +476,46 @@ async function applyMembershipCycleBenefits(input: {
     throw new Error("Paid membership invoice is missing its subscription");
   }
   const database = getDatabase();
+  const organization = await database.query.organizations.findFirst({
+    where: eq(organizations.stripeSubscriptionId, subscriptionId),
+  });
+  if (organization) {
+    const recovered = ["past_due", "unpaid", "incomplete"].includes(
+      organization.stripeSubscriptionStatus ?? "",
+    );
+    if (recovered) {
+      await database
+        .update(organizations)
+        .set({
+          stripeSubscriptionStatus: "active",
+          stripeFeeMetadataStatus: organization.stripeAccountId
+            ? "pending"
+            : "not-connected",
+          stripeFeeMetadataSyncedAt: null,
+          updatedAt: input.occurredAt,
+        })
+        .where(eq(organizations.id, organization.id));
+    }
+    await database.insert(auditLog).values({
+      organizationId: organization.id,
+      actorType: "system",
+      action: "organization.plan_payment_succeeded",
+      entityType: "organization",
+      entityId: organization.id,
+      reason: recovered
+        ? "Stripe reported a paid Duna HQ invoice and restored paid-plan economics."
+        : "Stripe reported a paid Duna HQ subscription invoice.",
+      traceId: input.traceId,
+      createdAt: input.occurredAt,
+    });
+    if (recovered) {
+      await synchronizeOrganizationFeeMetadata({
+        organizationId: organization.id,
+        now: input.occurredAt,
+      });
+    }
+    return;
+  }
   const membership = await database.query.memberships.findFirst({
     where: eq(memberships.stripeSubscriptionId, subscriptionId),
   });
@@ -427,7 +665,7 @@ async function processStripeWorkflow(
       : new Date();
 
   if (action === "membership.synchronized") {
-    await synchronizeMembership({
+    await synchronizeSubscription({
       object,
       occurredAt,
       traceId: eventPayload.id ?? webhook.providerEventId,
@@ -527,7 +765,44 @@ async function processStripeWorkflow(
         ${eventPayload.id ?? webhook.providerEventId}::text
       )
     `);
+    const operatorCollectionId =
+      typeof metadata?.dunaCollectionId === "string"
+        ? metadata.dunaCollectionId
+        : undefined;
+    if (operatorCollectionId) {
+      await database.batch([
+        database
+          .update(payments)
+          .set({ method: "stripe-terminal", updatedAt: occurredAt })
+          .where(eq(payments.orderId, order.id)),
+        database
+          .update(operatorPaymentCollections)
+          .set({
+            status: "succeeded",
+            declineCode: null,
+            failureCode: null,
+            failureMessage: null,
+            completedAt: occurredAt,
+            updatedAt: occurredAt,
+          })
+          .where(eq(operatorPaymentCollections.id, operatorCollectionId)),
+        database
+          .insert(operatorPaymentEvents)
+          .values({
+            collectionId: operatorCollectionId,
+            organizationId: order.organizationId!,
+            eventType: "terminal.approved",
+            status: "succeeded",
+            idempotencyKey: `stripe:${eventPayload.id ?? webhook.providerEventId}:operator-payment`,
+            message: "Stripe webhook confirmed the card-present payment.",
+            details: { paymentIntentId },
+            createdAt: occurredAt,
+          })
+          .onConflictDoNothing(),
+      ]);
+    }
     await fulfillPaidCatalogOrder(order.id, occurredAt);
+    await reconcileTeamEntryPayment(order.id, occurredAt);
   } else if (action === "checkout.completed") {
     const mode = optionalString(object, "mode");
     if (mode === "subscription") {
@@ -543,6 +818,13 @@ async function processStripeWorkflow(
         typeof metadata?.dunaOrderId === "string"
           ? metadata.dunaOrderId
           : undefined;
+      if (
+        !orderId &&
+        (metadata?.product === "duna-membership" ||
+          metadata?.product === "duna-hq")
+      ) {
+        return;
+      }
       if (!orderId) {
         throw new Error("Subscription checkout is missing dunaOrderId");
       }
@@ -605,6 +887,7 @@ async function processStripeWorkflow(
         });
       }
       await fulfillPaidCatalogOrder(order.id, occurredAt);
+      await reconcileTeamEntryPayment(order.id, occurredAt);
     }
   } else if (
     action === "order.payment_failed" ||
@@ -616,6 +899,55 @@ async function processStripeWorkflow(
       typeof metadata?.dunaOrderId === "string"
         ? metadata.dunaOrderId
         : undefined;
+    const operatorCollectionId =
+      typeof metadata?.dunaCollectionId === "string"
+        ? metadata.dunaCollectionId
+        : undefined;
+    if (operatorCollectionId && action === "order.payment_failed") {
+      const lastPaymentError = object.last_payment_error as
+        Readonly<Record<string, unknown>> | undefined;
+      const declineCode = optionalString(
+        lastPaymentError ?? {},
+        "decline_code",
+      );
+      const failureCode = optionalString(lastPaymentError ?? {}, "code");
+      const failureMessage = optionalString(lastPaymentError ?? {}, "message");
+      const collection =
+        await database.query.operatorPaymentCollections.findFirst({
+          where: eq(operatorPaymentCollections.id, operatorCollectionId),
+        });
+      if (collection && collection.status !== "succeeded") {
+        const nextStatus = declineCode ? "declined" : "failed";
+        await database.batch([
+          database
+            .update(operatorPaymentCollections)
+            .set({
+              status: nextStatus,
+              declineCode: declineCode ?? null,
+              failureCode: failureCode ?? null,
+              failureMessage: failureMessage ?? null,
+              updatedAt: occurredAt,
+            })
+            .where(eq(operatorPaymentCollections.id, operatorCollectionId)),
+          database
+            .insert(operatorPaymentEvents)
+            .values({
+              collectionId: operatorCollectionId,
+              organizationId: collection.organizationId,
+              eventType: declineCode ? "terminal.declined" : "terminal.error",
+              status: nextStatus,
+              processorCode: declineCode ?? failureCode,
+              message:
+                failureMessage ?? "Stripe reported a card-present failure.",
+              idempotencyKey: `stripe:${eventPayload.id ?? webhook.providerEventId}:operator-payment`,
+              details: {},
+              createdAt: occurredAt,
+            })
+            .onConflictDoNothing(),
+        ]);
+      }
+      return;
+    }
     if (orderId) {
       const failedAt = occurredAt;
       const failedOrder = await database.query.orders.findFirst({

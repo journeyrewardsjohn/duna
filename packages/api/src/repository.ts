@@ -20,6 +20,7 @@ import {
 import { priceConsumerOrder, type PricedOrderItem } from "@duna/pricing";
 import { isDatabaseConfigured } from "@duna/db";
 import { databaseRepository } from "./database-repository";
+import { membershipPlanOffers } from "./membership";
 import type {
   DunaRepository,
   PickupMutationInput,
@@ -89,22 +90,10 @@ export const demoRepository = {
       dunaPlus: {
         active: true,
         kind: "complimentary" as const,
-        label: "Complimentary Duna+",
+        plan: "premium-plus" as const,
+        label: "Complimentary Premium+",
       },
-      dunaPlusPlans: [
-        {
-          interval: "month" as const,
-          priceMinor: 799,
-          currency: "USD" as const,
-          configured: Boolean(process.env.STRIPE_DUNA_PLUS_MONTHLY_PRICE_ID),
-        },
-        {
-          interval: "year" as const,
-          priceMinor: 5_900,
-          currency: "USD" as const,
-          configured: Boolean(process.env.STRIPE_DUNA_PLUS_ANNUAL_PRICE_ID),
-        },
-      ],
+      dunaPlusPlans: membershipPlanOffers(),
       consents: [],
       privacyRequests: [],
     }),
@@ -209,6 +198,7 @@ export const demoRepository = {
       organizationId === demoOrganization.id
         ? {
             organization: demoOrganization,
+            canManageCommission: false,
             metrics: [
               {
                 label: "Gross volume",
@@ -238,6 +228,23 @@ export const demoRepository = {
             venues: demoVenues,
             events: mutableEvents,
             audit: demoAuditEvents,
+            billing: {
+              configuredPlan: "club",
+              effectivePlan: "club",
+              subscriptionStatus: "active",
+              interval: "month",
+              cancelAtPeriodEnd: false,
+              commission: {
+                organizationId: demoOrganization.id,
+                configuredPlan: "club",
+                effectivePlan: "club",
+                subscriptionStatus: "active",
+                defaultRateBps: 0,
+                rateBps: 0,
+                source: "plan-default",
+                stripeSyncStatus: "synced",
+              },
+            },
             commerce: {
               paidOrders: 0,
               pendingOrders: 0,

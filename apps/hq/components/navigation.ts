@@ -64,7 +64,7 @@ export const adminModules = [
   { slug: "ratings-lab", label: "Ratings lab", icon: FlaskConical },
   { slug: "profile-merge", label: "Merge profiles", icon: GitMerge },
   { slug: "payments", label: "Payments", icon: BadgeDollarSign },
-  { slug: "video", label: "Video + Duna+", icon: Radio },
+  { slug: "video", label: "Video + Premium", icon: Radio },
   { slug: "audit", label: "Audit log", icon: ScrollText },
   { slug: "flags", label: "Feature flags", icon: Flag },
   { slug: "health", label: "System health", icon: HeartHandshake },

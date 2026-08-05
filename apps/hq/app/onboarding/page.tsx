@@ -235,8 +235,8 @@ export default async function OrganizationOnboardingPage({
                   <small>
                     Your plan selection is recorded now. Paid billing setup
                     follows in Money before paid capabilities are published.
-                    Processing and marketplace fees are shown separately before
-                    transactions.
+                    Processing, organization, and player service fees are shown
+                    separately before transactions.
                   </small>
                 </span>
               </div>

@@ -12,6 +12,7 @@ async function main() {
   const checkout = await createDunaPlusCheckout({
     personId: "10000000-0000-4000-8000-000000000010",
     email: "duna-sandbox@example.com",
+    plan: "premium",
     interval: "year",
     successUrl: "http://localhost:3000/app/settings?checkout=success",
     cancelUrl: "http://localhost:3000/app/settings?checkout=cancelled",

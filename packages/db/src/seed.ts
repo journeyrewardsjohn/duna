@@ -1,3 +1,9 @@
+import {
+  MEMBERSHIP_PLANS,
+  membershipTierCode,
+  type MembershipBillingInterval,
+  type PaidMembershipPlanId,
+} from "@duna/core";
 import { getDatabase } from "./client";
 import {
   courts,
@@ -25,7 +31,10 @@ const ids = {
   sam: "10000000-0000-4000-8000-000000000013",
   program: "10000000-0000-4000-8000-000000000020",
   session: "10000000-0000-4000-8000-000000000021",
-  dunaPlusTier: "10000000-0000-4000-8000-000000000030",
+  premiumMonthlyTier: "10000000-0000-4000-8000-000000000030",
+  premiumAnnualTier: "10000000-0000-4000-8000-000000000031",
+  premiumPlusMonthlyTier: "10000000-0000-4000-8000-000000000032",
+  premiumPlusAnnualTier: "10000000-0000-4000-8000-000000000033",
   wallet: "10000000-0000-4000-8000-000000000040",
   prize: "10000000-0000-4000-8000-000000000041",
 } as const;
@@ -202,22 +211,44 @@ await database
   ])
   .onConflictDoNothing();
 
+const platformMembershipTiers: readonly {
+  id: string;
+  plan: PaidMembershipPlanId;
+  interval: MembershipBillingInterval;
+}[] = [
+  { id: ids.premiumMonthlyTier, plan: "premium", interval: "month" },
+  { id: ids.premiumAnnualTier, plan: "premium", interval: "year" },
+  {
+    id: ids.premiumPlusMonthlyTier,
+    plan: "premium-plus",
+    interval: "month",
+  },
+  {
+    id: ids.premiumPlusAnnualTier,
+    plan: "premium-plus",
+    interval: "year",
+  },
+];
+
 await database
   .insert(membershipTiers)
-  .values({
-    id: ids.dunaPlusTier,
-    code: "duna-plus-annual",
-    name: "Duna+ Annual",
-    priceMinor: 5900,
-    currency: "USD",
-    interval: "year",
-    benefits: [
-      "No platform fees",
-      "Full rating history",
-      "Partner chemistry",
-      "Two monthly guest passes",
-    ],
-  })
+  .values(
+    platformMembershipTiers.map(({ id, plan, interval }) => {
+      const definition = MEMBERSHIP_PLANS[plan];
+      return {
+        id,
+        code: membershipTierCode(plan, interval),
+        name: `${definition.name} ${interval === "month" ? "Monthly" : "Annual"}`,
+        priceMinor:
+          interval === "month"
+            ? definition.monthlyPriceMinor
+            : definition.annualPriceMinor,
+        currency: "USD",
+        interval,
+        benefits: definition.benefits,
+      };
+    }),
+  )
   .onConflictDoNothing();
 
 await database

@@ -6,6 +6,7 @@ import {
   eventPolicyAcceptances,
   eventTypes,
   getDatabase,
+  messages,
   orderItems,
   orders,
   organizations,
@@ -15,12 +16,15 @@ import {
   programs,
   registrations,
   sessions,
+  teamMembers,
   teamEntries,
   tickets,
   ticketTypes,
   venues,
 } from "@duna/db";
+import type { PersonSummary } from "@duna/core";
 import {
+  calculateOrganizationCommissionFee,
   calculateOperatorProcessingFee,
   priceConsumerOrder,
   type CurrencyCode,
@@ -36,6 +40,9 @@ import {
 } from "./commerce";
 import type { ApiActor } from "./context";
 import { hasActiveDunaPlusMembership } from "./membership";
+import { resolveOrganizationCommissionPolicy } from "./organization-billing";
+import { sendTransactionalEmail } from "./resend";
+import { sendTemplateSms } from "./sent";
 import {
   createEventCheckoutSession,
   getStripeClient,
@@ -100,19 +107,30 @@ export interface EventCheckoutStatus {
 export interface TeamClaimSummary {
   readonly eventTitle: string;
   readonly eventSlug: string;
+  readonly divisionId: string;
   readonly divisionName: string;
   readonly captainName: string;
   readonly expectedTeamSize: number;
   readonly claimedPlayers: number;
+  readonly paidPlayers: number;
   readonly paymentMode: "self" | "team";
   readonly status:
     "assembling" | "ready" | "confirmed" | "cancelled" | "expired";
   readonly expiresAt: string;
   readonly alreadyClaimed: boolean;
   readonly paymentRequired: boolean;
+  readonly isOrganizer: boolean;
+  readonly canManageRoster: boolean;
+  readonly registrationClosesAt: string;
   readonly roster: readonly {
+    readonly slot: number;
+    readonly personId?: string;
+    readonly inviteTarget?: string;
     readonly displayName: string;
     readonly status: "captain" | "selected" | "invited" | "claimed";
+    readonly deliveryStatus?: "queued" | "sent" | "failed";
+    readonly paid: boolean;
+    readonly editable: boolean;
   }[];
 }
 
@@ -127,6 +145,238 @@ export interface PendingTicketApproval {
   readonly totalMinor: number;
   readonly currency: CurrencyCode;
   readonly purchasedAt: string;
+}
+
+export interface TeammateSearchResult {
+  readonly person: PersonSummary;
+  readonly relationship: "recent-partner" | "connection" | "nearby" | "search";
+  readonly sharedTeams: number;
+  readonly gender: string;
+  readonly eligible: boolean;
+  readonly eligibilityReasons: readonly string[];
+}
+
+function personInitials(displayName: string): string {
+  return displayName
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+}
+
+function genderEligibility(
+  requirement?: string,
+  candidate?: string | null,
+): { readonly eligible: boolean; readonly reason?: string } {
+  const required = requirement?.trim().toLowerCase() ?? "";
+  const value = candidate?.trim().toLowerCase() ?? "";
+  const womenOnly = /women|woman|female|girls?/.test(required);
+  const menOnly =
+    !womenOnly && /(^|\W)(men|man|male|boys?)(\W|$)/.test(required);
+  if (!womenOnly && !menOnly) return { eligible: true };
+  if (!value) {
+    return { eligible: false, reason: "Gender eligibility is not verified" };
+  }
+  const matchesWomen = /women|woman|female|girls?/.test(value);
+  const matchesMen = /(^|\W)(men|man|male|boys?)(\W|$)/.test(value);
+  return womenOnly
+    ? {
+        eligible: matchesWomen,
+        reason: matchesWomen ? undefined : "This is a women's division",
+      }
+    : {
+        eligible: matchesMen,
+        reason: matchesMen ? undefined : "This is a men's division",
+      };
+}
+
+export async function searchEventTeammates(input: {
+  readonly actor: ApiActor;
+  readonly query?: string;
+  readonly divisionId?: string;
+  readonly limit: number;
+  readonly now: Date;
+}): Promise<readonly TeammateSearchResult[]> {
+  if (!process.env.DATABASE_URL) return [];
+  const database = getDatabase();
+  const query = input.query?.trim().slice(0, 80) ?? "";
+  const actor = await database.query.people.findFirst({
+    where: eq(people.id, input.actor.personId),
+  });
+  const division = input.divisionId
+    ? await database.query.divisions.findFirst({
+        where: eq(divisions.id, input.divisionId),
+      })
+    : undefined;
+  const settings = (division?.settings ?? {}) as {
+    readonly ratingMinimum?: number;
+    readonly ratingMaximum?: number;
+    readonly ageMinimum?: number;
+    readonly ageMaximum?: number;
+    readonly gender?: string;
+  };
+  const discipline = division?.discipline ?? "beach-2s";
+  const rows = await database.execute(sql`
+    WITH actor_teams AS (
+      SELECT ${teamMembers.teamId} AS team_id
+      FROM ${teamMembers}
+      WHERE ${teamMembers.personId} = ${input.actor.personId}::uuid
+    ), partner_stats AS (
+      SELECT
+        teammate.person_id,
+        count(DISTINCT teammate.team_id)::integer AS shared_teams,
+        max(teammate.joined_at) AS last_partnered_at
+      FROM team_members teammate
+      INNER JOIN actor_teams mine ON mine.team_id = teammate.team_id
+      WHERE teammate.person_id <> ${input.actor.personId}::uuid
+      GROUP BY teammate.person_id
+    )
+    SELECT
+      candidate.id,
+      candidate.display_name,
+      candidate.handle,
+      candidate.avatar_url,
+      candidate.home_market,
+      candidate.is_minor,
+      candidate.gender_category,
+      candidate.birth_date,
+      candidate.profile_claim_status,
+      candidate.is_professional,
+      rating.display,
+      rating.mu,
+      rating.phi,
+      rating.sigma,
+      rating.confidence,
+      rating.discipline,
+      coalesce(partner.shared_teams, 0)::integer AS shared_teams,
+      partner.last_partnered_at
+    FROM people candidate
+    LEFT JOIN ratings rating
+      ON rating.person_id = candidate.id
+      AND rating.discipline = ${discipline}
+    LEFT JOIN partner_stats partner ON partner.person_id = candidate.id
+    WHERE candidate.id <> ${input.actor.personId}::uuid
+      AND candidate.status = 'active'
+      AND candidate.profile_visibility = 'public'
+      AND candidate.is_minor = false
+      AND (
+        ${query} = '' OR
+        (
+          coalesce(candidate.display_name, '') || ' ' ||
+          coalesce(candidate.handle, '') || ' ' ||
+          coalesce(candidate.home_market, '')
+        )
+          ILIKE ${`%${query}%`}
+      )
+    ORDER BY
+      CASE WHEN lower(candidate.display_name) = lower(${query}) THEN 0 ELSE 1 END,
+      CASE WHEN lower(candidate.display_name) LIKE lower(${`${query}%`}) THEN 0 ELSE 1 END,
+      CASE WHEN partner.shared_teams > 0 THEN 0 ELSE 1 END,
+      partner.last_partnered_at DESC NULLS LAST,
+      CASE WHEN candidate.home_market = ${actor?.homeMarket ?? ""} THEN 0 ELSE 1 END,
+      candidate.display_name ASC
+    LIMIT ${Math.max(1, Math.min(20, input.limit))}
+  `);
+  type SearchRow = {
+    id: string;
+    display_name: string;
+    handle: string;
+    avatar_url: string | null;
+    home_market: string | null;
+    is_minor: boolean;
+    gender_category: string | null;
+    birth_date: string | null;
+    profile_claim_status: string;
+    is_professional: boolean;
+    display: number | null;
+    mu: number | null;
+    phi: number | null;
+    sigma: number | null;
+    confidence: PersonSummary["rating"]["confidence"] | null;
+    discipline: PersonSummary["rating"]["discipline"] | null;
+    shared_teams: number;
+  };
+  return (rows.rows as unknown as SearchRow[]).map((row) => {
+    const ratingDisplay = row.display ?? 3;
+    const reasons: string[] = [];
+    if (
+      settings.ratingMinimum !== undefined &&
+      ratingDisplay < settings.ratingMinimum
+    ) {
+      reasons.push(`Rating below ${settings.ratingMinimum.toFixed(2)}`);
+    }
+    if (
+      settings.ratingMaximum !== undefined &&
+      ratingDisplay > settings.ratingMaximum
+    ) {
+      reasons.push(`Rating above ${settings.ratingMaximum.toFixed(2)}`);
+    }
+    const age = row.birth_date
+      ? Math.floor(
+          (input.now.getTime() -
+            new Date(`${row.birth_date}T00:00:00Z`).getTime()) /
+            (365.2425 * 24 * 60 * 60_000),
+        )
+      : undefined;
+    if (
+      settings.ageMinimum !== undefined &&
+      age !== undefined &&
+      age < settings.ageMinimum
+    ) {
+      reasons.push(`Must be ${settings.ageMinimum}+`);
+    }
+    if (
+      settings.ageMaximum !== undefined &&
+      age !== undefined &&
+      age > settings.ageMaximum
+    ) {
+      reasons.push(`Must be ${settings.ageMaximum} or younger`);
+    }
+    if (
+      (settings.ageMinimum !== undefined ||
+        settings.ageMaximum !== undefined) &&
+      age === undefined
+    ) {
+      reasons.push("Age is not verified");
+    }
+    const gender = genderEligibility(settings.gender, row.gender_category);
+    if (!gender.eligible && gender.reason) reasons.push(gender.reason);
+    return {
+      person: {
+        id: row.id,
+        displayName: row.display_name,
+        handle: row.handle,
+        initials: personInitials(row.display_name),
+        homeMarket: row.home_market ?? "Market not set",
+        rating: {
+          display: ratingDisplay,
+          mu: row.mu ?? 1_500,
+          phi: row.phi ?? 350,
+          sigma: row.sigma ?? 0.06,
+          confidence: row.confidence ?? "Provisional",
+          discipline: row.discipline ?? "beach-2s",
+        },
+        roles: ["player"],
+        isMinor: row.is_minor,
+        avatarUrl: row.avatar_url ?? undefined,
+        profileClaimStatus:
+          row.profile_claim_status as PersonSummary["profileClaimStatus"],
+        isProfessional: row.is_professional,
+      },
+      relationship:
+        row.shared_teams > 0
+          ? "recent-partner"
+          : row.home_market && row.home_market === actor?.homeMarket
+            ? "nearby"
+            : "search",
+      sharedTeams: row.shared_teams,
+      gender: row.gender_category ?? "Not listed",
+      eligible: reasons.length === 0,
+      eligibilityReasons: reasons,
+    };
+  });
 }
 
 export interface ApprovedTicketOrder {
@@ -166,6 +416,8 @@ interface CheckoutEvent {
     | "court-rental"
     | "pickup";
   readonly priceMinor: number;
+  readonly teamPriceMinor?: number;
+  readonly playerPriceMinor?: number;
   readonly currency: CurrencyCode;
   readonly itemKind?: OrderItemKind;
   readonly itemReferenceId?: string;
@@ -472,6 +724,7 @@ async function loadCheckoutEvent(
         divisionCurrency: divisions.currency,
         divisionTeamSize: divisions.teamSize,
         divisionPriceBasis: divisions.priceBasis,
+        divisionSettings: divisions.settings,
       })
       .from(sessions)
       .leftJoin(programs, eq(sessions.programId, programs.id))
@@ -512,16 +765,38 @@ async function loadCheckoutEvent(
         "Event organization was not found.",
       );
     }
+    const selectedTeamSize = Math.max(1, row.divisionTeamSize ?? 1);
+    const configuredTeamPrice = row.divisionSettings?.teamEntryFeeMinor;
+    const configuredPlayerPrice = row.divisionSettings?.playerEntryFeeMinor;
+    const basePriceMinor = row.divisionPriceMinor ?? row.priceMinor ?? 0;
+    const teamPriceMinor =
+      typeof configuredTeamPrice === "number" &&
+      Number.isSafeInteger(configuredTeamPrice) &&
+      configuredTeamPrice >= 0
+        ? configuredTeamPrice
+        : row.divisionPriceBasis === "per-person"
+          ? basePriceMinor * selectedTeamSize
+          : basePriceMinor;
+    const playerPriceMinor =
+      typeof configuredPlayerPrice === "number" &&
+      Number.isSafeInteger(configuredPlayerPrice) &&
+      configuredPlayerPrice >= 0
+        ? configuredPlayerPrice
+        : row.divisionPriceBasis === "per-person"
+          ? basePriceMinor
+          : Math.ceil(basePriceMinor / selectedTeamSize);
     return {
       id: row.id,
       source: "session",
       title: row.title,
       kind: row.kindFromProgram ?? row.kindFromEventType ?? "open-play",
-      priceMinor: row.divisionPriceMinor ?? row.priceMinor ?? 0,
+      priceMinor: basePriceMinor,
+      teamPriceMinor,
+      playerPriceMinor,
       currency: currency(
         row.divisionCurrency ?? row.currency ?? organization.currency,
       ),
-      teamSize: row.divisionTeamSize ?? 1,
+      teamSize: selectedTeamSize,
       priceBasis:
         row.divisionPriceBasis === "per-person" ? "per-person" : "per-team",
       organization,
@@ -599,6 +874,12 @@ interface CheckoutTeamMember {
   readonly personId?: string;
   readonly inviteTarget?: string;
   readonly displayName?: string;
+  readonly status?: "selected" | "invited" | "claimed";
+  readonly deliveryChannel?: "email" | "sms" | "in-app";
+  readonly deliveryStatus?: "queued" | "sent" | "failed";
+  readonly providerMessageId?: string;
+  readonly paidAt?: string;
+  readonly orderId?: string;
 }
 
 async function saveTeamEntry(input: {
@@ -608,15 +889,23 @@ async function saveTeamEntry(input: {
   readonly paymentMode: "self" | "team";
   readonly roster: readonly CheckoutTeamMember[];
   readonly now: Date;
-}): Promise<string> {
+}): Promise<{
+  readonly id: string;
+  readonly claimToken: string;
+  readonly created: boolean;
+}> {
   const existing = await getDatabase().query.teamEntries.findFirst({
     where: eq(teamEntries.registrationId, input.registrationId),
   });
-  if (existing) return existing.claimToken;
+  if (existing) {
+    return { id: existing.id, claimToken: existing.claimToken, created: false };
+  }
+  const id = crypto.randomUUID();
   const claimToken = crypto.randomUUID();
   await getDatabase()
     .insert(teamEntries)
     .values({
+      id,
       registrationId: input.registrationId,
       payingPersonId: input.payingPersonId,
       partnerPersonId: input.roster.find((member) => member.personId)?.personId,
@@ -630,7 +919,126 @@ async function saveTeamEntry(input: {
       claimToken,
       claimExpiresAt: new Date(input.now.getTime() + 14 * 24 * 60 * 60_000),
     });
-  return claimToken;
+  return { id, claimToken, created: true };
+}
+
+async function deliverTeamInvitations(input: {
+  readonly teamEntryId: string;
+  readonly claimToken: string;
+  readonly roster: readonly CheckoutTeamMember[];
+  readonly captain: ApiActor;
+  readonly eventTitle: string;
+  readonly organizationId?: string;
+  readonly applicationOrigin: string;
+  readonly now: Date;
+}) {
+  const database = getDatabase();
+  const invitationUrl = new URL(
+    `/app/team/claim/${input.claimToken}`,
+    input.applicationOrigin,
+  ).toString();
+  const deliveredRoster = await Promise.all(
+    input.roster.map(async (member, index) => {
+      if (member.deliveryStatus === "sent") {
+        return {
+          ...member,
+          status:
+            member.status ??
+            (member.personId ? ("selected" as const) : ("invited" as const)),
+        };
+      }
+      const person = member.personId
+        ? await database.query.people.findFirst({
+            where: eq(people.id, member.personId),
+          })
+        : undefined;
+      const target = member.inviteTarget?.trim();
+      const email =
+        person?.email ?? (target?.includes("@") ? target : undefined);
+      const phone =
+        person?.phoneE164 ??
+        (target && !target.includes("@") ? target : undefined);
+      const displayName =
+        member.displayName ?? person?.displayName ?? "teammate";
+      const body = `${input.captain.displayName} invited you to join their team for ${input.eventTitle}. Claim your player spot, review the event agreements, and pay your share if required: ${invitationUrl}`;
+      let delivery:
+        | {
+            readonly channel: "email" | "sms" | "in-app";
+            readonly sent: boolean;
+            readonly messageId?: string;
+          }
+        | undefined;
+      try {
+        if (email) {
+          const result = await sendTransactionalEmail({
+            to: email,
+            subject: `${input.captain.displayName} invited you to ${input.eventTitle}`,
+            text: `Hi ${displayName},\n\n${body}\n\nYour team is not complete until every required player has claimed their spot and completed payment.`,
+            idempotencyKey: `team-invite-${input.teamEntryId}-${index}-${stableHash({ email }).slice(0, 12)}`,
+          });
+          delivery = {
+            channel: "email",
+            sent: result.sent,
+            messageId: result.messageId,
+          };
+        } else if (phone) {
+          const result = await sendTemplateSms({
+            to: phone,
+            templateName:
+              process.env.SENT_DM_TEAM_INVITE_TEMPLATE_NAME ??
+              "duna_team_event_invite",
+            parameters: {
+              captain_name: input.captain.displayName,
+              event_title: input.eventTitle,
+              invite_url: invitationUrl,
+            },
+            idempotencyKey: `team-invite-${input.teamEntryId}-${index}-${stableHash({ phone }).slice(0, 12)}`,
+          });
+          delivery = {
+            channel: "sms",
+            sent: result.sent,
+            messageId: result.messageId,
+          };
+        }
+      } catch {
+        delivery = {
+          channel: email ? "email" : phone ? "sms" : "in-app",
+          sent: false,
+        };
+      }
+      if (person) {
+        await database.insert(messages).values({
+          organizationId: input.organizationId,
+          senderPersonId: input.captain.personId,
+          recipientPersonId: person.id,
+          channel: "in-app",
+          kind: "event-team-invitation",
+          subject: `Team invitation · ${input.eventTitle}`,
+          body,
+          status: "queued",
+          scheduledAt: input.now,
+        });
+        delivery ??= { channel: "in-app", sent: true };
+      }
+      return {
+        ...member,
+        status:
+          member.status ??
+          (member.personId ? ("selected" as const) : ("invited" as const)),
+        deliveryChannel: delivery?.channel,
+        deliveryStatus: delivery
+          ? delivery.sent
+            ? ("sent" as const)
+            : ("failed" as const)
+          : undefined,
+        providerMessageId: delivery?.messageId,
+      };
+    }),
+  );
+  await database
+    .update(teamEntries)
+    .set({ roster: deliveredRoster, updatedAt: input.now })
+    .where(eq(teamEntries.id, input.teamEntryId));
 }
 
 export async function startEventCheckout(input: {
@@ -641,6 +1049,7 @@ export async function startEventCheckout(input: {
   readonly ticketQuantity?: number;
   readonly teamPaymentMode?: "self" | "team";
   readonly teamRoster?: readonly CheckoutTeamMember[];
+  readonly teamClaimToken?: string;
   readonly subjectPersonId?: string;
   readonly acceptedPolicyIds?: readonly string[];
   readonly readPolicyIds?: readonly string[];
@@ -672,6 +1081,39 @@ export async function startEventCheckout(input: {
     input.ticketTypeId,
     input.ticketQuantity,
   );
+  const joiningTeam = input.teamClaimToken
+    ? await loadTeamClaimRecord(input.teamClaimToken)
+    : undefined;
+  if (input.teamClaimToken && !joiningTeam) {
+    throw new CheckoutError(
+      "EVENT_NOT_FOUND",
+      "The team invitation for this registration was not found.",
+    );
+  }
+  if (joiningTeam) {
+    const member = joiningTeam.roster.find(
+      (candidate) => candidate.personId === input.actor.personId,
+    );
+    if (
+      joiningTeam.sessionId !== input.sessionId ||
+      joiningTeam.divisionId !== input.divisionId ||
+      joiningTeam.paymentMode === "team" ||
+      joiningTeam.payingPersonId === input.actor.personId ||
+      member?.status !== "claimed" ||
+      member.paidAt
+    ) {
+      throw new CheckoutError(
+        "EVENT_NOT_CHECKOUT_ELIGIBLE",
+        "This team invitation is not eligible for an individual payment.",
+      );
+    }
+    if (subjectPersonId !== input.actor.personId) {
+      throw new CheckoutError(
+        "EVENT_NOT_CHECKOUT_ELIGIBLE",
+        "A team invitation must be paid from the invited player's profile.",
+      );
+    }
+  }
   const policies = await loadCheckoutPolicies(
     input.sessionId,
     Boolean(event.ticketTypeId),
@@ -687,6 +1129,12 @@ export async function startEventCheckout(input: {
     throw new CheckoutError(
       "EVENT_NOT_CHECKOUT_ELIGIBLE",
       "Team members apply to player entries, not spectator tickets.",
+    );
+  }
+  if (joiningTeam && teamRoster.length > 0) {
+    throw new CheckoutError(
+      "EVENT_NOT_CHECKOUT_ELIGIBLE",
+      "Invited players cannot create a second roster during team payment.",
     );
   }
   if (
@@ -712,13 +1160,12 @@ export async function startEventCheckout(input: {
     (event.kind === "league" || event.kind === "tournament"
       ? "registration"
       : "booking");
-  const itemQuantity =
-    event.quantity ??
-    (input.teamPaymentMode === "team" &&
-    event.priceBasis === "per-person" &&
-    expectedTeamSize > 1
-      ? expectedTeamSize
-      : 1);
+  const itemQuantity = event.quantity ?? 1;
+  const unitAmountMinor = event.ticketTypeId
+    ? event.priceMinor
+    : expectedTeamSize > 1 && input.teamPaymentMode === "team"
+      ? (event.teamPriceMinor ?? event.priceMinor)
+      : (event.playerPriceMinor ?? event.priceMinor);
   const priced = priceConsumerOrder({
     currency: event.currency,
     isDunaPlus: hasDunaPlus,
@@ -728,7 +1175,7 @@ export async function startEventCheckout(input: {
         kind: itemKind,
         description: event.title,
         quantity: itemQuantity,
-        unitAmountMinor: event.priceMinor,
+        unitAmountMinor,
       },
     ],
   });
@@ -869,9 +1316,10 @@ export async function startEventCheckout(input: {
       "registrationId" in registration
         ? registration.registrationId
         : registration.participantId;
-    const teamClaimToken =
+    const savedTeamEntry =
       event.source === "session" &&
       expectedTeamSize > 1 &&
+      !joiningTeam &&
       registration.status !== "waitlisted"
         ? await saveTeamEntry({
             registrationId,
@@ -882,6 +1330,26 @@ export async function startEventCheckout(input: {
             now: input.now,
           })
         : undefined;
+    if (savedTeamEntry?.created) {
+      await deliverTeamInvitations({
+        teamEntryId: savedTeamEntry.id,
+        claimToken: savedTeamEntry.claimToken,
+        roster: teamRoster,
+        captain: input.actor,
+        eventTitle: event.title,
+        organizationId: event.organization?.id,
+        applicationOrigin: new URL(input.successUrl).origin,
+        now: input.now,
+      }).catch(() => undefined);
+    }
+    const teamClaimToken = savedTeamEntry?.claimToken;
+    if (joiningTeam && input.teamClaimToken) {
+      await markTeamMemberPaid({
+        record: joiningTeam,
+        personId: input.actor.personId,
+        now: input.now,
+      });
+    }
     await recordPolicyAcceptances({
       policies: acceptedPolicies,
       readPolicyIds: input.readPolicyIds ?? [],
@@ -946,6 +1414,17 @@ export async function startEventCheckout(input: {
     currency: priced.currency,
     method: "online-card",
   });
+  const commissionPolicy = resolveOrganizationCommissionPolicy(
+    event.organization,
+  );
+  const organizationCommissionFee = calculateOrganizationCommissionFee({
+    amountMinor: priced.subtotalMinor,
+    currency: priced.currency,
+    rateBps: commissionPolicy.rateBps,
+    organizationId: event.organization.id,
+    plan: commissionPolicy.effectivePlan,
+    source: commissionPolicy.source,
+  });
   if (!existingOrder) {
     await database.batch([
       database.insert(orders).values({
@@ -967,10 +1446,10 @@ export async function startEventCheckout(input: {
         referenceId: event.itemReferenceId ?? event.id,
         description: event.title,
         quantity: itemQuantity,
-        unitAmountMinor: event.priceMinor,
-        totalAmountMinor: event.priceMinor * itemQuantity,
+        unitAmountMinor,
+        totalAmountMinor: unitAmountMinor * itemQuantity,
       }),
-      ...[...priced.fees, operatorProcessingFee]
+      ...[...priced.fees, operatorProcessingFee, organizationCommissionFee]
         .filter((fee) => fee.amountMinor > 0)
         .map((fee) =>
           database.insert(appliedFees).values({
@@ -1044,10 +1523,11 @@ export async function startEventCheckout(input: {
       .where(eq(orders.id, orderId));
     throw error;
   }
-  const teamClaimToken =
+  const savedTeamEntry =
     !event.ticketTypeId &&
     event.source === "session" &&
     expectedTeamSize > 1 &&
+    !joiningTeam &&
     hold?.result_status === "pending" &&
     hold.registration_id
       ? await saveTeamEntry({
@@ -1059,6 +1539,32 @@ export async function startEventCheckout(input: {
           now: input.now,
         })
       : undefined;
+  if (savedTeamEntry?.created) {
+    await deliverTeamInvitations({
+      teamEntryId: savedTeamEntry.id,
+      claimToken: savedTeamEntry.claimToken,
+      roster: teamRoster,
+      captain: input.actor,
+      eventTitle: event.title,
+      organizationId: event.organization?.id,
+      applicationOrigin: new URL(input.successUrl).origin,
+      now: input.now,
+    }).catch(() => undefined);
+  }
+  const teamClaimToken = savedTeamEntry?.claimToken;
+  if (
+    joiningTeam &&
+    input.teamClaimToken &&
+    hold?.result_status === "pending" &&
+    hold.registration_id
+  ) {
+    await attachTeamMemberOrder({
+      record: joiningTeam,
+      personId: input.actor.personId,
+      orderId,
+      now: input.now,
+    });
+  }
   if (!event.ticketTypeId && hold?.result_status === "confirmed") {
     await database
       .update(orders)
@@ -1170,7 +1676,9 @@ export async function startEventCheckout(input: {
   try {
     const applicationFeeMinor = Math.min(
       priced.totalMinor,
-      feeTotalMinor + operatorProcessingFee.amountMinor,
+      feeTotalMinor +
+        operatorProcessingFee.amountMinor +
+        organizationCommissionFee.amountMinor,
     );
     const checkout = await createEventCheckoutSession({
       orderId,
@@ -1181,6 +1689,8 @@ export async function startEventCheckout(input: {
       amountMinor: priced.totalMinor,
       currency: priced.currency,
       applicationFeeMinor,
+      organizationCommissionMinor: organizationCommissionFee.amountMinor,
+      organizationCommissionRateBps: commissionPolicy.rateBps,
       connectedAccountId: event.organization.stripeAccountId,
       successUrl: teamClaimToken
         ? `${input.successUrl}&team=${encodeURIComponent(teamClaimToken)}`
@@ -1435,7 +1945,7 @@ export async function getEventCheckoutStatus(input: {
 }
 
 async function loadTeamClaimRecord(claimToken: string) {
-  return (
+  const record = (
     await getDatabase()
       .select({
         id: teamEntries.id,
@@ -1447,6 +1957,12 @@ async function loadTeamClaimRecord(claimToken: string) {
         claimExpiresAt: teamEntries.claimExpiresAt,
         eventTitle: sessions.title,
         eventSlug: sessions.slug,
+        sessionId: sessions.id,
+        registrationClosesAt: sessions.startsAt,
+        registrationSettings: eventBlueprints.registrationSettings,
+        registrationStatus: registrations.status,
+        orderStatus: orders.status,
+        divisionId: divisions.id,
         divisionName: divisions.name,
         captainName: people.displayName,
       })
@@ -1457,10 +1973,132 @@ async function loadTeamClaimRecord(claimToken: string) {
       )
       .innerJoin(sessions, eq(registrations.sessionId, sessions.id))
       .innerJoin(divisions, eq(registrations.divisionId, divisions.id))
+      .leftJoin(eventBlueprints, eq(sessions.id, eventBlueprints.sessionId))
       .innerJoin(people, eq(teamEntries.payingPersonId, people.id))
+      .leftJoin(orders, eq(registrations.orderId, orders.id))
       .where(eq(teamEntries.claimToken, claimToken))
       .limit(1)
   )[0];
+  if (!record) return undefined;
+  const settings = (record.registrationSettings ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const configuredClose =
+    settings.registrationClosesAt ??
+    settings.registrationCloseAt ??
+    settings.closesAt;
+  const parsedClose =
+    typeof configuredClose === "string" &&
+    !Number.isNaN(Date.parse(configuredClose))
+      ? new Date(configuredClose)
+      : record.registrationClosesAt;
+  return { ...record, registrationClosesAt: parsedClose };
+}
+
+type TeamClaimRecord = NonNullable<
+  Awaited<ReturnType<typeof loadTeamClaimRecord>>
+>;
+
+function captainPaymentComplete(record: TeamClaimRecord): boolean {
+  return (
+    record.orderStatus === "paid" ||
+    record.orderStatus === "partially-refunded" ||
+    record.registrationStatus === "confirmed" ||
+    record.registrationStatus === "checked-in"
+  );
+}
+
+async function refreshTeamEntryStatus(
+  record: TeamClaimRecord,
+  roster: TeamClaimRecord["roster"],
+  now: Date,
+) {
+  const claimedPlayers =
+    1 + roster.filter((member) => member.status === "claimed").length;
+  const paidPlayers =
+    record.paymentMode === "team" && captainPaymentComplete(record)
+      ? record.expectedTeamSize
+      : (captainPaymentComplete(record) ? 1 : 0) +
+        roster.filter((member) => Boolean(member.paidAt)).length;
+  const ready =
+    claimedPlayers >= record.expectedTeamSize &&
+    paidPlayers >= record.expectedTeamSize;
+  await getDatabase()
+    .update(teamEntries)
+    .set({
+      roster,
+      status: ready ? "ready" : "assembling",
+      claimedAt: ready ? now : null,
+      rosterLockedAt: ready ? now : null,
+      updatedAt: now,
+    })
+    .where(eq(teamEntries.id, record.id));
+}
+
+async function attachTeamMemberOrder(input: {
+  readonly record: TeamClaimRecord;
+  readonly personId: string;
+  readonly orderId: string;
+  readonly now: Date;
+}) {
+  const roster = input.record.roster.map((member) =>
+    member.personId === input.personId
+      ? { ...member, orderId: input.orderId }
+      : member,
+  );
+  await getDatabase()
+    .update(teamEntries)
+    .set({ roster, updatedAt: input.now })
+    .where(eq(teamEntries.id, input.record.id));
+}
+
+async function markTeamMemberPaid(input: {
+  readonly record: TeamClaimRecord;
+  readonly personId: string;
+  readonly now: Date;
+}) {
+  const roster = input.record.roster.map((member) =>
+    member.personId === input.personId
+      ? {
+          ...member,
+          paidAt: input.now.toISOString(),
+          status: "claimed" as const,
+        }
+      : member,
+  );
+  await refreshTeamEntryStatus(input.record, roster, input.now);
+}
+
+export async function reconcileTeamEntryPayment(
+  orderId: string,
+  occurredAt: Date,
+): Promise<void> {
+  if (!process.env.DATABASE_URL) return;
+  const database = getDatabase();
+  const matchingEntries = await database
+    .select({
+      claimToken: teamEntries.claimToken,
+      roster: teamEntries.roster,
+    })
+    .from(teamEntries)
+    .where(
+      sql`${teamEntries.roster} @> ${JSON.stringify([{ orderId }])}::jsonb`,
+    );
+  for (const entry of matchingEntries) {
+    const record = await loadTeamClaimRecord(entry.claimToken);
+    if (!record) continue;
+    const roster = entry.roster.map((member) =>
+      member.orderId === orderId
+        ? {
+            ...member,
+            paidAt: occurredAt.toISOString(),
+            status: "claimed" as const,
+          }
+        : member,
+    );
+    await refreshTeamEntryStatus(record, roster, occurredAt);
+  }
 }
 
 function teamEntryStatus(value: string): TeamClaimSummary["status"] {
@@ -1508,13 +2146,35 @@ async function buildTeamClaimSummary(
     );
   const claimedPlayers =
     1 + roster.filter((member) => member.status === "claimed").length;
+  const captainPaid =
+    record.orderStatus === "paid" ||
+    record.orderStatus === "partially-refunded" ||
+    record.registrationStatus === "confirmed" ||
+    record.registrationStatus === "checked-in";
+  const paidPlayers =
+    record.paymentMode === "team" && captainPaid
+      ? record.expectedTeamSize
+      : (captainPaid ? 1 : 0) +
+        roster.filter((member) => Boolean(member.paidAt)).length;
+  const isOrganizer = record.payingPersonId === actorPersonId;
+  const registrationOpen = record.registrationClosesAt > now;
+  const canManageRoster =
+    isOrganizer &&
+    registrationOpen &&
+    record.status !== "cancelled" &&
+    record.status !== "expired";
+  const actorRosterMember = roster.find(
+    (member) => member.personId === actorPersonId,
+  );
   return {
     eventTitle: record.eventTitle,
     eventSlug: record.eventSlug,
+    divisionId: record.divisionId,
     divisionName: record.divisionName,
     captainName: record.captainName,
     expectedTeamSize: record.expectedTeamSize,
     claimedPlayers,
+    paidPlayers,
     paymentMode: record.paymentMode === "team" ? "team" : "self",
     status: expired ? "expired" : teamEntryStatus(record.status),
     expiresAt: record.claimExpiresAt.toISOString(),
@@ -1522,14 +2182,33 @@ async function buildTeamClaimSummary(
     paymentRequired:
       record.paymentMode !== "team" &&
       record.payingPersonId !== actorPersonId &&
-      alreadyClaimed,
+      alreadyClaimed &&
+      !actorRosterMember?.paidAt,
+    isOrganizer,
+    canManageRoster,
+    registrationClosesAt: record.registrationClosesAt.toISOString(),
     roster: [
-      { displayName: record.captainName, status: "captain" as const },
-      ...roster.map((member) => ({
+      {
+        slot: 0,
+        personId: record.payingPersonId,
+        displayName: record.captainName,
+        status: "captain" as const,
+        paid: captainPaid,
+        editable: false,
+      },
+      ...roster.map((member, index) => ({
+        slot: index + 1,
+        personId: member.personId,
+        inviteTarget: member.inviteTarget,
         displayName:
           member.displayName ??
           (member.status === "claimed" ? "Duna player" : "Invite pending"),
         status: member.status,
+        deliveryStatus: member.deliveryStatus,
+        paid:
+          record.paymentMode === "team" ? captainPaid : Boolean(member.paidAt),
+        editable:
+          canManageRoster && (record.paymentMode === "team" || !member.paidAt),
       })),
     ],
   };
@@ -1630,7 +2309,19 @@ export async function claimTeamEntry(input: {
     };
     const claimedPlayers =
       1 + roster.filter((member) => member.status === "claimed").length;
-    const ready = claimedPlayers >= record.expectedTeamSize;
+    const captainPaid =
+      record.orderStatus === "paid" ||
+      record.orderStatus === "partially-refunded" ||
+      record.registrationStatus === "confirmed" ||
+      record.registrationStatus === "checked-in";
+    const paidPlayers =
+      record.paymentMode === "team" && captainPaid
+        ? record.expectedTeamSize
+        : (captainPaid ? 1 : 0) +
+          roster.filter((member) => Boolean(member.paidAt)).length;
+    const ready =
+      claimedPlayers >= record.expectedTeamSize &&
+      paidPlayers >= record.expectedTeamSize;
     await database.batch([
       database
         .update(teamEntries)
@@ -1661,6 +2352,132 @@ export async function claimTeamEntry(input: {
       }),
     ]);
   }
+  return buildTeamClaimSummary(
+    input.claimToken,
+    input.actor.personId,
+    input.now,
+  );
+}
+
+function teamMemberKey(member: CheckoutTeamMember): string {
+  if (member.personId) return `person:${member.personId}`;
+  return `invite:${member.inviteTarget?.trim().toLowerCase() ?? ""}`;
+}
+
+export async function updateTeamEntryRoster(input: {
+  readonly actor: ApiActor;
+  readonly claimToken: string;
+  readonly roster: readonly CheckoutTeamMember[];
+  readonly applicationOrigin: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<TeamClaimSummary> {
+  if (!process.env.DATABASE_URL) {
+    throw new CheckoutError(
+      "DATABASE_REQUIRED",
+      "Team roster editing requires the connected Duna database.",
+    );
+  }
+  const database = getDatabase();
+  const record = await loadTeamClaimRecord(input.claimToken);
+  if (!record) {
+    throw new CheckoutError("EVENT_NOT_FOUND", "This team was not found.");
+  }
+  if (record.payingPersonId !== input.actor.personId) {
+    throw new CheckoutError(
+      "CHECKOUT_UNAVAILABLE",
+      "Only the original team organizer can edit this roster.",
+    );
+  }
+  if (
+    record.registrationClosesAt <= input.now ||
+    record.status === "cancelled" ||
+    record.status === "expired"
+  ) {
+    throw new CheckoutError(
+      "CHECKOUT_UNAVAILABLE",
+      "This roster can no longer be changed because registration is closed.",
+    );
+  }
+  if (input.roster.length > record.expectedTeamSize - 1) {
+    throw new CheckoutError(
+      "EVENT_NOT_CHECKOUT_ELIGIBLE",
+      "The roster has more players than this division allows.",
+    );
+  }
+  const keys = input.roster.map(teamMemberKey);
+  if (
+    keys.some((key) => key.endsWith(":")) ||
+    new Set(keys).size !== keys.length
+  ) {
+    throw new CheckoutError(
+      "EVENT_NOT_CHECKOUT_ELIGIBLE",
+      "Every teammate must be unique and have a Duna profile, email, or phone.",
+    );
+  }
+  const existingByKey = new Map(
+    record.roster.map((member) => [teamMemberKey(member), member] as const),
+  );
+  if (
+    record.paymentMode !== "team" &&
+    record.roster.some(
+      (member) => member.paidAt && !keys.includes(teamMemberKey(member)),
+    )
+  ) {
+    throw new CheckoutError(
+      "CHECKOUT_UNAVAILABLE",
+      "A player who has paid and registered can no longer be removed.",
+    );
+  }
+  const nextRoster = input.roster.map((member) => {
+    const existing = existingByKey.get(teamMemberKey(member));
+    return {
+      ...member,
+      status:
+        existing?.status ??
+        (member.personId ? ("selected" as const) : ("invited" as const)),
+      deliveryChannel: existing?.deliveryChannel,
+      deliveryStatus: existing?.deliveryStatus,
+      providerMessageId: existing?.providerMessageId,
+      paidAt: existing?.paidAt,
+      orderId: existing?.orderId,
+    };
+  });
+  await database
+    .update(teamEntries)
+    .set({
+      roster: nextRoster,
+      partnerPersonId: nextRoster.find((member) => member.personId)?.personId,
+      status: "assembling",
+      claimedAt: null,
+      rosterLockedAt: null,
+      updatedAt: input.now,
+    })
+    .where(eq(teamEntries.id, record.id));
+  await deliverTeamInvitations({
+    teamEntryId: record.id,
+    claimToken: input.claimToken,
+    roster: nextRoster,
+    captain: input.actor,
+    eventTitle: record.eventTitle,
+    organizationId: input.actor.organizationId,
+    applicationOrigin: input.applicationOrigin,
+    now: input.now,
+  }).catch(() => undefined);
+  await database.insert(auditLog).values({
+    actorPersonId: input.actor.personId,
+    organizationId: input.actor.organizationId,
+    actorType: "person",
+    action: "team-entry.roster_updated",
+    entityType: "team-entry",
+    entityId: record.id,
+    afterHash: stableHash({ roster: nextRoster }),
+    reason:
+      "The original organizer updated the event team before registration closed.",
+    traceId: input.requestId,
+    ipAddress: input.ipAddress,
+  });
   return buildTeamClaimSummary(
     input.claimToken,
     input.actor.personId,
