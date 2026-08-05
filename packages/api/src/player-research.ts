@@ -364,6 +364,21 @@ function outputText(value: unknown): string | undefined {
   return undefined;
 }
 
+async function gatewayFailure(response: Response): Promise<Error> {
+  let detail = "";
+  try {
+    detail = await response.text();
+  } catch {
+    // The status code remains useful when the provider omits a readable body.
+  }
+  if (/customer_verification_required/i.test(detail)) {
+    return new Error(
+      "Vercel AI Gateway is blocking Duna research until the Vercel team completes customer verification or billing setup. No player data was changed; complete verification in Vercel, then retry.",
+    );
+  }
+  return new Error(`Vercel AI Gateway returned HTTP ${response.status}.`);
+}
+
 async function searchEvidence(
   query: string,
   apiKey: string,
@@ -464,7 +479,7 @@ async function synthesize(
     }),
   });
   if (!response.ok) {
-    throw new Error(`Vercel AI Gateway returned HTTP ${response.status}.`);
+    throw await gatewayFailure(response);
   }
   const text = outputText(await response.json());
   if (!text) throw new Error("Vercel AI Gateway returned no player proposal.");

@@ -150,4 +150,44 @@ describe("player research evidence workflow", () => {
       createPlayerResearchProposal({ displayName: "Alex Rivera" }),
     ).rejects.toThrow("Vercel AI Gateway is not configured");
   });
+
+  it("explains the Vercel customer verification block without changing providers", async () => {
+    vi.stubEnv("FIRECRAWL_API_KEY", "firecrawl-test");
+    vi.stubEnv("AI_GATEWAY_API_KEY", "gateway-test");
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).includes("firecrawl.dev")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              web: [
+                {
+                  title: "Alex Rivera official profile",
+                  url: "https://example.org/players/alex-rivera",
+                },
+              ],
+            },
+          }),
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: "customer_verification_required",
+            message: "Customer verification is required.",
+          },
+        }),
+        { status: 403 },
+      );
+    });
+
+    await expect(
+      createPlayerResearchProposal(
+        { displayName: "Alex Rivera" },
+        { fetchImpl: fetchMock },
+      ),
+    ).rejects.toThrow(
+      "Vercel AI Gateway is blocking Duna research until the Vercel team completes customer verification or billing setup",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

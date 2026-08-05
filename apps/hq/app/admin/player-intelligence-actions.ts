@@ -20,6 +20,16 @@ function integer(formData: FormData, key: string): number | undefined {
   return Number.isInteger(result) && result >= 0 ? result : undefined;
 }
 
+function heightMillimeters(formData: FormData): number | undefined {
+  const source = value(formData, "heightCentimeters");
+  if (!source) return undefined;
+  const centimeters = Number(source);
+  if (!Number.isFinite(centimeters) || centimeters < 60 || centimeters > 260) {
+    throw new Error("Height must be between 60 and 260 centimeters.");
+  }
+  return Math.round(centimeters * 10);
+}
+
 function links(source: string | undefined) {
   return (source ?? "")
     .split("\n")
@@ -115,12 +125,58 @@ export async function researchRankedPlayersAction(
       idempotencyKey: crypto.randomUUID(),
     });
     refreshPlayerIntelligence();
+    const verificationBlock = result.results.find(
+      (item) =>
+        item.status === "failed" &&
+        item.message?.includes("customer verification"),
+    );
     return {
       status: result.succeeded === result.attempted ? "success" : "error",
-      message: `${result.succeeded} of ${result.attempted} ranked-player proposals completed. Every result remains in review.`,
+      message:
+        verificationBlock?.message ??
+        `${result.succeeded} of ${result.attempted} ranked-player proposals completed. Every result remains in review.`,
     };
   } catch (error) {
     return failure(error, "The ranked-player research batch could not run.");
+  }
+}
+
+export async function savePlayerIdentityAction(
+  _previous: PlayerIntelligenceActionState,
+  formData: FormData,
+): Promise<PlayerIntelligenceActionState> {
+  const personId = value(formData, "personId");
+  const displayName = value(formData, "displayName");
+  const handle = value(formData, "handle");
+  const reason = value(formData, "reason");
+  if (!personId || !displayName || !handle || !reason || reason.length < 10) {
+    return {
+      status: "error",
+      message:
+        "Add the player name, handle, and a verification note of at least 10 characters.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    await caller.admin.updatePlayerIdentity({
+      personId,
+      displayName,
+      handle,
+      givenName: value(formData, "givenName"),
+      familyName: value(formData, "familyName"),
+      homeMarket: value(formData, "homeMarket"),
+      heightMillimeters: heightMillimeters(formData),
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    refreshPlayerIntelligence(personId);
+    return {
+      status: "success",
+      message:
+        "Canonical player identity saved across rankings, research, and the public profile.",
+    };
+  } catch (error) {
+    return failure(error, "The canonical player identity could not be saved.");
   }
 }
 
