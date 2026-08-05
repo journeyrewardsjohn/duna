@@ -250,6 +250,63 @@ test("pickup host flow publishes a complete listing", async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 });
 
+test("player planning keeps selection in place and extends its date rail", async ({
+  page,
+}) => {
+  await page.goto("/app/play");
+  await expect(
+    page.getByRole("heading", { name: "When do you want to play?" }),
+  ).toBeVisible();
+
+  const selectedPill = page.locator(
+    '.calendar-picker__pill[aria-current="date"]',
+  );
+  await expect(selectedPill).toHaveCount(1);
+  await expect(selectedPill.locator(":scope > span")).toHaveCount(1);
+  await expect(selectedPill.locator(":scope > strong")).toHaveCount(1);
+  await expect(selectedPill.locator(":scope > small")).toHaveText(
+    /^[A-Z][a-z]{2}$/,
+  );
+
+  const rail = page.locator(".play-calendar-picker .calendar-picker__rail");
+  const pills = rail.locator(".calendar-picker__pill");
+  const selectedIndex = await pills.evaluateAll((elements) =>
+    elements.findIndex(
+      (element) => element.getAttribute("aria-current") === "date",
+    ),
+  );
+  const nextPill = pills.nth(selectedIndex + 1);
+  const scrollPosition = await rail.evaluate((element) =>
+    Math.round(element.scrollLeft),
+  );
+  await nextPill.click();
+  await expect(nextPill).toHaveAttribute("aria-current", "date");
+  await expect
+    .poll(() => rail.evaluate((element) => Math.round(element.scrollLeft)))
+    .toBe(scrollPosition);
+
+  const initialPillCount = await pills.count();
+  expect(initialPillCount).toBeGreaterThanOrEqual(91);
+  await rail.evaluate((element) => {
+    element.scrollLeft = element.scrollWidth;
+  });
+  await expect.poll(() => pills.count()).toBeGreaterThan(initialPillCount);
+
+  await page.getByRole("button", { name: "Full calendar" }).click();
+  const calendar = page.getByRole("dialog", {
+    name: "When do you want to play?",
+  });
+  await expect(calendar).toBeVisible();
+  await expect(calendar.locator(".calendar-month")).toHaveCount(2);
+  await expect(calendar.getByText("Your plans", { exact: true })).toBeVisible();
+  await expect(
+    calendar.getByText("Events to explore", { exact: true }),
+  ).toBeVisible();
+  await calendar.getByRole("button", { name: "Close full calendar" }).click();
+  await expect(calendar).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+});
+
 test("player onboarding stays clear and editable on mobile", async ({
   page,
 }) => {
