@@ -9071,7 +9071,7 @@ function createStyles(palette: Palette) {
     },
     proMobileLocationMapLabelText: {
       color: "#ffffff",
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.3,
     },
@@ -9105,7 +9105,7 @@ function createStyles(palette: Palette) {
     },
     proMobileLocationCopyText: {
       color: colors.bone,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "800",
     },
     proMobileLocationOpen: {
@@ -9118,7 +9118,7 @@ function createStyles(palette: Palette) {
     },
     proMobileLocationOpenText: {
       color: colors.onAccent,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "900",
     },
     proMobileInfoEyebrow: {
