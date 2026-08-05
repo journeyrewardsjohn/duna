@@ -3556,7 +3556,11 @@ export async function loadPublicWorldRankings() {
         ? [
             [
               `${row.genderCategory}:${row.personId}`,
-              { rank: row.rank, points: row.points },
+              {
+                rank: row.rank,
+                points: row.points,
+                countryCode: row.countryCode ?? undefined,
+              },
             ] as const,
           ]
         : [],
@@ -3589,19 +3593,23 @@ export async function loadPublicWorldRankings() {
     dunaRows
       .filter((row) => row.genderCategory === genderCategory)
       .slice(0, 200)
-      .map((row, index) => ({
-        rank: index + 1,
-        personId: row.personId,
-        displayName: row.displayName,
-        handle: row.handle,
-        avatarUrl: row.avatarUrl ?? undefined,
-        sandRating: row.sandRating,
-        confidence: row.confidence,
-        ratedMatches: row.ratedMatches,
-        worldRanking: worldRankByPerson.get(
+      .map((row, index) => {
+        const worldRanking = worldRankByPerson.get(
           `${genderCategory}:${row.personId}`,
-        ),
-      }));
+        );
+        return {
+          rank: index + 1,
+          personId: row.personId,
+          displayName: row.displayName,
+          handle: row.handle,
+          avatarUrl: row.avatarUrl ?? undefined,
+          countryCode: worldRanking?.countryCode,
+          sandRating: row.sandRating,
+          confidence: row.confidence,
+          ratedMatches: row.ratedMatches,
+          worldRanking,
+        };
+      });
   const worldFor = (genderCategory: (typeof genders)[number]) =>
     worldRows
       .filter((row) => row.genderCategory === genderCategory)
@@ -3854,11 +3862,11 @@ function slugSegment(value: string): string {
     .slice(0, 96);
 }
 
-function professionalSource(sourceSlug: string): "fivb" | "avp" {
+export function professionalSource(sourceSlug: string): "fivb" | "avp" {
   return sourceSlug === "avp-league" ? "avp" : "fivb";
 }
 
-function professionalTour(sourceSlug: string, category?: string | null) {
+export function professionalTour(sourceSlug: string, category?: string | null) {
   if (sourceSlug === "avp-league") return "avp" as const;
   const normalized = category?.toLowerCase() ?? "";
   if (normalized.includes("elite")) return "elite" as const;
@@ -3940,7 +3948,7 @@ type PublicProMatch = {
   readonly watchOptions: readonly PublicWatchOption[];
 };
 
-type PublicWatchOption = {
+export type PublicWatchOption = {
   readonly id: string;
   readonly kind: "vbtv" | "youtube" | "live-tv";
   readonly label: string;
@@ -4174,7 +4182,7 @@ export function inheritProfessionalEventEditorial(
   };
 }
 
-function effectiveProfessionalEvent(event: {
+export function effectiveProfessionalEvent(event: {
   readonly name: string;
   readonly location?: string | null;
   readonly category?: string | null;
@@ -4193,7 +4201,7 @@ function effectiveProfessionalEvent(event: {
   };
 }
 
-type RawProfessionalTeamEntry = {
+export type RawProfessionalTeamEntry = {
   readonly externalTeamId: string;
   readonly list:
     "main-draw" | "qualification" | "reserve" | "withdrawn" | "league";
@@ -4308,7 +4316,9 @@ export function parseAvpLeagueEventPayload(value: unknown):
   };
 }
 
-function watchOptionsFromPayload(value: unknown): readonly PublicWatchOption[] {
+export function watchOptionsFromPayload(
+  value: unknown,
+): readonly PublicWatchOption[] {
   const payload = unknownRecord(value);
   if (!Array.isArray(payload.watchOptions)) return [];
   return payload.watchOptions.flatMap((candidate, index) => {
@@ -4343,7 +4353,7 @@ function watchOptionsFromPayload(value: unknown): readonly PublicWatchOption[] {
   });
 }
 
-function rawProfessionalTeamEntries(
+export function rawProfessionalTeamEntries(
   payloadValue: unknown,
 ): readonly RawProfessionalTeamEntry[] {
   const payload = unknownRecord(payloadValue);
@@ -6284,6 +6294,7 @@ export async function loadPublicPlayerPerformance(personId: string) {
       .select({
         id: externalPlayerProfiles.id,
         source: importSources.name,
+        sourceSlug: importSources.slug,
         profileUrl: externalPlayerProfiles.profileUrl,
         externalRating: externalPlayerProfiles.externalRating,
         externalRatingConfidence:
@@ -6432,11 +6443,18 @@ export async function loadPublicPlayerPerformance(personId: string) {
       };
     }),
     sources: externalRows.map((source) => ({
-      ...source,
-      profileUrl: source.profileUrl ?? undefined,
+      id: source.id,
+      source:
+        source.sourceSlug === "sandrating"
+          ? "Duna match archive"
+          : source.source,
+      ...(source.sourceSlug === "sandrating" || !source.profileUrl
+        ? {}
+        : { profileUrl: source.profileUrl }),
       externalRating: source.externalRating ?? undefined,
       externalRatingConfidence: source.externalRatingConfidence ?? undefined,
       externalMatchCount: source.externalMatchCount ?? undefined,
+      isProfessional: source.isProfessional,
       lastImportedAt: source.lastImportedAt?.toISOString(),
     })),
     participantProfiles: participantProfiles.map((profile) => ({
@@ -6447,6 +6465,7 @@ export async function loadPublicPlayerPerformance(personId: string) {
       ? {
           rank: world.rank,
           points: world.points,
+          countryCode: world.countryCode ?? undefined,
           genderCategory: world.genderCategory,
           rankingDate: world.rankingDate,
           previousRank: world.previousRank ?? undefined,

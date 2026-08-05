@@ -369,6 +369,184 @@ export const people = pgTable(
   ],
 );
 
+export const playerPublicProfiles = pgTable(
+  "player_public_profiles",
+  {
+    personId: uuid("person_id")
+      .primaryKey()
+      .references(() => people.id, { onDelete: "cascade" }),
+    publicationStatus: varchar("publication_status", { length: 24 })
+      .notNull()
+      .default("draft"),
+    shortBio: text("short_bio"),
+    biography: text("biography"),
+    countryCode: varchar("country_code", { length: 3 }),
+    hometown: text("hometown"),
+    collegeName: text("college_name"),
+    collegeLogoUrl: text("college_logo_url"),
+    playingRole: varchar("playing_role", { length: 48 }),
+    cutoutImageUrl: text("cutout_image_url"),
+    heroImageUrl: text("hero_image_url"),
+    heroVideoUrl: text("hero_video_url"),
+    imageAlt: text("image_alt"),
+    careerStats: jsonb("career_stats")
+      .notNull()
+      .$type<{
+        readonly events?: number;
+        readonly wins?: number;
+        readonly podiums?: number;
+        readonly gold?: number;
+        readonly silver?: number;
+        readonly bronze?: number;
+        readonly earningsMinor?: number;
+        readonly earningsCurrency?: string;
+      }>()
+      .default({}),
+    links: jsonb("links")
+      .notNull()
+      .$type<
+        readonly {
+          readonly label: string;
+          readonly url: string;
+          readonly kind: "website" | "instagram" | "youtube" | "news";
+        }[]
+      >()
+      .default([]),
+    news: jsonb("news")
+      .notNull()
+      .$type<
+        readonly {
+          readonly title: string;
+          readonly url: string;
+          readonly publisher?: string;
+          readonly publishedAt?: string;
+        }[]
+      >()
+      .default([]),
+    researchStatus: varchar("research_status", { length: 24 })
+      .notNull()
+      .default("not-started"),
+    researchProposal: jsonb("research_proposal")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    researchEvidence: jsonb("research_evidence")
+      .notNull()
+      .$type<
+        readonly {
+          readonly title: string;
+          readonly url: string;
+          readonly description?: string;
+        }[]
+      >()
+      .default([]),
+    researchModel: varchar("research_model", { length: 160 }),
+    researchedAt: timestamp("researched_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    reviewedByPersonId: uuid("reviewed_by_person_id").references(
+      () => people.id,
+    ),
+    reviewedAt: timestamp("reviewed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    publishedAt: timestamp("published_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("player_public_profile_status_idx").on(
+      table.publicationStatus,
+      table.updatedAt,
+    ),
+    index("player_public_profile_research_idx").on(
+      table.researchStatus,
+      table.researchedAt,
+    ),
+    check(
+      "player_public_profile_publication_status_valid",
+      sql`${table.publicationStatus} IN ('draft', 'review', 'published')`,
+    ),
+    check(
+      "player_public_profile_research_status_valid",
+      sql`${table.researchStatus} IN ('not-started', 'queued', 'researching', 'review', 'published', 'failed')`,
+    ),
+  ],
+);
+
+export const playerMediaWorkflows = pgTable(
+  "player_media_workflows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    requestedByPersonId: uuid("requested_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    status: varchar("status", { length: 24 }).notNull().default("draft"),
+    referenceImages: jsonb("reference_images")
+      .notNull()
+      .$type<
+        readonly {
+          readonly url: string;
+          readonly kind: "action" | "portrait";
+          readonly uploadedAt: string;
+        }[]
+      >()
+      .default([]),
+    brief: text("brief"),
+    generationPrompt: text("generation_prompt"),
+    models: jsonb("models")
+      .notNull()
+      .$type<{
+        readonly cutout?: string;
+        readonly poster?: string;
+      }>()
+      .default({}),
+    outputImages: jsonb("output_images")
+      .notNull()
+      .$type<
+        readonly {
+          readonly url: string;
+          readonly kind: "cutout" | "poster" | "background";
+          readonly jobId?: string;
+        }[]
+      >()
+      .default([]),
+    rightsConfirmedAt: timestamp("rights_confirmed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    reviewedByPersonId: uuid("reviewed_by_person_id").references(
+      () => people.id,
+    ),
+    reviewedAt: timestamp("reviewed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    failureReason: text("failure_reason"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("player_media_workflow_person_idx").on(
+      table.personId,
+      table.createdAt,
+    ),
+    index("player_media_workflow_queue_idx").on(table.status, table.createdAt),
+    check(
+      "player_media_workflow_status_valid",
+      sql`${table.status} IN ('draft', 'ready', 'generating', 'review', 'published', 'failed', 'rejected')`,
+    ),
+  ],
+);
+
 export const guardianships = pgTable(
   "guardianships",
   {
@@ -5733,6 +5911,74 @@ export const follows = pgTable(
     primaryKey({
       columns: [table.followerPersonId, table.entityType, table.entityId],
     }),
+  ],
+);
+
+export const playerFollowPreferences = pgTable(
+  "player_follow_preferences",
+  {
+    followerPersonId: uuid("follower_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    playerPersonId: uuid("player_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    notifyRegistrations: boolean("notify_registrations")
+      .notNull()
+      .default(true),
+    notifyWatch: boolean("notify_watch").notNull().default(true),
+    notifyResults: boolean("notify_results").notNull().default(false),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.followerPersonId, table.playerPersonId],
+    }),
+    index("player_follow_preferences_player_idx").on(table.playerPersonId),
+    check(
+      "player_follow_preferences_not_self",
+      sql`${table.followerPersonId} <> ${table.playerPersonId}`,
+    ),
+  ],
+);
+
+export const playerFollowDeliveries = pgTable(
+  "player_follow_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    followerPersonId: uuid("follower_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    playerPersonId: uuid("player_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    entityKey: varchar("entity_key", { length: 192 }).notNull(),
+    messageId: uuid("message_id").references(() => messages.id, {
+      onDelete: "set null",
+    }),
+    payload: jsonb("payload")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("player_follow_delivery_unique").on(
+      table.followerPersonId,
+      table.playerPersonId,
+      table.kind,
+      table.entityKey,
+    ),
+    index("player_follow_delivery_player_idx").on(
+      table.playerPersonId,
+      table.createdAt,
+    ),
+    check(
+      "player_follow_delivery_kind_valid",
+      sql`${table.kind} IN ('registration', 'watch', 'result')`,
+    ),
   ],
 );
 

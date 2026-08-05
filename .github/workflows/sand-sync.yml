@@ -7,6 +7,7 @@ on:
     - cron: "15 */6 * * *"
     - cron: "10 10 * * *"
     - cron: "45 10 * * *"
+    - cron: "20 11 * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -20,6 +21,7 @@ on:
           - index
           - rankings
           - research
+          - players
 
 concurrency:
   group: sand-sync-${{ github.event.schedule || inputs.mode }}
@@ -46,6 +48,8 @@ jobs:
             mode="index"
           elif [ "$SCHEDULE" = "45 10 * * *" ]; then
             mode="research"
+          elif [ "$SCHEDULE" = "20 11 * * *" ]; then
+            mode="players"
           else
             mode="rankings"
           fi

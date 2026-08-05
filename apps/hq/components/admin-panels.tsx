@@ -4,6 +4,8 @@ import type {
   AdminVideoOverview,
   FeatureFlagCollection,
   GuardianReviewItem,
+  PlayerIntelligenceAdmin,
+  PlayerIntelligenceDetail,
   SandDataOverview,
 } from "@duna/api";
 import type { OrganizationSummary, PersonSummary } from "@duna/core";
@@ -25,6 +27,7 @@ import {
   RefreshCw,
   ScrollText,
   ShieldCheck,
+  Sparkles,
   TicketCheck,
   Trophy,
   UsersRound,
@@ -45,6 +48,7 @@ import {
   type ProfessionalTourTool,
 } from "./pro-tour-admin-controls";
 import { VideoAdminControls } from "./video-admin-controls";
+import { PlayerIntelligenceAdminPanel } from "./player-intelligence-admin";
 
 const adminMetricIcons = [
   WalletCards,
@@ -92,6 +96,12 @@ const copy: Record<
     title: "Pro tour",
     description:
       "Manage synced FIVB and AVP events, broadcast destinations, seasonal teams, substitutions, and player identity mappings.",
+  },
+  "player-intelligence": {
+    eyebrow: "Evidence-backed athlete storytelling",
+    title: "Player profiles",
+    description:
+      "Research, review, enrich, and publish the world's leading beach-volleyball player profiles without silently overwriting editorial truth.",
   },
   "player-mapping": {
     eyebrow: "Canonical identity resolution",
@@ -725,6 +735,10 @@ export function AdminPanel({
   playerSearchQuery,
   proEventId,
   proTourTool,
+  playerIntelligence,
+  playerIntelligenceDetail,
+  playerIntelligenceGender,
+  playerIntelligenceStatus,
 }: {
   readonly module: AdminModule;
   readonly overview: AdminOverviewData;
@@ -737,6 +751,11 @@ export function AdminPanel({
   readonly playerSearchQuery?: string;
   readonly proEventId?: string;
   readonly proTourTool?: ProfessionalTourTool;
+  readonly playerIntelligence?: PlayerIntelligenceAdmin;
+  readonly playerIntelligenceDetail?: PlayerIntelligenceDetail;
+  readonly playerIntelligenceGender?: "men" | "women";
+  readonly playerIntelligenceStatus?:
+    "all" | "not-started" | "review" | "published" | "failed";
 }) {
   if (module === "overview") return null;
   const content = copy[module];
@@ -749,20 +768,22 @@ export function AdminPanel({
           ? Activity
           : module === "pro-tour"
             ? Trophy
-            : module === "sand-data" ||
-                module === "player-mapping" ||
-                module === "ratings-lab" ||
-                module === "profile-merge"
-              ? Activity
-              : module === "payments"
-                ? WalletCards
-                : module === "video"
-                  ? Radio
-                  : module === "audit"
-                    ? ScrollText
-                    : module === "flags"
-                      ? Flag
-                      : HeartPulse;
+            : module === "player-intelligence"
+              ? Sparkles
+              : module === "sand-data" ||
+                  module === "player-mapping" ||
+                  module === "ratings-lab" ||
+                  module === "profile-merge"
+                ? Activity
+                : module === "payments"
+                  ? WalletCards
+                  : module === "video"
+                    ? Radio
+                    : module === "audit"
+                      ? ScrollText
+                      : module === "flags"
+                        ? Flag
+                        : HeartPulse;
   const ratedPlayers = overview.metrics.find(
     (metric) => metric.label === "Rated players",
   );
@@ -828,6 +849,14 @@ export function AdminPanel({
           initialEventId={proEventId}
           players={playerDirectory}
           tool={proTourTool}
+        />
+      ) : module === "player-intelligence" && playerIntelligence ? (
+        <PlayerIntelligenceAdminPanel
+          data={playerIntelligence}
+          detail={playerIntelligenceDetail}
+          gender={playerIntelligenceGender}
+          query={playerSearchQuery}
+          status={playerIntelligenceStatus}
         />
       ) : module === "player-mapping" && sandData ? (
         <PlayerMappingPanel

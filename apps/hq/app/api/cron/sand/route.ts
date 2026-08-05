@@ -1,9 +1,11 @@
 import {
+  dispatchPlayerFollowNotifications,
   refreshAvpLeague,
   refreshActiveFivbEvents,
   refreshFivbEventIndex,
   refreshSandRatingNetwork,
   refreshWorldRankings,
+  researchRankedPlayers,
   researchUpcomingProfessionalEvents,
 } from "@duna/api";
 import { NextResponse } from "next/server";
@@ -38,6 +40,13 @@ export async function GET(request: Request) {
       return NextResponse.json(
         await researchUpcomingProfessionalEvents({ limit: 2 }),
       );
+    }
+    if (mode === "players") {
+      const [research, notifications] = await Promise.all([
+        researchRankedPlayers({ limit: 2 }),
+        dispatchPlayerFollowNotifications({ limit: 50 }),
+      ]);
+      return NextResponse.json({ research, notifications });
     }
     if (mode === "sandrating") {
       return NextResponse.json(

@@ -313,6 +313,21 @@ import {
   updatePlayingProfile,
 } from "./profile-onboarding";
 import {
+  createPlayerMediaWorkflow,
+  loadOwnPlayerMediaStudio,
+  loadPlayerFollowState,
+  loadPlayerIntelligenceAdmin,
+  loadPlayerIntelligenceDetail,
+  loadPublicPlayerIntelligenceByHandle,
+  playerMediaUploadContext,
+  PlayerIntelligenceError,
+  researchPlayerProfile,
+  researchRankedPlayers,
+  reviewPlayerMediaWorkflow,
+  savePlayerPublicProfile,
+  setPlayerFollow,
+} from "./player-intelligence";
+import {
   approveImportedMatch,
   applyProfessionalEventResearch,
   approveReadySandRatingMatches,
@@ -408,6 +423,23 @@ async function attachEventWeather(
     }),
   };
 }
+
+const publicHttpUrlSchema = z.url().refine(
+  (value) => {
+    const url = new URL(value);
+    return (
+      (url.protocol === "https:" || url.protocol === "http:") &&
+      !/(^|\.)sandrating\.com$/i.test(url.hostname)
+    );
+  },
+  { message: "Use a public HTTP or HTTPS URL." },
+);
+
+const publicHttpsUrlSchema = z
+  .url()
+  .refine((value) => new URL(value).protocol === "https:", {
+    message: "Use a secure HTTPS URL.",
+  });
 
 const moneyItemSchema = z.object({
   id: z.string().min(1),
@@ -924,6 +956,17 @@ function throwDomainError(error: unknown): never {
               : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
+  if (error instanceof PlayerIntelligenceError) {
+    const code =
+      error.code === "PLAYER_NOT_FOUND" || error.code === "WORKFLOW_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "FOLLOW_SELF"
+          ? "CONFLICT"
+          : error.code === "DATABASE_REQUIRED"
+            ? "INTERNAL_SERVER_ERROR"
+            : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
   if (error instanceof IdentityError) {
     const code =
       error.code === "PERSON_NOT_FOUND" ||
@@ -1324,6 +1367,19 @@ const publicRouter = router({
       );
       if (!performance) throw new TRPCError({ code: "NOT_FOUND" });
       return performance;
+    }),
+  playerIntelligence: publicProcedure
+    .input(z.object({ handle: z.string().trim().min(1).max(48) }))
+    .query(async ({ input }) => {
+      try {
+        const intelligence = await loadPublicPlayerIntelligenceByHandle(
+          input.handle,
+        );
+        if (!intelligence) throw new TRPCError({ code: "NOT_FOUND" });
+        return intelligence;
+      } catch (error) {
+        return throwDomainError(error);
+      }
     }),
   ratingLab: publicProcedure.query(() => loadPublicRatingLab()),
   worldRankings: publicProcedure.query(() => loadPublicWorldRankings()),
@@ -2797,6 +2853,134 @@ const playerRouter = router({
   settings: protectedProcedure
     .output(playerSettingsSchema)
     .query(({ ctx }) => getRepository().player.settings(ctx.actor!.personId)),
+  playerFollowState: protectedProcedure
+    .input(z.object({ playerPersonId: z.string().uuid() }))
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadPlayerFollowState({
+          followerPersonId: ctx.actor!.personId,
+          playerPersonId: input.playerPersonId,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  setPlayerFollow: protectedProcedure
+    .use(requireScope("social:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "player-follow-update",
+        capacity: 30,
+        refillPerMinute: 10,
+      }),
+    )
+    .input(
+      z.object({
+        playerPersonId: z.string().uuid(),
+        following: z.boolean(),
+        notifyRegistrations: z.boolean(),
+        notifyWatch: z.boolean(),
+        notifyResults: z.boolean(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.setPlayerFollow",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await setPlayerFollow({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  playerMediaStudio: protectedProcedure
+    .input(
+      z.object({ subjectPersonId: z.string().uuid().optional() }).optional(),
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadOwnPlayerMediaStudio({
+          actor: ctx.actor!,
+          subjectPersonId: input?.subjectPersonId,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  playerMediaUploadContext: protectedProcedure
+    .use(requireScope("profile:write"))
+    .input(
+      z.object({ subjectPersonId: z.string().uuid().optional() }).optional(),
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        return await playerMediaUploadContext({
+          actor: ctx.actor!,
+          subjectPersonId: input?.subjectPersonId,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  createPlayerMediaWorkflow: protectedProcedure
+    .use(requireScope("profile:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "player-media-workflow-create",
+        capacity: 6,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(
+      z.object({
+        subjectPersonId: z.string().uuid().optional(),
+        referenceImages: z
+          .array(
+            z.object({
+              url: publicHttpsUrlSchema,
+              kind: z.enum(["action", "portrait"]),
+            }),
+          )
+          .min(3)
+          .max(4),
+        brief: z.string().trim().max(1_000).optional(),
+        rightsConfirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.createPlayerMediaWorkflow",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createPlayerMediaWorkflow({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   inferPlayingExperience: protectedProcedure
     .input(
       z.object({
@@ -6725,6 +6909,210 @@ const adminRouter = router({
       return throwDomainError(error);
     }
   }),
+  playerIntelligence: superAdminProcedure
+    .input(
+      z
+        .object({
+          page: z.number().int().min(1).default(1),
+          pageSize: z.number().int().min(10).max(50).default(25),
+          query: z.string().trim().max(100).optional(),
+          gender: z.enum(["men", "women"]).optional(),
+          status: z
+            .enum(["all", "not-started", "review", "published", "failed"])
+            .default("all"),
+        })
+        .default({ page: 1, pageSize: 25, status: "all" }),
+    )
+    .query(async ({ input }) => {
+      try {
+        return await loadPlayerIntelligenceAdmin(input);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  playerIntelligenceDetail: superAdminProcedure
+    .input(z.object({ personId: z.string().uuid() }))
+    .query(async ({ input }) => {
+      try {
+        return await loadPlayerIntelligenceDetail(input.personId);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  researchPlayerProfile: superAdminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-player-intelligence-research",
+        capacity: 8,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(
+      z.object({
+        personId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.researchPlayerProfile",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await researchPlayerProfile({
+              actor: ctx.actor!,
+              personId: input.personId,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  researchRankedPlayers: superAdminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-player-intelligence-batch-research",
+        capacity: 2,
+        refillPerMinute: 0.1,
+      }),
+    )
+    .input(
+      z.object({
+        limit: z.number().int().min(1).max(10).default(4),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.researchRankedPlayers",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await researchRankedPlayers({
+              limit: input.limit,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  savePlayerPublicProfile: superAdminProcedure
+    .input(
+      z.object({
+        personId: z.string().uuid(),
+        publicationStatus: z.enum(["draft", "published"]),
+        shortBio: z.string().trim().max(700).optional(),
+        biography: z.string().trim().max(2_500).optional(),
+        countryCode: z.string().trim().min(2).max(3).optional(),
+        hometown: z.string().trim().max(180).optional(),
+        collegeName: z.string().trim().max(180).optional(),
+        collegeLogoUrl: publicHttpsUrlSchema.optional(),
+        playingRole: z.string().trim().max(80).optional(),
+        cutoutImageUrl: publicHttpsUrlSchema.optional(),
+        heroImageUrl: publicHttpsUrlSchema.optional(),
+        heroVideoUrl: publicHttpsUrlSchema.optional(),
+        imageAlt: z.string().trim().max(240).optional(),
+        careerStats: z.object({
+          events: z.number().int().nonnegative().optional(),
+          wins: z.number().int().nonnegative().optional(),
+          podiums: z.number().int().nonnegative().optional(),
+          gold: z.number().int().nonnegative().optional(),
+          silver: z.number().int().nonnegative().optional(),
+          bronze: z.number().int().nonnegative().optional(),
+          earningsMinor: z.number().int().nonnegative().optional(),
+          earningsCurrency: z.string().trim().length(3).optional(),
+        }),
+        links: z
+          .array(
+            z.object({
+              label: z.string().trim().min(1).max(120),
+              url: publicHttpUrlSchema,
+              kind: z.enum(["website", "instagram", "youtube", "news"]),
+            }),
+          )
+          .max(20),
+        news: z
+          .array(
+            z.object({
+              title: z.string().trim().min(1).max(240),
+              url: publicHttpUrlSchema,
+              publisher: z.string().trim().max(120).optional(),
+              publishedAt: z.string().trim().max(32).optional(),
+            }),
+          )
+          .max(20),
+        reason: z.string().trim().min(10).max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.savePlayerPublicProfile",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await savePlayerPublicProfile({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  reviewPlayerMediaWorkflow: superAdminProcedure
+    .input(
+      z.object({
+        workflowId: z.string().uuid(),
+        decision: z.enum(["review", "published", "rejected"]),
+        outputs: z
+          .array(
+            z.object({
+              url: publicHttpsUrlSchema,
+              kind: z.enum(["cutout", "poster", "background"]),
+              jobId: z.string().trim().max(200).optional(),
+            }),
+          )
+          .max(8),
+        reason: z.string().trim().min(10).max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.reviewPlayerMediaWorkflow",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await reviewPlayerMediaWorkflow({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   reviewMatchHistoryDispute: adminProcedure
     .input(
       z.object({

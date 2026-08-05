@@ -3,6 +3,7 @@
 import {
   Bell,
   CreditCard,
+  Images,
   ShieldCheck,
   Sparkles,
   UserRound,
@@ -15,6 +16,7 @@ const baseSections = [
   { id: "membership", label: "Membership", icon: CreditCard },
   { id: "profile", label: "Profile", icon: UserRound },
   { id: "playing-profile", label: "Player details", icon: Sparkles },
+  { id: "player-media", label: "Player artwork", icon: Images },
   { id: "household", label: "Household", icon: Users },
 ] as const;
 
