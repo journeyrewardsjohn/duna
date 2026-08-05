@@ -30,6 +30,7 @@ import {
 import { and, asc, desc, eq, inArray, lte, ne, sql } from "drizzle-orm";
 import { stableHash } from "../canonical";
 import { scopesForRoles, type ApiActor } from "../context";
+import { venueWallTimeToUtc } from "../court-checkout";
 import { publishImportedProfessionalActivities } from "../live-activities";
 import { applyApprovedImportedMatchRating } from "../match-service";
 import { assertProfileSubjectAuthority } from "../profile-onboarding";
@@ -78,6 +79,7 @@ export class SandDataServiceError extends Error {
       | "CLAIM_CONFLICT"
       | "INVALID_PROFILE_URL"
       | "INVALID_WATCH_OPTION"
+      | "INVALID_PROFESSIONAL_EVENT"
       | "PROFESSIONAL_REQUIRED"
       | "SUPER_ADMIN_REQUIRED",
     message: string,
@@ -114,6 +116,9 @@ function preserveEditorialPayload(
       : {}),
     ...(Array.isArray(previous.rosterOverrides)
       ? { rosterOverrides: previous.rosterOverrides }
+      : {}),
+    ...(previous.professionalEditorial
+      ? { professionalEditorial: previous.professionalEditorial }
       : {}),
   };
 }
@@ -1493,6 +1498,18 @@ export async function loadSandDataOverview() {
         )
       : undefined;
   const sourceById = new Map(sources.map((source) => [source.id, source]));
+  const linkedPlayerBySourceIdentity = new Map(
+    linkedMappingRows.map((mapping) => [
+      `${mapping.sourceId}:${mapping.externalPersonId}`,
+      mapping.personId && mapping.personDisplayName && mapping.personHandle
+        ? {
+            id: mapping.personId,
+            displayName: mapping.personDisplayName,
+            handle: mapping.personHandle,
+          }
+        : undefined,
+    ]),
+  );
   return {
     sources: sources.map((source) => ({
       id: source.id,
@@ -1565,38 +1582,77 @@ export async function loadSandDataOverview() {
       source: sourceById.get(match.sourceId)?.name ?? "Unknown source",
       possibleDuplicateOfId: match.possibleDuplicateOfId ?? undefined,
     })),
-    events: events.map((event) => ({
-      id: event.id,
-      externalEventId: event.externalEventId,
-      name: event.name,
-      location: event.location ?? undefined,
-      category: event.category ?? undefined,
-      genderCategory: event.genderCategory,
-      startsOn: event.startsOn ?? undefined,
-      endsOn: event.endsOn ?? undefined,
-      status: event.status,
-      live: event.live,
-      teamCount: event.teamCount,
-      matchCount: event.matchCount,
-      lastSyncedAt: event.lastSyncedAt.toISOString(),
-      watchOptions: watchOptionsFromPayload(event.rawPayload),
-      matches: professionalMatchRows
-        .filter(
-          (match) =>
-            match.sourceId === event.sourceId &&
-            match.externalEventId === event.externalEventId,
-        )
-        .map((match) => ({
-          id: match.id,
-          label:
-            match.participants
-              .map((participant) => participant.name)
-              .join(" / ") || match.title,
-          roundLabel: match.roundLabel ?? undefined,
-          playedAt: match.playedAt?.toISOString(),
-          watchOptions: watchOptionsFromPayload(match.rawPayload),
-        })),
-    })),
+    events: events.map((event) => {
+      const effective = effectiveProfessionalEvent(event);
+      return {
+        id: event.id,
+        externalEventId: event.externalEventId,
+        sourceSlug: sourceById.get(event.sourceId)?.slug ?? "unknown",
+        sourceName: sourceById.get(event.sourceId)?.name ?? "Unknown source",
+        sourceUrl: event.sourceUrl,
+        publicPath: `/events/${professionalEventSlug(event)}`,
+        name: effective.name,
+        location: effective.location,
+        category: effective.category,
+        genderCategory: event.genderCategory,
+        startsOn: effective.startsOn,
+        endsOn: effective.endsOn,
+        status: event.status,
+        live: event.live,
+        teamCount: event.teamCount,
+        matchCount: event.matchCount,
+        lastSyncedAt: event.lastSyncedAt.toISOString(),
+        avpSeason: optionalNumber(unknownRecord(event.rawPayload).season),
+        scraped: {
+          name: event.name,
+          location: event.location ?? undefined,
+          category: event.category ?? undefined,
+          startsOn: event.startsOn ?? undefined,
+          endsOn: event.endsOn ?? undefined,
+        },
+        editorial: effective.editorial,
+        watchOptions: watchOptionsFromPayload(event.rawPayload),
+        matches: professionalMatchRows
+          .filter(
+            (match) =>
+              match.sourceId === event.sourceId &&
+              match.externalEventId === event.externalEventId,
+          )
+          .map((match) => ({
+            id: match.id,
+            label:
+              match.participants
+                .map((participant) => participant.name)
+                .join(" / ") || match.title,
+            roundLabel: match.roundLabel ?? undefined,
+            playedAt: match.playedAt?.toISOString(),
+            gender:
+              objectString(match.rawPayload, "gender") === "women" ||
+              (!objectString(match.rawPayload, "gender") &&
+                match.roundLabel?.toLowerCase().includes("women"))
+                ? ("women" as const)
+                : ("men" as const),
+            teamAName:
+              objectString(match.rawPayload, "teamAName") ??
+              match.participants
+                .filter((participant) => participant.side === "A")
+                .map((participant) => participant.name)
+                .join(" / "),
+            teamBName:
+              objectString(match.rawPayload, "teamBName") ??
+              match.participants
+                .filter((participant) => participant.side === "B")
+                .map((participant) => participant.name)
+                .join(" / "),
+            time: objectString(match.rawPayload, "time"),
+            court: objectString(match.rawPayload, "court"),
+            timezone:
+              objectString(match.rawPayload, "timezone") ??
+              effective.editorial.timezone,
+            watchOptions: watchOptionsFromPayload(match.rawPayload),
+          })),
+      };
+    }),
     avpTeams: [
       ...new Map(
         events
@@ -1617,7 +1673,20 @@ export async function loadSandDataOverview() {
                   entry.entryTag === "women"
                     ? ("women" as const)
                     : ("men" as const),
-                players: entry.players,
+                standing: {
+                  rank: entry.seed,
+                  matchesPlayed: entry.matchesPlayed,
+                  wins: entry.wins,
+                  losses: entry.losses,
+                  matchPoints: entry.matchPoints,
+                  winPercentage: entry.winPercentage,
+                },
+                players: entry.players.map((player) => ({
+                  ...player,
+                  mappedPlayer: linkedPlayerBySourceIdentity.get(
+                    `${event.sourceId}:${player.externalPersonId}`,
+                  ),
+                })),
               }));
           })
           .map((team) => [team.key, team] as const),
@@ -2353,7 +2422,11 @@ export async function loadPublicProCoverage() {
       .limit(1),
   ]);
   const eventRows = storedEventRows
-    .map((row) => ({ ...row.event, sourceSlug: row.sourceSlug }))
+    .map((row) => ({
+      ...row.event,
+      sourceSlug: row.sourceSlug,
+      effective: effectiveProfessionalEvent(row.event),
+    }))
     .sort((a, b) => {
       if (a.live !== b.live) return a.live ? -1 : 1;
       if (a.status !== b.status) {
@@ -2364,9 +2437,13 @@ export async function loadPublicProCoverage() {
         );
       }
       if (a.status === "completed") {
-        return (b.startsOn ?? "").localeCompare(a.startsOn ?? "");
+        return (b.effective.startsOn ?? "").localeCompare(
+          a.effective.startsOn ?? "",
+        );
       }
-      return (a.startsOn ?? "9999").localeCompare(b.startsOn ?? "9999");
+      return (a.effective.startsOn ?? "9999").localeCompare(
+        b.effective.startsOn ?? "9999",
+      );
     });
   const rankingDate = latestDate[0]?.date;
   const matchPersonIds = [
@@ -2445,12 +2522,12 @@ export async function loadPublicProCoverage() {
       id: event.id,
       externalEventId: event.externalEventId,
       slug: professionalEventSlug(event),
-      name: event.name,
-      location: event.location ?? undefined,
-      category: event.category ?? undefined,
+      name: event.effective.name,
+      location: event.effective.location,
+      category: event.effective.category,
       genderCategory: event.genderCategory,
-      startsOn: event.startsOn ?? undefined,
-      endsOn: event.endsOn ?? undefined,
+      startsOn: event.effective.startsOn,
+      endsOn: event.effective.endsOn,
       status: event.status,
       live: event.live,
       teamCount: event.teamCount,
@@ -2460,7 +2537,7 @@ export async function loadPublicProCoverage() {
         event.sourceSlug === "avp-league"
           ? ("avp" as const)
           : ("fivb" as const),
-      tour: professionalTour(event.sourceSlug, event.category),
+      tour: professionalTour(event.sourceSlug, event.effective.category),
     })),
     matches: matchRows.map((match) => {
       const event = eventRows.find(
@@ -2490,7 +2567,10 @@ export async function loadPublicProCoverage() {
                 : event.live
                   ? ("live" as const)
                   : ("scheduled" as const),
-              tour: professionalTour(event.sourceSlug, event.category),
+              tour: professionalTour(
+                event.sourceSlug,
+                event.effective.category,
+              ),
             }
           : {}),
       };
@@ -2587,6 +2667,9 @@ type PublicProMatch = {
   readonly sourceUrl?: string;
   readonly time?: string;
   readonly court?: string;
+  readonly timezone?: string;
+  readonly leagueTeamAName?: string;
+  readonly leagueTeamBName?: string;
   readonly teamA: ProTeam;
   readonly teamB: ProTeam;
   readonly sets: readonly { readonly a: number; readonly b: number }[];
@@ -2611,6 +2694,127 @@ type PublicWatchOption = {
   readonly url?: string;
   readonly channelName?: string;
 };
+
+type ProfessionalEventMedia = {
+  readonly id: string;
+  readonly kind: "poster" | "hero-image" | "hero-video";
+  readonly url: string;
+  readonly posterUrl?: string;
+  readonly alt: string;
+  readonly caption?: string;
+  readonly featured: boolean;
+};
+
+type ProfessionalEventEditorial = {
+  readonly overrides: {
+    readonly name?: string;
+    readonly location?: string;
+    readonly category?: string;
+    readonly startsOn?: string;
+    readonly endsOn?: string;
+  };
+  readonly summary?: string;
+  readonly venueName?: string;
+  readonly venueAddress?: string;
+  readonly timezone?: string;
+  readonly media: readonly ProfessionalEventMedia[];
+  readonly updatedAt?: string;
+};
+
+function professionalEventEditorialFromPayload(
+  value: unknown,
+): ProfessionalEventEditorial {
+  const payload = unknownRecord(value);
+  const stored = unknownRecord(payload.professionalEditorial);
+  const overrides = unknownRecord(stored.overrides);
+  const optionalDate = (candidate: unknown) => {
+    const value = optionalSnapshotString(candidate);
+    return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+  };
+  const media = Array.isArray(stored.media)
+    ? stored.media.flatMap<ProfessionalEventMedia>((candidate) => {
+        const row = unknownRecord(candidate);
+        const id = optionalSnapshotString(row.id);
+        const url = optionalSnapshotString(row.url);
+        const kind =
+          row.kind === "poster" ||
+          row.kind === "hero-image" ||
+          row.kind === "hero-video"
+            ? row.kind
+            : undefined;
+        if (!id || !url || !kind) return [];
+        return [
+          {
+            id,
+            kind,
+            url,
+            alt: optionalSnapshotString(row.alt) ?? "Professional event media",
+            featured: row.featured === true,
+            ...(optionalSnapshotString(row.posterUrl)
+              ? { posterUrl: optionalSnapshotString(row.posterUrl) }
+              : {}),
+            ...(optionalSnapshotString(row.caption)
+              ? { caption: optionalSnapshotString(row.caption) }
+              : {}),
+          },
+        ];
+      })
+    : [];
+  return {
+    overrides: {
+      ...(optionalSnapshotString(overrides.name)
+        ? { name: optionalSnapshotString(overrides.name) }
+        : {}),
+      ...(optionalSnapshotString(overrides.location)
+        ? { location: optionalSnapshotString(overrides.location) }
+        : {}),
+      ...(optionalSnapshotString(overrides.category)
+        ? { category: optionalSnapshotString(overrides.category) }
+        : {}),
+      ...(optionalDate(overrides.startsOn)
+        ? { startsOn: optionalDate(overrides.startsOn) }
+        : {}),
+      ...(optionalDate(overrides.endsOn)
+        ? { endsOn: optionalDate(overrides.endsOn) }
+        : {}),
+    },
+    media,
+    ...(optionalSnapshotString(stored.summary)
+      ? { summary: optionalSnapshotString(stored.summary) }
+      : {}),
+    ...(optionalSnapshotString(stored.venueName)
+      ? { venueName: optionalSnapshotString(stored.venueName) }
+      : {}),
+    ...(optionalSnapshotString(stored.venueAddress)
+      ? { venueAddress: optionalSnapshotString(stored.venueAddress) }
+      : {}),
+    ...(optionalSnapshotString(stored.timezone)
+      ? { timezone: optionalSnapshotString(stored.timezone) }
+      : {}),
+    ...(optionalSnapshotString(stored.updatedAt)
+      ? { updatedAt: optionalSnapshotString(stored.updatedAt) }
+      : {}),
+  };
+}
+
+function effectiveProfessionalEvent(event: {
+  readonly name: string;
+  readonly location?: string | null;
+  readonly category?: string | null;
+  readonly startsOn?: string | null;
+  readonly endsOn?: string | null;
+  readonly rawPayload: unknown;
+}) {
+  const editorial = professionalEventEditorialFromPayload(event.rawPayload);
+  return {
+    name: editorial.overrides.name ?? event.name,
+    location: editorial.overrides.location ?? event.location ?? undefined,
+    category: editorial.overrides.category ?? event.category ?? undefined,
+    startsOn: editorial.overrides.startsOn ?? event.startsOn ?? undefined,
+    endsOn: editorial.overrides.endsOn ?? event.endsOn ?? undefined,
+    editorial,
+  };
+}
 
 type RawProfessionalTeamEntry = {
   readonly externalTeamId: string;
@@ -2923,12 +3127,6 @@ export async function saveProfessionalWatchOption(input: {
   }
   const url = validatedWatchUrl(input.url, input.kind);
   const channelName = input.channelName?.trim() || undefined;
-  if (input.kind === "youtube" && !url) {
-    throw new SandDataServiceError(
-      "INVALID_WATCH_OPTION",
-      "Add the YouTube link for this broadcast.",
-    );
-  }
   if (input.kind === "live-tv" && !channelName) {
     throw new SandDataServiceError(
       "INVALID_WATCH_OPTION",
@@ -3007,6 +3205,273 @@ export async function saveProfessionalWatchOption(input: {
     professionalEventId: event.id,
     importedMatchId: input.importedMatchId,
   };
+}
+
+function validatedPublicUrl(value: string, label: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new SandDataServiceError(
+      "INVALID_PROFESSIONAL_EVENT",
+      `${label} must be a complete http or https URL.`,
+    );
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new SandDataServiceError(
+      "INVALID_PROFESSIONAL_EVENT",
+      `${label} must use http or https.`,
+    );
+  }
+  return parsed.toString();
+}
+
+function validatedTimeZone(value: string | undefined): string | undefined {
+  if (!value?.trim()) return undefined;
+  const timeZone = value.trim();
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format(new Date());
+  } catch {
+    throw new SandDataServiceError(
+      "INVALID_PROFESSIONAL_EVENT",
+      "Choose a valid IANA timezone such as America/Chicago.",
+    );
+  }
+  return timeZone;
+}
+
+export async function loadProfessionalEventMediaUploadContext(input: {
+  readonly actor: ApiActor;
+  readonly professionalEventId: string;
+}) {
+  requireDatabase();
+  requireSuperAdmin(input.actor);
+  const event = await getDatabase().query.professionalEvents.findFirst({
+    where: eq(professionalEvents.id, input.professionalEventId),
+  });
+  if (!event) {
+    throw new SandDataServiceError(
+      "MATCH_NOT_FOUND",
+      "The professional event was not found.",
+    );
+  }
+  return { professionalEventId: event.id };
+}
+
+export async function saveProfessionalEventEditorial(input: {
+  readonly actor: ApiActor;
+  readonly professionalEventId: string;
+  readonly overrides: {
+    readonly name?: string;
+    readonly location?: string;
+    readonly category?: string;
+    readonly startsOn?: string;
+    readonly endsOn?: string;
+  };
+  readonly summary?: string;
+  readonly venueName?: string;
+  readonly venueAddress?: string;
+  readonly timezone?: string;
+  readonly reason: string;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  requireSuperAdmin(input.actor);
+  const now = input.now ?? new Date();
+  const database = getDatabase();
+  const event = await database.query.professionalEvents.findFirst({
+    where: eq(professionalEvents.id, input.professionalEventId),
+  });
+  if (!event) {
+    throw new SandDataServiceError(
+      "MATCH_NOT_FOUND",
+      "The professional event was not found.",
+    );
+  }
+  if (
+    input.overrides.startsOn &&
+    input.overrides.endsOn &&
+    input.overrides.endsOn < input.overrides.startsOn
+  ) {
+    throw new SandDataServiceError(
+      "INVALID_PROFESSIONAL_EVENT",
+      "The event end date must be on or after its start date.",
+    );
+  }
+  const previous = professionalEventEditorialFromPayload(event.rawPayload);
+  const professionalEditorial: ProfessionalEventEditorial = {
+    overrides: {
+      ...(input.overrides.name?.trim()
+        ? { name: input.overrides.name.trim() }
+        : {}),
+      ...(input.overrides.location?.trim()
+        ? { location: input.overrides.location.trim() }
+        : {}),
+      ...(input.overrides.category?.trim()
+        ? { category: input.overrides.category.trim() }
+        : {}),
+      ...(input.overrides.startsOn
+        ? { startsOn: input.overrides.startsOn }
+        : {}),
+      ...(input.overrides.endsOn ? { endsOn: input.overrides.endsOn } : {}),
+    },
+    media: previous.media,
+    updatedAt: now.toISOString(),
+    ...(input.summary?.trim() ? { summary: input.summary.trim() } : {}),
+    ...(input.venueName?.trim() ? { venueName: input.venueName.trim() } : {}),
+    ...(input.venueAddress?.trim()
+      ? { venueAddress: input.venueAddress.trim() }
+      : {}),
+    ...(validatedTimeZone(input.timezone)
+      ? { timezone: validatedTimeZone(input.timezone) }
+      : {}),
+  };
+  const rawPayload = unknownRecord(event.rawPayload);
+  await database
+    .update(professionalEvents)
+    .set({
+      rawPayload: { ...rawPayload, professionalEditorial },
+      updatedAt: now,
+    })
+    .where(eq(professionalEvents.id, event.id));
+  await database.insert(auditLog).values({
+    actorPersonId: input.actor.personId,
+    actorType: "person",
+    action: "professional-event.editorial.saved",
+    entityType: "professional-event",
+    entityId: event.id,
+    beforeHash: stableHash(previous),
+    afterHash: stableHash(professionalEditorial),
+    reason: input.reason,
+    createdAt: now,
+  });
+  return professionalEditorial;
+}
+
+export async function saveProfessionalEventMedia(input: {
+  readonly actor: ApiActor;
+  readonly professionalEventId: string;
+  readonly kind: ProfessionalEventMedia["kind"];
+  readonly url: string;
+  readonly posterUrl?: string;
+  readonly alt: string;
+  readonly caption?: string;
+  readonly featured: boolean;
+  readonly reason: string;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  requireSuperAdmin(input.actor);
+  const now = input.now ?? new Date();
+  const database = getDatabase();
+  const event = await database.query.professionalEvents.findFirst({
+    where: eq(professionalEvents.id, input.professionalEventId),
+  });
+  if (!event) {
+    throw new SandDataServiceError(
+      "MATCH_NOT_FOUND",
+      "The professional event was not found.",
+    );
+  }
+  const previous = professionalEventEditorialFromPayload(event.rawPayload);
+  const media: ProfessionalEventMedia = {
+    id: crypto.randomUUID(),
+    kind: input.kind,
+    url: validatedPublicUrl(input.url, "Media URL"),
+    alt: input.alt.trim(),
+    featured: input.featured,
+    ...(input.posterUrl
+      ? { posterUrl: validatedPublicUrl(input.posterUrl, "Video poster URL") }
+      : {}),
+    ...(input.caption?.trim() ? { caption: input.caption.trim() } : {}),
+  };
+  const professionalEditorial: ProfessionalEventEditorial = {
+    ...previous,
+    media: [
+      ...previous.media.map((item) =>
+        input.featured ? { ...item, featured: false } : item,
+      ),
+      media,
+    ],
+    updatedAt: now.toISOString(),
+  };
+  await database
+    .update(professionalEvents)
+    .set({
+      rawPayload: {
+        ...unknownRecord(event.rawPayload),
+        professionalEditorial,
+      },
+      updatedAt: now,
+    })
+    .where(eq(professionalEvents.id, event.id));
+  await database.insert(auditLog).values({
+    actorPersonId: input.actor.personId,
+    actorType: "person",
+    action: "professional-event.media.saved",
+    entityType: "professional-event",
+    entityId: event.id,
+    afterHash: stableHash(media),
+    reason: input.reason,
+    createdAt: now,
+  });
+  return media;
+}
+
+export async function removeProfessionalEventMedia(input: {
+  readonly actor: ApiActor;
+  readonly professionalEventId: string;
+  readonly mediaId: string;
+  readonly reason: string;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  requireSuperAdmin(input.actor);
+  const now = input.now ?? new Date();
+  const database = getDatabase();
+  const event = await database.query.professionalEvents.findFirst({
+    where: eq(professionalEvents.id, input.professionalEventId),
+  });
+  if (!event) {
+    throw new SandDataServiceError(
+      "MATCH_NOT_FOUND",
+      "The professional event was not found.",
+    );
+  }
+  const previous = professionalEventEditorialFromPayload(event.rawPayload);
+  const removed = previous.media.find((item) => item.id === input.mediaId);
+  if (!removed) {
+    throw new SandDataServiceError(
+      "INVALID_PROFESSIONAL_EVENT",
+      "That event media item no longer exists.",
+    );
+  }
+  const professionalEditorial: ProfessionalEventEditorial = {
+    ...previous,
+    media: previous.media.filter((item) => item.id !== input.mediaId),
+    updatedAt: now.toISOString(),
+  };
+  await database
+    .update(professionalEvents)
+    .set({
+      rawPayload: {
+        ...unknownRecord(event.rawPayload),
+        professionalEditorial,
+      },
+      updatedAt: now,
+    })
+    .where(eq(professionalEvents.id, event.id));
+  await database.insert(auditLog).values({
+    actorPersonId: input.actor.personId,
+    actorType: "person",
+    action: "professional-event.media.removed",
+    entityType: "professional-event",
+    entityId: event.id,
+    beforeHash: stableHash(removed),
+    reason: input.reason,
+    createdAt: now,
+  });
+  return { removed: true };
 }
 
 export async function removeProfessionalWatchOption(input: {
@@ -3095,6 +3560,226 @@ export async function removeProfessionalWatchOption(input: {
     createdAt: now,
   });
   return { optionId: input.optionId, removed: true as const };
+}
+
+export async function saveProfessionalMatchSchedule(input: {
+  readonly actor: ApiActor;
+  readonly professionalEventId: string;
+  readonly importedMatchId?: string;
+  readonly gender: "men" | "women";
+  readonly teamAName: string;
+  readonly teamBName: string;
+  readonly localStartsAt: string;
+  readonly timezone: string;
+  readonly roundLabel?: string;
+  readonly court?: string;
+  readonly reason: string;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  requireSuperAdmin(input.actor);
+  const now = input.now ?? new Date();
+  const database = getDatabase();
+  const event = await database.query.professionalEvents.findFirst({
+    where: eq(professionalEvents.id, input.professionalEventId),
+  });
+  if (!event) {
+    throw new SandDataServiceError(
+      "MATCH_NOT_FOUND",
+      "The professional event was not found.",
+    );
+  }
+  const source = await database.query.importSources.findFirst({
+    where: eq(importSources.id, event.sourceId),
+  });
+  if (source?.slug !== "avp-league") {
+    throw new SandDataServiceError(
+      "INVALID_PROFESSIONAL_EVENT",
+      "Manual schedule creation is currently available for AVP League events.",
+    );
+  }
+  if (
+    normalizePersonName(input.teamAName) ===
+    normalizePersonName(input.teamBName)
+  ) {
+    throw new SandDataServiceError(
+      "INVALID_PROFESSIONAL_EVENT",
+      "Choose two different AVP teams.",
+    );
+  }
+  const timeZone = validatedTimeZone(input.timezone)!;
+  let playedAt: Date;
+  try {
+    playedAt = venueWallTimeToUtc(input.localStartsAt, timeZone);
+  } catch {
+    throw new SandDataServiceError(
+      "INVALID_PROFESSIONAL_EVENT",
+      "Choose a valid local match date and time.",
+    );
+  }
+  const entries = rawProfessionalTeamEntries(event.rawPayload).filter(
+    (entry) => entry.list === "league" && entry.entryTag === input.gender,
+  );
+  const findTeam = (name: string) =>
+    entries.find(
+      (entry) => normalizePersonName(entry.label) === normalizePersonName(name),
+    );
+  const teamA = findTeam(input.teamAName);
+  const teamB = findTeam(input.teamBName);
+  if (!teamA || !teamB) {
+    throw new SandDataServiceError(
+      "INVALID_PROFESSIONAL_EVENT",
+      "Choose teams from the synced AVP season roster for this division.",
+    );
+  }
+  const externalPersonIds = [
+    ...teamA.players.map((player) => player.externalPersonId),
+    ...teamB.players.map((player) => player.externalPersonId),
+  ];
+  const linkRows = await database
+    .select({
+      externalPersonId: importLinks.externalPersonId,
+      personId: importLinks.personId,
+    })
+    .from(importLinks)
+    .where(
+      and(
+        eq(importLinks.sourceId, event.sourceId),
+        inArray(importLinks.externalPersonId, externalPersonIds),
+      ),
+    );
+  const personIdByExternalId = new Map(
+    linkRows.flatMap((link) =>
+      link.personId ? [[link.externalPersonId, link.personId] as const] : [],
+    ),
+  );
+  const participants = [
+    ...teamA.players.map((player) => ({ ...player, side: "A" as const })),
+    ...teamB.players.map((player) => ({ ...player, side: "B" as const })),
+  ].map((player) => ({
+    externalPersonId: player.externalPersonId,
+    name: player.displayName,
+    side: player.side,
+    ...(personIdByExternalId.get(player.externalPersonId)
+      ? { personId: personIdByExternalId.get(player.externalPersonId) }
+      : {}),
+  }));
+  const effective = effectiveProfessionalEvent(event);
+  const time = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  }).format(playedAt);
+  const season = optionalNumber(unknownRecord(event.rawPayload).season);
+  const defaultRoundLabel = `${input.gender === "women" ? "Women" : "Men"}${season ? ` · ${season}` : ""}`;
+  const scheduleIdentity = {
+    professionalEventId: event.id,
+    gender: input.gender,
+    teamAName: teamA.label,
+    teamBName: teamB.label,
+    localStartsAt: input.localStartsAt,
+  };
+  const externalMatchId = `admin:${event.externalEventId}:${stableHash(scheduleIdentity).slice(0, 24)}`;
+  const nextRawPayload = {
+    season,
+    gender: input.gender,
+    teamAName: teamA.label,
+    teamBName: teamB.label,
+    time,
+    timezone: timeZone,
+    localStartsAt: input.localStartsAt,
+    adminScheduled: true,
+    ...(input.court?.trim() ? { court: input.court.trim() } : {}),
+  };
+  let previousMatch = input.importedMatchId
+    ? await database.query.importedMatches.findFirst({
+        where: eq(importedMatches.id, input.importedMatchId),
+      })
+    : await database.query.importedMatches.findFirst({
+        where: and(
+          eq(importedMatches.sourceId, event.sourceId),
+          eq(importedMatches.externalMatchId, externalMatchId),
+        ),
+      });
+  if (
+    previousMatch &&
+    (previousMatch.sourceId !== event.sourceId ||
+      previousMatch.externalEventId !== event.externalEventId)
+  ) {
+    throw new SandDataServiceError(
+      "MATCH_NOT_FOUND",
+      "The selected match does not belong to this professional event.",
+    );
+  }
+  const roundLabel = input.roundLabel?.trim() || defaultRoundLabel;
+  if (previousMatch) {
+    const rawPayload = unknownRecord(previousMatch.rawPayload);
+    await database
+      .update(importedMatches)
+      .set({
+        title: effective.name,
+        roundLabel,
+        location:
+          effective.editorial.venueName ?? effective.location ?? undefined,
+        genderCategory: input.gender,
+        playedAt,
+        participants,
+        rawPayload: preserveEditorialPayload(
+          { ...rawPayload, ...nextRawPayload },
+          rawPayload,
+        ),
+        updatedAt: now,
+      })
+      .where(eq(importedMatches.id, previousMatch.id));
+  } else {
+    const sourceFingerprint = stableHash({
+      sourceId: event.sourceId,
+      externalMatchId,
+    });
+    const [created] = await database
+      .insert(importedMatches)
+      .values({
+        sourceId: event.sourceId,
+        externalMatchId,
+        externalEventId: event.externalEventId,
+        sourceUrl: event.sourceUrl,
+        sourceFingerprint,
+        crossSourceFingerprint: stableHash(scheduleIdentity),
+        title: effective.name,
+        roundLabel,
+        location:
+          effective.editorial.venueName ?? effective.location ?? undefined,
+        genderCategory: input.gender,
+        playedAt,
+        participants,
+        sets: [],
+        importState: "staged",
+        rawPayload: nextRawPayload,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    previousMatch = created;
+  }
+  if (!previousMatch) throw new Error("Could not save professional match");
+  await database.insert(auditLog).values({
+    actorPersonId: input.actor.personId,
+    actorType: "person",
+    action: input.importedMatchId
+      ? "professional-match.schedule.updated"
+      : "professional-match.schedule.created",
+    entityType: "imported-match",
+    entityId: previousMatch.id,
+    afterHash: stableHash({ scheduleIdentity, timeZone, roundLabel }),
+    reason: input.reason,
+    createdAt: now,
+  });
+  return {
+    id: previousMatch.id,
+    professionalEventId: event.id,
+    playedAt: playedAt.toISOString(),
+    time,
+  };
 }
 
 export async function saveAvpRosterAssignment(input: {
@@ -3536,6 +4221,7 @@ export async function loadPublicProEvent(slug: string) {
     .where(eq(importSources.id, event.sourceId))
     .limit(1);
   const sourceSlug = sourceRows[0]?.slug ?? "fivb-12ndr";
+  const effective = effectiveProfessionalEvent(event);
 
   const matchRows = await database
     .select()
@@ -3720,6 +4406,20 @@ export async function loadPublicProEvent(slug: string) {
       ...(objectString(match.rawPayload, "court")
         ? { court: objectString(match.rawPayload, "court") }
         : {}),
+      ...((objectString(match.rawPayload, "timezone") ??
+      effective.editorial.timezone)
+        ? {
+            timezone:
+              objectString(match.rawPayload, "timezone") ??
+              effective.editorial.timezone,
+          }
+        : {}),
+      ...(objectString(match.rawPayload, "teamAName")
+        ? { leagueTeamAName: objectString(match.rawPayload, "teamAName") }
+        : {}),
+      ...(objectString(match.rawPayload, "teamBName")
+        ? { leagueTeamBName: objectString(match.rawPayload, "teamBName") }
+        : {}),
       teamA,
       teamB,
       sets: match.sets,
@@ -3787,15 +4487,15 @@ export async function loadPublicProEvent(slug: string) {
     id: event.id,
     slug: eventSlug,
     externalEventId: event.externalEventId,
-    name: event.name,
-    location: event.location ?? undefined,
+    name: effective.name,
+    location: effective.location,
     countryCode: event.countryCode ?? undefined,
-    category: event.category ?? undefined,
+    category: effective.category,
     source: professionalSource(sourceSlug),
-    tour: professionalTour(sourceSlug, event.category),
+    tour: professionalTour(sourceSlug, effective.category),
     genderCategory: event.genderCategory,
-    startsOn: event.startsOn ?? undefined,
-    endsOn: event.endsOn ?? undefined,
+    startsOn: effective.startsOn,
+    endsOn: effective.endsOn,
     status: event.status,
     live: event.live,
     teamCount:
@@ -3807,6 +4507,13 @@ export async function loadPublicProEvent(slug: string) {
     lastSyncedAt: event.lastSyncedAt.toISOString(),
     teamEntries: publicTeamEntries,
     avpLeague,
+    editorial: {
+      summary: effective.editorial.summary,
+      venueName: effective.editorial.venueName,
+      venueAddress: effective.editorial.venueAddress,
+      timezone: effective.editorial.timezone,
+      media: effective.editorial.media,
+    },
     watchOptions: eventWatchOptions,
     sibling: sibling
       ? {

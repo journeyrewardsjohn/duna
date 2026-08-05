@@ -49,7 +49,7 @@ import {
   type OperatorActionState,
 } from "@/app/actions";
 import { createBrandMediaPath, optimizeImageUpload } from "@/lib/media-storage";
-import { PlaceAddressFields } from "./place-address-fields";
+import { AddressEntry } from "./place-address-fields";
 
 const initialState: OperatorActionState = { status: "idle", message: "" };
 
@@ -2770,7 +2770,7 @@ function TaxSettingsEditor({
               name="legalName"
             />
           </label>
-          <PlaceAddressFields
+          <AddressEntry
             initial={{
               googlePlaceId: workspace.organization.googlePlaceId,
               addressLine1: workspace.organization.addressLine1,

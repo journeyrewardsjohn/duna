@@ -35,6 +35,9 @@ import {
   processPlayerSourceConnection,
   processSandAutoApproveMatch,
 } from "./sand-data/service";
+import { connectAccountMoneyReady } from "./stripe-connect";
+
+export { connectAccountMoneyReady } from "./stripe-connect";
 
 export type WorkflowStatus =
   "queued" | "running" | "retry" | "succeeded" | "failed";
@@ -401,14 +404,6 @@ function connectAccountTransfersReady(
     Readonly<Record<string, unknown>> | undefined;
   return (
     capabilities?.transfers === "active" && object.payouts_enabled === true
-  );
-}
-
-export function connectAccountMoneyReady(
-  object: Readonly<Record<string, unknown>>,
-): boolean {
-  return (
-    object.charges_enabled === true || connectAccountTransfersReady(object)
   );
 }
 

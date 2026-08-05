@@ -57,11 +57,15 @@ export async function generateMetadata({
     caller.public.eventBySlug({ slug }).catch(() => undefined),
     caller.public.proEvent({ slug }).catch(() => undefined),
   ]);
+  const proSocialImage =
+    proEvent?.editorial.media.find((item) => item.kind !== "hero-video")?.url ??
+    proEvent?.editorial.media.find((item) => item.posterUrl)?.posterUrl;
   return {
     title: event?.title ?? proEvent?.name ?? "Event",
     description:
       event?.shortSummary ??
       event?.description ??
+      proEvent?.editorial.summary ??
       (proEvent
         ? `Live standings, pools, bracket, results, and predictions for ${proEvent.name}.`
         : undefined),
@@ -76,7 +80,9 @@ export async function generateMetadata({
               defaultEventMedia(event.kind, event.id).path,
           ],
         }
-      : undefined,
+      : proSocialImage
+        ? { images: [proSocialImage] }
+        : undefined,
   };
 }
 

@@ -161,6 +161,13 @@ export interface WorkOSAccessTokenClaims extends JWTPayload {
   readonly roles?: string[];
 }
 
+export function isWorkOSAccessTokenForClient(
+  claims: WorkOSAccessTokenClaims,
+  clientId: string,
+): claims is WorkOSAccessTokenClaims & { readonly sub: string } {
+  return Boolean(claims.sub && claims.client_id === clientId);
+}
+
 function getWorkOSClient(): WorkOS {
   const credentials = resolveWorkOSCredentials();
   if (!credentials) {
@@ -191,13 +198,12 @@ export async function verifyWorkOSAccessToken(
   const { payload } = await jwtVerify(
     token,
     getWorkOSJwks(client, credentials.clientId),
-    { issuer: "https://api.workos.com" },
   );
   const claims = payload as WorkOSAccessTokenClaims;
-  if (!claims.sub || claims.client_id !== credentials.clientId) {
+  if (!isWorkOSAccessTokenForClient(claims, credentials.clientId)) {
     throw new Error("WorkOS access token is invalid");
   }
-  return claims as WorkOSAccessTokenClaims & { readonly sub: string };
+  return claims;
 }
 
 export function workOSAccessTokenExpiresAt(token: string): number {
@@ -518,7 +524,11 @@ export async function createApiContextFromRequest(
       workosOrganizationRoles: claims.roles,
     });
     return createApiContext({ ...base, actor, useDemoActor: false });
-  } catch {
+  } catch (error) {
+    console.warn("WorkOS request authentication failed", {
+      requestId: base.requestId,
+      reason: error instanceof Error ? error.message : "Unknown error",
+    });
     return createApiContext({ ...base, useDemoActor: false });
   }
 }

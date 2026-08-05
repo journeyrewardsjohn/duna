@@ -1,4 +1,8 @@
 import Stripe from "stripe";
+import {
+  connectAccountMetadataEntityId,
+  connectAccountMoneyReady,
+} from "./stripe-connect";
 
 let stripeClient: Stripe | undefined;
 
@@ -428,6 +432,26 @@ export async function createConnectOnboarding(input: {
     },
   });
   return { accountId, url: link.url };
+}
+
+export async function retrieveConnectAccountReadiness(
+  accountId: string,
+): Promise<{
+  readonly accountId: string;
+  readonly accountType: "v2-recipient";
+  readonly chargesEnabled: boolean;
+  readonly metadataEntityId?: string;
+}> {
+  const account = await getStripeClient().v2.core.accounts.retrieve(accountId, {
+    include: ["configuration.recipient", "requirements"],
+  });
+  const object = account as unknown as Readonly<Record<string, unknown>>;
+  return {
+    accountId: account.id,
+    accountType: "v2-recipient",
+    chargesEnabled: connectAccountMoneyReady(object),
+    metadataEntityId: connectAccountMetadataEntityId(object),
+  };
 }
 
 export async function createTerminalConnectionToken(

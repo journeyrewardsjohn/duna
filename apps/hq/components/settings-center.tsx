@@ -37,7 +37,7 @@ import {
   updateOrganizationProfileAction,
   type OperatorActionState,
 } from "@/app/actions";
-import { PlaceAddressFields } from "./place-address-fields";
+import { AddressEntry } from "./place-address-fields";
 
 export type SettingsSection =
   "overview" | "business" | "brand" | "money" | "operations";
@@ -763,7 +763,7 @@ export function SettingsCenter({
                       name="legalName"
                     />
                   </label>
-                  <PlaceAddressFields
+                  <AddressEntry
                     initial={{
                       googlePlaceId: organization.googlePlaceId,
                       addressLine1: organization.addressLine1,

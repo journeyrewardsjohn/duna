@@ -50,6 +50,7 @@ import {
   courtCheckoutStatusSchema,
   courtHoldResultSchema,
   eventSummarySchema,
+  eventDraftEditorSchema,
   eventCheckoutResultSchema,
   eventCheckoutStatusSchema,
   featureFlagCollectionSchema,
@@ -81,6 +82,7 @@ import {
   publicOrganizationStorefrontSchema,
   registrationResultSchema,
   scoreStateSchema,
+  stripeAccountReadinessResultSchema,
   stripeOnboardingResultSchema,
   scoreEventSchema,
   teamClaimSummarySchema,
@@ -265,17 +267,20 @@ import {
   createVenue,
   draftCourtScheduleFromPrompt,
   loadDemoOperatorWorkspace,
+  loadEventDraft,
   loadOperatorWorkspace,
   loadPlayerInvitation,
   loadStaffInvitation,
   OperatorServiceError,
   publishSession,
   publishVenue,
+  refreshStripeOnboarding,
   saveMessageDraft,
   startStripeOnboarding,
   replaceCourtSchedule,
   updateCourtBookingConfiguration,
   updateStaffProfile,
+  updateEventDraft,
   updateVenueProfile,
 } from "./operator-service";
 import {
@@ -317,6 +322,7 @@ import {
   loadPublicProEvent,
   loadPublicProMatch,
   loadPublicProCoverage,
+  loadProfessionalEventMediaUploadContext,
   loadSandDataOverview,
   mergeUnclaimedProfile,
   queuePlayerSourceConnection,
@@ -329,8 +335,12 @@ import {
   reviewPlayerSourceConnection,
   SandDataServiceError,
   saveAvpRosterAssignment,
+  saveProfessionalEventEditorial,
+  saveProfessionalEventMedia,
+  saveProfessionalMatchSchedule,
   saveProfessionalWatchOption,
   searchDunaPlayers,
+  removeProfessionalEventMedia,
   removeProfessionalWatchOption,
 } from "./sand-data/service";
 import {
@@ -825,7 +835,9 @@ function throwDomainError(error: unknown): never {
           : error.code === "DATABASE_REQUIRED" ||
               error.code === "MUX_REQUIRED" ||
               error.code === "R2_REQUIRED" ||
-              error.code === "SIGNED_PLAYBACK_REQUIRED"
+              error.code === "SIGNED_PLAYBACK_REQUIRED" ||
+              error.code === "LIVE_PROVIDER_FAILED" ||
+              error.code === "UPLOAD_PROVIDER_FAILED"
             ? "INTERNAL_SERVER_ERROR"
             : error.code === "INVALID_ASSOCIATION" ||
                 error.code === "UPLOAD_PART_INVALID" ||
@@ -4419,6 +4431,19 @@ const operatorRouter = router({
         ? loadDemoOperatorWorkspace(ctx.actor!.organizationId!)
         : loadOperatorWorkspace(ctx.actor!.organizationId!),
     ),
+  eventDraft: organizationProcedure("sessions:read")
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .output(eventDraftEditorSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadEventDraft(
+          ctx.actor!.organizationId!,
+          input.sessionId,
+        );
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   createCatalogItem: organizationProcedure("payments:write")
     .input(
       z.object({
@@ -5968,6 +5993,35 @@ const operatorRouter = router({
         },
       }),
     ),
+  updateEventDraft: organizationProcedure("sessions:write")
+    .input(
+      z.intersection(
+        createEventDraftInputSchema,
+        z.object({ sessionId: z.string().uuid() }),
+      ),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.updateEventDraft",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateEventDraft({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   publishSession: organizationProcedure("sessions:write")
     .input(
       z.object({
@@ -6119,6 +6173,37 @@ const operatorRouter = router({
             return await createMarketingCampaignDraft({
               actor: ctx.actor!,
               ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  refreshStripeOnboarding: organizationProcedure("payments:write")
+    .use(
+      rateLimitMiddleware({
+        id: "stripe-status-refresh",
+        capacity: 12,
+        refillPerMinute: 3,
+        scope: "organization",
+      }),
+    )
+    .input(z.object({ idempotencyKey: z.string().uuid() }))
+    .output(stripeAccountReadinessResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.refreshStripeOnboarding",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await refreshStripeOnboarding({
+              actor: ctx.actor!,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,
@@ -6748,6 +6833,116 @@ const adminRouter = router({
       try {
         return await refreshAvpLeague({
           season: input?.season,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  professionalEventMediaUploadContext: adminProcedure
+    .input(z.object({ professionalEventId: z.string().uuid() }))
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadProfessionalEventMediaUploadContext({
+          ...input,
+          actor: ctx.actor!,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  saveProfessionalEventEditorial: adminProcedure
+    .input(
+      z.object({
+        professionalEventId: z.string().uuid(),
+        overrides: z.object({
+          name: z.string().trim().min(2).max(180).optional(),
+          location: z.string().trim().min(2).max(180).optional(),
+          category: z.string().trim().min(2).max(100).optional(),
+          startsOn: z.iso.date().optional(),
+          endsOn: z.iso.date().optional(),
+        }),
+        summary: z.string().trim().max(1_500).optional(),
+        venueName: z.string().trim().max(180).optional(),
+        venueAddress: z.string().trim().max(300).optional(),
+        timezone: z.string().trim().max(80).optional(),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await saveProfessionalEventEditorial({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  saveProfessionalEventMedia: adminProcedure
+    .input(
+      z.object({
+        professionalEventId: z.string().uuid(),
+        kind: z.enum(["poster", "hero-image", "hero-video"]),
+        url: z.url(),
+        posterUrl: z.url().optional(),
+        alt: z.string().trim().min(2).max(240),
+        caption: z.string().trim().max(500).optional(),
+        featured: z.boolean(),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await saveProfessionalEventMedia({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  removeProfessionalEventMedia: adminProcedure
+    .input(
+      z.object({
+        professionalEventId: z.string().uuid(),
+        mediaId: z.string().uuid(),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await removeProfessionalEventMedia({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  saveProfessionalMatchSchedule: adminProcedure
+    .input(
+      z.object({
+        professionalEventId: z.string().uuid(),
+        importedMatchId: z.string().uuid().optional(),
+        gender: z.enum(["men", "women"]),
+        teamAName: z.string().trim().min(2).max(120),
+        teamBName: z.string().trim().min(2).max(120),
+        localStartsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
+        timezone: z.string().trim().min(2).max(80),
+        roundLabel: z.string().trim().max(120).optional(),
+        court: z.string().trim().max(120).optional(),
+        reason: z.string().trim().min(10).max(500),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await saveProfessionalMatchSchedule({
+          ...input,
           actor: ctx.actor!,
           now: ctx.now,
         });

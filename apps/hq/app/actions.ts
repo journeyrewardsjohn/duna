@@ -89,11 +89,36 @@ function result(
   return { status, message, onboardingUrl, entityId };
 }
 
+function friendlyErrorMessage(error: unknown): string {
+  const message =
+    error instanceof Error ? error.message : "The change could not be saved.";
+  try {
+    const issues = JSON.parse(message) as readonly {
+      readonly path?: readonly (string | number)[];
+    }[];
+    if (Array.isArray(issues)) {
+      const fields = new Set(
+        issues.flatMap((issue) =>
+          Array.isArray(issue.path) ? issue.path.map(String) : [],
+        ),
+      );
+      if (
+        ["addressLine1", "locality", "administrativeArea", "postalCode"].some(
+          (fieldName) => fields.has(fieldName),
+        )
+      ) {
+        return "Choose a complete Google address, or enter the city, state or region, and postal code manually.";
+      }
+      return "Some required information is missing or invalid. Review the form and try again.";
+    }
+  } catch {
+    // Non-validation errors already carry a useful, user-facing message.
+  }
+  return message;
+}
+
 function errorState(error: unknown): OperatorActionState {
-  return result(
-    "error",
-    error instanceof Error ? error.message : "The change could not be saved.",
-  );
+  return result("error", friendlyErrorMessage(error));
 }
 
 function revalidateOperator() {
@@ -334,14 +359,23 @@ export async function updateCommerceSettingsAction(
   formData: FormData,
 ): Promise<OperatorActionState> {
   try {
+    const addressLine1 = field(formData, "addressLine1");
+    const locality = field(formData, "locality");
+    const administrativeArea = field(formData, "administrativeArea");
+    const postalCode = field(formData, "postalCode");
+    if (!addressLine1 || !locality || !administrativeArea || !postalCode) {
+      throw new Error(
+        "Choose a complete Google address, or enter the city, state or region, and postal code manually.",
+      );
+    }
     const caller = await getServerCaller();
     await caller.operator.updateCommerceSettings({
       legalName: optionalField(formData, "legalName"),
-      addressLine1: field(formData, "addressLine1"),
+      addressLine1,
       addressLine2: optionalField(formData, "addressLine2"),
-      locality: field(formData, "locality"),
-      administrativeArea: field(formData, "administrativeArea"),
-      postalCode: field(formData, "postalCode"),
+      locality,
+      administrativeArea,
+      postalCode,
       countryCode: field(formData, "countryCode") || "US",
       googlePlaceId: optionalField(formData, "googlePlaceId"),
       latitude: optionalNumberField(formData, "latitude"),
@@ -791,6 +825,9 @@ type ServerCaller = Awaited<ReturnType<typeof getServerCaller>>;
 type CreateEventDraftPayload = Parameters<
   ServerCaller["operator"]["createEventDraft"]
 >[0];
+type UpdateEventDraftPayload = Parameters<
+  ServerCaller["operator"]["updateEventDraft"]
+>[0];
 
 export async function createPlayerInvitationAction(
   _previous: OperatorActionState,
@@ -995,6 +1032,36 @@ export async function createEventDraftAction(
       "Event draft saved. Money and publication remain gated.",
       undefined,
       created.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function updateEventDraftAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const serialized = field(formData, "eventDraft");
+    if (!serialized) throw new Error("The event draft is empty.");
+    const parsed = JSON.parse(serialized) as Omit<
+      UpdateEventDraftPayload,
+      "sessionId" | "confirmedPrice" | "idempotencyKey"
+    >;
+    const caller = await getServerCaller();
+    const updated = await caller.operator.updateEventDraft({
+      ...parsed,
+      sessionId: field(formData, "sessionId"),
+      confirmedPrice: confirmed(formData, "confirmedPrice"),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Event changes saved. The draft is still private.",
+      undefined,
+      updated.id,
     );
   } catch (error) {
     return errorState(error);
@@ -1523,6 +1590,29 @@ export async function startStripeOnboardingAction(
       "success",
       "Stripe’s secure onboarding link is ready. You must personally complete its identity and legal steps.",
       onboarding.onboardingUrl,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function refreshStripeOnboardingAction(
+  _previous: OperatorActionState,
+  _formData: FormData,
+): Promise<OperatorActionState> {
+  void _previous;
+  void _formData;
+  try {
+    const caller = await getServerCaller();
+    const readiness = await caller.operator.refreshStripeOnboarding({
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      readiness.chargesEnabled
+        ? "Stripe confirmed that sandbox payments are ready. Paid events can now be published."
+        : "Stripe still needs more information before it can receive payments.",
     );
   } catch (error) {
     return errorState(error);

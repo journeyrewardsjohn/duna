@@ -3,7 +3,19 @@ import { AdminAccessDenied } from "@/components/admin-access-denied";
 import { AdminPanel } from "@/components/admin-panels";
 import { adminModules, type AdminModule } from "@/components/navigation";
 import { AdminShell } from "@/components/admin-shell";
+import type { ProfessionalTourTool } from "@/components/pro-tour-admin-controls";
 import { getServerCaller } from "@/lib/api";
+
+const professionalTourTools = new Set<ProfessionalTourTool>([
+  "overview",
+  "events",
+  "editorial",
+  "schedule",
+  "broadcasts",
+  "rosters",
+  "mappings",
+  "sources",
+]);
 
 export async function generateMetadata({
   params,
@@ -20,15 +32,23 @@ export default async function AdminModulePage({
   searchParams,
 }: {
   readonly params: Promise<{ module: string }>;
-  readonly searchParams: Promise<{ q?: string }>;
+  readonly searchParams: Promise<{
+    q?: string;
+    tool?: string;
+    event?: string;
+  }>;
 }) {
   const { module } = await params;
-  const { q } = await searchParams;
+  const { event, q, tool } = await searchParams;
+  const proTourTool = professionalTourTools.has(tool as ProfessionalTourTool)
+    ? (tool as ProfessionalTourTool)
+    : undefined;
   const item = adminModules.find((entry) => entry.slug === module);
   if (!item || module === "overview") notFound();
   const caller = await getServerCaller();
   const needsSandData = [
     "sand-data",
+    "pro-tour",
     "player-mapping",
     "ratings-lab",
     "profile-merge",
@@ -41,7 +61,7 @@ export default async function AdminModulePage({
       ? caller.admin.featureFlags()
       : Promise.resolve({ flags: [], canManage: false }),
     needsSandData ? caller.admin.sandData() : Promise.resolve(undefined),
-    module === "player-mapping"
+    module === "player-mapping" || module === "pro-tour"
       ? caller.admin.players({ query: q, limit: 40 })
       : Promise.resolve([]),
     module === "video"
@@ -89,6 +109,8 @@ export default async function AdminModulePage({
         sandData={result.sandData}
         playerDirectory={result.players}
         playerSearchQuery={q}
+        proEventId={event}
+        proTourTool={proTourTool}
       />
     </AdminShell>
   );

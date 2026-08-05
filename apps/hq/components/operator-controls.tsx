@@ -52,6 +52,7 @@ import {
   createVenueAction,
   draftCourtScheduleAction,
   publishVenueAction,
+  refreshStripeOnboardingAction,
   replaceCourtScheduleAction,
   saveMessageDraftAction,
   startStripeOnboardingAction,
@@ -59,7 +60,7 @@ import {
   updateVenueProfileAction,
   type OperatorActionState,
 } from "@/app/actions";
-import { PlaceAddressFields } from "./place-address-fields";
+import { AddressEntry } from "./place-address-fields";
 import {
   createCourtMediaPath,
   createVenueMediaPath,
@@ -846,7 +847,7 @@ function VenueComposer({
               placeholder="Showers, parking, pro shop, covered courts"
             />
           </label>
-          <PlaceAddressFields label="Venue or beach address" />
+          <AddressEntry label="Venue or beach address" />
           <label className="operator-field--wide">
             <span>Venue timezone</span>
             <input
@@ -2200,6 +2201,10 @@ function StripeOnboarding({
     startStripeOnboardingAction,
     initialOperatorActionState,
   );
+  const [refreshState, refreshAction, refreshPending] = useActionState(
+    refreshStripeOnboardingAction,
+    initialOperatorActionState,
+  );
   const ready = workspace.organization.stripeChargesEnabled;
   return (
     <section className="hq-card operator-control-card stripe-readiness-card">
@@ -2234,32 +2239,46 @@ function StripeOnboarding({
         </span>
       </div>
       {!ready && (
-        <form action={action} className="operator-form">
-          <div className="operator-legal-boundary">
-            <ShieldCheck aria-hidden size={18} />
-            <p>
-              Stripe will ask <strong>you</strong> to verify the business and
-              accept its legal terms. Duna cannot complete those attestations
-              for you.
-            </p>
-          </div>
-          <div className="operator-form-footer">
-            <ActionNotice state={state} />
-            <SubmitButton pending={pending}>
-              Prepare secure Stripe link
-            </SubmitButton>
-          </div>
-          {state.onboardingUrl && (
-            <a
-              className="hq-button hq-button--primary stripe-onboarding-link"
-              href={state.onboardingUrl}
-              rel="noreferrer"
-            >
-              Continue securely with Stripe{" "}
-              <ArrowUpRight aria-hidden size={16} />
-            </a>
+        <>
+          {workspace.organization.stripeAccountId && (
+            <form action={refreshAction} className="operator-form">
+              <div className="operator-form-footer">
+                <ActionNotice state={refreshState} />
+                <SubmitButton pending={refreshPending} secondary>
+                  Refresh Stripe status
+                </SubmitButton>
+              </div>
+            </form>
           )}
-        </form>
+          <form action={action} className="operator-form">
+            <div className="operator-legal-boundary">
+              <ShieldCheck aria-hidden size={18} />
+              <p>
+                Stripe will ask <strong>you</strong> to verify the business and
+                accept its legal terms. Duna cannot complete those attestations
+                for you.
+              </p>
+            </div>
+            <div className="operator-form-footer">
+              <ActionNotice state={state} />
+              <SubmitButton pending={pending}>
+                {workspace.organization.stripeAccountId
+                  ? "Continue Stripe setup"
+                  : "Prepare secure Stripe link"}
+              </SubmitButton>
+            </div>
+            {state.onboardingUrl && (
+              <a
+                className="hq-button hq-button--primary stripe-onboarding-link"
+                href={state.onboardingUrl}
+                rel="noreferrer"
+              >
+                Continue securely with Stripe{" "}
+                <ArrowUpRight aria-hidden size={16} />
+              </a>
+            )}
+          </form>
+        </>
       )}
     </section>
   );

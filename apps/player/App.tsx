@@ -24,8 +24,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   useWindowDimensions,
   View,
   type ViewStyle,
@@ -50,6 +48,11 @@ import {
 } from "./watch-scoring";
 import { VideoStudioScreen } from "./video-studio";
 import { HealthScreen } from "./health-screen";
+import {
+  FellixText as Text,
+  FellixTextInput as TextInput,
+  useFellixFonts,
+} from "./fellix-text";
 
 // Metro requires a static module reference so the campaign image ships in the native bundle.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -4282,6 +4285,11 @@ function DunaApp() {
 }
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFellixFonts();
+
+  if (fontError) throw fontError;
+  if (!fontsLoaded) return null;
+
   return (
     <SafeAreaProvider>
       <PlayerRuntimeProvider>
@@ -4344,7 +4352,7 @@ function createStyles(palette: Palette) {
     },
     bookingVenueEyebrow: {
       color: colors.aqua,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "800",
       letterSpacing: 0.7,
     },
@@ -4358,7 +4366,7 @@ function createStyles(palette: Palette) {
     },
     bookingVenueAction: {
       color: colors.bone,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "800",
     },
     bookingVenueName: {
@@ -4392,7 +4400,7 @@ function createStyles(palette: Palette) {
     bookingDateUnavailable: { opacity: 0.32 },
     bookingDateDay: {
       color: colors.muted,
-      fontSize: 6,
+      fontSize: 10,
       fontWeight: "800",
     },
     bookingDateNumber: {
@@ -4441,7 +4449,7 @@ function createStyles(palette: Palette) {
     bookingWeatherIcon: { fontSize: 24 },
     bookingWeatherUpdated: {
       color: colors.muted,
-      fontSize: 6,
+      fontSize: 10,
       textAlign: "right",
     },
     bookingSlotGrid: {
@@ -4465,17 +4473,17 @@ function createStyles(palette: Palette) {
     },
     bookingSlotCourt: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       marginTop: 5,
     },
     bookingSlotWeather: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       marginTop: 4,
     },
     bookingSlotPrice: {
       color: colors.aqua,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "800",
       marginTop: 5,
     },
@@ -4494,7 +4502,7 @@ function createStyles(palette: Palette) {
     },
     bookingDaylightNote: {
       color: colors.muted,
-      fontSize: 8,
+      fontSize: 10,
       lineHeight: 13,
       marginTop: 10,
     },
@@ -4555,7 +4563,7 @@ function createStyles(palette: Palette) {
     },
     bookingPartnerName: {
       color: colors.bone,
-      fontSize: 7,
+      fontSize: 10,
       textAlign: "center",
       width: 58,
     },
@@ -4595,14 +4603,14 @@ function createStyles(palette: Palette) {
       borderRadius: 12,
       borderWidth: 1,
       color: colors.positive,
-      fontSize: 9,
+      fontSize: 10,
       lineHeight: 14,
       marginTop: 12,
       padding: 11,
     },
     formSectionLabel: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "800",
       letterSpacing: 1,
       marginTop: 8,
@@ -4650,7 +4658,7 @@ function createStyles(palette: Palette) {
     },
     previewBannerText: {
       color: colors.warning,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "800",
       letterSpacing: 0.8,
       textAlign: "center",
@@ -4726,7 +4734,7 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.warningRgb, 0.12),
       borderRadius: 6,
       color: colors.warning,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "800",
       letterSpacing: 1,
       overflow: "hidden",
@@ -4735,7 +4743,7 @@ function createStyles(palette: Palette) {
     },
     headerEyebrow: {
       color: colors.muted,
-      fontSize: 8,
+      fontSize: 10,
       letterSpacing: 1.2,
       marginTop: 5,
     },
@@ -5155,7 +5163,7 @@ function createStyles(palette: Palette) {
     },
     eyebrow: {
       color: colors.aqua,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "700",
       letterSpacing: 1.15,
     },
@@ -5178,7 +5186,7 @@ function createStyles(palette: Palette) {
     },
     pillText: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "800",
       letterSpacing: 0.7,
     },
@@ -5211,7 +5219,7 @@ function createStyles(palette: Palette) {
     ratingOrbitInnerCompact: { borderRadius: 55, height: 110, width: 110 },
     ratingLabel: {
       color: colors.muted,
-      fontSize: 6,
+      fontSize: 10,
       letterSpacing: 0.9,
       transform: [{ rotate: "12deg" }],
     },
@@ -5226,7 +5234,7 @@ function createStyles(palette: Palette) {
     ratingValueCompact: { fontSize: 34, lineHeight: 36 },
     ratingDelta: {
       color: colors.positive,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "700",
       transform: [{ rotate: "12deg" }],
     },
@@ -5240,7 +5248,7 @@ function createStyles(palette: Palette) {
     },
     lockedText: {
       color: colors.onAccent,
-      fontSize: 6,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -5252,10 +5260,10 @@ function createStyles(palette: Palette) {
       paddingTop: 14,
     },
     statValue: { color: colors.bone, fontSize: 15, fontWeight: "800" },
-    statLabel: { color: colors.muted, fontSize: 8, marginTop: 3 },
+    statLabel: { color: colors.muted, fontSize: 10, marginTop: 3 },
     nextDate: {
       color: colors.aqua,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "800",
       letterSpacing: 1.2,
       marginTop: 26,
@@ -5286,7 +5294,7 @@ function createStyles(palette: Palette) {
       marginLeft: -5,
       width: 34,
     },
-    miniAvatarText: { color: colors.bone, fontSize: 8, fontWeight: "800" },
+    miniAvatarText: { color: colors.bone, fontSize: 10, fontWeight: "800" },
     cardLink: {
       borderTopColor: rgba(colors.overlayRgb, 0.07),
       borderTopWidth: 1,
@@ -5304,12 +5312,12 @@ function createStyles(palette: Palette) {
     },
     liveActivityButtonText: {
       color: colors.onAccent,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "900",
     },
     liveActivityNotice: {
       color: colors.positive,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "700",
       marginTop: 8,
     },
@@ -5331,7 +5339,7 @@ function createStyles(palette: Palette) {
     },
     metricLabel: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       marginTop: 4,
       textAlign: "center",
     },
@@ -5350,7 +5358,7 @@ function createStyles(palette: Palette) {
       lineHeight: 28,
       marginTop: 4,
     },
-    sectionAction: { color: colors.aqua, fontSize: 9, fontWeight: "700" },
+    sectionAction: { color: colors.aqua, fontSize: 10, fontWeight: "700" },
     horizontalBleed: { marginHorizontal: -18, paddingHorizontal: 18 },
     eventCard: {
       backgroundColor: colors.depth,
@@ -5398,7 +5406,7 @@ function createStyles(palette: Palette) {
     eventBody: { padding: 12 },
     eventTime: {
       color: colors.aqua,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "700",
       letterSpacing: 0.6,
       textTransform: "uppercase",
@@ -5411,10 +5419,10 @@ function createStyles(palette: Palette) {
       marginTop: 6,
       minHeight: 39,
     },
-    eventMeta: { color: colors.muted, fontSize: 8, marginTop: 5 },
+    eventMeta: { color: colors.muted, fontSize: 10, marginTop: 5 },
     eventWeather: {
       color: colors.aqua,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "700",
       marginTop: 5,
     },
@@ -5428,7 +5436,7 @@ function createStyles(palette: Palette) {
       paddingTop: 9,
     },
     eventPrice: { color: colors.bone, fontSize: 10, fontWeight: "800" },
-    eventSpots: { color: colors.muted, fontSize: 8 },
+    eventSpots: { color: colors.muted, fontSize: 10 },
     proTourEntry: {
       alignItems: "center",
       backgroundColor: colors.aquaDeep,
@@ -5443,7 +5451,7 @@ function createStyles(palette: Palette) {
     },
     proTourEntryEyebrow: {
       color: "#9de9ff",
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.9,
     },
@@ -5457,7 +5465,7 @@ function createStyles(palette: Palette) {
     },
     proTourEntryMeta: {
       color: "rgba(255,255,255,.7)",
-      fontSize: 8,
+      fontSize: 10,
       marginTop: 7,
     },
     proTourEntryArrow: {
@@ -5510,7 +5518,7 @@ function createStyles(palette: Palette) {
     },
     proEventPickerStatus: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.6,
     },
@@ -5538,13 +5546,13 @@ function createStyles(palette: Palette) {
     },
     proEventHeroMeta: {
       color: "rgba(255,255,255,.74)",
-      fontSize: 9,
+      fontSize: 10,
       lineHeight: 14,
       marginTop: 10,
     },
     proEventUpdated: {
       color: "rgba(255,255,255,.56)",
-      fontSize: 7,
+      fontSize: 10,
       marginTop: 12,
     },
     proBracket: {
@@ -5557,7 +5565,7 @@ function createStyles(palette: Palette) {
     proBracketRound: { minWidth: 240, width: 240 },
     proBracketRoundTitle: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.7,
       marginBottom: 9,
@@ -5587,18 +5595,18 @@ function createStyles(palette: Palette) {
     proBracketTeamName: {
       color: colors.muted,
       flex: 1,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "700",
     },
     proBracketWinner: { color: colors.bone, fontWeight: "900" },
     proBracketScore: {
       color: colors.aqua,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "900",
     },
     proBracketPrediction: {
       color: colors.muted,
-      fontSize: 6,
+      fontSize: 10,
       marginTop: 7,
       textTransform: "uppercase",
     },
@@ -5614,7 +5622,7 @@ function createStyles(palette: Palette) {
     proFollowButtonActive: { backgroundColor: colors.aqua },
     proFollowButtonText: {
       color: colors.aqua,
-      fontSize: 7,
+      fontSize: 10,
       fontWeight: "900",
     },
     proFollowButtonTextActive: { color: colors.onAccent },
@@ -5646,9 +5654,9 @@ function createStyles(palette: Palette) {
       gap: 8,
       minHeight: 32,
     },
-    proPoolPlace: { color: colors.aqua, fontSize: 8, width: 15 },
-    proPoolTeam: { color: colors.bone, flex: 1, fontSize: 8 },
-    proPoolRecord: { color: colors.muted, fontSize: 8 },
+    proPoolPlace: { color: colors.aqua, fontSize: 10, width: 15 },
+    proPoolTeam: { color: colors.bone, flex: 1, fontSize: 10 },
+    proPoolRecord: { color: colors.muted, fontSize: 10 },
     listCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.07),
@@ -5674,7 +5682,7 @@ function createStyles(palette: Palette) {
     },
     resultText: { color: colors.onAccent, fontSize: 12, fontWeight: "900" },
     rowTitle: { color: colors.bone, fontSize: 11, fontWeight: "700" },
-    rowMeta: { color: colors.muted, fontSize: 8, marginTop: 3 },
+    rowMeta: { color: colors.muted, fontSize: 10, marginTop: 3 },
     matchScore: { alignItems: "flex-end" },
     aiInsight: {
       backgroundColor: colors.navy,
@@ -5702,7 +5710,7 @@ function createStyles(palette: Palette) {
       letterSpacing: -0.4,
       marginTop: 6,
     },
-    aiBody: { color: colors.muted, fontSize: 9, lineHeight: 14, marginTop: 5 },
+    aiBody: { color: colors.muted, fontSize: 10, lineHeight: 14, marginTop: 5 },
     searchField: {
       alignItems: "center",
       backgroundColor: colors.depth,
@@ -5734,7 +5742,7 @@ function createStyles(palette: Palette) {
       backgroundColor: colors.aqua,
       borderColor: colors.aqua,
     },
-    filterText: { color: colors.muted, fontSize: 9, fontWeight: "600" },
+    filterText: { color: colors.muted, fontSize: 10, fontWeight: "600" },
     filterTextActive: { color: colors.onAccent, fontWeight: "800" },
     mapCard: {
       backgroundColor: colors.navy,
@@ -5774,7 +5782,7 @@ function createStyles(palette: Palette) {
       position: "absolute",
       width: 32,
     },
-    mapPinText: { color: colors.onAccent, fontSize: 8, fontWeight: "900" },
+    mapPinText: { color: colors.onAccent, fontSize: 10, fontWeight: "900" },
     mapLabel: {
       backgroundColor: rgba(colors.inkRgb, 0.82),
       borderRadius: 10,
@@ -5784,7 +5792,7 @@ function createStyles(palette: Palette) {
       position: "absolute",
     },
     mapLabelTitle: { color: colors.bone, fontSize: 11, fontWeight: "800" },
-    mapLabelText: { color: colors.muted, fontSize: 8, marginTop: 2 },
+    mapLabelText: { color: colors.muted, fontSize: 10, marginTop: 2 },
     eventGrid: { gap: 10 },
     successBanner: {
       alignItems: "center",
@@ -5820,7 +5828,7 @@ function createStyles(palette: Palette) {
       width: 38,
     },
     weekDayActive: { backgroundColor: colors.aqua },
-    weekDayLabel: { color: colors.muted, fontSize: 7 },
+    weekDayLabel: { color: colors.muted, fontSize: 10 },
     weekDayNumber: {
       color: colors.bone,
       fontSize: 11,
@@ -5847,7 +5855,7 @@ function createStyles(palette: Palette) {
     },
     bookingTime: { width: 35 },
     bookingTimeMain: { color: colors.bone, fontSize: 10, fontWeight: "700" },
-    bookingTimeSuffix: { color: colors.muted, fontSize: 6 },
+    bookingTimeSuffix: { color: colors.muted, fontSize: 10 },
     bookingAccent: { borderRadius: 2, height: 35, width: 3 },
     pickupRow: {
       alignItems: "center",
@@ -5865,7 +5873,7 @@ function createStyles(palette: Palette) {
       padding: 6,
       width: 38,
     },
-    pickupDay: { color: colors.aqua, fontSize: 6, fontWeight: "800" },
+    pickupDay: { color: colors.aqua, fontSize: 10, fontWeight: "800" },
     pickupNumber: { color: colors.bone, fontSize: 15, fontWeight: "900" },
     pickupSpots: {
       color: colors.aqua,
@@ -5896,7 +5904,7 @@ function createStyles(palette: Palette) {
     hostMarkText: { color: colors.aqua, fontSize: 22 },
     bodyText: {
       color: colors.muted,
-      fontSize: 9,
+      fontSize: 10,
       lineHeight: 14,
       marginTop: 5,
     },
@@ -5931,7 +5939,7 @@ function createStyles(palette: Palette) {
     },
     walletLabel: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       letterSpacing: 1.2,
       marginTop: 40,
     },
@@ -5942,13 +5950,13 @@ function createStyles(palette: Palette) {
       letterSpacing: -3,
       marginTop: 5,
     },
-    walletMeta: { color: colors.muted, fontSize: 8, marginTop: 4 },
+    walletMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
     walletActions: { flexDirection: "row", gap: 8, marginTop: 25 },
     walletActionText: {
       backgroundColor: rgba(colors.overlayRgb, 0.08),
       borderRadius: 18,
       color: colors.bone,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "700",
       overflow: "hidden",
       paddingHorizontal: 12,
@@ -6029,7 +6037,7 @@ function createStyles(palette: Palette) {
       letterSpacing: -1,
       marginTop: 7,
     },
-    profileHandle: { color: colors.muted, fontSize: 8, marginTop: 2 },
+    profileHandle: { color: colors.muted, fontSize: 10, marginTop: 2 },
     profileSetupCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.accentRgb, 0.14),
@@ -6165,7 +6173,7 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.accentRgb, 0.08),
       borderRadius: 10,
       color: colors.aqua,
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.7,
       overflow: "hidden",
@@ -6209,7 +6217,7 @@ function createStyles(palette: Palette) {
       position: "relative",
     },
     tabIcon: { color: colors.muted, fontSize: 19 },
-    tabLabel: { color: colors.muted, fontSize: 7, fontWeight: "600" },
+    tabLabel: { color: colors.muted, fontSize: 10, fontWeight: "600" },
     tabActive: { color: colors.aqua },
     tabIndicator: {
       backgroundColor: colors.aqua,
@@ -6315,7 +6323,7 @@ function createStyles(palette: Palette) {
       letterSpacing: -1.4,
       marginTop: 18,
     },
-    checkoutMeta: { color: colors.muted, fontSize: 9, marginTop: 5 },
+    checkoutMeta: { color: colors.muted, fontSize: 10, marginTop: 5 },
     checkoutSummaryText: {
       color: colors.muted,
       fontSize: 11,
@@ -6454,7 +6462,7 @@ function createStyles(palette: Palette) {
     payButtonText: { color: colors.onAccent, fontSize: 12, fontWeight: "900" },
     paymentTrust: {
       color: colors.muted,
-      fontSize: 7,
+      fontSize: 10,
       marginTop: 9,
       textAlign: "center",
     },

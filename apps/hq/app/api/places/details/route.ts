@@ -72,9 +72,11 @@ export async function GET(request: Request) {
     locality:
       component("locality") ??
       component("postal_town") ??
-      component("sublocality"),
+      component("sublocality_level_1") ??
+      component("sublocality") ??
+      component("administrative_area_level_2"),
     administrativeArea: component("administrative_area_level_1", true),
-    postalCode: component("postal_code"),
+    postalCode: component("postal_code") ?? component("postal_code_prefix"),
     countryCode: component("country", true),
   });
 }

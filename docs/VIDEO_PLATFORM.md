@@ -90,18 +90,27 @@ already exists and otherwise remains email-bound until the account is resolved.
 
 ## Guided iOS capture
 
-The local Expo module combines AVFoundation, Apple Vision, Core Motion, and
-HaishinKit:
+The local Expo module combines ARKit, AVFoundation, Apple Vision, Core Motion,
+and HaishinKit:
 
+- Before capture, ARKit finds a horizontal ground plane and projects the known
+  court geometry from the usual position behind an end line. On supported
+  devices, LiDAR scene depth and mesh reconstruction improve the ground lock.
+  Non-LiDAR phones use ARKit plane detection and then Vision/Core Motion.
 - AVFoundation owns camera, microphone, focus/exposure, local recording, and
   capture buffers.
 - Vision checks the frame for court-like rectangular geometry and human body
-  poses.
+  poses. A ground plane alone is not enough to award a Good grade; Duna also
+  looks for boundary evidence so an indoor floor is not labeled as a court.
 - Core Motion checks device stability and records attitude.
-- The overlay shows four outside corners, net line, center, horizon, and safe
-  margins.
+- The overlay continuously projects four outside corners, net line, center,
+  horizon, and safe margins as the camera moves.
 - Guidance covers framing, distance, rotation, stability, player scale, and low
-  light.
+  light. Suggestions are stabilized before changing so the user can make small,
+  gradual adjustments.
+- Setup asks for Landscape or Portrait. The camera guide detects the physical
+  orientation, asks the user to rotate when needed, and locks the selected
+  capture orientation once recording begins.
 - Acceptable calibration locks focus, exposure, lens, and zoom, then stores the
   calibration with the video.
 
@@ -263,6 +272,8 @@ models.
    event and encrypted Duna Health storage and sharing controls.
 2. Add R2 credentials to Duna Web. The existing sensitive Duna HQ values cannot
    be exported or copied by Vercel CLI.
+   Add `GOOGLE_PLACES_API_KEY` to Duna Web as well; the mobile venue picker calls
+   the server-side Duna Web Places proxy.
 3. Install/approve Mux in the account, create API and signing keys, set the
    webhook secret, and add all Mux values to both server projects.
 4. Create a fresh iOS build. Expo Go cannot load the local native capture

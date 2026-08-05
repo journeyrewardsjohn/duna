@@ -5,6 +5,7 @@ module.exports = {
   displayName: "Duna",
   bundleIdentifier: ".watch",
   deploymentTarget: "10.0",
+  icon: "../../assets/icon.png",
   frameworks: ["SwiftUI", "WatchKit", "WatchConnectivity"],
   colors: {
     $accent: "#2F6FB1",

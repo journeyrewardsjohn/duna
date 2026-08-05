@@ -30,12 +30,48 @@ describe("connected-account money readiness", () => {
     ).toBe(true);
   });
 
+  it("supports native Accounts v2 recipient capability payloads", () => {
+    expect(
+      connectAccountMoneyReady({
+        configuration: {
+          recipient: {
+            applied: true,
+            capabilities: {
+              stripe_balance: {
+                payouts: { status: "active" },
+                stripe_transfers: { status: "active" },
+              },
+            },
+          },
+        },
+      }),
+    ).toBe(true);
+  });
+
   it("keeps incomplete recipient onboarding gated", () => {
     expect(
       connectAccountMoneyReady({
         charges_enabled: false,
         payouts_enabled: false,
         capabilities: { transfers: "pending" },
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps restricted Accounts v2 recipient capabilities gated", () => {
+    expect(
+      connectAccountMoneyReady({
+        configuration: {
+          recipient: {
+            applied: true,
+            capabilities: {
+              stripe_balance: {
+                payouts: { status: "active" },
+                stripe_transfers: { status: "restricted" },
+              },
+            },
+          },
+        },
       }),
     ).toBe(false);
   });

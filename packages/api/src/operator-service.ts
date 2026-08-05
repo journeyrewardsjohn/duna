@@ -39,14 +39,24 @@ import { demoOrganization } from "@duna/core/demo";
 import { and, asc, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import {
+  eventDraftSmartRulesSchema,
+  eventFeatureSchema,
+  eventLocationSchema,
+  eventMediaSchema,
+  eventPolicySchema,
+  leagueRecurrenceSchema,
+} from "./contracts";
+import {
   loadDemoCommerceWorkspace,
   loadOperatorCommerceWorkspace,
 } from "./catalog-service";
 import type {
+  EventDraftEditor,
   OperatorMutationResult,
   OperatorWorkspace,
   PlayerInvitation,
   PlayerInvitationClaimResult,
+  StripeAccountReadinessResult,
   StripeOnboardingResult,
 } from "./contracts";
 import type { ApiActor } from "./context";
@@ -55,7 +65,10 @@ import {
   venueWallTimeToUtc,
 } from "./court-checkout";
 import { enforceGuardianCopies } from "./messaging";
-import { createConnectOnboarding } from "./payments";
+import {
+  createConnectOnboarding,
+  retrieveConnectAccountReadiness,
+} from "./payments";
 import { isResendConfigured, sendTransactionalEmail } from "./resend";
 import { isSentConfigured, sendTemplateSms } from "./sent";
 import { loadWeatherForecast, resolveWeatherCoordinates } from "./weather";
@@ -190,6 +203,10 @@ export interface CreateEventDraftInput {
   readonly requestId: string;
   readonly ipAddress?: string;
   readonly now: Date;
+}
+
+export interface UpdateEventDraftInput extends CreateEventDraftInput {
+  readonly sessionId: string;
 }
 
 export class OperatorServiceError extends Error {
@@ -346,6 +363,37 @@ function timeZone(value: string): string {
       "Choose a valid IANA timezone.",
     );
   }
+}
+
+function venueLocalDateTime(instant: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(instant);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
+}
+
+function settingChoice<const T extends readonly string[]>(
+  value: unknown,
+  choices: T,
+  fallback: T[number],
+): T[number] {
+  return typeof value === "string" && choices.includes(value)
+    ? (value as T[number])
+    : fallback;
+}
+
+function settingNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function slugBase(value: string): string {
@@ -1836,6 +1884,287 @@ export async function loadOperatorWorkspace(
       };
     })(),
     ...commerce,
+  };
+}
+
+export async function loadEventDraft(
+  organizationId: string,
+  sessionId: string,
+): Promise<EventDraftEditor> {
+  requireDatabase();
+  const database = getDatabase();
+  const row = (
+    await database
+      .select({
+        id: sessions.id,
+        slug: sessions.slug,
+        status: sessions.status,
+        title: sessions.title,
+        startsAt: sessions.startsAt,
+        endsAt: sessions.endsAt,
+        timezone: sessions.timezone,
+        venueId: sessions.venueId,
+        venueName: venues.name,
+        venueOrganizationId: venues.organizationId,
+        courtId: sessions.courtId,
+        courtName: courts.name,
+        kindFromEventType: eventTypes.kind,
+        eventTypeOrganizationId: eventTypes.organizationId,
+        kindFromProgram: programs.kind,
+        programOrganizationId: programs.organizationId,
+        shortSummary: eventBlueprints.shortSummary,
+        description: eventBlueprints.description,
+        media: eventBlueprints.media,
+        location: eventBlueprints.location,
+        features: eventBlueprints.features,
+        policies: eventBlueprints.policies,
+        recurrence: eventBlueprints.recurrence,
+        registrationSettings: eventBlueprints.registrationSettings,
+      })
+      .from(sessions)
+      .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
+      .leftJoin(programs, eq(sessions.programId, programs.id))
+      .leftJoin(venues, eq(sessions.venueId, venues.id))
+      .leftJoin(courts, eq(sessions.courtId, courts.id))
+      .leftJoin(eventBlueprints, eq(sessions.id, eventBlueprints.sessionId))
+      .where(eq(sessions.id, sessionId))
+      .limit(1)
+  )[0];
+
+  if (!row) {
+    throw new OperatorServiceError(
+      "RESOURCE_NOT_FOUND",
+      "Event draft was not found.",
+    );
+  }
+  const ownerOrganizationId =
+    row.eventTypeOrganizationId ??
+    row.programOrganizationId ??
+    row.venueOrganizationId;
+  if (ownerOrganizationId !== organizationId) {
+    throw new OperatorServiceError(
+      "RESOURCE_WRONG_ORGANIZATION",
+      "Event draft belongs to another organization.",
+    );
+  }
+  if (row.status !== "draft") {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Only private drafts can be edited in the event builder.",
+    );
+  }
+  const kind = row.kindFromEventType ?? row.kindFromProgram;
+  if (kind !== "tournament" && kind !== "league") {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "This session type is not supported by the event builder.",
+    );
+  }
+
+  const [divisionRows, ticketTypeRows] = await Promise.all([
+    database
+      .select()
+      .from(divisions)
+      .where(eq(divisions.sessionId, sessionId))
+      .orderBy(asc(divisions.createdAt)),
+    database
+      .select()
+      .from(ticketTypes)
+      .where(eq(ticketTypes.sessionId, sessionId))
+      .orderBy(asc(ticketTypes.createdAt)),
+  ]);
+
+  const parsedLocation = eventLocationSchema.safeParse(row.location);
+  const location = parsedLocation.success
+    ? parsedLocation.data
+    : {
+        mode: row.venueId ? ("venue" as const) : ("address" as const),
+        venueName: row.venueName ?? "Event venue",
+        courtNames: row.courtName ? [row.courtName] : [],
+      };
+  const parsedMedia = eventMediaSchema.array().safeParse(row.media ?? []);
+  const parsedFeatures = eventFeatureSchema
+    .array()
+    .safeParse(row.features ?? []);
+  const parsedPolicies = eventPolicySchema
+    .array()
+    .safeParse(row.policies ?? []);
+  const parsedRecurrence = leagueRecurrenceSchema.safeParse(row.recurrence);
+  const registrationSettings =
+    row.registrationSettings && typeof row.registrationSettings === "object"
+      ? row.registrationSettings
+      : {};
+  const parsedSmartRules = eventDraftSmartRulesSchema.safeParse(
+    registrationSettings.smartRules,
+  );
+
+  return {
+    id: row.id,
+    slug: row.slug,
+    status: "draft",
+    title: row.title,
+    shortSummary: row.shortSummary ?? undefined,
+    description: row.description ?? undefined,
+    kind,
+    media: parsedMedia.success ? parsedMedia.data : [],
+    location: {
+      ...location,
+      venueId: row.venueId ?? undefined,
+      courtIds: row.courtId ? [row.courtId] : [],
+    },
+    timezone: row.timezone,
+    localStartsAt: venueLocalDateTime(row.startsAt, row.timezone),
+    localEndsAt: venueLocalDateTime(row.endsAt, row.timezone),
+    divisions: divisionRows.map((division) => {
+      const settings = division.settings;
+      const teamFormat = settingChoice(
+        settings.teamFormat,
+        [
+          "solo",
+          "doubles",
+          "three-person",
+          "four-person",
+          "six-person",
+        ] as const,
+        division.teamSize === 1
+          ? "solo"
+          : division.teamSize === 3
+            ? "three-person"
+            : division.teamSize === 4
+              ? "four-person"
+              : division.teamSize >= 6
+                ? "six-person"
+                : "doubles",
+      );
+      const maximumTeams = Math.max(
+        division.minimumTeams,
+        division.maximumTeams ??
+          Math.max(1, Math.ceil(division.capacity / division.teamSize)),
+      );
+      const rawPoolPlay =
+        settings.poolPlay && typeof settings.poolPlay === "object"
+          ? (settings.poolPlay as Record<string, unknown>)
+          : {};
+      const teamsPerPool = Math.max(
+        2,
+        Math.min(
+          maximumTeams,
+          Math.round(settingNumber(rawPoolPlay.teamsPerPool) ?? 4),
+        ),
+      );
+      const teamsAdvancing = Math.max(
+        1,
+        Math.min(
+          teamsPerPool,
+          Math.round(settingNumber(rawPoolPlay.teamsAdvancing) ?? 2),
+        ),
+      );
+      const ratingMinimum = settingNumber(settings.ratingMinimum);
+      const ratingMaximum = settingNumber(settings.ratingMaximum);
+      const ageMinimum = settingNumber(settings.ageMinimum);
+      const ageMaximum = settingNumber(settings.ageMaximum);
+      return {
+        id: division.id,
+        name: division.name,
+        description: division.description ?? undefined,
+        minimumTeams: division.minimumTeams,
+        maximumTeams,
+        teamFormat,
+        surface: settingChoice(
+          settings.surface,
+          ["sand", "grass", "water", "indoor-sand"] as const,
+          division.discipline === "grass"
+            ? "grass"
+            : division.discipline === "indoor"
+              ? "indoor-sand"
+              : "sand",
+        ),
+        gender: settingChoice(
+          settings.gender,
+          ["mens", "womens", "coed", "open"] as const,
+          "open",
+        ),
+        priceBasis: settingChoice(
+          division.priceBasis,
+          ["per-person", "per-team"] as const,
+          "per-team",
+        ),
+        priceMinor: division.entryFeeMinor,
+        ratingEnabled:
+          ratingMinimum !== undefined && ratingMaximum !== undefined,
+        ratingMinimum,
+        ratingMaximum,
+        ageEnabled: ageMinimum !== undefined && ageMaximum !== undefined,
+        ageMinimum:
+          ageMinimum === undefined
+            ? undefined
+            : Math.max(0, Math.round(ageMinimum)),
+        ageMaximum:
+          ageMaximum === undefined
+            ? undefined
+            : Math.max(1, Math.round(ageMaximum)),
+        tournamentFormat: settingChoice(
+          settings.tournamentFormat,
+          [
+            "kob-qob",
+            "single-elimination",
+            "double-elimination-true",
+            "double-elimination-crossover",
+          ] as const,
+          "double-elimination-true",
+        ),
+        poolPlay: {
+          enabled:
+            typeof rawPoolPlay.enabled === "boolean"
+              ? rawPoolPlay.enabled
+              : true,
+          teamsPerPool,
+          format: settingChoice(
+            rawPoolPlay.format,
+            ["full", "olympic-crossover"] as const,
+            "full",
+          ),
+          teamsAdvancing,
+        },
+        seeding: settingChoice(
+          settings.seeding ?? division.ratingBasis,
+          [
+            "first-come",
+            "sand-rating-score",
+            "sand-rating-best-8",
+            "sand-rating-ttm",
+            "manual",
+          ] as const,
+          "sand-rating-best-8",
+        ),
+      };
+    }),
+    tickets: ticketTypeRows.map((ticket) => ({
+      id: ticket.id,
+      name: ticket.name,
+      description: ticket.description ?? undefined,
+      priceMinor: ticket.priceMinor,
+      quantity: ticket.quantity ?? undefined,
+      waitlistEnabled: ticket.waitlistEnabled,
+      approvalRequired: ticket.approvalRequired,
+      availableOnline: ticket.availableOnline,
+      availableInPerson: ticket.availableInPerson,
+    })),
+    features: parsedFeatures.success ? parsedFeatures.data : [],
+    policies: parsedPolicies.success ? parsedPolicies.data : [],
+    smartRules: parsedSmartRules.success
+      ? parsedSmartRules.data
+      : {
+          waitlistEnabled: true,
+          allowLateCancellation: false,
+          freeCancellationHours: 24,
+          bookingOpensDays: 90,
+          bookingClosesMinutes: 60,
+          autoCancelLowAttendance: false,
+          minimumAttendance: 4,
+          approvalRequired: false,
+        },
+    recurrence: parsedRecurrence.success ? parsedRecurrence.data : undefined,
   };
 }
 
@@ -3948,9 +4277,7 @@ export async function createProgramSession(input: {
   return { id: sessionId, entity: "session", status: "draft" };
 }
 
-export async function createEventDraft(
-  input: CreateEventDraftInput,
-): Promise<OperatorMutationResult> {
+async function prepareEventDraftWrite(input: CreateEventDraftInput) {
   requireDatabase();
   if (!input.confirmedPrice) {
     throw new OperatorServiceError(
@@ -4108,6 +4435,35 @@ export async function createEventDraft(
   ];
   const startingPrice = offeredPrices.length ? Math.min(...offeredPrices) : 0;
   const storedCurrency = currency(organization.currency);
+  return {
+    organizationId,
+    database,
+    venue,
+    eventTimezone,
+    startsAt,
+    endsAt,
+    capacity,
+    minimumCapacity,
+    startingPrice,
+    storedCurrency,
+  };
+}
+
+export async function createEventDraft(
+  input: CreateEventDraftInput,
+): Promise<OperatorMutationResult> {
+  const {
+    organizationId,
+    database,
+    venue,
+    eventTimezone,
+    startsAt,
+    endsAt,
+    capacity,
+    minimumCapacity,
+    startingPrice,
+    storedCurrency,
+  } = await prepareEventDraftWrite(input);
   const programId = crypto.randomUUID();
   const eventTypeId = crypto.randomUUID();
   const sessionId = crypto.randomUUID();
@@ -4270,6 +4626,195 @@ export async function createEventDraft(
     }),
   ]);
   return { id: sessionId, entity: "event", status: "draft" };
+}
+
+export async function updateEventDraft(
+  input: UpdateEventDraftInput,
+): Promise<OperatorMutationResult> {
+  const organizationId = requireOrganization(input.actor);
+  const before = await loadEventDraft(organizationId, input.sessionId);
+  const {
+    database,
+    venue,
+    eventTimezone,
+    startsAt,
+    endsAt,
+    capacity,
+    minimumCapacity,
+    startingPrice,
+    storedCurrency,
+  } = await prepareEventDraftWrite(input);
+  const target = await database.query.sessions.findFirst({
+    where: eq(sessions.id, input.sessionId),
+  });
+  if (!target?.programId || !target.eventTypeId || target.status !== "draft") {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Only complete private event drafts can be edited.",
+    );
+  }
+
+  const values = {
+    title: input.title.trim(),
+    shortSummary: input.shortSummary?.trim() || undefined,
+    description: input.description?.trim() || undefined,
+    kind: input.kind,
+    startsAt: startsAt.toISOString(),
+    endsAt: endsAt.toISOString(),
+    timezone: eventTimezone,
+    venueId: venue?.id,
+    courtId: input.location.courtIds[0],
+    capacity,
+    minimumCapacity,
+    priceMinor: startingPrice,
+    currency: storedCurrency,
+  };
+
+  await database.batch([
+    database
+      .update(programs)
+      .set({
+        title: values.title,
+        description: values.description ?? null,
+        kind: values.kind,
+        updatedAt: input.now,
+      })
+      .where(eq(programs.id, target.programId)),
+    database
+      .update(eventTypes)
+      .set({
+        title: values.title,
+        kind: values.kind,
+        durationMinutes: Math.round(
+          (endsAt.getTime() - startsAt.getTime()) / 60_000,
+        ),
+        capacity: values.capacity,
+        minimumCapacity: values.minimumCapacity,
+        priceMinor: values.priceMinor,
+        currency: values.currency,
+        updatedAt: input.now,
+      })
+      .where(eq(eventTypes.id, target.eventTypeId)),
+    database
+      .update(sessions)
+      .set({
+        title: values.title,
+        startsAt,
+        endsAt,
+        timezone: values.timezone,
+        venueId: values.venueId ?? null,
+        courtId: values.courtId ?? null,
+        capacity: values.capacity,
+        minimumCapacity: values.minimumCapacity,
+        updatedAt: input.now,
+      })
+      .where(eq(sessions.id, input.sessionId)),
+    database
+      .update(eventBlueprints)
+      .set({
+        shortSummary: values.shortSummary ?? null,
+        description: values.description ?? null,
+        media: input.media,
+        location: {
+          mode: input.location.mode,
+          venueName: input.location.venueName.trim(),
+          address: input.location.address?.trim() || undefined,
+          googlePlaceId: input.location.googlePlaceId?.trim() || undefined,
+          latitude: input.location.latitude,
+          longitude: input.location.longitude,
+          onlineUrl: input.location.onlineUrl?.trim() || undefined,
+          courtNames: input.location.courtNames,
+        },
+        features: input.features,
+        policies: input.policies,
+        recurrence: input.recurrence ?? null,
+        registrationSettings: {
+          teamConfirmationRequired: true,
+          allowPlayerSearch: true,
+          allowInviteLink: true,
+          allowEmailInvite: true,
+          allowSmsInvite: true,
+          paymentResponsibility: ["self", "entire-team"],
+          smartRules: input.smartRules,
+        },
+        updatedAt: input.now,
+      })
+      .where(eq(eventBlueprints.sessionId, input.sessionId)),
+    database.delete(divisions).where(eq(divisions.sessionId, input.sessionId)),
+    database
+      .delete(ticketTypes)
+      .where(eq(ticketTypes.sessionId, input.sessionId)),
+    ...input.divisions.map((division) =>
+      database.insert(divisions).values({
+        id: crypto.randomUUID(),
+        sessionId: input.sessionId,
+        name: division.name.trim(),
+        description: division.description?.trim() || undefined,
+        discipline: divisionDiscipline(division),
+        ratingBasis: division.seeding,
+        capacity: division.maximumTeams * teamSize(division.teamFormat),
+        minimumTeams: division.minimumTeams,
+        maximumTeams: division.maximumTeams,
+        teamSize: teamSize(division.teamFormat),
+        priceBasis: division.priceBasis,
+        settings: {
+          teamFormat: division.teamFormat,
+          surface: division.surface,
+          gender: division.gender,
+          ratingMinimum: division.ratingEnabled
+            ? division.ratingMinimum
+            : undefined,
+          ratingMaximum: division.ratingEnabled
+            ? division.ratingMaximum
+            : undefined,
+          ageMinimum: division.ageEnabled ? division.ageMinimum : undefined,
+          ageMaximum: division.ageEnabled ? division.ageMaximum : undefined,
+          tournamentFormat: division.tournamentFormat,
+          poolPlay: division.poolPlay,
+          seeding: division.seeding,
+        },
+        entryFeeMinor: division.priceMinor,
+        currency: values.currency,
+      }),
+    ),
+    ...input.tickets.map((ticket) =>
+      database.insert(ticketTypes).values({
+        id: crypto.randomUUID(),
+        sessionId: input.sessionId,
+        name: ticket.name.trim(),
+        description: ticket.description?.trim() || undefined,
+        priceMinor: ticket.priceMinor,
+        currency: values.currency,
+        quantity: ticket.quantity,
+        availableOnline: ticket.availableOnline,
+        availableInPerson: ticket.availableInPerson,
+        waitlistEnabled: ticket.waitlistEnabled,
+        approvalRequired: ticket.approvalRequired,
+      }),
+    ),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "event.draft_updated",
+      entityType: "session",
+      entityId: input.sessionId,
+      beforeHash: stableHash(before),
+      afterHash: stableHash({
+        ...values,
+        divisions: input.divisions,
+        tickets: input.tickets,
+        features: input.features,
+        policies: input.policies,
+        recurrence: input.recurrence,
+      }),
+      reason: "Operator reviewed and saved changes to a private event draft.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return { id: input.sessionId, entity: "event", status: "draft" };
 }
 
 export async function publishSession(input: {
@@ -4754,6 +5299,88 @@ function validateCallbackUrl(value: string): string {
     );
   }
   return url.toString();
+}
+
+export async function refreshStripeOnboarding(input: {
+  readonly actor: ApiActor;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<StripeAccountReadinessResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const organization = await organizationRow(organizationId);
+  if (!organization.stripeAccountId) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Start Stripe onboarding before refreshing payment status.",
+    );
+  }
+
+  const readiness = await retrieveConnectAccountReadiness(
+    organization.stripeAccountId,
+  );
+  if (
+    readiness.accountId !== organization.stripeAccountId ||
+    (readiness.metadataEntityId &&
+      readiness.metadataEntityId !== organization.id)
+  ) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Stripe account metadata conflicts with the Duna organization mapping.",
+    );
+  }
+
+  const changed =
+    organization.stripeAccountType !== readiness.accountType ||
+    organization.stripeChargesEnabled !== readiness.chargesEnabled;
+  if (changed) {
+    const database = getDatabase();
+    await database.batch([
+      database
+        .update(organizations)
+        .set({
+          stripeAccountType: readiness.accountType,
+          stripeChargesEnabled: readiness.chargesEnabled,
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            eq(organizations.id, organizationId),
+            eq(organizations.stripeAccountId, readiness.accountId),
+          ),
+        ),
+      database.insert(auditLog).values({
+        organizationId,
+        actorPersonId: input.actor.personId,
+        actorType: "person",
+        action: "stripe.account_status_refreshed",
+        entityType: "organization",
+        entityId: organizationId,
+        beforeHash: stableHash({
+          accountId: organization.stripeAccountId,
+          accountType: organization.stripeAccountType,
+          chargesEnabled: organization.stripeChargesEnabled,
+        }),
+        afterHash: stableHash({
+          accountId: readiness.accountId,
+          accountType: readiness.accountType,
+          chargesEnabled: readiness.chargesEnabled,
+        }),
+        reason: readiness.chargesEnabled
+          ? "Stripe confirmed that the connected account can receive Duna sandbox payments."
+          : "Stripe still reports incomplete or restricted connected-account capabilities.",
+        traceId: input.requestId,
+        ipAddress: input.ipAddress,
+        createdAt: input.now,
+      }),
+    ]);
+  }
+
+  return {
+    accountId: readiness.accountId,
+    chargesEnabled: readiness.chargesEnabled,
+  };
 }
 
 export async function startStripeOnboarding(input: {

@@ -82,8 +82,17 @@ export function ProMatchDetail({
   readonly videos?: readonly VideoSummary[];
 }) {
   const { event, match } = detail;
+  const hasScore = match.sets.length > 0;
   const teamAWins = match.sets.filter((set) => set.a > set.b).length;
   const teamBWins = match.sets.filter((set) => set.b > set.a).length;
+  const scoreStatus =
+    match.status === "completed"
+      ? "Final"
+      : match.status === "live"
+        ? "Live score"
+        : match.time
+          ? `Starts ${match.time}`
+          : "Scheduled";
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "SportsEvent",
@@ -124,6 +133,11 @@ export function ProMatchDetail({
               {match.status}
             </Badge>
             <Badge>{match.roundLabel}</Badge>
+            {match.leagueTeamAName && match.leagueTeamBName && (
+              <Badge>
+                {match.leagueTeamAName} vs. {match.leagueTeamBName}
+              </Badge>
+            )}
           </div>
           <h1>
             {match.teamA.label} <span>vs</span> {match.teamB.label}
@@ -140,7 +154,7 @@ export function ProMatchDetail({
                     month: "long",
                     day: "numeric",
                     year: "numeric",
-                    timeZone: "UTC",
+                    timeZone: match.timezone ?? "UTC",
                   }).format(new Date(match.playedAt))
                 : (event.startsOn ?? "Date pending")}
               {match.time ? ` · ${match.time}` : ""}
@@ -151,12 +165,18 @@ export function ProMatchDetail({
             </span>
           </div>
         </div>
-        <div className="pro-match-hero__score">
+        <div
+          aria-label={`${match.teamA.label} ${hasScore ? teamAWins : "not started"}, ${match.teamB.label} ${hasScore ? teamBWins : "not started"}. ${scoreStatus}.`}
+          aria-live={match.status === "live" ? "polite" : undefined}
+          className={`pro-match-hero__score${hasScore ? "" : " pro-match-hero__score--pending"}`}
+          role="group"
+        >
           <span>{match.teamA.label}</span>
-          <strong>{teamAWins}</strong>
+          <strong>{hasScore ? teamAWins : "—"}</strong>
           <i>:</i>
-          <strong>{teamBWins}</strong>
+          <strong>{hasScore ? teamBWins : "—"}</strong>
           <span>{match.teamB.label}</span>
+          <small>{scoreStatus}</small>
         </div>
       </section>
 
@@ -252,7 +272,13 @@ export function ProMatchDetail({
                       <strong>{option.label}</strong>
                       <small>
                         {option.channelName ??
-                          (option.url ? "Open stream" : "Live TV")}
+                          (option.url
+                            ? "Open stream"
+                            : option.kind === "youtube"
+                              ? "Direct link coming soon"
+                              : option.kind === "vbtv"
+                                ? "VBTV subscription"
+                                : "Live TV")}
                       </small>
                     </span>
                     {option.url && <ExternalLink aria-hidden size={14} />}

@@ -3,10 +3,12 @@ import {
   assertBrandMediaPath,
   assertCourtMediaPath,
   assertEventMediaPath,
+  assertProfessionalEventMediaPath,
   assertVenueMediaPath,
   createBrandMediaPath,
   createCourtMediaPath,
   createEventMediaPath,
+  createProfessionalEventMediaPath,
   createVenueMediaPath,
   validateEventMediaInput,
 } from "./media-storage";
@@ -70,6 +72,25 @@ describe("event media storage", () => {
     expect(() =>
       assertEventMediaPath(
         `events/${organizationId}/../outside.jpg`,
+        organizationId,
+        "jpg",
+      ),
+    ).toThrow("destination is invalid");
+
+    const professionalPath = createProfessionalEventMediaPath(
+      organizationId,
+      "image/jpeg",
+      identifier,
+    );
+    expect(professionalPath).toBe(
+      `professional-events/${organizationId}/${identifier}.jpg`,
+    );
+    expect(() =>
+      assertProfessionalEventMediaPath(professionalPath, organizationId, "jpg"),
+    ).not.toThrow();
+    expect(() =>
+      assertProfessionalEventMediaPath(
+        `professional-events/${organizationId}/../outside.jpg`,
         organizationId,
         "jpg",
       ),

@@ -1,9 +1,11 @@
 import AVFoundation
 import CoreImage
+import ARKit
 import CoreMotion
 import ExpoModulesCore
 import HaishinKit
 import PhotosUI
+import SceneKit
 import UIKit
 import UniformTypeIdentifiers
 import Vision
@@ -14,6 +16,7 @@ private final class DunaVideoCaptureController: NSObject {
   private let connection = RTMPConnection()
   let stream: RTMPStream
   private let motionManager = CMMotionManager()
+  let arSession = ARSession()
   private let visionQueue = DispatchQueue(
     label: "co.duna.video.vision",
     qos: .userInitiated
@@ -27,18 +30,33 @@ private final class DunaVideoCaptureController: NSObject {
   private var pendingStreamKey: String?
   private var lastVisionAt = CFAbsoluteTimeGetCurrent()
   private var lastPreviewAt = CFAbsoluteTimeGetCurrent()
+  private var lastARAt = CFAbsoluteTimeGetCurrent()
   private var recorder: IOStreamRecorder?
   private var recordingPromise: Promise?
   private var latestGuidance: [String: Any]?
+  private var usesGroundTracking = false
+  private var lidarAvailable = false
+  private var latestGroundCorners: [CGPoint]?
+  private var latestCameraHeight: Double?
+  private var latestHorizonY = 0.16
+  private var latestTrackingState = "initializing"
+  private var smoothedScore: Double?
+  private var pendingSuggestion: String?
+  private var pendingSuggestionSince = CFAbsoluteTimeGetCurrent()
+  private var stableSuggestion: String?
+  private var lockedCaptureOrientation: AVCaptureVideoOrientation?
+  private var currentDeviceOrientation = "unknown"
 
   var courtWidthMeters = 8.0
   var courtLengthMeters = 16.0
   var netHeightMeters = 2.43
+  var preferredOrientation = "landscape"
 
   private override init() {
     stream = RTMPStream(connection: connection)
     super.init()
     stream.delegate = self
+    arSession.delegate = self
     stream.frameRate = 30
     stream.videoSettings.bitRate = 5_000_000
     stream.audioSettings.bitRate = 128_000
@@ -82,6 +100,8 @@ private final class DunaVideoCaptureController: NSObject {
   func attach(view: DunaVideoCaptureView) {
     activeView = view
     view.preview.attachStream(stream)
+    view.arPreview.session = arSession
+    showGroundPreview(usesGroundTracking)
     handleOrientationChange()
   }
 
@@ -109,27 +129,16 @@ private final class DunaVideoCaptureController: NSObject {
         )
       }
       camera = captureDevice
-      stream.attachCamera(captureDevice) { [weak self] unit, error in
-        unit?.isVideoMirrored = false
-        if let error {
-          self?.emitError("Camera setup failed: \(error.localizedDescription)")
-        }
-      }
       prepared = true
       startMotion()
-    }
-    if audioEnabled {
-      stream.attachAudio(AVCaptureDevice.default(for: .audio)) {
-        [weak self] _,
-        error in
-        if let error {
-          self?.emitError(
-            "Microphone setup failed: \(error.localizedDescription)"
-          )
-        }
+      if ARWorldTrackingConfiguration.isSupported {
+        startGroundTracking()
+      } else {
+        attachCaptureDevices(audioEnabled: audioEnabled)
       }
-    } else {
-      stream.attachAudio(nil)
+    }
+    if !usesGroundTracking {
+      attachAudioDevice(audioEnabled: audioEnabled)
     }
     emitState("preview")
   }
@@ -138,6 +147,14 @@ private final class DunaVideoCaptureController: NSObject {
     guard pendingStreamKey == nil, recorder == nil else { return }
     stream.attachCamera(nil)
     stream.attachAudio(nil)
+    arSession.pause()
+    usesGroundTracking = false
+    latestGroundCorners = nil
+    latestCameraHeight = nil
+    smoothedScore = nil
+    stableSuggestion = nil
+    pendingSuggestion = nil
+    showGroundPreview(false)
     motionManager.stopDeviceMotionUpdates()
     prepared = false
     camera = nil
@@ -145,6 +162,7 @@ private final class DunaVideoCaptureController: NSObject {
 
   func startStream(url: String, key: String, audioEnabled: Bool) throws {
     try prepare(audioEnabled: audioEnabled)
+    transitionToCapture(audioEnabled: audioEnabled)
     pendingStreamKey = key
     UIApplication.shared.isIdleTimerDisabled = true
     emitState("connecting")
@@ -155,12 +173,14 @@ private final class DunaVideoCaptureController: NSObject {
     pendingStreamKey = nil
     stream.close()
     connection.close()
+    lockedCaptureOrientation = nil
     UIApplication.shared.isIdleTimerDisabled = recorder != nil
     emitState("stopped")
   }
 
   func startRecording(audioEnabled: Bool) throws {
     try prepare(audioEnabled: audioEnabled)
+    transitionToCapture(audioEnabled: audioEnabled)
     guard recorder == nil else {
       throw NSError(
         domain: "DunaVideoCapture",
@@ -197,6 +217,69 @@ private final class DunaVideoCaptureController: NSObject {
     }
     recordingPromise = promise
     recorder.stopRunning()
+  }
+
+  private func attachCaptureDevices(audioEnabled: Bool) {
+    guard let camera else { return }
+    stream.attachCamera(camera) { [weak self] unit, error in
+      unit?.isVideoMirrored = false
+      if let error {
+        self?.emitError("Camera setup failed: \(error.localizedDescription)")
+      }
+    }
+    attachAudioDevice(audioEnabled: audioEnabled)
+  }
+
+  private func attachAudioDevice(audioEnabled: Bool) {
+    if audioEnabled {
+      stream.attachAudio(AVCaptureDevice.default(for: .audio)) {
+        [weak self] _,
+        error in
+        if let error {
+          self?.emitError(
+            "Microphone setup failed: \(error.localizedDescription)"
+          )
+        }
+      }
+    } else {
+      stream.attachAudio(nil)
+    }
+  }
+
+  private func startGroundTracking() {
+    let configuration = ARWorldTrackingConfiguration()
+    configuration.planeDetection = [.horizontal]
+    lidarAvailable = ARWorldTrackingConfiguration.supportsSceneReconstruction(
+      .mesh
+    )
+    if lidarAvailable {
+      configuration.sceneReconstruction = .meshWithClassification
+    }
+    if ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
+      configuration.frameSemantics.insert(.sceneDepth)
+    }
+    usesGroundTracking = true
+    latestTrackingState = "initializing"
+    showGroundPreview(true)
+    arSession.run(configuration, options: [.resetTracking, .removeExistingAnchors])
+  }
+
+  private func transitionToCapture(audioEnabled: Bool) {
+    if usesGroundTracking {
+      arSession.pause()
+      usesGroundTracking = false
+      showGroundPreview(false)
+      attachCaptureDevices(audioEnabled: audioEnabled)
+    }
+    lockedCaptureOrientation = currentVideoOrientation()
+    applyVideoOrientation(lockedCaptureOrientation ?? .portrait)
+  }
+
+  private func showGroundPreview(_ enabled: Bool) {
+    DispatchQueue.main.async { [weak self] in
+      self?.activeView?.arPreview.isHidden = !enabled
+      self?.activeView?.preview.isHidden = enabled
+    }
   }
 
   func lockCalibration() -> [String: Any]? {
@@ -248,17 +331,32 @@ private final class DunaVideoCaptureController: NSObject {
 
   @objc
   private func handleOrientationChange() {
-    let orientation: AVCaptureVideoOrientation
+    let orientation = currentVideoOrientation()
+    if lockedCaptureOrientation == nil {
+      applyVideoOrientation(orientation)
+    }
+  }
+
+  private func currentVideoOrientation() -> AVCaptureVideoOrientation {
     switch UIDevice.current.orientation {
     case .landscapeLeft:
-      orientation = .landscapeRight
+      currentDeviceOrientation = "landscape"
+      return .landscapeRight
     case .landscapeRight:
-      orientation = .landscapeLeft
+      currentDeviceOrientation = "landscape"
+      return .landscapeLeft
     case .portraitUpsideDown:
-      orientation = .portraitUpsideDown
+      currentDeviceOrientation = "portrait"
+      return .portraitUpsideDown
+    case .portrait:
+      currentDeviceOrientation = "portrait"
+      return .portrait
     default:
-      orientation = .portrait
+      return lockedCaptureOrientation ?? .portrait
     }
+  }
+
+  private func applyVideoOrientation(_ orientation: AVCaptureVideoOrientation) {
     stream.videoOrientation = orientation
     activeView?.preview.videoOrientation = orientation
   }
@@ -312,22 +410,29 @@ private final class DunaVideoCaptureController: NSObject {
   }
 
   private func analyze(_ sampleBuffer: CMSampleBuffer) {
-    let now = CFAbsoluteTimeGetCurrent()
-    guard now - lastVisionAt >= 0.45 else { return }
-    lastVisionAt = now
     guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
       return
     }
+    analyze(pixelBuffer, orientation: visionOrientation())
+  }
+
+  private func analyze(
+    _ pixelBuffer: CVPixelBuffer,
+    orientation: CGImagePropertyOrientation
+  ) {
+    let now = CFAbsoluteTimeGetCurrent()
+    guard now - lastVisionAt >= 0.45 else { return }
+    lastVisionAt = now
     let rectangleRequest = VNDetectRectanglesRequest()
-    rectangleRequest.maximumObservations = 2
-    rectangleRequest.minimumConfidence = 0.42
-    rectangleRequest.minimumAspectRatio = 0.28
+    rectangleRequest.maximumObservations = 4
+    rectangleRequest.minimumConfidence = 0.5
+    rectangleRequest.minimumAspectRatio = 0.22
     rectangleRequest.maximumAspectRatio = 1.0
-    rectangleRequest.quadratureTolerance = 35
+    rectangleRequest.quadratureTolerance = 28
     let poseRequest = VNDetectHumanBodyPoseRequest()
     let handler = VNImageRequestHandler(
       cvPixelBuffer: pixelBuffer,
-      orientation: .right,
+      orientation: orientation,
       options: [:]
     )
     do {
@@ -347,52 +452,128 @@ private final class DunaVideoCaptureController: NSObject {
     }
   }
 
+  private func visionOrientation() -> CGImagePropertyOrientation {
+    switch UIDevice.current.orientation {
+    case .landscapeLeft:
+      return .up
+    case .landscapeRight:
+      return .down
+    case .portraitUpsideDown:
+      return .left
+    default:
+      return .right
+    }
+  }
+
+  private func stableWarnings(_ warnings: [String]) -> [String] {
+    guard let candidate = warnings.first else {
+      stableSuggestion = nil
+      pendingSuggestion = nil
+      return []
+    }
+    let now = CFAbsoluteTimeGetCurrent()
+    if candidate != pendingSuggestion {
+      pendingSuggestion = candidate
+      pendingSuggestionSince = now
+    }
+    if stableSuggestion == nil || now - pendingSuggestionSince >= 0.8 {
+      stableSuggestion = candidate
+    }
+    var result = warnings
+    if let stableSuggestion {
+      result.removeAll { $0 == stableSuggestion }
+      result.insert(stableSuggestion, at: 0)
+    }
+    return Array(result.prefix(8))
+  }
+
   private func publishGuidance(
     rectangle: VNRectangleObservation?,
     pose: VNHumanBodyPoseObservation?
   ) {
     var score = 100
     var warnings: [String] = []
-    var corners: [[String: Double]]?
-    var confidence = 0.15
-
-    if let rectangle {
-      let box = rectangle.boundingBox
-      confidence = Double(rectangle.confidence)
-      corners = [
-        ["x": Double(rectangle.topLeft.x), "y": Double(rectangle.topLeft.y)],
-        ["x": Double(rectangle.topRight.x), "y": Double(rectangle.topRight.y)],
-        [
-          "x": Double(rectangle.bottomRight.x),
-          "y": Double(rectangle.bottomRight.y)
-        ],
-        [
-          "x": Double(rectangle.bottomLeft.x),
-          "y": Double(rectangle.bottomLeft.y)
-        ]
-      ]
-      if box.width > 0.93 || box.height > 0.88 {
-        score -= 22
-        warnings.append("Move farther back")
-      }
-      if box.maxX > 0.98 {
-        score -= 16
-        warnings.append("The far-right service area is outside the frame")
-      }
-      if box.minX < 0.02 {
-        score -= 12
-        warnings.append("Rotate slightly left")
-      } else if box.midX > 0.59 {
-        score -= 9
-        warnings.append("Rotate slightly right")
-      }
-      if box.maxY < 0.7 {
-        score -= 10
-        warnings.append("Raise the phone")
-      }
-    } else {
+    let orientationMatches = currentDeviceOrientation == preferredOrientation
+    if !orientationMatches {
       score -= 38
-      warnings.append("Keep all four outside court corners visible")
+      warnings.append("Rotate your iPhone to \(preferredOrientation)")
+    }
+
+    let visionCorners: [CGPoint]? = rectangle.map {
+      [
+        CGPoint(x: $0.topLeft.x, y: 1 - $0.topLeft.y),
+        CGPoint(x: $0.topRight.x, y: 1 - $0.topRight.y),
+        CGPoint(x: $0.bottomRight.x, y: 1 - $0.bottomRight.y),
+        CGPoint(x: $0.bottomLeft.x, y: 1 - $0.bottomLeft.y)
+      ]
+    }
+    let projectedCorners = latestGroundCorners ?? visionCorners
+    let groundDetected = latestGroundCorners != nil ||
+      (!ARWorldTrackingConfiguration.isSupported && rectangle != nil)
+
+    var courtDetected = false
+    if let rectangle, let projectedCorners {
+      let projectedMinX = projectedCorners.map(\.x).min() ?? 0
+      let projectedMaxX = projectedCorners.map(\.x).max() ?? 1
+      let projectedMinY = projectedCorners.map(\.y).min() ?? 0
+      let projectedMaxY = projectedCorners.map(\.y).max() ?? 1
+      let box = rectangle.boundingBox
+      let rectangleCenter = CGPoint(x: box.midX, y: 1 - box.midY)
+      let projectedCenter = CGPoint(
+        x: (projectedMinX + projectedMaxX) / 2,
+        y: (projectedMinY + projectedMaxY) / 2
+      )
+      let centerDistance = hypot(
+        rectangleCenter.x - projectedCenter.x,
+        rectangleCenter.y - projectedCenter.y
+      )
+      courtDetected = rectangle.confidence >= 0.58 &&
+        box.width * box.height >= 0.07 &&
+        (!usesGroundTracking || centerDistance < 0.34)
+    }
+
+    if !groundDetected {
+      score -= 42
+      warnings.append("Tilt down slowly so Duna can find the sand")
+    } else if !courtDetected {
+      score -= 31
+      warnings.append("Ground found—fit all four boundary corners in the guide")
+    }
+
+    if let projectedCorners {
+      let minX = projectedCorners.map(\.x).min() ?? 0
+      let maxX = projectedCorners.map(\.x).max() ?? 1
+      let minY = projectedCorners.map(\.y).min() ?? 0
+      let maxY = projectedCorners.map(\.y).max() ?? 1
+      let width = maxX - minX
+      let height = maxY - minY
+      let midX = (minX + maxX) / 2
+
+      if minX < 0.035 || maxX > 0.965 || maxY > 0.9 || width > 0.93 {
+        score -= 20
+        warnings.append("Step farther behind the end line")
+      } else if width < 0.42 || height < 0.3 {
+        score -= 12
+        warnings.append("Move a little closer while keeping every corner visible")
+      }
+      if midX < 0.44 {
+        score -= 9
+        warnings.append("Rotate gradually left")
+      } else if midX > 0.56 {
+        score -= 9
+        warnings.append("Rotate gradually right")
+      }
+      if minY > 0.32 {
+        score -= 10
+        warnings.append("Raise the phone slightly")
+      }
+    }
+
+    if let cameraHeight = latestCameraHeight, cameraHeight < 0.38 {
+      score -= 13
+      warnings.append(
+        "Ground-level tripod detected—raise it for stronger player tracking"
+      )
     }
 
     if let pose, let points = try? pose.recognizedPoints(.all) {
@@ -404,7 +585,6 @@ private final class DunaVideoCaptureController: NSObject {
           score -= 12
           warnings.append("Players may be too small for advanced analytics")
         }
-        confidence = max(confidence, 0.55)
       }
     }
 
@@ -443,6 +623,12 @@ private final class DunaVideoCaptureController: NSObject {
     }
 
     score = max(0, min(100, score))
+    if !courtDetected {
+      score = min(score, 63)
+    }
+    smoothedScore = smoothedScore.map { $0 * 0.72 + Double(score) * 0.28 }
+      ?? Double(score)
+    score = Int((smoothedScore ?? Double(score)).rounded())
     let grade: String
     if score >= 84 {
       grade = "excellent"
@@ -454,16 +640,41 @@ private final class DunaVideoCaptureController: NSObject {
       grade = "poor"
     }
     let timestamp = ISO8601DateFormatter().string(from: Date())
+    let confidence: Double = courtDetected
+      ? (lidarAvailable ? 0.9 : 0.78)
+      : groundDetected
+        ? (lidarAvailable ? 0.68 : 0.55)
+        : 0.18
+    let stabilizedWarnings = stableWarnings(warnings)
     var payload: [String: Any] = [
       "qualityGrade": grade,
       "qualityScore": score,
       "confidence": confidence,
-      "acceptable": score >= 67,
-      "warnings": Array(warnings.prefix(8)),
+      "acceptable": score >= 67 && orientationMatches && courtDetected,
+      "warnings": stabilizedWarnings,
+      "projectionSource": latestGroundCorners != nil
+        ? (lidarAvailable ? "lidar" : "arkit")
+        : rectangle != nil ? "vision" : "estimated",
+      "lidarAvailable": lidarAvailable,
+      "groundPlaneDetected": groundDetected,
+      "courtDetected": courtDetected,
+      "preferredOrientation": preferredOrientation,
+      "deviceOrientation": currentDeviceOrientation,
+      "orientationMatches": orientationMatches,
+      "trackingState": latestTrackingState,
+      "horizonY": latestHorizonY,
       "calibratedAt": timestamp
     ]
-    if let corners {
-      payload["corners"] = corners
+    if let projectedCorners {
+      payload["corners"] = projectedCorners.map {
+        [
+          "x": max(0, min(1, Double($0.x))),
+          "y": max(0, min(1, Double($0.y)))
+        ]
+      }
+    }
+    if let latestCameraHeight {
+      payload["cameraHeightMeters"] = latestCameraHeight
     }
     if let attitude {
       payload["deviceAttitude"] = attitude
@@ -508,6 +719,129 @@ private final class DunaVideoCaptureController: NSObject {
         ]
       )
     }
+  }
+}
+
+extension DunaVideoCaptureController: ARSessionDelegate {
+  func session(_ session: ARSession, didUpdate frame: ARFrame) {
+    guard usesGroundTracking else { return }
+    let now = CFAbsoluteTimeGetCurrent()
+    guard now - lastARAt >= 0.2 else { return }
+    lastARAt = now
+
+    switch frame.camera.trackingState {
+    case .normal:
+      latestTrackingState = "normal"
+    case .limited:
+      latestTrackingState = "limited"
+    case .notAvailable:
+      latestTrackingState = "unavailable"
+    }
+
+    let horizontalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
+      guard
+        let plane = anchor as? ARPlaneAnchor,
+        plane.alignment == .horizontal
+      else {
+        return nil
+      }
+      return plane
+    }
+    let ground = horizontalPlanes.max {
+      $0.extent.x * $0.extent.z < $1.extent.x * $1.extent.z
+    }
+
+    if let ground, let view = activeView {
+      let cameraTransform = frame.camera.transform
+      let cameraPosition = SIMD3<Float>(
+        cameraTransform.columns.3.x,
+        cameraTransform.columns.3.y,
+        cameraTransform.columns.3.z
+      )
+      var forward = SIMD3<Float>(
+        -cameraTransform.columns.2.x,
+        0,
+        -cameraTransform.columns.2.z
+      )
+      var right = SIMD3<Float>(
+        cameraTransform.columns.0.x,
+        0,
+        cameraTransform.columns.0.z
+      )
+      if simd_length(forward) > 0.001 && simd_length(right) > 0.001 {
+        forward = simd_normalize(forward)
+        right = simd_normalize(right)
+        let groundY = ground.transform.columns.3.y
+        let cameraHeight = max(0, cameraPosition.y - groundY)
+        let nearDistance = max(1.5, min(4.5, cameraHeight * 2.2))
+        var nearCenter = cameraPosition + forward * nearDistance
+        nearCenter.y = groundY
+        let farCenter = nearCenter + forward * Float(courtLengthMeters)
+        let halfWidth = Float(courtWidthMeters / 2)
+        let worldCorners = [
+          farCenter - right * halfWidth,
+          farCenter + right * halfWidth,
+          nearCenter + right * halfWidth,
+          nearCenter - right * halfWidth
+        ]
+        DispatchQueue.main.async { [weak self, weak view] in
+          guard
+            let self,
+            let view,
+            view.bounds.width > 0,
+            view.bounds.height > 0
+          else {
+            return
+          }
+          let projected = worldCorners.map { point -> CGPoint in
+            let screen = view.arPreview.projectPoint(
+              SCNVector3(point.x, point.y, point.z)
+            )
+            return CGPoint(
+              x: CGFloat(screen.x) / view.bounds.width,
+              y: CGFloat(screen.y) / view.bounds.height
+            )
+          }
+          if projected.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) {
+            if let previous = self.latestGroundCorners,
+              previous.count == projected.count
+            {
+              self.latestGroundCorners = zip(previous, projected).map {
+                CGPoint(
+                  x: $0.0.x * 0.72 + $0.1.x * 0.28,
+                  y: $0.0.y * 0.72 + $0.1.y * 0.28
+                )
+              }
+            } else {
+              self.latestGroundCorners = projected
+            }
+            self.latestCameraHeight = Double(cameraHeight)
+            let pitch = Double(frame.camera.eulerAngles.x)
+            self.latestHorizonY = max(0.08, min(0.42, 0.5 + pitch * 0.55))
+          }
+        }
+      }
+    } else {
+      latestGroundCorners = nil
+      latestCameraHeight = nil
+    }
+
+    let pixelBuffer = frame.capturedImage
+    let orientation = visionOrientation()
+    visionQueue.async { [weak self] in
+      self?.analyze(pixelBuffer, orientation: orientation)
+    }
+  }
+
+  func session(_ session: ARSession, didFailWithError error: Error) {
+    guard usesGroundTracking else { return }
+    usesGroundTracking = false
+    latestTrackingState = "unavailable"
+    showGroundPreview(false)
+    attachCaptureDevices(audioEnabled: audioEnabled)
+    emitError(
+      "Ground sensing is unavailable, so Duna switched to the Vision court guide."
+    )
   }
 }
 
@@ -581,6 +915,7 @@ extension DunaVideoCaptureController: IOStreamRecorderDelegate {
   ) {
     stream.removeObserver(recorder)
     self.recorder = nil
+    lockedCaptureOrientation = nil
     UIApplication.shared.isIdleTimerDisabled = pendingStreamKey != nil
     recordingPromise?.reject(
       "ERR_DUNA_RECORDING",
@@ -595,6 +930,7 @@ extension DunaVideoCaptureController: IOStreamRecorderDelegate {
   ) {
     stream.removeObserver(recorder)
     self.recorder = nil
+    lockedCaptureOrientation = nil
     UIApplication.shared.isIdleTimerDisabled = pendingStreamKey != nil
     let url = writer.outputURL
     let asset = AVURLAsset(url: url)
@@ -615,6 +951,7 @@ extension DunaVideoCaptureController: IOStreamRecorderDelegate {
 }
 
 public final class DunaVideoCaptureView: ExpoView {
+  let arPreview = ARSCNView(frame: .zero)
   let preview = MTHKView(frame: .zero)
   let onGuidance = ExpoModulesCore.EventDispatcher()
   let onStreamState = ExpoModulesCore.EventDispatcher()
@@ -624,6 +961,10 @@ public final class DunaVideoCaptureView: ExpoView {
   public required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
     clipsToBounds = true
+    arPreview.automaticallyUpdatesLighting = true
+    arPreview.rendersCameraGrain = false
+    arPreview.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    addSubview(arPreview)
     preview.videoGravity = .resizeAspectFill
     preview.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     addSubview(preview)
@@ -633,6 +974,7 @@ public final class DunaVideoCaptureView: ExpoView {
   public override var bounds: CGRect {
     didSet {
       preview.frame = bounds
+      arPreview.frame = bounds
     }
   }
 
@@ -922,6 +1264,12 @@ public final class DunaVideoCaptureModule: Module {
       Prop("netHeightMeters") {
         (_: DunaVideoCaptureView, value: Double) in
         DunaVideoCaptureController.shared.netHeightMeters = value
+      }
+
+      Prop("preferredOrientation") {
+        (_: DunaVideoCaptureView, value: String) in
+        DunaVideoCaptureController.shared.preferredOrientation =
+          value == "portrait" ? "portrait" : "landscape"
       }
     }
   }

@@ -26,6 +26,7 @@ import {
   ScrollText,
   ShieldCheck,
   TicketCheck,
+  Trophy,
   UsersRound,
   WalletCards,
 } from "lucide-react";
@@ -39,6 +40,10 @@ import {
   RatingsLabPanel,
   SandDataPanel,
 } from "./sand-admin-controls";
+import {
+  ProfessionalTourAdminPanel,
+  type ProfessionalTourTool,
+} from "./pro-tour-admin-controls";
 import { VideoAdminControls } from "./video-admin-controls";
 
 const adminMetricIcons = [
@@ -81,6 +86,12 @@ const copy: Record<
     title: "Sand data",
     description:
       "VolleyballLife, BVBInfo, FIVB, and world-ranking evidence in one staged pipeline.",
+  },
+  "pro-tour": {
+    eyebrow: "Professional competition operations",
+    title: "Pro tour",
+    description:
+      "Manage synced FIVB and AVP events, broadcast destinations, seasonal teams, substitutions, and player identity mappings.",
   },
   "player-mapping": {
     eyebrow: "Canonical identity resolution",
@@ -712,6 +723,8 @@ export function AdminPanel({
   sandData,
   playerDirectory,
   playerSearchQuery,
+  proEventId,
+  proTourTool,
 }: {
   readonly module: AdminModule;
   readonly overview: AdminOverviewData;
@@ -722,6 +735,8 @@ export function AdminPanel({
   readonly sandData?: SandDataOverview;
   readonly playerDirectory: readonly PersonSummary[];
   readonly playerSearchQuery?: string;
+  readonly proEventId?: string;
+  readonly proTourTool?: ProfessionalTourTool;
 }) {
   if (module === "overview") return null;
   const content = copy[module];
@@ -732,20 +747,22 @@ export function AdminPanel({
         ? ShieldCheck
         : module === "ratings"
           ? Activity
-          : module === "sand-data" ||
-              module === "player-mapping" ||
-              module === "ratings-lab" ||
-              module === "profile-merge"
-            ? Activity
-            : module === "payments"
-              ? WalletCards
-              : module === "video"
-                ? Radio
-                : module === "audit"
-                  ? ScrollText
-                  : module === "flags"
-                    ? Flag
-                    : HeartPulse;
+          : module === "pro-tour"
+            ? Trophy
+            : module === "sand-data" ||
+                module === "player-mapping" ||
+                module === "ratings-lab" ||
+                module === "profile-merge"
+              ? Activity
+              : module === "payments"
+                ? WalletCards
+                : module === "video"
+                  ? Radio
+                  : module === "audit"
+                    ? ScrollText
+                    : module === "flags"
+                      ? Flag
+                      : HeartPulse;
   const ratedPlayers = overview.metrics.find(
     (metric) => metric.label === "Rated players",
   );
@@ -805,6 +822,13 @@ export function AdminPanel({
         </div>
       ) : module === "sand-data" && sandData ? (
         <SandDataPanel data={sandData} />
+      ) : module === "pro-tour" && sandData ? (
+        <ProfessionalTourAdminPanel
+          data={sandData}
+          initialEventId={proEventId}
+          players={playerDirectory}
+          tool={proTourTool}
+        />
       ) : module === "player-mapping" && sandData ? (
         <PlayerMappingPanel
           data={sandData}
