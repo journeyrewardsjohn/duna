@@ -7,6 +7,7 @@ export type HealthKitChanges = {
   readonly deletedExternalIds: readonly string[];
   readonly cursors: HealthKitCursor;
   readonly hasMore: boolean;
+  readonly metricsWithMore?: readonly string[];
 };
 
 export type DunaHealthKitModuleEvents = {

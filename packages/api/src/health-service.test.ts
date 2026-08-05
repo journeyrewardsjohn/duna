@@ -41,6 +41,27 @@ describe("Duna Health encryption", () => {
       }),
     ).toThrow();
   });
+
+  it("keeps wearable and app source attribution inside encrypted payloads", () => {
+    const source = {
+      bundleIdentifier: "com.whoop.ios",
+      name: "WHOOP",
+      version: "5.0",
+      device: { manufacturer: "WHOOP", model: "MG" },
+    };
+    const encrypted = encryptHealthPayload({
+      value: 51,
+      unit: "ms",
+      source,
+    });
+
+    expect(encrypted.encryptedPayload).not.toContain("WHOOP");
+    expect(decryptHealthPayload(encrypted)).toEqual({
+      value: 51,
+      unit: "ms",
+      source,
+    });
+  });
 });
 
 describe("Duna Health authorization", () => {

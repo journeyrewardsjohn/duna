@@ -36,6 +36,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { SvgUri } from "react-native-svg";
 import {
   startDunaLiveActivity,
   updateDunaLiveActivity,
@@ -55,6 +56,15 @@ import {
 } from "./watch-scoring";
 import { VideoStudioScreen } from "./video-studio";
 import { HealthScreen } from "./health-screen";
+import { HealthHistorySyncAgent } from "./health-history-sync-agent";
+import {
+  proEventFeaturedMedia,
+  proEventMediaUrl,
+  proEventSections,
+  searchProEvents,
+  sortProEvents,
+  type ProTourSection,
+} from "./pro-tour";
 import {
   FellixText as Text,
   FellixTextInput as TextInput,
@@ -2295,6 +2305,279 @@ function VenueBookingModal({
   );
 }
 
+type ProCoverageEvent = NonNullable<
+  PlayerRuntime["proCoverage"]
+>["events"][number];
+type ResolvedProEvent = NonNullable<ProEventDetail>;
+type ProMatch = ResolvedProEvent["matches"][number];
+
+const proTourSectionLabels: Record<ProTourSection, string> = {
+  overview: "Overview",
+  live: "Live",
+  schedule: "Schedule",
+  draw: "Draw",
+  teams: "Teams",
+  watch: "Watch",
+};
+
+function formatProEventDay(value?: string | null): string {
+  if (!value) return "Date pending";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T12:00:00Z`));
+}
+
+function formatProEventDates(start?: string | null, end?: string | null) {
+  if (!start && !end) return "Dates to be announced";
+  if (!start || !end || start === end) return formatProEventDay(start ?? end);
+  return `${formatProEventDay(start)} – ${formatProEventDay(end)}`;
+}
+
+function countryFlag(code?: string | null): string {
+  const normalized = code?.trim().toUpperCase();
+  if (!normalized || normalized.length !== 2) return "";
+  return String.fromCodePoint(
+    ...[...normalized].map((letter) => 127397 + letter.charCodeAt(0)),
+  );
+}
+
+function ProTourBrandMark({
+  source,
+  compact = false,
+}: {
+  readonly source: "fivb" | "avp";
+  readonly compact?: boolean;
+}) {
+  const [logoFailed, setLogoFailed] = useState(false);
+  useEffect(() => setLogoFailed(false), [source]);
+  const label = source === "avp" ? "AVP" : "BEACH PRO TOUR";
+  const asset = source === "avp" ? "avp.svg" : "beach-pro-tour.svg";
+  return (
+    <View
+      accessibilityLabel={
+        source === "avp" ? "AVP" : "Volleyball World Beach Pro Tour"
+      }
+      style={[
+        styles.proMobileBrandMark,
+        compact && styles.proMobileBrandMarkCompact,
+      ]}
+    >
+      {logoFailed ? (
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.proMobileBrandFallback,
+            source === "avp" && styles.proMobileBrandFallbackAvp,
+          ]}
+        >
+          {label}
+        </Text>
+      ) : (
+        <SvgUri
+          height={compact ? 26 : 36}
+          onError={() => setLogoFailed(true)}
+          uri={`${dunaWebUrl}/media/tours/${asset}`}
+          width={compact ? 58 : 84}
+        />
+      )}
+    </View>
+  );
+}
+
+function ProTourEventCard({
+  event,
+  onPress,
+}: {
+  readonly event: ProCoverageEvent;
+  readonly onPress: () => void;
+}) {
+  const live = event.live;
+  return (
+    <Pressable
+      accessibilityLabel={`Open ${event.name}${live ? ", live now" : ""}`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.proMobileEventCard,
+        live && styles.proMobileEventCardLive,
+        pressed && styles.proMobilePressed,
+      ]}
+    >
+      <ProTourBrandMark compact source={event.source} />
+      <View style={styles.proMobileEventCardBody}>
+        <View style={styles.proMobileEventKickerRow}>
+          <Text
+            style={[
+              styles.proMobileEventStatus,
+              live && styles.proMobileEventStatusLive,
+            ]}
+          >
+            {live ? "● LIVE NOW" : event.status.toUpperCase()}
+          </Text>
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.proMobileEventDivision,
+              live && styles.proMobileEventDivisionLive,
+            ]}
+          >
+            {event.genderCategory}
+          </Text>
+        </View>
+        <Text
+          numberOfLines={2}
+          style={[
+            styles.proMobileEventName,
+            live && styles.proMobileEventNameLive,
+          ]}
+        >
+          {event.name}
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.proMobileEventMeta,
+            live && styles.proMobileEventMetaLive,
+          ]}
+        >
+          {formatProEventDates(event.startsOn, event.endsOn)} ·{" "}
+          {event.location ?? "Location pending"}
+        </Text>
+      </View>
+      <Text
+        aria-hidden
+        style={[
+          styles.proMobileEventArrow,
+          live && styles.proMobileEventArrowLive,
+        ]}
+      >
+        ›
+      </Text>
+    </Pressable>
+  );
+}
+
+function ProTourMatchCard({
+  match,
+  followed,
+  onFollow,
+}: {
+  readonly match: ProMatch;
+  readonly followed: boolean;
+  readonly onFollow?: () => void;
+}) {
+  const live = match.status === "live";
+  const time =
+    match.time ??
+    (match.playedAt
+      ? new Intl.DateTimeFormat("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(new Date(match.playedAt))
+      : "Time pending");
+  const scores = (side: "a" | "b") =>
+    match.sets.map((set) => set[side]).join("  ") || "—";
+  return (
+    <View
+      style={[styles.proMobileMatchCard, live && styles.proMobileMatchCardLive]}
+    >
+      <View style={styles.proMobileMatchHeader}>
+        <Text
+          style={[
+            styles.proMobileMatchStatus,
+            live && styles.proMobileMatchStatusLive,
+          ]}
+        >
+          {live
+            ? "● LIVE"
+            : match.status === "completed"
+              ? "FINAL"
+              : "UPCOMING"}
+        </Text>
+        <Text numberOfLines={1} style={styles.proMobileMatchMeta}>
+          {match.roundLabel} · {time}
+          {match.court ? ` · ${match.court}` : ""}
+        </Text>
+      </View>
+      <View style={styles.proMobileMatchTeamRow}>
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.proMobileMatchTeam,
+            match.winnerSide === "A" && styles.proMobileMatchWinner,
+          ]}
+        >
+          {match.teamA.label}
+        </Text>
+        <Text style={styles.proMobileMatchScore}>{scores("a")}</Text>
+      </View>
+      <View style={styles.proMobileMatchTeamRow}>
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.proMobileMatchTeam,
+            match.winnerSide === "B" && styles.proMobileMatchWinner,
+          ]}
+        >
+          {match.teamB.label}
+        </Text>
+        <Text style={styles.proMobileMatchScore}>{scores("b")}</Text>
+      </View>
+      <View style={styles.proMobileMatchFooter}>
+        <Text style={styles.proMobileMatchPrediction}>
+          {match.prediction.basis === "SandRating"
+            ? `${match.prediction.teamA.toFixed(0)}% · ${match.prediction.teamB.toFixed(0)}% Sand Rating`
+            : "Even matchup"}
+        </Text>
+        {onFollow && (
+          <Pressable
+            accessibilityLabel={
+              followed ? "Following match on Lock Screen" : "Follow match"
+            }
+            onPress={onFollow}
+            style={[
+              styles.proMobileFollowButton,
+              followed && styles.proMobileFollowButtonActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.proMobileFollowButtonText,
+                followed && styles.proMobileFollowButtonTextActive,
+              ]}
+            >
+              {followed ? "Following" : live ? "Follow live" : "Follow"}
+            </Text>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function ProTourSectionTitle({
+  eyebrow,
+  title,
+  trailing,
+}: {
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly trailing?: string;
+}) {
+  return (
+    <View style={styles.proMobileSectionTitleRow}>
+      <View style={styles.proMobileSectionTitleCopy}>
+        <Text style={styles.proMobileSectionEyebrow}>{eyebrow}</Text>
+        <Text style={styles.proMobileSectionTitle}>{title}</Text>
+      </View>
+      {trailing && <Text style={styles.proMobileSectionCount}>{trailing}</Text>}
+    </View>
+  );
+}
+
 function ProTourModal({
   visible,
   onClose,
@@ -2302,31 +2585,61 @@ function ProTourModal({
   readonly visible: boolean;
   readonly onClose: () => void;
 }) {
-  const { client, proCoverage } = usePlayerRuntime();
+  const { width } = useWindowDimensions();
+  const { client, publicClient, proCoverage } = usePlayerRuntime();
+  const coverageClient = publicClient ?? client;
   const [selectedSlug, setSelectedSlug] = useState<string>();
   const [event, setEvent] = useState<ProEventDetail>();
+  const [activeSection, setActiveSection] =
+    useState<ProTourSection>("overview");
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
+  const [reloadKey, setReloadKey] = useState(0);
+  const [posterFailed, setPosterFailed] = useState(false);
   const [followedMatchId, setFollowedMatchId] = useState<string>();
   const [followNotice, setFollowNotice] = useState<string>();
   const events = proCoverage?.events ?? [];
+  const orderedEvents = useMemo(() => sortProEvents(events), [events]);
+  const filteredEvents = useMemo(
+    () => searchProEvents(orderedEvents, search),
+    [orderedEvents, search],
+  );
+  const liveEvents = orderedEvents.filter((candidate) => candidate.live);
+  const otherEvents = orderedEvents.filter((candidate) => !candidate.live);
 
   useEffect(() => {
-    if (!visible || selectedSlug || events.length === 0) return;
-    setSelectedSlug(
-      events.find((candidate) => candidate.live)?.slug ?? events[0]?.slug,
-    );
-  }, [events, selectedSlug, visible]);
+    if (!visible) {
+      setSelectedSlug(undefined);
+      setEvent(undefined);
+      setActiveSection("overview");
+      setSearch("");
+      setError(undefined);
+      setFollowNotice(undefined);
+    }
+  }, [visible]);
 
   useEffect(() => {
-    if (!visible || !selectedSlug || !client) return;
+    if (!visible || !selectedSlug) return;
+    if (!coverageClient) {
+      setLoading(false);
+      setError("Live event data is unavailable. Please try again in a moment.");
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(undefined);
-    void client.public.proEvent
+    setPosterFailed(false);
+    void coverageClient.public.proEvent
       .query({ slug: selectedSlug })
       .then((nextEvent) => {
-        if (!cancelled) setEvent(nextEvent);
+        if (cancelled) return;
+        if (!nextEvent) {
+          setError("This event is not available yet.");
+          return;
+        }
+        setEvent(nextEvent);
+        setActiveSection("overview");
       })
       .catch((reason) => {
         if (!cancelled) setError(displayError(reason));
@@ -2337,7 +2650,7 @@ function ProTourModal({
     return () => {
       cancelled = true;
     };
-  }, [client, selectedSlug, visible]);
+  }, [coverageClient, reloadKey, selectedSlug, visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -2372,7 +2685,30 @@ function ProTourModal({
     }).catch(() => undefined);
   }, [event, followedMatchId]);
 
-  const followMatch = async (match: ProEventDetail["matches"][number]) => {
+  const openEvent = (slug: string) => {
+    selectionHaptic();
+    setEvent(undefined);
+    setError(undefined);
+    setFollowNotice(undefined);
+    setSelectedSlug(slug);
+  };
+
+  const backToEvents = () => {
+    selectionHaptic();
+    setSelectedSlug(undefined);
+    setEvent(undefined);
+    setError(undefined);
+    setActiveSection("overview");
+  };
+
+  const handleClose = () => {
+    setSelectedSlug(undefined);
+    setEvent(undefined);
+    setSearch("");
+    onClose();
+  };
+
+  const followMatch = async (match: ProMatch) => {
     const latestSet = match.sets.at(-1);
     await startDunaLiveActivity(
       {
@@ -2408,253 +2744,765 @@ function ProTourModal({
     successHaptic();
   };
 
+  const followAction = (match: ProMatch) =>
+    Platform.OS === "ios" && match.status !== "completed"
+      ? () => {
+          selectionHaptic();
+          void followMatch(match).catch((reason) =>
+            setFollowNotice(displayError(reason)),
+          );
+        }
+      : undefined;
+
   if (!visible) return null;
+
+  const selectedSummary = selectedSlug
+    ? events.find((candidate) => candidate.slug === selectedSlug)
+    : undefined;
+  const sections = event ? proEventSections(event) : (["overview"] as const);
+  const featuredMedia = event ? proEventFeaturedMedia(event) : undefined;
+  const posterUrl = event ? proEventMediaUrl(event) : undefined;
+  const posterIsPortrait = featuredMedia?.kind === "poster";
+  const heroHeight = posterIsPortrait
+    ? Math.min(390, Math.max(300, width * 0.96))
+    : Math.min(310, Math.max(250, width * 0.72));
+  const liveMatches =
+    event?.matches.filter((match) => match.status === "live") ?? [];
+  const completedMatches =
+    event?.matches.filter((match) => match.status === "completed").length ?? 0;
+  const venueAddress = event
+    ? (event.editorial.venue?.formattedAddress ??
+      event.editorial.venueAddress ??
+      [
+        event.editorial.venue?.addressLine1,
+        event.editorial.venue?.locality,
+        event.editorial.venue?.administrativeArea,
+        event.editorial.venue?.postalCode,
+      ]
+        .filter(Boolean)
+        .join(", "))
+    : undefined;
+  const watchOptions = event
+    ? [
+        ...event.watchOptions,
+        ...event.matches.flatMap((match) => match.watchOptions),
+      ].filter(
+        (option, index, options) =>
+          options.findIndex((candidate) => candidate.id === option.id) ===
+          index,
+      )
+    : [];
+
+  const renderEmpty = (title: string, body: string) => (
+    <View style={styles.proMobileEmptyCard}>
+      <Text style={styles.proMobileEmptyIcon}>◌</Text>
+      <Text style={styles.proMobileEmptyTitle}>{title}</Text>
+      <Text style={styles.proMobileEmptyBody}>{body}</Text>
+    </View>
+  );
+
+  const renderOverview = () => {
+    if (!event) return null;
+    return (
+      <>
+        <View style={styles.proMobileStatGrid}>
+          <View style={styles.proMobileStatCard}>
+            <Text style={styles.proMobileStatValue}>{event.teamCount}</Text>
+            <Text style={styles.proMobileStatLabel}>Teams</Text>
+          </View>
+          <View style={styles.proMobileStatCard}>
+            <Text style={styles.proMobileStatValue}>
+              {completedMatches}/{event.matchCount}
+            </Text>
+            <Text style={styles.proMobileStatLabel}>Matches</Text>
+          </View>
+          <View style={styles.proMobileStatCard}>
+            <Text style={styles.proMobileStatValue}>
+              {event.bracket.length || event.pools.length || "—"}
+            </Text>
+            <Text style={styles.proMobileStatLabel}>
+              {event.bracket.length ? "Rounds" : "Pools"}
+            </Text>
+          </View>
+        </View>
+
+        {event.editorial.summary && (
+          <View style={styles.proMobileInfoCard}>
+            <Text style={styles.proMobileInfoEyebrow}>EVENT OVERVIEW</Text>
+            <Text style={styles.proMobileSummary}>
+              {event.editorial.summary}
+            </Text>
+          </View>
+        )}
+
+        {liveMatches.length > 0 && (
+          <>
+            <ProTourSectionTitle
+              eyebrow="UPDATING LIVE"
+              title="On court now"
+              trailing={`${liveMatches.length}`}
+            />
+            <View style={styles.proMobileCardStack}>
+              {liveMatches.slice(0, 3).map((match) => (
+                <ProTourMatchCard
+                  followed={followedMatchId === match.id}
+                  key={match.id}
+                  match={match}
+                  onFollow={followAction(match)}
+                />
+              ))}
+            </View>
+          </>
+        )}
+
+        {(event.editorial.venueName || event.location || venueAddress) && (
+          <View style={styles.proMobileInfoCard}>
+            <Text style={styles.proMobileInfoEyebrow}>EVENT LOCATION</Text>
+            <Text style={styles.proMobileInfoTitle}>
+              {event.editorial.venueName ?? event.location}
+            </Text>
+            {venueAddress && (
+              <Text style={styles.proMobileInfoBody}>{venueAddress}</Text>
+            )}
+            {event.editorial.timezone && (
+              <Text style={styles.proMobileInfoFootnote}>
+                Schedule shown in {event.editorial.timezone}
+              </Text>
+            )}
+          </View>
+        )}
+
+        <View style={styles.proMobileActionRow}>
+          {event.editorial.ticketUrl && (
+            <Pressable
+              onPress={() =>
+                void WebBrowser.openBrowserAsync(event.editorial.ticketUrl!)
+              }
+              style={styles.proMobilePrimaryAction}
+            >
+              <Text style={styles.proMobilePrimaryActionText}>Tickets ↗</Text>
+            </Pressable>
+          )}
+          <Pressable
+            onPress={() => void WebBrowser.openBrowserAsync(event.sourceUrl)}
+            style={styles.proMobileSecondaryAction}
+          >
+            <Text style={styles.proMobileSecondaryActionText}>
+              Official source ↗
+            </Text>
+          </Pressable>
+        </View>
+
+        {event.sibling && (
+          <Pressable
+            onPress={() => openEvent(event.sibling!.slug)}
+            style={styles.proMobileSiblingCard}
+          >
+            <View>
+              <Text style={styles.proMobileInfoEyebrow}>OTHER DIVISION</Text>
+              <Text style={styles.proMobileSiblingTitle}>
+                {event.sibling.name}
+              </Text>
+            </View>
+            <Text style={styles.proMobileSiblingArrow}>›</Text>
+          </Pressable>
+        )}
+      </>
+    );
+  };
+
+  const renderLive = () => {
+    if (!event) return null;
+    return (
+      <>
+        <ProTourSectionTitle
+          eyebrow="LIVE TOURNAMENT DESK"
+          title="On court now"
+          trailing={`${liveMatches.length} live`}
+        />
+        {liveMatches.length > 0 ? (
+          <View style={styles.proMobileCardStack}>
+            {liveMatches.map((match) => (
+              <ProTourMatchCard
+                followed={followedMatchId === match.id}
+                key={match.id}
+                match={match}
+                onFollow={followAction(match)}
+              />
+            ))}
+          </View>
+        ) : (
+          renderEmpty(
+            "No match is live right now",
+            "The tournament desk will surface live scores here as soon as play begins.",
+          )
+        )}
+      </>
+    );
+  };
+
+  const renderSchedule = () => {
+    if (!event) return null;
+    return (
+      <>
+        <ProTourSectionTitle
+          eyebrow="SCORES + SCHEDULE"
+          title="Every match"
+          trailing={`${event.matches.length}`}
+        />
+        {event.matches.length > 0 ? (
+          <View style={styles.proMobileCardStack}>
+            {event.matches.slice(0, 60).map((match) => (
+              <ProTourMatchCard
+                followed={followedMatchId === match.id}
+                key={match.id}
+                match={match}
+                onFollow={followAction(match)}
+              />
+            ))}
+            {event.matches.length > 60 && (
+              <Text style={styles.proMobileListNote}>
+                Showing the latest 60 of {event.matches.length} matches.
+              </Text>
+            )}
+          </View>
+        ) : (
+          renderEmpty(
+            "Schedule coming soon",
+            "Matches will appear here when the official event feed publishes them.",
+          )
+        )}
+      </>
+    );
+  };
+
+  const renderDraw = () => {
+    if (!event) return null;
+    return (
+      <>
+        {event.bracket.length > 0 && (
+          <>
+            <ProTourSectionTitle
+              eyebrow="CHAMPIONSHIP DRAW"
+              title="Bracket"
+              trailing={`${event.bracket.length} rounds`}
+            />
+            <View style={styles.proMobileDrawStack}>
+              {event.bracket.map((round) => (
+                <View key={round.key} style={styles.proMobileDrawRound}>
+                  <Text style={styles.proMobileDrawRoundTitle}>
+                    {round.label}
+                  </Text>
+                  <View style={styles.proMobileCardStack}>
+                    {round.matches.map((match) => (
+                      <ProTourMatchCard
+                        followed={followedMatchId === match.id}
+                        key={match.id}
+                        match={match}
+                        onFollow={followAction(match)}
+                      />
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+        {event.pools.length > 0 && (
+          <>
+            <ProTourSectionTitle
+              eyebrow="POOL PLAY"
+              title="Standings"
+              trailing={`${event.pools.length} pools`}
+            />
+            <View style={styles.proMobileCardStack}>
+              {event.pools.map((pool) => (
+                <View key={pool.name} style={styles.proMobilePoolCard}>
+                  <View style={styles.proMobilePoolHeader}>
+                    <Text style={styles.proMobilePoolTitle}>{pool.name}</Text>
+                    <Text style={styles.proMobilePoolProgress}>
+                      {pool.completedMatches}/{pool.matchCount} played
+                    </Text>
+                  </View>
+                  {pool.standings.map((standing, index) => (
+                    <View
+                      key={standing.team.key}
+                      style={styles.proMobileStandingRow}
+                    >
+                      <Text style={styles.proMobileStandingRank}>
+                        {index + 1}
+                      </Text>
+                      <Text
+                        numberOfLines={1}
+                        style={styles.proMobileStandingTeam}
+                      >
+                        {standing.team.label}
+                      </Text>
+                      <Text style={styles.proMobileStandingRecord}>
+                        {standing.wins}–{standing.losses}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+        {event.bracket.length === 0 &&
+          event.pools.length === 0 &&
+          renderEmpty(
+            "Draw coming soon",
+            "Pool standings and bracket rounds will appear as the official feed reports them.",
+          )}
+      </>
+    );
+  };
+
+  const renderTeams = () => {
+    if (!event) return null;
+    return (
+      <>
+        <ProTourSectionTitle
+          eyebrow="FIELD + STANDINGS"
+          title="Teams"
+          trailing={`${event.teamCount || event.teamEntries.length}`}
+        />
+        {event.liveStandings.length > 0 && (
+          <View style={styles.proMobileStandingsCard}>
+            {event.liveStandings.slice(0, 24).map((standing, index) => (
+              <View key={standing.team.key} style={styles.proMobileStandingRow}>
+                <Text style={styles.proMobileStandingRank}>{index + 1}</Text>
+                <Text numberOfLines={1} style={styles.proMobileStandingTeam}>
+                  {standing.team.label}
+                </Text>
+                <Text style={styles.proMobileStandingRecord}>
+                  {standing.wins}–{standing.losses}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+        {event.teamEntries.length > 0 && (
+          <View style={styles.proMobileTeamGrid}>
+            {event.teamEntries.slice(0, 64).map((team) => (
+              <View key={team.externalTeamId} style={styles.proMobileTeamCard}>
+                <View style={styles.proMobileTeamCardTop}>
+                  <Text style={styles.proMobileTeamSeed}>
+                    {team.seed ? `#${team.seed}` : "TEAM"}
+                  </Text>
+                  <Text style={styles.proMobileTeamCountry}>
+                    {countryFlag(team.countryCode)}
+                  </Text>
+                </View>
+                <Text numberOfLines={2} style={styles.proMobileTeamName}>
+                  {team.label}
+                </Text>
+                <Text numberOfLines={2} style={styles.proMobileTeamPlayers}>
+                  {team.players.map((player) => player.name).join(" / ")}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+        {event.liveStandings.length === 0 &&
+          event.teamEntries.length === 0 &&
+          renderEmpty(
+            "Teams coming soon",
+            "The entry list will appear here when it is confirmed by the tour.",
+          )}
+      </>
+    );
+  };
+
+  const renderWatch = () => {
+    if (!event) return null;
+    return (
+      <>
+        <ProTourSectionTitle
+          eyebrow="BROADCAST GUIDE"
+          title="Where to watch"
+          trailing={`${watchOptions.length}`}
+        />
+        {watchOptions.length > 0 ? (
+          <View style={styles.proMobileCardStack}>
+            {watchOptions.map((option) => (
+              <Pressable
+                disabled={!option.url}
+                key={option.id}
+                onPress={() =>
+                  option.url
+                    ? void WebBrowser.openBrowserAsync(option.url)
+                    : undefined
+                }
+                style={({ pressed }) => [
+                  styles.proMobileWatchCard,
+                  pressed && styles.proMobilePressed,
+                ]}
+              >
+                <View style={styles.proMobileWatchIcon}>
+                  <Text style={styles.proMobileWatchIconText}>
+                    {option.kind === "youtube" ? "▶" : "◉"}
+                  </Text>
+                </View>
+                <View style={styles.proMobileWatchCopy}>
+                  <Text style={styles.proMobileWatchTitle}>{option.label}</Text>
+                  <Text style={styles.proMobileWatchMeta}>
+                    {option.channelName ??
+                      (option.url ? "Open stream" : "Broadcast confirmed")}
+                  </Text>
+                </View>
+                {option.url && (
+                  <Text style={styles.proMobileWatchArrow}>↗</Text>
+                )}
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          renderEmpty(
+            "Broadcast details pending",
+            "Verified streaming and television options will appear here when announced.",
+          )
+        )}
+      </>
+    );
+  };
+
+  const renderActiveSection = () => {
+    switch (activeSection) {
+      case "live":
+        return renderLive();
+      case "schedule":
+        return renderSchedule();
+      case "draw":
+        return renderDraw();
+      case "teams":
+        return renderTeams();
+      case "watch":
+        return renderWatch();
+      default:
+        return renderOverview();
+    }
+  };
+
   return (
     <Modal
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
       presentationStyle="pageSheet"
       visible={visible}
     >
       <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
-        <View style={styles.proTourHeader}>
-          <View>
-            <Text style={styles.eyebrow}>FIVB + BEACH PRO TOUR</Text>
-            <Text style={styles.proTourTitle}>Pro Tour</Text>
-          </View>
-          <Pressable
-            accessibilityLabel="Close Pro Tour"
-            onPress={onClose}
-            style={styles.proTourClose}
-          >
-            <Text style={styles.closeText}>×</Text>
-          </Pressable>
-        </View>
-        <ScrollView
-          contentContainerStyle={styles.proTourContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.horizontalBleed}
-          >
-            <View style={styles.proEventPicker}>
-              {events.map((candidate) => (
-                <Pressable
-                  key={candidate.id}
-                  onPress={() => {
-                    selectionHaptic();
-                    setEvent(undefined);
-                    setSelectedSlug(candidate.slug);
-                  }}
-                  style={[
-                    styles.proEventPickerCard,
-                    candidate.slug === selectedSlug &&
-                      styles.proEventPickerCardActive,
-                  ]}
+        {selectedSlug ? (
+          <>
+            <View style={styles.proMobileDetailHeader}>
+              <Pressable
+                accessibilityLabel="Back to Pro Tour events"
+                onPress={backToEvents}
+                style={styles.proMobileHeaderButton}
+              >
+                <Text style={styles.proMobileHeaderButtonText}>‹</Text>
+              </Pressable>
+              <View style={styles.proMobileDetailHeaderCopy}>
+                <Text style={styles.proMobileDetailHeaderEyebrow}>
+                  {event?.live || selectedSummary?.live
+                    ? "● LIVE EVENT"
+                    : "PRO EVENT"}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={styles.proMobileDetailHeaderTitle}
                 >
-                  <Text
+                  {event?.name ?? selectedSummary?.name ?? "Event"}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Close Pro Tour"
+                onPress={handleClose}
+                style={styles.proMobileHeaderButton}
+              >
+                <Text style={styles.proMobileHeaderCloseText}>×</Text>
+              </Pressable>
+            </View>
+
+            {event && (
+              <ScrollView
+                contentContainerStyle={styles.proMobileSectionNavContent}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.proMobileSectionNav}
+              >
+                {sections.map((section) => (
+                  <Pressable
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: activeSection === section }}
+                    key={section}
+                    onPress={() => {
+                      selectionHaptic();
+                      setActiveSection(section);
+                    }}
                     style={[
-                      styles.proEventPickerStatus,
-                      candidate.live && styles.proLiveText,
+                      styles.proMobileSectionTab,
+                      activeSection === section &&
+                        styles.proMobileSectionTabActive,
                     ]}
                   >
-                    {candidate.live ? "● LIVE" : candidate.status.toUpperCase()}
-                  </Text>
-                  <Text numberOfLines={2} style={styles.proEventPickerName}>
-                    {candidate.name}
-                  </Text>
-                  <Text style={styles.rowMeta}>
-                    {candidate.location ?? "Location pending"} ·{" "}
-                    {candidate.genderCategory}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
-          {loading && !event && (
-            <Text style={styles.bookingEmpty}>
-              Loading live tournament desk…
-            </Text>
-          )}
-          {error && <Text style={styles.formError}>{error}</Text>}
-          {event && (
-            <>
-              <View style={styles.proEventHero}>
-                <View style={styles.eventBadges}>
-                  <Pill tone={event.live ? "live" : "neutral"}>
-                    {event.live ? "Live now" : event.status}
-                  </Pill>
-                  <Pill>{event.category ?? "FIVB"}</Pill>
+                    <Text
+                      style={[
+                        styles.proMobileSectionTabText,
+                        activeSection === section &&
+                          styles.proMobileSectionTabTextActive,
+                      ]}
+                    >
+                      {proTourSectionLabels[section]}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+
+            {loading && !event ? (
+              <View style={styles.proMobileLoadingState}>
+                <View style={styles.proMobileLoadingMark}>
+                  <Text style={styles.proMobileLoadingMarkText}>D</Text>
                 </View>
-                <Text style={styles.proEventHeroTitle}>{event.name}</Text>
-                <Text style={styles.proEventHeroMeta}>
-                  {event.location ?? "Location pending"} · {event.teamCount}{" "}
-                  teams · {event.matches.length}/{event.matchCount} matches
+                <Text style={styles.proMobileLoadingTitle}>
+                  Opening the tournament desk
                 </Text>
-                <Text style={styles.proEventUpdated}>
-                  Updated{" "}
-                  {new Date(event.lastSyncedAt).toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
+                <Text style={styles.proMobileLoadingBody}>
+                  Bringing in live scores, teams, and event media…
                 </Text>
+              </View>
+            ) : error && !event ? (
+              <View style={styles.proMobileLoadingState}>
+                <Text style={styles.proMobileEmptyIcon}>!</Text>
+                <Text style={styles.proMobileLoadingTitle}>
+                  Event could not load
+                </Text>
+                <Text style={styles.proMobileLoadingBody}>{error}</Text>
+                <Pressable
+                  onPress={() => setReloadKey((value) => value + 1)}
+                  style={styles.proMobileRetryButton}
+                >
+                  <Text style={styles.proMobileRetryButtonText}>Try again</Text>
+                </Pressable>
+              </View>
+            ) : event ? (
+              <ScrollView
+                contentContainerStyle={styles.proMobileDetailContent}
+                key={activeSection}
+                showsVerticalScrollIndicator={false}
+              >
+                {activeSection === "overview" && (
+                  <View style={[styles.proMobileHero, { height: heroHeight }]}>
+                    {posterUrl && !posterFailed ? (
+                      <Image
+                        accessibilityLabel={featuredMedia?.alt ?? event.name}
+                        onError={() => setPosterFailed(true)}
+                        resizeMode={posterIsPortrait ? "contain" : "cover"}
+                        source={{ uri: posterUrl }}
+                        style={styles.proMobileHeroImage}
+                      />
+                    ) : (
+                      <View style={styles.proMobileHeroFallback}>
+                        <View style={styles.proMobileCourtOutline} />
+                        <View style={styles.proMobileCourtNet} />
+                      </View>
+                    )}
+                    <View style={styles.proMobileHeroScrim} />
+                    <View style={styles.proMobileHeroTop}>
+                      <View style={styles.proMobileHeroBadges}>
+                        <View
+                          style={[
+                            styles.proMobileHeroBadge,
+                            event.live && styles.proMobileHeroBadgeLive,
+                          ]}
+                        >
+                          <Text style={styles.proMobileHeroBadgeText}>
+                            {event.live
+                              ? "● LIVE NOW"
+                              : event.status.toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={styles.proMobileHeroBadge}>
+                          <Text style={styles.proMobileHeroBadgeText}>
+                            {event.genderCategory.toUpperCase()}
+                          </Text>
+                        </View>
+                      </View>
+                      <ProTourBrandMark compact source={event.source} />
+                    </View>
+                    <View style={styles.proMobileHeroCopy}>
+                      <Text style={styles.proMobileHeroCategory}>
+                        {event.category ?? "Professional beach volleyball"}
+                      </Text>
+                      <Text style={styles.proMobileHeroTitle}>
+                        {event.name}
+                      </Text>
+                      <Text style={styles.proMobileHeroMeta}>
+                        {countryFlag(event.countryCode)}{" "}
+                        {formatProEventDates(event.startsOn, event.endsOn)} ·{" "}
+                        {event.editorial.venueName ??
+                          event.location ??
+                          "Location pending"}
+                      </Text>
+                    </View>
+                  </View>
+                )}
                 {followNotice && (
-                  <Text style={styles.liveActivityNotice}>{followNotice}</Text>
+                  <View style={styles.proMobileNotice}>
+                    <Text style={styles.proMobileNoticeText}>
+                      {followNotice}
+                    </Text>
+                  </View>
+                )}
+                {error && event && (
+                  <Text style={styles.formError}>{error}</Text>
+                )}
+                {renderActiveSection()}
+              </ScrollView>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <View style={styles.proMobileHubHeader}>
+              <View>
+                <Text style={styles.proMobileHubEyebrow}>
+                  PROFESSIONAL BEACH VOLLEYBALL
+                </Text>
+                <Text style={styles.proMobileHubTitle}>Pro Tour</Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Close Pro Tour"
+                onPress={handleClose}
+                style={styles.proMobileHeaderButton}
+              >
+                <Text style={styles.proMobileHeaderCloseText}>×</Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              contentContainerStyle={styles.proMobileHubContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.proMobileIntro}>
+                <View style={styles.proMobileIntroCopy}>
+                  <Text style={styles.proMobileIntroKicker}>
+                    {liveEvents.length > 0
+                      ? `● ${liveEvents.length} LIVE NOW`
+                      : "WORLD TOUR COVERAGE"}
+                  </Text>
+                  <Text style={styles.proMobileIntroTitle}>
+                    The world’s game, live in Duna.
+                  </Text>
+                  <Text style={styles.proMobileIntroBody}>
+                    Scores, draws, teams, schedules, and broadcasts in one
+                    mobile tournament desk.
+                  </Text>
+                </View>
+                <View style={styles.proMobileIntroBrands}>
+                  <ProTourBrandMark source="fivb" />
+                  <ProTourBrandMark source="avp" />
+                </View>
+              </View>
+
+              <View style={styles.proMobileSearchBar}>
+                <Text aria-hidden style={styles.proMobileSearchIcon}>
+                  ⌕
+                </Text>
+                <TextInput
+                  accessibilityLabel="Search Pro Tour events"
+                  autoCapitalize="none"
+                  onChangeText={setSearch}
+                  placeholder="Search events, cities, or tours"
+                  placeholderTextColor={colors.muted}
+                  returnKeyType="search"
+                  style={styles.proMobileSearchInput}
+                  value={search}
+                />
+                {search.length > 0 && (
+                  <Pressable
+                    accessibilityLabel="Clear event search"
+                    onPress={() => setSearch("")}
+                    style={styles.proMobileSearchClear}
+                  >
+                    <Text style={styles.proMobileSearchClearText}>×</Text>
+                  </Pressable>
                 )}
               </View>
 
-              <SectionHeader
-                eyebrow={`${event.bracket.length} ROUNDS`}
-                title="Championship bracket."
-              />
-              {event.bracket.length > 0 ? (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.horizontalBleed}
-                >
-                  <View style={styles.proBracket}>
-                    {event.bracket.map((round) => (
-                      <View key={round.key} style={styles.proBracketRound}>
-                        <Text style={styles.proBracketRoundTitle}>
-                          {round.label.toUpperCase()}
-                        </Text>
-                        <View style={styles.proBracketRoundMatches}>
-                          {round.matches.map((match) => (
-                            <View key={match.id} style={styles.proBracketMatch}>
-                              <View style={styles.proBracketTeam}>
-                                <Text
-                                  numberOfLines={1}
-                                  style={[
-                                    styles.proBracketTeamName,
-                                    match.winnerSide === "A" &&
-                                      styles.proBracketWinner,
-                                  ]}
-                                >
-                                  {match.teamA.label}
-                                </Text>
-                                <Text style={styles.proBracketScore}>
-                                  {match.sets.map((set) => set.a).join(" · ") ||
-                                    "—"}
-                                </Text>
-                              </View>
-                              <View style={styles.proBracketTeam}>
-                                <Text
-                                  numberOfLines={1}
-                                  style={[
-                                    styles.proBracketTeamName,
-                                    match.winnerSide === "B" &&
-                                      styles.proBracketWinner,
-                                  ]}
-                                >
-                                  {match.teamB.label}
-                                </Text>
-                                <Text style={styles.proBracketScore}>
-                                  {match.sets.map((set) => set.b).join(" · ") ||
-                                    "—"}
-                                </Text>
-                              </View>
-                              <Text style={styles.proBracketPrediction}>
-                                {match.status === "live"
-                                  ? "● LIVE"
-                                  : `${match.prediction.teamA.toFixed(0)}% · ${
-                                      match.prediction.basis
-                                    }`}
-                              </Text>
-                              {Platform.OS === "ios" &&
-                                match.status !== "completed" && (
-                                  <Pressable
-                                    onPress={() => {
-                                      selectionHaptic();
-                                      void followMatch(match).catch((reason) =>
-                                        setFollowNotice(displayError(reason)),
-                                      );
-                                    }}
-                                    style={[
-                                      styles.proFollowButton,
-                                      followedMatchId === match.id &&
-                                        styles.proFollowButtonActive,
-                                    ]}
-                                  >
-                                    <Text
-                                      style={[
-                                        styles.proFollowButtonText,
-                                        followedMatchId === match.id &&
-                                          styles.proFollowButtonTextActive,
-                                      ]}
-                                    >
-                                      {followedMatchId === match.id
-                                        ? "Following on Lock Screen"
-                                        : match.status === "live"
-                                          ? "Follow live"
-                                          : "Notify + follow"}
-                                    </Text>
-                                  </Pressable>
-                                )}
-                            </View>
-                          ))}
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                </ScrollView>
-              ) : (
-                <View style={styles.bookingEmptyCard}>
-                  <Text style={styles.rowTitle}>
-                    Bracket seeds are still taking shape.
-                  </Text>
-                  <Text style={styles.bodyText}>
-                    Pool standings and completed matches update here as the
-                    official feed reports them.
-                  </Text>
-                </View>
-              )}
-
-              {event.pools.length > 0 && (
+              {search.trim() ? (
                 <>
-                  <SectionHeader
-                    eyebrow={`${event.pools.length} POOLS`}
-                    title="Pool standings."
+                  <ProTourSectionTitle
+                    eyebrow="SEARCH RESULTS"
+                    title="Events"
+                    trailing={`${filteredEvents.length}`}
                   />
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.horizontalBleed}
-                  >
-                    <View style={styles.proPoolRow}>
-                      {event.pools.map((pool) => (
-                        <View key={pool.name} style={styles.proPoolCard}>
-                          <Text style={styles.proPoolTitle}>{pool.name}</Text>
-                          {pool.standings.slice(0, 5).map((standing, index) => (
-                            <View
-                              key={standing.team.key}
-                              style={styles.proPoolStanding}
-                            >
-                              <Text style={styles.proPoolPlace}>
-                                {index + 1}
-                              </Text>
-                              <Text
-                                numberOfLines={1}
-                                style={styles.proPoolTeam}
-                              >
-                                {standing.team.label}
-                              </Text>
-                              <Text style={styles.proPoolRecord}>
-                                {standing.wins}–{standing.losses}
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
+                  {filteredEvents.length > 0 ? (
+                    <View style={styles.proMobileCardStack}>
+                      {filteredEvents.map((candidate) => (
+                        <ProTourEventCard
+                          event={candidate}
+                          key={candidate.id}
+                          onPress={() => openEvent(candidate.slug)}
+                        />
                       ))}
                     </View>
-                  </ScrollView>
+                  ) : (
+                    renderEmpty(
+                      "No matching events",
+                      "Try a city, event name, category, or tour.",
+                    )
+                  )}
+                </>
+              ) : (
+                <>
+                  {liveEvents.length > 0 && (
+                    <>
+                      <ProTourSectionTitle
+                        eyebrow="UPDATING FREQUENTLY"
+                        title="Live now"
+                        trailing={`${liveEvents.length}`}
+                      />
+                      <View style={styles.proMobileCardStack}>
+                        {liveEvents.slice(0, 6).map((candidate) => (
+                          <ProTourEventCard
+                            event={candidate}
+                            key={candidate.id}
+                            onPress={() => openEvent(candidate.slug)}
+                          />
+                        ))}
+                      </View>
+                    </>
+                  )}
+
+                  <ProTourSectionTitle
+                    eyebrow={liveEvents.length > 0 ? "EXPLORE MORE" : "NEXT UP"}
+                    title={
+                      liveEvents.length > 0 ? "Other events" : "Tour calendar"
+                    }
+                    trailing={`${otherEvents.length}`}
+                  />
+                  {otherEvents.length > 0 ? (
+                    <View style={styles.proMobileCardStack}>
+                      {otherEvents.slice(0, 20).map((candidate) => (
+                        <ProTourEventCard
+                          event={candidate}
+                          key={candidate.id}
+                          onPress={() => openEvent(candidate.slug)}
+                        />
+                      ))}
+                    </View>
+                  ) : events.length === 0 ? (
+                    renderEmpty(
+                      "Tour calendar is syncing",
+                      "Live and upcoming professional events will appear here shortly.",
+                    )
+                  ) : null}
                 </>
               )}
-            </>
-          )}
-        </ScrollView>
+            </ScrollView>
+          </>
+        )}
       </SafeAreaView>
     </Modal>
   );
@@ -4711,6 +5559,7 @@ function DunaApp() {
         },
       }}
     >
+      <HealthHistorySyncAgent paused={tab === "health"} runtime={runtime} />
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <StatusBar style={theme === "dark" ? "light" : "dark"} />
         <View style={styles.app}>
@@ -6374,6 +7223,850 @@ function createStyles(palette: Palette) {
     proPoolPlace: { color: colors.aqua, fontSize: 10, width: 15 },
     proPoolTeam: { color: colors.bone, flex: 1, fontSize: 10 },
     proPoolRecord: { color: colors.muted, fontSize: 10 },
+    proMobilePressed: { opacity: 0.82 },
+    proMobileBrandMark: {
+      alignItems: "center",
+      backgroundColor: "#ffffff",
+      borderColor: rgba(colors.inkRgb, 0.08),
+      borderRadius: 12,
+      borderWidth: 1,
+      height: 48,
+      justifyContent: "center",
+      overflow: "hidden",
+      paddingHorizontal: 7,
+      width: 96,
+    },
+    proMobileBrandMarkCompact: {
+      borderRadius: 10,
+      height: 38,
+      paddingHorizontal: 5,
+      width: 70,
+    },
+    proMobileBrandFallback: {
+      color: "#102340",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: -0.2,
+      textAlign: "center",
+    },
+    proMobileBrandFallbackAvp: {
+      color: "#df2d3a",
+      fontSize: 18,
+      fontStyle: "italic",
+      letterSpacing: -1,
+    },
+    proMobileHubHeader: {
+      alignItems: "center",
+      backgroundColor: colors.canvas,
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: 82,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+    },
+    proMobileHubEyebrow: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
+    proMobileHubTitle: {
+      color: colors.bone,
+      fontSize: 30,
+      fontWeight: "900",
+      letterSpacing: -1.5,
+      lineHeight: 34,
+      marginTop: 2,
+    },
+    proMobileHeaderButton: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 21,
+      borderWidth: 1,
+      height: 42,
+      justifyContent: "center",
+      width: 42,
+    },
+    proMobileHeaderButtonText: {
+      color: colors.bone,
+      fontSize: 32,
+      fontWeight: "500",
+      lineHeight: 34,
+      marginTop: -2,
+    },
+    proMobileHeaderCloseText: {
+      color: colors.bone,
+      fontSize: 27,
+      fontWeight: "500",
+      lineHeight: 29,
+    },
+    proMobileHubContent: {
+      paddingBottom: 58,
+      paddingHorizontal: 18,
+    },
+    proMobileIntro: {
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 22,
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 18,
+      minHeight: 180,
+      overflow: "hidden",
+      padding: 18,
+    },
+    proMobileIntroCopy: {
+      flex: 1,
+      justifyContent: "center",
+      minWidth: 0,
+    },
+    proMobileIntroKicker: {
+      color: "#ff9d81",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.9,
+    },
+    proMobileIntroTitle: {
+      color: "#ffffff",
+      fontSize: 25,
+      fontWeight: "900",
+      letterSpacing: -1.1,
+      lineHeight: 27,
+      marginTop: 10,
+    },
+    proMobileIntroBody: {
+      color: "rgba(255,255,255,.72)",
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 9,
+    },
+    proMobileIntroBrands: {
+      gap: 8,
+      justifyContent: "center",
+    },
+    proMobileSearchBar: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 15,
+      borderWidth: 1,
+      flexDirection: "row",
+      height: 48,
+      marginTop: 14,
+      paddingHorizontal: 12,
+    },
+    proMobileSearchIcon: {
+      color: colors.aqua,
+      fontSize: 22,
+      fontWeight: "700",
+      marginRight: 7,
+    },
+    proMobileSearchInput: {
+      color: colors.bone,
+      flex: 1,
+      fontSize: 12,
+      fontWeight: "600",
+      height: 46,
+      paddingVertical: 0,
+    },
+    proMobileSearchClear: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 12,
+      height: 24,
+      justifyContent: "center",
+      width: 24,
+    },
+    proMobileSearchClearText: {
+      color: colors.muted,
+      fontSize: 18,
+      lineHeight: 20,
+    },
+    proMobileSectionTitleRow: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 11,
+      marginTop: 28,
+    },
+    proMobileSectionTitleCopy: { flex: 1, minWidth: 0 },
+    proMobileSectionEyebrow: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.9,
+    },
+    proMobileSectionTitle: {
+      color: colors.bone,
+      fontSize: 23,
+      fontWeight: "900",
+      letterSpacing: -0.9,
+      lineHeight: 27,
+      marginTop: 3,
+    },
+    proMobileSectionCount: {
+      backgroundColor: colors.navyLift,
+      borderRadius: 999,
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+      marginLeft: 10,
+      overflow: "hidden",
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+    },
+    proMobileCardStack: { gap: 9 },
+    proMobileEventCard: {
+      alignItems: "center",
+      alignSelf: "stretch",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      minHeight: 104,
+      padding: 12,
+    },
+    proMobileEventCardLive: {
+      backgroundColor: colors.aquaDeep,
+      borderColor: rgba(colors.flareRgb, 0.5),
+    },
+    proMobileEventCardBody: { flex: 1, minWidth: 0 },
+    proMobileEventKickerRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "space-between",
+    },
+    proMobileEventStatus: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.55,
+    },
+    proMobileEventStatusLive: { color: "#ff9d81" },
+    proMobileEventDivision: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700",
+      textTransform: "capitalize",
+    },
+    proMobileEventDivisionLive: { color: "rgba(255,255,255,.62)" },
+    proMobileEventName: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+      letterSpacing: -0.45,
+      lineHeight: 19,
+      marginTop: 6,
+    },
+    proMobileEventNameLive: { color: "#ffffff" },
+    proMobileEventMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 6,
+    },
+    proMobileEventMetaLive: { color: "rgba(255,255,255,.68)" },
+    proMobileEventArrow: {
+      color: colors.aqua,
+      fontSize: 25,
+      fontWeight: "600",
+      marginLeft: 1,
+    },
+    proMobileEventArrowLive: { color: "#ffffff" },
+    proMobileDetailHeader: {
+      alignItems: "center",
+      backgroundColor: colors.canvas,
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 66,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    proMobileDetailHeaderCopy: { flex: 1, minWidth: 0 },
+    proMobileDetailHeaderEyebrow: {
+      color: colors.danger,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+    proMobileDetailHeaderTitle: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+      letterSpacing: -0.4,
+      marginTop: 2,
+    },
+    proMobileSectionNav: {
+      backgroundColor: colors.canvas,
+      borderBottomColor: rgba(colors.overlayRgb, 0.08),
+      borderBottomWidth: 1,
+      flexGrow: 0,
+      maxHeight: 55,
+    },
+    proMobileSectionNavContent: {
+      alignItems: "center",
+      gap: 7,
+      minHeight: 54,
+      paddingHorizontal: 12,
+    },
+    proMobileSectionTab: {
+      alignItems: "center",
+      borderRadius: 999,
+      justifyContent: "center",
+      minHeight: 34,
+      paddingHorizontal: 13,
+    },
+    proMobileSectionTabActive: { backgroundColor: colors.aquaDeep },
+    proMobileSectionTabText: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    proMobileSectionTabTextActive: { color: "#ffffff" },
+    proMobileDetailContent: {
+      paddingBottom: 60,
+      paddingHorizontal: 18,
+    },
+    proMobileHero: {
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 22,
+      marginTop: 16,
+      overflow: "hidden",
+      position: "relative",
+    },
+    proMobileHeroImage: {
+      backgroundColor: colors.aquaDeep,
+      bottom: 0,
+      height: "100%",
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: 0,
+      width: "100%",
+    },
+    proMobileHeroFallback: {
+      backgroundColor: colors.aquaDeep,
+      bottom: 0,
+      left: 0,
+      overflow: "hidden",
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
+    proMobileCourtOutline: {
+      borderColor: "rgba(255,255,255,.32)",
+      borderWidth: 2,
+      bottom: -35,
+      left: 50,
+      position: "absolute",
+      right: 50,
+      top: 95,
+      transform: [{ perspective: 300 }, { rotateX: "52deg" }],
+    },
+    proMobileCourtNet: {
+      backgroundColor: "rgba(255,255,255,.36)",
+      height: 2,
+      left: 24,
+      position: "absolute",
+      right: 24,
+      top: "50%",
+    },
+    proMobileHeroScrim: {
+      backgroundColor: "rgba(5,16,30,.34)",
+      bottom: 0,
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
+    proMobileHeroTop: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      left: 14,
+      position: "absolute",
+      right: 14,
+      top: 14,
+    },
+    proMobileHeroBadges: { flexDirection: "row", gap: 6 },
+    proMobileHeroBadge: {
+      backgroundColor: "rgba(5,16,30,.72)",
+      borderColor: "rgba(255,255,255,.18)",
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 9,
+      paddingVertical: 6,
+    },
+    proMobileHeroBadgeLive: { backgroundColor: "rgba(184,68,68,.9)" },
+    proMobileHeroBadgeText: {
+      color: "#ffffff",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.45,
+    },
+    proMobileHeroCopy: {
+      backgroundColor: "rgba(5,16,30,.76)",
+      bottom: 0,
+      left: 0,
+      padding: 18,
+      position: "absolute",
+      right: 0,
+    },
+    proMobileHeroCategory: {
+      color: "#a7d7ff",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+      textTransform: "uppercase",
+    },
+    proMobileHeroTitle: {
+      color: "#ffffff",
+      fontSize: 29,
+      fontWeight: "900",
+      letterSpacing: -1.3,
+      lineHeight: 31,
+      marginTop: 7,
+    },
+    proMobileHeroMeta: {
+      color: "rgba(255,255,255,.74)",
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 9,
+    },
+    proMobileNotice: {
+      backgroundColor: rgba(colors.positiveRgb, 0.12),
+      borderColor: rgba(colors.positiveRgb, 0.24),
+      borderRadius: 13,
+      borderWidth: 1,
+      marginTop: 12,
+      padding: 11,
+    },
+    proMobileNoticeText: {
+      color: colors.positive,
+      fontSize: 11,
+      fontWeight: "700",
+      lineHeight: 15,
+    },
+    proMobileStatGrid: {
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 12,
+    },
+    proMobileStatCard: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 15,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 78,
+      padding: 9,
+    },
+    proMobileStatValue: {
+      color: colors.bone,
+      fontSize: 20,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+    },
+    proMobileStatLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700",
+      marginTop: 3,
+    },
+    proMobileInfoCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      marginTop: 12,
+      padding: 16,
+    },
+    proMobileInfoEyebrow: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    proMobileSummary: {
+      color: colors.bone,
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 8,
+    },
+    proMobileInfoTitle: {
+      color: colors.bone,
+      fontSize: 18,
+      fontWeight: "900",
+      letterSpacing: -0.5,
+      marginTop: 7,
+    },
+    proMobileInfoBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 5,
+    },
+    proMobileInfoFootnote: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "700",
+      marginTop: 9,
+    },
+    proMobileActionRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 12,
+    },
+    proMobilePrimaryAction: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      justifyContent: "center",
+      minHeight: 42,
+      paddingHorizontal: 15,
+    },
+    proMobilePrimaryActionText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    proMobileSecondaryAction: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 999,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 42,
+      paddingHorizontal: 15,
+    },
+    proMobileSecondaryActionText: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    proMobileSiblingCard: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 17,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 12,
+      padding: 15,
+    },
+    proMobileSiblingTitle: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "900",
+      marginTop: 4,
+    },
+    proMobileSiblingArrow: { color: colors.aqua, fontSize: 26 },
+    proMobileMatchCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 16,
+      borderWidth: 1,
+      overflow: "hidden",
+      padding: 13,
+    },
+    proMobileMatchCardLive: {
+      borderColor: rgba(colors.dangerRgb, 0.45),
+      borderLeftColor: colors.danger,
+      borderLeftWidth: 3,
+    },
+    proMobileMatchHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "space-between",
+      marginBottom: 8,
+    },
+    proMobileMatchStatus: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.6,
+    },
+    proMobileMatchStatusLive: { color: colors.danger },
+    proMobileMatchMeta: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 10,
+      textAlign: "right",
+    },
+    proMobileMatchTeamRow: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.06),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 34,
+    },
+    proMobileMatchTeam: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    proMobileMatchWinner: { color: colors.bone, fontWeight: "900" },
+    proMobileMatchScore: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
+    proMobileMatchFooter: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "space-between",
+      marginTop: 9,
+    },
+    proMobileMatchPrediction: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 10,
+    },
+    proMobileFollowButton: {
+      borderColor: colors.aqua,
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    proMobileFollowButtonActive: { backgroundColor: colors.aqua },
+    proMobileFollowButtonText: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    proMobileFollowButtonTextActive: { color: colors.onAccent },
+    proMobileEmptyCard: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 17,
+      borderWidth: 1,
+      marginTop: 8,
+      padding: 24,
+    },
+    proMobileEmptyIcon: {
+      color: colors.aqua,
+      fontSize: 25,
+      fontWeight: "900",
+    },
+    proMobileEmptyTitle: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+      marginTop: 7,
+      textAlign: "center",
+    },
+    proMobileEmptyBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 6,
+      textAlign: "center",
+    },
+    proMobileListNote: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 6,
+      textAlign: "center",
+    },
+    proMobileDrawStack: { gap: 18 },
+    proMobileDrawRound: { gap: 8 },
+    proMobileDrawRoundTitle: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.5,
+      textTransform: "uppercase",
+    },
+    proMobilePoolCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 16,
+      borderWidth: 1,
+      overflow: "hidden",
+      padding: 13,
+    },
+    proMobilePoolHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingBottom: 8,
+    },
+    proMobilePoolTitle: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    proMobilePoolProgress: { color: colors.muted, fontSize: 10 },
+    proMobileStandingRow: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.07),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      minHeight: 42,
+    },
+    proMobileStandingRank: {
+      color: colors.aqua,
+      fontSize: 11,
+      fontWeight: "900",
+      textAlign: "center",
+      width: 22,
+    },
+    proMobileStandingTeam: {
+      color: colors.bone,
+      flex: 1,
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    proMobileStandingRecord: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    proMobileStandingsCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 16,
+      borderWidth: 1,
+      overflow: "hidden",
+      paddingHorizontal: 13,
+    },
+    proMobileTeamGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 10,
+    },
+    proMobileTeamCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 15,
+      borderWidth: 1,
+      minHeight: 112,
+      padding: 12,
+      width: "48.5%",
+    },
+    proMobileTeamCardTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    proMobileTeamSeed: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.6,
+    },
+    proMobileTeamCountry: { fontSize: 16 },
+    proMobileTeamName: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
+      lineHeight: 16,
+      marginTop: 9,
+    },
+    proMobileTeamPlayers: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 6,
+    },
+    proMobileWatchCard: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 76,
+      padding: 13,
+    },
+    proMobileWatchIcon: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 14,
+      height: 46,
+      justifyContent: "center",
+      width: 46,
+    },
+    proMobileWatchIconText: {
+      color: colors.aqua,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    proMobileWatchCopy: { flex: 1, minWidth: 0 },
+    proMobileWatchTitle: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    proMobileWatchMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
+    proMobileWatchArrow: { color: colors.aqua, fontSize: 19 },
+    proMobileLoadingState: {
+      alignItems: "center",
+      flex: 1,
+      justifyContent: "center",
+      paddingHorizontal: 34,
+      paddingVertical: 48,
+    },
+    proMobileLoadingMark: {
+      alignItems: "center",
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 28,
+      height: 56,
+      justifyContent: "center",
+      width: 56,
+    },
+    proMobileLoadingMarkText: {
+      color: "#ffffff",
+      fontSize: 24,
+      fontWeight: "900",
+    },
+    proMobileLoadingTitle: {
+      color: colors.bone,
+      fontSize: 19,
+      fontWeight: "900",
+      letterSpacing: -0.5,
+      marginTop: 15,
+      textAlign: "center",
+    },
+    proMobileLoadingBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 17,
+      marginTop: 7,
+      textAlign: "center",
+    },
+    proMobileRetryButton: {
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      marginTop: 16,
+      paddingHorizontal: 18,
+      paddingVertical: 11,
+    },
+    proMobileRetryButtonText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
     listCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.07),

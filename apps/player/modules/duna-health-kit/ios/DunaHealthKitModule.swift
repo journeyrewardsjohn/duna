@@ -132,11 +132,37 @@ private final class DunaHealthStore: @unchecked Sendable {
   }
 
   func serialize(sample: HKSample, definition: HealthTypeDefinition) -> [String: Any]? {
+    var source: [String: Any] = [
+      "bundleIdentifier": sample.sourceRevision.source.bundleIdentifier,
+      "name": sample.sourceRevision.source.name,
+    ]
+    if let version = sample.sourceRevision.version {
+      source["version"] = version
+    }
+    if let productType = sample.sourceRevision.productType {
+      source["productType"] = productType
+    }
+    if let device = sample.device {
+      var serializedDevice: [String: String] = [:]
+      if let name = device.name { serializedDevice["name"] = name }
+      if let manufacturer = device.manufacturer {
+        serializedDevice["manufacturer"] = manufacturer
+      }
+      if let model = device.model { serializedDevice["model"] = model }
+      if let hardwareVersion = device.hardwareVersion {
+        serializedDevice["hardwareVersion"] = hardwareVersion
+      }
+      if let softwareVersion = device.softwareVersion {
+        serializedDevice["softwareVersion"] = softwareVersion
+      }
+      if !serializedDevice.isEmpty { source["device"] = serializedDevice }
+    }
     var value: [String: Any] = [
       "externalId": sample.uuid.uuidString.lowercased(),
       "metric": definition.metric,
       "startedAt": ISO8601DateFormatter.duna.string(from: sample.startDate),
       "endedAt": ISO8601DateFormatter.duna.string(from: sample.endDate),
+      "source": source,
     ]
     if let quantity = sample as? HKQuantitySample, let unit = definition.unit {
       value["kind"] = "quantity"
@@ -184,7 +210,7 @@ private final class DunaHealthStore: @unchecked Sendable {
             samples: (samples ?? []).compactMap { self.serialize(sample: $0, definition: definition) },
             deletedIDs: (deletedObjects ?? []).map { $0.uuid.uuidString.lowercased() },
             anchor: newAnchor,
-            hasMore: (samples?.count ?? 0) >= limit || (deletedObjects?.count ?? 0) >= limit
+            hasMore: (samples?.count ?? 0) + (deletedObjects?.count ?? 0) >= limit
           )
         )
       }
@@ -264,11 +290,11 @@ public final class DunaHealthKitModule: Module {
     }
 
     AsyncFunction("readChanges") {
-      (categoriesJSON: String, cursorJSON: String?, limitPerType: Int) async throws -> String in
+      (categoriesJSON: String, cursorJSON: String?, recordLimit: Int) async throws -> String in
       guard HKHealthStore.isHealthDataAvailable() else {
         throw DunaHealthKitError.unavailable
       }
-      let limit = max(1, min(limitPerType, 500))
+      let limit = max(1, min(recordLimit, 500))
       var cursors: [String: String] = [:]
       if let cursorJSON, let data = cursorJSON.data(using: .utf8) {
         guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: String]
@@ -279,22 +305,42 @@ public final class DunaHealthKitModule: Module {
       var deletedIDs: [String] = []
       var nextCursors = cursors
       var hasMore = false
+      var metricsWithMore: [String] = []
       let definitions = try DunaHealthStore.shared.selectedDefinitions(categoriesJSON: categoriesJSON)
-      for definition in definitions {
+      for (index, definition) in definitions.enumerated() {
+        let consumed = samples.count + deletedIDs.count
+        let remaining = limit - consumed
+        if remaining <= 0 {
+          hasMore = true
+          metricsWithMore.append(contentsOf: definitions[index...].map(\.metric))
+          break
+        }
         let anchor = try DunaHealthStore.shared.decodeAnchor(cursors[definition.metric])
-        let result = try await DunaHealthStore.shared.anchoredQuery(definition: definition, anchor: anchor, limit: limit)
+        let result = try await DunaHealthStore.shared.anchoredQuery(
+          definition: definition,
+          anchor: anchor,
+          limit: remaining
+        )
         samples.append(contentsOf: result.samples)
         deletedIDs.append(contentsOf: result.deletedIDs)
         if let next = try DunaHealthStore.shared.encodeAnchor(result.anchor) {
           nextCursors[definition.metric] = next
         }
-        hasMore = hasMore || result.hasMore
+        if result.hasMore {
+          hasMore = true
+          metricsWithMore.append(definition.metric)
+          if index + 1 < definitions.count {
+            metricsWithMore.append(contentsOf: definitions[(index + 1)...].map(\.metric))
+          }
+          break
+        }
       }
       let payload: [String: Any] = [
         "samples": samples,
         "deletedExternalIds": Array(Set(deletedIDs)),
         "cursors": nextCursors,
         "hasMore": hasMore,
+        "metricsWithMore": Array(Set(metricsWithMore)).sorted(),
       ]
       guard JSONSerialization.isValidJSONObject(payload) else {
         throw DunaHealthKitError.invalidResponse

@@ -52,6 +52,7 @@ type OrganizationWallets = Awaited<
 export interface PlayerRuntime {
   readonly mode: "preview" | "live";
   readonly client?: DunaApiClient;
+  readonly publicClient?: DunaApiClient;
   readonly dashboard?: PlayerDashboard;
   readonly wallet?: PlayerWallet;
   readonly settings?: PlayerSettings;
@@ -332,6 +333,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       value={{
         mode: "live",
         client,
+        publicClient: client,
         dashboard,
         wallet,
         settings,
@@ -350,12 +352,28 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
 }
 
 function PreviewRuntime({ children }: { readonly children: ReactNode }) {
+  const publicClient = useMemo(() => createDunaApiClient(async () => null), []);
+  const [proCoverage, setProCoverage] = useState<PublicProCoverage>();
+  useEffect(() => {
+    let active = true;
+    void publicClient.public.proCoverage
+      .query()
+      .then((coverage) => {
+        if (active) setProCoverage(coverage);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [publicClient]);
   const value = useMemo<PlayerRuntime>(
     () => ({
       mode: "preview",
+      publicClient,
+      proCoverage,
       refresh: async () => undefined,
     }),
-    [],
+    [proCoverage],
   );
   return (
     <RuntimeContext.Provider value={value}>{children}</RuntimeContext.Provider>

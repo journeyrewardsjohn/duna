@@ -766,6 +766,23 @@ const healthSampleBaseSchema = z.object({
   value: z.number().finite().min(-1_000_000).max(1_000_000).optional(),
   unit: z.string().trim().min(1).max(32).optional(),
   categoryValue: z.string().trim().min(1).max(80).optional(),
+  source: z
+    .object({
+      bundleIdentifier: z.string().trim().min(1).max(255),
+      name: z.string().trim().min(1).max(160),
+      version: z.string().trim().min(1).max(80).optional(),
+      productType: z.string().trim().min(1).max(160).optional(),
+      device: z
+        .object({
+          name: z.string().trim().min(1).max(160).optional(),
+          manufacturer: z.string().trim().min(1).max(160).optional(),
+          model: z.string().trim().min(1).max(160).optional(),
+          hardwareVersion: z.string().trim().min(1).max(80).optional(),
+          softwareVersion: z.string().trim().min(1).max(80).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
   workout: z
     .object({
       activityType: z.number().int().nonnegative(),
@@ -843,6 +860,9 @@ export const healthConnectionSchema = z.object({
   timezone: z.string(),
   earliestAuthorizedAt: z.iso.datetime().optional(),
   lastSyncedAt: z.iso.datetime().optional(),
+  importedSampleCount: z.number().int().nonnegative().optional(),
+  earliestSampleAt: z.iso.datetime().optional(),
+  latestSampleAt: z.iso.datetime().optional(),
 });
 export const healthDailySummarySchema = z.object({
   date: z.string(),

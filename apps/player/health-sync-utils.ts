@@ -1,4 +1,44 @@
+import type { HealthCategory } from "@duna/api";
+
 export const HEALTH_UPLOAD_BATCH_LIMIT = 400;
+
+export type AppleHealthSyncState = {
+  readonly categories: readonly HealthCategory[];
+  readonly recordsProcessed: number;
+  readonly deletionsProcessed: number;
+  readonly pagesProcessed: number;
+  readonly complete: boolean;
+  readonly remainingMetrics: readonly string[];
+  readonly startedAt: string;
+  readonly updatedAt: string;
+};
+
+export function mergeAppleHealthSyncState(input: {
+  readonly previous?: AppleHealthSyncState;
+  readonly categories: readonly HealthCategory[];
+  readonly recordsProcessed: number;
+  readonly deletionsProcessed: number;
+  readonly pagesProcessed: number;
+  readonly complete: boolean;
+  readonly remainingMetrics?: readonly string[];
+  readonly now: string;
+}): AppleHealthSyncState {
+  return {
+    categories: [
+      ...new Set([...(input.previous?.categories ?? []), ...input.categories]),
+    ],
+    recordsProcessed:
+      (input.previous?.recordsProcessed ?? 0) + input.recordsProcessed,
+    deletionsProcessed:
+      (input.previous?.deletionsProcessed ?? 0) + input.deletionsProcessed,
+    pagesProcessed:
+      (input.previous?.pagesProcessed ?? 0) + input.pagesProcessed,
+    complete: input.complete,
+    remainingMetrics: [...new Set(input.remainingMetrics ?? [])],
+    startedAt: input.previous?.startedAt ?? input.now,
+    updatedAt: input.now,
+  };
+}
 
 export type HealthUploadBatch<T> = {
   readonly samples: readonly T[];
@@ -38,6 +78,9 @@ export function planHealthUploadBatches<T>(
 
 export function healthSyncErrorMessage(reason: unknown): string {
   const message = reason instanceof Error ? reason.message : "";
+  if (/secure history support is still rolling out/i.test(message)) {
+    return "Duna Health is finishing a secure service update. Your Apple Health import checkpoint is safe and will resume automatically shortly.";
+  }
   if (/no procedure found|not_found|\b404\b/i.test(message)) {
     return "Duna Health is temporarily unavailable. Your Apple Health data was not changed. Please try again shortly.";
   }

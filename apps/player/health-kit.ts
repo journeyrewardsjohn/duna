@@ -5,11 +5,19 @@ import DunaHealthKit, {
   parseHealthKitChanges,
   type HealthKitAuthorizationRequest,
 } from "./modules/duna-health-kit";
-import { planHealthUploadBatches } from "./health-sync-utils";
+import {
+  mergeAppleHealthSyncState,
+  planHealthUploadBatches,
+  type AppleHealthSyncState,
+} from "./health-sync-utils";
 
 const HEALTH_CURSOR_KEY = "duna.healthkit.cursor.v1";
 const HEALTH_DIRTY_KEY = "duna.healthkit.changes.v1";
-const HEALTHKIT_PAGE_LIMIT_PER_TYPE = 20;
+const HEALTH_BACKFILL_KEY = "duna.healthkit.backfill.v2";
+// The native reader fills one bounded page across selected types. Busy sources
+// such as Apple Watch or WHOOP can therefore use the whole page instead of
+// advancing only a handful of records per sync.
+const HEALTHKIT_PAGE_RECORD_LIMIT = 400;
 // Stay below the original production sync guard while a large backfill is in
 // progress. A remaining anchor is retained and the next foreground/manual sync
 // continues exactly where this session stopped.
@@ -22,7 +30,31 @@ export type HealthSyncProgress = {
   readonly deleted: number;
   readonly recordsFound: number;
   readonly pendingRecords: number;
+  readonly totalRecordsProcessed: number;
+  readonly remainingMetrics: readonly string[];
 };
+
+export type AppleHealthSyncInput = {
+  readonly client: DunaApiClient;
+  readonly categories: readonly HealthCategory[];
+  readonly maxPages?: number;
+  readonly onProgress?: (progress: HealthSyncProgress) => void;
+};
+
+export type AppleHealthSyncResult = {
+  readonly pages: number;
+  readonly imported: number;
+  readonly deleted: number;
+  readonly complete: boolean;
+  readonly recordsFound: number;
+  readonly state: AppleHealthSyncState;
+};
+
+let appleHealthSyncActive = false;
+
+export function isAppleHealthSyncActive(): boolean {
+  return appleHealthSyncActive;
+}
 
 export const healthCategoryDetails: Readonly<
   Record<
@@ -73,16 +105,23 @@ export async function requestAppleHealthAccess(
   return DunaHealthKit.requestAuthorization(JSON.stringify(categories));
 }
 
-export async function syncAppleHealth(input: {
-  readonly client: DunaApiClient;
-  readonly categories: readonly HealthCategory[];
-  readonly onProgress?: (progress: HealthSyncProgress) => void;
-}): Promise<{
-  readonly pages: number;
-  readonly imported: number;
-  readonly deleted: number;
-  readonly complete: boolean;
-}> {
+export async function syncAppleHealth(
+  input: AppleHealthSyncInput,
+): Promise<AppleHealthSyncResult> {
+  if (appleHealthSyncActive) {
+    throw new Error("Apple Health history is already syncing.");
+  }
+  appleHealthSyncActive = true;
+  try {
+    return await syncAppleHealthOnce(input);
+  } finally {
+    appleHealthSyncActive = false;
+  }
+}
+
+async function syncAppleHealthOnce(
+  input: AppleHealthSyncInput,
+): Promise<AppleHealthSyncResult> {
   if (!DunaHealthKit || !DunaHealthKit.isAvailable()) {
     throw new Error("Apple Health is unavailable on this device.");
   }
@@ -92,7 +131,17 @@ export async function syncAppleHealth(input: {
   let deleted = 0;
   let recordsFound = 0;
   let hasMore = true;
-  while (hasMore && pages < MAX_HEALTHKIT_PAGES_PER_SYNC) {
+  let remainingMetrics: readonly string[] = [];
+  let syncState = await getAppleHealthSyncState();
+  const startingRecordsProcessed = syncState?.recordsProcessed ?? 0;
+  const pageBudget = Math.max(
+    1,
+    Math.min(
+      input.maxPages ?? MAX_HEALTHKIT_PAGES_PER_SYNC,
+      MAX_HEALTHKIT_PAGES_PER_SYNC,
+    ),
+  );
+  while (hasMore && pages < pageBudget) {
     input.onProgress?.({
       phase: "reading",
       pages,
@@ -100,13 +149,16 @@ export async function syncAppleHealth(input: {
       deleted,
       recordsFound,
       pendingRecords: 0,
+      totalRecordsProcessed: startingRecordsProcessed + recordsFound,
+      remainingMetrics,
     });
     const raw = await DunaHealthKit.readChanges(
       JSON.stringify(input.categories),
       cursor,
-      HEALTHKIT_PAGE_LIMIT_PER_TYPE,
+      HEALTHKIT_PAGE_RECORD_LIMIT,
     );
     const changes = parseHealthKitChanges(raw);
+    remainingMetrics = changes.metricsWithMore ?? [];
     recordsFound += changes.samples.length + changes.deletedExternalIds.length;
     const uploadBatches = planHealthUploadBatches(
       changes.samples,
@@ -120,13 +172,24 @@ export async function syncAppleHealth(input: {
         deleted,
         recordsFound,
         pendingRecords: batch.samples.length + batch.deletedExternalIds.length,
+        totalRecordsProcessed: startingRecordsProcessed + recordsFound,
+        remainingMetrics,
       });
+      const earliestAuthorizedAt = batch.samples
+        .map((sample) => sample.startedAt)
+        .sort()[0];
       const result = await input.client.player.syncHealthSamples.mutate({
         categories: [...input.categories],
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        earliestAuthorizedAt,
         samples: [...batch.samples],
         deletedExternalIds: [...batch.deletedExternalIds],
       });
+      if (result.protocolVersion !== 2) {
+        throw new Error(
+          "Duna Health secure history support is still rolling out. Your import checkpoint was preserved; please try again shortly.",
+        );
+      }
       imported += result.imported;
       deleted += result.deleted;
     }
@@ -135,6 +198,21 @@ export async function syncAppleHealth(input: {
     await SecureStore.setItemAsync(HEALTH_CURSOR_KEY, cursor);
     pages += 1;
     hasMore = changes.hasMore;
+    const now = new Date().toISOString();
+    syncState = mergeAppleHealthSyncState({
+      previous: syncState,
+      categories: input.categories,
+      recordsProcessed: changes.samples.length,
+      deletionsProcessed: changes.deletedExternalIds.length,
+      pagesProcessed: 1,
+      complete: !hasMore,
+      remainingMetrics,
+      now,
+    });
+    await SecureStore.setItemAsync(
+      HEALTH_BACKFILL_KEY,
+      JSON.stringify(syncState),
+    );
     if (
       !hasMore ||
       (changes.samples.length === 0 && changes.deletedExternalIds.length === 0)
@@ -147,7 +225,42 @@ export async function syncAppleHealth(input: {
   } else {
     await SecureStore.deleteItemAsync(HEALTH_DIRTY_KEY);
   }
-  return { pages, imported, deleted, complete: !hasMore };
+  const finalState =
+    syncState ??
+    mergeAppleHealthSyncState({
+      categories: input.categories,
+      recordsProcessed: 0,
+      deletionsProcessed: 0,
+      pagesProcessed: pages,
+      complete: !hasMore,
+      remainingMetrics,
+      now: new Date().toISOString(),
+    });
+  return {
+    pages,
+    imported,
+    deleted,
+    complete: !hasMore,
+    recordsFound,
+    state: finalState,
+  };
+}
+
+export async function getAppleHealthSyncState(): Promise<
+  AppleHealthSyncState | undefined
+> {
+  const stored = await SecureStore.getItemAsync(HEALTH_BACKFILL_KEY);
+  if (!stored) return undefined;
+  try {
+    return JSON.parse(stored) as AppleHealthSyncState;
+  } catch {
+    await SecureStore.deleteItemAsync(HEALTH_BACKFILL_KEY);
+    return undefined;
+  }
+}
+
+export async function hasPendingAppleHealthChanges(): Promise<boolean> {
+  return Boolean(await SecureStore.getItemAsync(HEALTH_DIRTY_KEY));
 }
 
 export async function startAppleHealthMonitoring(
@@ -169,5 +282,6 @@ export async function clearAppleHealthCursor(): Promise<void> {
   await Promise.all([
     SecureStore.deleteItemAsync(HEALTH_CURSOR_KEY),
     SecureStore.deleteItemAsync(HEALTH_DIRTY_KEY),
+    SecureStore.deleteItemAsync(HEALTH_BACKFILL_KEY),
   ]);
 }

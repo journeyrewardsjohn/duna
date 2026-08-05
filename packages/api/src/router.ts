@@ -1449,6 +1449,7 @@ const playerRouter = router({
       z.object({
         imported: z.number().int().nonnegative(),
         deleted: z.number().int().nonnegative(),
+        protocolVersion: z.literal(2),
       }),
     )
     .mutation(async ({ input, ctx }) => {
