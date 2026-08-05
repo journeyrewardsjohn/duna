@@ -1,7 +1,9 @@
 import {
+  grantDueMonthlyPredictionCredits,
   processWorkflowJobById,
   queueDuePlayerSourceRefreshes,
   recoverReadyWorkflowJobs,
+  settleResolvedPredictionMarkets,
 } from "@duna/api";
 import { Inngest } from "inngest";
 
@@ -56,8 +58,36 @@ export const refreshPlayerSources = inngest.createFunction(
   },
 );
 
+export const grantPredictionCredits = inngest.createFunction(
+  {
+    id: "grant-monthly-prediction-credits",
+    name: "Grant monthly non-cash prediction credits",
+    triggers: [{ cron: "17 4 * * *" }],
+    retries: 3,
+  },
+  async ({ step }) =>
+    step.run("grant-due-prediction-credits", () =>
+      grantDueMonthlyPredictionCredits({ limit: 2_000 }),
+    ),
+);
+
+export const settlePredictionMarkets = inngest.createFunction(
+  {
+    id: "settle-resolved-prediction-markets",
+    name: "Settle resolved Duna prediction markets",
+    triggers: [{ cron: "*/2 * * * *" }],
+    retries: 3,
+  },
+  async ({ step }) =>
+    step.run("settle-resolved-markets", () =>
+      settleResolvedPredictionMarkets({ limit: 1_000 }),
+    ),
+);
+
 export const dunaInngestFunctions = [
   processWorkflowJob,
   recoverWorkflowJobs,
   refreshPlayerSources,
+  grantPredictionCredits,
+  settlePredictionMarkets,
 ] as const;

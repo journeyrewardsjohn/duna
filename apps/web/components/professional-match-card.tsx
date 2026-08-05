@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
+import type { PredictionMarketView } from "@duna/api";
 import { TourBrandMark, type TourBrand } from "./tour-brand-mark";
 
 export interface ProfessionalMatchPlayer {
@@ -111,6 +112,7 @@ export function ProfessionalMatchCard({
   winnerSide,
   outcomeLabel,
   ratingDelta,
+  predictionMarket,
   className = "",
 }: {
   readonly href?: string;
@@ -126,6 +128,7 @@ export function ProfessionalMatchCard({
   readonly winnerSide?: "A" | "B";
   readonly outcomeLabel?: string;
   readonly ratingDelta?: number;
+  readonly predictionMarket?: PredictionMarketView;
   readonly className?: string;
 }) {
   const body = (
@@ -171,6 +174,30 @@ export function ProfessionalMatchCard({
           winner={winnerSide === "B"}
         />
       </div>
+      {predictionMarket && (
+        <div className="professional-match-card__market">
+          <div>
+            <span>{predictionMarket.yesLabel}</span>
+            <strong>{(predictionMarket.yesPriceBps / 100).toFixed(0)}%</strong>
+            <i>
+              <b style={{ width: `${predictionMarket.yesPriceBps / 100}%` }} />
+            </i>
+          </div>
+          <div>
+            <span>{predictionMarket.noLabel}</span>
+            <strong>{(predictionMarket.noPriceBps / 100).toFixed(0)}%</strong>
+            <i>
+              <b style={{ width: `${predictionMarket.noPriceBps / 100}%` }} />
+            </i>
+          </div>
+          <small>
+            {predictionMarket.volumeCredits.toLocaleString("en-US", {
+              maximumFractionDigits: 1,
+            })}{" "}
+            credit volume · {predictionMarket.participantCount} predictors
+          </small>
+        </div>
+      )}
       {(ratingDelta !== undefined || href) && (
         <footer>
           {ratingDelta !== undefined ? (

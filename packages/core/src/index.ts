@@ -11,6 +11,7 @@ export * from "./membership-plans";
 export * from "./organization-plans";
 export * from "./map-links";
 export * from "./player-url";
+export * from "./prediction-market";
 export * from "./ticketing";
 export * from "./trust";
 export * from "./wallet";

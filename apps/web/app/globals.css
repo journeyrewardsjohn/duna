@@ -2515,6 +2515,10 @@ a.professional-match-card:hover {
   order: 50;
 }
 
+.pro-event-content > .tournament-markets {
+  order: 50;
+}
+
 .pro-event-content > .pro-event-matches {
   order: 60;
 }
@@ -14187,8 +14191,8 @@ a.play-day__booking {
 }
 
 .pro-tour-filters {
-  background: color-mix(in srgb, var(--color-surface) 90%, transparent);
-  border: 1px solid var(--color-line);
+  background: #fff;
+  border: 1px solid #d8e0ea;
   border-radius: 999px;
   display: flex;
   gap: 0.25rem;
@@ -14212,9 +14216,196 @@ a.play-day__booking {
   white-space: nowrap;
 }
 
+.pro-tour-filters a:hover {
+  background: #eef4f9;
+  color: #173a67;
+}
+
 .pro-tour-filters a[aria-current="page"] {
-  background: var(--color-navy);
+  background: #173a67;
   color: var(--color-white);
+}
+
+:root[data-theme="dark"] .pro-tour-filters {
+  background: #0c171e;
+  border-color: #23343f;
+}
+
+:root[data-theme="dark"] .pro-tour-filters a:hover {
+  background: #142833;
+  color: #d8f7f3;
+}
+
+.pro-schedule-calendar {
+  background:
+    radial-gradient(circle at 92% 5%, rgb(59 149 159 / 12%), transparent 30%),
+    #fff;
+  border: 1px solid #d8e0ea;
+  border-radius: 28px;
+  box-shadow: 0 18px 55px rgb(21 51 78 / 8%);
+  overflow: hidden;
+  padding: clamp(1rem, 2.5vw, 1.6rem);
+}
+
+:root[data-theme="dark"] .pro-schedule-calendar {
+  background:
+    radial-gradient(circle at 92% 5%, rgb(69 175 153 / 14%), transparent 30%),
+    #0b151b;
+  border-color: #23343f;
+}
+
+.pro-schedule-calendar > header {
+  align-items: end;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.pro-schedule-calendar > header h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 4vw, 3.3rem);
+  letter-spacing: -0.065em;
+  line-height: 0.96;
+  margin: 0.3rem 0 0;
+}
+
+.pro-schedule-calendar > header > span {
+  align-items: center;
+  background: #f1f5f9;
+  border-radius: 999px;
+  color: #56677c;
+  display: flex;
+  font-size: 0.68rem;
+  font-weight: 750;
+  gap: 0.4rem;
+  padding: 0.65rem 0.8rem;
+}
+
+:root[data-theme="dark"] .pro-schedule-calendar > header > span {
+  background: #14242e;
+  color: #b7c8d2;
+}
+
+.pro-schedule-calendar__controls {
+  align-items: center;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 76px minmax(0, 1fr);
+}
+
+.pro-schedule-calendar__all {
+  align-items: center;
+  background: #f3f6f9;
+  border: 1px solid #d8e0ea;
+  border-radius: 999px;
+  color: #617188;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  height: 108px;
+  justify-content: center;
+  line-height: 1;
+}
+
+.pro-schedule-calendar__all span {
+  font-size: 0.625rem;
+  margin: 0.45rem 0 0.25rem;
+}
+
+.pro-schedule-calendar__all strong {
+  color: #173a67;
+  font-size: 0.72rem;
+}
+
+.pro-schedule-calendar__all[aria-current="page"] {
+  background: #173a67;
+  border-color: #173a67;
+  color: #cce0f4;
+}
+
+.pro-schedule-calendar__all[aria-current="page"] strong {
+  color: #fff;
+}
+
+:root[data-theme="dark"] .pro-schedule-calendar__all {
+  background: #12222b;
+  border-color: #2a3c47;
+  color: #9fb3bf;
+}
+
+:root[data-theme="dark"] .pro-schedule-calendar__all strong {
+  color: #d8f7f3;
+}
+
+.pro-schedule-calendar__picker {
+  min-width: 0;
+}
+
+.pro-schedule-calendar > footer {
+  align-items: center;
+  color: var(--color-bone-muted);
+  display: flex;
+  font-size: 0.625rem;
+  gap: 0.8rem;
+  margin-top: 0.7rem;
+  padding-left: 82px;
+}
+
+.pro-schedule-calendar > footer span {
+  align-items: center;
+  display: flex;
+  gap: 0.3rem;
+}
+
+.pro-schedule-calendar > footer i {
+  background: #2d6ca5;
+  border-radius: 50%;
+  height: 6px;
+  width: 6px;
+}
+
+.pro-schedule-calendar > footer i[data-tone="event"] {
+  background: var(--color-flare);
+}
+
+.pro-schedule-calendar > footer small {
+  margin-left: auto;
+}
+
+@media (max-width: 680px) {
+  .pro-schedule-calendar > header > span,
+  .pro-schedule-calendar > footer small {
+    display: none;
+  }
+
+  .pro-schedule-calendar__controls {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .pro-schedule-calendar__all {
+    height: 94px;
+  }
+
+  .pro-schedule-calendar .calendar-picker__pill {
+    flex-basis: 66px;
+    min-height: 94px;
+  }
+
+  .pro-schedule-calendar .calendar-picker__arrow {
+    display: none;
+  }
+
+  .pro-schedule-calendar .calendar-picker__rail-shell {
+    grid-template-columns: minmax(0, 1fr) 42px;
+  }
+
+  .pro-schedule-calendar .calendar-picker__open span {
+    display: none;
+  }
+
+  .pro-schedule-calendar > footer {
+    padding-left: 70px;
+  }
 }
 
 .pro-event-section + .pro-event-section {
@@ -16985,6 +17176,790 @@ html {
   background: var(--color-canvas);
   color: var(--color-bone);
   scroll-behavior: smooth;
+}
+
+/* Shared prediction-credit markets */
+
+.professional-match-card__market {
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0.75rem 0.85rem 0;
+}
+
+.professional-match-card__market > div {
+  display: grid;
+  gap: 0.25rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.professional-match-card__market span {
+  font-size: 0.625rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.professional-match-card__market strong {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+}
+
+.professional-match-card__market i {
+  background: #e7edf2;
+  border-radius: 99px;
+  grid-column: 1 / -1;
+  height: 3px;
+  overflow: hidden;
+}
+
+.professional-match-card__market i b {
+  background: #2b729e;
+  display: block;
+  height: 100%;
+}
+
+.professional-match-card__market > div:nth-child(2) i b {
+  background: #d35e5e;
+}
+
+.professional-match-card__market > small {
+  color: var(--color-bone-muted);
+  font-size: 0.625rem;
+  grid-column: 1 / -1;
+}
+
+.prediction-market-detail {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(290px, 360px);
+}
+
+.prediction-market-detail__chart,
+.prediction-ticket,
+.tournament-markets__focus {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 24px;
+}
+
+.prediction-market-detail__chart {
+  min-width: 0;
+  padding: clamp(0.9rem, 2vw, 1.25rem);
+}
+
+.prediction-market-detail__chart > header {
+  align-items: start;
+  display: flex;
+  justify-content: space-between;
+}
+
+.prediction-market-detail__chart > header h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 4vw, 3.2rem);
+  letter-spacing: -0.06em;
+  margin: 0.25rem 0 0;
+}
+
+.prediction-market-detail__chart > header > span {
+  align-items: center;
+  background: #edf5f7;
+  border-radius: 999px;
+  color: #236f79;
+  display: flex;
+  font-size: 0.625rem;
+  font-weight: 700;
+  gap: 0.3rem;
+  padding: 0.55rem 0.7rem;
+}
+
+:root[data-theme="dark"] .prediction-market-detail__chart > header > span {
+  background: #153039;
+  color: #77d8d2;
+}
+
+.prediction-chart > header,
+.prediction-chart > footer {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.prediction-chart > header {
+  border-bottom: 1px solid var(--color-line);
+  margin-top: 1rem;
+  padding-bottom: 0.7rem;
+}
+
+.prediction-chart > header > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.prediction-chart > header span,
+.prediction-chart > footer span {
+  align-items: center;
+  color: var(--color-bone-muted);
+  display: flex;
+  font-size: 0.625rem;
+  gap: 0.3rem;
+}
+
+.prediction-chart > header i {
+  background: #2167ad;
+  border-radius: 50%;
+  height: 7px;
+  width: 7px;
+}
+
+.prediction-chart > header i[data-side="no"] {
+  background: #d35e5e;
+}
+
+.prediction-chart > header strong {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+}
+
+.prediction-chart__plot {
+  min-height: 150px;
+  position: relative;
+}
+
+.prediction-chart svg {
+  display: block;
+  overflow: visible;
+  touch-action: none;
+  width: 100%;
+}
+
+.prediction-chart__grid {
+  stroke: color-mix(in srgb, var(--color-line) 80%, transparent);
+  stroke-dasharray: 3 5;
+  stroke-width: 1;
+}
+
+.prediction-chart__line {
+  animation: prediction-line-in 720ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.prediction-chart__line--yes {
+  stroke: #2167ad;
+}
+
+.prediction-chart__line--no {
+  stroke: #d35e5e;
+}
+
+.prediction-chart__cursor {
+  stroke: #8c9bab;
+  stroke-dasharray: 3 4;
+  stroke-width: 1;
+}
+
+.prediction-chart__dot {
+  stroke: var(--color-surface);
+  stroke-width: 3;
+}
+
+.prediction-chart__dot--yes {
+  fill: #2167ad;
+}
+
+.prediction-chart__dot--no {
+  fill: #d35e5e;
+}
+
+.prediction-chart__tooltip {
+  background: #102c43;
+  border-radius: 10px;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  padding: 0.45rem 0.55rem;
+  pointer-events: none;
+  position: absolute;
+  top: 10px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.prediction-chart__tooltip small {
+  color: rgb(255 255 255 / 65%);
+  font-size: 0.625rem;
+}
+
+.prediction-chart > footer {
+  border-top: 1px solid var(--color-line);
+  padding-top: 0.65rem;
+}
+
+.prediction-chart > footer > div {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.prediction-chart > footer button {
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--color-bone-muted);
+  cursor: pointer;
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 0.35rem 0.4rem;
+}
+
+.prediction-chart > footer button[aria-pressed="true"] {
+  background: #e8eef9;
+  color: #1f5ea5;
+}
+
+:root[data-theme="dark"]
+  .prediction-chart
+  > footer
+  button[aria-pressed="true"] {
+  background: #17334d;
+  color: #9dc8f4;
+}
+
+@keyframes prediction-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.prediction-ticket {
+  box-shadow: 0 16px 45px rgb(16 44 67 / 8%);
+  overflow: hidden;
+  padding: 1rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.prediction-ticket > header {
+  align-items: center;
+  border-bottom: 1px solid var(--color-line);
+  display: flex;
+  justify-content: space-between;
+  margin: -0.1rem -0.1rem 0.8rem;
+  padding: 0 0.1rem 0.75rem;
+}
+
+.prediction-ticket > header > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.prediction-ticket > header span,
+.prediction-ticket label > span {
+  color: var(--color-bone-muted);
+  font-size: 0.625rem;
+}
+
+.prediction-ticket > header strong {
+  font-size: 0.8rem;
+}
+
+.prediction-ticket__sides {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.prediction-ticket__sides button {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 13px;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  min-height: 68px;
+  padding: 0.65rem;
+  text-align: left;
+}
+
+.prediction-ticket__sides button[aria-pressed="true"] {
+  background: #eaf2fb;
+  border-color: #5c91c5;
+  box-shadow: inset 0 -3px #2167ad;
+}
+
+.prediction-ticket__sides button:nth-child(2)[aria-pressed="true"] {
+  background: #fbefef;
+  border-color: #db8888;
+  box-shadow: inset 0 -3px #d35e5e;
+}
+
+:root[data-theme="dark"] .prediction-ticket__sides button[aria-pressed="true"] {
+  background: #132c42;
+}
+
+:root[data-theme="dark"]
+  .prediction-ticket__sides
+  button:nth-child(2)[aria-pressed="true"] {
+  background: #351f24;
+}
+
+.prediction-ticket__sides span {
+  font-size: 0.625rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prediction-ticket__sides strong {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  margin-top: auto;
+}
+
+.prediction-ticket > label {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.8rem;
+}
+
+.prediction-ticket input {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  color: inherit;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  min-width: 0;
+  padding: 0.6rem 0.7rem;
+  width: 100%;
+}
+
+.prediction-ticket__quick {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 0.45rem;
+}
+
+.prediction-ticket__quick button {
+  background: transparent;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  color: var(--color-bone-muted);
+  cursor: pointer;
+  font-size: 0.625rem;
+  padding: 0.4rem;
+}
+
+.prediction-ticket__estimate {
+  background: var(--color-canvas);
+  border-radius: 13px;
+  display: grid;
+  gap: 0.2rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 0.75rem;
+  padding: 0.65rem;
+}
+
+.prediction-ticket__estimate span,
+.prediction-ticket__estimate small {
+  color: var(--color-bone-muted);
+  font-size: 0.625rem;
+}
+
+.prediction-ticket__estimate strong {
+  font-size: 0.72rem;
+}
+
+.prediction-ticket__estimate small {
+  grid-column: 1 / -1;
+}
+
+.prediction-ticket__submit,
+.prediction-ticket__review > button:last-child {
+  align-items: center;
+  background: #1859d1;
+  border: 0;
+  border-radius: 12px;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.68rem;
+  font-weight: 750;
+  justify-content: center;
+  margin-top: 0.75rem;
+  min-height: 44px;
+  width: 100%;
+}
+
+.prediction-ticket__submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.prediction-ticket__review {
+  align-items: center;
+  background: #eef4fb;
+  border: 1px solid #cbdced;
+  border-radius: 13px;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin-top: 0.75rem;
+  padding: 0.65rem;
+}
+
+:root[data-theme="dark"] .prediction-ticket__review {
+  background: #122738;
+  border-color: #29465e;
+}
+
+.prediction-ticket__review > button:first-child {
+  align-self: start;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.prediction-ticket__review p {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.65rem;
+  margin: 0;
+}
+
+.prediction-ticket__review small {
+  color: var(--color-bone-muted);
+  font-size: 0.625rem;
+  margin-top: 0.25rem;
+}
+
+.prediction-ticket__review > button:last-child {
+  gap: 0.3rem;
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+.prediction-ticket__rule {
+  align-items: start;
+  color: var(--color-bone-muted);
+  display: flex;
+  font-size: 0.625rem;
+  gap: 0.3rem;
+  line-height: 1.45;
+  margin-top: 0.65rem;
+}
+
+.prediction-ticket__message {
+  color: #18745b;
+  font-size: 0.625rem;
+  margin: 0.55rem 0 0;
+}
+
+.prediction-ticket--signed-out {
+  text-align: center;
+}
+
+.prediction-ticket--signed-out h3 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  margin: 0.7rem 0 0.35rem;
+}
+
+.prediction-ticket--signed-out p {
+  color: var(--color-bone-muted);
+  font-size: 0.66rem;
+  line-height: 1.5;
+}
+
+.prediction-ticket--signed-out a {
+  align-items: center;
+  color: #246b9b;
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 750;
+  gap: 0.3rem;
+  text-decoration: none;
+}
+
+.tournament-markets > header > span {
+  align-items: center;
+  background: #edf5f7;
+  border-radius: 999px;
+  color: #236f79;
+  display: flex;
+  font-size: 0.625rem;
+  font-weight: 700;
+  gap: 0.3rem;
+  padding: 0.55rem 0.7rem;
+}
+
+.tournament-markets__layout {
+  align-items: start;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: minmax(220px, 0.65fr) minmax(0, 1.35fr) minmax(
+      290px,
+      0.8fr
+    );
+}
+
+.tournament-markets__teams {
+  border: 1px solid var(--color-line);
+  border-radius: 18px;
+  max-height: 560px;
+  overflow: auto;
+  padding: 0.35rem;
+}
+
+.tournament-markets__teams button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.62rem;
+  text-align: left;
+  width: 100%;
+}
+
+.tournament-markets__teams button + button {
+  border-top: 1px solid var(--color-line);
+}
+
+.tournament-markets__teams button[aria-pressed="true"] {
+  background: #eaf2fb;
+}
+
+:root[data-theme="dark"]
+  .tournament-markets__teams
+  button[aria-pressed="true"] {
+  background: #142b3d;
+}
+
+.tournament-markets__teams strong {
+  font-size: 0.65rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tournament-markets__teams small {
+  color: var(--color-bone-muted);
+  font-size: 0.625rem;
+  grid-column: 2;
+}
+
+.tournament-markets__teams b {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  grid-column: 3;
+  grid-row: 1 / 3;
+}
+
+.tournament-markets__focus {
+  min-width: 0;
+  padding: 0.9rem;
+}
+
+.tournament-markets__focus > header {
+  align-items: end;
+  display: flex;
+  justify-content: space-between;
+}
+
+.tournament-markets__focus > header span {
+  color: var(--color-bone-muted);
+  font-size: 0.625rem;
+}
+
+.tournament-markets__focus > header h3 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  letter-spacing: -0.045em;
+  margin: 0.2rem 0 0;
+}
+
+.tournament-markets__focus > header > strong {
+  font-family: var(--font-display);
+  font-size: 2rem;
+}
+
+.prediction-wallet-section {
+  border: 1px solid color-mix(in srgb, #2b729e 25%, var(--color-line));
+}
+
+.prediction-wallet-summary {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.prediction-wallet-summary > article {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 18px;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.9rem;
+}
+
+.prediction-wallet-summary__icon {
+  align-items: center;
+  background: #e7f0f8;
+  border-radius: 12px;
+  color: #246b9b;
+  display: flex;
+  height: 42px;
+  justify-content: center;
+  margin-bottom: 0.45rem;
+  width: 42px;
+}
+
+:root[data-theme="dark"] .prediction-wallet-summary__icon {
+  background: #163146;
+}
+
+.prediction-wallet-summary small,
+.prediction-wallet-summary p,
+.prediction-wallet-positions small,
+.prediction-wallet-positions span {
+  color: var(--color-bone-muted);
+  font-size: 0.625rem;
+}
+
+.prediction-wallet-summary .duna-numeric {
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  letter-spacing: -0.06em;
+}
+
+.prediction-wallet-summary p {
+  line-height: 1.45;
+  margin: 0.35rem 0 0;
+}
+
+.prediction-wallet-positions {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0.8rem;
+}
+
+.prediction-wallet-positions > section {
+  border: 1px solid var(--color-line);
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.prediction-wallet-positions > section > header,
+.prediction-wallet-positions article {
+  align-items: center;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding: 0.75rem;
+}
+
+.prediction-wallet-positions > section > header {
+  background: var(--color-canvas);
+  display: flex;
+  justify-content: space-between;
+}
+
+.prediction-wallet-positions h3 {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  margin: 0;
+}
+
+.prediction-wallet-positions article + article {
+  border-top: 1px solid var(--color-line);
+}
+
+.prediction-wallet-positions article > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.prediction-wallet-positions article strong {
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prediction-wallet-positions article .duna-numeric {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  text-align: right;
+}
+
+@media (max-width: 980px) {
+  .prediction-market-detail,
+  .tournament-markets__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .prediction-ticket {
+    position: static;
+  }
+
+  .tournament-markets__teams {
+    display: flex;
+    max-height: none;
+    overflow-x: auto;
+  }
+
+  .tournament-markets__teams button {
+    flex: 0 0 220px;
+  }
+}
+
+@media (max-width: 680px) {
+  .prediction-market-detail__chart > header > span,
+  .tournament-markets > header > span {
+    display: none;
+  }
+
+  .prediction-chart > header {
+    align-items: start;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .prediction-chart > footer {
+    align-items: start;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .prediction-wallet-summary,
+  .prediction-wallet-positions {
+    grid-template-columns: 1fr;
+  }
+
+  .professional-match-card__market {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Light-first public event experience */
@@ -21499,6 +22474,16 @@ html {
   margin: 0 auto;
   max-width: 1520px;
   padding: 0 clamp(1rem, 4vw, 4rem);
+}
+
+.event-public__prediction {
+  margin: clamp(1rem, 2.5vw, 2rem) auto 0;
+  max-width: 1520px;
+  padding: 0 clamp(1rem, 4vw, 4rem);
+}
+
+.event-public__prediction > .pro-event-section {
+  margin: 0;
 }
 
 .weather-card {

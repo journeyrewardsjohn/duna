@@ -85,6 +85,8 @@ import {
   playerDashboardSchema,
   playerSettingsSchema,
   playerWalletSchema,
+  predictionMarketSchema,
+  predictionWalletSchema,
   pricingSchema,
   publicCoachSchema,
   publicOrganizationStorefrontSchema,
@@ -408,6 +410,16 @@ import {
   removeProfessionalEventMedia,
   removeProfessionalWatchOption,
 } from "./sand-data/service";
+import {
+  ensurePredictionMarket,
+  loadPublicEventTeamPredictionDefinitions,
+  loadPublicMatchPredictionDefinition,
+  loadPredictionMarket,
+  loadPredictionWallet,
+  placePredictionOrder,
+  PredictionMarketError,
+  settlePredictionMarket,
+} from "./prediction-market";
 import {
   buildPersonDataExport,
   cancelAccountDeletion,
@@ -838,6 +850,20 @@ async function runIdempotentMutation<T extends object>(input: {
 }
 
 function throwDomainError(error: unknown): never {
+  if (error instanceof PredictionMarketError) {
+    const code =
+      error.code === "MARKET_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "INVALID_ORDER"
+          ? "BAD_REQUEST"
+          : error.code === "INSUFFICIENT_CREDITS" ||
+              error.code === "MARKET_CLOSED"
+            ? "PRECONDITION_FAILED"
+            : error.code === "ALREADY_SETTLED"
+              ? "CONFLICT"
+              : "INTERNAL_SERVER_ERROR";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
   if (error instanceof CommerceError) {
     const code =
       error.code.endsWith("_NOT_FOUND") || error.code === "TICKET_NOT_FOUND"
@@ -1499,6 +1525,322 @@ const publicRouter = router({
       );
       if (!match) throw new TRPCError({ code: "NOT_FOUND" });
       return match;
+    }),
+  proMatchPredictionMarket: publicProcedure
+    .input(
+      z.object({
+        eventSlug: z.string().trim().min(1).max(180),
+        matchId: z.string().uuid(),
+      }),
+    )
+    .output(predictionMarketSchema)
+    .query(async ({ input, ctx }) => {
+      const event = await loadPublicProEvent(
+        input.eventSlug,
+        ctx.actor?.personId,
+        ctx.now,
+      );
+      const match = event?.matches.find(
+        (candidate) => candidate.id === input.matchId,
+      );
+      if (!event || !match) throw new TRPCError({ code: "NOT_FOUND" });
+      const definition = {
+        subjectType: "pro-match" as const,
+        subjectId: match.id,
+        groupKey: `pro-event:${event.id}`,
+        title: `${match.teamA.label} vs ${match.teamB.label}`,
+        yesLabel: match.teamA.label,
+        noLabel: match.teamB.label,
+        initialYesPriceBps: Math.max(
+          100,
+          Math.min(9_900, Math.round(match.prediction.teamA * 100)),
+        ),
+        resolvedSide:
+          match.status === "completed" && match.winnerSide
+            ? match.winnerSide === "A"
+              ? ("yes" as const)
+              : ("no" as const)
+            : undefined,
+        locksAt: match.scheduledAt ? new Date(match.scheduledAt) : undefined,
+        sourceSnapshot: {
+          eventId: event.id,
+          eventSlug: event.slug,
+          roundLabel: match.roundLabel,
+          modelBasis: match.prediction.basis,
+          modelTeamA: match.prediction.teamA,
+          modelTeamB: match.prediction.teamB,
+        },
+      };
+      const storedMarket = await ensurePredictionMarket(definition);
+      if (definition.resolvedSide) {
+        await settlePredictionMarket({
+          marketId: storedMarket.id,
+          resolvedSide: definition.resolvedSide,
+          now: ctx.now,
+        });
+      }
+      const market = await loadPredictionMarket({
+        subjectType: definition.subjectType,
+        subjectId: definition.subjectId,
+        viewerPersonId: ctx.actor?.personId,
+        now: ctx.now,
+      });
+      if (!market) throw new TRPCError({ code: "NOT_FOUND" });
+      return market;
+    }),
+  proMatchPredictionMarkets: publicProcedure
+    .input(
+      z.object({
+        matches: z
+          .array(
+            z.object({
+              eventSlug: z.string().trim().min(1).max(180),
+              matchId: z.string().uuid(),
+            }),
+          )
+          .max(40),
+      }),
+    )
+    .output(z.record(z.string().uuid(), predictionMarketSchema))
+    .query(async ({ input, ctx }) => {
+      const eventSlugs = [
+        ...new Set(input.matches.map((match) => match.eventSlug)),
+      ];
+      const eventRows = await Promise.all(
+        eventSlugs.map(
+          async (eventSlug) =>
+            [
+              eventSlug,
+              await loadPublicProEvent(eventSlug, ctx.actor?.personId, ctx.now),
+            ] as const,
+        ),
+      );
+      const eventsBySlug = new Map(eventRows);
+      const rows = await Promise.all(
+        input.matches.map(async (requested) => {
+          const event = eventsBySlug.get(requested.eventSlug);
+          const match = event?.matches.find(
+            (candidate) => candidate.id === requested.matchId,
+          );
+          if (!event || !match) return undefined;
+          const definition = {
+            subjectType: "pro-match" as const,
+            subjectId: match.id,
+            groupKey: `pro-event:${event.id}`,
+            title: `${match.teamA.label} vs ${match.teamB.label}`,
+            yesLabel: match.teamA.label,
+            noLabel: match.teamB.label,
+            initialYesPriceBps: Math.max(
+              100,
+              Math.min(9_900, Math.round(match.prediction.teamA * 100)),
+            ),
+            resolvedSide:
+              match.status === "completed" && match.winnerSide
+                ? match.winnerSide === "A"
+                  ? ("yes" as const)
+                  : ("no" as const)
+                : undefined,
+            locksAt: match.scheduledAt
+              ? new Date(match.scheduledAt)
+              : undefined,
+            sourceSnapshot: {
+              eventId: event.id,
+              eventSlug: event.slug,
+              roundLabel: match.roundLabel,
+              modelBasis: match.prediction.basis,
+              modelTeamA: match.prediction.teamA,
+              modelTeamB: match.prediction.teamB,
+            },
+          };
+          const storedMarket = await ensurePredictionMarket(definition);
+          if (definition.resolvedSide) {
+            await settlePredictionMarket({
+              marketId: storedMarket.id,
+              resolvedSide: definition.resolvedSide,
+              now: ctx.now,
+            });
+          }
+          const market = await loadPredictionMarket({
+            subjectType: definition.subjectType,
+            subjectId: definition.subjectId,
+            viewerPersonId: ctx.actor?.personId,
+            now: ctx.now,
+          });
+          return market ? ([match.id, market] as const) : undefined;
+        }),
+      );
+      return Object.fromEntries(
+        rows.filter((row): row is NonNullable<(typeof rows)[number]> =>
+          Boolean(row),
+        ),
+      );
+    }),
+  proEventPredictionMarkets: publicProcedure
+    .input(z.object({ eventSlug: z.string().trim().min(1).max(180) }))
+    .output(z.array(predictionMarketSchema).readonly())
+    .query(async ({ input, ctx }) => {
+      const event = await loadPublicProEvent(
+        input.eventSlug,
+        ctx.actor?.personId,
+        ctx.now,
+      );
+      if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+      const fallbackPercentage =
+        100 / Math.max(1, event.winnerPrediction.entries.length);
+      const champion = event.podium.champion;
+      const normalizedRoster = (
+        players: readonly { readonly name: string }[],
+      ) =>
+        players
+          .map((player) => player.name.trim().toLocaleLowerCase())
+          .sort()
+          .join("|");
+      const championEntry = champion
+        ? event.teamEntries.find(
+            (entry) =>
+              entry.label === champion.label ||
+              normalizedRoster(entry.players) ===
+                normalizedRoster(champion.players),
+          )
+        : undefined;
+      return Promise.all(
+        event.winnerPrediction.entries.map(async (entry) => {
+          const definition = {
+            subjectType: "pro-event-team" as const,
+            subjectId: `${event.id}:${entry.externalTeamId}`,
+            groupKey: `pro-event:${event.id}`,
+            title: `Will ${entry.label} win ${event.name}?`,
+            yesLabel: `${entry.label} wins`,
+            noLabel: `${entry.label} does not win`,
+            initialYesPriceBps: Math.max(
+              100,
+              Math.min(
+                9_900,
+                Math.round(
+                  (entry.percentage > 0
+                    ? entry.percentage
+                    : fallbackPercentage) * 100,
+                ),
+              ),
+            ),
+            locksAt: event.endsOn
+              ? new Date(`${event.endsOn}T23:59:59.999Z`)
+              : undefined,
+            sourceSnapshot: {
+              eventId: event.id,
+              eventSlug: event.slug,
+              externalTeamId: entry.externalTeamId,
+              seed: entry.seed,
+              modelRating: entry.averageRating,
+            },
+          };
+          const storedMarket = await ensurePredictionMarket(definition);
+          if (event.status === "completed" && championEntry) {
+            await settlePredictionMarket({
+              marketId: storedMarket.id,
+              resolvedSide:
+                entry.externalTeamId === championEntry.externalTeamId
+                  ? "yes"
+                  : "no",
+              now: ctx.now,
+            });
+          }
+          const market = await loadPredictionMarket({
+            subjectType: definition.subjectType,
+            subjectId: definition.subjectId,
+            viewerPersonId: ctx.actor?.personId,
+            now: ctx.now,
+          });
+          if (!market) throw new TRPCError({ code: "NOT_FOUND" });
+          return market;
+        }),
+      );
+    }),
+  eventPredictionMarkets: publicProcedure
+    .input(z.object({ eventSlug: z.string().trim().min(1).max(180) }))
+    .output(
+      z.object({
+        entries: z
+          .array(
+            z.object({
+              externalTeamId: z.string().uuid(),
+              label: z.string(),
+            }),
+          )
+          .readonly(),
+        markets: z.array(predictionMarketSchema).readonly(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const result = await loadPublicEventTeamPredictionDefinitions(
+        input.eventSlug,
+      );
+      if (!result) throw new TRPCError({ code: "NOT_FOUND" });
+      const markets = await Promise.all(
+        result.entries.map(async (entry) => {
+          await ensurePredictionMarket(entry.definition);
+          const market = await loadPredictionMarket({
+            subjectType: entry.definition.subjectType,
+            subjectId: entry.definition.subjectId,
+            viewerPersonId: ctx.actor?.personId,
+            now: ctx.now,
+          });
+          if (!market) throw new TRPCError({ code: "NOT_FOUND" });
+          return market;
+        }),
+      );
+      return {
+        entries: result.entries.map((entry) => ({
+          externalTeamId: entry.externalTeamId,
+          label: entry.label,
+        })),
+        markets,
+      };
+    }),
+  predictionMarket: publicProcedure
+    .input(
+      z.object({
+        subjectType: z.enum([
+          "match",
+          "event-team",
+          "pro-match",
+          "pro-event-team",
+        ]),
+        subjectId: z.string().trim().min(1).max(320),
+      }),
+    )
+    .output(predictionMarketSchema.optional())
+    .query(({ input, ctx }) =>
+      loadPredictionMarket({
+        ...input,
+        viewerPersonId: ctx.actor?.personId,
+        now: ctx.now,
+      }),
+    ),
+  matchPredictionMarket: publicProcedure
+    .input(z.object({ matchId: z.string().uuid() }))
+    .output(predictionMarketSchema)
+    .query(async ({ input, ctx }) => {
+      const definition = await loadPublicMatchPredictionDefinition(
+        input.matchId,
+      );
+      if (!definition) throw new TRPCError({ code: "NOT_FOUND" });
+      const storedMarket = await ensurePredictionMarket(definition);
+      if (definition.resolvedSide) {
+        await settlePredictionMarket({
+          marketId: storedMarket.id,
+          resolvedSide: definition.resolvedSide,
+          now: ctx.now,
+        });
+      }
+      const market = await loadPredictionMarket({
+        subjectType: definition.subjectType,
+        subjectId: definition.subjectId,
+        viewerPersonId: ctx.actor?.personId,
+        now: ctx.now,
+      });
+      if (!market) throw new TRPCError({ code: "NOT_FOUND" });
+      return market;
     }),
   organizationBySlug: publicProcedure
     .input(z.object({ slug: z.string().min(1) }))
@@ -2374,6 +2716,343 @@ const playerRouter = router({
               videoId: input.videoId,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  predictionWallet: protectedProcedure
+    .output(predictionWalletSchema)
+    .query(({ ctx }) =>
+      loadPredictionWallet({ personId: ctx.actor!.personId, now: ctx.now }),
+    ),
+  placeMatchPredictionOrder: adultProcedure
+    .use(requireScope("wallet:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "public-match-prediction-order",
+        capacity: 30,
+        refillPerMinute: 20,
+      }),
+    )
+    .input(
+      z.object({
+        matchId: z.string().uuid(),
+        side: z.enum(["A", "B"]),
+        credits: z.number().int().min(1).max(1_000_000_000),
+        limitPriceBps: z.number().int().min(100).max(9_900),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        orderId: z.string().uuid(),
+        marketId: z.string().uuid(),
+        status: z.enum(["open", "partially-filled", "filled"]),
+        filledShares: z.number().nonnegative(),
+        openShares: z.number().nonnegative(),
+        allocatedCredits: z.number().int().positive(),
+        availableCredits: z.number().nonnegative(),
+        immutable: z.literal(true),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.placeMatchPredictionOrder",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            const market = await loadPublicMatchPredictionDefinition(
+              input.matchId,
+            );
+            if (!market) {
+              throw new PredictionMarketError(
+                "MARKET_NOT_FOUND",
+                "This public match is not available for prediction.",
+              );
+            }
+            return await placePredictionOrder({
+              personId: ctx.actor!.personId,
+              market,
+              side: input.side === "A" ? "yes" : "no",
+              credits: input.credits,
+              limitPriceBps: input.limitPriceBps,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  placeProMatchPredictionOrder: adultProcedure
+    .use(requireScope("wallet:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "professional-match-prediction-order",
+        capacity: 30,
+        refillPerMinute: 20,
+      }),
+    )
+    .input(
+      z.object({
+        eventSlug: z.string().trim().min(1).max(180),
+        matchId: z.string().uuid(),
+        side: z.enum(["A", "B"]),
+        credits: z.number().int().min(1).max(1_000_000_000),
+        limitPriceBps: z.number().int().min(100).max(9_900),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        orderId: z.string().uuid(),
+        marketId: z.string().uuid(),
+        status: z.enum(["open", "partially-filled", "filled"]),
+        filledShares: z.number().nonnegative(),
+        openShares: z.number().nonnegative(),
+        allocatedCredits: z.number().int().positive(),
+        availableCredits: z.number().nonnegative(),
+        immutable: z.literal(true),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.placeProMatchPredictionOrder",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            const event = await loadPublicProEvent(
+              input.eventSlug,
+              ctx.actor!.personId,
+              ctx.now,
+            );
+            const match = event?.matches.find(
+              (candidate) => candidate.id === input.matchId,
+            );
+            if (!event || !match) {
+              throw new PredictionMarketError(
+                "MARKET_NOT_FOUND",
+                "This match is not available for prediction.",
+              );
+            }
+            if (match.communityPrediction.closed) {
+              throw new PredictionMarketError(
+                "MARKET_CLOSED",
+                "Positions closed when this match began.",
+              );
+            }
+            const initialYesPriceBps = Math.max(
+              100,
+              Math.min(9_900, Math.round(match.prediction.teamA * 100)),
+            );
+            return await placePredictionOrder({
+              personId: ctx.actor!.personId,
+              market: {
+                subjectType: "pro-match",
+                subjectId: match.id,
+                groupKey: `pro-event:${event.id}`,
+                title: `${match.teamA.label} vs ${match.teamB.label}`,
+                yesLabel: match.teamA.label,
+                noLabel: match.teamB.label,
+                initialYesPriceBps,
+                locksAt: match.scheduledAt
+                  ? new Date(match.scheduledAt)
+                  : undefined,
+                sourceSnapshot: {
+                  eventId: event.id,
+                  eventSlug: event.slug,
+                  roundLabel: match.roundLabel,
+                  modelBasis: match.prediction.basis,
+                  modelTeamA: match.prediction.teamA,
+                  modelTeamB: match.prediction.teamB,
+                },
+              },
+              side: input.side === "A" ? "yes" : "no",
+              credits: input.credits,
+              limitPriceBps: input.limitPriceBps,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  placeProEventTeamPredictionOrder: adultProcedure
+    .use(requireScope("wallet:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "professional-event-prediction-order",
+        capacity: 30,
+        refillPerMinute: 20,
+      }),
+    )
+    .input(
+      z.object({
+        eventSlug: z.string().trim().min(1).max(180),
+        externalTeamId: z.string().trim().min(1).max(180),
+        side: z.enum(["yes", "no"]),
+        credits: z.number().int().min(1).max(1_000_000_000),
+        limitPriceBps: z.number().int().min(100).max(9_900),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        orderId: z.string().uuid(),
+        marketId: z.string().uuid(),
+        status: z.enum(["open", "partially-filled", "filled"]),
+        filledShares: z.number().nonnegative(),
+        openShares: z.number().nonnegative(),
+        allocatedCredits: z.number().int().positive(),
+        availableCredits: z.number().nonnegative(),
+        immutable: z.literal(true),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.placeProEventTeamPredictionOrder",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            const event = await loadPublicProEvent(
+              input.eventSlug,
+              ctx.actor!.personId,
+              ctx.now,
+            );
+            const entry = event?.winnerPrediction.entries.find(
+              (candidate) => candidate.externalTeamId === input.externalTeamId,
+            );
+            if (!event || !entry) {
+              throw new PredictionMarketError(
+                "MARKET_NOT_FOUND",
+                "This team is not in the active tournament draw.",
+              );
+            }
+            if (event.status === "completed") {
+              throw new PredictionMarketError(
+                "MARKET_CLOSED",
+                "Tournament positions are closed after the final result.",
+              );
+            }
+            const fallbackPercentage =
+              100 / Math.max(1, event.winnerPrediction.entries.length);
+            const initialYesPriceBps = Math.max(
+              100,
+              Math.min(
+                9_900,
+                Math.round(
+                  (entry.percentage > 0
+                    ? entry.percentage
+                    : fallbackPercentage) * 100,
+                ),
+              ),
+            );
+            return await placePredictionOrder({
+              personId: ctx.actor!.personId,
+              market: {
+                subjectType: "pro-event-team",
+                subjectId: `${event.id}:${entry.externalTeamId}`,
+                groupKey: `pro-event:${event.id}`,
+                title: `Will ${entry.label} win ${event.name}?`,
+                yesLabel: `${entry.label} wins`,
+                noLabel: `${entry.label} does not win`,
+                initialYesPriceBps,
+                locksAt: event.endsOn
+                  ? new Date(`${event.endsOn}T23:59:59.999Z`)
+                  : undefined,
+                sourceSnapshot: {
+                  eventId: event.id,
+                  eventSlug: event.slug,
+                  externalTeamId: entry.externalTeamId,
+                  seed: entry.seed,
+                  modelRating: entry.averageRating,
+                },
+              },
+              side: input.side,
+              credits: input.credits,
+              limitPriceBps: input.limitPriceBps,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  placeEventTeamPredictionOrder: adultProcedure
+    .use(requireScope("wallet:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "public-event-prediction-order",
+        capacity: 30,
+        refillPerMinute: 20,
+      }),
+    )
+    .input(
+      z.object({
+        eventSlug: z.string().trim().min(1).max(180),
+        externalTeamId: z.string().uuid(),
+        side: z.enum(["yes", "no"]),
+        credits: z.number().int().min(1).max(1_000_000_000),
+        limitPriceBps: z.number().int().min(100).max(9_900),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        orderId: z.string().uuid(),
+        marketId: z.string().uuid(),
+        status: z.enum(["open", "partially-filled", "filled"]),
+        filledShares: z.number().nonnegative(),
+        openShares: z.number().nonnegative(),
+        allocatedCredits: z.number().int().positive(),
+        availableCredits: z.number().nonnegative(),
+        immutable: z.literal(true),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.placeEventTeamPredictionOrder",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            const result = await loadPublicEventTeamPredictionDefinitions(
+              input.eventSlug,
+            );
+            const entry = result?.entries.find(
+              (candidate) => candidate.externalTeamId === input.externalTeamId,
+            );
+            if (!result || !entry) {
+              throw new PredictionMarketError(
+                "MARKET_NOT_FOUND",
+                "This team is not in the confirmed event draw.",
+              );
+            }
+            if (result.event.status === "completed") {
+              throw new PredictionMarketError(
+                "MARKET_CLOSED",
+                "Tournament positions are closed after the final result.",
+              );
+            }
+            return await placePredictionOrder({
+              personId: ctx.actor!.personId,
+              market: entry.definition,
+              side: input.side,
+              credits: input.credits,
+              limitPriceBps: input.limitPriceBps,
               now: ctx.now,
             });
           } catch (error) {
@@ -7610,6 +8289,34 @@ const adminRouter = router({
   overview: adminProcedure
     .output(adminOverviewSchema)
     .query(() => getRepository().admin.overview()),
+  settlePredictionMarket: superAdminProcedure
+    .input(
+      z.object({
+        marketId: z.string().uuid(),
+        resolvedSide: z.enum(["yes", "no"]),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(z.object({ marketId: z.string().uuid(), settled: z.boolean() }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.settlePredictionMarket",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await settlePredictionMarket({
+              marketId: input.marketId,
+              resolvedSide: input.resolvedSide,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   videoOverview: adminProcedure
     .output(adminVideoOverviewSchema)
     .query(async ({ ctx }) => {
