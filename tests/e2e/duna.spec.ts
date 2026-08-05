@@ -50,14 +50,18 @@ test("public rankings and rating evidence stay open and responsive", async ({
   await page.goto("/rankings?view=world&gender=women");
   await expect(
     page.getByRole("heading", {
-      name: "The world rankings, connected to the match record.",
+      name: "The players shaping beach volleyball now.",
     }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "World ranking", exact: true }),
+    page
+      .getByRole("navigation", { name: "Ranking system" })
+      .getByRole("link", { name: "World ranking", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   await expect(
-    page.getByRole("link", { name: /Duna Sand Rating/ }),
+    page
+      .getByRole("navigation", { name: "Ranking system" })
+      .getByRole("link", { name: /Duna Sand Rating/ }),
   ).toHaveAttribute("href", "/rankings?view=duna&gender=women");
   await expectNoHorizontalOverflow(page);
 
