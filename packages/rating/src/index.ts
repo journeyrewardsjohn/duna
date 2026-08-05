@@ -243,6 +243,21 @@ function deriveResult(setScores: readonly SetScore[]): {
   };
 }
 
+export function performanceEvidenceFromSetScores(
+  setScores: readonly SetScore[],
+): {
+  readonly actualTeamA: number;
+  readonly pointShareTeamA: number;
+  readonly marginMultiplier: number;
+} {
+  const result = deriveResult(setScores);
+  return {
+    actualTeamA: result.actualA,
+    pointShareTeamA: result.pointShareA,
+    marginMultiplier: result.marginMultiplier,
+  };
+}
+
 function nextPhi(phi: number, ratedMatches: number): number {
   const contraction =
     ratedMatches < 10 ? 0.9 : ratedMatches < 30 ? 0.94 : 0.975;

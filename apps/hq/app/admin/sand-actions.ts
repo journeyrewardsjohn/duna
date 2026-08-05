@@ -99,6 +99,73 @@ export async function refreshWorldRankingsAction(
   }
 }
 
+export async function refreshSandRatingNetworkAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const maxDepth = Number.parseInt(String(formData.get("maxDepth") ?? "4"), 10);
+  const topPlayersPerGender = Number.parseInt(
+    String(formData.get("topPlayersPerGender") ?? "200"),
+    10,
+  );
+  if (
+    !Number.isInteger(maxDepth) ||
+    maxDepth < 1 ||
+    maxDepth > 4 ||
+    !Number.isInteger(topPlayersPerGender) ||
+    topPlayersPerGender < 50 ||
+    topPlayersPerGender > 500
+  ) {
+    return {
+      status: "error",
+      message:
+        "Choose 1–4 graph degrees and 50–500 ranked players per division.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.refreshSandRatingNetwork({
+      maxDepth,
+      topPlayersPerGender,
+    });
+    refreshSandAdmin();
+    return {
+      status: "success",
+      message: `SandRating network staged: ${result.counters.players} profiles and ${result.counters.matches} matches across ${maxDepth} degrees.`,
+    };
+  } catch (error) {
+    return failure(error, "The SandRating network could not be refreshed.");
+  }
+}
+
+export async function approveSandRatingBackfillAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const reason = String(formData.get("reason") ?? "").trim();
+  const limit = Number.parseInt(String(formData.get("limit") ?? "5000"), 10);
+  if (reason.length < 10 || !Number.isInteger(limit) || limit < 1) {
+    return {
+      status: "error",
+      message: "Document the approval basis and choose a valid match limit.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.approveReadySandRatingMatches({
+      limit: Math.min(5_000, limit),
+      reason,
+    });
+    refreshSandAdmin();
+    return {
+      status: "success",
+      message: `${result.approved} partner matches approved; ${result.replay.players} Duna SandRatings rebuilt from ${result.replay.matches} matches.`,
+    };
+  } catch (error) {
+    return failure(error, "The SandRating backfill could not be approved.");
+  }
+}
+
 export async function refreshAvpLeagueAction(
   _previous: SandActionState,
   formData: FormData,
