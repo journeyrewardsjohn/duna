@@ -58,8 +58,10 @@ function TeamName({
       {team.players.map((player, index) => (
         <span key={`${player.personId ?? player.name}-${index}`}>
           {index > 0 && <i>/</i>}
-          {player.handle && linkPlayers ? (
-            <Link href={`/players/${player.handle}`}>{player.name}</Link>
+          {(player.publicPath ?? player.handle) && linkPlayers ? (
+            <Link href={player.publicPath ?? `/players/${player.handle}`}>
+              {player.name}
+            </Link>
           ) : (
             <span>{player.name}</span>
           )}
@@ -106,8 +108,10 @@ function AvpRoster({ team }: { readonly team: AvpDivisionTeam }) {
       {team.players.map((player, index) => (
         <span key={player.personId ?? player.externalPersonId}>
           {index > 0 && " / "}
-          {player.handle ? (
-            <Link href={`/players/${player.handle}`}>{player.name}</Link>
+          {(player.publicPath ?? player.handle) ? (
+            <Link href={player.publicPath ?? `/players/${player.handle}`}>
+              {player.name}
+            </Link>
           ) : (
             player.name
           )}
@@ -602,8 +606,13 @@ export function ProEventDetail({ event }: { readonly event: PublicProEvent }) {
                               key={player.personId ?? player.externalPersonId}
                             >
                               {index > 0 && " / "}
-                              {player.handle ? (
-                                <Link href={`/players/${player.handle}`}>
+                              {(player.publicPath ?? player.handle) ? (
+                                <Link
+                                  href={
+                                    player.publicPath ??
+                                    `/players/${player.handle}`
+                                  }
+                                >
                                   {player.name}
                                 </Link>
                               ) : (

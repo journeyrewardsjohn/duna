@@ -27,7 +27,7 @@ import {
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
 import { PlayerFollowButton } from "@/components/player-follow-button";
 import {
@@ -152,11 +152,14 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { handle } = await params;
   const caller = await getServerCaller();
-  const [player, intelligence] = await Promise.all([
-    caller.public.playerProfile({ handle }).catch(() => undefined),
-    caller.public.playerIntelligence({ handle }).catch(() => undefined),
-  ]);
-  if (!player) return { title: "Player not found · Duna" };
+  const route = await caller.public
+    .playerRoute({ identifier: handle })
+    .catch(() => undefined);
+  if (!route) return { title: "Player not found" };
+  const { player } = route;
+  const intelligence = await caller.public
+    .playerIntelligence({ handle: player.handle })
+    .catch(() => undefined);
   const description =
     intelligence?.profile?.shortBio ??
     `${player.displayName}'s Sand Rating, world ranking, verified beach volleyball results, upcoming events, partners, and performance trends.`;
@@ -170,14 +173,14 @@ export async function generateMetadata({
       detail: `Sand Rating ${player.rating.display.toFixed(2)} · verified results · upcoming events`,
     });
   return {
-    title: `${player.displayName} beach volleyball profile · Duna`,
+    title: `${player.displayName} beach volleyball profile`,
     description,
-    alternates: { canonical: `/players/${player.handle}` },
+    alternates: { canonical: route.canonicalPath },
     openGraph: {
       title: `${player.displayName} · Sand Rating ${player.rating.display.toFixed(2)}`,
       description,
       type: "profile",
-      url: `/players/${player.handle}`,
+      url: route.canonicalPath,
       siteName: "Duna",
       images: [
         { url: image, alt: `${player.displayName} beach volleyball profile` },
@@ -200,13 +203,23 @@ export default async function PublicPlayerPage({
 }) {
   const { handle } = await params;
   const caller = await getServerCaller();
-  const [player, performance, intelligence, videos] = await Promise.all([
-    caller.public.playerProfile({ handle }).catch(() => undefined),
-    caller.public.playerPerformance({ handle }).catch(() => undefined),
-    caller.public.playerIntelligence({ handle }).catch(() => undefined),
-    caller.public.videos({ ownerHandle: handle }).catch(() => []),
+  const route = await caller.public
+    .playerRoute({ identifier: handle })
+    .catch(() => undefined);
+  if (!route) notFound();
+  if (route.canonicalPath !== `/players/${handle}`) {
+    redirect(route.canonicalPath);
+  }
+  const { player } = route;
+  const [performance, intelligence, videos] = await Promise.all([
+    caller.public
+      .playerPerformance({ handle: player.handle })
+      .catch(() => undefined),
+    caller.public
+      .playerIntelligence({ handle: player.handle })
+      .catch(() => undefined),
+    caller.public.videos({ ownerHandle: player.handle }).catch(() => []),
   ]);
-  if (!player) notFound();
 
   const followState = await caller.player
     .playerFollowState({ playerPersonId: player.id })
@@ -363,7 +376,24 @@ export default async function PublicPlayerPage({
   const cutoutImage = enrichment?.cutoutImageUrl;
   const profileImage = cutoutImage ?? player.avatarUrl;
   const claimPath = `/app/onboarding?claimProfile=${encodeURIComponent(player.handle)}`;
-  const profileUrl = absolutePublicUrl(`/players/${player.handle}`);
+  const profileUrl = absolutePublicUrl(route.canonicalPath);
+  const nameParts = player.displayName.trim().split(/\s+/);
+  const heroLastName = nameParts.at(-1) ?? player.displayName;
+  const heroFirstName = nameParts.slice(0, -1).join(" ") || heroLastName;
+  const latestConnectedResult = recent[0];
+  const latestPlayerSide = latestConnectedResult?.event.participants.find(
+    (participant) => participant.personId === player.id,
+  )?.side;
+  const latestOpponent = latestConnectedResult
+    ? teamName(
+        latestConnectedResult.event.participants,
+        latestPlayerSide === "B" ? "A" : "B",
+      )
+    : undefined;
+  const latestScore = latestConnectedResult?.event.sets
+    .map((set) => `${set.a}–${set.b}`)
+    .join(" · ");
+  const nextAppearance = intelligence?.upcomingEvents[0];
   const sameAs = (enrichment?.links ?? [])
     .filter((link) => link.kind !== "news")
     .map((link) => link.url);
@@ -456,125 +486,225 @@ export default async function PublicPlayerPage({
         type="application/ld+json"
       />
 
-      <section
-        className="athlete-hero"
-        style={
-          heroImage
-            ? ({
-                "--athlete-hero-image": `url("${heroImage}")`,
-              } as React.CSSProperties)
-            : undefined
-        }
-      >
-        {enrichment?.heroVideoUrl && (
-          <video
-            aria-label={`${player.displayName} beach volleyball profile reel`}
-            autoPlay
-            className="athlete-hero__video"
-            loop
-            muted
-            playsInline
-            poster={heroImage}
-            src={enrichment.heroVideoUrl}
-          />
-        )}
-        <div className="athlete-hero__wash" />
-        <div className="athlete-hero__content">
-          <div className="athlete-hero__copy">
-            <div className="profile-badge-row">
-              <Badge>{profileStateLabel(player.profileClaimStatus)}</Badge>
-              {player.isProfessional && (
-                <Badge tone="positive">
-                  <Trophy aria-hidden size={14} /> Professional
-                </Badge>
-              )}
-              {performance?.worldRanking && (
-                <Badge tone="warning">
-                  <Globe2 aria-hidden size={14} /> World #
-                  {performance.worldRanking.rank}
-                </Badge>
-              )}
-            </div>
-            <p className="athlete-hero__country">
-              <span aria-hidden>{countryFlag(countryCode)}</span>
-              {countryCode ?? "Beach volleyball"}
-              {enrichment?.playingRole ? ` · ${enrichment.playingRole}` : ""}
-            </p>
-            <h1>{player.displayName}</h1>
-            <p className="athlete-hero__lede">
-              {enrichment?.shortBio ?? fallbackSummary}
-            </p>
-            <div className="athlete-hero__meta">
-              <span>@{player.handle}</span>
-              {(enrichment?.hometown ?? player.homeMarket) && (
-                <span>
-                  <MapPin aria-hidden size={16} />
-                  {enrichment?.hometown ?? player.homeMarket}
-                </span>
-              )}
-              {enrichment?.collegeName && (
-                <span>
-                  {enrichment.collegeLogoUrl ? (
-                    <Image
-                      alt=""
-                      height={22}
-                      src={enrichment.collegeLogoUrl}
-                      unoptimized
-                      width={22}
-                    />
-                  ) : (
-                    <GraduationCap aria-hidden size={17} />
-                  )}
-                  {enrichment.collegeName}
-                </span>
-              )}
-            </div>
-            <div className="athlete-hero__actions">
-              <PlayerFollowButton
-                handle={player.handle}
-                initialState={followState}
-                playerPersonId={player.id}
-              />
-              {player.profileClaimStatus === "unclaimed" ? (
-                <Link href={claimPath}>
-                  <UserRoundCheck aria-hidden size={18} /> Claim profile
-                </Link>
-              ) : (
-                <a href="#match-history">
-                  Explore results <ArrowRight aria-hidden size={17} />
-                </a>
-              )}
-            </div>
-          </div>
-          {profileImage ? (
-            <div className="athlete-hero__portrait">
-              <Image
-                alt={enrichment?.imageAlt ?? player.displayName}
-                fill
-                priority
-                sizes="(max-width: 760px) 92vw, 44vw"
-                src={profileImage}
-                unoptimized
-              />
-            </div>
-          ) : (
-            <div className="athlete-hero__monogram" aria-hidden>
-              {player.initials}
-            </div>
+      <section className="athlete-stage">
+        <section
+          className="athlete-hero"
+          style={
+            heroImage
+              ? ({
+                  "--athlete-hero-image": `url("${heroImage}")`,
+                } as React.CSSProperties)
+              : undefined
+          }
+        >
+          {enrichment?.heroVideoUrl && (
+            <video
+              aria-label={`${player.displayName} beach volleyball profile reel`}
+              autoPlay
+              className="athlete-hero__video"
+              loop
+              muted
+              playsInline
+              poster={heroImage}
+              src={enrichment.heroVideoUrl}
+            />
           )}
-          <div className="athlete-hero__rating">
-            <small>Sand Rating</small>
-            <Numeric>{player.rating.display.toFixed(2)}</Numeric>
-            <span
-              data-direction={(player.rating.delta ?? 0) >= 0 ? "up" : "down"}
-            >
-              {(player.rating.delta ?? 0) >= 0 ? "+" : ""}
-              {(player.rating.delta ?? 0).toFixed(2)} current movement
-            </span>
+          <div className="athlete-hero__wash" />
+          <span aria-hidden className="athlete-hero__surname">
+            {heroLastName}
+          </span>
+          <div className="athlete-hero__content">
+            <div className="athlete-hero__copy">
+              <div className="profile-badge-row">
+                <Badge>{profileStateLabel(player.profileClaimStatus)}</Badge>
+                {player.isProfessional && (
+                  <Badge tone="positive">
+                    <Trophy aria-hidden size={14} /> Professional
+                  </Badge>
+                )}
+              </div>
+              <p className="athlete-hero__country">
+                <span aria-hidden>{countryFlag(countryCode)}</span>
+                {countryCode ?? "Beach volleyball"}
+                {enrichment?.playingRole ? ` · ${enrichment.playingRole}` : ""}
+              </p>
+              <h1>
+                <span>{heroFirstName}</span>
+                <strong>{heroLastName}</strong>
+              </h1>
+              <p className="athlete-hero__lede">
+                {enrichment?.shortBio ?? fallbackSummary}
+              </p>
+              <div className="athlete-hero__meta">
+                <span>
+                  {player.profileClaimStatus === "claimed"
+                    ? `@${player.handle}`
+                    : "Official tour identity"}
+                </span>
+                {(enrichment?.hometown ?? player.homeMarket) && (
+                  <span>
+                    <MapPin aria-hidden size={16} />
+                    {enrichment?.hometown ?? player.homeMarket}
+                  </span>
+                )}
+                {enrichment?.collegeName && (
+                  <span>
+                    {enrichment.collegeLogoUrl ? (
+                      <Image
+                        alt=""
+                        height={22}
+                        src={enrichment.collegeLogoUrl}
+                        unoptimized
+                        width={22}
+                      />
+                    ) : (
+                      <GraduationCap aria-hidden size={17} />
+                    )}
+                    {enrichment.collegeName}
+                  </span>
+                )}
+              </div>
+              <div className="athlete-hero__actions">
+                <PlayerFollowButton
+                  handle={route.canonicalPath.replace("/players/", "")}
+                  initialState={followState}
+                  playerPersonId={player.id}
+                />
+                {player.profileClaimStatus === "unclaimed" ? (
+                  <Link href={claimPath}>
+                    <UserRoundCheck aria-hidden size={18} /> Claim profile
+                  </Link>
+                ) : (
+                  <a href="#match-history">
+                    Explore results <ArrowRight aria-hidden size={17} />
+                  </a>
+                )}
+              </div>
+            </div>
+
+            <div className="athlete-hero__visual">
+              <span aria-hidden className="athlete-hero__rank-mark">
+                {performance?.worldRanking
+                  ? `#${performance.worldRanking.rank}`
+                  : "DUNA"}
+              </span>
+              {profileImage ? (
+                <div className="athlete-hero__portrait">
+                  <Image
+                    alt={enrichment?.imageAlt ?? player.displayName}
+                    fill
+                    priority
+                    sizes="(max-width: 820px) 92vw, 42vw"
+                    src={profileImage}
+                    unoptimized
+                  />
+                </div>
+              ) : (
+                <div className="athlete-hero__monogram" aria-hidden>
+                  {player.initials}
+                </div>
+              )}
+              <div className="athlete-hero__rating">
+                <small>Sand Rating</small>
+                <Numeric>{player.rating.display.toFixed(2)}</Numeric>
+                <span
+                  data-direction={
+                    (player.rating.delta ?? 0) >= 0 ? "up" : "down"
+                  }
+                >
+                  {(player.rating.delta ?? 0) >= 0 ? "+" : ""}
+                  {(player.rating.delta ?? 0).toFixed(2)} current movement
+                </span>
+              </div>
+            </div>
+
+            <aside className="athlete-hero__rail">
+              {latestConnectedResult ? (
+                <article
+                  className="athlete-hero-card athlete-hero-card--result"
+                  data-result={latestConnectedResult.result}
+                >
+                  <header>
+                    <span>Latest result</span>
+                    <Badge
+                      tone={
+                        latestConnectedResult.result === "win"
+                          ? "positive"
+                          : "neutral"
+                      }
+                    >
+                      {latestConnectedResult.result === "win"
+                        ? "Win"
+                        : latestConnectedResult.result === "loss"
+                          ? "Loss"
+                          : "Connected"}
+                    </Badge>
+                  </header>
+                  <small>vs.</small>
+                  <strong>{latestOpponent || "Opponent pending"}</strong>
+                  <p>{latestScore || "Score pending"}</p>
+                  <footer>
+                    <span>
+                      {formatMatchDate(
+                        latestConnectedResult.event.occurredAt,
+                        true,
+                      )}
+                    </span>
+                    <b>
+                      {latestConnectedResult.event.delta >= 0 ? "+" : ""}
+                      {latestConnectedResult.event.delta.toFixed(2)} rating
+                    </b>
+                  </footer>
+                </article>
+              ) : (
+                <article className="athlete-hero-card athlete-hero-card--result">
+                  <header>
+                    <span>Latest result</span>
+                    <Badge>Pending</Badge>
+                  </header>
+                  <strong>Match evidence is connecting.</strong>
+                  <p>The profile will update as verified results arrive.</p>
+                </article>
+              )}
+
+              {nextAppearance && (
+                <Link
+                  className="athlete-hero-card athlete-hero-card--next"
+                  href={`/events/${nextAppearance.slug}`}
+                  style={
+                    nextAppearance.featuredMedia
+                      ? {
+                          backgroundImage: `linear-gradient(180deg, rgb(5 21 43 / 12%), rgb(5 21 43 / 92%)), url("${nextAppearance.featuredMedia.posterUrl ?? nextAppearance.featuredMedia.url}")`,
+                        }
+                      : undefined
+                  }
+                >
+                  <span>
+                    {nextAppearance.status === "live" ? "Live now" : "Next"}
+                  </span>
+                  <strong>{nextAppearance.name}</strong>
+                  <small>
+                    {formatEventDate(
+                      nextAppearance.startsOn,
+                      nextAppearance.endsOn,
+                    )}
+                  </small>
+                  <b>
+                    Event profile <ArrowRight aria-hidden size={15} />
+                  </b>
+                </Link>
+              )}
+            </aside>
           </div>
-        </div>
+        </section>
+
         <div className="athlete-stat-deck">
           {[
+            {
+              label: "Sand Rating",
+              value: player.rating.display.toFixed(2),
+              detail: `${netRatingChange >= 0 ? "+" : ""}${netRatingChange.toFixed(2)} across connected form`,
+            },
             {
               label: "Verified record",
               value: `${wins}–${losses}`,
@@ -583,22 +713,16 @@ export default async function PublicPlayerPage({
             {
               label: "Win percentage",
               value: `${winRate.toFixed(0)}%`,
-              detail: `${recentWins} of last ${recent.length || 0}`,
+              detail: `${recentWins} wins in the latest ${recent.length || 0}`,
             },
             {
-              label: "Rating movement",
-              value: `${netRatingChange >= 0 ? "+" : ""}${netRatingChange.toFixed(2)}`,
-              detail: player.rating.confidence,
-            },
-            {
-              label: "Model upsets",
-              value: String(upsetWins.length),
-              detail: "wins below 50% forecast",
-            },
-            {
-              label: "Followers",
-              value: String(intelligence?.followerCount ?? 0),
-              detail: "player alerts enabled",
+              label: "World position",
+              value: performance?.worldRanking
+                ? `#${performance.worldRanking.rank}`
+                : "—",
+              detail: performance?.worldRanking
+                ? `${performance.worldRanking.points.toFixed(0)} tour points`
+                : `${upsetWins.length} model upsets`,
             },
           ].map((metric) => (
             <article key={metric.label}>

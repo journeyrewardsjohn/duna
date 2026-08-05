@@ -169,13 +169,18 @@ function teamEntity(team: TeamLike, eventUrl: string, idSuffix?: string) {
     sport: "Beach volleyball",
     member: team.players.map((player) => ({
       "@type": "Person",
-      ...(player.handle
-        ? { "@id": absolutePublicUrl(`/players/${player.handle}`) }
+      ...((player.publicPath ?? player.handle)
+        ? {
+            "@id": absolutePublicUrl(
+              player.publicPath ?? `/players/${player.handle}`,
+            ),
+          }
         : {}),
       name: player.name,
-      url: player.handle
-        ? absolutePublicUrl(`/players/${player.handle}`)
-        : undefined,
+      url:
+        (player.publicPath ?? player.handle)
+          ? absolutePublicUrl(player.publicPath ?? `/players/${player.handle}`)
+          : undefined,
       additionalProperty:
         player.rating !== undefined
           ? {
@@ -202,6 +207,7 @@ function eventTeamEntities(event: PublicProEvent, eventUrl: string) {
         name: player.name,
         ...(player.personId ? { personId: player.personId } : {}),
         ...(player.handle ? { handle: player.handle } : {}),
+        ...(player.publicPath ? { publicPath: player.publicPath } : {}),
         ...(player.avatarUrl ? { avatarUrl: player.avatarUrl } : {}),
         ...(player.rating !== undefined ? { rating: player.rating } : {}),
       })),

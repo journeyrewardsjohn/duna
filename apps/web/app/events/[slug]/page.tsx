@@ -369,8 +369,13 @@ export default async function EventPage({
                             </span>
                           )}
                         </div>
-                        {feature.personHandle && (
-                          <Link href={`/players/${feature.personHandle}`}>
+                        {(feature.personPublicPath ?? feature.personHandle) && (
+                          <Link
+                            href={
+                              feature.personPublicPath ??
+                              `/players/${feature.personHandle}`
+                            }
+                          >
                             View full profile{" "}
                             <ArrowRight aria-hidden size={15} />
                           </Link>
@@ -481,7 +486,10 @@ export default async function EventPage({
             </header>
             <div className="event-player-strip">
               {(event.attendees ?? []).map((person) => (
-                <Link href={`/players/${person.handle}`} key={person.id}>
+                <Link
+                  href={person.publicPath ?? `/players/${person.handle}`}
+                  key={person.id}
+                >
                   <span className="avatar">
                     {person.avatarUrl ? (
                       <img alt="" src={person.avatarUrl} />

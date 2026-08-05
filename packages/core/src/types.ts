@@ -38,6 +38,7 @@ export interface PersonSummary {
   readonly id: string;
   readonly displayName: string;
   readonly handle: string;
+  readonly publicPath?: string;
   readonly initials: string;
   readonly homeMarket: string;
   readonly rating: SandRating;
@@ -136,6 +137,7 @@ export interface EventAttendeeSummary {
   readonly id: string;
   readonly displayName: string;
   readonly handle: string;
+  readonly publicPath?: string;
   readonly initials: string;
   readonly avatarUrl?: string;
   readonly homeMarket?: string;
@@ -157,6 +159,7 @@ export interface EventFeature {
   readonly description?: string;
   readonly personId?: string;
   readonly personHandle?: string;
+  readonly personPublicPath?: string;
   readonly personInitials?: string;
   readonly personName?: string;
   readonly personHomeMarket?: string;

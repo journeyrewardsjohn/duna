@@ -412,23 +412,24 @@ async function callTool(input: {
       });
       return players.map((player) => ({
         ...player,
-        profileUrl: `${origin}/players/${player.handle}`,
+        profileUrl: `${origin}${player.publicPath ?? `/players/${player.handle}`}`,
       }));
     }
     case "get_player": {
       const handle = stringArgument(input.args, "handle")!;
-      const [player, performance, intelligence, videos] = await Promise.all([
-        caller.public.playerProfile({ handle }),
-        caller.public.playerPerformance({ handle }),
-        caller.public.playerIntelligence({ handle }),
-        caller.public.videos({ ownerHandle: handle }),
+      const route = await caller.public.playerRoute({ identifier: handle });
+      const { player } = route;
+      const [performance, intelligence, videos] = await Promise.all([
+        caller.public.playerPerformance({ handle: player.handle }),
+        caller.public.playerIntelligence({ handle: player.handle }),
+        caller.public.videos({ ownerHandle: player.handle }),
       ]);
       return {
         player,
         performance,
         intelligence,
         videos,
-        profileUrl: `${origin}/players/${player.handle}`,
+        profileUrl: `${origin}${route.canonicalPath}`,
         claimUrl: `${origin}/app/onboarding?claimProfile=${encodeURIComponent(player.handle)}`,
       };
     }

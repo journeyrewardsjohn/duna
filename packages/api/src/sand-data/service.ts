@@ -9,6 +9,7 @@ import {
   matchHistoryDisputes,
   matches,
   people,
+  playerPublicProfiles,
   playerSourceConnections,
   professionalEvents,
   ratingBacktestPredictions,
@@ -32,6 +33,7 @@ import {
   worldRankingSignal,
   type RatingBacktestMatch,
 } from "@duna/rating";
+import { publicPlayerPath } from "@duna/core";
 import {
   and,
   asc,
@@ -3456,7 +3458,7 @@ export async function searchPublicPlayers(input: {
   const query = input.query.trim().toLowerCase().replaceAll("%", "");
   if (query.length < 2) return [];
   const pattern = `%${query}%`;
-  return getDatabase()
+  const rows = await getDatabase()
     .select({
       id: people.id,
       displayName: people.displayName,
@@ -3488,6 +3490,17 @@ export async function searchPublicPlayers(input: {
       asc(people.displayName),
     )
     .limit(Math.min(50, Math.max(1, input.limit ?? 20)));
+  return rows.map((row) => ({
+    ...row,
+    publicPath: publicPlayerPath({
+      id: row.id,
+      displayName: row.displayName,
+      handle: row.handle,
+      homeMarket: row.homeMarket,
+      profileClaimStatus: row.profileClaimStatus as
+        "claimed" | "unclaimed" | "claim-pending" | "merged",
+    }),
+  }));
 }
 
 export async function loadPublicWorldRankings() {
@@ -3523,6 +3536,8 @@ export async function loadPublicWorldRankings() {
             countryCode: worldRankings.countryCode,
             personId: worldRankings.personId,
             handle: people.handle,
+            homeMarket: people.homeMarket,
+            profileClaimStatus: people.profileClaimStatus,
             avatarUrl: people.avatarUrl,
             profileVisibility: people.profileVisibility,
             personStatus: people.status,
@@ -3571,6 +3586,8 @@ export async function loadPublicWorldRankings() {
       personId: people.id,
       displayName: people.displayName,
       handle: people.handle,
+      homeMarket: people.homeMarket,
+      profileClaimStatus: people.profileClaimStatus,
       avatarUrl: people.avatarUrl,
       genderCategory: people.genderCategory,
       sandRating: ratings.display,
@@ -3602,6 +3619,15 @@ export async function loadPublicWorldRankings() {
           personId: row.personId,
           displayName: row.displayName,
           handle: row.handle,
+          publicPath: publicPlayerPath({
+            id: row.personId,
+            displayName: row.displayName,
+            handle: row.handle,
+            homeMarket: row.homeMarket,
+            countryCode: worldRanking?.countryCode,
+            profileClaimStatus: row.profileClaimStatus as
+              "claimed" | "unclaimed" | "claim-pending" | "merged",
+          }),
           avatarUrl: row.avatarUrl ?? undefined,
           countryCode: worldRanking?.countryCode,
           sandRating: row.sandRating,
@@ -3626,6 +3652,18 @@ export async function loadPublicWorldRankings() {
           countryCode: row.countryCode ?? undefined,
           personId: row.personId ?? undefined,
           handle: publicProfile ? (row.handle ?? undefined) : undefined,
+          publicPath:
+            publicProfile && row.personId && row.handle
+              ? publicPlayerPath({
+                  id: row.personId,
+                  displayName: row.displayName,
+                  handle: row.handle,
+                  homeMarket: row.homeMarket,
+                  countryCode: row.countryCode,
+                  profileClaimStatus: row.profileClaimStatus as
+                    "claimed" | "unclaimed" | "claim-pending" | "merged",
+                })
+              : undefined,
           avatarUrl: publicProfile ? (row.avatarUrl ?? undefined) : undefined,
           sandRating: row.sandRating ?? undefined,
           ratedMatches: row.ratedMatches ?? undefined,
@@ -3909,6 +3947,7 @@ type ProParticipant = {
   readonly name: string;
   readonly personId?: string;
   readonly handle?: string;
+  readonly publicPath?: string;
   readonly avatarUrl?: string;
   readonly rating?: number;
 };
@@ -5972,7 +6011,7 @@ export async function loadPublicProEvent(slug: string) {
       ),
     ]),
   ];
-  const [personRows, ratingRows] =
+  const [personRows, ratingRows, publicProfileRows, rankingCountryRows] =
     personIds.length > 0
       ? await Promise.all([
           database
@@ -5980,6 +6019,8 @@ export async function loadPublicProEvent(slug: string) {
               id: people.id,
               displayName: people.displayName,
               handle: people.handle,
+              homeMarket: people.homeMarket,
+              profileClaimStatus: people.profileClaimStatus,
               avatarUrl: people.avatarUrl,
             })
             .from(people)
@@ -5996,9 +6037,64 @@ export async function loadPublicProEvent(slug: string) {
                 eq(ratings.discipline, "beach-2s"),
               ),
             ),
+          database
+            .select({
+              personId: playerPublicProfiles.personId,
+              countryCode: playerPublicProfiles.countryCode,
+              hometown: playerPublicProfiles.hometown,
+            })
+            .from(playerPublicProfiles)
+            .where(
+              and(
+                inArray(playerPublicProfiles.personId, personIds),
+                eq(playerPublicProfiles.publicationStatus, "published"),
+              ),
+            ),
+          database
+            .select({
+              personId: worldRankings.personId,
+              countryCode: worldRankings.countryCode,
+              rankingDate: worldRankings.rankingDate,
+            })
+            .from(worldRankings)
+            .where(inArray(worldRankings.personId, personIds))
+            .orderBy(desc(worldRankings.rankingDate)),
         ])
-      : [[], []];
-  const personById = new Map(personRows.map((person) => [person.id, person]));
+      : [[], [], [], []];
+  const publicProfileByPersonId = new Map(
+    publicProfileRows.map((profile) => [profile.personId, profile] as const),
+  );
+  const rankingCountryByPersonId = new Map<string, string>();
+  for (const ranking of rankingCountryRows) {
+    if (
+      ranking.personId &&
+      ranking.countryCode &&
+      !rankingCountryByPersonId.has(ranking.personId)
+    ) {
+      rankingCountryByPersonId.set(ranking.personId, ranking.countryCode);
+    }
+  }
+  const personById = new Map(
+    personRows.map((person) => {
+      const profile = publicProfileByPersonId.get(person.id);
+      return [
+        person.id,
+        {
+          ...person,
+          publicPath: publicPlayerPath({
+            id: person.id,
+            displayName: person.displayName,
+            handle: person.handle,
+            homeMarket: profile?.hometown ?? person.homeMarket,
+            countryCode:
+              profile?.countryCode ?? rankingCountryByPersonId.get(person.id),
+            profileClaimStatus: person.profileClaimStatus as
+              "claimed" | "unclaimed" | "claim-pending" | "merged",
+          }),
+        },
+      ] as const;
+    }),
+  );
   const ratingByPersonId = new Map(
     ratingRows.map((rating) => [rating.personId, rating.display]),
   );
@@ -6018,6 +6114,7 @@ export async function loadPublicProEvent(slug: string) {
         name: person?.displayName ?? player.displayName,
         ...(personId ? { personId } : {}),
         ...(person?.handle ? { handle: person.handle } : {}),
+        ...(person?.publicPath ? { publicPath: person.publicPath } : {}),
         ...(person?.avatarUrl ? { avatarUrl: person.avatarUrl } : {}),
         ...(rating !== undefined ? { rating } : {}),
       };
@@ -6056,6 +6153,7 @@ export async function loadPublicProEvent(slug: string) {
           name: person?.displayName ?? participant.name,
           ...(participant.personId ? { personId: participant.personId } : {}),
           ...(person?.handle ? { handle: person.handle } : {}),
+          ...(person?.publicPath ? { publicPath: person.publicPath } : {}),
           ...(person?.avatarUrl ? { avatarUrl: person.avatarUrl } : {}),
           ...(rating !== undefined ? { rating } : {}),
         };

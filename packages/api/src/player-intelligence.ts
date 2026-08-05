@@ -12,8 +12,10 @@ import {
   playerMediaWorkflows,
   playerPublicProfiles,
   professionalEvents,
+  profileMergeRecords,
   worldRankings,
 } from "@duna/db";
+import { playerIdFromPublicIdentifier, publicPlayerPath } from "@duna/core";
 import { and, asc, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import type { ApiActor } from "./context";
@@ -111,6 +113,108 @@ async function publicPersonByHandle(handle: string) {
       eq(people.isMinor, false),
     ),
   });
+}
+
+async function canonicalPlayerPath(
+  person: typeof people.$inferSelect,
+): Promise<string> {
+  const database = getDatabase();
+  const [profile, ranking] = await Promise.all([
+    database.query.playerPublicProfiles.findFirst({
+      where: and(
+        eq(playerPublicProfiles.personId, person.id),
+        eq(playerPublicProfiles.publicationStatus, "published"),
+      ),
+      columns: { countryCode: true, hometown: true },
+    }),
+    database.query.worldRankings.findFirst({
+      where: eq(worldRankings.personId, person.id),
+      orderBy: [desc(worldRankings.rankingDate), asc(worldRankings.rank)],
+      columns: { countryCode: true },
+    }),
+  ]);
+  return publicPlayerPath({
+    id: person.id,
+    displayName: person.displayName,
+    handle: person.handle,
+    homeMarket: profile?.hometown ?? person.homeMarket,
+    countryCode: profile?.countryCode ?? ranking?.countryCode,
+    profileClaimStatus: person.profileClaimStatus as
+      "claimed" | "unclaimed" | "claim-pending" | "merged",
+  });
+}
+
+export async function resolvePublicPlayerRoute(identifier: string) {
+  requireDatabase();
+  const database = getDatabase();
+  const normalized = identifier.trim().toLowerCase();
+  const personId = playerIdFromPublicIdentifier(normalized);
+
+  if (personId) {
+    const source = await database.query.people.findFirst({
+      where: eq(people.id, personId),
+    });
+    if (source) {
+      const sourceIsPublic =
+        source.status === "active" &&
+        source.profileVisibility === "public" &&
+        !source.isMinor;
+      if (
+        sourceIsPublic &&
+        (source.profileClaimStatus === "unclaimed" ||
+          source.profileClaimStatus === "claim-pending" ||
+          source.profileClaimStatus === "claimed")
+      ) {
+        return {
+          personId: source.id,
+          handle: source.handle,
+          canonicalPath: await canonicalPlayerPath(source),
+        };
+      }
+
+      const merge = await database.query.profileMergeRecords.findFirst({
+        where: eq(profileMergeRecords.sourcePersonId, source.id),
+        orderBy: [desc(profileMergeRecords.createdAt)],
+        columns: { targetPersonId: true },
+      });
+      if (merge) {
+        const target = await database.query.people.findFirst({
+          where: and(
+            eq(people.id, merge.targetPersonId),
+            eq(people.status, "active"),
+            eq(people.profileVisibility, "public"),
+            eq(people.isMinor, false),
+            eq(people.profileClaimStatus, "claimed"),
+          ),
+        });
+        if (target) {
+          return {
+            personId: target.id,
+            handle: target.handle,
+            canonicalPath: await canonicalPlayerPath(target),
+          };
+        }
+      }
+    }
+    return undefined;
+  }
+
+  const person = await database.query.people.findFirst({
+    where: and(
+      eq(people.handle, normalized),
+      eq(people.status, "active"),
+      eq(people.profileVisibility, "public"),
+      eq(people.isMinor, false),
+      eq(people.profileClaimStatus, "claimed"),
+    ),
+  });
+  return person
+    ? {
+        personId: person.id,
+        handle: person.handle,
+        canonicalPath: await canonicalPlayerPath(person),
+      }
+    : undefined;
 }
 
 type UpcomingPlayerEvent = {

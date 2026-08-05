@@ -9,6 +9,7 @@ export * from "./reporting";
 export * from "./ledger";
 export * from "./membership-plans";
 export * from "./organization-plans";
+export * from "./player-url";
 export * from "./ticketing";
 export * from "./trust";
 export * from "./wallet";

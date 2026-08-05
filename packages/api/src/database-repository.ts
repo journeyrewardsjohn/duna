@@ -20,6 +20,7 @@ import {
   organizations,
   orders,
   people,
+  playerPublicProfiles,
   playerSourceConnections,
   pickupParticipants,
   pickupSessions,
@@ -38,6 +39,7 @@ import {
   venues,
   walletAccounts,
   walletLedger,
+  worldRankings,
 } from "@duna/db";
 import {
   evaluateTaxRails,
@@ -66,6 +68,7 @@ import {
   membershipPlanForTierCode,
   type PersonRole,
   type PersonSummary,
+  publicPlayerPath,
   type VenueSummary,
   type WalletEntry,
 } from "@duna/core";
@@ -179,30 +182,58 @@ async function loadPeople(
 ): Promise<PersonSummary[]> {
   if (personIds.length === 0) return [];
   const database = getDatabase();
-  const [personRows, ratingRows, membershipRows, guardianRows] =
-    await Promise.all([
-      database
-        .select()
-        .from(people)
-        .where(inArray(people.id, [...personIds])),
-      database
-        .select()
-        .from(ratings)
-        .where(inArray(ratings.personId, [...personIds])),
-      database
-        .select()
-        .from(organizationMemberships)
-        .where(
-          and(
-            inArray(organizationMemberships.personId, [...personIds]),
-            eq(organizationMemberships.active, true),
-          ),
+  const [
+    personRows,
+    ratingRows,
+    membershipRows,
+    guardianRows,
+    publicProfileRows,
+    worldRankingRows,
+  ] = await Promise.all([
+    database
+      .select()
+      .from(people)
+      .where(inArray(people.id, [...personIds])),
+    database
+      .select()
+      .from(ratings)
+      .where(inArray(ratings.personId, [...personIds])),
+    database
+      .select()
+      .from(organizationMemberships)
+      .where(
+        and(
+          inArray(organizationMemberships.personId, [...personIds]),
+          eq(organizationMemberships.active, true),
         ),
-      database
-        .select()
-        .from(guardianships)
-        .where(inArray(guardianships.minorId, [...personIds])),
-    ]);
+      ),
+    database
+      .select()
+      .from(guardianships)
+      .where(inArray(guardianships.minorId, [...personIds])),
+    database
+      .select({
+        personId: playerPublicProfiles.personId,
+        countryCode: playerPublicProfiles.countryCode,
+        hometown: playerPublicProfiles.hometown,
+      })
+      .from(playerPublicProfiles)
+      .where(
+        and(
+          inArray(playerPublicProfiles.personId, [...personIds]),
+          eq(playerPublicProfiles.publicationStatus, "published"),
+        ),
+      ),
+    database
+      .select({
+        personId: worldRankings.personId,
+        countryCode: worldRankings.countryCode,
+        rankingDate: worldRankings.rankingDate,
+      })
+      .from(worldRankings)
+      .where(inArray(worldRankings.personId, [...personIds]))
+      .orderBy(desc(worldRankings.rankingDate)),
+  ]);
   const ratingByPerson = new Map(
     ratingRows.map((row) => [row.personId, row] as const),
   );
@@ -219,13 +250,33 @@ async function loadPeople(
     guardiansByMinor.set(row.minorId, current);
   }
   const order = new Map(personIds.map((id, index) => [id, index] as const));
+  const publicProfileByPerson = new Map(
+    publicProfileRows.map((row) => [row.personId, row] as const),
+  );
+  const countryByPerson = new Map<string, string>();
+  for (const row of worldRankingRows) {
+    if (row.personId && row.countryCode && !countryByPerson.has(row.personId)) {
+      countryByPerson.set(row.personId, row.countryCode);
+    }
+  }
   return personRows
     .map((person): PersonSummary => {
       const rating = ratingByPerson.get(person.id);
+      const publicProfile = publicProfileByPerson.get(person.id);
       return {
         id: person.id,
         displayName: person.displayName,
         handle: person.handle,
+        publicPath: publicPlayerPath({
+          id: person.id,
+          displayName: person.displayName,
+          handle: person.handle,
+          homeMarket: publicProfile?.hometown ?? person.homeMarket,
+          countryCode:
+            publicProfile?.countryCode ?? countryByPerson.get(person.id),
+          profileClaimStatus: person.profileClaimStatus as
+            "claimed" | "unclaimed" | "claim-pending" | "merged",
+        }),
         initials: initials(person.displayName),
         homeMarket: person.homeMarket ?? "Market not set",
         roles: [
@@ -1009,6 +1060,7 @@ async function loadEvents(input?: {
           id: person.id,
           displayName: person.displayName,
           handle: person.handle,
+          publicPath: person.publicPath,
           initials: person.initials,
           avatarUrl: person.avatarUrl,
           homeMarket: person.homeMarket,
@@ -1260,6 +1312,7 @@ async function loadEvents(input?: {
                     ? {
                         ...feature,
                         personHandle: person.handle,
+                        personPublicPath: person.publicPath,
                         personInitials: person.initials,
                         personName: person.displayName,
                         personHomeMarket: person.homeMarket,

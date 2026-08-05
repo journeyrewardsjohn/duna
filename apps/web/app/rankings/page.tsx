@@ -121,9 +121,7 @@ export default async function RankingsPage({
           "@type": "ListItem",
           position: row.rank,
           name: row.displayName,
-          url: row.handle
-            ? absolutePublicUrl(`/players/${row.handle}`)
-            : undefined,
+          url: row.publicPath ? absolutePublicUrl(row.publicPath) : undefined,
           item: {
             "@type": "Person",
             name: row.displayName,
@@ -287,7 +285,7 @@ export default async function RankingsPage({
                         </strong>
                       </span>
                     </div>
-                    {row.handle && (
+                    {row.publicPath && (
                       <span className="ranking-podium__open">
                         Player profile <ArrowRight aria-hidden size={15} />
                       </span>
@@ -295,18 +293,18 @@ export default async function RankingsPage({
                   </div>
                 </>
               );
-              return row.handle ? (
+              return row.publicPath ? (
                 <Link
                   data-place={index + 1}
-                  href={`/players/${row.handle}`}
-                  key={`${row.rank}-${row.displayName}`}
+                  href={row.publicPath}
+                  key={`${row.personId ?? row.publicPath}-${row.rank}-${index}`}
                 >
                   {card}
                 </Link>
               ) : (
                 <article
                   data-place={index + 1}
-                  key={`${row.rank}-${row.displayName}`}
+                  key={`${row.personId ?? row.displayName}-${row.rank}-${index}`}
                 >
                   {card}
                 </article>
@@ -333,7 +331,7 @@ export default async function RankingsPage({
 
         <div className="rankings-list rankings-v2__list">
           {view === "world"
-            ? worldRows.map((row) => (
+            ? worldRows.map((row, index) => (
                 <RankingRow
                   content={
                     <>
@@ -354,7 +352,7 @@ export default async function RankingsPage({
                       <Movement value={movement(row)} />
                     </>
                   }
-                  key={`${row.rank}-${row.displayName}`}
+                  key={`${row.personId ?? row.publicPath ?? row.displayName}-${row.rank}-${index}`}
                   row={row}
                 />
               ))
@@ -456,6 +454,7 @@ function RankingRow({
     readonly rank: number;
     readonly displayName: string;
     readonly handle?: string;
+    readonly publicPath?: string;
     readonly avatarUrl?: string;
   };
 }) {
@@ -473,11 +472,11 @@ function RankingRow({
         {!row.avatarUrl ? initials(row.displayName) : null}
       </span>
       {content}
-      {row.handle ? <ArrowRight aria-hidden size={18} /> : <span />}
+      {row.publicPath ? <ArrowRight aria-hidden size={18} /> : <span />}
     </>
   );
-  return row.handle ? (
-    <Link href={`/players/${row.handle}`}>{inner}</Link>
+  return row.publicPath ? (
+    <Link href={row.publicPath}>{inner}</Link>
   ) : (
     <div>{inner}</div>
   );
