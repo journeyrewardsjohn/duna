@@ -20,6 +20,7 @@ const requiredFiles = [
   "docs/design/duna-mobile-design-guide.md",
   "docs/design/duna-theming-light-dark.md",
   "apps/web/app/design-v3.css",
+  "apps/web/app/not-found.tsx",
   "apps/hq/app/design-v3.css",
   "apps/web/public/brand/duna-mark.svg",
   "apps/web/public/media/brand/imagery-log.json",
@@ -44,6 +45,21 @@ const requiredFiles = [
 
 for (const file of requiredFiles) {
   if (!existsSync(join(root, file))) violations.push(`${file} is missing`);
+}
+
+const webV3Css = readFileSync(join(root, "apps/web/app/design-v3.css"), "utf8");
+const requiredContrastContracts = [
+  "--campaign-hero-ink",
+  ':root[data-theme="dark"] .pro-tour-hero__veil',
+  ".athlete-hero-card--result .duna-badge",
+  ".club-marketing-secondary",
+  ".event-public__booking > a:not(.secondary)",
+  ".not-found-v3",
+] as const;
+for (const contract of requiredContrastContracts) {
+  if (!webV3Css.includes(contract)) {
+    violations.push(`apps/web/app/design-v3.css must preserve ${contract}`);
+  }
 }
 
 const heroMotionPath = join(
@@ -226,5 +242,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  "Design system verified: v3 references, zoning, typography limits, club/player identity, icon variants, generated imagery, theme behavior, naming, and country-code policy are intact.",
+  "Design system verified: v3 references, zoning, typography limits, club/player identity, icon variants, generated imagery, theme contrast, recovery, naming, and country-code policy are intact.",
 );

@@ -132,11 +132,14 @@ body {
 }
 
 .campaign-hero {
+  --campaign-hero-ink: #17140f;
+  --campaign-hero-muted: #5b554c;
+  --campaign-hero-line: rgb(23 20 15 / 24%);
   position: relative;
   min-height: min(54rem, calc(100svh - 2rem));
   margin: 0;
   overflow: clip;
-  color: var(--text-1);
+  color: var(--campaign-hero-ink);
   border: 0;
   border-radius: 0;
   background: var(--ground-warm);
@@ -198,7 +201,7 @@ body {
 .campaign-hero h1 {
   max-width: 10ch;
   margin: 1rem 0 1.25rem;
-  color: var(--text-1);
+  color: var(--campaign-hero-ink);
   font-size: clamp(3.5rem, 8vw, 6.5rem);
   font-weight: 650;
   line-height: 1.03;
@@ -208,18 +211,18 @@ body {
 }
 
 .campaign-hero .campaign-kicker {
-  color: var(--text-2);
+  color: var(--campaign-hero-muted);
 }
 
 .campaign-hero h1 em {
-  color: var(--flare-text);
+  color: #a43e12;
   font-style: italic;
   font-weight: 600;
 }
 
 .campaign-hero__copy > p {
   max-width: 50ch;
-  color: var(--text-2);
+  color: var(--campaign-hero-muted);
   font-size: clamp(1rem, 1.5vw, 1.1875rem);
 }
 
@@ -228,16 +231,27 @@ body {
 }
 
 .campaign-button--light {
-  border-color: var(--text-1);
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-fg);
+  border-color: var(--campaign-hero-ink);
+  background: var(--campaign-hero-ink);
+  color: #fff;
 }
 
 .campaign-button--glass {
-  border-color: var(--hairline-strong);
-  background: rgb(255 255 255 / 62%);
-  color: var(--text-1);
+  border-color: var(--campaign-hero-line);
+  background: rgb(255 255 255 / 78%);
+  color: var(--campaign-hero-ink);
   backdrop-filter: blur(18px);
+}
+
+.campaign-hero .campaign-button--light:hover {
+  background: #312b23;
+  color: #fff;
+}
+
+.campaign-hero .campaign-button--glass:hover {
+  border-color: rgb(23 20 15 / 38%);
+  background: rgb(255 255 255 / 92%);
+  color: var(--campaign-hero-ink);
 }
 
 .campaign-hero__proof {
@@ -247,25 +261,25 @@ body {
   display: grid;
   grid-template-columns: repeat(3, minmax(7.5rem, 1fr));
   width: min(38rem, 46vw);
-  border-top: 1px solid var(--hairline-strong);
-  color: var(--text-1);
+  border-top: 1px solid var(--campaign-hero-line);
+  color: var(--campaign-hero-ink);
 }
 
 .campaign-hero__proof > div {
   min-width: 0;
   padding: 1rem;
-  border-left: 1px solid var(--hairline);
+  border-left: 1px solid var(--campaign-hero-line);
 }
 
 .campaign-hero__proof .duna-numeric {
   display: block;
-  color: var(--text-1);
+  color: var(--campaign-hero-ink);
   font-size: clamp(1.75rem, 3.2vw, 3.25rem);
   line-height: 1;
 }
 
 .campaign-hero__proof span:last-child {
-  color: var(--text-2);
+  color: var(--campaign-hero-muted);
 }
 
 .campaign-strand {
@@ -587,7 +601,7 @@ body {
 }
 
 .pro-tour-hero p {
-  max-width: 52ch;
+  max-width: 44ch;
   color: var(--text-2);
   font-size: clamp(1rem, 1.35vw, 1.1875rem);
   line-height: 1.55;
@@ -617,6 +631,16 @@ body {
     rgb(181 204 211 / 93%) 30%,
     rgb(181 204 211 / 34%) 62%,
     rgb(181 204 211 / 4%)
+  );
+}
+
+:root[data-theme="dark"] .pro-tour-hero__veil {
+  background: linear-gradient(
+    90deg,
+    var(--ground-cool) 0 34%,
+    rgb(30 26 20 / 88%) 44%,
+    rgb(30 26 20 / 42%) 58%,
+    transparent 72%
   );
 }
 
@@ -861,6 +885,12 @@ body {
   border-radius: 12px;
 }
 
+.event-public__booking > a:not(.secondary) {
+  color: var(--btn-primary-fg);
+  border-color: var(--btn-primary-bg);
+  background: var(--btn-primary-bg);
+}
+
 /* Player identity band and shelf — one portrait, then proof. */
 .player-profile-v2 {
   --player-accent: var(--gold);
@@ -990,9 +1020,9 @@ body {
 }
 
 .athlete-hero__actions > a {
-  color: var(--text-1);
-  border-color: var(--hairline-strong);
-  background: rgb(255 255 255 / 58%);
+  color: #17140f;
+  border-color: rgb(23 20 15 / 24%);
+  background: rgb(255 255 255 / 82%);
 }
 
 .athlete-hero__actions > a:first-child {
@@ -1100,6 +1130,11 @@ body {
 .athlete-hero-card--next > strong {
   font-family: var(--font-body);
   font-weight: 800;
+}
+
+.athlete-hero-card--result .duna-badge,
+.club-marketing-hero__product .duna-badge {
+  color: #f2f0ea;
 }
 
 .athlete-stage > .athlete-stat-deck {
@@ -1293,8 +1328,9 @@ body {
 }
 
 .club-marketing-secondary {
-  color: var(--text-1);
-  border-color: var(--hairline-strong);
+  color: #17140f;
+  border-color: rgb(23 20 15 / 24%);
+  background: rgb(255 255 255 / 90%);
 }
 
 .club-marketing-hero__product {
@@ -1535,6 +1571,138 @@ body {
   opacity: 0.52;
 }
 
+/* Branded recovery surface — legible in either user theme. */
+.not-found-v3 {
+  position: relative;
+  min-height: 100svh;
+  overflow: clip;
+  color: var(--text-1);
+  background:
+    radial-gradient(
+      circle at 78% 32%,
+      color-mix(in srgb, var(--flare) 14%, transparent),
+      transparent 24rem
+    ),
+    var(--ground);
+}
+
+.not-found-v3__stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(18rem, 0.55fr);
+  gap: clamp(2rem, 8vw, 8rem);
+  align-items: center;
+  width: min(100% - clamp(2rem, 8vw, 8rem), 86rem);
+  min-height: min(52rem, 86svh);
+  margin-inline: auto;
+  padding-block: clamp(8rem, 15vw, 12rem) clamp(5rem, 9vw, 8rem);
+}
+
+.not-found-v3__copy {
+  position: relative;
+  z-index: 2;
+  max-width: 48rem;
+}
+
+.not-found-v3__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--text-2);
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.not-found-v3__eyebrow::before {
+  width: 2.25rem;
+  height: 2px;
+  content: "";
+  background: var(--flare);
+}
+
+.not-found-v3 h1 {
+  max-width: 10ch;
+  margin: 1.25rem 0 1.5rem;
+  color: var(--text-1);
+  font-family: var(--font-display);
+  font-size: clamp(3.5rem, 8vw, 7rem);
+  font-weight: 620;
+  line-height: 0.94;
+  letter-spacing: -0.03em;
+}
+
+.not-found-v3__copy > p {
+  max-width: 48ch;
+  margin: 0;
+  color: var(--text-2);
+  font-size: clamp(1rem, 1.4vw, 1.1875rem);
+  line-height: 1.6;
+}
+
+.not-found-v3__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.not-found-v3__actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 50px;
+  padding: 0.8rem 1.2rem;
+  color: var(--btn-primary-fg);
+  border: 1px solid var(--btn-primary-bg);
+  border-radius: 999px;
+  background: var(--btn-primary-bg);
+  font-weight: 800;
+}
+
+.not-found-v3__actions a:last-child {
+  color: var(--text-1);
+  border-color: var(--hairline-strong);
+  background: var(--surface-1);
+}
+
+.not-found-v3__mark {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  color: var(--text-1);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 50%;
+  font-family: var(--font-data);
+  font-size: clamp(6rem, 15vw, 13rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.not-found-v3__mark::before,
+.not-found-v3__mark::after {
+  position: absolute;
+  content: "";
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+}
+
+.not-found-v3__mark::before {
+  inset: 12%;
+}
+
+.not-found-v3__mark::after {
+  inset: 29%;
+  background: var(--flare);
+  opacity: 0.12;
+}
+
 /* Smaller screens preserve edge doctrine without hiding essential controls. */
 @media (max-width: 820px) {
   .campaign-hero {
@@ -1553,6 +1721,15 @@ body {
       rgb(246 245 241 / 94%),
       rgb(246 245 241 / 50%) 78%,
       transparent
+    );
+  }
+
+  :root[data-theme="dark"] .pro-tour-hero__veil {
+    background: linear-gradient(
+      90deg,
+      var(--ground-cool),
+      rgb(30 26 20 / 92%) 72%,
+      rgb(30 26 20 / 68%)
     );
   }
 
@@ -1732,6 +1909,19 @@ body {
 
   .settings-player-accents {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .not-found-v3__stage {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    padding-block: 8rem 4rem;
+  }
+
+  .not-found-v3__mark {
+    order: -1;
+    width: min(70vw, 20rem);
+    justify-self: end;
+    font-size: clamp(5rem, 24vw, 9rem);
   }
 
   .pro-entry-list {
