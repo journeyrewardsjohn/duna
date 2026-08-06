@@ -44,22 +44,24 @@ export function EventCard({
         <WeatherInline forecast={event.weather} instant={event.startsAt} />
         <div className="event-card__meta">
           <span>
-            <Numeric>
-              {isFree
-                ? "Free"
-                : formatMoney(
-                    event.price.amountMinor,
-                    event.price.currency,
-                    "en-US",
-                  )}
-            </Numeric>
+            {isFree ? (
+              "Free"
+            ) : (
+              <Numeric tier="table">
+                {formatMoney(
+                  event.price.amountMinor,
+                  event.price.currency,
+                  "en-US",
+                )}
+              </Numeric>
+            )}
           </span>
           <span>
-            <Numeric>{event.spotsRemaining}</Numeric> spots
+            <Numeric tier="chip">{event.spotsRemaining}</Numeric> spots
           </span>
           {event.ratingRange && (
             <span>
-              <Numeric>
+              <Numeric tier="chip">
                 {event.ratingRange[0].toFixed(1)}–
                 {event.ratingRange[1].toFixed(1)}
               </Numeric>

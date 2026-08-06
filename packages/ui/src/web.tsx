@@ -122,15 +122,25 @@ export function Surface({
   );
 }
 
+export type NumericTier =
+  "score" | "monument" | "hero" | "block" | "table" | "chip";
+
 export function Numeric({
   children,
   className,
-}: {
-  readonly children: ReactNode;
-  readonly className?: string;
+  tier = "table",
+  ...props
+}: HTMLAttributes<HTMLSpanElement> & {
+  readonly tier?: NumericTier;
 }) {
   return (
-    <span className={["duna-numeric", className].filter(Boolean).join(" ")}>
+    <span
+      className={["duna-numeric", `duna-numeric--${tier}`, className]
+        .filter(Boolean)
+        .join(" ")}
+      data-numeric-tier={tier}
+      {...props}
+    >
       {children}
     </span>
   );

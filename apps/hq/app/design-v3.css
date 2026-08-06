@@ -5,7 +5,7 @@
   --hq-core: #a9c463;
   --hq-ink: #3f5417;
   --hq-deep: #1e2a0e;
-  font-synthesis: none;
+  font-synthesis-style: none;
   font-synthesis-weight: none;
 }
 
@@ -16,11 +16,13 @@ body {
 }
 
 body {
+  --font-display: var(--font-body);
+  --font-heading: var(--font-body);
   font-family: var(--font-body);
   text-rendering: optimizeLegibility;
 }
 
-body[data-zone="athletic"] :is(h1, h2, h3) {
+body[data-zone="operator"] :is(h1, h2, h3) {
   font-family: var(--font-body);
   font-style: normal;
 }
@@ -29,7 +31,6 @@ body[data-zone="athletic"] :is(h1, h2, h3) {
   max-width: 20ch;
   color: var(--text-1);
   font-family: var(--font-body);
-  font-weight: 750;
   font-synthesis: none;
 }
 
@@ -40,7 +41,20 @@ body[data-zone="athletic"] :is(h1, h2, h3) {
 .hq-shell .hq-card h3 {
   color: var(--text-1);
   font-family: var(--font-body);
-  font-weight: 750;
+}
+
+.hq-shell .hq-page h1 {
+  font-weight: 800;
+}
+
+.hq-shell .hq-page h2,
+.hq-shell .hq-card h2 {
+  font-weight: 700;
+}
+
+.hq-shell .hq-page h3,
+.hq-shell .hq-card h3 {
+  font-weight: 600;
 }
 
 :where(h1) {
@@ -49,6 +63,7 @@ body[data-zone="athletic"] :is(h1, h2, h3) {
   line-height: 1.04;
   letter-spacing: -0.03em;
   word-spacing: 0.05em;
+  font-weight: 800;
 }
 
 :where(h2) {
@@ -56,6 +71,7 @@ body[data-zone="athletic"] :is(h1, h2, h3) {
   line-height: 1.1;
   letter-spacing: -0.018em;
   word-spacing: 0.03em;
+  font-weight: 700;
 }
 
 :where(h3) {
@@ -63,6 +79,7 @@ body[data-zone="athletic"] :is(h1, h2, h3) {
   line-height: 1.12;
   letter-spacing: -0.012em;
   word-spacing: 0.02em;
+  font-weight: 600;
 }
 
 :where(.hq-eyebrow, [class*="__eyebrow"], [class*="__label"]) {
@@ -76,38 +93,119 @@ body[data-zone="athletic"] :is(h1, h2, h3) {
   text-transform: uppercase;
 }
 
-:where(
-  .duna-numeric,
-  .hq-lead-metric strong,
-  .hq-analytics-metrics strong,
-  .metric-grid strong,
-  [class*="metric"] strong,
-  [class*="stat"] strong,
-  time
-) {
+:where(time) {
   font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
   font-variant-numeric: tabular-nums;
   font-variation-settings:
-    "wdth" 96,
-    "wght" 800;
+    "wdth" 78,
+    "wght" 700;
+  font-weight: 700;
 }
 
-.hq-shell .hq-lead-metric strong,
-.hq-shell .hq-analytics-metrics strong,
-.hq-shell .metric-grid strong,
-.hq-shell [class*="metric"] strong,
-.hq-shell [class*="stat"] strong {
+.duna-numeric[data-numeric-tier] {
+  font-family: var(--font-data) !important;
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.duna-numeric--score {
+  font-weight: 900 !important;
+  letter-spacing: -0.03em !important;
+  font-variation-settings:
+    "wdth" 64,
+    "wght" 900 !important;
+}
+
+.duna-numeric--monument {
+  font-feature-settings: "pnum" 1;
+  font-variant-numeric: proportional-nums;
+  font-weight: 900 !important;
+  letter-spacing: -0.03em !important;
+  font-variation-settings:
+    "wdth" 122,
+    "wght" 900 !important;
+}
+
+.duna-numeric--hero {
+  font-weight: 800 !important;
+  letter-spacing: -0.02em !important;
+  font-variation-settings:
+    "wdth" 108,
+    "wght" 800 !important;
+}
+
+.duna-numeric--block {
+  font-weight: 800 !important;
+  letter-spacing: -0.02em !important;
+  font-variation-settings:
+    "wdth" 94,
+    "wght" 800 !important;
+}
+
+.duna-numeric--table,
+.duna-numeric--chip {
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+  font-variation-settings:
+    "wdth" 78,
+    "wght" 700 !important;
+}
+
+.hq-shell .hq-lead-metric :where(strong, .duna-numeric) {
   font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
   font-variant-numeric: tabular-nums;
   font-variation-settings:
-    "wdth" 96,
-    "wght" 800;
+    "wdth" 108,
+    "wght" 800 !important;
+  font-weight: 800;
+}
+
+.hq-shell .hq-analytics-metrics :where(strong, .duna-numeric),
+.hq-shell .metric-grid :where(strong, .duna-numeric),
+.hq-shell .product-performance-metrics .duna-numeric,
+.hq-shell .admin-org-metric-grid .duna-numeric {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
+  font-variation-settings:
+    "wdth" 94,
+    "wght" 800 !important;
   font-weight: 800;
 }
 
 .hq-shell {
   min-height: 100svh;
   background: var(--ground);
+}
+
+.theme-kit-type-lock {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+  color: var(--text-2);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.theme-kit-type-lock > span {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.theme-kit-type-lock > strong {
+  color: var(--text-1);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.theme-kit-type-lock > p {
+  max-width: 58ch;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.55;
 }
 
 .hq-sidebar {

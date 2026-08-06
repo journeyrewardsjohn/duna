@@ -1,7 +1,5 @@
 import "@fontsource-variable/archivo";
 import "@fontsource-variable/fraunces";
-import "@fontsource/instrument-serif/400.css";
-import "@fontsource/instrument-serif/400-italic.css";
 import "@duna/ui/styles.css";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "./globals.css";

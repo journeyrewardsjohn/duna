@@ -142,7 +142,7 @@ export function MembershipSettings({
               </span>
               <span>
                 <small>Billing status</small>
-                <Numeric>{statusLabel(membership)}</Numeric>
+                <span>{statusLabel(membership)}</span>
               </span>
             </div>
             <ul>

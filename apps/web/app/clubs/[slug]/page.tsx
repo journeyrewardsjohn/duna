@@ -187,8 +187,8 @@ export default async function ClubPage({
     "--club-sand": normalizedClubColor["--club-tint"],
     "--club-ink": "#1B1B19",
     "--club-canvas": theme.palette.canvas,
-    "--club-heading": `"${theme.typography.heading}", "Fellix", sans-serif`,
-    "--club-body": `"${theme.typography.body}", "Fellix", sans-serif`,
+    "--club-heading": "var(--font-display)",
+    "--club-body": "var(--font-body)",
   } as CSSProperties;
   const catalog = storefront?.catalog ?? [];
   const catalogEvents = catalog.filter((item) => item.type === "event");
@@ -199,6 +199,7 @@ export default async function ClubPage({
   return (
     <main
       className={`public-detail club-profile club-profile--${theme.cardStyle} club-profile-layout--${theme.profileLayout}`}
+      data-zone="editorial"
       style={themeStyle}
     >
       <SiteHeader />

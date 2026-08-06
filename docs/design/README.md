@@ -6,6 +6,8 @@ Live Activities, video, imagery, and lifecycle media.
 
 The current references are intentionally separate:
 
+- `duna-font-usage-guide.md` is the authoritative typography contract for all
+  web, HQ, Player, and Pro surfaces. It supersedes every earlier font rule.
 - `duna-design-system-v3.md` is the active amendment for ground inversion,
   athletic composition, typography, club color, and player identity.
 - `duna-implementation-audit.md` records the verified production failures and
@@ -27,10 +29,10 @@ Rewards font package supplied for Duna. They may not be redistributed or reused
 outside the licensed product.
 
 The supplied Awesome Serif archive is labeled as a desktop-font package. Duna
-uses Fraunces Variable for shippable editorial display typography and Fellix
-for athletic display typography until web and app embedding rights for Awesome
-Serif are documented. The Awesome Serif files must not be copied into a web or
-native bundle merely because they were supplied for design review.
+uses Fraunces Variable only for editorial headlines and Fellix for athletic,
+operator, and app display typography. Instrument Serif is retired. The Awesome
+Serif files must not be copied into a web or native bundle merely because they
+were supplied for design review.
 
 ## Generated media
 

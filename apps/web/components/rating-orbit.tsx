@@ -26,7 +26,7 @@ export function RatingOrbit({
       </svg>
       <div className="rating-orbit__content">
         <span>Sand Rating</span>
-        <Numeric>{value.toFixed(2)}</Numeric>
+        <Numeric tier="hero">{value.toFixed(2)}</Numeric>
         {!compact && (
           <small>
             {delta !== undefined && delta !== 0

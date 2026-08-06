@@ -1479,11 +1479,8 @@ body {
 }
 
 .campaign-kicker {
-  font-family: var(--font-data);
-  font-stretch: 78%;
-  font-variation-settings:
-    "wdth" 78,
-    "wght" 720;
+  font-family: var(--font-body);
+  font-weight: 500;
 }
 
 .campaign-kicker > span {
@@ -1561,9 +1558,8 @@ body {
 
 .campaign-hero__proof .duna-numeric {
   font-family: var(--font-data);
-  font-stretch: 116%;
   font-variation-settings:
-    "wdth" 116,
+    "wdth" 94,
     "wght" 800;
   font-weight: 800;
 }
@@ -1644,9 +1640,8 @@ body {
 
 .campaign-rating__card strong {
   font-family: var(--font-data);
-  font-stretch: 116%;
   font-variation-settings:
-    "wdth" 116,
+    "wdth" 108,
     "wght" 800;
 }
 
@@ -1777,9 +1772,8 @@ body {
 
 .pro-tour-hero__orb .duna-numeric {
   font-family: var(--font-data);
-  font-stretch: 116%;
   font-variation-settings:
-    "wdth" 116,
+    "wdth" 108,
     "wght" 800;
 }
 
@@ -19359,7 +19353,7 @@ a.play-day__booking {
 
 /* Professional match center */
 
-.pro-match-hero[data-zone="performance"] {
+.pro-match-hero[data-zone="athletic"] {
   background:
     radial-gradient(
       circle at 82% 6%,
@@ -19375,22 +19369,22 @@ a.play-day__booking {
   padding-top: clamp(2.5rem, 6vw, 5.5rem);
 }
 
-.pro-match-hero[data-zone="performance"] > div:first-child {
+.pro-match-hero[data-zone="athletic"] > div:first-child {
   max-width: 1040px;
 }
 
-.pro-match-hero[data-zone="performance"] > div:first-child > a,
-.pro-match-hero[data-zone="performance"] > div:first-child > p,
-.pro-match-hero[data-zone="performance"] .pro-match-hero__facts {
+.pro-match-hero[data-zone="athletic"] > div:first-child > a,
+.pro-match-hero[data-zone="athletic"] > div:first-child > p,
+.pro-match-hero[data-zone="athletic"] .pro-match-hero__facts {
   color: var(--text-2);
 }
 
-.pro-match-hero[data-zone="performance"] h1 {
+.pro-match-hero[data-zone="athletic"] h1 {
   font-size: clamp(3.3rem, 7vw, 7rem);
   max-width: 1180px;
 }
 
-.pro-match-hero[data-zone="performance"] h1 span {
+.pro-match-hero[data-zone="athletic"] h1 span {
   color: var(--text-3);
   opacity: 0.82;
 }
@@ -19909,12 +19903,12 @@ a.play-day__booking {
 }
 
 @media (max-width: 680px) {
-  .pro-match-hero[data-zone="performance"] {
+  .pro-match-hero[data-zone="athletic"] {
     padding-left: 0.8rem;
     padding-right: 0.8rem;
   }
 
-  .pro-match-hero[data-zone="performance"] h1 {
+  .pro-match-hero[data-zone="athletic"] h1 {
     font-size: clamp(2.8rem, 14vw, 4.6rem);
   }
 
@@ -26455,7 +26449,6 @@ a {
 .hero h1 {
   font-family: var(--font-display);
   font-size: clamp(4.3rem, 7.6vw, 8.2rem);
-  font-stretch: expanded;
   font-weight: 800;
   letter-spacing: -0.03em;
   line-height: 0.82;
@@ -33839,7 +33832,7 @@ button.selected > .choice-radio {
 }
 
 .athlete-stat-deck small,
-.athlete-stat-deck span {
+.athlete-stat-deck article > span {
   color: var(--color-bone-muted);
   font-size: 0.75rem;
 }
@@ -34290,9 +34283,8 @@ button.selected > .choice-radio {
   text-align: right;
 }
 
-.match-history-card__forecast strong {
-  font-family: var(--font-display);
-  font-size: 1.35rem !important;
+.match-history-card__forecast .duna-numeric {
+  font-size: 2rem !important;
 }
 
 .match-history-card__score {
@@ -34307,8 +34299,8 @@ button.selected > .choice-radio {
   align-items: center;
   display: grid;
   gap: 0.7rem;
-  grid-template-columns: minmax(0, 1fr) repeat(3, 38px) 42px;
-  min-height: 52px;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 48px) 52px;
+  min-height: 68px;
 }
 
 .match-history-card__score > div + div {
@@ -34320,25 +34312,23 @@ button.selected > .choice-radio {
   font-weight: 800;
 }
 
-.match-history-card__score strong,
-.match-history-card__score b {
+.match-history-card__score .duna-numeric {
   align-items: center;
   color: var(--color-bone-muted);
   display: flex;
-  font-family: var(--font-display);
-  font-size: 1.1rem !important;
+  font-size: 2rem !important;
   justify-content: center;
 }
 
-.match-history-card__score strong.is-set-winner {
+.match-history-card__score .duna-numeric.is-set-winner {
   color: var(--color-bone);
 }
 
-.match-history-card__score b {
+.match-history-card__score .match-history-card__sets {
   background: var(--color-depth);
   border-radius: 10px;
   color: var(--color-white);
-  height: 36px;
+  height: 48px;
 }
 
 .athlete-match-history article > footer {
@@ -34350,16 +34340,16 @@ button.selected > .choice-radio {
   gap: 0.2rem;
 }
 
-.athlete-match-history article > footer > span strong {
+.athlete-match-history article > footer > span .duna-numeric {
   color: var(--color-bone);
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
 }
 
-.athlete-match-history article > footer > span strong.up {
+.athlete-match-history article > footer > span .duna-numeric.up {
   color: var(--color-positive);
 }
 
-.athlete-match-history article > footer > span strong.down {
+.athlete-match-history article > footer > span .duna-numeric.down {
   color: var(--color-danger);
 }
 
@@ -34964,7 +34954,7 @@ button.selected > .choice-radio {
 }
 
 .athlete-stage > .athlete-stat-deck small,
-.athlete-stage > .athlete-stat-deck span {
+.athlete-stage > .athlete-stat-deck article > span {
   color: rgb(255 255 255 / 68%);
   font-size: 0.76rem;
 }
@@ -35081,7 +35071,7 @@ button.selected > .choice-radio {
   }
 
   .athlete-stage .athlete-hero__rank-mark {
-    font-size: clamp(5.5rem, 29vw, 9rem);
+    font-size: clamp(120px, 29vw, 144px);
     top: 30%;
   }
 

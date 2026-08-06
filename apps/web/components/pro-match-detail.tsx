@@ -4,7 +4,7 @@ import type {
   PublicProMatchDetail,
   VideoSummary,
 } from "@duna/api";
-import { Badge } from "@duna/ui";
+import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowLeft,
   CalendarDays,
@@ -36,6 +36,8 @@ export function ProMatchDetail({
   readonly videos?: readonly VideoSummary[];
 }) {
   const { event, match } = detail;
+  const matchStatus = match.liveScore?.status ?? match.status;
+  const isLive = matchStatus === "live";
   const structuredData = professionalMatchJsonLd(detail);
   return (
     <main className="pro-match-page" data-zone="athletic">
@@ -46,7 +48,7 @@ export function ProMatchDetail({
       />
       <section
         className="pro-match-hero"
-        data-zone={match.status === "live" ? "live" : "athletic"}
+        data-zone={isLive ? "live" : "athletic"}
       >
         <div>
           <Link href={`/events/${event.slug}`}>
@@ -54,9 +56,9 @@ export function ProMatchDetail({
             {event.name}
           </Link>
           <div>
-            <Badge tone={match.status === "live" ? "danger" : "neutral"}>
-              {match.status === "live" && <Radio aria-hidden size={11} />}
-              {match.status}
+            <Badge tone={isLive ? "danger" : "neutral"}>
+              {isLive && <Radio aria-hidden size={11} />}
+              {matchStatus}
             </Badge>
             <Badge>{match.roundLabel}</Badge>
             {match.leagueTeamAName && match.leagueTeamBName && (
@@ -110,11 +112,15 @@ export function ProMatchDetail({
           </header>
           <div className="pro-match-prediction__labels">
             <span>
-              <strong>{match.prediction.teamA.toFixed(0)}%</strong>
+              <Numeric tier="hero">
+                {match.prediction.teamA.toFixed(0)}%
+              </Numeric>
               {match.teamA.label}
             </span>
             <span>
-              <strong>{match.prediction.teamB.toFixed(0)}%</strong>
+              <Numeric tier="hero">
+                {match.prediction.teamB.toFixed(0)}%
+              </Numeric>
               {match.teamB.label}
             </span>
           </div>
@@ -157,12 +163,12 @@ export function ProMatchDetail({
             <>
               <div className="pro-head-to-head__score">
                 <div>
-                  <strong>{detail.headToHead.teamAWins}</strong>
+                  <Numeric tier="block">{detail.headToHead.teamAWins}</Numeric>
                   <span>{match.teamA.label} wins</span>
                 </div>
                 <i>vs</i>
                 <div>
-                  <strong>{detail.headToHead.teamBWins}</strong>
+                  <Numeric tier="block">{detail.headToHead.teamBWins}</Numeric>
                   <span>{match.teamB.label} wins</span>
                 </div>
               </div>

@@ -147,7 +147,7 @@ export default async function RankingsPage({
   };
 
   return (
-    <main className="rankings-page rankings-v2">
+    <main className="rankings-page rankings-v2" data-zone="athletic">
       <SiteHeader />
       <script
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
@@ -177,7 +177,7 @@ export default async function RankingsPage({
           <span className="page-eyebrow">
             Top {gender === "men" ? "men" : "women"}
           </span>
-          <strong>{activeRows.length}</strong>
+          <Numeric tier="monument">{activeRows.length}</Numeric>
           <p>ranked players in this connected snapshot</p>
           <div aria-label="Ranking distribution" className="rankings-pulse">
             {pulseValues.map((value, index) => (
@@ -191,11 +191,11 @@ export default async function RankingsPage({
           </div>
           <div>
             <span>
-              <Numeric>{mappedProfiles}</Numeric>
+              <Numeric tier="block">{mappedProfiles}</Numeric>
               <small>public profiles</small>
             </span>
             <span>
-              <Numeric>{dunaRows.length}</Numeric>
+              <Numeric tier="block">{dunaRows.length}</Numeric>
               <small>Sand Rated</small>
             </span>
           </div>
@@ -454,7 +454,7 @@ function RankingRow({
 }) {
   const inner = (
     <>
-      <Numeric>{row.rank}</Numeric>
+      <Numeric tier="table">{row.rank}</Numeric>
       <span
         className="rankings-list__avatar"
         style={

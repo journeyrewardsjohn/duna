@@ -21,7 +21,7 @@ export function LegalDocument({
   readonly document: LegalDocumentModel;
 }) {
   return (
-    <main className="legal-page">
+    <main className="legal-page" data-zone="editorial">
       <SiteHeader />
       <header className="legal-hero">
         <div>

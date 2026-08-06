@@ -342,6 +342,15 @@ export const typography = {
   mono: "Archivo",
 } as const;
 
+export const numericTiers = {
+  score: { width: 64, weight: 900, tabular: true },
+  monument: { width: 122, weight: 900, tabular: false },
+  hero: { width: 108, weight: 800, tabular: true },
+  block: { width: 94, weight: 800, tabular: true },
+  table: { width: 78, weight: 700, tabular: true },
+  chip: { width: 78, weight: 700, tabular: true },
+} as const;
+
 export const motion = {
   score: 180,
   fast: 140,
@@ -358,6 +367,7 @@ export const nativeTokens = {
   spacing,
   radii,
   typography,
+  numericTiers,
   motion,
   resolve: resolveDunaTokens,
   minimumTarget: 48,

@@ -72,7 +72,7 @@ export default async function CoachProfilePage({
     );
 
   return (
-    <main className="public-detail coach-profile-page">
+    <main className="public-detail coach-profile-page" data-zone="athletic">
       <SiteHeader />
       <section className="coach-profile-hero">
         <div className="coach-profile-hero__portrait">

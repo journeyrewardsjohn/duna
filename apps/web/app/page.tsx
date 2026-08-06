@@ -91,15 +91,15 @@ export default async function HomePage() {
 
           <div className="campaign-hero__proof" aria-label="Duna network">
             <div>
-              <Numeric>{people.length}</Numeric>
+              <Numeric tier="block">{people.length}</Numeric>
               <span>player profiles</span>
             </div>
             <div>
-              <Numeric>{events.length}</Numeric>
+              <Numeric tier="block">{events.length}</Numeric>
               <span>ways to play</span>
             </div>
             <div>
-              <Numeric>{courtCount}</Numeric>
+              <Numeric tier="block">{courtCount}</Numeric>
               <span>connected courts</span>
             </div>
           </div>
@@ -230,7 +230,7 @@ export default async function HomePage() {
                         },
                       )}
                     </small>
-                    <Numeric>
+                    <Numeric tier="block">
                       {formatVenueTime(
                         event.startsAt,
                         event.timezone,
@@ -264,15 +264,17 @@ export default async function HomePage() {
                     </small>
                   </span>
                   <span className="campaign-event-list__meta">
-                    <Numeric>
-                      {event.price.amountMinor === 0
-                        ? "Free"
-                        : formatMoney(
-                            event.price.amountMinor,
-                            event.price.currency,
-                            "en-US",
-                          )}
-                    </Numeric>
+                    {event.price.amountMinor === 0 ? (
+                      <span>Free</span>
+                    ) : (
+                      <Numeric tier="table">
+                        {formatMoney(
+                          event.price.amountMinor,
+                          event.price.currency,
+                          "en-US",
+                        )}
+                      </Numeric>
+                    )}
                     <small>{event.spotsRemaining} spots</small>
                   </span>
                   <span className="campaign-event-list__arrow">
@@ -326,7 +328,7 @@ export default async function HomePage() {
           </div>
           <div className="campaign-tour__stat">
             <small>Connected profiles</small>
-            <Numeric>{people.length}</Numeric>
+            <Numeric tier="hero">{people.length}</Numeric>
             <span>Ratings, results + form</span>
           </div>
         </div>
@@ -423,7 +425,7 @@ export default async function HomePage() {
             <div className="campaign-operator__metric campaign-operator__metric--hero">
               <small>One connected business</small>
               <strong>
-                <Numeric>{events.length}</Numeric> live offers
+                <Numeric tier="hero">{events.length}</Numeric> live offers
               </strong>
               <span>{marketNames || "Ready for your first market"}</span>
             </div>
@@ -431,17 +433,17 @@ export default async function HomePage() {
               <div>
                 <CalendarDays aria-hidden />
                 <small>Published sessions</small>
-                <Numeric>{events.length}</Numeric>
+                <Numeric tier="block">{events.length}</Numeric>
               </div>
               <div>
                 <Building2 aria-hidden />
                 <small>Courts</small>
-                <Numeric>{courtCount}</Numeric>
+                <Numeric tier="block">{courtCount}</Numeric>
               </div>
               <div>
                 <Users aria-hidden />
                 <small>Public profiles</small>
-                <Numeric>{people.length}</Numeric>
+                <Numeric tier="block">{people.length}</Numeric>
               </div>
             </div>
             <div className="campaign-operator__insight">

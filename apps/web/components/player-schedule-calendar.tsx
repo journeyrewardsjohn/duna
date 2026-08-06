@@ -145,7 +145,7 @@ export function PlayerScheduleCalendar({
             {selectedBookings.map((booking) => (
               <article className="play-day__booking" key={booking.id}>
                 <span className="play-day__time">
-                  <Numeric>
+                  <Numeric tier="table">
                     {formatTime(booking.startsAt, "America/Los_Angeles")}
                   </Numeric>
                   <small>
@@ -169,7 +169,7 @@ export function PlayerScheduleCalendar({
                 key={event.id}
               >
                 <span className="play-day__time">
-                  <Numeric>
+                  <Numeric tier="table">
                     {formatTime(event.startsAt, event.timezone)}
                   </Numeric>
                   <small>{formatTime(event.endsAt, event.timezone)}</small>

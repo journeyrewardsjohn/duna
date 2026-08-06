@@ -16,7 +16,7 @@ export const metadata = {
 
 export default function LegalCenterPage() {
   return (
-    <main className="legal-page">
+    <main className="legal-page" data-zone="editorial">
       <SiteHeader />
       <header className="legal-center-hero">
         <span className="page-eyebrow">Trust + accountability</span>

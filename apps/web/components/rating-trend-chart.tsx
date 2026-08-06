@@ -1,6 +1,7 @@
 "use client";
 
 import type { MatchSummary } from "@duna/core";
+import { Numeric } from "@duna/ui";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useMemo, useState } from "react";
@@ -199,20 +200,28 @@ export function RatingTrendChart({
       <div className="rating-trend-chart__summary">
         <span>
           <small>Starting</small>
-          <strong>{formatRating(startingRating)}</strong>
+          <strong>
+            <Numeric tier="block">{formatRating(startingRating)}</Numeric>
+          </strong>
         </span>
         <span>
           <small>Current</small>
-          <strong>{formatRating(last.rating)}</strong>
+          <strong>
+            <Numeric tier="block">{formatRating(last.rating)}</Numeric>
+          </strong>
         </span>
         <span data-direction={change >= 0 ? "up" : "down"}>
           <small>Net movement</small>
-          <strong>{signed(change)}</strong>
+          <strong>
+            <Numeric tier="block">{signed(change)}</Numeric>
+          </strong>
         </span>
         <span>
           <small>Range</small>
           <strong>
-            {formatRating(low)}–{formatRating(high)}
+            <Numeric tier="block">
+              {formatRating(low)}–{formatRating(high)}
+            </Numeric>
           </strong>
         </span>
       </div>
@@ -235,12 +244,16 @@ export function RatingTrendChart({
                 </time>
               </div>
               <strong className="rating-trend-chart__selected-value">
-                {formatRating(activePoint.rating)}
-                <small
+                <Numeric tier="hero">
+                  {formatRating(activePoint.rating)}
+                </Numeric>
+                <Numeric
+                  className="rating-trend-chart__delta"
                   data-direction={(activePoint.delta ?? 0) >= 0 ? "up" : "down"}
+                  tier="chip"
                 >
                   {signed(activePoint.delta ?? 0)}
-                </small>
+                </Numeric>
               </strong>
               <p>{activePoint.matchTitle ?? "Duna rated match"}</p>
               <div className="rating-trend-chart__matchup">
@@ -256,16 +269,28 @@ export function RatingTrendChart({
                 <div>
                   <dt>Before</dt>
                   <dd>
-                    {formatRating(activePoint.before ?? activePoint.rating)}
+                    <Numeric tier="table">
+                      {formatRating(activePoint.before ?? activePoint.rating)}
+                    </Numeric>
                   </dd>
                 </div>
                 <div>
                   <dt>After</dt>
-                  <dd>{formatRating(activePoint.rating)}</dd>
+                  <dd>
+                    <Numeric tier="table">
+                      {formatRating(activePoint.rating)}
+                    </Numeric>
+                  </dd>
                 </div>
                 <div>
                   <dt>Score</dt>
-                  <dd>{activePoint.score || "Pending"}</dd>
+                  <dd>
+                    {activePoint.score ? (
+                      <Numeric tier="table">{activePoint.score}</Numeric>
+                    ) : (
+                      "Pending"
+                    )}
+                  </dd>
                 </div>
               </dl>
               {activePoint.matchHref && (
@@ -337,6 +362,7 @@ export function RatingTrendChart({
                 className="rating-trend-chart__line"
                 d={path}
                 data-chart-series
+                pathLength={1}
               />
               {activeChartPoint && (
                 <line
@@ -446,7 +472,13 @@ export function RatingTrendChart({
                   <em>vs</em>
                   {activePoint.opponents ?? "Opponent pending"}
                 </strong>
-                <p>{activePoint.score || "Score pending"}</p>
+                <p>
+                  {activePoint.score ? (
+                    <Numeric tier="table">{activePoint.score}</Numeric>
+                  ) : (
+                    "Score pending"
+                  )}
+                </p>
                 <dl>
                   <div>
                     <dt>Movement</dt>
@@ -455,12 +487,18 @@ export function RatingTrendChart({
                         (activePoint.delta ?? 0) >= 0 ? "up" : "down"
                       }
                     >
-                      {signed(activePoint.delta ?? 0)}
+                      <Numeric tier="table">
+                        {signed(activePoint.delta ?? 0)}
+                      </Numeric>
                     </dd>
                   </div>
                   <div>
                     <dt>Rating after</dt>
-                    <dd>{formatRating(activePoint.rating)}</dd>
+                    <dd>
+                      <Numeric tier="table">
+                        {formatRating(activePoint.rating)}
+                      </Numeric>
+                    </dd>
                   </div>
                 </dl>
               </div>

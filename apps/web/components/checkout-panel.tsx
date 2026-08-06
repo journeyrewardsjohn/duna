@@ -1398,7 +1398,7 @@ export function CheckoutPanel({
           {isDunaPlus && (
             <span className="positive">
               <small>Premium service-fee waiver</small>
-              <Numeric>Included</Numeric>
+              <span>Included</span>
             </span>
           )}
           <span className="checkout-summary__total">

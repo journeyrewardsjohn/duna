@@ -107,8 +107,10 @@ export default async function PlayerDashboard() {
               </strong>
               <p>
                 Current rating{" "}
-                <Numeric>{player.rating.display.toFixed(2)}</Numeric> ·
-                discipline {player.rating.discipline.replace("-", " ")}
+                <Numeric tier="chip">
+                  {player.rating.display.toFixed(2)}
+                </Numeric>{" "}
+                · discipline {player.rating.discipline.replace("-", " ")}
               </p>
               <Link href="/app/matches">
                 Open match history <ArrowRight aria-hidden size={15} />
@@ -126,11 +128,11 @@ export default async function PlayerDashboard() {
             </div>
             <div>
               <small>Connected matches</small>
-              <Numeric>{dashboard.recentMatches.length}</Numeric>
+              <Numeric tier="block">{dashboard.recentMatches.length}</Numeric>
             </div>
             <div>
               <small>Wallet</small>
-              <Numeric>
+              <Numeric tier="block">
                 ${(dashboard.walletBalanceMinor / 100).toFixed(2)}
               </Numeric>
             </div>
@@ -148,7 +150,7 @@ export default async function PlayerDashboard() {
             </Badge>
           </div>
           <div className="next-up-panel__time">
-            <Numeric>
+            <Numeric tier="table">
               {nextEvent
                 ? formatVenueTime(
                     nextEvent.startsAt,
@@ -178,7 +180,7 @@ export default async function PlayerDashboard() {
               <span className="avatar">{player.initials}</span>
             </div>
             <span>
-              <Numeric>
+              <Numeric tier="chip">
                 {nextEvent
                   ? `${nextEvent.capacity - nextEvent.spotsRemaining}/${nextEvent.capacity}`
                   : "0"}
@@ -200,7 +202,7 @@ export default async function PlayerDashboard() {
         {dashboard.metrics.map((metric) => (
           <article key={metric.label}>
             <small>{metric.label}</small>
-            <Numeric>{metric.value}</Numeric>
+            <Numeric tier="block">{metric.value}</Numeric>
             {metric.change && (
               <span className={metric.trend === "up" ? "positive" : undefined}>
                 {metric.change}

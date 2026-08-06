@@ -97,8 +97,11 @@ function TournamentIntelligence({
           <h2>Tournament pulse</h2>
         </div>
         <Badge>
-          {statistics.coverage.matchesWithStatistics}/
-          {statistics.coverage.totalMatches} matches
+          <Numeric tier="chip">
+            {statistics.coverage.matchesWithStatistics}/
+            {statistics.coverage.totalMatches}
+          </Numeric>{" "}
+          matches
         </Badge>
       </header>
       <div className="pro-tournament-intelligence__overview">
@@ -106,35 +109,54 @@ function TournamentIntelligence({
           <article>
             <span>Hitting efficiency</span>
             <strong>
-              {statisticValue(
-                statistics.averages.hittingEfficiency,
-                "hittingEfficiency",
-              )}
+              <Numeric tier="block">
+                {statisticValue(
+                  statistics.averages.hittingEfficiency,
+                  "hittingEfficiency",
+                )}
+              </Numeric>
             </strong>
             <small>Tournament average</small>
           </article>
           <article>
             <span>Aces / set</span>
-            <strong>{statisticValue(statistics.averages.acesPerSet)}</strong>
+            <strong>
+              <Numeric tier="block">
+                {statisticValue(statistics.averages.acesPerSet)}
+              </Numeric>
+            </strong>
             <small>Across both sides</small>
           </article>
           <article>
             <span>Blocks / set</span>
-            <strong>{statisticValue(statistics.averages.blocksPerSet)}</strong>
+            <strong>
+              <Numeric tier="block">
+                {statisticValue(statistics.averages.blocksPerSet)}
+              </Numeric>
+            </strong>
             <small>Across both sides</small>
           </article>
           <article>
             <span>Digs / set</span>
-            <strong>{statisticValue(statistics.averages.digsPerSet)}</strong>
+            <strong>
+              <Numeric tier="block">
+                {statisticValue(statistics.averages.digsPerSet)}
+              </Numeric>
+            </strong>
             <small>Successful digs</small>
           </article>
         </div>
         <aside className="pro-tournament-intelligence__correlation">
           <span>Defense context</span>
           <strong>
-            {correlation
-              ? `${correlation.coefficient > 0 ? "+" : ""}${correlation.coefficient.toFixed(2)}`
-              : "Building"}
+            {correlation ? (
+              <Numeric tier="block">
+                {correlation.coefficient > 0 ? "+" : ""}
+                {correlation.coefficient.toFixed(2)}
+              </Numeric>
+            ) : (
+              "Building"
+            )}
           </strong>
           <p>{correlationCopy}</p>
           <small>
@@ -168,11 +190,18 @@ function TournamentIntelligence({
             <span>{standout.label}</span>
             <strong>{standout.teamName}</strong>
             <div>
-              <b>{statisticValue(standout.value, standout.metric)}</b>
+              <b>
+                <Numeric tier="block">
+                  {statisticValue(standout.value, standout.metric)}
+                </Numeric>
+              </b>
               <small>
-                {standout.delta >= 0 ? "+" : ""}
-                {statisticValue(standout.delta, standout.metric)} vs. field ·{" "}
-                {standout.matches} match{standout.matches === 1 ? "" : "es"}
+                <Numeric tier="chip">
+                  {standout.delta >= 0 ? "+" : ""}
+                  {statisticValue(standout.delta, standout.metric)}
+                </Numeric>{" "}
+                vs. field · <Numeric tier="chip">{standout.matches}</Numeric>{" "}
+                match{standout.matches === 1 ? "" : "es"}
               </small>
             </div>
           </article>
@@ -197,14 +226,28 @@ function TournamentIntelligence({
                 <>
                   <strong>{team.name}</strong>
                   <span>
-                    {statisticValue(
-                      team.hittingEfficiency,
-                      "hittingEfficiency",
-                    )}
+                    <Numeric tier="table">
+                      {statisticValue(
+                        team.hittingEfficiency,
+                        "hittingEfficiency",
+                      )}
+                    </Numeric>
                   </span>
-                  <span>{statisticValue(team.acesPerSet)}</span>
-                  <span>{statisticValue(team.blocksPerSet)}</span>
-                  <span>{statisticValue(team.digsPerSet)}</span>
+                  <span>
+                    <Numeric tier="table">
+                      {statisticValue(team.acesPerSet)}
+                    </Numeric>
+                  </span>
+                  <span>
+                    <Numeric tier="table">
+                      {statisticValue(team.blocksPerSet)}
+                    </Numeric>
+                  </span>
+                  <span>
+                    <Numeric tier="table">
+                      {statisticValue(team.digsPerSet)}
+                    </Numeric>
+                  </span>
                 </>
               );
               return team.teamNo ? (
@@ -234,15 +277,23 @@ function TournamentIntelligence({
               const content = (
                 <>
                   <strong>{player.name}</strong>
-                  <span>{player.points}</span>
                   <span>
-                    {statisticValue(
-                      player.hittingEfficiency,
-                      "hittingEfficiency",
-                    )}
+                    <Numeric tier="table">{player.points}</Numeric>
                   </span>
-                  <span>{player.aces}</span>
-                  <span>{player.digs}</span>
+                  <span>
+                    <Numeric tier="table">
+                      {statisticValue(
+                        player.hittingEfficiency,
+                        "hittingEfficiency",
+                      )}
+                    </Numeric>
+                  </span>
+                  <span>
+                    <Numeric tier="table">{player.aces}</Numeric>
+                  </span>
+                  <span>
+                    <Numeric tier="table">{player.digs}</Numeric>
+                  </span>
                 </>
               );
               return player.publicPath ? (
@@ -381,7 +432,7 @@ function AvpDivisionStandings({
             {teams.map((team) => (
               <tr key={team.externalTeamId}>
                 <td>
-                  <Numeric>{team.seed ?? "—"}</Numeric>
+                  <Numeric tier="table">{team.seed ?? "—"}</Numeric>
                 </td>
                 <th scope="row">
                   <strong>{team.label}</strong>
@@ -440,7 +491,7 @@ function AvpOverallStandings({
             {standings.map((standing) => (
               <tr key={standing.teamName}>
                 <td>
-                  <Numeric>{standing.rank}</Numeric>
+                  <Numeric tier="table">{standing.rank}</Numeric>
                 </td>
                 <th scope="row">{standing.teamName}</th>
                 <td>{standing.matchesPlayed}</td>
@@ -522,12 +573,6 @@ export function ProEventDetail({
     venue?.formattedAddress ||
     structuredVenueAddress ||
     event.editorial.venueAddress;
-  const usesHamburgVenuePlate = [
-    event.name,
-    event.location,
-    event.editorial.venueName,
-    venueAddress,
-  ].some((value) => /hamburg/i.test(value ?? ""));
   const venueMapParameters = new URLSearchParams();
   if (venue?.latitude !== undefined && venue.longitude !== undefined) {
     venueMapParameters.set("latitude", String(venue.latitude));
@@ -669,7 +714,7 @@ export function ProEventDetail({
             {event.matchCount > 0 ? (
               <>
                 <strong>
-                  <Numeric>{completedMatchCount}</Numeric>
+                  <Numeric tier="hero">{completedMatchCount}</Numeric>
                   <small> / {event.matchCount} matches</small>
                 </strong>
                 <div>
@@ -704,17 +749,6 @@ export function ProEventDetail({
       <div
         className={`pro-event-content${event.live ? " pro-event-content--live" : ""}`}
       >
-        {usesHamburgVenuePlate && (
-          <figure className="pro-event-venue-plate">
-            <img
-              alt="Atmospheric waterfront sand courts at first light"
-              src="/media/brand/duna-event-venue-hamburg-v1.webp"
-            />
-            <figcaption>
-              Venue atmosphere · Duna illustration, not official event imagery
-            </figcaption>
-          </figure>
-        )}
         {venueAddress && venueMapHref && (
           <ProEventVenueCard
             address={venueAddress}
@@ -1052,7 +1086,7 @@ export function ProEventDetail({
                   aria-label={`Place ${index + 1}`}
                   className="pro-live-table__place"
                 >
-                  <Numeric>{standing.medal ?? index + 1}</Numeric>
+                  <Numeric tier="table">{standing.medal ?? index + 1}</Numeric>
                 </span>
                 <div className="pro-live-table__team">
                   <TeamName compact team={standing.team} />

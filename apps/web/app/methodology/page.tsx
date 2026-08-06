@@ -44,7 +44,7 @@ export default async function MethodologyPage() {
   );
 
   return (
-    <main className="rating-methodology-page">
+    <main className="rating-methodology-page" data-zone="editorial">
       <SiteHeader />
       <section className="rating-methodology-hero">
         <div>
@@ -64,7 +64,9 @@ export default async function MethodologyPage() {
         </div>
         <div className="rating-methodology-hero__score">
           <span>Latest walk-forward run</span>
-          <Numeric>{lab?.matchesProcessed.toLocaleString() ?? "—"}</Numeric>
+          <Numeric tier="hero">
+            {lab?.matchesProcessed.toLocaleString() ?? "—"}
+          </Numeric>
           <strong>pre-match predictions</strong>
           <small>
             {lab
@@ -153,21 +155,27 @@ export default async function MethodologyPage() {
                       <small>{model.family}</small>
                     </span>
                     <span role="cell">
-                      <Numeric>{percentage(model.accuracy)}</Numeric>
+                      <Numeric tier="block">
+                        {percentage(model.accuracy)}
+                      </Numeric>
                     </span>
                     <span role="cell">
-                      <Numeric>{model.brierScore.toFixed(4)}</Numeric>
+                      <Numeric tier="table">
+                        {model.brierScore.toFixed(4)}
+                      </Numeric>
                     </span>
                     <span role="cell">
-                      <Numeric>{model.logLoss.toFixed(4)}</Numeric>
+                      <Numeric tier="table">{model.logLoss.toFixed(4)}</Numeric>
                     </span>
                     <span role="cell">
-                      <Numeric>
+                      <Numeric tier="table">
                         {model.expectedCalibrationError.toFixed(4)}
                       </Numeric>
                     </span>
                     <span role="cell">
-                      <Numeric>{model.areaUnderRocCurve.toFixed(3)}</Numeric>
+                      <Numeric tier="table">
+                        {model.areaUnderRocCurve.toFixed(3)}
+                      </Numeric>
                     </span>
                   </div>
                 ))}
@@ -252,7 +260,9 @@ export default async function MethodologyPage() {
                               pre-match
                             </small>
                           </span>
-                          <Numeric>{Math.round(probability * 100)}%</Numeric>
+                          <Numeric tier="table">
+                            {Math.round(probability * 100)}%
+                          </Numeric>
                           <span>
                             <strong>
                               {teamB.map((player) => player.name).join(" / ") ||

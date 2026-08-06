@@ -9326,7 +9326,7 @@ function createStyles(palette: Palette) {
     },
     wordmarkText: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Wordmark",
       fontSize: 17,
       fontWeight: "900",
       letterSpacing: 3,
@@ -9419,7 +9419,7 @@ function createStyles(palette: Palette) {
     },
     homeRatingBadgeValue: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Table",
       fontSize: 17,
       fontWeight: "900",
       letterSpacing: -0.7,
@@ -9560,7 +9560,7 @@ function createStyles(palette: Palette) {
     },
     homePerformanceValue: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Block",
       fontSize: 18,
       fontWeight: "900",
       letterSpacing: -0.5,
@@ -10139,7 +10139,7 @@ function createStyles(palette: Palette) {
     },
     ratingValue: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Hero",
       fontSize: 45,
       fontWeight: "900",
       letterSpacing: -3,
@@ -10176,7 +10176,7 @@ function createStyles(palette: Palette) {
     },
     statValue: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Table",
       fontSize: 15,
       fontWeight: "800",
     },
@@ -10253,7 +10253,7 @@ function createStyles(palette: Palette) {
     },
     metricNumber: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Table",
       fontSize: 14,
       fontWeight: "800",
       textAlign: "center",
@@ -10523,7 +10523,7 @@ function createStyles(palette: Palette) {
     proBracketWinner: { color: colors.bone, fontWeight: "900" },
     proBracketScore: {
       color: colors.aqua,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Chip",
       fontSize: 10,
       fontWeight: "900",
     },
@@ -11074,7 +11074,7 @@ function createStyles(palette: Palette) {
     },
     proMobileStatValue: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Block",
       fontSize: 20,
       fontWeight: "900",
       letterSpacing: -0.7,
@@ -11296,7 +11296,7 @@ function createStyles(palette: Palette) {
     },
     mobilePredictionChartLegendValue: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Table",
       fontSize: 18,
       fontWeight: "900",
     },
@@ -11644,7 +11644,7 @@ function createStyles(palette: Palette) {
     proMobileMatchWinner: { color: colors.bone, fontWeight: "900" },
     proMobileMatchScore: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Table",
       fontSize: 13,
       fontWeight: "900",
       letterSpacing: 1.1,
@@ -11667,7 +11667,7 @@ function createStyles(palette: Palette) {
     },
     proMobileMatchPredictionValue: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Chip",
       fontSize: 10,
       fontWeight: "900",
     },
@@ -12144,7 +12144,7 @@ function createStyles(palette: Palette) {
     weekDayLabel: { color: colors.muted, fontSize: 10 },
     weekDayNumber: {
       color: colors.bone,
-      fontFamily: "Archivo-Bold",
+      fontFamily: "Archivo-Table",
       fontSize: 11,
       fontWeight: "700",
       marginTop: 4,
@@ -12190,7 +12190,7 @@ function createStyles(palette: Palette) {
     pickupDay: { color: colors.aqua, fontSize: 10, fontWeight: "800" },
     pickupNumber: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Table",
       fontSize: 15,
       fontWeight: "900",
     },
@@ -12342,7 +12342,7 @@ function createStyles(palette: Palette) {
     },
     predictionWalletFactValue: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Table",
       fontSize: 16,
       fontWeight: "900",
     },
@@ -12398,7 +12398,7 @@ function createStyles(palette: Palette) {
     },
     moneyAmount: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Chip",
       fontSize: 10,
       fontWeight: "800",
     },
@@ -12540,8 +12540,8 @@ function createStyles(palette: Palette) {
     },
     athleteHeroRatingValue: {
       color: colors.white,
-      fontFamily: "Archivo-ExtraBold",
-      fontSize: 27,
+      fontFamily: "Archivo-Hero",
+      fontSize: 40,
       fontWeight: "900",
       letterSpacing: -1.4,
       lineHeight: 30,
@@ -12576,8 +12576,8 @@ function createStyles(palette: Palette) {
     },
     athleteMetricValue: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
-      fontSize: 31,
+      fontFamily: "Archivo-Block",
+      fontSize: 32,
       fontWeight: "900",
       letterSpacing: -1.4,
       marginTop: 14,
@@ -12659,7 +12659,7 @@ function createStyles(palette: Palette) {
     },
     athleteChartSummaryValue: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Block",
       fontSize: 20,
       fontWeight: "900",
       letterSpacing: -0.7,
@@ -12747,7 +12747,7 @@ function createStyles(palette: Palette) {
     },
     athleteMomentValue: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Block",
       fontSize: 34,
       fontWeight: "900",
       letterSpacing: -1.4,
@@ -12846,7 +12846,7 @@ function createStyles(palette: Palette) {
     athleteResultMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
     athleteResultDelta: { alignItems: "flex-end" },
     athleteResultDeltaValue: {
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Chip",
       fontSize: 13,
       fontWeight: "900",
     },
@@ -12903,7 +12903,7 @@ function createStyles(palette: Palette) {
     },
     athleteBioFactValue: {
       color: colors.bone,
-      fontFamily: "Archivo-Bold",
+      fontFamily: "Archivo-Table",
       fontSize: 12,
       fontWeight: "800",
       marginTop: 4,
@@ -13391,7 +13391,7 @@ function createStyles(palette: Palette) {
     mobileQuantityButtonText: { color: "#ffffff", fontSize: 19 },
     mobileQuantityValue: {
       color: "#ffffff",
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Table",
       fontSize: 15,
       fontWeight: "900",
     },
@@ -13732,7 +13732,7 @@ function createStyles(palette: Palette) {
     },
     totalAmount: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Table",
       fontSize: 15,
       fontWeight: "900",
     },

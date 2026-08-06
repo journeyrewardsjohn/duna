@@ -4355,7 +4355,7 @@ const styles = StyleSheet.create({
   healthVideoHeart: { color: "#ff6a5f", fontSize: 16 },
   healthVideoValue: {
     color: "#ffffff",
-    fontFamily: "Archivo-ExtraBold",
+    fontFamily: "Archivo-Table",
     fontSize: 14,
     fontVariant: ["tabular-nums"],
     fontWeight: "900",
@@ -4532,7 +4532,7 @@ const styles = StyleSheet.create({
   playerMetricItem: { alignItems: "center", flex: 1, justifyContent: "center" },
   playerMetricValue: {
     color: "#ffffff",
-    fontFamily: "Archivo-ExtraBold",
+    fontFamily: "Archivo-Table",
     fontSize: 17,
     fontWeight: "800",
   },

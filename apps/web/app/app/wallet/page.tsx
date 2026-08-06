@@ -53,7 +53,7 @@ export default async function WalletPage() {
             <CircleDollarSign aria-hidden size={25} />
           </div>
           <span>Available balance</span>
-          <Numeric>
+          <Numeric tier="hero">
             {formatMoney(wallet.availableMinor, wallet.currency)}
           </Numeric>
           <div className="wallet-balance-card__actions">
@@ -77,7 +77,7 @@ export default async function WalletPage() {
             </span>
             <div>
               <small>Pending balance</small>
-              <Numeric>
+              <Numeric tier="block">
                 {formatMoney(wallet.pendingMinor, wallet.currency)}
               </Numeric>
               <span>Tax status: {wallet.taxFormStatus}</span>
@@ -115,7 +115,7 @@ export default async function WalletPage() {
               <Coins aria-hidden size={24} />
             </span>
             <small>Available</small>
-            <Numeric>
+            <Numeric tier="hero">
               {Math.floor(predictionWallet.availableCredits).toLocaleString(
                 "en-US",
               )}
@@ -136,7 +136,7 @@ export default async function WalletPage() {
               <TrendingUp aria-hidden size={24} />
             </span>
             <small>Positions</small>
-            <Numeric>{predictionWallet.positions.length}</Numeric>
+            <Numeric tier="block">{predictionWallet.positions.length}</Numeric>
             <strong>open or settled</strong>
             <p>
               {predictionWallet.openOrders.length} unmatched or partially

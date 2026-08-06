@@ -1,5 +1,5 @@
 import { formatMoney, ORGANIZATION_PLANS } from "@duna/core";
-import { Badge } from "@duna/ui";
+import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowRight,
   BarChart3,
@@ -198,14 +198,30 @@ export default function RunYourClubPage() {
               <article key={plan.id}>
                 <small>{plan.productName}</small>
                 <strong>
-                  {plan.monthlyPriceMinor === 0
-                    ? "Free"
-                    : `${formatMoney(plan.monthlyPriceMinor, "USD")}/mo`}
+                  {plan.monthlyPriceMinor === 0 ? (
+                    "Free"
+                  ) : (
+                    <>
+                      <Numeric tier="block">
+                        {formatMoney(plan.monthlyPriceMinor, "USD")}
+                      </Numeric>
+                      /mo
+                    </>
+                  )}
                 </strong>
                 <span>
-                  {plan.defaultCommissionBps === 0
-                    ? "0% organization fee"
-                    : `${plan.defaultCommissionBps / 100}% organization fee`}
+                  {plan.defaultCommissionBps === 0 ? (
+                    <>
+                      <Numeric tier="chip">0%</Numeric> organization fee
+                    </>
+                  ) : (
+                    <>
+                      <Numeric tier="chip">
+                        {plan.defaultCommissionBps / 100}%
+                      </Numeric>{" "}
+                      organization fee
+                    </>
+                  )}
                 </span>
               </article>
             ))}

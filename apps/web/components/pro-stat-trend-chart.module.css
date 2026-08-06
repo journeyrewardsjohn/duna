@@ -56,8 +56,7 @@
 }
 
 .metrics strong {
-  font-family: var(--font-display);
-  font-size: 1.55rem;
+  font-family: var(--font-data);
 }
 
 .body {
@@ -80,9 +79,7 @@
 }
 
 .body aside > strong {
-  font-family: var(--font-display);
-  font-size: clamp(2.7rem, 6vw, 5.2rem);
-  letter-spacing: -0.03em;
+  font-family: var(--font-data);
   line-height: 1;
   margin: 0.6rem 0 1.2rem;
 }
@@ -127,16 +124,54 @@
   font-size: 15px;
 }
 
+.plot .axisValue {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
+  font-variation-settings:
+    "wdth" 78,
+    "wght" 700;
+  font-weight: 700;
+}
+
 .grid {
   stroke: color-mix(in srgb, var(--color-line) 76%, transparent);
   stroke-dasharray: 8 10;
 }
 
 .line {
+  animation: pro-stat-line-in 1.1s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
   fill: none;
   stroke: var(--color-blue);
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
   stroke-linejoin: round;
   stroke-width: 4;
+}
+
+.point {
+  animation: pro-stat-point-in 420ms 700ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes pro-stat-line-in {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes pro-stat-point-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.5);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .win {
@@ -202,5 +237,15 @@
 
   .plot svg {
     min-width: 680px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .line,
+  .point {
+    animation: none;
+    opacity: 1;
+    stroke-dashoffset: 0;
+    transform: none;
   }
 }

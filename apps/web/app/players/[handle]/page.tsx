@@ -222,7 +222,6 @@ export default async function PublicPlayerPage({
       .catch(() => undefined),
     caller.public.videos({ ownerHandle: player.handle }).catch(() => []),
   ]);
-
   const followState = await caller.player
     .playerFollowState({ playerPersonId: player.id })
     .catch(() => undefined);
@@ -631,11 +630,15 @@ export default async function PublicPlayerPage({
             </div>
 
             <div className="athlete-hero__visual">
-              <span aria-hidden className="athlete-hero__rank-mark">
+              <Numeric
+                aria-hidden
+                className="athlete-hero__rank-mark"
+                tier="monument"
+              >
                 {performance?.worldRanking
                   ? `#${performance.worldRanking.rank}`
                   : "DUNA"}
-              </span>
+              </Numeric>
               {profileImage ? (
                 <div className="athlete-hero__portrait">
                   <Image
@@ -654,7 +657,9 @@ export default async function PublicPlayerPage({
               )}
               <div className="athlete-hero__rating">
                 <small>Sand Rating</small>
-                <Numeric>{player.rating.display.toFixed(2)}</Numeric>
+                <Numeric tier="hero">
+                  {player.rating.display.toFixed(2)}
+                </Numeric>
                 <span
                   data-direction={
                     (player.rating.delta ?? 0) >= 0 ? "up" : "down"
@@ -691,7 +696,13 @@ export default async function PublicPlayerPage({
                   </header>
                   <small>vs.</small>
                   <strong>{latestOpponent || "Opponent pending"}</strong>
-                  <p>{latestScore || "Score pending"}</p>
+                  <p>
+                    {latestScore ? (
+                      <Numeric tier="table">{latestScore}</Numeric>
+                    ) : (
+                      "Score pending"
+                    )}
+                  </p>
                   <footer>
                     <span>
                       {formatMatchDate(
@@ -794,7 +805,9 @@ export default async function PublicPlayerPage({
           ].map((metric) => (
             <article key={metric.label}>
               <small>{metric.label}</small>
-              <strong>{metric.value}</strong>
+              <strong>
+                <Numeric tier="block">{metric.value}</Numeric>
+              </strong>
               <span>{metric.detail}</span>
             </article>
           ))}
@@ -1125,16 +1138,22 @@ export default async function PublicPlayerPage({
                 <span className="page-eyebrow">Official Elite box scores</span>
                 <h2>How the game is changing.</h2>
               </div>
-              <Badge>{professionalStatistics.matches} matches</Badge>
+              <Badge>
+                <Numeric tier="chip">{professionalStatistics.matches}</Numeric>{" "}
+                matches
+              </Badge>
             </header>
             <div className="athlete-pro-statistics__summary">
               <article>
                 <span>Hitting efficiency</span>
                 <strong>
-                  {professionalStatistics.hittingEfficiency?.toFixed(1) ?? "—"}
-                  {professionalStatistics.hittingEfficiency !== undefined
-                    ? "%"
-                    : ""}
+                  <Numeric tier="block">
+                    {professionalStatistics.hittingEfficiency?.toFixed(1) ??
+                      "—"}
+                    {professionalStatistics.hittingEfficiency !== undefined
+                      ? "%"
+                      : ""}
+                  </Numeric>
                 </strong>
                 <small>
                   {professionalStatistics.attackPoints} kills ·{" "}
@@ -1143,19 +1162,29 @@ export default async function PublicPlayerPage({
               </article>
               <article>
                 <span>Aces / set</span>
-                <strong>{professionalStatistics.acesPerSet.toFixed(2)}</strong>
+                <strong>
+                  <Numeric tier="block">
+                    {professionalStatistics.acesPerSet.toFixed(2)}
+                  </Numeric>
+                </strong>
                 <small>{professionalStatistics.aces} total aces</small>
               </article>
               <article>
                 <span>Blocks / set</span>
                 <strong>
-                  {professionalStatistics.blocksPerSet.toFixed(2)}
+                  <Numeric tier="block">
+                    {professionalStatistics.blocksPerSet.toFixed(2)}
+                  </Numeric>
                 </strong>
                 <small>{professionalStatistics.blocks} total blocks</small>
               </article>
               <article>
                 <span>Digs / set</span>
-                <strong>{professionalStatistics.digsPerSet.toFixed(2)}</strong>
+                <strong>
+                  <Numeric tier="block">
+                    {professionalStatistics.digsPerSet.toFixed(2)}
+                  </Numeric>
+                </strong>
                 <small>{professionalStatistics.digs} successful digs</small>
               </article>
             </div>
@@ -1261,7 +1290,9 @@ function SignatureResultCard({
         <p>{event.sets.map((set) => `${set.a}–${set.b}`).join(" · ")}</p>
       </div>
       <div>
-        <Numeric>{(predictedWinProbability(event) * 100).toFixed(0)}%</Numeric>
+        <Numeric tier="block">
+          {(predictedWinProbability(event) * 100).toFixed(0)}%
+        </Numeric>
         <small>pre-match forecast</small>
         <strong>
           {event.delta >= 0 ? "+" : ""}
@@ -1306,43 +1337,51 @@ function MatchHistoryCard({
         </div>
         <div className="match-history-card__forecast">
           <small>Pre-match forecast</small>
-          <strong>{(predictedWinProbability(event) * 100).toFixed(0)}%</strong>
+          <Numeric tier="block">
+            {(predictedWinProbability(event) * 100).toFixed(0)}%
+          </Numeric>
         </div>
       </header>
       <div className="match-history-card__score">
         <div className={side === "A" ? "is-player" : undefined}>
           <span>{teamA}</span>
           {event.sets.map((set, index) => (
-            <strong
+            <Numeric
               className={set.a > set.b ? "is-set-winner" : undefined}
               key={`${event.id}-a-${index}`}
+              tier="block"
             >
               {set.a}
-            </strong>
+            </Numeric>
           ))}
-          <b>{setWins.a}</b>
+          <Numeric className="match-history-card__sets" tier="block">
+            {setWins.a}
+          </Numeric>
         </div>
         <div className={side === "B" ? "is-player" : undefined}>
           <span>{teamB}</span>
           {event.sets.map((set, index) => (
-            <strong
+            <Numeric
               className={set.b > set.a ? "is-set-winner" : undefined}
               key={`${event.id}-b-${index}`}
+              tier="block"
             >
               {set.b}
-            </strong>
+            </Numeric>
           ))}
-          <b>{setWins.b}</b>
+          <Numeric className="match-history-card__sets" tier="block">
+            {setWins.b}
+          </Numeric>
         </div>
       </div>
       <footer>
         <span>
           Sand Rating
-          <strong className={event.delta >= 0 ? "up" : "down"}>
+          <Numeric className={event.delta >= 0 ? "up" : "down"} tier="table">
             {event.beforeDisplay.toFixed(2)} → {event.afterDisplay.toFixed(2)} (
             {event.delta >= 0 ? "+" : ""}
             {event.delta.toFixed(2)})
-          </strong>
+          </Numeric>
         </span>
         <div>
           {event.canonicalMatchPath && (

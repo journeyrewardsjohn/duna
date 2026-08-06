@@ -186,7 +186,9 @@ export default async function PublicMatchPage({
               <h2>{teamA}</h2>
               <div>
                 {match.score.map(([score], index) => (
-                  <Numeric key={`a-${index}`}>{score}</Numeric>
+                  <Numeric key={`a-${index}`} tier="block">
+                    {score}
+                  </Numeric>
                 ))}
               </div>
             </article>
@@ -195,7 +197,9 @@ export default async function PublicMatchPage({
               <h2>{teamB}</h2>
               <div>
                 {match.score.map(([, score], index) => (
-                  <Numeric key={`b-${index}`}>{score}</Numeric>
+                  <Numeric key={`b-${index}`} tier="block">
+                    {score}
+                  </Numeric>
                 ))}
               </div>
             </article>
@@ -279,7 +283,9 @@ export default async function PublicMatchPage({
                       <strong>{player.displayName}</strong>
                       <small>{player.homeMarket}</small>
                     </span>
-                    <Numeric>{player.rating.display.toFixed(2)}</Numeric>
+                    <Numeric tier="table">
+                      {player.rating.display.toFixed(2)}
+                    </Numeric>
                   </>
                 );
                 return player.publicPath ? (

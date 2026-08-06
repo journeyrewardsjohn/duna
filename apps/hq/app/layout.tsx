@@ -1,7 +1,4 @@
 import "@fontsource-variable/archivo";
-import "@fontsource-variable/fraunces";
-import "@fontsource/instrument-serif/400.css";
-import "@fontsource/instrument-serif/400-italic.css";
 import "@duna/ui/styles.css";
 import "./globals.css";
 import "./design-v3.css";
@@ -42,7 +39,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
-      <body data-zone="athletic">
+      <body data-zone="operator">
         <DunaAuthProvider>{children}</DunaAuthProvider>
       </body>
     </html>
