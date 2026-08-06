@@ -312,6 +312,51 @@ export async function updateVideoQuotaPolicyAction(
   }
 }
 
+export async function reviewVisionCalibrationSampleAction(
+  _previous: VideoAdminActionState,
+  formData: FormData,
+): Promise<VideoAdminActionState> {
+  const sampleId = String(formData.get("sampleId") ?? "");
+  const decision = String(formData.get("decision") ?? "");
+  const notes = String(formData.get("notes") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  if (
+    !sampleId ||
+    !["approved", "rejected"].includes(decision) ||
+    notes.length < 8 ||
+    !confirmed
+  ) {
+    return {
+      status: "error",
+      message:
+        "Choose approve or reject, add review notes of at least 8 characters, and confirm the decision.",
+    };
+  }
+
+  try {
+    const caller = await getServerCaller();
+    const sample = await caller.admin.reviewVisionCalibrationSample({
+      sampleId,
+      decision: decision as "approved" | "rejected",
+      notes,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/video");
+    return {
+      status: "success",
+      message:
+        sample.status === "approved"
+          ? "Calibration approved for a future, separately controlled training set. No training started automatically."
+          : "Calibration rejected and retained in the review audit trail.",
+    };
+  } catch (error) {
+    return videoActionError(
+      error,
+      "The calibration review could not be saved.",
+    );
+  }
+}
+
 export async function updateOrganizationCommissionAction(
   _previous: OrganizationCommissionActionState,
   formData: FormData,

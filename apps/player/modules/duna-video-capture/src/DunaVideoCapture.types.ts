@@ -7,6 +7,16 @@ export interface CapturePoint {
   readonly y: number;
 }
 
+export type CaptureLine = readonly [CapturePoint, CapturePoint];
+
+export interface CaptureEdgeVisibility {
+  readonly far: boolean;
+  readonly left: boolean;
+  readonly right: boolean;
+  readonly near: boolean;
+  readonly net: boolean;
+}
+
 export interface CaptureGuidance {
   readonly qualityGrade: CaptureQualityGrade;
   readonly qualityScore: number;
@@ -14,6 +24,20 @@ export interface CaptureGuidance {
   readonly acceptable: boolean;
   readonly warnings: readonly string[];
   readonly corners?: readonly CapturePoint[];
+  /** The net line projected onto the sand plane. */
+  readonly netLine?: CaptureLine;
+  /** The visible top tape, which is intentionally separate from the sand plane. */
+  readonly netTopLine?: CaptureLine;
+  /** Optional left/right antenna tips. */
+  readonly antennaPoints?: CaptureLine;
+  readonly visibleCornerCount?: number;
+  readonly nearLineVisible?: boolean;
+  readonly partialCourt?: boolean;
+  readonly edgeVisibility?: CaptureEdgeVisibility;
+  readonly netDetected?: boolean;
+  readonly antennaDetected?: boolean;
+  readonly calibrationMode?: "automatic" | "assisted" | "manual";
+  readonly modelVersion?: string;
   readonly horizonY?: number;
   readonly projectionSource?: "lidar" | "arkit" | "vision" | "estimated";
   readonly lidarAvailable?: boolean;
@@ -40,6 +64,7 @@ export interface DunaCourtCalibration extends CaptureGuidance {
   readonly courtLengthMeters: number;
   readonly netHeightMeters: number;
   readonly preferredOrientation: "landscape" | "portrait";
+  readonly calibrationMode?: "automatic" | "assisted" | "manual";
 }
 
 export interface PreparedVideo {

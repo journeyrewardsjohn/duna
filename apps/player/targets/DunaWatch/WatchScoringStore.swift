@@ -19,6 +19,7 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
   @Published var sessionID: String?
   @Published var videoID: String?
   @Published var matchID: String?
+  @Published var captureMode = "record"
   @Published var teamA = "Team A"
   @Published var teamB = "Team B"
   @Published var sets: [WatchSetScore] = [WatchSetScore()]
@@ -29,6 +30,7 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
   @Published var previewQuality = "Waiting for camera"
   @Published var previewScore = 0
   @Published var previewAcceptable = false
+  @Published var previewPartial = false
   @Published var previewCapturedAt: Date?
   @Published var sideChangeDue = false
 
@@ -195,6 +197,7 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
       teamA = "Team A"
       teamB = "Team B"
       sessionStatus = "setup"
+      captureMode = "record"
       recordingStartedAt = nil
     }
     sets = [WatchSetScore()]
@@ -331,6 +334,7 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
       sessionID = nil
       videoID = nil
       sessionStatus = "setup"
+      captureMode = "record"
       recordingStartedAt = nil
     } else {
       sessionID = incomingSessionID ?? sessionID
@@ -340,6 +344,7 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     teamA = applicationContext["teamA"] as? String ?? teamA
     teamB = applicationContext["teamB"] as? String ?? teamB
     sessionStatus = applicationContext["status"] as? String ?? sessionStatus
+    captureMode = applicationContext["captureMode"] as? String ?? captureMode
     if let startedAt = applicationContext["recordingStartedAt"] as? String {
       recordingStartedAt = parseDate(startedAt)
     }
@@ -374,8 +379,11 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     if let guidance = applicationContext["guidance"] as? [String: Any] {
       previewScore = guidance["qualityScore"] as? Int ?? previewScore
       previewAcceptable = guidance["acceptable"] as? Bool ?? false
+      previewPartial = guidance["partialCourt"] as? Bool ?? false
       if let warnings = guidance["warnings"] as? [String], let first = warnings.first {
         previewQuality = first
+      } else if previewPartial {
+        previewQuality = "Partial court calibrated"
       } else {
         previewQuality = previewAcceptable ? "Court is in frame" : "Adjust camera"
       }

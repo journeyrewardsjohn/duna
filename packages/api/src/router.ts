@@ -284,6 +284,7 @@ import {
   recordVideoUploadPart,
   recordVideoViewHeartbeat,
   requestVideoMusicRemoval,
+  reviewVisionCalibrationSample,
   revokeComplimentaryDunaPlus,
   searchVideoAssociations,
   updateVideoPrivacy,
@@ -955,7 +956,8 @@ function throwDomainError(error: unknown): never {
     const code =
       error.code === "VIDEO_NOT_FOUND" ||
       error.code === "ASSOCIATION_NOT_FOUND" ||
-      error.code === "GRANT_NOT_FOUND"
+      error.code === "GRANT_NOT_FOUND" ||
+      error.code === "CALIBRATION_SAMPLE_NOT_FOUND"
         ? "NOT_FOUND"
         : error.code === "PLAYBACK_FORBIDDEN"
           ? "FORBIDDEN"
@@ -2435,6 +2437,7 @@ const playerRouter = router({
         liveVisibility: z.enum(["public", "link-only"]),
         recordingVisibility: z.enum(["public", "private"]),
         hasAudio: z.boolean(),
+        visionLearningConsent: z.boolean().default(false),
         courtCalibration: courtCalibrationSchema.optional(),
         idempotencyKey: z.string().uuid(),
       }),
@@ -2607,6 +2610,7 @@ const playerRouter = router({
         recordingVisibility: z.enum(["public", "private"]),
         publishedToProfile: z.boolean(),
         hasAudio: z.boolean(),
+        visionLearningConsent: z.boolean().default(false),
         originalFileName: z.string().trim().min(1).max(255),
         mimeType: z.enum(["video/mp4", "video/quicktime"]),
         bytes: z
@@ -8679,6 +8683,46 @@ const adminRouter = router({
         return throwDomainError(error);
       }
     }),
+  reviewVisionCalibrationSample: superAdminProcedure
+    .input(
+      z.object({
+        sampleId: z.string().uuid(),
+        decision: z.enum(["approved", "rejected"]),
+        notes: z.string().trim().min(8).max(1_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        status: z.enum(["approved", "rejected"]),
+        reviewedAt: z.iso.datetime(),
+        approvedForTrainingAt: z.iso.datetime().optional(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.reviewVisionCalibrationSample",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await reviewVisionCalibrationSample({
+              actor: ctx.actor!,
+              sampleId: input.sampleId,
+              decision: input.decision,
+              notes: input.notes,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   grantComplimentaryDunaPlus: superAdminProcedure
     .input(
       z.object({

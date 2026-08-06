@@ -22,10 +22,13 @@ import {
   teams,
   venues,
   videoQuotaPolicies,
+  videoInsightFeedback,
   videoShareLinks,
   videoUploadParts,
   videoViews,
   videos,
+  visionCalibrationSamples,
+  visionSessions,
   webhookEvents,
 } from "@duna/db";
 import {
@@ -62,6 +65,7 @@ import {
   createMuxLiveVideo,
   createR2VideoUpload,
   isMuxSignedPlaybackConfigured,
+  isMuxLivePlanUnavailable,
   isMuxVideoConfigured,
   isR2VideoConfigured,
   loadMuxVideoMetrics,
@@ -125,6 +129,7 @@ export class VideoServiceError extends Error {
       | "MUX_REQUIRED"
       | "R2_REQUIRED"
       | "SIGNED_PLAYBACK_REQUIRED"
+      | "LIVE_PLAN_UNAVAILABLE"
       | "LIVE_PROVIDER_FAILED"
       | "UPLOAD_PROVIDER_FAILED"
       | "DUNA_PLUS_REQUIRED"
@@ -140,6 +145,8 @@ export class VideoServiceError extends Error {
       | "UPLOAD_PART_INVALID"
       | "UPLOAD_INCOMPLETE"
       | "GRANT_NOT_FOUND"
+      | "CALIBRATION_SAMPLE_NOT_FOUND"
+      | "CALIBRATION_SAMPLE_ALREADY_REVIEWED"
       | "INVALID_GRANT_WINDOW",
     message: string,
   ) {
@@ -977,6 +984,7 @@ export async function createLiveVideo(input: {
   readonly liveVisibility: LiveVisibility;
   readonly recordingVisibility: RecordingVisibility;
   readonly hasAudio: boolean;
+  readonly visionLearningConsent: boolean;
   readonly courtCalibration?: CourtCalibration;
   readonly idempotencyKey: string;
   readonly requestId: string;
@@ -1053,6 +1061,10 @@ export async function createLiveVideo(input: {
     liveVisibility: input.liveVisibility,
     recordingVisibility: input.recordingVisibility,
     hasAudio: input.hasAudio,
+    visionLearningConsent: input.visionLearningConsent,
+    visionLearningConsentedAt: input.visionLearningConsent
+      ? input.now
+      : undefined,
     courtCalibration: input.courtCalibration,
     createdAt: input.now,
     updatedAt: input.now,
@@ -1112,6 +1124,12 @@ export async function createLiveVideo(input: {
       })
       .where(eq(videos.id, videoId));
     console.error("Duna live provider setup failed", { error, videoId });
+    if (isMuxLivePlanUnavailable(error)) {
+      throw new VideoServiceError(
+        "LIVE_PLAN_UNAVAILABLE",
+        "Mux still reports that live streaming is unavailable for Duna's account. Record with Duna now while an administrator enables Mux live access.",
+      );
+    }
     throw new VideoServiceError(
       "LIVE_PROVIDER_FAILED",
       "Duna could not open the live stream. Please try again in a moment.",
@@ -1341,6 +1359,7 @@ export async function beginVideoUpload(input: {
   readonly recordingVisibility: RecordingVisibility;
   readonly publishedToProfile: boolean;
   readonly hasAudio: boolean;
+  readonly visionLearningConsent: boolean;
   readonly originalFileName: string;
   readonly mimeType: "video/mp4" | "video/quicktime";
   readonly bytes: number;
@@ -1424,6 +1443,10 @@ export async function beginVideoUpload(input: {
     recordingVisibility,
     publishedToProfile,
     hasAudio: input.hasAudio,
+    visionLearningConsent: input.visionLearningConsent,
+    visionLearningConsentedAt: input.visionLearningConsent
+      ? input.now
+      : undefined,
     originalFileName: input.originalFileName,
     mimeType: input.mimeType,
     bytes: input.bytes,
@@ -2003,48 +2026,94 @@ export async function loadAdminVideoOverview(
 ): Promise<AdminVideoOverview> {
   requireDatabase();
   const database = getDatabase();
-  const [policy, totalRows, viewRows, grantRows, activeStreams, usageRows] =
-    await Promise.all([
-      loadQuotaPolicy(),
-      database
-        .select({
-          count: sql<number>`count(*)::int`,
-          bytes: sql<number>`coalesce(sum(${videos.bytes}), 0)::bigint`,
-        })
-        .from(videos)
-        .where(sql`${videos.status} <> 'deleted'`)
-        .then((rows) => rows[0]),
-      database
-        .select({
-          watched: sql<number>`coalesce(sum(${videoViews.watchedSeconds}), 0)::bigint`,
-        })
-        .from(videoViews)
-        .then((rows) => rows[0]),
-      database
-        .select()
-        .from(dunaPlusGrants)
-        .orderBy(desc(dunaPlusGrants.createdAt))
-        .limit(100),
-      loadVideoSummaries({
-        where: eq(videos.status, "live"),
-        limit: 50,
-      }),
-      database
-        .select({
-          personId: videos.ownerPersonId,
-          videoCount: sql<number>`count(*)::int`,
-        })
-        .from(videos)
-        .where(sql`${videos.status} <> 'deleted'`)
-        .groupBy(videos.ownerPersonId)
-        .orderBy(desc(sql`count(*)`))
-        .limit(20),
-    ]);
+  const [
+    policy,
+    totalRows,
+    viewRows,
+    grantRows,
+    activeStreams,
+    usageRows,
+    calibrationRows,
+    calibrationCountRows,
+    insightFeedbackRows,
+  ] = await Promise.all([
+    loadQuotaPolicy(),
+    database
+      .select({
+        count: sql<number>`count(*)::int`,
+        bytes: sql<number>`coalesce(sum(${videos.bytes}), 0)::bigint`,
+      })
+      .from(videos)
+      .where(sql`${videos.status} <> 'deleted'`)
+      .then((rows) => rows[0]),
+    database
+      .select({
+        watched: sql<number>`coalesce(sum(${videoViews.watchedSeconds}), 0)::bigint`,
+      })
+      .from(videoViews)
+      .then((rows) => rows[0]),
+    database
+      .select()
+      .from(dunaPlusGrants)
+      .orderBy(desc(dunaPlusGrants.createdAt))
+      .limit(100),
+    loadVideoSummaries({
+      where: eq(videos.status, "live"),
+      limit: 50,
+    }),
+    database
+      .select({
+        personId: videos.ownerPersonId,
+        videoCount: sql<number>`count(*)::int`,
+      })
+      .from(videos)
+      .where(sql`${videos.status} <> 'deleted'`)
+      .groupBy(videos.ownerPersonId)
+      .orderBy(desc(sql`count(*)`))
+      .limit(20),
+    database
+      .select({
+        sample: visionCalibrationSamples,
+        videoTitle: videos.title,
+        previewJpegBase64: visionSessions.previewJpegBase64,
+        sessionPreviewCapturedAt: visionSessions.previewCapturedAt,
+      })
+      .from(visionCalibrationSamples)
+      .innerJoin(videos, eq(videos.id, visionCalibrationSamples.videoId))
+      .innerJoin(
+        visionSessions,
+        eq(visionSessions.id, visionCalibrationSamples.sessionId),
+      )
+      .orderBy(
+        sql`case when ${visionCalibrationSamples.status} = 'pending' then 0 else 1 end`,
+        desc(visionCalibrationSamples.createdAt),
+      )
+      .limit(50),
+    database
+      .select({
+        status: visionCalibrationSamples.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(visionCalibrationSamples)
+      .groupBy(visionCalibrationSamples.status),
+    database
+      .select({
+        vote: videoInsightFeedback.vote,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(videoInsightFeedback)
+      .groupBy(videoInsightFeedback.vote),
+  ]);
   const personIds = [
     ...usageRows.map((row) => row.personId),
     ...grantRows.flatMap((grant) =>
       [grant.personId, grant.grantedByPersonId].filter((id): id is string =>
         Boolean(id),
+      ),
+    ),
+    ...calibrationRows.flatMap(({ sample }) =>
+      [sample.ownerPersonId, sample.reviewedByPersonId].filter(
+        (id): id is string => Boolean(id),
       ),
     ),
   ];
@@ -2062,6 +2131,12 @@ export async function loadAdminVideoOverview(
           ]
         : [];
     }),
+  );
+  const calibrationCounts = new Map(
+    calibrationCountRows.map((row) => [row.status, row.count]),
+  );
+  const feedbackCounts = new Map(
+    insightFeedbackRows.map((row) => [row.vote, row.count]),
   );
   return {
     canManage,
@@ -2082,8 +2157,138 @@ export async function loadAdminVideoOverview(
     activeStreams,
     topUsage,
     grants: grantRows.map((grant) => grantResult(grant, peopleById)),
+    visionLearning: {
+      automaticTraining: false,
+      reviewRequired: true,
+      counts: {
+        pending: calibrationCounts.get("pending") ?? 0,
+        approved: calibrationCounts.get("approved") ?? 0,
+        rejected: calibrationCounts.get("rejected") ?? 0,
+        training: calibrationCounts.get("training") ?? 0,
+        trained: calibrationCounts.get("trained") ?? 0,
+      },
+      insightFeedback: {
+        helpful: feedbackCounts.get(1) ?? 0,
+        notHelpful: feedbackCounts.get(-1) ?? 0,
+      },
+      calibrationSamples: calibrationRows.flatMap((row) => {
+        const owner = peopleById.get(row.sample.ownerPersonId);
+        if (!owner) return [];
+        const previewCapturedAt =
+          row.sample.previewCapturedAt ?? row.sessionPreviewCapturedAt;
+        return [
+          {
+            id: row.sample.id,
+            videoId: row.sample.videoId,
+            sessionId: row.sample.sessionId,
+            videoTitle: row.videoTitle,
+            owner,
+            sourceModelVersion: row.sample.sourceModelVersion ?? undefined,
+            qualityScore: row.sample.qualityScore ?? undefined,
+            geometry: row.sample.geometry,
+            previewDataUrl: row.previewJpegBase64
+              ? `data:image/jpeg;base64,${row.previewJpegBase64}`
+              : undefined,
+            previewCapturedAt: previewCapturedAt?.toISOString(),
+            status: row.sample.status as
+              "pending" | "approved" | "rejected" | "training" | "trained",
+            reviewedByName: row.sample.reviewedByPersonId
+              ? peopleById.get(row.sample.reviewedByPersonId)?.displayName
+              : undefined,
+            reviewNotes: row.sample.reviewNotes ?? undefined,
+            reviewedAt: row.sample.reviewedAt?.toISOString(),
+            approvedForTrainingAt:
+              row.sample.approvedForTrainingAt?.toISOString(),
+            createdAt: row.sample.createdAt.toISOString(),
+          },
+        ];
+      }),
+    },
     muxConfigured: isMuxVideoConfigured(),
     r2Configured: isR2VideoConfigured(),
+  };
+}
+
+export async function reviewVisionCalibrationSample(input: {
+  readonly actor: ApiActor;
+  readonly sampleId: string;
+  readonly decision: "approved" | "rejected";
+  readonly notes: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{
+  readonly id: string;
+  readonly status: "approved" | "rejected";
+  readonly reviewedAt: string;
+  readonly approvedForTrainingAt?: string;
+}> {
+  requireDatabase();
+  const database = getDatabase();
+  const sample = await database.query.visionCalibrationSamples.findFirst({
+    where: eq(visionCalibrationSamples.id, input.sampleId),
+  });
+  if (!sample) {
+    throw new VideoServiceError(
+      "CALIBRATION_SAMPLE_NOT_FOUND",
+      "Calibration sample not found.",
+    );
+  }
+  if (sample.status !== "pending") {
+    throw new VideoServiceError(
+      "CALIBRATION_SAMPLE_ALREADY_REVIEWED",
+      "This calibration sample has already been reviewed.",
+    );
+  }
+
+  const approvedForTrainingAt =
+    input.decision === "approved" ? input.now : null;
+  const updated = await database
+    .update(visionCalibrationSamples)
+    .set({
+      status: input.decision,
+      reviewedByPersonId: input.actor.personId,
+      reviewNotes: input.notes,
+      reviewedAt: input.now,
+      approvedForTrainingAt,
+      updatedAt: input.now,
+    })
+    .where(
+      and(
+        eq(visionCalibrationSamples.id, sample.id),
+        eq(visionCalibrationSamples.status, "pending"),
+      ),
+    )
+    .returning({
+      id: visionCalibrationSamples.id,
+      status: visionCalibrationSamples.status,
+      reviewedAt: visionCalibrationSamples.reviewedAt,
+      approvedForTrainingAt: visionCalibrationSamples.approvedForTrainingAt,
+    })
+    .then((rows) => rows[0]);
+  if (!updated || !updated.reviewedAt) {
+    throw new VideoServiceError(
+      "CALIBRATION_SAMPLE_ALREADY_REVIEWED",
+      "This calibration sample was reviewed by another administrator.",
+    );
+  }
+
+  await recordAudit({
+    actorPersonId: input.actor.personId,
+    action: `vision.calibration-sample-${input.decision}`,
+    entityType: "vision-calibration-sample",
+    entityId: updated.id,
+    reason: `${input.notes} No automatic model training was started.`,
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+    now: input.now,
+  });
+
+  return {
+    id: updated.id,
+    status: input.decision,
+    reviewedAt: updated.reviewedAt.toISOString(),
+    approvedForTrainingAt: updated.approvedForTrainingAt?.toISOString(),
   };
 }
 

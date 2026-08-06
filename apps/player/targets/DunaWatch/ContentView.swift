@@ -63,7 +63,12 @@ struct ContentView: View {
     ZStack {
       TimelineView(.periodic(from: .now, by: 1)) { context in
         HStack(spacing: 4) {
-          Image(systemName: scoring.isVisionActive ? "figure.run" : "stopwatch.fill")
+          Image(
+            systemName: scoring.isVisionActive
+              ? (scoring.captureMode == "live"
+                ? "dot.radiowaves.left.and.right" : "video.fill")
+              : "stopwatch.fill"
+          )
             .font(.system(size: compact ? 10 : 11, weight: .bold))
             .foregroundStyle(scoring.isVisionActive ? dunaGreen : .secondary)
           Text(elapsedLabel(scoring.elapsedSeconds(at: context.date)))
@@ -247,7 +252,11 @@ struct ContentView: View {
         VStack(spacing: 0) {
           Text("SET \(scoring.currentSetIndex + 1)")
             .font(.system(size: compact ? 9 : 10, weight: .black, design: .rounded))
-          Text(scoring.isVisionActive ? "DUNA VISION" : "QUICK SCORE")
+          Text(
+            scoring.isVisionActive
+              ? (scoring.captureMode == "live" ? "LIVE STREAM" : "DUNA RECORDING")
+              : "QUICK SCORE"
+          )
             .font(.system(size: compact ? 6 : 7, weight: .bold, design: .rounded))
             .tracking(0.7)
             .foregroundStyle(scoring.isVisionActive ? dunaGreen : .secondary)
@@ -349,7 +358,7 @@ private struct CameraPreviewView: View {
           .buttonStyle(.plain)
           .foregroundStyle(Color.accentColor)
         Spacer()
-        Text("CAMERA CHECK")
+        Text(scoring.captureMode == "live" ? "LIVE CAMERA" : "RECORD CAMERA")
           .font(.system(size: 8, weight: .black, design: .rounded))
           .tracking(0.8)
       }
@@ -366,7 +375,7 @@ private struct CameraPreviewView: View {
           VStack(spacing: 5) {
             Image(systemName: "video.slash")
               .font(.title3)
-            Text("Open Duna Vision on iPhone")
+            Text("Open Duna capture on iPhone")
               .font(.caption2.weight(.semibold))
               .multilineTextAlignment(.center)
           }
@@ -397,7 +406,10 @@ private struct CameraPreviewView: View {
 
       Text(scoring.previewQuality)
         .font(.system(size: 9, weight: .semibold))
-        .foregroundStyle(scoring.previewAcceptable ? .green : .yellow)
+        .foregroundStyle(
+          scoring.previewAcceptable
+            ? .green : (scoring.previewPartial ? .orange : .yellow)
+        )
         .lineLimit(2)
         .multilineTextAlignment(.center)
     }

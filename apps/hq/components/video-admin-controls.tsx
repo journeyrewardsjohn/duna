@@ -1,15 +1,23 @@
 "use client";
 
-import type { AdminVideoOverview, DunaPlusGrant } from "@duna/api";
+import type {
+  AdminVideoOverview,
+  DunaPlusGrant,
+  VisionCalibrationReviewSample,
+} from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
 import {
   Check,
+  BrainCircuit,
   CircleAlert,
   Clock3,
   Cloud,
   Database,
   Gift,
   HardDrive,
+  ScanLine,
+  ThumbsDown,
+  ThumbsUp,
   Radio,
   ShieldCheck,
   Trash2,
@@ -18,6 +26,7 @@ import {
 import { useActionState } from "react";
 import {
   grantComplimentaryDunaPlusAction,
+  reviewVisionCalibrationSampleAction,
   revokeComplimentaryDunaPlusAction,
   updateVideoQuotaPolicyAction,
   type VideoAdminActionState,
@@ -358,6 +367,189 @@ function EntitlementList({
   );
 }
 
+function calibrationStatusTone(
+  status: VisionCalibrationReviewSample["status"],
+): "neutral" | "positive" | "warning" | "danger" {
+  if (status === "approved" || status === "trained") return "positive";
+  if (status === "rejected") return "danger";
+  if (status === "pending") return "warning";
+  return "neutral";
+}
+
+function CalibrationSampleRow({
+  canManage,
+  sample,
+}: {
+  readonly canManage: boolean;
+  readonly sample: VisionCalibrationReviewSample;
+}) {
+  const [state, action, pending] = useActionState(
+    reviewVisionCalibrationSampleAction,
+    initialState,
+  );
+  return (
+    <article className="video-calibration-sample">
+      <div
+        aria-label={
+          sample.previewDataUrl
+            ? `Court setup preview for ${sample.videoTitle}`
+            : "Court setup preview unavailable"
+        }
+        className={`video-calibration-preview${sample.previewDataUrl ? " video-calibration-preview--available" : ""}`}
+        role="img"
+        style={
+          sample.previewDataUrl
+            ? { backgroundImage: `url(${sample.previewDataUrl})` }
+            : undefined
+        }
+      >
+        <ScanLine aria-hidden size={28} />
+        <span>{sample.qualityScore ?? "—"}/100</span>
+      </div>
+      <div className="video-calibration-copy">
+        <div>
+          <span>
+            <strong>{sample.videoTitle}</strong>
+            <small>{sample.owner.displayName}</small>
+          </span>
+          <Badge tone={calibrationStatusTone(sample.status)}>
+            {sample.status}
+          </Badge>
+        </div>
+        <small>
+          {sample.sourceModelVersion ?? "Unversioned detector"} · queued{" "}
+          {formatDate(sample.createdAt)}
+        </small>
+        {sample.reviewedAt && (
+          <p>
+            Reviewed {formatDate(sample.reviewedAt)}
+            {sample.reviewedByName ? ` by ${sample.reviewedByName}` : ""}.{" "}
+            {sample.reviewNotes}
+          </p>
+        )}
+      </div>
+      {sample.status === "pending" ? (
+        <form action={action} className="video-calibration-review">
+          <input name="sampleId" type="hidden" value={sample.id} />
+          <label>
+            <span>Reviewer notes</span>
+            <textarea
+              disabled={!canManage}
+              maxLength={1_000}
+              minLength={8}
+              name="notes"
+              placeholder="Are court, net, and visible/off-screen landmarks accurate?"
+              required
+              rows={3}
+            />
+          </label>
+          <label className="video-calibration-confirm">
+            <input
+              disabled={!canManage}
+              name="confirmed"
+              required
+              type="checkbox"
+              value="true"
+            />
+            <span>I reviewed the image and geometry.</span>
+          </label>
+          <div>
+            <button
+              className="hq-button hq-button--secondary"
+              disabled={!canManage || pending}
+              name="decision"
+              type="submit"
+              value="rejected"
+            >
+              Reject
+            </button>
+            <button
+              className="hq-button hq-button--primary"
+              disabled={!canManage || pending}
+              name="decision"
+              type="submit"
+              value="approved"
+            >
+              Approve sample
+            </button>
+          </div>
+          <ActionNotice state={state} />
+        </form>
+      ) : null}
+    </article>
+  );
+}
+
+function VisionLearningReview({
+  overview,
+}: {
+  readonly overview: AdminVideoOverview;
+}) {
+  const learning = overview.visionLearning;
+  return (
+    <section className="hq-card video-learning-review">
+      <header className="hq-card-heading">
+        <div>
+          <span className="hq-eyebrow">Duna Vision learning lab</span>
+          <h2>Consent-based calibration review</h2>
+          <p>
+            Players explicitly opt in. Reviewers see only the setup preview and
+            court geometry; approval adds a sample to a controlled future
+            training set and never starts training automatically.
+          </p>
+        </div>
+        <div className="video-learning-policy">
+          <BrainCircuit aria-hidden size={24} />
+          <Badge tone="positive">Human review required</Badge>
+        </div>
+      </header>
+      <div className="video-learning-summary">
+        <article>
+          <strong>{learning.counts.pending}</strong>
+          <span>Awaiting review</span>
+        </article>
+        <article>
+          <strong>{learning.counts.approved}</strong>
+          <span>Approved samples</span>
+        </article>
+        <article>
+          <strong>{learning.counts.rejected}</strong>
+          <span>Rejected samples</span>
+        </article>
+        <article>
+          <span>
+            <ThumbsUp aria-hidden size={16} />
+            {learning.insightFeedback.helpful}
+          </span>
+          <span>
+            <ThumbsDown aria-hidden size={16} />
+            {learning.insightFeedback.notHelpful}
+          </span>
+          <small>Player insight feedback</small>
+        </article>
+      </div>
+      <div className="video-calibration-queue">
+        {learning.calibrationSamples.map((sample) => (
+          <CalibrationSampleRow
+            canManage={overview.canManage}
+            key={sample.id}
+            sample={sample}
+          />
+        ))}
+        {learning.calibrationSamples.length === 0 && (
+          <div className="hq-empty">
+            <strong>No consented calibration samples yet.</strong>
+            <span>
+              New samples appear only after a player opts in and attaches a Duna
+              Vision session to their recording.
+            </span>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function UsageTables({ overview }: { readonly overview: AdminVideoOverview }) {
   return (
     <div className="video-admin-lower">
@@ -527,6 +719,7 @@ export function VideoAdminControls({
         <QuotaPolicy overview={overview} />
         <GrantComplimentary canManage={overview.canManage} />
       </div>
+      <VisionLearningReview overview={overview} />
       <EntitlementList overview={overview} />
       <UsageTables overview={overview} />
     </div>
