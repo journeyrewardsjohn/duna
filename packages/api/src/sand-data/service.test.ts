@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   inferHistoricalPersonId,
   inheritProfessionalEventEditorial,
+  matchProfessionalStatisticsToPlayers,
   mergeProfessionalEventPayload,
   parseAvpLeagueEventPayload,
   parsePlayerSourceProfile,
@@ -12,6 +13,7 @@ import {
   professionalMatchPredictionClosed,
   professionalMatchStatus,
   selectFivbRefreshCandidates,
+  shouldBackfillEliteVolleyballWorldEvent,
   shouldAutoLinkProfessionalSource,
   shouldCreateUnclaimedSourceProfile,
 } from "./service";
@@ -92,6 +94,65 @@ describe("FIVB event detail refresh", () => {
       "LIVE",
       "MONTREAL",
     ]);
+  });
+
+  it("limits historical box-score backfill to completed Elite events in the selected year", () => {
+    const common = { year: 2026, today: "2026-08-06" } as const;
+    expect(
+      shouldBackfillEliteVolleyballWorldEvent({
+        ...common,
+        name: "Elite16 Gstaad",
+        category: "Elite 16",
+        startsOn: "2026-07-01",
+        endsOn: "2026-07-05",
+      }),
+    ).toBe(true);
+    expect(
+      shouldBackfillEliteVolleyballWorldEvent({
+        ...common,
+        name: "BPT Challenger Stare Jablonki",
+        category: "Challenger",
+        startsOn: "2026-07-30",
+        endsOn: "2026-08-02",
+      }),
+    ).toBe(false);
+    expect(
+      shouldBackfillEliteVolleyballWorldEvent({
+        ...common,
+        name: "Elite16 Hamburg",
+        startsOn: "2026-08-05",
+        endsOn: "2026-08-09",
+      }),
+    ).toBe(false);
+    expect(
+      shouldBackfillEliteVolleyballWorldEvent({
+        ...common,
+        name: "Elite16 Gstaad",
+        startsOn: "2025-07-02",
+        endsOn: "2025-07-06",
+      }),
+    ).toBe(false);
+  });
+
+  it("maps official legal-name statistics to roster aliases by side and lineup order", () => {
+    expect(
+      matchProfessionalStatisticsToPlayers({
+        statisticNames: ["Gonçalves Oliveira Júnior", "Diego Mariano Lanci"],
+        playerNames: ["Evandro", "Arthur Lanci"],
+      }),
+    ).toEqual([0, 1]);
+    expect(
+      matchProfessionalStatisticsToPlayers({
+        statisticNames: ["Diego Mariano Lanci", "Gonçalves Oliveira Júnior"],
+        playerNames: ["Evandro", "Arthur Lanci"],
+      }),
+    ).toEqual([1, 0]);
+    expect(
+      matchProfessionalStatisticsToPlayers({
+        statisticNames: ["van de Velde", "de Groot"],
+        playerNames: ["van de Velde", "de Groot"],
+      }),
+    ).toEqual([0, 1]);
   });
 
   it("reconstructs an official main-draw match with phase-safe identity and mapped roster IDs", () => {

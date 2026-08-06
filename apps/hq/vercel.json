@@ -4,11 +4,15 @@
   "crons": [
     {
       "path": "/api/cron/sand?mode=vw-live",
-      "schedule": "*/5 * * * *"
+      "schedule": "* * * * *"
     },
     {
       "path": "/api/cron/sand?mode=live",
       "schedule": "15 */2 * * *"
+    },
+    {
+      "path": "/api/cron/sand?mode=elite-stats",
+      "schedule": "17 * * * *"
     }
   ]
 }

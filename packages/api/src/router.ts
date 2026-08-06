@@ -396,6 +396,7 @@ import {
   importSandSource,
   linkExternalPlayer,
   loadPublicPlayerPerformanceByHandle,
+  loadPublicProfessionalTeam,
   loadPublicRatingLab,
   loadPublicProEvent,
   loadPublicProMatch,
@@ -1535,6 +1536,13 @@ const publicRouter = router({
       );
       if (!event) throw new TRPCError({ code: "NOT_FOUND" });
       return event;
+    }),
+  proTeam: publicProcedure
+    .input(z.object({ teamNo: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const team = await loadPublicProfessionalTeam(input.teamNo);
+      if (!team) throw new TRPCError({ code: "NOT_FOUND" });
+      return team;
     }),
   proMatch: publicProcedure
     .input(

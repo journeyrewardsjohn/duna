@@ -104,9 +104,15 @@ import {
   type SandDataSource,
   type SourceImportResult,
 } from "./types";
+import { aggregateTournamentStatistics } from "./tournament-analytics";
+import {
+  generateTournamentInsights,
+  parseTournamentInsights,
+} from "./tournament-insights";
 import {
   buildOfficialFivbMatchRecord,
   discoverVolleyballWorldEvent,
+  discoverVolleyballWorldEventAtUrl,
   fetchVolleyballWorldLiveMatch,
   fetchVolleyballWorldLiveMatches,
   fetchVolleyballWorldMatchStatistics,
@@ -233,6 +239,8 @@ export function mergeProfessionalEventPayload(input: {
 
 export interface FivbRefreshCandidate {
   readonly externalEventId: string;
+  readonly name?: string;
+  readonly category?: string | null;
   readonly live: boolean;
   readonly startsOn?: string | null;
   readonly rawPayload: unknown;
@@ -1769,6 +1777,49 @@ function officialMatchWinner(
   return a > b ? "A" : b > a ? "B" : undefined;
 }
 
+function professionalStatisticNameScore(left: string, right: string): number {
+  const normalizedLeft = normalizePersonName(left);
+  const normalizedRight = normalizePersonName(right);
+  if (!normalizedLeft || !normalizedRight) return 0;
+  if (normalizedLeft === normalizedRight) return 100;
+  if (
+    normalizedLeft.includes(normalizedRight) ||
+    normalizedRight.includes(normalizedLeft)
+  ) {
+    return 80;
+  }
+  const rightTokens = new Set(
+    normalizedRight.split(" ").filter((token) => token.length > 1),
+  );
+  return normalizedLeft
+    .split(" ")
+    .filter((token) => token.length > 1 && rightTokens.has(token)).length;
+}
+
+export function matchProfessionalStatisticsToPlayers(input: {
+  readonly statisticNames: readonly string[];
+  readonly playerNames: readonly string[];
+}): readonly (number | undefined)[] {
+  const assigned = new Set<number>();
+  return input.statisticNames.map((statisticName) => {
+    const ranked = input.playerNames
+      .map((playerName, playerIndex) => ({
+        playerIndex,
+        score: professionalStatisticNameScore(statisticName, playerName),
+      }))
+      .filter((candidate) => !assigned.has(candidate.playerIndex))
+      .sort((left, right) => right.score - left.score);
+    const playerIndex =
+      ranked[0] && ranked[0].score > 0
+        ? ranked[0].playerIndex
+        : input.statisticNames.length === input.playerNames.length
+          ? ranked[0]?.playerIndex
+          : undefined;
+    if (playerIndex !== undefined) assigned.add(playerIndex);
+    return playerIndex;
+  });
+}
+
 function officialMatchCandidateScore(input: {
   readonly row: typeof importedMatches.$inferSelect;
   readonly candidate: VolleyballWorldScheduledMatch;
@@ -1955,25 +2006,86 @@ async function volleyballWorldEventSource(input: {
       `FIVB event ${input.event.externalEventId} has no usable date range.`,
     );
   }
-  return discoverVolleyballWorldEvent({
-    tcode: input.event.externalEventId,
-    name: input.event.name,
-    location: input.event.location ?? undefined,
-    category: input.event.category ?? undefined,
-    genderCategory:
-      input.event.genderCategory === "women"
-        ? "women"
-        : input.event.genderCategory === "coed"
-          ? "coed"
-          : "men",
-    startsOn,
-    endsOn,
-    now: input.now,
-  });
+  const genderCategory =
+    input.event.genderCategory === "women"
+      ? "women"
+      : input.event.genderCategory === "coed"
+        ? "coed"
+        : "men";
+  try {
+    return await discoverVolleyballWorldEvent({
+      tcode: input.event.externalEventId,
+      name: input.event.name,
+      location: input.event.location ?? undefined,
+      category: input.event.category ?? undefined,
+      genderCategory,
+      startsOn,
+      endsOn,
+      now: input.now,
+    });
+  } catch (discoveryError) {
+    const eventPayload = unknownRecord(input.event.rawPayload);
+    const candidateSourceUrl = [
+      objectString(eventPayload, "volleyballWorldCompetitionUrl"),
+      input.event.sourceUrl,
+    ].find((candidate) =>
+      /^https:\/\/en\.volleyballworld\.com\/beachvolleyball\/competitions\//i.test(
+        candidate ?? "",
+      ),
+    );
+    const countryAliases: Readonly<Record<string, string>> = {
+      BR: "BRA",
+      BRA: "BRA",
+      BRAZIL: "BRA",
+      CA: "CAN",
+      CAN: "CAN",
+      CANADA: "CAN",
+      CH: "SUI",
+      CHE: "SUI",
+      SUI: "SUI",
+      SWITZERLAND: "SUI",
+      CZ: "CZE",
+      CZE: "CZE",
+      CZECHIA: "CZE",
+      "CZECH REPUBLIC": "CZE",
+      DE: "GER",
+      DEU: "GER",
+      GER: "GER",
+      GERMANY: "GER",
+    };
+    const locationParts = (input.event.location ?? "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const countryCandidate =
+      input.event.countryCode ?? locationParts.at(-1)?.toUpperCase();
+    const countryCode = countryAliases[countryCandidate?.toUpperCase() ?? ""];
+    const city = locationParts[0];
+    const derivedUrl =
+      !candidateSourceUrl &&
+      /elite\s*16|\belite\b/i.test(
+        `${input.event.name} ${input.event.category ?? ""}`,
+      ) &&
+      city &&
+      countryCode
+        ? `https://en.volleyballworld.com/beachvolleyball/competitions/beach-pro-tour/${startsOn.slice(0, 4)}/elite16/${slugSegment(city)}-${countryCode.toLowerCase()}/`
+        : undefined;
+    const competitionUrl = candidateSourceUrl ?? derivedUrl;
+    if (!competitionUrl) throw discoveryError;
+    return discoverVolleyballWorldEventAtUrl({
+      competitionUrl,
+      competitionName: input.event.name,
+      startsOn,
+      endsOn,
+      genderCategory,
+      now: input.now,
+    });
+  }
 }
 
 export async function refreshVolleyballWorldEvent(input: {
   readonly externalEventId: string;
+  readonly statisticsLimit?: number;
   readonly now?: Date;
 }) {
   requireDatabase();
@@ -2007,7 +2119,11 @@ export async function refreshVolleyballWorldEvent(input: {
       .filter((match) => match.status === "live")
       .map((match) => match.matchNo),
   );
-  let completedStatisticsBudget = activeLiveMatchNos.size === 0 ? 2 : 0;
+  let completedStatisticsBudget =
+    activeLiveMatchNos.size === 0
+      ? Math.max(0, Math.min(20, input.statisticsLimit ?? 2))
+      : 0;
+  let statisticsFetched = 0;
   const teamByNo = new Map(
     schedule.teams.map((team) => [team.teamNo, team] as const),
   );
@@ -2105,19 +2221,31 @@ export async function refreshVolleyballWorldEvent(input: {
     const current = liveByMatchNo.get(scheduled.matchNo);
     const existingOfficial = parseStoredVolleyballWorldMatch(row.rawPayload);
     let statistics = existingOfficial?.statistics;
+    const effectiveOfficialStatus =
+      current?.status ?? (scheduled.winnerSide ? "completed" : "scheduled");
     const shouldFetchCompletedStatistics =
-      current?.status === "completed" &&
+      effectiveOfficialStatus === "completed" &&
       !statistics &&
       completedStatisticsBudget > 0;
     if (
-      current?.hasLineup &&
-      (current.status === "live" || shouldFetchCompletedStatistics)
+      (current?.hasLineup ||
+        (shouldFetchCompletedStatistics &&
+          Boolean(scheduled.teamANo && scheduled.teamBNo))) &&
+      (current?.status === "live" || shouldFetchCompletedStatistics)
     ) {
       if (shouldFetchCompletedStatistics) completedStatisticsBudget -= 1;
-      statistics = await fetchVolleyballWorldMatchStatistics({
+      const fetchedStatistics = await fetchVolleyballWorldMatchStatistics({
         competitionUrl: binding.competitionUrl,
         matchNo: scheduled.matchNo,
-      }).catch(() => statistics);
+      }).catch(() => undefined);
+      if (
+        fetchedStatistics &&
+        (fetchedStatistics.team.length > 0 ||
+          fetchedStatistics.players.length > 0)
+      ) {
+        if (!statistics) statisticsFetched += 1;
+        statistics = fetchedStatistics;
+      }
     }
     const nextStored = storedVolleyballWorldMatch({
       scheduled,
@@ -2248,9 +2376,73 @@ export async function refreshVolleyballWorldEvent(input: {
     if (stored.status === "completed") completed += 1;
   }
   const rawPayload = unknownRecord(event.rawPayload);
+  const existingOfficialPayload = unknownRecord(rawPayload.volleyballWorld);
+  const existingInsights = parseTournamentInsights(
+    existingOfficialPayload.analytics,
+  );
+  let tournamentInsights = existingInsights;
+  if (live === 0) {
+    const refreshedRows = await database
+      .select()
+      .from(importedMatches)
+      .where(
+        and(
+          eq(importedMatches.sourceId, source.id),
+          eq(importedMatches.externalEventId, event.externalEventId),
+        ),
+      );
+    const statistics = aggregateTournamentStatistics(
+      refreshedRows.map((row) => {
+        const stored = parseStoredVolleyballWorldMatch(row.rawPayload);
+        const winnerSide = stored ? officialMatchWinner(stored) : undefined;
+        return {
+          id: row.id,
+          ...(winnerSide ? { winnerSide } : {}),
+          setCount: stored?.sets.length ?? row.sets.length,
+          teamA: {
+            key: String(stored?.teamA?.teamNo ?? `${row.id}:A`),
+            name: stored?.teamA?.name ?? "Team A",
+            ...(stored?.teamA?.teamNo ? { teamNo: stored.teamA.teamNo } : {}),
+            ...(stored?.teamA?.countryCode
+              ? { countryCode: stored.teamA.countryCode }
+              : {}),
+          },
+          teamB: {
+            key: String(stored?.teamB?.teamNo ?? `${row.id}:B`),
+            name: stored?.teamB?.name ?? "Team B",
+            ...(stored?.teamB?.teamNo ? { teamNo: stored.teamB.teamNo } : {}),
+            ...(stored?.teamB?.countryCode
+              ? { countryCode: stored.teamB.countryCode }
+              : {}),
+          },
+          ...(stored?.statistics ? { statistics: stored.statistics } : {}),
+        };
+      }),
+    );
+    if (statistics && statistics.coverage.matchesWithStatistics >= 4) {
+      const signature = stableHash(statistics);
+      if (existingInsights?.signature !== signature) {
+        tournamentInsights = await generateTournamentInsights({
+          eventName: event.name,
+          sourceUrl: binding.competitionUrl,
+          signature,
+          statistics,
+          now,
+        }).catch(() => existingInsights);
+      }
+    }
+  }
+  const allOfficialMatchesCompleted = linked > 0 && completed === linked;
   await database
     .update(professionalEvents)
     .set({
+      live: live > 0,
+      status:
+        live > 0
+          ? "live"
+          : allOfficialMatchesCompleted
+            ? "completed"
+            : event.status,
       rawPayload: {
         ...rawPayload,
         volleyballWorld: {
@@ -2258,6 +2450,7 @@ export async function refreshVolleyballWorldEvent(input: {
           syncedAt: now.toISOString(),
           linkedMatchCount: linked,
           liveMatchCount: live,
+          ...(tournamentInsights ? { analytics: tournamentInsights } : {}),
         },
       },
       matchCount: Math.max(event.matchCount, linked),
@@ -2274,6 +2467,7 @@ export async function refreshVolleyballWorldEvent(input: {
     linked,
     live,
     completed,
+    statisticsFetched,
   };
 }
 
@@ -2287,6 +2481,8 @@ export async function refreshActiveFivbEvents(input: {
   const rows = await getDatabase()
     .select({
       externalEventId: professionalEvents.externalEventId,
+      name: professionalEvents.name,
+      category: professionalEvents.category,
       live: professionalEvents.live,
       startsOn: professionalEvents.startsOn,
       rawPayload: professionalEvents.rawPayload,
@@ -2315,10 +2511,15 @@ export async function refreshActiveFivbEvents(input: {
         externalId: row.externalEventId,
         now,
       });
-      const officialLive = await refreshVolleyballWorldEvent({
-        externalEventId: row.externalEventId,
-        now,
-      }).catch(() => undefined);
+      const officialLive = isVolleyballWorldEliteEvent({
+        name: row.name ?? "",
+        category: row.category,
+      })
+        ? await refreshVolleyballWorldEvent({
+            externalEventId: row.externalEventId,
+            now,
+          }).catch(() => undefined)
+        : undefined;
       results.push({
         externalEventId: row.externalEventId,
         status: "succeeded",
@@ -2355,6 +2556,8 @@ export async function refreshActiveVolleyballWorldEvents(input: {
   const rows = await getDatabase()
     .select({
       externalEventId: professionalEvents.externalEventId,
+      name: professionalEvents.name,
+      category: professionalEvents.category,
       live: professionalEvents.live,
       startsOn: professionalEvents.startsOn,
       rawPayload: professionalEvents.rawPayload,
@@ -2368,7 +2571,12 @@ export async function refreshActiveVolleyballWorldEvents(input: {
     )
     .limit(250);
   const candidates = [...rows]
-    .filter((row) => hasTournamentDetail(unknownRecord(row.rawPayload)))
+    .filter((row) =>
+      isVolleyballWorldEliteEvent({
+        name: row.name,
+        category: row.category,
+      }),
+    )
     .sort(
       (left, right) =>
         Number(right.live) - Number(left.live) ||
@@ -2399,6 +2607,99 @@ export async function refreshActiveVolleyballWorldEvents(input: {
   return {
     attempted: results.length,
     succeeded: results.filter((result) => result.status === "succeeded").length,
+    results,
+  };
+}
+
+export function isVolleyballWorldEliteEvent(input: {
+  readonly name: string;
+  readonly category?: string | null;
+}): boolean {
+  return /elite\s*16|\belite\b/i.test(`${input.name} ${input.category ?? ""}`);
+}
+
+export function shouldBackfillEliteVolleyballWorldEvent(input: {
+  readonly name: string;
+  readonly category?: string | null;
+  readonly startsOn?: string | null;
+  readonly endsOn?: string | null;
+  readonly year: number;
+  readonly today: string;
+}): boolean {
+  const endsOn = input.endsOn ?? input.startsOn;
+  return Boolean(
+    input.startsOn?.startsWith(`${input.year}-`) &&
+    endsOn &&
+    endsOn < input.today &&
+    isVolleyballWorldEliteEvent(input),
+  );
+}
+
+export async function refreshEliteVolleyballWorldHistory(input: {
+  readonly year?: number;
+  readonly eventLimit?: number;
+  readonly statisticsPerEvent?: number;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  const database = getDatabase();
+  const now = input.now ?? new Date();
+  const year = input.year ?? now.getUTCFullYear();
+  const source = await ensureSource("fivb-12ndr");
+  const rows = await database
+    .select()
+    .from(professionalEvents)
+    .where(eq(professionalEvents.sourceId, source.id))
+    .orderBy(sql`${professionalEvents.lastSyncedAt} asc nulls first`)
+    .limit(500);
+  const today = now.toISOString().slice(0, 10);
+  const candidates = rows
+    .filter((event) =>
+      shouldBackfillEliteVolleyballWorldEvent({
+        name: event.name,
+        category: event.category,
+        startsOn: event.startsOn,
+        endsOn: event.endsOn,
+        year,
+        today,
+      }),
+    )
+    .slice(0, Math.max(1, Math.min(4, input.eventLimit ?? 2)));
+  const results = [];
+  for (const event of candidates) {
+    try {
+      results.push({
+        status: "succeeded" as const,
+        ...(await refreshVolleyballWorldEvent({
+          externalEventId: event.externalEventId,
+          statisticsLimit: Math.max(
+            1,
+            Math.min(20, input.statisticsPerEvent ?? 8),
+          ),
+          now,
+        })),
+      });
+    } catch (error) {
+      results.push({
+        status: "failed" as const,
+        externalEventId: event.externalEventId,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Elite statistics refresh failed.",
+      });
+    }
+  }
+  return {
+    year,
+    eliteOnly: true as const,
+    attempted: results.length,
+    succeeded: results.filter((result) => result.status === "succeeded").length,
+    statisticsFetched: results.reduce(
+      (sum, result) =>
+        sum + ("statisticsFetched" in result ? result.statisticsFetched : 0),
+      0,
+    ),
     results,
   };
 }
@@ -8478,6 +8779,91 @@ export async function loadPublicProEvent(
       };
     },
   );
+  const publicMatchById = new Map(
+    publicMatches.map((match) => [match.id, match] as const),
+  );
+  const tournamentPlayerByExternalId = new Map<
+    string,
+    (typeof publicMatches)[number]["teamA"]["players"][number]
+  >();
+  for (const row of matchRows) {
+    const stored = parseStoredVolleyballWorldMatch(row.rawPayload);
+    const match = publicMatchById.get(row.id);
+    if (!stored?.statistics || !match) continue;
+    for (const side of ["A", "B"] as const) {
+      const playerStatistics = stored.statistics.players.filter(
+        (statistic) => statistic.side === side,
+      );
+      const players = side === "A" ? match.teamA.players : match.teamB.players;
+      const playerIndexes = matchProfessionalStatisticsToPlayers({
+        statisticNames: playerStatistics.map((statistic) => statistic.name),
+        playerNames: players.map((player) => player.name),
+      });
+      playerStatistics.forEach((statistic, index) => {
+        const playerIndex = playerIndexes[index];
+        const player =
+          playerIndex === undefined ? undefined : players[playerIndex];
+        if (player)
+          tournamentPlayerByExternalId.set(statistic.externalPlayerId, player);
+      });
+    }
+  }
+  const tournamentStatisticsBase = aggregateTournamentStatistics(
+    matchRows.map((row) => {
+      const stored = parseStoredVolleyballWorldMatch(row.rawPayload);
+      const match = publicMatchById.get(row.id);
+      return {
+        id: row.id,
+        ...(match?.winnerSide ? { winnerSide: match.winnerSide } : {}),
+        setCount: stored?.sets.length ?? row.sets.length,
+        teamA: {
+          key: match?.teamA.key ?? `${row.id}:A`,
+          name: match?.teamA.label ?? "Team A",
+          ...(stored?.teamA?.teamNo ? { teamNo: stored.teamA.teamNo } : {}),
+          ...(match?.teamA.countryCode
+            ? { countryCode: match.teamA.countryCode }
+            : {}),
+        },
+        teamB: {
+          key: match?.teamB.key ?? `${row.id}:B`,
+          name: match?.teamB.label ?? "Team B",
+          ...(stored?.teamB?.teamNo ? { teamNo: stored.teamB.teamNo } : {}),
+          ...(match?.teamB.countryCode
+            ? { countryCode: match.teamB.countryCode }
+            : {}),
+        },
+        ...(stored?.statistics ? { statistics: stored.statistics } : {}),
+      };
+    }),
+  );
+  const tournamentStatistics = tournamentStatisticsBase
+    ? {
+        ...tournamentStatisticsBase,
+        players: tournamentStatisticsBase.players.map((stat) => {
+          const player =
+            tournamentPlayerByExternalId.get(stat.externalPlayerId) ??
+            publicMatches
+              .flatMap((match) => [
+                ...match.teamA.players,
+                ...match.teamB.players,
+              ])
+              .find(
+                (candidate) =>
+                  normalizePersonName(candidate.name) ===
+                  normalizePersonName(stat.name),
+              );
+          return {
+            ...stat,
+            ...(player?.personId ? { personId: player.personId } : {}),
+            ...(player?.publicPath ? { publicPath: player.publicPath } : {}),
+            ...(player?.avatarUrl ? { avatarUrl: player.avatarUrl } : {}),
+          };
+        }),
+      }
+    : undefined;
+  const tournamentInsights = parseTournamentInsights(
+    unknownRecord(unknownRecord(event.rawPayload).volleyballWorld).analytics,
+  );
   const eventPredictionCountByTeam = new Map(
     eventPredictionCounts.map((prediction) => [
       prediction.externalTeamId,
@@ -8619,6 +9005,8 @@ export async function loadPublicProEvent(
     },
     watchOptions: eventWatchOptions,
     winnerPrediction,
+    tournamentStatistics,
+    tournamentInsights,
     sibling: sibling
       ? {
           name: sibling.name,
@@ -9060,14 +9448,19 @@ export async function loadPublicProfessionalMatchLive(matchId: string) {
   );
   if (!current) return stored;
   const statistics =
-    binding && current.status !== "scheduled" && current.hasLineup
+    binding &&
+    current.status !== "scheduled" &&
+    current.hasLineup &&
+    (current.status === "completed" || !stored.statistics)
       ? await fetchVolleyballWorldMatchStatistics({
           competitionUrl: binding.competitionUrl,
           matchNo: current.matchNo,
         }).catch(() => stored.statistics)
       : stored.statistics;
-  return {
+  const now = new Date();
+  const reconciled = {
     ...stored,
+    transport: "rest" as const,
     status: current.status,
     statusLabel: current.statusLabel,
     ...(current.currentSetNo ? { currentSetNo: current.currentSetNo } : {}),
@@ -9079,84 +9472,216 @@ export async function loadPublicProfessionalMatchLive(matchId: string) {
     hasLineup: current.hasLineup,
     ...(current.liveStreamUrl ? { liveStreamUrl: current.liveStreamUrl } : {}),
     ...(statistics ? { statistics } : {}),
-    syncedAt: new Date().toISOString(),
+    syncedAt: now.toISOString(),
+    pollingMs:
+      current.status === "live" ? (15_000 as const) : (30_000 as const),
   } satisfies VolleyballWorldStoredMatch;
+  const sets = reconciled.sets.map((set) => ({ a: set.a, b: set.b }));
+  const winnerSide = officialMatchWinner(reconciled);
+  const complete = hasDecisiveImportedScore(sets, winnerSide);
+  const allMapped = row.participants.every((participant) =>
+    Boolean(participant.personId),
+  );
+  const importState =
+    row.importState === "approved"
+      ? "approved"
+      : complete && allMapped
+        ? "ready"
+        : complete
+          ? "needs-mapping"
+          : "staged";
+  const rawPayload = {
+    ...unknownRecord(row.rawPayload),
+    volleyballWorld: reconciled,
+  };
+  const sourceRecord: ExternalMatchRecord = {
+    externalMatchId: row.externalMatchId,
+    externalEventId: row.externalEventId ?? undefined,
+    sourceUrl: row.sourceUrl ?? undefined,
+    title: row.title,
+    roundLabel: row.roundLabel ?? undefined,
+    location: row.location ?? undefined,
+    genderCategory:
+      row.genderCategory === "women"
+        ? "women"
+        : row.genderCategory === "coed"
+          ? "coed"
+          : "men",
+    playedAt: row.playedAt?.toISOString(),
+    participants: row.participants,
+    sets,
+    winnerSide,
+    raw: rawPayload,
+  };
+  await database
+    .update(importedMatches)
+    .set({
+      sourceFingerprint: sourceMatchFingerprint("fivb-12ndr", sourceRecord),
+      crossSourceFingerprint: crossSourceMatchFingerprint(sourceRecord),
+      sets,
+      winnerSide,
+      importState,
+      exclusionReason: undefined,
+      rawPayload,
+      updatedAt: now,
+    })
+    .where(eq(importedMatches.id, row.id));
+  if (event) {
+    const officialRows = await database
+      .select({ rawPayload: importedMatches.rawPayload })
+      .from(importedMatches)
+      .where(
+        and(
+          eq(importedMatches.sourceId, row.sourceId),
+          eq(
+            importedMatches.externalEventId,
+            row.externalEventId ?? "__missing__",
+          ),
+        ),
+      );
+    const officialStatuses = officialRows.flatMap((candidate) => {
+      const parsed = parseStoredVolleyballWorldMatch(candidate.rawPayload);
+      return parsed ? [parsed.status] : [];
+    });
+    const liveMatchCount = officialStatuses.filter(
+      (status) => status === "live",
+    ).length;
+    const allCompleted =
+      officialStatuses.length > 0 &&
+      officialStatuses.every((status) => status === "completed");
+    const eventRawPayload = unknownRecord(event.rawPayload);
+    const eventOfficial = unknownRecord(eventRawPayload.volleyballWorld);
+    await database
+      .update(professionalEvents)
+      .set({
+        live: liveMatchCount > 0,
+        status:
+          liveMatchCount > 0
+            ? "live"
+            : allCompleted
+              ? "completed"
+              : event.status,
+        rawPayload: {
+          ...eventRawPayload,
+          volleyballWorld: {
+            ...eventOfficial,
+            syncedAt: now.toISOString(),
+            liveMatchCount,
+          },
+        },
+        lastSyncedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(professionalEvents.id, event.id));
+  }
+  return reconciled;
 }
 
 export async function loadPublicPlayerPerformance(personId: string) {
   requireDatabase();
   const database = getDatabase();
-  const [eventRows, externalRows, latestRanking] = await Promise.all([
-    database
-      .select({
-        id: ratingEvents.id,
-        matchId: ratingEvents.matchId,
-        before: ratingEvents.before,
-        after: ratingEvents.after,
-        explanation: ratingEvents.explanation,
-        verificationWeightBps: ratingEvents.verificationWeightBps,
-        createdAt: ratingEvents.createdAt,
-        completedAt: matches.completedAt,
-        startedAt: matches.startedAt,
-        scheduledAt: matches.scheduledAt,
-        matchCreatedAt: matches.createdAt,
-        importedMatchId: importedMatches.id,
-        matchTitle: importedMatches.title,
-        sourceUrl: importedMatches.sourceUrl,
-        sets: importedMatches.sets,
-        participants: importedMatches.participants,
-        professionalEventName: professionalEvents.name,
-        professionalEventGenderCategory: professionalEvents.genderCategory,
-        professionalEventStartsOn: professionalEvents.startsOn,
-      })
-      .from(ratingEvents)
-      .leftJoin(matches, eq(matches.id, ratingEvents.matchId))
-      .leftJoin(
-        importedMatches,
-        and(
-          eq(importedMatches.canonicalMatchId, ratingEvents.matchId),
-          eq(importedMatches.importState, "approved"),
-        ),
-      )
-      .leftJoin(
-        professionalEvents,
-        and(
-          eq(professionalEvents.sourceId, importedMatches.sourceId),
-          eq(
-            professionalEvents.externalEventId,
-            importedMatches.externalEventId,
+  const [eventRows, externalRows, latestRanking, professionalStatRows] =
+    await Promise.all([
+      database
+        .select({
+          id: ratingEvents.id,
+          matchId: ratingEvents.matchId,
+          before: ratingEvents.before,
+          after: ratingEvents.after,
+          explanation: ratingEvents.explanation,
+          verificationWeightBps: ratingEvents.verificationWeightBps,
+          createdAt: ratingEvents.createdAt,
+          completedAt: matches.completedAt,
+          startedAt: matches.startedAt,
+          scheduledAt: matches.scheduledAt,
+          matchCreatedAt: matches.createdAt,
+          importedMatchId: importedMatches.id,
+          matchTitle: importedMatches.title,
+          sourceUrl: importedMatches.sourceUrl,
+          sets: importedMatches.sets,
+          participants: importedMatches.participants,
+          professionalEventName: professionalEvents.name,
+          professionalEventGenderCategory: professionalEvents.genderCategory,
+          professionalEventStartsOn: professionalEvents.startsOn,
+        })
+        .from(ratingEvents)
+        .leftJoin(matches, eq(matches.id, ratingEvents.matchId))
+        .leftJoin(
+          importedMatches,
+          and(
+            eq(importedMatches.canonicalMatchId, ratingEvents.matchId),
+            eq(importedMatches.importState, "approved"),
           ),
-        ),
-      )
-      .where(eq(ratingEvents.personId, personId))
-      .orderBy(desc(ratingEvents.createdAt))
-      .limit(100),
-    database
-      .select({
-        id: externalPlayerProfiles.id,
-        source: importSources.name,
-        sourceSlug: importSources.slug,
-        profileUrl: externalPlayerProfiles.profileUrl,
-        externalRating: externalPlayerProfiles.externalRating,
-        externalRatingConfidence:
-          externalPlayerProfiles.externalRatingConfidence,
-        externalMatchCount: externalPlayerProfiles.externalMatchCount,
-        isProfessional: externalPlayerProfiles.isProfessional,
-        lastImportedAt: externalPlayerProfiles.lastImportedAt,
-      })
-      .from(externalPlayerProfiles)
-      .innerJoin(
-        importSources,
-        eq(externalPlayerProfiles.sourceId, importSources.id),
-      )
-      .where(eq(externalPlayerProfiles.personId, personId)),
-    database
-      .select()
-      .from(worldRankings)
-      .where(eq(worldRankings.personId, personId))
-      .orderBy(desc(worldRankings.rankingDate), asc(worldRankings.rank))
-      .limit(1),
-  ]);
+        )
+        .leftJoin(
+          professionalEvents,
+          and(
+            eq(professionalEvents.sourceId, importedMatches.sourceId),
+            eq(
+              professionalEvents.externalEventId,
+              importedMatches.externalEventId,
+            ),
+          ),
+        )
+        .where(eq(ratingEvents.personId, personId))
+        .orderBy(desc(ratingEvents.createdAt))
+        .limit(100),
+      database
+        .select({
+          id: externalPlayerProfiles.id,
+          source: importSources.name,
+          sourceSlug: importSources.slug,
+          profileUrl: externalPlayerProfiles.profileUrl,
+          externalRating: externalPlayerProfiles.externalRating,
+          externalRatingConfidence:
+            externalPlayerProfiles.externalRatingConfidence,
+          externalMatchCount: externalPlayerProfiles.externalMatchCount,
+          isProfessional: externalPlayerProfiles.isProfessional,
+          lastImportedAt: externalPlayerProfiles.lastImportedAt,
+        })
+        .from(externalPlayerProfiles)
+        .innerJoin(
+          importSources,
+          eq(externalPlayerProfiles.sourceId, importSources.id),
+        )
+        .where(eq(externalPlayerProfiles.personId, personId)),
+      database
+        .select()
+        .from(worldRankings)
+        .where(eq(worldRankings.personId, personId))
+        .orderBy(desc(worldRankings.rankingDate), asc(worldRankings.rank))
+        .limit(1),
+      database
+        .select({
+          id: importedMatches.id,
+          playedAt: importedMatches.playedAt,
+          updatedAt: importedMatches.updatedAt,
+          participants: importedMatches.participants,
+          rawPayload: importedMatches.rawPayload,
+          eventName: professionalEvents.name,
+          eventGenderCategory: professionalEvents.genderCategory,
+          eventStartsOn: professionalEvents.startsOn,
+        })
+        .from(importedMatches)
+        .leftJoin(
+          professionalEvents,
+          and(
+            eq(professionalEvents.sourceId, importedMatches.sourceId),
+            eq(
+              professionalEvents.externalEventId,
+              importedMatches.externalEventId,
+            ),
+          ),
+        )
+        .where(
+          sql`${importedMatches.participants} @> ${JSON.stringify([{ personId }])}::jsonb`,
+        )
+        .orderBy(
+          desc(importedMatches.playedAt),
+          desc(importedMatches.updatedAt),
+        )
+        .limit(300),
+    ]);
   const latestBacktest = await database.query.ratingBacktestRuns.findFirst({
     where: eq(ratingBacktestRuns.status, "completed"),
     orderBy: [desc(ratingBacktestRuns.completedAt)],
@@ -9253,6 +9778,139 @@ export async function loadPublicPlayerPerformance(personId: string) {
       participantRankingCountry.set(ranking.personId, ranking.countryCode);
     }
   }
+  const professionalStatTrends = professionalStatRows.flatMap((row) => {
+    const stored = parseStoredVolleyballWorldMatch(row.rawPayload);
+    if (!stored?.statistics || stored.status !== "completed") return [];
+    const participant = row.participants.find(
+      (candidate) => candidate.personId === personId,
+    );
+    if (!participant) return [];
+    const sideParticipants = row.participants.filter(
+      (candidate) => candidate.side === participant.side,
+    );
+    const sideStatistics = stored.statistics.players.filter(
+      (candidate) => candidate.side === participant.side,
+    );
+    const participantIndex = sideParticipants.findIndex(
+      (candidate) => candidate.personId === personId,
+    );
+    const statisticIndex = matchProfessionalStatisticsToPlayers({
+      statisticNames: sideStatistics.map((statistic) => statistic.name),
+      playerNames: sideParticipants.map((candidate) => candidate.name),
+    }).findIndex((index) => index === participantIndex);
+    const stat =
+      statisticIndex >= 0 ? sideStatistics[statisticIndex] : undefined;
+    if (!stat) return [];
+    const setCount = Math.max(1, stored.sets.length);
+    const hittingEfficiency =
+      stat.attackAttempts && stat.attackAttempts > 0
+        ? Math.round(
+            (((stat.attackPoints ?? stat.attack) - (stat.attackErrors ?? 0)) /
+              stat.attackAttempts) *
+              10_000,
+          ) / 100
+        : stat.hittingEfficiency;
+    const opponent = row.participants
+      .filter((candidate) => candidate.side !== participant.side)
+      .map((candidate) => candidate.name)
+      .join(" / ");
+    const winnerSide = officialMatchWinner(stored);
+    const canonicalPath =
+      row.eventName && row.eventGenderCategory
+        ? professionalMatchCanonicalPath({
+            event: {
+              name: row.eventName,
+              genderCategory: row.eventGenderCategory,
+              startsOn: row.eventStartsOn,
+            },
+            matchId: row.id,
+            participants: row.participants,
+          })
+        : undefined;
+    return [
+      {
+        matchId: row.id,
+        occurredAt: (row.playedAt ?? row.updatedAt).toISOString(),
+        eventName: row.eventName ?? "Professional match",
+        opponent: opponent || "Opponent",
+        result:
+          winnerSide === participant.side
+            ? ("win" as const)
+            : winnerSide
+              ? ("loss" as const)
+              : ("unknown" as const),
+        ...(canonicalPath ? { canonicalPath } : {}),
+        sets: setCount,
+        points: stat.total,
+        attackPoints: stat.attackPoints ?? stat.attack,
+        attackErrors: stat.attackErrors ?? 0,
+        attackAttempts: stat.attackAttempts ?? 0,
+        ...(hittingEfficiency !== undefined ? { hittingEfficiency } : {}),
+        aces: stat.servePoints ?? stat.serve,
+        blocks: stat.blockPoints ?? stat.block,
+        digs: stat.digs ?? 0,
+        acesPerSet:
+          Math.round(((stat.servePoints ?? stat.serve) / setCount) * 100) / 100,
+        blocksPerSet:
+          Math.round(((stat.blockPoints ?? stat.block) / setCount) * 100) / 100,
+        digsPerSet: Math.round(((stat.digs ?? 0) / setCount) * 100) / 100,
+      },
+    ];
+  });
+  const professionalTotals = professionalStatTrends.reduce(
+    (totals, point) => ({
+      matches: totals.matches + 1,
+      sets: totals.sets + point.sets,
+      points: totals.points + point.points,
+      attackPoints: totals.attackPoints + point.attackPoints,
+      attackErrors: totals.attackErrors + point.attackErrors,
+      attackAttempts: totals.attackAttempts + point.attackAttempts,
+      aces: totals.aces + point.aces,
+      blocks: totals.blocks + point.blocks,
+      digs: totals.digs + point.digs,
+    }),
+    {
+      matches: 0,
+      sets: 0,
+      points: 0,
+      attackPoints: 0,
+      attackErrors: 0,
+      attackAttempts: 0,
+      aces: 0,
+      blocks: 0,
+      digs: 0,
+    },
+  );
+  const professionalStatistics =
+    professionalTotals.matches > 0
+      ? {
+          ...professionalTotals,
+          hittingEfficiency:
+            professionalTotals.attackAttempts > 0
+              ? Math.round(
+                  ((professionalTotals.attackPoints -
+                    professionalTotals.attackErrors) /
+                    professionalTotals.attackAttempts) *
+                    10_000,
+                ) / 100
+              : undefined,
+          acesPerSet:
+            Math.round(
+              (professionalTotals.aces / professionalTotals.sets) * 100,
+            ) / 100,
+          blocksPerSet:
+            Math.round(
+              (professionalTotals.blocks / professionalTotals.sets) * 100,
+            ) / 100,
+          digsPerSet:
+            Math.round(
+              (professionalTotals.digs / professionalTotals.sets) * 100,
+            ) / 100,
+          trends: [...professionalStatTrends].sort((left, right) =>
+            left.occurredAt.localeCompare(right.occurredAt),
+          ),
+        }
+      : undefined;
   const world = latestRanking[0];
   return {
     history: eventRows.map((event) => {
@@ -9357,6 +10015,7 @@ export async function loadPublicPlayerPerformance(personId: string) {
       isProfessional: source.isProfessional,
       lastImportedAt: source.lastImportedAt?.toISOString(),
     })),
+    professionalStatistics,
     participantProfiles: participantProfiles.map((profile) => {
       const countryCode =
         profile.countryCode ?? participantRankingCountry.get(profile.id);
@@ -9406,6 +10065,248 @@ export async function loadPublicPlayerPerformanceByHandle(handle: string) {
     ),
   });
   return person ? loadPublicPlayerPerformance(person.id) : undefined;
+}
+
+export async function loadPublicProfessionalTeam(teamNo: number) {
+  requireDatabase();
+  if (!Number.isInteger(teamNo) || teamNo < 1) return undefined;
+  const database = getDatabase();
+  const rows = await database
+    .select({
+      match: importedMatches,
+      eventName: professionalEvents.name,
+      eventGenderCategory: professionalEvents.genderCategory,
+      eventStartsOn: professionalEvents.startsOn,
+    })
+    .from(importedMatches)
+    .leftJoin(
+      professionalEvents,
+      and(
+        eq(professionalEvents.sourceId, importedMatches.sourceId),
+        eq(professionalEvents.externalEventId, importedMatches.externalEventId),
+      ),
+    )
+    .where(
+      or(
+        sql`${importedMatches.rawPayload}->'volleyballWorld'->'teamA'->>'teamNo' = ${String(teamNo)}`,
+        sql`${importedMatches.rawPayload}->'volleyballWorld'->'teamB'->>'teamNo' = ${String(teamNo)}`,
+      ),
+    )
+    .orderBy(desc(importedMatches.playedAt), desc(importedMatches.updatedAt))
+    .limit(500);
+  const officialRows = rows.flatMap((row) => {
+    const stored = parseStoredVolleyballWorldMatch(row.match.rawPayload);
+    const side =
+      stored?.teamA?.teamNo === teamNo
+        ? ("A" as const)
+        : stored?.teamB?.teamNo === teamNo
+          ? ("B" as const)
+          : undefined;
+    return stored && side ? [{ ...row, stored, side }] : [];
+  });
+  const latest = officialRows[0];
+  if (!latest) return undefined;
+  const completedOfficialRows = officialRows.filter(
+    (row) => row.stored.status === "completed",
+  );
+  const analyticsInput = completedOfficialRows.map((row) => ({
+    id: row.match.id,
+    ...(officialMatchWinner(row.stored)
+      ? { winnerSide: officialMatchWinner(row.stored) }
+      : {}),
+    setCount: row.stored.sets.length,
+    teamA: {
+      key: String(row.stored.teamA?.teamNo ?? `${row.match.id}:A`),
+      name: row.stored.teamA?.name ?? "Team A",
+      ...(row.stored.teamA?.teamNo ? { teamNo: row.stored.teamA.teamNo } : {}),
+      ...(row.stored.teamA?.countryCode
+        ? { countryCode: row.stored.teamA.countryCode }
+        : {}),
+    },
+    teamB: {
+      key: String(row.stored.teamB?.teamNo ?? `${row.match.id}:B`),
+      name: row.stored.teamB?.name ?? "Team B",
+      ...(row.stored.teamB?.teamNo ? { teamNo: row.stored.teamB.teamNo } : {}),
+      ...(row.stored.teamB?.countryCode
+        ? { countryCode: row.stored.teamB.countryCode }
+        : {}),
+    },
+    ...(row.stored.statistics ? { statistics: row.stored.statistics } : {}),
+  }));
+  const statistics = aggregateTournamentStatistics(analyticsInput)?.teams.find(
+    (team) => team.teamNo === teamNo,
+  );
+  const trends = completedOfficialRows
+    .flatMap((row, index) => {
+      if (!row.stored.statistics) return [];
+      const single = aggregateTournamentStatistics([analyticsInput[index]!]);
+      const point = single?.teams.find((team) => team.teamNo === teamNo);
+      if (!point) return [];
+      const opponent =
+        row.side === "A" ? row.stored.teamB?.name : row.stored.teamA?.name;
+      const winnerSide = officialMatchWinner(row.stored);
+      const canonicalPath =
+        row.eventName && row.eventGenderCategory
+          ? professionalMatchCanonicalPath({
+              event: {
+                name: row.eventName,
+                genderCategory: row.eventGenderCategory,
+                startsOn: row.eventStartsOn,
+              },
+              matchId: row.match.id,
+              participants: row.match.participants,
+            })
+          : undefined;
+      return [
+        {
+          matchId: row.match.id,
+          occurredAt: (row.match.playedAt ?? row.match.updatedAt).toISOString(),
+          eventName: row.eventName ?? "Professional match",
+          opponent: opponent ?? "Opponent",
+          result:
+            winnerSide === row.side
+              ? ("win" as const)
+              : winnerSide
+                ? ("loss" as const)
+                : ("unknown" as const),
+          ...(canonicalPath ? { canonicalPath } : {}),
+          hittingEfficiency: point.hittingEfficiency,
+          acesPerSet: point.acesPerSet,
+          blocksPerSet: point.blocksPerSet,
+          digsPerSet: point.digsPerSet,
+        },
+      ];
+    })
+    .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt));
+  const playerEntries = new Map<
+    string,
+    { readonly personId?: string; readonly name: string }
+  >();
+  for (const row of officialRows) {
+    for (const participant of row.match.participants.filter(
+      (candidate) => candidate.side === row.side,
+    )) {
+      const key = participant.personId ?? normalizePersonName(participant.name);
+      if (!playerEntries.has(key)) {
+        playerEntries.set(key, {
+          ...(participant.personId ? { personId: participant.personId } : {}),
+          name: participant.name,
+        });
+      }
+    }
+  }
+  const personIds = [...playerEntries.values()].flatMap((player) =>
+    player.personId ? [player.personId] : [],
+  );
+  const playerRows =
+    personIds.length > 0
+      ? await database
+          .select({
+            id: people.id,
+            displayName: people.displayName,
+            handle: people.handle,
+            avatarUrl: people.avatarUrl,
+            homeMarket: people.homeMarket,
+            profileClaimStatus: people.profileClaimStatus,
+            countryCode: playerPublicProfiles.countryCode,
+            sandRating: ratings.display,
+          })
+          .from(people)
+          .leftJoin(
+            playerPublicProfiles,
+            and(
+              eq(playerPublicProfiles.personId, people.id),
+              eq(playerPublicProfiles.publicationStatus, "published"),
+            ),
+          )
+          .leftJoin(
+            ratings,
+            and(
+              eq(ratings.personId, people.id),
+              eq(ratings.discipline, "beach-2s"),
+            ),
+          )
+          .where(inArray(people.id, personIds))
+      : [];
+  const playerById = new Map(playerRows.map((player) => [player.id, player]));
+  const team =
+    latest.side === "A" ? latest.stored.teamA! : latest.stored.teamB!;
+  const record = completedOfficialRows.reduce(
+    (summary, row) => {
+      const winnerSide = officialMatchWinner(row.stored);
+      if (!winnerSide) return summary;
+      summary.matches += 1;
+      if (winnerSide === row.side) summary.wins += 1;
+      else summary.losses += 1;
+      return summary;
+    },
+    { matches: 0, wins: 0, losses: 0 },
+  );
+  return {
+    teamNo,
+    name: team.name,
+    countryCode: team.countryCode,
+    record,
+    players: [...playerEntries.values()].map((entry) => {
+      const player = entry.personId
+        ? playerById.get(entry.personId)
+        : undefined;
+      return {
+        name: player?.displayName ?? entry.name,
+        ...(player
+          ? {
+              personId: player.id,
+              publicPath: publicPlayerPath({
+                id: player.id,
+                displayName: player.displayName,
+                handle: player.handle,
+                homeMarket: player.homeMarket,
+                countryCode: player.countryCode ?? team.countryCode,
+                profileClaimStatus: player.profileClaimStatus as
+                  "claimed" | "unclaimed" | "claim-pending" | "merged",
+              }),
+              ...(player.avatarUrl ? { avatarUrl: player.avatarUrl } : {}),
+              ...(player.sandRating !== null
+                ? { sandRating: player.sandRating }
+                : {}),
+            }
+          : {}),
+      };
+    }),
+    statistics,
+    trends,
+    matches: completedOfficialRows.slice(0, 40).map((row) => {
+      const opponent =
+        row.side === "A" ? row.stored.teamB?.name : row.stored.teamA?.name;
+      const winnerSide = officialMatchWinner(row.stored);
+      const canonicalPath =
+        row.eventName && row.eventGenderCategory
+          ? professionalMatchCanonicalPath({
+              event: {
+                name: row.eventName,
+                genderCategory: row.eventGenderCategory,
+                startsOn: row.eventStartsOn,
+              },
+              matchId: row.match.id,
+              participants: row.match.participants,
+            })
+          : undefined;
+      return {
+        matchId: row.match.id,
+        occurredAt: (row.match.playedAt ?? row.match.updatedAt).toISOString(),
+        eventName: row.eventName ?? "Professional match",
+        opponent: opponent ?? "Opponent",
+        result:
+          winnerSide === row.side
+            ? ("win" as const)
+            : winnerSide
+              ? ("loss" as const)
+              : ("unknown" as const),
+        sets: row.stored.sets,
+        ...(canonicalPath ? { canonicalPath } : {}),
+      };
+    }),
+  };
 }
 
 export type PlayerSourceConnectionSource = "volleyball-life" | "bvbinfo";
@@ -10543,6 +11444,9 @@ export type PublicProEvent = NonNullable<
 >;
 export type PublicProMatchDetail = NonNullable<
   Awaited<ReturnType<typeof loadPublicProMatch>>
+>;
+export type PublicProfessionalTeam = NonNullable<
+  Awaited<ReturnType<typeof loadPublicProfessionalTeam>>
 >;
 export type PublicPlayerPerformance = Awaited<
   ReturnType<typeof loadPublicPlayerPerformance>
