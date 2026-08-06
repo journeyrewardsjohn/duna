@@ -287,19 +287,19 @@ function PlayerStatCard({
         <div>
           <dt>Total</dt>
           <dd>
-            <Numeric tier="table">{stat.total}</Numeric>
+            <Numeric tier="block">{stat.total}</Numeric>
           </dd>
         </div>
         <div>
           <dt>Kills</dt>
           <dd>
-            <Numeric tier="table">{stat.attackPoints ?? stat.attack}</Numeric>
+            <Numeric tier="block">{stat.attackPoints ?? stat.attack}</Numeric>
           </dd>
         </div>
         <div>
           <dt>Hit eff.</dt>
           <dd>
-            <Numeric tier="table">
+            <Numeric tier="block">
               {hittingEfficiency !== undefined
                 ? `${hittingEfficiency.toFixed(1)}%`
                 : "—"}
@@ -309,19 +309,19 @@ function PlayerStatCard({
         <div>
           <dt>Aces</dt>
           <dd>
-            <Numeric tier="table">{stat.servePoints ?? stat.serve}</Numeric>
+            <Numeric tier="block">{stat.servePoints ?? stat.serve}</Numeric>
           </dd>
         </div>
         <div>
           <dt>Blocks</dt>
           <dd>
-            <Numeric tier="table">{stat.blockPoints ?? stat.block}</Numeric>
+            <Numeric tier="block">{stat.blockPoints ?? stat.block}</Numeric>
           </dd>
         </div>
         <div>
           <dt>Digs</dt>
           <dd>
-            <Numeric tier="table">{stat.digs ?? "—"}</Numeric>
+            <Numeric tier="block">{stat.digs ?? "—"}</Numeric>
           </dd>
         </div>
       </dl>
@@ -682,7 +682,7 @@ export function ProLiveMatchScoreboard({
                   const maximum = Math.max(stat.a, stat.b, 1);
                   return (
                     <div className="pro-live-stats__metric" key={stat.key}>
-                      <Numeric tier="table">{stat.a}</Numeric>
+                      <Numeric tier="block">{stat.a}</Numeric>
                       <div>
                         <span>{stat.label}</span>
                         <i>
@@ -690,7 +690,7 @@ export function ProLiveMatchScoreboard({
                           <b style={{ width: `${(stat.b / maximum) * 50}%` }} />
                         </i>
                       </div>
-                      <Numeric tier="table">{stat.b}</Numeric>
+                      <Numeric tier="block">{stat.b}</Numeric>
                     </div>
                   );
                 })}

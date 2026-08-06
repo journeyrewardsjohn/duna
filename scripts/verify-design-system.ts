@@ -174,12 +174,12 @@ if (
 }
 for (const [selector, size] of [
   [
-    ".pro-live-stats__metric > .duna-numeric--table",
-    "font-size: clamp(1.5rem, 2vw, 1.85rem)",
+    ".pro-live-stats__metric > .duna-numeric--block",
+    "font-size: clamp(2rem, 2vw, 2.25rem)",
   ],
   [
-    ".pro-live-stats__player dd .duna-numeric--table",
-    "font-size: clamp(1.2rem, 1.7vw, 1.55rem)",
+    ".pro-live-stats__player dd .duna-numeric--block",
+    "font-size: clamp(2rem, 1.8vw, 2.125rem)",
   ],
 ] as const) {
   const selectorStart = webV3Css.indexOf(selector);
@@ -187,18 +187,18 @@ for (const [selector, size] of [
   const rule = webV3Css.slice(selectorStart, ruleEnd);
   if (selectorStart < 0 || !rule.includes(size)) {
     violations.push(
-      `apps/web/app/design-v3.css must preserve ${selector} within the dense-match Table tier`,
+      `apps/web/app/design-v3.css must preserve ${selector} within the compact Block tier`,
     );
   }
 }
 for (const contract of [
-  '<Numeric tier="table">{stat.total}</Numeric>',
-  '<Numeric tier="table">{stat.a}</Numeric>',
-  '<Numeric tier="table">{stat.b}</Numeric>',
+  '<Numeric tier="block">{stat.total}</Numeric>',
+  '<Numeric tier="block">{stat.a}</Numeric>',
+  '<Numeric tier="block">{stat.b}</Numeric>',
 ] as const) {
   if (!liveMatchScoreboardSource.includes(contract)) {
     violations.push(
-      `apps/web/components/pro-live-match-scoreboard.tsx must preserve ${contract} for dense match statistics`,
+      `apps/web/components/pro-live-match-scoreboard.tsx must preserve ${contract} for compact Block statistics`,
     );
   }
 }
