@@ -6739,7 +6739,7 @@ a.professional-match-card:hover {
 }
 
 .rankings-v2__list-header > span {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 
 .rankings-v2__list {
@@ -17858,7 +17858,7 @@ a.play-day__booking {
 
 .rankings-list-header > span {
   color: var(--color-bone-muted);
-  font-size: 0.65rem;
+  font-size: 0.8125rem;
 }
 
 .rankings-list {

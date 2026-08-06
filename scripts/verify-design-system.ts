@@ -202,6 +202,19 @@ for (const [contract, message] of [
     violations.push(`apps/web/app/globals.css ${message}`);
   }
 }
+for (const selector of [
+  ".rankings-v2__list-header > span",
+  ".rankings-list-header > span",
+] as const) {
+  const selectorStart = webGlobalCss.indexOf(selector);
+  const ruleEnd = webGlobalCss.indexOf("}", selectorStart);
+  const rule = webGlobalCss.slice(selectorStart, ruleEnd);
+  if (selectorStart < 0 || !rule.includes("font-size: 0.8125rem")) {
+    violations.push(
+      `apps/web/app/globals.css must keep ${selector} at the 13px Table minimum`,
+    );
+  }
+}
 
 const regressionContracts = [
   {
