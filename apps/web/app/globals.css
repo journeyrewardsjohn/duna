@@ -2931,7 +2931,8 @@ a.professional-match-card:hover {
 }
 
 .professional-match-card__players > span > img,
-.professional-match-card__players > span > .duna-identity {
+.professional-match-card__players > span > .duna-identity,
+.professional-match-card__players > span > .duna-country-flag {
   align-items: center;
   border-radius: 50%;
   display: inline-flex;
@@ -18028,6 +18029,19 @@ a.play-day__booking {
   min-height: 100vh;
 }
 
+.duna-country-flag {
+  background-position: center;
+  background-size: cover;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--hairline-strong);
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 1em;
+  overflow: hidden;
+  vertical-align: -0.1em;
+  width: 1em;
+}
+
 .pro-event-hero,
 .pro-match-hero {
   background:
@@ -18048,7 +18062,7 @@ a.play-day__booking {
 }
 
 .pro-back-link,
-.pro-match-hero > div:first-child > a {
+.pro-match-hero__breadcrumb a {
   align-items: center;
   color: var(--color-bone-muted);
   display: inline-flex;
@@ -18059,7 +18073,7 @@ a.play-day__booking {
 }
 
 .pro-event-hero__badges,
-.pro-match-hero > div:first-child > div {
+.pro-match-hero__intro > div:first-child {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
@@ -19363,18 +19377,41 @@ a.play-day__booking {
     var(--ground);
   border-bottom-color: var(--hairline);
   color: var(--text-1);
-  gap: clamp(2rem, 4vw, 3.5rem);
+  gap: 0;
   grid-template-columns: minmax(0, 1fr);
   padding-bottom: clamp(2rem, 5vw, 4.5rem);
   padding-top: clamp(2.5rem, 6vw, 5.5rem);
 }
 
-.pro-match-hero[data-zone="athletic"] > div:first-child {
+.pro-match-hero__breadcrumb,
+.pro-match-hero__intro {
   max-width: 1040px;
 }
 
-.pro-match-hero[data-zone="athletic"] > div:first-child > a,
-.pro-match-hero[data-zone="athletic"] > div:first-child > p,
+.pro-match-hero__breadcrumb {
+  margin-bottom: clamp(1.25rem, 2vw, 1.8rem);
+}
+
+.pro-match-hero__breadcrumb a {
+  background: color-mix(in srgb, var(--surface-1) 84%, transparent);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  color: var(--text-2);
+  margin: 0;
+  min-height: 48px;
+  padding: 0.62rem 0.82rem;
+}
+
+.pro-match-hero__breadcrumb a:hover {
+  border-color: var(--text-2);
+  color: var(--text-1);
+}
+
+.pro-match-hero__intro {
+  margin-bottom: clamp(2rem, 4vw, 3.5rem);
+}
+
+.pro-match-hero[data-zone="athletic"] .pro-match-hero__intro > p,
 .pro-match-hero[data-zone="athletic"] .pro-match-hero__facts {
   color: var(--text-2);
 }
@@ -19593,8 +19630,10 @@ a.play-day__booking {
 
 .pro-live-scoreboard__player > img,
 .pro-live-scoreboard__player > .duna-identity,
+.pro-live-scoreboard__player > .duna-country-flag,
 .pro-live-stats__player > div > img,
-.pro-live-stats__player > div > .duna-identity {
+.pro-live-stats__player > div > .duna-identity,
+.pro-live-stats__player > div > .duna-country-flag {
   border-radius: 50%;
   flex: 0 0 auto;
   height: 40px;
@@ -19603,7 +19642,9 @@ a.play-day__booking {
 }
 
 .pro-live-scoreboard__player > .duna-identity,
-.pro-live-stats__player > div > .duna-identity {
+.pro-live-scoreboard__player > .duna-country-flag,
+.pro-live-stats__player > div > .duna-identity,
+.pro-live-stats__player > div > .duna-country-flag {
   align-items: center;
   display: inline-flex;
   font-size: 0.75rem;
@@ -19664,12 +19705,13 @@ a.play-day__booking {
 
 .pro-live-scoreboard__match-points {
   background: color-mix(in srgb, var(--ground-cool) 72%, transparent);
-  font-size: clamp(2.25rem, 5vw, 4rem);
+  font-size: clamp(2.1rem, 4vw, 3.25rem);
   letter-spacing: -0.03em;
 }
 
 .pro-live-scoreboard__team--winner .pro-live-scoreboard__match-points {
-  color: var(--signal);
+  background: color-mix(in srgb, var(--gain) 14%, var(--surface-2));
+  color: var(--text-1);
 }
 
 .pro-live-stats {
@@ -19746,9 +19788,7 @@ a.play-day__booking {
   margin-top: 0.75rem;
 }
 
-.pro-live-stats__metric > strong {
-  font-family: var(--font-display);
-  font-size: 1.35rem;
+.pro-live-stats__metric > .duna-numeric {
   text-align: center;
 }
 
@@ -19864,9 +19904,11 @@ a.play-day__booking {
 }
 
 .pro-live-stats__player dd {
-  font-family: var(--font-display);
-  font-size: 1.25rem;
   margin: 0.2rem 0 0;
+}
+
+.pro-live-stats__player dd .duna-numeric {
+  letter-spacing: -0.01em;
 }
 
 .pro-live-scoreboard__footer {
@@ -19951,7 +19993,8 @@ a.play-day__booking {
   }
 
   .pro-live-scoreboard__player > img,
-  .pro-live-scoreboard__player > .duna-identity {
+  .pro-live-scoreboard__player > .duna-identity,
+  .pro-live-scoreboard__player > .duna-country-flag {
     height: 34px;
     width: 34px;
   }

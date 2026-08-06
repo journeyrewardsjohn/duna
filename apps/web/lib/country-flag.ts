@@ -1,3 +1,5 @@
+import { alpha3ToAlpha2 } from "i18n-iso-countries";
+
 const iso3ToIso2: Readonly<Record<string, string>> = {
   ARG: "AR",
   AUS: "AU",
@@ -46,7 +48,8 @@ const iso3ToIso2: Readonly<Record<string, string>> = {
 export function countryCode(value?: string): string | undefined {
   if (!value) return undefined;
   const upper = value.trim().toUpperCase();
-  const iso2 = upper.length === 2 ? upper : iso3ToIso2[upper];
+  const iso2 =
+    upper.length === 2 ? upper : (iso3ToIso2[upper] ?? alpha3ToAlpha2(upper));
   return iso2 && /^[A-Z]{2}$/.test(iso2) ? iso2 : undefined;
 }
 
