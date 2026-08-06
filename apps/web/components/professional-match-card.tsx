@@ -75,6 +75,11 @@ function TeamResultRow({
           <span key={`${player.name}-${index}`}>
             {player.avatarUrl ? (
               <img alt="" src={player.avatarUrl} />
+            ) : team.countryCode ? (
+              <CountryCode
+                code={team.countryCode}
+                fallback={player.name.slice(0, 2)}
+              />
             ) : team.flagUrl ? (
               <img
                 alt={`${team.countryCode ?? "Team"} flag`}
