@@ -256,6 +256,35 @@ export function isMuxSignedPlaybackConfigured(): boolean {
   );
 }
 
+export function isMuxLivePlanUnavailable(error: unknown): boolean {
+  const candidate = error as
+    | {
+        readonly message?: unknown;
+        readonly error?: unknown;
+        readonly body?: unknown;
+      }
+    | undefined;
+  let serialized = "";
+  try {
+    serialized = JSON.stringify(error);
+  } catch {
+    // A circular provider object can still expose a useful message.
+  }
+  const text = [
+    error instanceof Error ? error.message : "",
+    typeof candidate?.message === "string" ? candidate.message : "",
+    serialized,
+  ]
+    .join(" ")
+    .toLowerCase();
+  return (
+    text.includes("live streams are unavailable on the free plan") ||
+    (text.includes("live stream") &&
+      text.includes("free plan") &&
+      text.includes("unavailable"))
+  );
+}
+
 export function muxDataEnvironmentKey(): string | undefined {
   return process.env.MUX_DATA_ENV_KEY?.trim() || undefined;
 }

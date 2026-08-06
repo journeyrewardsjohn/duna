@@ -255,7 +255,9 @@ private final class DunaVideoCaptureController: NSObject {
     if lidarAvailable {
       configuration.sceneReconstruction = .meshWithClassification
     }
-    if ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
+    if ARWorldTrackingConfiguration.supportsFrameSemantics(.smoothedSceneDepth) {
+      configuration.frameSemantics.insert(.smoothedSceneDepth)
+    } else if ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
       configuration.frameSemantics.insert(.sceneDepth)
     }
     usesGroundTracking = true
@@ -424,11 +426,19 @@ private final class DunaVideoCaptureController: NSObject {
     guard now - lastVisionAt >= 0.45 else { return }
     lastVisionAt = now
     let rectangleRequest = VNDetectRectanglesRequest()
-    rectangleRequest.maximumObservations = 4
-    rectangleRequest.minimumConfidence = 0.5
-    rectangleRequest.minimumAspectRatio = 0.22
+    rectangleRequest.maximumObservations = 8
+    rectangleRequest.minimumConfidence = 0.42
+    rectangleRequest.minimumAspectRatio = 0.14
     rectangleRequest.maximumAspectRatio = 1.0
-    rectangleRequest.quadratureTolerance = 28
+    rectangleRequest.minimumSize = 0.1
+    rectangleRequest.quadratureTolerance = 32
+    let landmarkRequest = VNDetectRectanglesRequest()
+    landmarkRequest.maximumObservations = 14
+    landmarkRequest.minimumConfidence = 0.32
+    landmarkRequest.minimumAspectRatio = 0.01
+    landmarkRequest.maximumAspectRatio = 0.28
+    landmarkRequest.minimumSize = 0.05
+    landmarkRequest.quadratureTolerance = 24
     let poseRequest = VNDetectHumanBodyPoseRequest()
     let handler = VNImageRequestHandler(
       cvPixelBuffer: pixelBuffer,
@@ -436,13 +446,27 @@ private final class DunaVideoCaptureController: NSObject {
       options: [:]
     )
     do {
-      try handler.perform([rectangleRequest, poseRequest])
-      let rectangle = rectangleRequest.results?.max {
-        $0.boundingBox.width * $0.boundingBox.height <
-          $1.boundingBox.width * $1.boundingBox.height
-      }
+      try handler.perform([rectangleRequest, landmarkRequest, poseRequest])
+      let rectangle = rectangleRequest.results?
+        .filter {
+          let box = $0.boundingBox
+          return box.width * box.height >= 0.045 && box.minY < 0.72
+        }
+        .max {
+          let leftBox = $0.boundingBox
+          let rightBox = $1.boundingBox
+          let leftScore = leftBox.width * leftBox.height *
+            CGFloat($0.confidence) * (1.25 - leftBox.midY * 0.35)
+          let rightScore = rightBox.width * rightBox.height *
+            CGFloat($1.confidence) * (1.25 - rightBox.midY * 0.35)
+          return leftScore < rightScore
+        }
       let pose = poseRequest.results?.first
-      publishGuidance(rectangle: rectangle, pose: pose)
+      publishGuidance(
+        rectangle: rectangle,
+        landmarks: landmarkRequest.results ?? [],
+        pose: pose
+      )
       if now - lastPreviewAt >= 2 {
         lastPreviewAt = now
         publishPreview(pixelBuffer)
@@ -489,6 +513,7 @@ private final class DunaVideoCaptureController: NSObject {
 
   private func publishGuidance(
     rectangle: VNRectangleObservation?,
+    landmarks: [VNRectangleObservation],
     pose: VNHumanBodyPoseObservation?
   ) {
     var score = 100
@@ -507,37 +532,100 @@ private final class DunaVideoCaptureController: NSObject {
         CGPoint(x: $0.bottomLeft.x, y: 1 - $0.bottomLeft.y)
       ]
     }
-    let projectedCorners = latestGroundCorners ?? visionCorners
-    let groundDetected = latestGroundCorners != nil ||
-      (!ARWorldTrackingConfiguration.isSupported && rectangle != nil)
+    // A Vision court observation is evidence. ARKit's projected court remains
+    // only an assisted starting pose because a real camera may be close enough
+    // that the near line falls behind the frame.
+    let projectedCorners = visionCorners ?? latestGroundCorners
+    let groundDetected = latestGroundCorners != nil || rectangle != nil
+    let courtDetected = rectangle.map {
+      $0.confidence >= 0.5 &&
+        $0.boundingBox.width * $0.boundingBox.height >= 0.045
+    } ?? false
 
-    var courtDetected = false
-    if let rectangle, let projectedCorners {
-      let projectedMinX = projectedCorners.map(\.x).min() ?? 0
-      let projectedMaxX = projectedCorners.map(\.x).max() ?? 1
-      let projectedMinY = projectedCorners.map(\.y).min() ?? 0
-      let projectedMaxY = projectedCorners.map(\.y).max() ?? 1
-      let box = rectangle.boundingBox
-      let rectangleCenter = CGPoint(x: box.midX, y: 1 - box.midY)
-      let projectedCenter = CGPoint(
-        x: (projectedMinX + projectedMaxX) / 2,
-        y: (projectedMinY + projectedMaxY) / 2
+    let horizontalLandmarks = landmarks.filter {
+      let box = $0.boundingBox
+      return box.width >= 0.22 && box.height <= 0.16 &&
+        box.width >= box.height * 2.4
+    }
+    let netObservation = horizontalLandmarks.max {
+      let left = $0.boundingBox
+      let right = $1.boundingBox
+      let leftScore = left.width * CGFloat($0.confidence) *
+        (1 - abs(left.midY - 0.5) * 0.35)
+      let rightScore = right.width * CGFloat($1.confidence) *
+        (1 - abs(right.midY - 0.5) * 0.35)
+      return leftScore < rightScore
+    }
+    let netTopLine: [CGPoint]? = netObservation.map {
+      let left = CGPoint(
+        x: ($0.topLeft.x + $0.bottomLeft.x) / 2,
+        y: 1 - ($0.topLeft.y + $0.bottomLeft.y) / 2
       )
-      let centerDistance = hypot(
-        rectangleCenter.x - projectedCenter.x,
-        rectangleCenter.y - projectedCenter.y
+      let right = CGPoint(
+        x: ($0.topRight.x + $0.bottomRight.x) / 2,
+        y: 1 - ($0.topRight.y + $0.bottomRight.y) / 2
       )
-      courtDetected = rectangle.confidence >= 0.58 &&
-        box.width * box.height >= 0.07 &&
-        (!usesGroundTracking || centerDistance < 0.34)
+      return [left, right]
+    }
+    let netDetected = netTopLine != nil
+
+    var antennaPoints: [CGPoint]?
+    if let netTopLine {
+      let vertical = landmarks.filter {
+        let box = $0.boundingBox
+        guard
+          box.height >= 0.1,
+          box.width <= 0.1,
+          box.height >= box.width * 2.3
+        else {
+          return false
+        }
+        let x = box.midX
+        return abs(x - netTopLine[0].x) <= 0.2 ||
+          abs(x - netTopLine[1].x) <= 0.2
+      }.sorted { $0.boundingBox.midX < $1.boundingBox.midX }
+      if let left = vertical.first, let right = vertical.last, left !== right {
+        antennaPoints = [
+          CGPoint(x: left.boundingBox.midX, y: 1 - left.boundingBox.maxY),
+          CGPoint(x: right.boundingBox.midX, y: 1 - right.boundingBox.maxY)
+        ]
+      }
+    }
+
+    func visible(_ point: CGPoint) -> Bool {
+      point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1
+    }
+    let visibleCorners = projectedCorners?.filter(visible).count ?? 0
+    let partialCourt = !courtDetected || visibleCorners < 4
+    let nearLineVisible = projectedCorners.map {
+      visible($0[2]) && visible($0[3])
+    } ?? false
+    let netLine: [CGPoint]? = projectedCorners.map {
+      [
+        CGPoint(
+          x: ($0[0].x + $0[3].x) / 2,
+          y: ($0[0].y + $0[3].y) / 2
+        ),
+        CGPoint(
+          x: ($0[1].x + $0[2].x) / 2,
+          y: ($0[1].y + $0[2].y) / 2
+        )
+      ]
     }
 
     if !groundDetected {
-      score -= 42
+      score -= 32
       warnings.append("Tilt down slowly so Duna can find the sand")
+    } else if !courtDetected && !netDetected {
+      score -= 18
+      warnings.append(
+        "Court is partly out of view—mark the net or adjust visible lines"
+      )
     } else if !courtDetected {
-      score -= 31
-      warnings.append("Ground found—fit all four boundary corners in the guide")
+      score -= 9
+      warnings.append(
+        "Net found; off-screen boundary lines will not block recording"
+      )
     }
 
     if let projectedCorners {
@@ -549,12 +637,14 @@ private final class DunaVideoCaptureController: NSObject {
       let height = maxY - minY
       let midX = (minX + maxX) / 2
 
-      if minX < 0.035 || maxX > 0.965 || maxY > 0.9 || width > 0.93 {
-        score -= 20
-        warnings.append("Step farther behind the end line")
-      } else if width < 0.42 || height < 0.3 {
+      if visibleCorners < 4 {
+        score -= max(4, (4 - visibleCorners) * 4)
+        warnings.append(
+          "\(4 - visibleCorners) court corner\(visibleCorners == 3 ? " is" : "s are") outside the frame—capture is still available"
+        )
+      } else if width < 0.36 || height < 0.26 {
         score -= 12
-        warnings.append("Move a little closer while keeping every corner visible")
+        warnings.append("Players may be small—move closer if the full court stays visible")
       }
       if midX < 0.44 {
         score -= 9
@@ -563,17 +653,20 @@ private final class DunaVideoCaptureController: NSObject {
         score -= 9
         warnings.append("Rotate gradually right")
       }
-      if minY > 0.32 {
+      if minY > 0.36 {
         score -= 10
-        warnings.append("Raise the phone slightly")
+        warnings.append("Raise the phone gradually to see more ball flight")
       }
     }
 
     if let cameraHeight = latestCameraHeight, cameraHeight < 0.38 {
-      score -= 13
+      score -= 10
       warnings.append(
-        "Ground-level tripod detected—raise it for stronger player tracking"
+        "Ground-level tripod detected—raise it if space allows for stronger analytics"
       )
+    } else if let cameraHeight = latestCameraHeight, cameraHeight < 1.15 {
+      score -= 5
+      warnings.append("A little more tripod height will improve trajectory coverage")
     }
 
     if let pose, let points = try? pose.recognizedPoints(.all) {
@@ -623,9 +716,6 @@ private final class DunaVideoCaptureController: NSObject {
     }
 
     score = max(0, min(100, score))
-    if !courtDetected {
-      score = min(score, 63)
-    }
     smoothedScore = smoothedScore.map { $0 * 0.72 + Double(score) * 0.28 }
       ?? Double(score)
     score = Int((smoothedScore ?? Double(score)).rounded())
@@ -642,22 +732,38 @@ private final class DunaVideoCaptureController: NSObject {
     let timestamp = ISO8601DateFormatter().string(from: Date())
     let confidence: Double = courtDetected
       ? (lidarAvailable ? 0.9 : 0.78)
-      : groundDetected
-        ? (lidarAvailable ? 0.68 : 0.55)
+      : groundDetected && netDetected
+        ? (lidarAvailable ? 0.76 : 0.64)
+        : groundDetected
+          ? (lidarAvailable ? 0.62 : 0.5)
         : 0.18
+    if warnings.isEmpty {
+      warnings.append("Court lock ready—fine-tune the net only if needed")
+    }
     let stabilizedWarnings = stableWarnings(warnings)
+    let acceptableGeometry = courtDetected || netDetected ||
+      (groundDetected && visibleCorners >= 2)
     var payload: [String: Any] = [
       "qualityGrade": grade,
       "qualityScore": score,
       "confidence": confidence,
-      "acceptable": score >= 67 && orientationMatches && courtDetected,
+      "acceptable": score >= 67 && orientationMatches && acceptableGeometry,
       "warnings": stabilizedWarnings,
-      "projectionSource": latestGroundCorners != nil
-        ? (lidarAvailable ? "lidar" : "arkit")
-        : rectangle != nil ? "vision" : "estimated",
+      "projectionSource": visionCorners != nil
+        ? "vision"
+        : latestGroundCorners != nil
+          ? (lidarAvailable ? "lidar" : "arkit")
+          : "estimated",
       "lidarAvailable": lidarAvailable,
       "groundPlaneDetected": groundDetected,
       "courtDetected": courtDetected,
+      "netDetected": netDetected,
+      "antennaDetected": antennaPoints != nil,
+      "visibleCornerCount": visibleCorners,
+      "nearLineVisible": nearLineVisible,
+      "partialCourt": partialCourt,
+      "calibrationMode": "automatic",
+      "modelVersion": "court-v2-partial-2026-08-05",
       "preferredOrientation": preferredOrientation,
       "deviceOrientation": currentDeviceOrientation,
       "orientationMatches": orientationMatches,
@@ -665,13 +771,30 @@ private final class DunaVideoCaptureController: NSObject {
       "horizonY": latestHorizonY,
       "calibratedAt": timestamp
     ]
+    func bounded(_ value: CGFloat) -> Double {
+      max(-1.5, min(2.5, Double(value)))
+    }
+    func pointPayload(_ point: CGPoint) -> [String: Double] {
+      ["x": bounded(point.x), "y": bounded(point.y)]
+    }
     if let projectedCorners {
-      payload["corners"] = projectedCorners.map {
-        [
-          "x": max(0, min(1, Double($0.x))),
-          "y": max(0, min(1, Double($0.y)))
-        ]
-      }
+      payload["corners"] = projectedCorners.map(pointPayload)
+      payload["edgeVisibility"] = [
+        "far": visible(projectedCorners[0]) && visible(projectedCorners[1]),
+        "right": visible(projectedCorners[1]) && visible(projectedCorners[2]),
+        "near": nearLineVisible,
+        "left": visible(projectedCorners[3]) && visible(projectedCorners[0]),
+        "net": netTopLine?.allSatisfy(visible) ?? false
+      ]
+    }
+    if let netLine {
+      payload["netLine"] = netLine.map(pointPayload)
+    }
+    if let netTopLine {
+      payload["netTopLine"] = netTopLine.map(pointPayload)
+    }
+    if let antennaPoints {
+      payload["antennaPoints"] = antennaPoints.map(pointPayload)
     }
     if let latestCameraHeight {
       payload["cameraHeightMeters"] = latestCameraHeight

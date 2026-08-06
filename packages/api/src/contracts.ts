@@ -772,6 +772,21 @@ export const videoQualityGradeSchema = z.enum([
   "limited",
   "poor",
 ]);
+const capturePointSchema = z.object({
+  // A calibrated court may legitimately continue beyond the camera frame.
+  // Keeping a bounded off-screen range preserves that geometry without
+  // accepting arbitrary coordinates.
+  x: z.number().min(-1.5).max(2.5),
+  y: z.number().min(-1.5).max(2.5),
+});
+const captureLineSchema = z.array(capturePointSchema).length(2).readonly();
+const captureEdgeVisibilitySchema = z.object({
+  far: z.boolean(),
+  left: z.boolean(),
+  right: z.boolean(),
+  near: z.boolean(),
+  net: z.boolean(),
+});
 export const courtCalibrationSchema = z.object({
   courtWidthMeters: z.number().positive().max(30),
   courtLengthMeters: z.number().positive().max(40),
@@ -779,16 +794,18 @@ export const courtCalibrationSchema = z.object({
   qualityGrade: videoQualityGradeSchema,
   qualityScore: z.number().min(0).max(100),
   confidence: z.number().min(0).max(1),
-  corners: z
-    .array(
-      z.object({
-        x: z.number().min(0).max(1),
-        y: z.number().min(0).max(1),
-      }),
-    )
-    .length(4)
-    .readonly()
-    .optional(),
+  corners: z.array(capturePointSchema).length(4).readonly().optional(),
+  netLine: captureLineSchema.optional(),
+  netTopLine: captureLineSchema.optional(),
+  antennaPoints: captureLineSchema.optional(),
+  visibleCornerCount: z.number().int().min(0).max(4).optional(),
+  nearLineVisible: z.boolean().optional(),
+  partialCourt: z.boolean().optional(),
+  edgeVisibility: captureEdgeVisibilitySchema.optional(),
+  netDetected: z.boolean().optional(),
+  antennaDetected: z.boolean().optional(),
+  calibrationMode: z.enum(["automatic", "assisted", "manual"]).optional(),
+  modelVersion: z.string().trim().min(1).max(80).optional(),
   horizonY: z.number().min(0).max(1).optional(),
   projectionSource: z
     .enum(["lidar", "arkit", "vision", "estimated"])
@@ -816,6 +833,7 @@ export const courtCalibrationSchema = z.object({
   calibratedAt: z.iso.datetime(),
 });
 export const visionSessionSettingsSchema = z.object({
+  captureMode: z.enum(["record", "live"]).optional(),
   courtWidthMeters: z.number().positive().max(30),
   courtLengthMeters: z.number().positive().max(40),
   netHeightMeters: z.number().positive().max(4),
@@ -823,16 +841,13 @@ export const visionSessionSettingsSchema = z.object({
   overlayScoreboard: z.boolean(),
   teamA: z.string().trim().min(1).max(80),
   teamB: z.string().trim().min(1).max(80),
-  corners: z
-    .array(
-      z.object({
-        x: z.number().min(0).max(1),
-        y: z.number().min(0).max(1),
-      }),
-    )
-    .length(4)
-    .readonly()
-    .optional(),
+  corners: z.array(capturePointSchema).length(4).readonly().optional(),
+  netLine: captureLineSchema.optional(),
+  netTopLine: captureLineSchema.optional(),
+  antennaPoints: captureLineSchema.optional(),
+  nearLineVisible: z.boolean().optional(),
+  edgeVisibility: captureEdgeVisibilitySchema.optional(),
+  calibrationMode: z.enum(["automatic", "assisted", "manual"]).optional(),
 });
 export const visionScoreSnapshotSchema = z
   .object({
@@ -1461,6 +1476,24 @@ export const dunaPlusGrantSchema = z.object({
   reason: z.string(),
   grantedByName: z.string().optional(),
 });
+export const visionCalibrationReviewSampleSchema = z.object({
+  id: z.string().uuid(),
+  videoId: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  videoTitle: z.string(),
+  owner: personSummarySchema,
+  sourceModelVersion: z.string().optional(),
+  qualityScore: z.number().int().min(0).max(100).optional(),
+  geometry: z.record(z.string(), z.unknown()),
+  previewDataUrl: z.string().max(300_000).optional(),
+  previewCapturedAt: z.iso.datetime().optional(),
+  status: z.enum(["pending", "approved", "rejected", "training", "trained"]),
+  reviewedByName: z.string().optional(),
+  reviewNotes: z.string().optional(),
+  reviewedAt: z.iso.datetime().optional(),
+  approvedForTrainingAt: z.iso.datetime().optional(),
+  createdAt: z.iso.datetime(),
+});
 export const adminVideoOverviewSchema = z.object({
   canManage: z.boolean(),
   settings: z.object({
@@ -1487,6 +1520,22 @@ export const adminVideoOverviewSchema = z.object({
     )
     .readonly(),
   grants: z.array(dunaPlusGrantSchema).readonly(),
+  visionLearning: z.object({
+    automaticTraining: z.literal(false),
+    reviewRequired: z.literal(true),
+    counts: z.object({
+      pending: z.number().int().nonnegative(),
+      approved: z.number().int().nonnegative(),
+      rejected: z.number().int().nonnegative(),
+      training: z.number().int().nonnegative(),
+      trained: z.number().int().nonnegative(),
+    }),
+    insightFeedback: z.object({
+      helpful: z.number().int().nonnegative(),
+      notHelpful: z.number().int().nonnegative(),
+    }),
+    calibrationSamples: z.array(visionCalibrationReviewSampleSchema).readonly(),
+  }),
   muxConfigured: z.boolean(),
   r2Configured: z.boolean(),
 });
@@ -4043,4 +4092,7 @@ export type HealthDashboard = z.infer<typeof healthDashboardSchema>;
 export type HealthVideoOverlay = z.infer<typeof healthVideoOverlaySchema>;
 export type HealthCorrelation = z.infer<typeof healthCorrelationSchema>;
 export type AdminVideoOverview = z.infer<typeof adminVideoOverviewSchema>;
+export type VisionCalibrationReviewSample = z.infer<
+  typeof visionCalibrationReviewSampleSchema
+>;
 export type DunaPlusGrant = z.infer<typeof dunaPlusGrantSchema>;

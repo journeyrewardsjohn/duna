@@ -3163,6 +3163,13 @@ export const videos = pgTable(
       .notNull()
       .default(false),
     hasAudio: boolean("has_audio").notNull().default(true),
+    visionLearningConsent: boolean("vision_learning_consent")
+      .notNull()
+      .default(false),
+    visionLearningConsentedAt: timestamp("vision_learning_consented_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     musicRemovalRequested: boolean("music_removal_requested")
       .notNull()
       .default(false),
@@ -3203,6 +3210,32 @@ export const videos = pgTable(
         readonly x: number;
         readonly y: number;
       }[];
+      readonly netLine?: readonly {
+        readonly x: number;
+        readonly y: number;
+      }[];
+      readonly netTopLine?: readonly {
+        readonly x: number;
+        readonly y: number;
+      }[];
+      readonly antennaPoints?: readonly {
+        readonly x: number;
+        readonly y: number;
+      }[];
+      readonly visibleCornerCount?: number;
+      readonly nearLineVisible?: boolean;
+      readonly partialCourt?: boolean;
+      readonly edgeVisibility?: {
+        readonly far: boolean;
+        readonly left: boolean;
+        readonly right: boolean;
+        readonly near: boolean;
+        readonly net: boolean;
+      };
+      readonly netDetected?: boolean;
+      readonly antennaDetected?: boolean;
+      readonly calibrationMode?: "automatic" | "assisted" | "manual";
+      readonly modelVersion?: string;
       readonly deviceAttitude?: {
         readonly pitch: number;
         readonly roll: number;
@@ -3273,6 +3306,10 @@ export const videos = pgTable(
       "video_coordinates_pair",
       sql`(${table.latitude} IS NULL AND ${table.longitude} IS NULL) OR (${table.latitude} IS NOT NULL AND ${table.longitude} IS NOT NULL)`,
     ),
+    check(
+      "video_vision_learning_consent_pair",
+      sql`(${table.visionLearningConsent} = false AND ${table.visionLearningConsentedAt} IS NULL) OR (${table.visionLearningConsent} = true AND ${table.visionLearningConsentedAt} IS NOT NULL)`,
+    ),
   ],
 );
 
@@ -3300,6 +3337,7 @@ export const visionSessions = pgTable(
     }).notNull(),
     settings: jsonb("settings")
       .$type<{
+        readonly captureMode?: "record" | "live";
         readonly courtWidthMeters: number;
         readonly courtLengthMeters: number;
         readonly netHeightMeters: number;
@@ -3311,6 +3349,27 @@ export const visionSessions = pgTable(
           readonly x: number;
           readonly y: number;
         }[];
+        readonly netLine?: readonly {
+          readonly x: number;
+          readonly y: number;
+        }[];
+        readonly netTopLine?: readonly {
+          readonly x: number;
+          readonly y: number;
+        }[];
+        readonly antennaPoints?: readonly {
+          readonly x: number;
+          readonly y: number;
+        }[];
+        readonly nearLineVisible?: boolean;
+        readonly edgeVisibility?: {
+          readonly far: boolean;
+          readonly left: boolean;
+          readonly right: boolean;
+          readonly near: boolean;
+          readonly net: boolean;
+        };
+        readonly calibrationMode?: "automatic" | "assisted" | "manual";
       }>()
       .notNull(),
     controlVersion: integer("control_version").notNull().default(1),
@@ -3410,6 +3469,154 @@ export const visionTimelineEvents = pgTable(
       "vision_timeline_elapsed_valid",
       sql`${table.elapsedMs} BETWEEN 0 AND 43200000`,
     ),
+  ],
+);
+
+// Model improvement is deliberately consented and human-reviewed. A sample
+// references the low-resolution Vision preview instead of copying private video
+// into a second store, and approval is distinct from automatic training.
+export const visionCalibrationSamples = pgTable(
+  "vision_calibration_samples",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" })
+      .unique(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => visionSessions.id, { onDelete: "cascade" })
+      .unique(),
+    ownerPersonId: uuid("owner_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    sourceModelVersion: varchar("source_model_version", { length: 80 }),
+    qualityScore: integer("quality_score"),
+    geometry: jsonb("geometry").notNull().$type<Record<string, unknown>>(),
+    previewCapturedAt: timestamp("preview_captured_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    status: varchar("status", { length: 24 }).notNull().default("pending"),
+    reviewedByPersonId: uuid("reviewed_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    reviewNotes: text("review_notes"),
+    reviewedAt: timestamp("reviewed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    approvedForTrainingAt: timestamp("approved_for_training_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("vision_calibration_status_created_idx").on(
+      table.status,
+      table.createdAt,
+    ),
+    index("vision_calibration_owner_created_idx").on(
+      table.ownerPersonId,
+      table.createdAt,
+    ),
+    check(
+      "vision_calibration_status_valid",
+      sql`${table.status} IN ('pending', 'approved', 'rejected', 'training', 'trained')`,
+    ),
+    check(
+      "vision_calibration_quality_score_valid",
+      sql`${table.qualityScore} IS NULL OR ${table.qualityScore} BETWEEN 0 AND 100`,
+    ),
+    check(
+      "vision_calibration_review_pair",
+      sql`(${table.status} = 'pending' AND ${table.reviewedAt} IS NULL AND ${table.reviewedByPersonId} IS NULL) OR (${table.status} <> 'pending' AND ${table.reviewedAt} IS NOT NULL AND ${table.reviewedByPersonId} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const videoInsights = pgTable(
+  "video_insights",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" }),
+    playerPersonId: uuid("player_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    category: varchar("category", { length: 32 }).notNull(),
+    headline: varchar("headline", { length: 180 }).notNull(),
+    guidance: text("guidance").notNull(),
+    evidence: jsonb("evidence").notNull().$type<Record<string, unknown>>(),
+    confidence: doublePrecision("confidence").notNull(),
+    modelVersion: varchar("model_version", { length: 80 }),
+    createdByType: varchar("created_by_type", { length: 16 })
+      .notNull()
+      .default("model"),
+    status: varchar("status", { length: 24 }).notNull().default("draft"),
+    reviewedByPersonId: uuid("reviewed_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    publishedAt: timestamp("published_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("video_insight_player_status_idx").on(
+      table.playerPersonId,
+      table.status,
+      table.createdAt,
+    ),
+    index("video_insight_video_idx").on(table.videoId, table.createdAt),
+    check(
+      "video_insight_category_valid",
+      sql`${table.category} IN ('hitting', 'passing', 'setting', 'serving', 'movement', 'strategy')`,
+    ),
+    check(
+      "video_insight_confidence_valid",
+      sql`${table.confidence} BETWEEN 0 AND 1`,
+    ),
+    check(
+      "video_insight_creator_valid",
+      sql`${table.createdByType} IN ('model', 'pro', 'admin')`,
+    ),
+    check(
+      "video_insight_status_valid",
+      sql`${table.status} IN ('draft', 'pro-review', 'published', 'dismissed', 'archived')`,
+    ),
+  ],
+);
+
+export const videoInsightFeedback = pgTable(
+  "video_insight_feedback",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    insightId: uuid("insight_id")
+      .notNull()
+      .references(() => videoInsights.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    vote: integer("vote").notNull(),
+    note: text("note"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("video_insight_feedback_person_unique").on(
+      table.insightId,
+      table.personId,
+    ),
+    index("video_insight_feedback_created_idx").on(table.createdAt),
+    check("video_insight_feedback_vote_valid", sql`${table.vote} IN (-1, 1)`),
   ],
 );
 
