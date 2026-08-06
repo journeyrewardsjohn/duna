@@ -276,6 +276,7 @@ export const people = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     workosUserId: varchar("workos_user_id", { length: 128 }).unique(),
     clerkUserId: varchar("clerk_user_id", { length: 128 }).unique(),
+    stripeCustomerId: varchar("stripe_customer_id", { length: 128 }).unique(),
     phoneE164: varchar("phone_e164", { length: 24 }).unique(),
     email: text("email"),
     givenName: text("given_name"),

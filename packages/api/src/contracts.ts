@@ -3921,6 +3921,15 @@ export const eventCheckoutResultSchema = z.object({
   teamClaimToken: z.string().min(16).max(128).optional(),
   checkoutSessionId: z.string().optional(),
   checkoutUrl: z.url().optional(),
+  paymentSheet: z
+    .object({
+      publishableKey: z.string().startsWith("pk_"),
+      paymentIntentId: z.string().startsWith("pi_"),
+      paymentIntentClientSecret: z.string().min(1),
+      customerId: z.string().startsWith("cus_"),
+      customerSessionClientSecret: z.string().min(1),
+    })
+    .optional(),
   expiresAt: z.iso.datetime().optional(),
   pricing: z.object({
     subtotalMinor: z.number().int().nonnegative(),

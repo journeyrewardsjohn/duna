@@ -92,7 +92,14 @@
           }
         }
       ],
-      "expo-video"
+      "expo-video",
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": [],
+          "enableGooglePay": false
+        }
+      ]
     ],
     "extra": {
       "eas": {
