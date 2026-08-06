@@ -3,7 +3,9 @@ import {
   getDatabase,
   guardianConsents,
   guardianships,
+  identityVerificationSessions,
   people,
+  playerPublicProfiles,
 } from "@duna/db";
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { stableHash } from "./canonical";
@@ -28,6 +30,7 @@ export class IdentityError extends Error {
       | "ADULT_REQUIRED"
       | "DEPENDENT_MUST_BE_MINOR"
       | "PUBLIC_MINOR_PROFILE_BLOCKED"
+      | "VERIFIED_PRO_REQUIRED"
       | "GUARDIANSHIP_NOT_FOUND"
       | "GUARDIANSHIP_ALREADY_REVIEWED"
       | "GUARDIAN_CONSENT_REQUIRED"
@@ -37,6 +40,83 @@ export class IdentityError extends Error {
     super(message);
     this.name = "IdentityError";
   }
+}
+
+export type PlayerAccentId =
+  | "dune-gold"
+  | "marine"
+  | "deep-coral"
+  | "moss"
+  | "terracotta"
+  | "slate-blue"
+  | "ochre"
+  | "plum"
+  | "sea-green"
+  | "ink";
+
+export async function updateOwnProfileAccent(input: {
+  readonly actor: ApiActor;
+  readonly accentId: PlayerAccentId;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{ readonly personId: string; readonly accentId: PlayerAccentId }> {
+  requireDatabase();
+  const database = getDatabase();
+  const [person, verification, profile] = await Promise.all([
+    database.query.people.findFirst({
+      where: eq(people.id, input.actor.personId),
+    }),
+    database.query.identityVerificationSessions.findFirst({
+      where: and(
+        eq(identityVerificationSessions.personId, input.actor.personId),
+        eq(identityVerificationSessions.status, "verified"),
+      ),
+    }),
+    database.query.playerPublicProfiles.findFirst({
+      where: eq(playerPublicProfiles.personId, input.actor.personId),
+    }),
+  ]);
+  if (!person) {
+    throw new IdentityError(
+      "PERSON_NOT_FOUND",
+      "Player profile was not found.",
+    );
+  }
+  if (!person.isProfessional || !verification) {
+    throw new IdentityError(
+      "VERIFIED_PRO_REQUIRED",
+      "A verified professional identity is required to select a profile accent.",
+    );
+  }
+  await database.batch([
+    database
+      .insert(playerPublicProfiles)
+      .values({
+        personId: person.id,
+        accentId: input.accentId,
+        updatedAt: input.now,
+      })
+      .onConflictDoUpdate({
+        target: playerPublicProfiles.personId,
+        set: { accentId: input.accentId, updatedAt: input.now },
+      }),
+    database.insert(auditLog).values({
+      actorPersonId: person.id,
+      actorType: "person",
+      action: "player.public_identity_accent_updated",
+      entityType: "player-public-profile",
+      entityId: person.id,
+      beforeHash: stableHash({ accentId: profile?.accentId ?? "dune-gold" }),
+      afterHash: stableHash({ accentId: input.accentId }),
+      reason:
+        "Verified professional selected a curated public identity accent.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return { personId: person.id, accentId: input.accentId };
 }
 
 function requireDatabase(): void {

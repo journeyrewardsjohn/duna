@@ -4,8 +4,12 @@
 the Player experience, Duna HQ, Super Admin, Duna Players, Duna Pro, Watch,
 Live Activities, video, imagery, and lifecycle media.
 
-The three versioned references are intentionally separate:
+The current references are intentionally separate:
 
+- `duna-design-system-v3.md` is the active amendment for ground inversion,
+  athletic composition, typography, club color, and player identity.
+- `duna-implementation-audit.md` records the verified production failures and
+  their acceptance criteria.
 - `duna-design-system.md` defines the core brand and web system.
 - `duna-mobile-design-guide.md` defines how that system behaves on phones and
   across the distinct Player and Pro jobs.
@@ -23,10 +27,10 @@ Rewards font package supplied for Duna. They may not be redistributed or reused
 outside the licensed product.
 
 The supplied Awesome Serif archive is labeled as a desktop-font package. Duna
-uses Instrument Serif for shippable digital display typography until web and
-app embedding rights for Awesome Serif are documented. The Awesome Serif files
-must not be copied into a web or native bundle merely because they were supplied
-for design review.
+uses Fraunces Variable for shippable editorial display typography and Fellix
+for athletic display typography until web and app embedding rights for Awesome
+Serif are documented. The Awesome Serif files must not be copied into a web or
+native bundle merely because they were supplied for design review.
 
 ## Generated media
 

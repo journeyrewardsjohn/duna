@@ -213,7 +213,7 @@ export default async function EventPage({
     .sort((left, right) => left.amountMinor - right.amountMinor)[0];
 
   return (
-    <main className="event-public">
+    <main className="event-public" data-zone="athletic">
       <SiteHeader />
 
       <section className="event-public__hero">
@@ -222,7 +222,7 @@ export default async function EventPage({
             <Badge tone={event.live ? "live" : "neutral"}>
               {event.live ? "Live now" : words(event.kind)}
             </Badge>
-            {event.tags.slice(0, 3).map((tag) => (
+            {event.tags.slice(0, 2).map((tag) => (
               <Badge key={tag}>{tag}</Badge>
             ))}
           </div>

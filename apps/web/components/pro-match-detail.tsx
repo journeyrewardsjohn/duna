@@ -38,13 +38,16 @@ export function ProMatchDetail({
   const { event, match } = detail;
   const structuredData = professionalMatchJsonLd(detail);
   return (
-    <main className="pro-match-page">
+    <main className="pro-match-page" data-zone="athletic">
       <SiteHeader />
       <script
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
         type="application/ld+json"
       />
-      <section className="pro-match-hero" data-zone="performance">
+      <section
+        className="pro-match-hero"
+        data-zone={match.status === "live" ? "live" : "athletic"}
+      >
         <div>
           <Link href={`/events/${event.slug}`}>
             <ArrowLeft aria-hidden size={15} />

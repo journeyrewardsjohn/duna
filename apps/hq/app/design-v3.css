@@ -1,0 +1,605 @@
+/* Duna HQ v3 — a calm light operating system with a formal signal-derived accent. */
+
+:root {
+  --hq-tint: #e8f2d4;
+  --hq-core: #a9c463;
+  --hq-ink: #3f5417;
+  --hq-deep: #1e2a0e;
+  font-synthesis: none;
+  font-synthesis-weight: none;
+}
+
+html,
+body {
+  background: var(--ground);
+  color: var(--text-1);
+}
+
+body {
+  font-family: var(--font-body);
+  text-rendering: optimizeLegibility;
+}
+
+body[data-zone="athletic"] :is(h1, h2, h3) {
+  font-family: var(--font-body);
+  font-style: normal;
+}
+
+:where(h1, h2, h3) {
+  max-width: 20ch;
+  color: var(--text-1);
+  font-family: var(--font-body);
+  font-weight: 750;
+  font-synthesis: none;
+}
+
+.hq-shell .hq-page h1,
+.hq-shell .hq-page h2,
+.hq-shell .hq-page h3,
+.hq-shell .hq-card h2,
+.hq-shell .hq-card h3 {
+  color: var(--text-1);
+  font-family: var(--font-body);
+  font-weight: 750;
+}
+
+:where(h1) {
+  max-width: 14ch;
+  font-size: clamp(2.4rem, 5.2vw, 4.75rem);
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  word-spacing: 0.05em;
+}
+
+:where(h2) {
+  font-size: clamp(1.8rem, 3.2vw, 3rem);
+  line-height: 1.1;
+  letter-spacing: -0.018em;
+  word-spacing: 0.03em;
+}
+
+:where(h3) {
+  font-size: clamp(1.3rem, 2.2vw, 1.8rem);
+  line-height: 1.12;
+  letter-spacing: -0.012em;
+  word-spacing: 0.02em;
+}
+
+:where(.hq-eyebrow, [class*="__eyebrow"], [class*="__label"]) {
+  color: color-mix(in srgb, var(--text-2) 72%, transparent);
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.14em;
+  word-spacing: 0;
+  text-transform: uppercase;
+}
+
+:where(
+  .duna-numeric,
+  .hq-lead-metric strong,
+  .hq-analytics-metrics strong,
+  .metric-grid strong,
+  [class*="metric"] strong,
+  [class*="stat"] strong,
+  time
+) {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-variation-settings:
+    "wdth" 96,
+    "wght" 800;
+}
+
+.hq-shell .hq-lead-metric strong,
+.hq-shell .hq-analytics-metrics strong,
+.hq-shell .metric-grid strong,
+.hq-shell [class*="metric"] strong,
+.hq-shell [class*="stat"] strong {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-variation-settings:
+    "wdth" 96,
+    "wght" 800;
+  font-weight: 800;
+}
+
+.hq-shell {
+  min-height: 100svh;
+  background: var(--ground);
+}
+
+.hq-sidebar {
+  color: var(--text-1);
+  border-right: 1px solid var(--hairline);
+  background:
+    linear-gradient(rgb(27 27 25 / 2%) 1px, transparent 1px), var(--surface-1);
+  background-size: 100% 76px;
+  box-shadow: 10px 0 32px rgb(27 27 25 / 3%);
+}
+
+.hq-sidebar :where(.duna-mark__word, .duna-mark__symbol) {
+  color: var(--text-1);
+}
+
+.organization-switcher,
+.admin-identity {
+  color: var(--text-1);
+  border-color: var(--hairline-strong);
+  background: var(--surface-2);
+}
+
+.organization-switcher > span:first-child {
+  color: var(--hq-ink);
+  background: var(--hq-tint);
+}
+
+.organization-switcher small,
+.admin-identity small {
+  color: var(--text-3);
+}
+
+.admin-identity {
+  color: var(--text-2);
+}
+
+.admin-identity > svg {
+  color: var(--gold);
+}
+
+.hq-sidebar nav a {
+  color: var(--text-2);
+}
+
+.hq-sidebar nav a:hover {
+  color: var(--text-1);
+  background: var(--surface-2);
+}
+
+.hq-sidebar nav a.active,
+.admin-shell .hq-sidebar nav a.active {
+  color: var(--hq-ink);
+  background: var(--hq-tint);
+  box-shadow: inset 3px 0 var(--hq-core);
+}
+
+.hq-sidebar-footer,
+.hq-sidebar-footer a {
+  color: var(--text-3);
+}
+
+.hq-topbar {
+  color: var(--text-1);
+  border-bottom: 1px solid var(--hairline);
+  background: rgb(246 245 241 / 86%);
+  backdrop-filter: blur(20px) saturate(1.2);
+}
+
+.hq-topbar :where(button, a) {
+  color: var(--text-2);
+  border-color: var(--hairline);
+  background: var(--surface-1);
+}
+
+.hq-ai-button {
+  color: var(--hq-ink) !important;
+  border-color: color-mix(in srgb, var(--hq-core) 50%, transparent) !important;
+  background: var(--hq-tint) !important;
+}
+
+.hq-content,
+.hq-page {
+  background: var(--ground);
+  color: var(--text-1);
+}
+
+.hq-content {
+  padding: clamp(1.25rem, 3vw, 3rem);
+}
+
+.hq-page {
+  width: min(100%, 94rem);
+  margin-inline: auto;
+}
+
+.hq-page-heading,
+.hq-page-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem 2rem;
+  align-items: end;
+  margin-bottom: clamp(2rem, 5vw, 4rem);
+  color: var(--text-1);
+}
+
+.hq-page-heading h1,
+.hq-page-header h1 {
+  margin: 0.75rem 0 1rem;
+}
+
+.hq-page-heading p,
+.hq-page-header p,
+.hq-card-heading p {
+  max-width: 56ch;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+
+.hq-card,
+.operator-control-card,
+.guided-product-builder,
+.theme-kit-editor {
+  color: var(--text-1);
+  border: 1px solid var(--hairline);
+  border-radius: 20px;
+  background: var(--surface-1);
+  box-shadow: var(--shadow-small);
+}
+
+.hq-card-heading h2,
+.operator-control-card h2 {
+  font-family: var(--font-body);
+  font-weight: 750;
+}
+
+.hq-button,
+.primary-action {
+  min-height: 2.75rem;
+  border-radius: 999px;
+  font-weight: 650;
+}
+
+.hq-button--primary,
+.primary-action {
+  color: #f2f0ea;
+  border-color: var(--hq-deep);
+  background: var(--hq-deep);
+}
+
+.hq-button--primary:hover,
+.primary-action:hover {
+  background: var(--hq-ink);
+}
+
+.hq-button--secondary {
+  color: var(--text-1);
+  border-color: var(--hairline-strong);
+  background: var(--surface-1);
+}
+
+:where(input, select, textarea) {
+  color: var(--text-1);
+  border-color: var(--hairline-strong);
+  border-radius: 8px;
+  background: var(--surface-1);
+}
+
+:where(input, select, textarea):focus-visible {
+  border-color: var(--hq-core);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hq-core) 28%, transparent);
+}
+
+/* Overview: one dark decision block, then calm evidence. */
+.hq-overview-layout {
+  align-items: start;
+}
+
+.hq-lead-metric:first-child,
+.people-command-metrics__primary,
+.product-performance-metrics > :first-child {
+  color: #f2f0ea;
+  border-color: transparent;
+  background: #1b1b19;
+}
+
+.hq-lead-metric:first-child :where(strong, h2, h3),
+.people-command-metrics__primary :where(strong, h2, h3),
+.product-performance-metrics > :first-child :where(strong, h2, h3) {
+  color: #f2f0ea;
+}
+
+.hq-lead-metric:first-child :where(small, span, p),
+.people-command-metrics__primary :where(small, span, p),
+.product-performance-metrics > :first-child :where(small, span, p) {
+  color: rgb(242 240 234 / 64%);
+}
+
+.hq-ai-analyst,
+.recommendation-card,
+.guided-product-assist {
+  color: #f2f0ea;
+  border-color: transparent;
+  background:
+    radial-gradient(circle at 85% 8%, rgb(169 196 99 / 20%), transparent 30%),
+    var(--hq-deep);
+  box-shadow: 0 24px 70px rgb(30 42 14 / 18%);
+}
+
+.hq-ai-analyst :where(h2, h3, strong),
+.recommendation-card :where(h2, h3, strong),
+.guided-product-assist :where(h2, h3, strong) {
+  color: #f2f0ea;
+}
+
+.hq-shell .hq-ai-analyst :where(h2, h3, strong),
+.hq-shell .recommendation-card :where(h2, h3, strong),
+.hq-shell .guided-product-assist :where(h2, h3, strong) {
+  color: #f2f0ea;
+  font-family: var(--font-body);
+}
+
+.hq-ai-analyst :where(p, small, span),
+.recommendation-card :where(p, small, span),
+.guided-product-assist :where(p, small, span) {
+  color: rgb(242 240 234 / 68%);
+}
+
+.hq-shell .hq-ai-analyst :where(p, small, span),
+.hq-shell .recommendation-card :where(p, small, span),
+.hq-shell .guided-product-assist :where(p, small, span) {
+  color: rgb(242 240 234 / 72%);
+}
+
+.hq-ai-signal {
+  border-color: rgb(242 240 234 / 12%);
+  background: rgb(242 240 234 / 6%);
+}
+
+/* Guided builders show path, readiness, and a live preview without visual noise. */
+.guided-product-builder {
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.guided-product-builder__header {
+  color: var(--text-1);
+  background: linear-gradient(112deg, var(--hq-tint), var(--surface-1) 72%);
+}
+
+.guided-product-builder__label,
+.guided-product-type-row > button.active,
+.guided-choice.active,
+.guided-product-steps > button.active {
+  color: var(--hq-ink);
+}
+
+.guided-product-type-row > button.active,
+.guided-choice.active {
+  border-color: var(--hq-core);
+  background: var(--hq-tint);
+}
+
+.guided-product-type-row > button > i,
+.guided-choice > i,
+.guided-product-steps i,
+.guided-product-progress > i,
+.guided-offer-preview__readiness > div > i {
+  background: var(--hq-core);
+}
+
+.guided-product-guide,
+.guided-product-stage,
+.guided-offer-preview__card {
+  color: var(--text-1);
+  background: var(--surface-1);
+}
+
+.guided-offer-preview__hero {
+  background: linear-gradient(130deg, var(--hq-tint), var(--ground-warm));
+}
+
+.guided-offer-preview__price {
+  color: #f2f0ea;
+  background: #1b1b19;
+}
+
+.guided-offer-preview__price :where(strong, small) {
+  color: inherit;
+}
+
+/* Theme Kit: one submitted color, normalized slots, private preview. */
+.theme-kit-editor {
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.theme-kit-identity-header {
+  color: var(--text-1);
+  border-bottom: 1px solid var(--hairline);
+  background: linear-gradient(112deg, var(--hq-tint), var(--surface-1) 70%);
+}
+
+.theme-kit-identity-header h2 {
+  color: var(--text-1);
+  font-family: var(--font-body);
+}
+
+.theme-kit-identity-header p,
+.theme-kit-identity-header .hq-eyebrow {
+  color: var(--text-2);
+}
+
+.hq-shell .theme-kit-editor input::placeholder,
+.hq-shell .theme-kit-editor textarea::placeholder {
+  color: color-mix(in srgb, var(--text-2) 72%, var(--surface-1));
+  opacity: 1;
+}
+
+.theme-kit-editor :where(input, textarea):disabled {
+  color: var(--text-2);
+  opacity: 0.72;
+}
+
+.theme-kit-page .hq-page-heading > div > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+}
+
+/* Super Admin stays formal and legible, including the unauthenticated gate. */
+.admin-access-denied h1,
+.admin-organization-hero h1 {
+  font-family: var(--font-body);
+  font-weight: 800;
+  line-height: 0.98;
+}
+
+.admin-access-denied a {
+  color: #f7f5ef;
+  background: var(--text-1);
+}
+
+.theme-kit-canonical {
+  color: var(--hq-ink);
+  border-color: color-mix(in srgb, var(--hq-core) 40%, transparent);
+  background: var(--hq-tint);
+}
+
+.theme-kit-workspace {
+  align-items: start;
+}
+
+.theme-kit-section {
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+  background: transparent;
+}
+
+.theme-color-system--normalized {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.75fr) minmax(18rem, 1.25fr);
+  gap: 1.25rem;
+  align-items: end;
+}
+
+.theme-color-field--source {
+  min-height: 100%;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--surface-1);
+}
+
+.theme-color-field--source input[type="color"] {
+  min-height: 5rem;
+  border-radius: 8px;
+}
+
+.theme-color-system__swatches {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+}
+
+.theme-color-system__swatches > span {
+  display: grid;
+  align-content: end;
+  min-height: 7rem;
+  padding: 0.7rem;
+  border-left: 1px solid rgb(27 27 25 / 12%);
+  color: var(--club-ink);
+  background: var(--club-tint);
+}
+
+.theme-color-system__swatches > span:nth-child(2) {
+  background: var(--club-edge);
+}
+
+.theme-color-system__swatches > span:nth-child(3) {
+  color: #f2f0ea;
+  background: var(--club-core);
+}
+
+.theme-color-system__swatches > span:nth-child(4) {
+  color: #f2f0ea;
+  background: var(--club-ink);
+}
+
+.theme-color-system__swatches > span:first-child {
+  border-left: 0;
+}
+
+.theme-kit-preview {
+  position: sticky;
+  top: 5.5rem;
+  overflow: hidden;
+  border-radius: 12px;
+  box-shadow: 0 24px 70px rgb(27 27 25 / 10%);
+}
+
+/* Super Admin uses the same calm ground; gold signals control, not danger. */
+.admin-shell {
+  --hq-tint: #f4ead5;
+  --hq-core: #c9a96a;
+  --hq-ink: #6c5527;
+  --hq-deep: #2c2519;
+}
+
+.admin-page .metric-grid > article:first-child,
+.admin-org-metric-grid > article:first-child,
+.pro-admin-metrics > article:first-child,
+.ratings-lab__metrics > article:first-child,
+.video-admin-metrics > article:first-child {
+  color: #f2f0ea;
+  background: #1b1b19;
+}
+
+.admin-page .metric-grid > article:first-child :where(strong, small, span),
+.admin-org-metric-grid > article:first-child :where(strong, small, span),
+.pro-admin-metrics > article:first-child :where(strong, small, span),
+.ratings-lab__metrics > article:first-child :where(strong, small, span),
+.video-admin-metrics > article:first-child :where(strong, small, span) {
+  color: inherit;
+}
+
+.admin-audit-table,
+.admin-event-list,
+.admin-overview-grid > section {
+  border-color: var(--hairline);
+  background: var(--surface-1);
+}
+
+@media (max-width: 980px) {
+  .hq-content {
+    padding: 1.25rem;
+  }
+
+  .theme-color-system--normalized {
+    grid-template-columns: 1fr;
+  }
+
+  .theme-kit-preview {
+    position: static;
+  }
+}
+
+@media (max-width: 720px) {
+  .hq-content {
+    padding: 1.25rem 1.25rem calc(7rem + env(safe-area-inset-bottom));
+  }
+
+  .hq-page-heading,
+  .hq-page-header {
+    grid-template-columns: 1fr;
+  }
+
+  .theme-color-system__swatches {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .theme-color-system__swatches > span:nth-child(3) {
+    border-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hq-shell * {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

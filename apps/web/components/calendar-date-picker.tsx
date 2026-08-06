@@ -51,7 +51,7 @@ function dateParts(value: string) {
   const date = parseIsoDate(value);
   const weekday = date.getUTCDay();
   return {
-    day: ["Sun", "Mon", "Tues", "Wed", "Thu", "Fri", "Sat"][weekday],
+    day: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][weekday],
     date: String(date.getUTCDate()),
     month: new Intl.DateTimeFormat("en-US", {
       month: "short",

@@ -2,7 +2,7 @@ import type {
   PublicPlayerIntelligence,
   PublicPlayerPerformance,
 } from "@duna/api";
-import { Badge, Numeric } from "@duna/ui";
+import { Badge, Numeric, playerAccents } from "@duna/ui";
 import {
   Activity,
   ArrowRight,
@@ -414,6 +414,9 @@ export default async function PublicPlayerPage({
         })
       : undefined;
   const enrichment = intelligence?.profile;
+  const playerAccent =
+    playerAccents.find((accent) => accent.id === enrichment?.accentId)?.color ??
+    playerAccents[0].color;
   const countryCode =
     enrichment?.countryCode ?? performance?.worldRanking?.countryCode;
   const heroImage = enrichment?.heroImageUrl;
@@ -523,7 +526,11 @@ export default async function PublicPlayerPage({
   };
 
   return (
-    <main className="public-detail player-profile-v2">
+    <main
+      className="public-detail player-profile-v2"
+      data-zone="athletic"
+      style={{ "--player-accent": playerAccent } as React.CSSProperties}
+    >
       <SiteHeader />
       <script
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
@@ -560,7 +567,9 @@ export default async function PublicPlayerPage({
           <div className="athlete-hero__content">
             <div className="athlete-hero__copy">
               <div className="profile-badge-row">
-                <Badge>{profileStateLabel(player.profileClaimStatus)}</Badge>
+                {player.profileClaimStatus !== "unclaimed" && (
+                  <Badge>{profileStateLabel(player.profileClaimStatus)}</Badge>
+                )}
                 {player.isProfessional && (
                   <Badge tone="positive">
                     <Trophy aria-hidden size={14} /> Professional
@@ -613,15 +622,9 @@ export default async function PublicPlayerPage({
                   initialState={followState}
                   playerPersonId={player.id}
                 />
-                {player.profileClaimStatus === "unclaimed" ? (
-                  <Link href={claimPath}>
-                    <UserRoundCheck aria-hidden size={18} /> Claim profile
-                  </Link>
-                ) : (
-                  <a href="#match-history">
-                    Explore results <ArrowRight aria-hidden size={17} />
-                  </a>
-                )}
+                <a href="#match-history">
+                  Explore results <ArrowRight aria-hidden size={17} />
+                </a>
               </div>
             </div>
 
@@ -655,8 +658,9 @@ export default async function PublicPlayerPage({
                     (player.rating.delta ?? 0) >= 0 ? "up" : "down"
                   }
                 >
-                  {(player.rating.delta ?? 0) >= 0 ? "+" : ""}
-                  {(player.rating.delta ?? 0).toFixed(2)} current movement
+                  {history.length > 0
+                    ? `${(player.rating.delta ?? 0) >= 0 ? "+" : ""}${(player.rating.delta ?? 0).toFixed(2)} current movement`
+                    : "Provisional rating"}
                 </span>
               </div>
             </div>
@@ -746,18 +750,36 @@ export default async function PublicPlayerPage({
             {
               label: "Sand Rating",
               value: player.rating.display.toFixed(2),
-              detail: `${netRatingChange >= 0 ? "+" : ""}${netRatingChange.toFixed(2)} across connected form`,
+              detail:
+                history.length > 0
+                  ? `${netRatingChange >= 0 ? "+" : ""}${netRatingChange.toFixed(2)} across connected form`
+                  : "Provisional until a rated result connects",
             },
-            {
-              label: "Verified record",
-              value: `${wins}–${losses}`,
-              detail: `${history.length} rated matches`,
-            },
-            {
-              label: "Win percentage",
-              value: `${winRate.toFixed(0)}%`,
-              detail: `${recentWins} wins in the latest ${recent.length || 0}`,
-            },
+            ...(history.length > 0
+              ? [
+                  {
+                    label: "Verified record",
+                    value: `${wins}–${losses}`,
+                    detail: `${history.length} rated matches`,
+                  },
+                  {
+                    label: "Win percentage",
+                    value: `${winRate.toFixed(0)}%`,
+                    detail: `${recentWins} wins in the latest ${recent.length}`,
+                  },
+                ]
+              : [
+                  {
+                    label: "Rated matches",
+                    value: "—",
+                    detail: "First verified result pending",
+                  },
+                  {
+                    label: "Form window",
+                    value: "10",
+                    detail: "Builds across the latest results",
+                  },
+                ]),
             {
               label: "World position",
               value: performance?.worldRanking
@@ -765,7 +787,7 @@ export default async function PublicPlayerPage({
                 : "—",
               detail: performance?.worldRanking
                 ? `${performance.worldRanking.points.toFixed(0)} tour points`
-                : `${upsetWins.length} model upsets`,
+                : "Ranking not connected",
             },
           ].map((metric) => (
             <article key={metric.label}>
@@ -775,6 +797,25 @@ export default async function PublicPlayerPage({
             </article>
           ))}
         </div>
+        {player.profileClaimStatus === "unclaimed" && (
+          <aside className="athlete-claim-callout">
+            <div>
+              <UserRoundCheck aria-hidden size={22} />
+              <span>
+                <small>Player identity</small>
+                <strong>Is this your competition record?</strong>
+                <p>
+                  Claim the profile to manage your photo, biography, social
+                  links, and public identity. Results and ratings stay
+                  evidence-owned by Duna.
+                </p>
+              </span>
+            </div>
+            <Link href={claimPath}>
+              Claim this profile <ArrowRight aria-hidden size={16} />
+            </Link>
+          </aside>
+        )}
       </section>
 
       <section className="public-profile-body athlete-profile-body">
@@ -830,9 +871,13 @@ export default async function PublicPlayerPage({
               <Activity aria-hidden size={22} />
               <small>Recent form</small>
               <strong>
-                {recentWins}/{recent.length || 0}
+                {recent.length > 0 ? `${recentWins}/${recent.length}` : "—"}
               </strong>
-              <span>Wins across the latest connected results</span>
+              <span>
+                {recent.length > 0
+                  ? "Wins across the latest connected results"
+                  : "First verified result pending"}
+              </span>
             </article>
             <article>
               <Globe2 aria-hidden size={22} />

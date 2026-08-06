@@ -7,21 +7,33 @@ and data truth always take precedence over visual novelty.
 
 Read the relevant reference before changing any user-facing surface:
 
-1. [`docs/design/duna-design-system.md`](docs/design/duna-design-system.md) is
-   the source of truth for brand, web, imagery, motion, voice, co-branding, and
-   page-level direction.
-2. [`docs/design/duna-mobile-design-guide.md`](docs/design/duna-mobile-design-guide.md)
+1. [`docs/design/duna-design-system-v3.md`](docs/design/duna-design-system-v3.md)
+   is the current source of truth for ground inversion, athletic composition,
+   typography, club color, player identity, and page-level direction. It
+   supersedes only the zoning rule in v2.
+2. [`docs/design/duna-implementation-audit.md`](docs/design/duna-implementation-audit.md)
+   is the verified correction ledger. Treat an item as closed only when source,
+   computed styles, responsive layout, and live behavior agree.
+3. [`docs/design/duna-design-system.md`](docs/design/duna-design-system.md)
+   remains the source for brand, imagery, motion, voice, and co-branding where
+   v3 does not amend it.
+4. [`docs/design/duna-mobile-design-guide.md`](docs/design/duna-mobile-design-guide.md)
    extends the system for Duna Players and Duna Pro. It owns mobile navigation,
    adaptive contrast, sunlight behavior, touch targets, offline states, the
    Strand, and the Watch.
-3. [`docs/design/duna-theming-light-dark.md`](docs/design/duna-theming-light-dark.md)
+5. [`docs/design/duna-theming-light-dark.md`](docs/design/duna-theming-light-dark.md)
    owns theme architecture. Theme is a preference, zone is meaning, and
    contrast is an environmental condition.
 
 When the documents appear to conflict, preserve these invariants:
 
-- Editorial is always warmer and lighter than performance.
-- Light means “read”; cool dark means “live, compete, or operate.”
+- Light is the default ground for editorial, athletic, browsing, ranking,
+  pre-match, post-match, HQ, and Super Admin surfaces.
+- Dark means a ball is in the air right now. Only live matches, live scoring,
+  and courtside mode use the live zone. A user-selected dark theme remains a
+  preference and does not change a surface's semantic zone.
+- Athletic energy comes from ghost type, blocked numerals, a single accent,
+  density contrast, and one plane break—not a dark background.
 - Energy belongs in athletes and meaningful data, not decorative chrome.
 - Flare is reserved for live, scarce, changing, or exception states. It is not
   a general CTA or brand color.
@@ -33,14 +45,26 @@ When the documents appear to conflict, preserve these invariants:
 - Build shared primitives and semantic tokens in `packages/ui` before adding a
   local variant. Raw hex values in product components are defects unless the
   value belongs to a third-party asset that cannot use Duna tokens.
-- Web surfaces declare `data-zone="editorial"` or `data-zone="performance"`.
+- Web surfaces declare `data-zone="editorial"`, `data-zone="athletic"`, or
+  `data-zone="live"`. Native screens declare the equivalent zone through the
+  shared token resolver. Never use the retired `performance` zone.
   Native screens declare the equivalent zone through the shared token resolver.
 - Every theme supports Light, Dark, and Match device. Never hardcode a fog
   dissolve: it must resolve to the active zone ground.
-- Use Fellix for product text, controls, labels, and names; Instrument Serif for
+- Use Fellix for product text, controls, labels, and names; Fraunces 600–700 for
   editorial display moments; and Archivo with tabular numerals for meaningful
-  data. Awesome Serif is an optional licensed display upgrade only when the
-  applicable web/app embedding rights are documented.
+  data and ghost type. Athletic surfaces contain no serif. Awesome Serif is an
+  optional licensed display upgrade only when the applicable web/app embedding
+  rights are documented.
+- Never synthesize a font weight. Tracking follows the v3 size curve and is
+  never tighter than `-0.030em`; display word spacing compensates negative
+  tracking.
+- HQ uses `--hq-*` only. Club Theme Kits accept one submitted color, normalize
+  it in OKLCH, and limit it to the five documented identity slots. Competition
+  surfaces remain neutral.
+- Players control expressive identity but never verified data. Curated accents,
+  photos, biographies, highlights, and sponsor marks obey verification and
+  moderation gates.
 - Meaningful numbers use Archivo and tabular numerals. Serif never appears in
   buttons, tables, small labels, or native UI below 24pt.
 - Use the four chip classes from the design system. Do not render status,
@@ -93,8 +117,8 @@ When the documents appear to conflict, preserve these invariants:
 
 ## Definition of done for user-facing work
 
-- Verify the changed experience in light editorial, light performance, dark
-  editorial, and dark performance contexts.
+- Verify the changed experience in light editorial, light athletic, live,
+  explicit dark preference, and bright/glare contexts.
 - Verify desktop, tablet, 390px mobile, reduced motion, keyboard navigation,
   and the native bright/glare conditions relevant to the change.
 - Run formatting, readable-type, lint, type, unit, build, mobile export, and

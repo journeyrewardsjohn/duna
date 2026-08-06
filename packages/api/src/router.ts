@@ -257,6 +257,7 @@ import {
   recordOwnBirthDate,
   reviewGuardianship,
   updateOwnProfile,
+  updateOwnProfileAccent,
 } from "./identity";
 import {
   IdentityVerificationError,
@@ -4602,6 +4603,70 @@ const playerRouter = router({
         },
       }),
     ),
+  updateProfileAccent: protectedProcedure
+    .use(requireScope("profile:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "profile-accent-update",
+        capacity: 12,
+        refillPerMinute: 6,
+      }),
+    )
+    .input(
+      z.object({
+        accentId: z.enum([
+          "dune-gold",
+          "marine",
+          "deep-coral",
+          "moss",
+          "terracotta",
+          "slate-blue",
+          "ochre",
+          "plum",
+          "sea-green",
+          "ink",
+        ]),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        personId: z.string().uuid(),
+        accentId: z.enum([
+          "dune-gold",
+          "marine",
+          "deep-coral",
+          "moss",
+          "terracotta",
+          "slate-blue",
+          "ochre",
+          "plum",
+          "sea-green",
+          "ink",
+        ]),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.updateProfileAccent",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateOwnProfileAccent({
+              actor: ctx.actor!,
+              accentId: input.accentId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   recordBirthDate: protectedProcedure
     .use(requireScope("profile:write"))
     .use(
@@ -6827,15 +6892,25 @@ const operatorRouter = router({
           ink: z.string().regex(/^#[0-9a-f]{6}$/i),
           canvas: z.string().regex(/^#[0-9a-f]{6}$/i),
           success: z.string().regex(/^#[0-9a-f]{6}$/i),
+          clubHue: z.number().min(0).max(360).optional(),
+          clubChroma: z.number().min(0.04).max(0.15).optional(),
         }),
         typography: z.object({
           heading: z.enum([
+            "Fellix",
+            "Fraunces",
             "Instrument Sans",
             "DM Sans",
             "Space Grotesk",
             "Playfair Display",
           ]),
-          body: z.enum(["Archivo", "Inter", "DM Sans", "Source Sans 3"]),
+          body: z.enum([
+            "Fellix",
+            "Archivo",
+            "Inter",
+            "DM Sans",
+            "Source Sans 3",
+          ]),
         }),
         fontLicenseConfirmed: z.boolean(),
         safeFallbackFont: z.string().trim().min(2).max(240),

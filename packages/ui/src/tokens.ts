@@ -1,6 +1,6 @@
 export type DunaTheme = "light" | "dark";
 export type DunaThemePreference = DunaTheme | "system";
-export type DunaZone = "editorial" | "performance";
+export type DunaZone = "editorial" | "athletic" | "live";
 export type DunaContrast = "ambient" | "bright" | "glare";
 
 export const environmentalColors = {
@@ -91,7 +91,37 @@ const resolvedContexts: Record<
       buttonGhostBorder: "rgba(27,27,25,0.22)",
       focusRing: "#E8683A",
     },
-    performance: {
+    athletic: {
+      ground: "#F6F5F1",
+      groundWarm: "#EFE6D3",
+      groundCool: "#B5CCD3",
+      surface1: "#FFFFFF",
+      surface2: "#EDECE6",
+      surface3: "#FFFFFF",
+      hairline: "rgba(27,27,25,0.08)",
+      hairlineStrong: "rgba(27,27,25,0.18)",
+      edgeLight: "transparent",
+      scrim: "rgba(27,27,25,0.44)",
+      text1: "#1B1B19",
+      text2: "#3A3A36",
+      text3: "#766F61",
+      textOnAccent: "#FFFFFF",
+      flare: "#E8683A",
+      flareText: "#B84A20",
+      flareFill: "rgba(232,104,58,0.13)",
+      flareBorder: "rgba(232,104,58,0.26)",
+      signal: "#C9E265",
+      gold: "#C9A96A",
+      gain: "#2F6B3A",
+      loss: "#9A4A2E",
+      imageVeil: "transparent",
+      dissolve: "#F6F5F1",
+      buttonPrimaryBackground: "#1B1B19",
+      buttonPrimaryForeground: "#F6F5F1",
+      buttonGhostBorder: "rgba(27,27,25,0.22)",
+      focusRing: "#E8683A",
+    },
+    live: {
       ground: "#1B1B19",
       groundWarm: "#231F19",
       groundCool: "#22343B",
@@ -153,7 +183,37 @@ const resolvedContexts: Record<
       buttonGhostBorder: "rgba(242,240,234,0.26)",
       focusRing: "#F4794C",
     },
-    performance: {
+    athletic: {
+      ground: "#141310",
+      groundWarm: "#1E1A14",
+      groundCool: "#16232A",
+      surface1: "#1C1A16",
+      surface2: "#24211C",
+      surface3: "#2C2823",
+      hairline: "rgba(239,230,211,0.10)",
+      hairlineStrong: "rgba(239,230,211,0.20)",
+      edgeLight: "transparent",
+      scrim: "rgba(10,10,9,0.62)",
+      text1: "#F2F0EA",
+      text2: "#B8B4A8",
+      text3: "#918B80",
+      textOnAccent: "#141310",
+      flare: "#F4794C",
+      flareText: "#F4794C",
+      flareFill: "rgba(244,121,76,0.16)",
+      flareBorder: "rgba(244,121,76,0.34)",
+      signal: "#A8C44E",
+      gold: "#D4B77C",
+      gain: "#6BAE78",
+      loss: "#C4785C",
+      imageVeil: "rgba(13,17,20,0.16)",
+      dissolve: "#141310",
+      buttonPrimaryBackground: "#F2F0EA",
+      buttonPrimaryForeground: "#141310",
+      buttonGhostBorder: "rgba(242,240,234,0.26)",
+      focusRing: "#F4794C",
+    },
+    live: {
       ground: "#0D1114",
       groundWarm: "#171410",
       groundCool: "#101A20",
@@ -206,7 +266,7 @@ export function resolveDunaTokens(
     };
   }
 
-  const darkGlare = theme === "dark" || zone === "performance";
+  const darkGlare = theme === "dark" || zone === "live";
   return {
     ...base,
     ground: darkGlare ? "#000000" : "#FFFFFF",
@@ -276,7 +336,7 @@ export const radii = {
 } as const;
 
 export const typography = {
-  display: "Instrument Serif",
+  display: "Fraunces",
   body: "Fellix",
   data: "Archivo",
   mono: "Archivo",

@@ -150,7 +150,7 @@ export default async function PublicMatchPage({
   };
 
   return (
-    <main className="public-match-page">
+    <main className="public-match-page" data-zone="athletic">
       <SiteHeader />
       <script
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}

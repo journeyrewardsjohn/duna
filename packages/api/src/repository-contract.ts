@@ -138,6 +138,20 @@ export interface PlayerSettings {
     readonly verifiedAt?: string;
     readonly lastErrorCode?: string;
   };
+  readonly publicIdentity: {
+    readonly tier: "claimed" | "verified-pro";
+    readonly accentId:
+      | "dune-gold"
+      | "marine"
+      | "deep-coral"
+      | "moss"
+      | "terracotta"
+      | "slate-blue"
+      | "ochre"
+      | "plum"
+      | "sea-green"
+      | "ink";
+  };
   readonly sourceConnections: readonly {
     readonly id: string;
     readonly source: "volleyball-life" | "bvbinfo";

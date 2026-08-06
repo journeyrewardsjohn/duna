@@ -37,4 +37,10 @@ describe("public player URLs", () => {
     expect(playerIdFromPublicIdentifier(identifier)).toBe(player.id);
     expect(playerIdFromPublicIdentifier(player.handle)).toBeUndefined();
   });
+
+  it("omits placeholder city text when no home market is known", () => {
+    expect(
+      publicPlayerGeneratedIdentifier({ ...player, homeMarket: undefined }),
+    ).toBe("ana-ramos-br-14599000-d811-4250-8c31-0250d8179f4a");
+  });
 });

@@ -386,6 +386,9 @@ export const playerPublicProfiles = pgTable(
     collegeName: text("college_name"),
     collegeLogoUrl: text("college_logo_url"),
     playingRole: varchar("playing_role", { length: 48 }),
+    accentId: varchar("accent_id", { length: 32 })
+      .notNull()
+      .default("dune-gold"),
     cutoutImageUrl: text("cutout_image_url"),
     heroImageUrl: text("hero_image_url"),
     heroVideoUrl: text("hero_video_url"),
@@ -476,6 +479,10 @@ export const playerPublicProfiles = pgTable(
     check(
       "player_public_profile_research_status_valid",
       sql`${table.researchStatus} IN ('not-started', 'queued', 'researching', 'review', 'published', 'failed')`,
+    ),
+    check(
+      "player_public_profile_accent_valid",
+      sql`${table.accentId} IN ('dune-gold', 'marine', 'deep-coral', 'moss', 'terracotta', 'slate-blue', 'ochre', 'plum', 'sea-green', 'ink')`,
     ),
   ],
 );
@@ -1105,19 +1112,23 @@ export const organizationThemes = pgTable(
         ink: string;
         canvas: string;
         success: string;
+        clubHue?: number;
+        clubChroma?: number;
       }>()
       .default({
-        primary: "#173A63",
-        accent: "#2B67A4",
-        sand: "#E9DFC9",
-        ink: "#101828",
-        canvas: "#FAFAF7",
-        success: "#4E7C67",
+        primary: "#517986",
+        accent: "#BDD2D9",
+        sand: "#E5F1F5",
+        ink: "#2D4D57",
+        canvas: "#F6F5F1",
+        success: "#2F6B3A",
+        clubHue: 220.25,
+        clubChroma: 0.0489,
       }),
     typography: jsonb("typography")
       .notNull()
       .$type<{ heading: string; body: string }>()
-      .default({ heading: "Instrument Sans", body: "Archivo" }),
+      .default({ heading: "Fellix", body: "Fellix" }),
     fontLicenseConfirmed: boolean("font_license_confirmed")
       .notNull()
       .default(false),

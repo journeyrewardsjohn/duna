@@ -322,13 +322,13 @@ export default async function ProTourPage({
   };
 
   return (
-    <main className="pro-tour-page" data-zone="editorial">
+    <main className="pro-tour-page" data-zone="athletic">
       <SiteHeader />
       <script
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
         type="application/ld+json"
       />
-      <section className="pro-tour-hero" data-zone="performance">
+      <section className="pro-tour-hero" data-zone="athletic">
         <div>
           <Badge tone={liveEvents.length ? "danger" : "neutral"}>
             <Radio aria-hidden size={12} />
@@ -336,13 +336,13 @@ export default async function ProTourPage({
           </Badge>
           <h1>The world&apos;s game, in one live view.</h1>
           <p>
-            FIVB Elite, Challenger, and Futures events plus the AVP League—
-            connected to Duna player identities, match history, and Sand Rating
-            predictions.
+            FIVB Elite, Challenger, and Futures events plus the AVP League. Duna
+            connects every event to player identities, match history, and Sand
+            Rating predictions.
           </p>
         </div>
-        <div className="pro-tour-hero__orb">
-          <Globe2 aria-hidden size={54} />
+        <div className="pro-tour-hero__stat">
+          <Globe2 aria-hidden size={28} />
           <Numeric>{coverage?.events.length ?? 0}</Numeric>
           <span>tracked events</span>
         </div>
@@ -352,7 +352,7 @@ export default async function ProTourPage({
             fill
             priority
             sizes="(max-width: 900px) 100vw, 1480px"
-            src="/media/brand/duna-pro-hero-v1.webp"
+            src="/media/brand/duna-pro-hero-v3.webp"
           />
         </div>
         <div className="pro-tour-hero__veil" aria-hidden />

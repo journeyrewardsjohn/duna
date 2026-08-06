@@ -1,3 +1,4 @@
+import { formatMoney, ORGANIZATION_PLANS } from "@duna/core";
 import { Badge } from "@duna/ui";
 import {
   ArrowRight,
@@ -6,7 +7,6 @@ import {
   CalendarDays,
   Check,
   CreditCard,
-  Layers3,
   Megaphone,
   Palette,
   ShieldCheck,
@@ -110,7 +110,7 @@ export default function RunYourClubPage() {
             alt=""
             fill
             priority
-            sizes="100vw"
+            sizes="(max-width: 820px) 100vw, 58vw"
             src="/media/brand/duna-club-hero-v1.webp"
           />
         </div>
@@ -118,11 +118,7 @@ export default function RunYourClubPage() {
           <Badge tone="positive">
             <Sparkles size={13} /> Built for clubs and independent coaches
           </Badge>
-          <h1>
-            Run the business.
-            <br />
-            Keep the game human.
-          </h1>
+          <h1>Run the business. Keep the game human.</h1>
           <p>
             Duna HQ brings scheduling, memberships, court inventory, payments,
             staff, events, and member communication into one calm operating
@@ -141,7 +137,7 @@ export default function RunYourClubPage() {
             ready.
           </small>
         </div>
-        <div className="club-marketing-hero__product" data-zone="performance">
+        <div className="club-marketing-hero__product" data-zone="athletic">
           <div className="club-marketing-product-bar">
             <span>DUNA HQ</span>
             <Badge>Today</Badge>
@@ -163,79 +159,71 @@ export default function RunYourClubPage() {
         </div>
       </section>
 
-      <section className="club-marketing-audience">
-        <div>
-          <span className="section__eyebrow">One system, your shape</span>
-          <h2>Useful on day one. Still coherent when you grow.</h2>
-        </div>
-        <div>
-          <article>
-            <span>
-              <Users size={20} />
-            </span>
-            <h3>For a single coach</h3>
+      <div className="club-marketing-chapters">
+        <section className="club-marketing-chapter club-marketing-chapter--command">
+          <header>
+            <span className="section__eyebrow">Daily operations</span>
+            <h2>One calm plan for every moving part.</h2>
             <p>
-              Sell lessons, publish availability, collect payment, understand
-              income, and keep every player relationship in one place.
+              Schedule courts, coaches, equipment, and players together. Smart
+              rules protect every booking window, approval, cancellation, and
+              waitlist without turning the day into settings work.
             </p>
-          </article>
-          <article>
-            <span>
-              <Layers3 size={20} />
-            </span>
-            <h3>For a club or facility</h3>
+          </header>
+          <div className="club-marketing-chapter__split">
+            <div>
+              <span className="club-marketing-hq-chip">For one coach</span>
+              <span className="club-marketing-hq-chip">For every location</span>
+              <CalendarPreview />
+            </div>
+            <div>
+              <small>Rules that travel</small>
+              <SmartRulesPreview />
+            </div>
+          </div>
+        </section>
+
+        <section className="club-marketing-chapter club-marketing-chapter--commerce">
+          <header>
+            <span className="section__eyebrow">Commerce + ledger</span>
+            <h2>Revenue, recovery, and the ledger in one line of sight.</h2>
             <p>
-              Coordinate staff, courts, leagues, memberships, goods, taxes,
-              calendars, and the customer experience without stitching tools
-              together.
+              Sell events, services, memberships, credits, and goods. Duna keeps
+              checkout, retries, refunds, and the balanced ledger connected so
+              operators always know what happened.
             </p>
-          </article>
-        </div>
-      </section>
-
-      <section className="club-marketing-feature-grid">
-        <article className="club-marketing-feature club-marketing-feature--rules">
-          <div className="club-marketing-feature__visual">
-            <SmartRulesPreview />
+          </header>
+          <div className="club-marketing-pricing" aria-label="Duna HQ pricing">
+            {Object.values(ORGANIZATION_PLANS).map((plan) => (
+              <article key={plan.id}>
+                <small>{plan.productName}</small>
+                <strong>
+                  {plan.monthlyPriceMinor === 0
+                    ? "Free"
+                    : `${formatMoney(plan.monthlyPriceMinor, "USD")}/mo`}
+                </strong>
+                <span>
+                  {plan.defaultCommissionBps === 0
+                    ? "0% organization fee"
+                    : `${plan.defaultCommissionBps / 100}% organization fee`}
+                </span>
+              </article>
+            ))}
           </div>
-          <span className="section__eyebrow">Smart Rules</span>
-          <h2>Easy controls, enforced consistently.</h2>
-          <p>
-            Set booking windows, approvals, cancellation terms, waitlists, and
-            minimum attendance once. Duna applies the rule during discovery,
-            checkout, reminders, and changes.
-          </p>
-        </article>
-
-        <article className="club-marketing-feature">
-          <div className="club-marketing-feature__visual">
-            <CalendarPreview />
+          <div className="club-marketing-proof">
+            <span>
+              <strong>Unlimited</strong>
+              staff + player records on paid plans
+            </span>
+            <span>
+              <strong>10 months</strong>
+              annual price for 12 months of access
+            </span>
+            <span>
+              <strong>Reviewable</strong>
+              refunds, retries, and AI suggestions
+            </span>
           </div>
-          <span className="section__eyebrow">One synced schedule</span>
-          <h2>Courts, coaches, equipment, and players stay aligned.</h2>
-          <p>
-            View by day, week, month, coach, or court. Duna checks conflicts
-            before a change and prepares the notifications before anything
-            moves.
-          </p>
-        </article>
-
-        <article className="club-marketing-feature club-marketing-feature--plans">
-          <div className="club-marketing-plan-cards">
-            <span>Access membership</span>
-            <span>10-credit pack</span>
-            <span>Annual training tier</span>
-          </div>
-          <span className="section__eyebrow">Plans + memberships</span>
-          <h2>Flexible value without a rigid pricing model.</h2>
-          <p>
-            Offer memberships, credits, included sessions, member pricing,
-            monthly or annual billing, and limited access—all scoped to your
-            organization.
-          </p>
-        </article>
-
-        <article className="club-marketing-feature club-marketing-feature--payments">
           <div className="club-marketing-payment-state">
             <BellRing size={20} />
             <span>
@@ -244,93 +232,67 @@ export default function RunYourClubPage() {
             </span>
             <Badge tone="positive">Protected</Badge>
           </div>
-          <span className="section__eyebrow">Payments that recover</span>
-          <h2>Less chasing. More recurring revenue kept.</h2>
-          <p>
-            Secure checkout, automatic retries, member reminders, connected
-            refunds, organization credits, and a balanced ledger keep money
-            movement understandable.
-          </p>
-        </article>
+        </section>
 
-        <article className="club-marketing-feature club-marketing-feature--marketing">
-          <div className="club-marketing-feature__visual">
+        <section className="club-marketing-chapter club-marketing-chapter--relationships">
+          <header>
+            <span className="section__eyebrow">Member intelligence</span>
+            <h2>Know who is thriving—and who needs a reason to return.</h2>
+            <p>
+              Explainable retention signals connect bookings, participation,
+              membership state, and cancellations. Campaigns stay consent-aware
+              and every outbound message remains reviewable.
+            </p>
+          </header>
+          <div className="club-marketing-chapter__split">
             <MarketingFlowPreview />
-          </div>
-          <span className="section__eyebrow">Simple marketing</span>
-          <h2>Segment. Trigger. Act.</h2>
-          <p>
-            Reach the right members by email, SMS, RCS, WhatsApp, or push.
-            Consent and guardian routing stay attached to the audience, while
-            Duna does the complex work underneath.
-          </p>
-        </article>
-
-        <article className="club-marketing-feature club-marketing-feature--people">
-          <div className="club-marketing-risk-card">
-            <span className="avatar">MS</span>
-            <span>
-              <strong>Member needs attention</strong>
-              <small>No connected booking in 24 days</small>
-            </span>
-            <Badge tone="warning">Watch</Badge>
-          </div>
-          <span className="section__eyebrow">Community intelligence</span>
-          <h2>Know who is thriving—and who may drift away.</h2>
-          <p>
-            Explainable retention signals use real bookings, participation,
-            membership state, and cancellations. Every reason is visible; no
-            mystery score pretends to know more than the data.
-          </p>
-        </article>
-      </section>
-
-      <section className="club-marketing-capabilities">
-        <div>
-          <span className="section__eyebrow">Everything connected</span>
-          <h2>A full operating system that still feels simple.</h2>
-          <p>
-            Each overview shows what exists and how it performs. Focused create
-            and edit workspaces appear only when you need to build.
-          </p>
-        </div>
-        <ul>
-          {capabilities.map(([Icon, title, detail]) => (
-            <li key={title}>
-              <Icon size={19} />
+            <div className="club-marketing-risk-card">
+              <span className="avatar">MS</span>
               <span>
-                <strong>{title}</strong>
-                <small>{detail}</small>
+                <strong>Member needs attention</strong>
+                <small>No connected booking in 24 days</small>
               </span>
-              <Check size={16} />
-            </li>
-          ))}
-        </ul>
-      </section>
+              <Badge tone="warning">Watch</Badge>
+            </div>
+          </div>
+        </section>
 
-      <section className="club-marketing-theme-story">
-        <div>
-          <Palette size={22} />
-          <span className="section__eyebrow">
-            Your club, presented as yours
-          </span>
-          <h2>Duna underneath. Your identity out front.</h2>
-          <p>
-            Choose a palette, typography, card style, logo, media, and profile
-            layout. Preview every change before publishing to web and app.
-          </p>
-        </div>
-        <div className="club-marketing-theme-preview">
-          <span className="club-marketing-theme-chip">Palette</span>
-          <span className="club-marketing-theme-chip">Typography</span>
-          <span className="club-marketing-theme-chip">Layout</span>
-          <article>
-            <small>Welcome back</small>
-            <h3>Find your next session.</h3>
-            <button type="button">Book now</button>
-          </article>
-        </div>
-      </section>
+        <section className="club-marketing-chapter club-marketing-chapter--identity">
+          <header>
+            <span className="section__eyebrow">Brand system</span>
+            <h2>Duna underneath. Your identity out front.</h2>
+            <p>
+              Supply one club color, approved marks, media, and voice. Duna
+              normalizes the hue for readability and previews the identity
+              before anything becomes player-facing.
+            </p>
+          </header>
+          <div className="club-marketing-theme-story">
+            <div className="club-marketing-theme-preview">
+              <span className="club-marketing-theme-chip">One club color</span>
+              <span className="club-marketing-theme-chip">Live preview</span>
+              <span className="club-marketing-theme-chip">Private draft</span>
+              <article>
+                <small>Welcome back</small>
+                <h3>Find your next session.</h3>
+                <button type="button">Book now</button>
+              </article>
+            </div>
+            <ul className="club-marketing-capability-list">
+              {capabilities.map(([Icon, title, detail]) => (
+                <li key={title}>
+                  <Icon size={19} />
+                  <span>
+                    <strong>{title}</strong>
+                    <small>{detail}</small>
+                  </span>
+                  <Check size={16} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      </div>
 
       <section className="club-marketing-cta">
         <span className="section__eyebrow">Start at your size</span>

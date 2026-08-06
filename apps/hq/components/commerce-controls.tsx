@@ -1,7 +1,7 @@
 "use client";
 
 import type { OperatorWorkspace } from "@duna/api";
-import { Badge } from "@duna/ui";
+import { Badge, normalizeClubColor } from "@duna/ui";
 import { upload } from "@vercel/blob/client";
 import {
   Archive,
@@ -1944,7 +1944,9 @@ export function ThemeKitEditor({
   const [brandVoice, setBrandVoice] = useState(
     workspace.theme.brandVoice ?? "",
   );
-  const [palette, setPalette] = useState(workspace.theme.palette);
+  const [submittedClubColor, setSubmittedClubColor] = useState(
+    workspace.theme.palette.primary,
+  );
   const [headingFont, setHeadingFont] = useState(
     workspace.theme.typography.heading,
   );
@@ -1968,13 +1970,21 @@ export function ThemeKitEditor({
     logoDarkUrl: { status: "idle", message: "" },
     heroMediaUrl: { status: "idle", message: "" },
   });
+  const normalizedClubColor = useMemo(
+    () => normalizeClubColor(submittedClubColor),
+    [submittedClubColor],
+  );
   const previewStyle = {
-    "--theme-preview-primary": palette.primary,
-    "--theme-preview-accent": palette.accent,
-    "--theme-preview-sand": palette.sand,
-    "--theme-preview-ink": palette.ink,
-    "--theme-preview-canvas": palette.canvas,
-    "--theme-preview-success": palette.success,
+    "--theme-preview-primary": normalizedClubColor.core,
+    "--theme-preview-accent": normalizedClubColor.edge,
+    "--theme-preview-sand": normalizedClubColor.tint,
+    "--theme-preview-ink": "#1B1B19",
+    "--theme-preview-canvas": "#F6F5F1",
+    "--theme-preview-success": "#2F6B3A",
+    "--club-tint": normalizedClubColor.tint,
+    "--club-edge": normalizedClubColor.edge,
+    "--club-core": normalizedClubColor.core,
+    "--club-ink": normalizedClubColor.ink,
     "--theme-preview-heading": `"${headingFont}", sans-serif`,
     "--theme-preview-body": `"${bodyFont}", sans-serif`,
   } as CSSProperties;
@@ -2156,28 +2166,53 @@ export function ThemeKitEditor({
                 <Palette aria-hidden size={20} />
                 <div>
                   <span>Color system</span>
-                  <strong>A palette with a job for every color.</strong>
+                  <strong>One club color, tuned for every surface.</strong>
                 </div>
               </header>
-              <div className="theme-color-system">
-                {Object.entries(palette).map(([name, value]) => (
-                  <label className="theme-color-field" key={name}>
-                    <input
-                      aria-label={`${name} color`}
-                      name={name}
-                      onChange={(event) =>
-                        setPalette((current) => ({
-                          ...current,
-                          [name]: event.target.value,
-                        }))
-                      }
-                      type="color"
-                      value={value}
-                    />
-                    <strong>{name}</strong>
-                    <code>{value}</code>
-                  </label>
-                ))}
+              <div className="theme-color-system theme-color-system--normalized">
+                <label className="theme-color-field theme-color-field--source">
+                  <input
+                    aria-label="Club color"
+                    name="submittedClubColor"
+                    onChange={(event) =>
+                      setSubmittedClubColor(event.target.value)
+                    }
+                    type="color"
+                    value={submittedClubColor}
+                  />
+                  <span>
+                    <strong>Club color</strong>
+                    <code>{submittedClubColor.toUpperCase()}</code>
+                  </span>
+                </label>
+                <div
+                  aria-label="Normalized club color tones"
+                  className="theme-color-system__swatches"
+                >
+                  {[
+                    ["Tint", normalizedClubColor.tint],
+                    ["Edge", normalizedClubColor.edge],
+                    ["Core", normalizedClubColor.core],
+                    ["Ink", normalizedClubColor.ink],
+                  ].map(([label, color]) => (
+                    <span key={label}>
+                      <i style={{ backgroundColor: color }} />
+                      <small>{label}</small>
+                      <code>{color}</code>
+                    </span>
+                  ))}
+                </div>
+                <p>
+                  Duna tunes your color so it stays readable across the product.
+                  Your hue is preserved.
+                </p>
+                {normalizedClubColor.conflictsWithFlare && (
+                  <p className="operator-action-notice operator-action-notice--error">
+                    <CircleAlert aria-hidden size={15} />
+                    Choose a color farther from Duna live coral so status
+                    remains unmistakable.
+                  </p>
+                )}
               </div>
             </section>
 
@@ -2421,6 +2456,8 @@ export function ThemeKitEditor({
                     value={headingFont}
                   >
                     {[
+                      "Fellix",
+                      "Fraunces",
                       "Instrument Sans",
                       "DM Sans",
                       "Space Grotesk",
@@ -2437,11 +2474,15 @@ export function ThemeKitEditor({
                     onChange={(event) => setBodyFont(event.target.value)}
                     value={bodyFont}
                   >
-                    {["Archivo", "Inter", "DM Sans", "Source Sans 3"].map(
-                      (font) => (
-                        <option key={font}>{font}</option>
-                      ),
-                    )}
+                    {[
+                      "Fellix",
+                      "Archivo",
+                      "Inter",
+                      "DM Sans",
+                      "Source Sans 3",
+                    ].map((font) => (
+                      <option key={font}>{font}</option>
+                    ))}
                   </select>
                 </label>
                 <label>
@@ -2576,7 +2617,10 @@ export function ThemeKitEditor({
         </label>
         <div className="operator-form-footer">
           <ActionNotice state={state} />
-          <SubmitButton pending={pending}>
+          <SubmitButton
+            disabled={normalizedClubColor.conflictsWithFlare}
+            pending={pending}
+          >
             Save canonical Theme Kit
           </SubmitButton>
         </div>

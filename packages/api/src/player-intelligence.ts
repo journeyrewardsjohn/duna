@@ -423,6 +423,7 @@ export async function loadPublicPlayerIntelligenceByHandle(
           collegeName: profile.collegeName ?? undefined,
           collegeLogoUrl: profile.collegeLogoUrl ?? undefined,
           playingRole: profile.playingRole ?? undefined,
+          accentId: profile.accentId,
           cutoutImageUrl: profile.cutoutImageUrl ?? undefined,
           heroImageUrl: profile.heroImageUrl ?? undefined,
           heroVideoUrl: profile.heroVideoUrl ?? undefined,
