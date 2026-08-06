@@ -117,7 +117,7 @@ body[data-zone="operator"] :is(h1, h2, h3) {
     "wght" 900 !important;
 }
 
-.duna-numeric--monument {
+.duna-numeric[data-numeric-tier].duna-numeric--monument {
   font-feature-settings: "pnum" 1;
   font-variant-numeric: proportional-nums;
   font-weight: 900 !important;
