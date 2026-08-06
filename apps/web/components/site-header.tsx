@@ -14,12 +14,10 @@ export function SiteHeader() {
           <DunaMark />
         </Link>
         <nav aria-label="Main navigation" className="site-header__nav">
-          <Link href="/app/discover">Discover</Link>
-          <Link href="/app/play">Play</Link>
-          <Link href="/create">Create an event</Link>
-          <Link href="/pro">Pro tour</Link>
-          <Link href="/run-your-club">For clubs + coaches</Link>
+          <Link href="/app/discover">Play</Link>
+          <Link href="/pro">Watch</Link>
           <Link href="/rankings">Sand Rating</Link>
+          <Link href="/run-your-club">For clubs + coaches</Link>
         </nav>
         <div className="site-header__actions">
           <ThemeToggle />
@@ -27,9 +25,22 @@ export function SiteHeader() {
             Duna HQ <ArrowUpRight aria-hidden size={15} />
           </a>
           <WebAuthButton configured={isWorkOSAuthKitConfigured()} />
-          <button aria-label="Open menu" className="site-header__menu">
-            <Menu aria-hidden size={21} />
-          </button>
+          <details className="site-header__mobile">
+            <summary
+              aria-label="Open navigation menu"
+              className="site-header__menu"
+            >
+              <Menu aria-hidden size={21} />
+            </summary>
+            <nav aria-label="Mobile navigation">
+              <Link href="/app/discover">Play</Link>
+              <Link href="/pro">Watch</Link>
+              <Link href="/rankings">Sand Rating</Link>
+              <Link href="/run-your-club">For clubs + coaches</Link>
+              <Link href="/create">Create an event</Link>
+              <a href={DUNA_HQ_URL}>Open Duna HQ</a>
+            </nav>
+          </details>
         </div>
       </div>
     </header>

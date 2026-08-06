@@ -20,10 +20,11 @@ import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
 
 const campaignMedia = {
-  rally: "/media/duna-hero-poster.webp",
-  rallyVideo: "/media/duna-hero.mp4",
+  rally: "/media/brand/duna-home-hero-v1.webp",
   serve: "/media/duna-action-serve.webp",
   celebrate: "/media/duna-action-dive.webp",
+  rating: "/media/brand/duna-rating-texture-v1.webp",
+  operator: "/media/brand/duna-club-hero-v1.webp",
 } as const;
 
 export default async function HomePage() {
@@ -45,23 +46,12 @@ export default async function HomePage() {
     .join(" · ");
 
   return (
-    <main className="campaign-home">
+    <main className="campaign-home" data-zone="editorial">
       <SiteHeader />
 
       <section className="campaign-hero">
         <div className="campaign-hero__media" aria-hidden>
           <Image alt="" fill priority sizes="100vw" src={campaignMedia.rally} />
-          <video
-            autoPlay
-            className="campaign-hero__video"
-            loop
-            muted
-            playsInline
-            poster={campaignMedia.rally}
-            preload="metadata"
-          >
-            <source src={campaignMedia.rallyVideo} type="video/mp4" />
-          </video>
           <div className="campaign-hero__wash" />
           <div className="campaign-hero__grain" />
         </div>
@@ -210,7 +200,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="campaign-live">
+      <section className="campaign-live" data-zone="performance">
         <div className="campaign-shell campaign-live__grid">
           <div className="campaign-live__copy">
             <span className="campaign-kicker campaign-kicker--sand">
@@ -320,10 +310,10 @@ export default async function HomePage() {
       <section className="campaign-shell campaign-rating">
         <div className="campaign-rating__image">
           <Image
-            alt="Elite beach volleyball player rising for a jump serve"
+            alt="Raked beach sand catching warm first light"
             fill
             sizes="(max-width: 900px) 100vw, 44vw"
-            src={campaignMedia.serve}
+            src={campaignMedia.rating}
           />
           <div className="campaign-rating__card">
             <RatingOrbit
@@ -384,6 +374,9 @@ export default async function HomePage() {
       </section>
 
       <section className="campaign-operator">
+        <div className="campaign-operator__media" aria-hidden>
+          <Image alt="" fill sizes="100vw" src={campaignMedia.operator} />
+        </div>
         <div className="campaign-shell campaign-operator__grid">
           <div className="campaign-operator__copy">
             <Badge>For clubs, coaches + facilities</Badge>

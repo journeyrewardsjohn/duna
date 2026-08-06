@@ -1,6 +1,6 @@
-import "@fontsource/archivo/500.css";
-import "@fontsource/archivo/700.css";
-import "@fontsource/archivo/800.css";
+import "@fontsource-variable/archivo";
+import "@fontsource/instrument-serif/400.css";
+import "@fontsource/instrument-serif/400-italic.css";
 import "@duna/ui/styles.css";
 import "./globals.css";
 
@@ -19,7 +19,10 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: "light dark",
-  themeColor: "#f8f7f3",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F6F5F1" },
+    { media: "(prefers-color-scheme: dark)", color: "#141310" },
+  ],
   width: "device-width",
   initialScale: 1,
 };
@@ -28,11 +31,16 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <html data-theme="light" lang="en" suppressHydrationWarning>
+    <html
+      data-theme="light"
+      data-theme-preference="system"
+      lang="en"
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
-      <body>
+      <body data-zone="editorial">
         <DunaAuthProvider>{children}</DunaAuthProvider>
       </body>
     </html>

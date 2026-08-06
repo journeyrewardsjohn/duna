@@ -3,7 +3,7 @@ import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { Bell, Search, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { adminModules, type AdminModule } from "./navigation";
 import { AuthControls } from "./auth-controls";
 
@@ -31,18 +31,24 @@ export function AdminShell({
         <nav aria-label="Duna administration">
           {adminModules.map((item) => {
             const Icon = item.icon;
+            const index = adminModules.indexOf(item);
+            const startsGroup = adminModules[index - 1]?.group !== item.group;
             return (
-              <Link
-                className={active === item.slug ? "active" : undefined}
-                href={
-                  item.slug === "overview" ? "/admin" : `/admin/${item.slug}`
-                }
-                key={item.slug}
-              >
-                <Icon aria-hidden size={18} />
-                <span>{item.label}</span>
-                {item.slug === "trust" && <i>3</i>}
-              </Link>
+              <Fragment key={item.slug}>
+                {startsGroup && (
+                  <span className="hq-sidebar__section">{item.group}</span>
+                )}
+                <Link
+                  className={active === item.slug ? "active" : undefined}
+                  href={
+                    item.slug === "overview" ? "/admin" : `/admin/${item.slug}`
+                  }
+                >
+                  <Icon aria-hidden size={18} />
+                  <span>{item.label}</span>
+                  {item.slug === "trust" && <i>3</i>}
+                </Link>
+              </Fragment>
             );
           })}
         </nav>

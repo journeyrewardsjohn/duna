@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "collection": "Golden Hour Performance",
+  "createdAt": "2026-08-05",
+  "generator": "Higgsfield Nano Banana Pro",
+  "policy": {
+    "identity": "No real player likenesses or identifiable public figures.",
+    "usage": "Atmospheric brand and product storytelling only; never evidence of a real event, venue, or participant.",
+    "treatment": "Preserve quiet negative space and use the shared fog-dissolve treatment at image boundaries."
+  },
+  "assets": [
+    {
+      "name": "duna-home-hero-v1",
+      "jobId": "ce3d726e-c7d2-4891-be33-9fefc2a34787",
+      "intent": "Anonymous beach athlete at first light with generous left-side editorial space.",
+      "reference": "/media/event-library/duna-event-sunrise-tournament.webp"
+    },
+    {
+      "name": "duna-club-hero-v1",
+      "jobId": "f96152d5-782f-4e25-9223-d03ac636734b",
+      "intent": "Raked empty courts and a distant groundskeeper at sunrise.",
+      "reference": "/media/event-library/duna-event-court-rental.webp"
+    },
+    {
+      "name": "duna-pro-hero-v1",
+      "jobId": "4f82a51d-ef43-4ae4-b725-165ec3bdde81",
+      "intent": "Blue-hour center court under arena light, built for a performance-zone overlay.",
+      "reference": "/media/event-library/duna-event-oceanfront-finals.webp"
+    },
+    {
+      "name": "duna-match-court-v1",
+      "jobId": "24ee3041-88de-421b-8394-62bad6632df1",
+      "intent": "Low-angle court, dune grass, suspended sand, and an open horizon for live scoring.",
+      "reference": "/media/event-library/duna-event-sunrise-tournament.webp"
+    },
+    {
+      "name": "duna-rating-texture-v1",
+      "jobId": "d6135a22-8cc5-40a7-8259-8c372b58cf5c",
+      "intent": "Tactile raked-sand contour texture for Sand Rating storytelling.",
+      "reference": "/media/event-library/duna-event-court-rental.webp"
+    },
+    {
+      "name": "duna-empty-court-v1",
+      "jobId": "897a9708-bc6a-487a-a858-a4b541e72230",
+      "intent": "A waiting ball and open court for truthful, calm empty states.",
+      "reference": "/media/event-library/duna-event-sunrise-tournament.webp"
+    }
+  ]
+}
