@@ -28,11 +28,11 @@ export type DunaProLiveActivityProps = {
   readonly updatedAt: string;
 };
 
-const navy = "#10263d";
-const sky = "#86c9ef";
+const navy = "#141a1e";
+const sky = "#d4b77c";
 const white = "#ffffff";
-const mist = "#c8d6e2";
-const warning = "#f7c86b";
+const mist = "#a9b4b8";
+const warning = "#f4794c";
 
 function eta(value?: number, status?: string) {
   if (status === "arrived") return "HERE";

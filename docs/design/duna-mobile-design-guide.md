@@ -10,18 +10,18 @@
 
 ## 1. Two apps, one system
 
-| | **Duna Players** | **Duna Pro** |
-|---|---|---|
-| Who | Players, from first-timers to world tour | Club owners, facility managers, independent coaches |
-| Job | Find a game. Know my level. Follow the sport. | Run today without anything breaking. |
-| Emotional register | Anticipation and identity | Control and calm |
-| Default ground | Dusk wash → fog (light, warm) | Fog → ink (neutral, cool) |
-| Density | Generous. One decision per screen. | Dense. Many facts per screen. |
-| Atmosphere budget | High — imagery, gradients, motion | Low — imagery almost never |
-| Serif usage | Frequent (headers, rating, event names) | Rare (page titles only) |
-| Archivo usage | Moderate (scores, rating) | Constant (every table, every figure) |
-| Persistent element | **The Strand** — docked bottom | **The Watch** — docked top |
-| Used | At the beach, in sun, one hand, sandy | Courtside or office, two hands, focused |
+|                    | **Duna Players**                              | **Duna Pro**                                        |
+| ------------------ | --------------------------------------------- | --------------------------------------------------- |
+| Who                | Players, from first-timers to world tour      | Club owners, facility managers, independent coaches |
+| Job                | Find a game. Know my level. Follow the sport. | Run today without anything breaking.                |
+| Emotional register | Anticipation and identity                     | Control and calm                                    |
+| Default ground     | Dusk wash → fog (light, warm)                 | Fog → ink (neutral, cool)                           |
+| Density            | Generous. One decision per screen.            | Dense. Many facts per screen.                       |
+| Atmosphere budget  | High — imagery, gradients, motion             | Low — imagery almost never                          |
+| Serif usage        | Frequent (headers, rating, event names)       | Rare (page titles only)                             |
+| Archivo usage      | Moderate (scores, rating)                     | Constant (every table, every figure)                |
+| Persistent element | **The Strand** — docked bottom                | **The Watch** — docked top                          |
+| Used               | At the beach, in sun, one hand, sandy         | Courtside or office, two hands, focused             |
 
 **What is identical across both, non-negotiable:** the token file, the type roles, the radii scale, the chip and status-pill system, the flare rule, the empty-state philosophy, iconography, motion curves, and the voice.
 
@@ -37,15 +37,16 @@ Our system leans on translucency, muted contrast, and soft neutrals. **In direct
 
 **Ship an adaptive contrast mode.** Not a user setting buried in preferences — an automatic, three-state response.
 
-| State | Trigger | Behavior |
-|---|---|---|
-| **Ambient** | Indoors, normal light | Full system: glass, imagery, gradients, atmosphere |
-| **Bright** | Screen brightness > 80% sustained, or ambient light sensor above threshold | Glass → solid fills. Imagery opacity → 15%. Body text → `--ink` at 100%. Borders → 1px `rgba(27,27,25,.18)`. Chips gain solid fills. Nothing else changes. |
-| **Glare** | Brightness pinned at max, or user taps the sun toggle | Near-monochrome: `--fog-50` or `--ink` grounds only, no imagery, no gradients, type weights bump one step, minimum 17px body, flare replaced by `--flare-deep #B84A20` |
+| State       | Trigger                                                                    | Behavior                                                                                                                                                               |
+| ----------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Ambient** | Indoors, normal light                                                      | Full system: glass, imagery, gradients, atmosphere                                                                                                                     |
+| **Bright**  | Screen brightness > 80% sustained, or ambient light sensor above threshold | Glass → solid fills. Imagery opacity → 15%. Body text → `--ink` at 100%. Borders → 1px `rgba(27,27,25,.18)`. Chips gain solid fills. Nothing else changes.             |
+| **Glare**   | Brightness pinned at max, or user taps the sun toggle                      | Near-monochrome: `--fog-50` or `--ink` grounds only, no imagery, no gradients, type weights bump one step, minimum 17px body, flare replaced by `--flare-deep #B84A20` |
 
 Implementation: `expo-brightness` plus a light sensor read where available, with a manual sun toggle in the header of both apps that a user can pin. Persist the choice for the session. Animate the transition over 240ms so it doesn't feel like a bug.
 
 **Contrast floors to enforce in code (approximate ratios on white):**
+
 - `--flare #E8683A` ≈ 3.2:1 — **legal for icons, dots, borders, and large numerals only. Never for body text.**
 - `--flare-deep #B84A20` ≈ 5.4:1 — the text variant. Use this for any flare-colored word.
 - `--signal #C9E265` — dots and fills only, never text on any ground.
@@ -72,13 +73,14 @@ Design for someone holding a phone with one sandy hand while carrying a ball bag
 
 Same three roles. Tighter scale, heavier minimums.
 
-| Role | Mobile use | Sizes |
-|---|---|---|
-| **Instrument Serif** (or Awesome Serif Light) | Screen titles, event names, rating hero, onboarding, empty-state headlines | 28 / 34 / 44. **Never below 24 on mobile.** |
-| **Figtree** (or Fellix) | Everything else | Body 16/24 · secondary 14.5/21 · caption 13/18 · micro 11.5/15 · tab label 10.5 |
-| **Archivo**, `tnum` on | Every meaningful number | Live score `wdth 66 / wght 800` @ 56–72 · rating `wdth 112 / 800` @ 38–48 · table figures `wdth 78 / 700` @ 13–15 · chips 12.5 |
+| Role                                          | Mobile use                                                                 | Sizes                                                                                                                          |
+| --------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Instrument Serif** (or Awesome Serif Light) | Screen titles, event names, rating hero, onboarding, empty-state headlines | 28 / 34 / 44. **Never below 24 on mobile.**                                                                                    |
+| **Figtree** (or Fellix)                       | Everything else                                                            | Body 16/24 · secondary 14.5/21 · caption 13/18 · micro 11.5/15 · tab label 10.5                                                |
+| **Archivo**, `tnum` on                        | Every meaningful number                                                    | Live score `wdth 66 / wght 800` @ 56–72 · rating `wdth 112 / 800` @ 38–48 · table figures `wdth 78 / 700` @ 13–15 · chips 12.5 |
 
 Rules:
+
 - **Body text never below 15pt.** 16 is the target. Respect Dynamic Type up to at least 200%; test the scoreboard and the schedule at that size.
 - Serif is a **moment**, not a texture. Roughly one serif element per screen in Players, and only the screen title in Pro.
 - Line length caps at ~40 characters for serif, ~60 for body.
@@ -91,11 +93,13 @@ Rules:
 The screen's temperature tells you what mode you're in before you read a word. This is the strongest cross-app idea we have — apply it literally.
 
 **Duna Players**
+
 - **Planning surfaces** (Today, Discover, Profile, Bookings): dusk wash `#FBF3F4 → #FFFFFF`, white cards, ink type. Warm, unhurried.
 - **Competition surfaces** (live scoring, live match, active session): full `--ink` takeover. Cold, focused, legible in sun.
 - The transition between them is a **deliberate 320ms cross-dissolve**, not a navigation push. Entering a live match should feel like the lights going down.
 
 **Duna Pro**
+
 - **Overview surfaces** (Today, Schedule, People, Performance): `--fog-50` ground, `--fog-100` cards. Neutral, calm, dense.
 - **Console surfaces** (live day view, courtside mode, ledger detail): `--marine-900 #22343B` ground. Not ink — marine-900 is slightly warmer and reads better for long dwell time on data.
 - **Exception surfaces** (payment failed, session under minimum, staffing gap): the card gains a flare left-border and a flare-tinted fill. The screen never turns red. One exception card should feel urgent; a screen full of them should still feel manageable.
@@ -109,6 +113,7 @@ The screen's temperature tells you what mode you're in before you read a word. T
 Glass is expensive on Android and fails in sun. Ration it.
 
 **Glass is permitted in exactly four places:**
+
 1. The tab bar and any bottom-docked bar
 2. The Strand / the Watch
 3. A sheet header while content scrolls under it
@@ -116,12 +121,12 @@ Glass is expensive on Android and fails in sun. Ration it.
 
 **Everywhere else: solid `--fog-100`, white, or a dark surface with a 1px `rgba(255,255,255,.08)` border.** Depth in-app comes from a strict elevation ladder, not blur:
 
-| Level | Light ground | Dark ground |
-|---|---|---|
-| 0 — page | `--fog-50` | `--ink` / `--marine-900` |
-| 1 — card | `#FFFFFF` | `rgba(246,245,241,.05)` + 1px `rgba(246,245,241,.10)` |
-| 2 — nested | `--fog-100` | `rgba(246,245,241,.08)` |
-| 3 — sheet | `#FFFFFF`, 28px top radius, one soft shadow `0 -8px 40px rgba(27,27,25,.10)` | `#1F1F1D`, same |
+| Level      | Light ground                                                                 | Dark ground                                           |
+| ---------- | ---------------------------------------------------------------------------- | ----------------------------------------------------- |
+| 0 — page   | `--fog-50`                                                                   | `--ink` / `--marine-900`                              |
+| 1 — card   | `#FFFFFF`                                                                    | `rgba(246,245,241,.05)` + 1px `rgba(246,245,241,.10)` |
+| 2 — nested | `--fog-100`                                                                  | `rgba(246,245,241,.08)`                               |
+| 3 — sheet  | `#FFFFFF`, 28px top radius, one soft shadow `0 -8px 40px rgba(27,27,25,.10)` | `#1F1F1D`, same                                       |
 
 Radii on mobile: **28** bottom sheets · **24** cards · **18** nested and list rows · **12** chips and inputs · **full** pills, avatars, tab indicators.
 
@@ -133,16 +138,16 @@ Radii on mobile: **28** bottom sheets · **24** cards · **18** nested and list 
 
 Motion budget on mobile is tighter than web: **one animated element per screen at a time.**
 
-| Event | Motion | Haptic |
-|---|---|---|
-| Point scored | Numeral slide-flip, 180ms ease-out | Light impact |
-| Set won | Set column locks in, 240ms, sand-500 flash | Medium impact |
-| Match won | Full-screen sand-gold wash sweep, 600ms, once | Success notification |
-| Rating moved | Value counts up over 800ms, delta chip fades in | Light impact |
-| Booking confirmed | Card settles, checkmark draws, 320ms | Success notification |
-| Payment failed (Pro) | Card border pulses flare twice, no bounce | Warning notification |
-| Pull to refresh | Sand grains drift, not a spinner | Selection tick at threshold |
-| Live dot | 2s pulse, infinite | None |
+| Event                | Motion                                          | Haptic                      |
+| -------------------- | ----------------------------------------------- | --------------------------- |
+| Point scored         | Numeral slide-flip, 180ms ease-out              | Light impact                |
+| Set won              | Set column locks in, 240ms, sand-500 flash      | Medium impact               |
+| Match won            | Full-screen sand-gold wash sweep, 600ms, once   | Success notification        |
+| Rating moved         | Value counts up over 800ms, delta chip fades in | Light impact                |
+| Booking confirmed    | Card settles, checkmark draws, 320ms            | Success notification        |
+| Payment failed (Pro) | Card border pulses flare twice, no bounce       | Warning notification        |
+| Pull to refresh      | Sand grains drift, not a spinner                | Selection tick at threshold |
+| Live dot             | 2s pulse, infinite                              | None                        |
 
 Curves: `cubic-bezier(.2,.7,.3,1)` for entrances and settles; linear only for the Strand marquee. Never spring-bounce — bounce reads playful, and Duna is calm.
 
@@ -157,9 +162,9 @@ Beaches have bad signal. Design for it as a normal condition, not an error.
 - **Scoring is offline-first.** A match in progress writes to local storage and syncs when it can. The UI shows a small `--pending` cloud chip reading `Saved on device` — never a blocking modal, never a lost point.
 - **Stale data gets a timestamp, not a spinner.** `Updated 4 min ago` in `--pending` micro type beats a skeleton that lies about freshness.
 - **Three empty-state tiers**, all following the system's honesty rule:
-  1. **Nothing yet, and that's fine** — serif headline, one line of plain explanation, one action. *"No matches recorded. Your first verified result starts your rating."* → `Record a match`
-  2. **Nothing yet, and it's the sport's fault** — `--pending` chip and one sentence, no illustration. *"Broadcast not yet announced."*
-  3. **Something is missing that we can name** — explain the mechanism. *"This player's tour profile isn't mapped to a Duna profile yet."*
+  1. **Nothing yet, and that's fine** — serif headline, one line of plain explanation, one action. _"No matches recorded. Your first verified result starts your rating."_ → `Record a match`
+  2. **Nothing yet, and it's the sport's fault** — `--pending` chip and one sentence, no illustration. _"Broadcast not yet announced."_
+  3. **Something is missing that we can name** — explain the mechanism. _"This player's tour profile isn't mapped to a Duna profile yet."_
 - Use the `empty-generic` image (single ball at rest on sand, long shadow) for tier 1 only, at 30% opacity behind the text. Tiers 2 and 3 get no artwork.
 
 ---
@@ -176,7 +181,7 @@ Draw icons from the sport's own objects wherever possible instead of generic met
 
 ## 10. Accessibility floor
 
-Non-negotiable in both apps: Dynamic Type to 200% without clipping; VoiceOver labels on every control (a score reads "Lorenz and Rietschel, fourteen. Tiisaar and Korotkov, thirteen. Set three."); 48pt targets; visible focus rings for keyboard and switch control; reduced-motion respected; no information conveyed by color alone — the serving indicator carries a dot *and* a position, the live pill carries a word *and* a color.
+Non-negotiable in both apps: Dynamic Type to 200% without clipping; VoiceOver labels on every control (a score reads "Lorenz and Rietschel, fourteen. Tiisaar and Korotkov, thirteen. Set three."); 48pt targets; visible focus rings for keyboard and switch control; reduced-motion respected; no information conveyed by color alone — the serving indicator carries a dot _and_ a position, the live pill carries a word _and_ a color.
 
 ---
 
@@ -232,16 +237,17 @@ This one component gives the app a heartbeat, keeps the live product one thumb a
 
 ## 14. Screen direction
 
-**Today** — dusk wash. Header: avatar, `Hi, welcome back` / name, bell with flare badge. Then the week rail (7 date pills, active fill `--dusk-deep`). Then today's sessions as white cards with time in Archivo `wdth 74`, title Figtree 600, venue 400, and a `--signal` dot for confirmed. Below: `Sand Rating` compact card with the value in Archivo Expanded and its delta. Bottom: one contextual suggestion in a flare-bordered container when there's a real reason — *"Two courts are open at Hermosa at 6."* No suggestion is better than a manufactured one.
+**Today** — dusk wash. Header: avatar, `Hi, welcome back` / name, bell with flare badge. Then the week rail (7 date pills, active fill `--dusk-deep`). Then today's sessions as white cards with time in Archivo `wdth 74`, title Figtree 600, venue 400, and a `--signal` dot for confirmed. Below: `Sand Rating` compact card with the value in Archivo Expanded and its delta. Bottom: one contextual suggestion in a flare-bordered container when there's a real reason — _"Two courts are open at Hermosa at 6."_ No suggestion is better than a manufactured one.
 
 **Play (Discover)** — fog ground. A filter row of Class B chips (`Pickup` `Clinic` `League` `Tournament` · `Tonight` `This week`), then a list of session cards using the strict card anatomy from the design system: `[Status] [Tier]` top-left, serif title, venue line, then a footer with price left and a Class C metric chip right that turns flare at ≤3 spots. Map view is a toggle, not a separate tab.
 
 **Score** — the app's most important surface, and a full dark takeover from the moment it opens.
+
 - Setup: two team rows, tap to assign players from recents or search, court and format chips. One `Start match` pill.
 - Live: `--ink` ground. Team names Figtree 500 at 18. Two enormous Archivo numerals, `wdth 66 / 800` at 72pt. **Left half of the screen scores left; right half scores right.** A persistent 56pt `Undo` pill bottom-center. Set strip along the top. Serving indicator as a `--signal` dot that moves. At 20 points, a `Match point` flare chip appears.
 - Result: sand-gold wash sweep once, then the verified-result summary with the rating delta animating in. Then one action: `Confirm result`. Opponent verification is a push, not a blocker.
 
-**Rating** — dusk wash, and the app's most editorial screen. The value in Archivo Expanded `wdth 112 / 800` at 48pt, delta beside it, a sparkline beneath with a flare endpoint dot. Then **"Why it moved"** — the three-row breakdown from the web card (`Beat a 3.4 pair, 21–19 / 15–12 → +0.09`), which is the most trust-building content in the product. Then match history as a compact list, then a link to methodology. Serif headline: *"A rating that moves when your game does."*
+**Rating** — dusk wash, and the app's most editorial screen. The value in Archivo Expanded `wdth 112 / 800` at 48pt, delta beside it, a sparkline beneath with a flare endpoint dot. Then **"Why it moved"** — the three-row breakdown from the web card (`Beat a 3.4 pair, 21–19 / 15–12 → +0.09`), which is the most trust-building content in the product. Then match history as a compact list, then a link to methodology. Serif headline: _"A rating that moves when your game does."_
 
 **Tour** — the only Players screen that inherits the web's dark performance treatment by default. Live matches at top with the two-line collapsed card, then today's schedule, then rankings. Event artwork appears only inside a contained card, never full-bleed. Following a player adds their live matches to your Strand priority.
 
@@ -250,7 +256,7 @@ This one component gives the app a heartbeat, keeps the live product one thumb a
 - **Live Activity / Dynamic Island** is the highest-leverage thing this app can ship. A live match on the lock screen: team abbreviations, set score in Archivo tabular, a flare dot, and set progress. In the compact Dynamic Island: `LOR 14 · TII 13`. This is a beach volleyball product's perfect use case and almost nobody in the sport has it.
 - **Home screen widgets:** small — Sand Rating value and delta. Medium — next session with venue and countdown. Large — today's sessions plus one live pro match.
 - **Watch:** score entry only. Two tap zones, undo via crown. Nothing else.
-- **Notifications** (Players voice — warm, brief, never pushy): *"Golden Hour 4s starts in 1 hour. Hermosa Pier."* · *"Your rating moved to 3.14 after last night's match."* · *"Erik added you to Saturday's team."* Never: streak guilt, "we miss you," or anything with an exclamation mark. Cap at two per day unless a match is live.
+- **Notifications** (Players voice — warm, brief, never pushy): _"Golden Hour 4s starts in 1 hour. Hermosa Pier."_ · _"Your rating moved to 3.14 after last night's match."_ · _"Erik added you to Saturday's team."_ Never: streak guilt, "we miss you," or anything with an exclamation mark. Cap at two per day unless a match is live.
 
 ## 16. App icon
 
@@ -264,7 +270,7 @@ Launch screen: `--sand-100`, the ridge mark centered, no wordmark, no spinner. I
 
 ## 17. What this app is for
 
-An operator's phone app is not a smaller dashboard. The desktop console is for *building* — creating offers, configuring rules, designing the theme. The phone is for *running and reacting.* Three moments:
+An operator's phone app is not a smaller dashboard. The desktop console is for _building_ — creating offers, configuring rules, designing the theme. The phone is for _running and reacting._ Three moments:
 
 1. **"Is today okay?"** — glance, morning and mid-afternoon, 10 seconds.
 2. **"Something needs me."** — respond to an exception: a failed payment, a session under minimum, a coach out, a member message. 30 seconds, from a notification.
@@ -310,15 +316,15 @@ It reports exactly three things, always in the same order and the same positions
 
 Tap the Watch to expand a sheet listing every exception with a one-tap resolution. **This is the whole app in one line.** An operator should be able to open Duna Pro, read one line, and close it.
 
-The mirroring is deliberate: Players' signature docks at the bottom because it's about *your next move*; Pro's docks at the top because it's about *ambient status*. Same component family, opposite anchor, opposite job.
+The mirroring is deliberate: Players' signature docks at the bottom because it's about _your next move_; Pro's docks at the top because it's about _ambient status_. Same component family, opposite anchor, opposite job.
 
 ## 20. Screen direction
 
 **Today** — fog ground. Below the Watch, the **day view as court lanes**: a horizontally scrolling hour axis with one lane per court, sessions as 18px-radius blocks. This is the single most operator-native view we can build — a facility manager thinks in courts and hours, not in a list. Blocks carry: title (Figtree 600 13), coach initials, attendance as `7/12` in Archivo tabular, and a flare left-border when under minimum. Tap a block for a sheet: attendance list, message the group, move, cancel.
 
-Under the lanes: `Needs attention` as a stack of exception cards, then `Duna AI` suggestions in the flare-bordered container (*"Two courts are quiet after 4 PM. Publish a level-matched pickup?"* → `Review` / `Dismiss`). AI suggestions cap at two visible; the rest collapse.
+Under the lanes: `Needs attention` as a stack of exception cards, then `Duna AI` suggestions in the flare-bordered container (_"Two courts are quiet after 4 PM. Publish a level-matched pickup?"_ → `Review` / `Dismiss`). AI suggestions cap at two visible; the rest collapse.
 
-**People** — fog ground, dense list. Search pinned. Segment chips: `Members` `At risk` `New` `Staff`. Rows are compact: avatar, name Figtree 500, one line of context (`Last booked 24 days ago`), and a right-aligned state chip. **Retention signals must show their reason inline** — the web copy already promises *"Every reason is visible; no mystery score pretends to know more than the data."* Honor that: `At risk · no booking in 24 days`, never a bare score. Swipe a row to message.
+**People** — fog ground, dense list. Search pinned. Segment chips: `Members` `At risk` `New` `Staff`. Rows are compact: avatar, name Figtree 500, one line of context (`Last booked 24 days ago`), and a right-aligned state chip. **Retention signals must show their reason inline** — the web copy already promises _"Every reason is visible; no mystery score pretends to know more than the data."_ Honor that: `At risk · no booking in 24 days`, never a bare score. Swipe a row to message.
 
 **Money** — this is a console surface: `--marine-900` ground. Today's takings in Archivo Expanded at the top, then a 7-day bar strip, then sections for `Failed payments` (flare-bordered, one-tap retry), `Upcoming payouts`, `Active plans`. All figures tabular, right-aligned, in a consistent column so the eye can scan a stack of numbers without re-anchoring. No charts beyond the bar strip — an operator on a phone wants amounts, not analytics.
 
@@ -330,7 +336,7 @@ Under the lanes: `Needs attention` as a stack of exception cards, then `Duna AI`
 
 - **Widgets:** small — the Watch line itself. Medium — next three sessions with attendance. Large — court lanes for the next four hours. The Watch as a widget is the most useful thing on an operator's home screen.
 - **Live Activity:** an in-progress session with a live attendance count and time remaining.
-- **Notifications** (Pro voice — operational, specific, actionable, never alarming): *"Open play at 5:30 has 4 of 8. Auto-cancel triggers at 3 PM."* · *"Payment retry failed for M. Sanchez. $95 membership."* · *"Coach Rivera marked unavailable for Thursday."* Every operational notification carries a one-tap action. Cap at three per day; batch the rest into a single evening digest. Never notify an operator about something they cannot act on from a phone.
+- **Notifications** (Pro voice — operational, specific, actionable, never alarming): _"Open play at 5:30 has 4 of 8. Auto-cancel triggers at 3 PM."_ · _"Payment retry failed for M. Sanchez. $95 membership."_ · _"Coach Rivera marked unavailable for Thursday."_ Every operational notification carries a one-tap action. Cap at three per day; batch the rest into a single evening digest. Never notify an operator about something they cannot act on from a phone.
 
 ## 22. App icon
 
@@ -365,19 +371,20 @@ The design system's imagery doctrine is about atmosphere on the web, where a her
 
 Ration it to five places, and generate them from the same Higgsfield seeds as the web so everything matches:
 
-| Slot | App | Direction |
-|---|---|---|
-| Onboarding, 3 frames | Both | `app-onboard-{find,score,rate}` — golden hour, wide, athlete small in frame |
-| Empty states, tier 1 only | Both | `empty-generic` at 30% opacity |
-| Event and venue headers | Players | Reuse web `event-venue-{slug}` plates, cropped 3:2, always fog-dissolved |
-| Behind the live scoreboard | Players | `match-court-{cc,c2}` at 12% opacity over ink |
-| Club cover image | Pro | Operator-uploaded, auto-graded toward our palette on upload, never generated |
+| Slot                       | App     | Direction                                                                    |
+| -------------------------- | ------- | ---------------------------------------------------------------------------- |
+| Onboarding, 3 frames       | Both    | `app-onboard-{find,score,rate}` — golden hour, wide, athlete small in frame  |
+| Empty states, tier 1 only  | Both    | `empty-generic` at 30% opacity                                               |
+| Event and venue headers    | Players | Reuse web `event-venue-{slug}` plates, cropped 3:2, always fog-dissolved     |
+| Behind the live scoreboard | Players | `match-court-{cc,c2}` at 12% opacity over ink                                |
+| Club cover image           | Pro     | Operator-uploaded, auto-graded toward our palette on upload, never generated |
 
 Everything else in both apps is typography, data, and color. That restraint is what makes the five images land.
 
 ## 26. Do and avoid — mobile specific
 
 **Do**
+
 - Ship adaptive contrast before ship, not after the first sunny-day complaint.
 - Put the app's core verb in the center tab (Players: Score) or the top line (Pro: the Watch).
 - Make the Strand and the Watch the first components you build — they define both apps.
@@ -387,6 +394,7 @@ Everything else in both apps is typography, data, and color. That restraint is w
 - Ship Live Activities. In this sport, nobody else has.
 
 **Avoid**
+
 - Glass on scrolling lists, or anywhere in Pro's dense views.
 - Serif below 24pt, or serif anywhere in a Pro table.
 - Porting desktop Duna HQ workflows into the phone app. Hand off instead.

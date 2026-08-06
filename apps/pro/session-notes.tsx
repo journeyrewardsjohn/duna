@@ -11,11 +11,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  FellixText as Text,
+  FellixTextInput as TextInput,
+} from "./fellix-text";
 import type { DunaApiClient } from "./mobile-api";
 import { useProRuntime } from "./runtime";
 
@@ -387,7 +389,7 @@ export function SessionNotesScreen({
     return (
       <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
         <View style={styles.centerState}>
-          <ActivityIndicator color="#235a96" size="large" />
+          <ActivityIndicator color="#3d6672" size="large" />
           <Text style={styles.centerTitle}>Opening the session</Text>
         </View>
       </SafeAreaView>
@@ -718,7 +720,7 @@ export function SessionNotesScreen({
 }
 
 const styles = StyleSheet.create({
-  safe: { backgroundColor: "#f8f7f3", flex: 1 },
+  safe: { backgroundColor: "#f6f5f1", flex: 1 },
   flex: { flex: 1 },
   topbar: {
     alignItems: "center",
@@ -730,41 +732,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   topButton: { justifyContent: "center", minHeight: 48, minWidth: 72 },
-  topButtonText: { color: "#235a96", fontSize: 15, fontWeight: "800" },
-  topTitle: { color: "#101828", fontSize: 17, fontWeight: "900" },
+  topButtonText: { color: "#3d6672", fontSize: 15, fontWeight: "800" },
+  topTitle: { color: "#1b1b19", fontSize: 17, fontWeight: "900" },
   centerState: {
     alignItems: "center",
     flex: 1,
     gap: 14,
     justifyContent: "center",
   },
-  centerTitle: { color: "#101828", fontSize: 18, fontWeight: "900" },
+  centerTitle: { color: "#1b1b19", fontSize: 18, fontWeight: "900" },
   content: { padding: 20, paddingBottom: 135 },
   eyebrow: {
-    color: "#235a96",
+    color: "#3d6672",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.15,
     marginTop: 12,
   },
   title: {
-    color: "#101828",
+    color: "#1b1b19",
     fontSize: 34,
     fontWeight: "900",
     letterSpacing: -1.1,
     lineHeight: 39,
     marginTop: 8,
   },
-  subtitle: { color: "#667085", fontSize: 14, lineHeight: 22, marginTop: 9 },
+  subtitle: { color: "#766f61", fontSize: 14, lineHeight: 22, marginTop: 9 },
   voiceCard: {
     alignItems: "center",
-    backgroundColor: "#13283f",
+    backgroundColor: "#141a1e",
     borderRadius: 26,
     marginTop: 24,
     overflow: "hidden",
     padding: 24,
   },
-  voiceCardLive: { backgroundColor: "#163c49" },
+  voiceCardLive: { backgroundColor: "#22343b" },
   orbWrap: {
     alignItems: "center",
     height: 104,
@@ -772,7 +774,7 @@ const styles = StyleSheet.create({
     width: 104,
   },
   orbPulse: {
-    backgroundColor: "#73dfd4",
+    backgroundColor: "#d4b77c",
     borderRadius: 52,
     height: 104,
     position: "absolute",
@@ -786,8 +788,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 72,
   },
-  orbActive: { backgroundColor: "#73dfd4" },
-  orbIcon: { color: "#13283f", fontSize: 24, fontWeight: "900" },
+  orbActive: { backgroundColor: "#d4b77c" },
+  orbIcon: { color: "#141a1e", fontSize: 24, fontWeight: "900" },
   voiceState: {
     color: "#f7c86b",
     fontSize: 10,
@@ -804,7 +806,7 @@ const styles = StyleSheet.create({
   },
   recordButton: {
     alignItems: "center",
-    backgroundColor: "#235a96",
+    backgroundColor: "#3d6672",
     borderRadius: 16,
     flexDirection: "row",
     gap: 9,
@@ -829,7 +831,7 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   stopButtonIcon: { color: "#c45252", fontSize: 14 },
-  stopButtonText: { color: "#13283f", fontSize: 15, fontWeight: "900" },
+  stopButtonText: { color: "#141a1e", fontSize: 15, fontWeight: "900" },
   voiceError: {
     color: "#ffd6d6",
     fontSize: 12,
@@ -849,7 +851,7 @@ const styles = StyleSheet.create({
     borderColor: "#dfe3e8",
     borderRadius: 16,
     borderWidth: 1,
-    color: "#101828",
+    color: "#1b1b19",
     fontSize: 15,
     minHeight: 54,
     paddingHorizontal: 15,
@@ -877,19 +879,19 @@ const styles = StyleSheet.create({
     minHeight: 88,
     padding: 14,
   },
-  visibilityCardOn: { backgroundColor: "#eef5fb", borderColor: "#235a96" },
+  visibilityCardOn: { backgroundColor: "#edece6", borderColor: "#3d6672" },
   visibilityIcon: {
     alignItems: "center",
-    backgroundColor: "#e9f0f7",
+    backgroundColor: "#edece6",
     borderRadius: 13,
     height: 44,
     justifyContent: "center",
     width: 44,
   },
-  visibilityIconText: { color: "#235a96", fontSize: 19, fontWeight: "900" },
-  visibilityTitle: { color: "#101828", fontSize: 15, fontWeight: "900" },
+  visibilityIconText: { color: "#3d6672", fontSize: 19, fontWeight: "900" },
+  visibilityTitle: { color: "#1b1b19", fontSize: 15, fontWeight: "900" },
   visibilityBody: {
-    color: "#667085",
+    color: "#766f61",
     fontSize: 11,
     lineHeight: 16,
     marginTop: 3,
@@ -903,9 +905,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 22,
   },
-  radioOn: { borderColor: "#235a96" },
+  radioOn: { borderColor: "#3d6672" },
   radioDot: {
-    backgroundColor: "#235a96",
+    backgroundColor: "#3d6672",
     borderRadius: 5,
     height: 10,
     width: 10,
@@ -925,15 +927,15 @@ const styles = StyleSheet.create({
   personRowOn: { backgroundColor: "#f1f8f6", borderColor: "#3d7d66" },
   personAvatar: {
     alignItems: "center",
-    backgroundColor: "#e9f0f7",
+    backgroundColor: "#edece6",
     borderRadius: 20,
     height: 40,
     justifyContent: "center",
     width: 40,
   },
-  personAvatarText: { color: "#235a96", fontSize: 12, fontWeight: "900" },
-  personName: { color: "#101828", fontSize: 14, fontWeight: "900" },
-  personMeta: { color: "#667085", fontSize: 10, lineHeight: 15, marginTop: 3 },
+  personAvatarText: { color: "#3d6672", fontSize: 12, fontWeight: "900" },
+  personName: { color: "#1b1b19", fontSize: 14, fontWeight: "900" },
+  personMeta: { color: "#766f61", fontSize: 10, lineHeight: 15, marginTop: 3 },
   check: {
     alignItems: "center",
     borderColor: "#c7cdd5",
@@ -964,7 +966,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   footer: {
-    backgroundColor: "#f8f7f3",
+    backgroundColor: "#f6f5f1",
     borderTopColor: "#e7e4dc",
     borderTopWidth: 1,
     bottom: 0,
@@ -975,7 +977,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: "center",
-    backgroundColor: "#235a96",
+    backgroundColor: "#3d6672",
     borderRadius: 16,
     justifyContent: "center",
     minHeight: 56,
@@ -992,7 +994,7 @@ const styles = StyleSheet.create({
     minHeight: 54,
     paddingHorizontal: 20,
   },
-  secondaryButtonText: { color: "#235a96", fontSize: 14, fontWeight: "900" },
+  secondaryButtonText: { color: "#3d6672", fontSize: 14, fontWeight: "900" },
   disabled: { opacity: 0.5 },
   savedPage: {
     alignItems: "center",
@@ -1002,14 +1004,14 @@ const styles = StyleSheet.create({
   },
   savedIcon: {
     alignItems: "center",
-    backgroundColor: "#e9f0f7",
+    backgroundColor: "#edece6",
     borderRadius: 37,
     height: 74,
     justifyContent: "center",
     width: 74,
   },
   savedIconShared: { backgroundColor: "#dcf4e4" },
-  savedIconText: { color: "#235a96", fontSize: 30, fontWeight: "900" },
+  savedIconText: { color: "#3d6672", fontSize: 30, fontWeight: "900" },
   savedEyebrow: {
     color: "#3d7d66",
     fontSize: 10,
@@ -1018,7 +1020,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   savedTitle: {
-    color: "#101828",
+    color: "#1b1b19",
     fontSize: 31,
     fontWeight: "900",
     letterSpacing: -1,
@@ -1027,7 +1029,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   savedBody: {
-    color: "#667085",
+    color: "#766f61",
     fontSize: 14,
     lineHeight: 22,
     marginVertical: 18,
@@ -1051,9 +1053,9 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 1,
   },
-  confirmTitle: { color: "#101828", fontSize: 23, fontWeight: "900" },
+  confirmTitle: { color: "#1b1b19", fontSize: 23, fontWeight: "900" },
   confirmBody: {
-    color: "#667085",
+    color: "#766f61",
     fontSize: 12,
     lineHeight: 19,
     marginBottom: 5,

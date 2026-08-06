@@ -188,7 +188,7 @@ export function MobilePlacePicker({
               style={styles.input}
               value={query}
             />
-            {loading && <ActivityIndicator color="#235a96" size="small" />}
+            {loading && <ActivityIndicator color="#3d6672" size="small" />}
           </View>
           {options.length > 0 && (
             <View style={styles.results}>
@@ -226,8 +226,8 @@ export function MobilePlacePicker({
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   field: { gap: 8 },
-  label: { color: "#101828", fontSize: 16, fontWeight: "800" },
-  description: { color: "#667085", fontSize: 13, lineHeight: 19 },
+  label: { color: "#1b1b19", fontSize: 16, fontWeight: "800" },
+  description: { color: "#766f61", fontSize: 13, lineHeight: 19 },
   inputShell: {
     alignItems: "center",
     backgroundColor: "#ffffff",
@@ -239,18 +239,18 @@ const styles = StyleSheet.create({
     minHeight: 62,
     paddingHorizontal: 14,
   },
-  input: { color: "#101828", flex: 1, fontSize: 16, minHeight: 60 },
+  input: { color: "#1b1b19", flex: 1, fontSize: 16, minHeight: 60 },
   pin: {
     alignItems: "center",
-    backgroundColor: "#e8eef7",
+    backgroundColor: "#dfe5e4",
     borderRadius: 18,
     height: 36,
     justifyContent: "center",
     width: 36,
   },
   pinConfirmed: { backgroundColor: "#e6f4ed" },
-  pinText: { color: "#235a96", fontSize: 20, fontWeight: "900" },
-  pinTextConfirmed: { color: "#2f7d57", fontSize: 16 },
+  pinText: { color: "#3d6672", fontSize: 20, fontWeight: "900" },
+  pinTextConfirmed: { color: "#2f6b3a", fontSize: 16 },
   lockedCard: {
     alignItems: "center",
     backgroundColor: "#ffffff",
@@ -262,22 +262,22 @@ const styles = StyleSheet.create({
     minHeight: 84,
     padding: 14,
   },
-  placeName: { color: "#101828", fontSize: 15, fontWeight: "800" },
+  placeName: { color: "#1b1b19", fontSize: 15, fontWeight: "800" },
   placeAddress: {
-    color: "#667085",
+    color: "#766f61",
     fontSize: 12,
     lineHeight: 17,
     marginTop: 2,
   },
   lockedLabel: {
-    color: "#2f7d57",
+    color: "#2f6b3a",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.9,
     marginTop: 6,
   },
   changeButton: { justifyContent: "center", minHeight: 44, paddingLeft: 8 },
-  changeText: { color: "#235a96", fontSize: 13, fontWeight: "800" },
+  changeText: { color: "#3d6672", fontSize: 13, fontWeight: "800" },
   results: {
     backgroundColor: "#ffffff",
     borderColor: "#d9dee6",
@@ -303,5 +303,5 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     textAlign: "right",
   },
-  error: { color: "#b84444", fontSize: 12, lineHeight: 17 },
+  error: { color: "#9a4a2e", fontSize: 12, lineHeight: 17 },
 });

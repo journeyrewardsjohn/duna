@@ -34,6 +34,21 @@ export function DunaMark({
   );
 }
 
+export function DunaLoader({
+  label = "Opening Duna",
+}: {
+  readonly label?: string;
+}) {
+  return (
+    <div aria-live="polite" className="duna-loader" role="status">
+      <span aria-hidden="true" className="duna-loader__mark">
+        <DunaMark compact />
+      </span>
+      <span className="duna-loader__label">{label}</span>
+    </div>
+  );
+}
+
 export function Button({
   children,
   tone = "primary",

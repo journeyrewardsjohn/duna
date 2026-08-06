@@ -13,14 +13,14 @@
 
 Duna carries two conflicting obligations. Our aesthetic is quiet. Our partners — FIVB, Beach Pro Tour, AVP, equipment and apparel brands — are loud. Resolve it by **zoning, not compromise.**
 
-| | Editorial zone | Performance zone |
-|---|---|---|
-| **Where** | Homepage, run-your-club, About, Sand Rating explainer, player features, marketing | Live match, match detail, event pages, /pro, brackets, standings, Duna HQ console |
-| **Ground** | Fog `#F6F5F1`, sand, marine | Ink `#1B1B19`, marine-900 `#22343B` |
-| **Display type** | Serif, large, airy | Condensed tabular numerals |
-| **Motion** | Max one ambient element per viewport | Unrestricted but purposeful |
-| **Partner brands** | Monochrome at rest, color on hover only | Full color, inside a contained frame |
-| **Feeling** | Still | Alive |
+|                    | Editorial zone                                                                    | Performance zone                                                                  |
+| ------------------ | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **Where**          | Homepage, run-your-club, About, Sand Rating explainer, player features, marketing | Live match, match detail, event pages, /pro, brackets, standings, Duna HQ console |
+| **Ground**         | Fog `#F6F5F1`, sand, marine                                                       | Ink `#1B1B19`, marine-900 `#22343B`                                               |
+| **Display type**   | Serif, large, airy                                                                | Condensed tabular numerals                                                        |
+| **Motion**         | Max one ambient element per viewport                                              | Unrestricted but purposeful                                                       |
+| **Partner brands** | Monochrome at rest, color on hover only                                           | Full color, inside a contained frame                                              |
+| **Feeling**        | Still                                                                             | Alive                                                                             |
 
 **Brand owns the fill. Duna owns the frame.** Corner radius, type, spacing, and fog dissolve are non-negotiable. Everything inside a partner container can be theirs.
 
@@ -31,47 +31,53 @@ A loud brand inside a quiet frame reads premium. A loud brand on a loud page rea
 ## 2. Color
 
 ### Environmental
-| Token | Hex | Name | Use |
-|---|---|---|---|
-| `--sand-100` | `#EFE6D3` | Warm Sand | Light warm sections |
-| `--sand-300` | `#E2CFA6` | Dune Gold | Gradient partner, imagery tint |
-| `--sand-500` | `#C9A96A` | Golden Hour | Podium, gold medal, premium tier, winner bracket paths |
-| `--marine-200` | `#B5CCD3` | Marine Haze | Cool section backgrounds |
-| `--marine-400` | `#8FB0BC` | Offshore | Hover on marine surfaces, secondary data |
-| `--marine-900` | `#22343B` | Deep Water | Dark performance ground, alternative to ink |
+
+| Token          | Hex       | Name        | Use                                                    |
+| -------------- | --------- | ----------- | ------------------------------------------------------ |
+| `--sand-100`   | `#EFE6D3` | Warm Sand   | Light warm sections                                    |
+| `--sand-300`   | `#E2CFA6` | Dune Gold   | Gradient partner, imagery tint                         |
+| `--sand-500`   | `#C9A96A` | Golden Hour | Podium, gold medal, premium tier, winner bracket paths |
+| `--marine-200` | `#B5CCD3` | Marine Haze | Cool section backgrounds                               |
+| `--marine-400` | `#8FB0BC` | Offshore    | Hover on marine surfaces, secondary data               |
+| `--marine-900` | `#22343B` | Deep Water  | Dark performance ground, alternative to ink            |
 
 ### Structural
-| Token | Hex | Use |
-|---|---|---|
-| `--ink` | `#1B1B19` | Headlines, primary buttons, dark ground |
-| `--ink-soft` | `#3A3A36` | Body copy on light |
-| `--fog-50` | `#F6F5F1` | Default page background |
-| `--fog-100` | `#EDECE6` | Card surfaces |
-| `--white` | `#FFFFFF` | Glass at 60–80% opacity |
+
+| Token        | Hex       | Use                                     |
+| ------------ | --------- | --------------------------------------- |
+| `--ink`      | `#1B1B19` | Headlines, primary buttons, dark ground |
+| `--ink-soft` | `#3A3A36` | Body copy on light                      |
+| `--fog-50`   | `#F6F5F1` | Default page background                 |
+| `--fog-100`  | `#EDECE6` | Card surfaces                           |
+| `--white`    | `#FFFFFF` | Glass at 60–80% opacity                 |
 
 > Fix on live site: `meta[theme-color]` is `#f8f7f3`. Change to `#F6F5F1` to match `--fog-50`.
 
 ### Accents — rationed, meaning-bearing
-| Token | Hex | Meaning | Budget |
-|---|---|---|---|
-| `--flare` | `#E8683A` | **Something is happening right now.** Live badges, match point, spots running out, in-progress. | ≤2% of pixels |
-| `--signal` | `#C9E265` | **Available / online / serving / verified.** Dots and small chips only. | ≤1% |
-| `--dusk` | `#F2DDE0` | Mobile ambient wash on planning screens only. Never a component fill on web. | Background only |
-| `--dusk-deep` | `#EDD3D9` | Selected date pill in app | — |
+
+| Token         | Hex       | Meaning                                                                                         | Budget          |
+| ------------- | --------- | ----------------------------------------------------------------------------------------------- | --------------- |
+| `--flare`     | `#E8683A` | **Something is happening right now.** Live badges, match point, spots running out, in-progress. | ≤2% of pixels   |
+| `--signal`    | `#C9E265` | **Available / online / serving / verified.** Dots and small chips only.                         | ≤1%             |
+| `--dusk`      | `#F2DDE0` | Mobile ambient wash on planning screens only. Never a component fill on web.                    | Background only |
+| `--dusk-deep` | `#EDD3D9` | Selected date pill in app                                                                       | —               |
 
 **The flare test:** before using coral, ask "is this describing a live, time-bound state?" If no, use ink or a neutral chip. Flare is never decorative, never a brand color, never a CTA fill.
 
 ### Semantic
-| Token | Hex | Use |
-|---|---|---|
-| `--gain` | `#2F6B3A` | Rating up, rank up, revenue up |
-| `--loss` | `#9A4A2E` | Rating down, rank down |
+
+| Token       | Hex       | Use                                      |
+| ----------- | --------- | ---------------------------------------- |
+| `--gain`    | `#2F6B3A` | Rating up, rank up, revenue up           |
+| `--loss`    | `#9A4A2E` | Rating down, rank down                   |
 | `--pending` | `#8A8578` | Not yet available, unmapped, provisional |
 
 ### Ratio target per screen
+
 Fog + shell 60% · sand 15% · marine 15% · ink 8% · accents ≤2%. Dark performance screens invert: ink 70%, marine 15%, fog type 12%, accents ≤3%.
 
 ### Gradients — three, and only three
+
 1. **Golden hour wash** — `marine-200 → sand-300` at 15–20°. Section transitions, hero overlays.
 2. **Fog dissolve** — imagery → `fog-50` over 300–500px. **Every hero uses this. Imagery never has a hard bottom edge.**
 3. **Dusk wash** — `#FBF3F4 → #FFFFFF` vertical. Mobile planning screens only.
@@ -83,6 +89,7 @@ Fog + shell 60% · sand 15% · marine 15% · ink 8% · accents ≤2%. Dark perfo
 You are cleared to ship the free stack. Structure is identical either way — the licensed upgrade is a font-file swap, nothing more.
 
 ### Role 1 — Display (serif)
+
 - **Shipping:** Instrument Serif, 400. **Optional upgrade:** Awesome Serif Light (~300).
 - Stack: `"Awesome Serif","Instrument Serif",Georgia,serif`
 - Line height 1.02–1.10. Letter-spacing −0.015 to −0.022em. **Sentence case with a terminal period.**
@@ -91,6 +98,7 @@ You are cleared to ship the free stack. Structure is identical either way — th
 - **Never use it for:** buttons, labels, table cells, nav, any number, any UI in the app, anything under 20px.
 
 ### Role 2 — Text / UI (sans)
+
 - **Shipping:** Figtree. **Optional upgrade:** Fellix.
 - Stack: `"Fellix","Figtree",-apple-system,sans-serif`
 - Weight map — treat as law:
@@ -103,6 +111,7 @@ You are cleared to ship the free stack. Structure is identical either way — th
 - Sizes: body 16/26 · secondary 14.5/23 · caption 13/18 · micro 11.5/16
 
 ### Role 3 — Data / Score (condensed + expanded)
+
 - **Archivo** (Google Fonts, SIL OFL). Variable: `wdth 62–125`, `wght 100–900`. One file, both jobs.
 - Always: `font-variant-numeric: tabular-nums; font-feature-settings:"tnum" 1;`
 - Width map:
@@ -114,19 +123,25 @@ You are cleared to ship the free stack. Structure is identical either way — th
 - **Never use it for:** prose, headlines, buttons, or numbers inside a sentence ("we tracked 105 events" stays in Figtree).
 
 ### The signature contrast
+
 A serif headline sitting directly above a condensed tabular scoreline is the entire brand in one frame. Poetry above, precision below. Design at least one such pairing into every major page.
 
 ### Loading
+
 ```html
-<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Figtree:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link
+  href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Figtree:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap"
+  rel="stylesheet"
+/>
 ```
+
 Self-host in production. Subset Archivo to Latin + numerals + `–` en dash. Preload the serif — it is above the fold on every page.
 
 ---
 
 ## 4. Eyebrow system
 
-Eyebrows are the most-used and most-abused device on the current site. They are doing real work: they tell you what *kind* of thing you're about to read. Formalize them.
+Eyebrows are the most-used and most-abused device on the current site. They are doing real work: they tell you what _kind_ of thing you're about to read. Formalize them.
 
 **Spec:** Figtree 500 · 11px · `letter-spacing: .14em` · uppercase · `--ink-soft` at 72% opacity (or `--sand-300` at 90% on dark) · 16px below it before the headline.
 
@@ -137,7 +152,8 @@ Eyebrows are the most-used and most-abused device on the current site. They are 
 3. **Source or state** — where it came from or how fresh. `Official entry lists` · `Updated 8:21 PM` · `Volleyball World snapshot` · `Live · updating`
 
 **Never:**
-- A teaser or a sales line. *"Your next yes is closer than you think"* is a headline, not an eyebrow.
+
+- A teaser or a sales line. _"Your next yes is closer than you think"_ is a headline, not an eyebrow.
 - A sentence, or anything over 5 words.
 - A repeat of the headline's noun. Eyebrow `Sand Rating` + headline "Sand Rating explained" wastes both.
 - Two eyebrows on one section.
@@ -154,28 +170,33 @@ Eyebrows are the most-used and most-abused device on the current site. They are 
 Tags carry state and taxonomy. On the current site they run together as undifferentiated text — `upcomingmen FutureBPT Futures Pingtan` — because there is no visual hierarchy between four different kinds of tag. Fix it with four distinct classes. Never place two tags of the same class adjacent; never place more than three tags on one card.
 
 ### Class A — Status pill (what is happening)
+
 Full radius · 5px 11px · Figtree 600 · 9.5px · `.16em` uppercase. **One per card, always first, always leftmost.**
 
-| State | Fill | Text | Notes |
-|---|---|---|---|
-| Live | `rgba(232,104,58,.14)` | `#B84A20` | Pulsing 6px flare dot |
-| Upcoming | `rgba(27,27,25,.06)` | `--ink-soft` | No dot |
-| Final | `--ink` | `--fog-50` | Solid — a result is settled |
-| Cancelled / withdrawn | transparent, 1px `--pending` border | `--pending` | Strikethrough team name |
-| Pending data | `rgba(138,133,120,.12)` | `--pending` | Italic label |
+| State                 | Fill                                | Text         | Notes                       |
+| --------------------- | ----------------------------------- | ------------ | --------------------------- |
+| Live                  | `rgba(232,104,58,.14)`              | `#B84A20`    | Pulsing 6px flare dot       |
+| Upcoming              | `rgba(27,27,25,.06)`                | `--ink-soft` | No dot                      |
+| Final                 | `--ink`                             | `--fog-50`   | Solid — a result is settled |
+| Cancelled / withdrawn | transparent, 1px `--pending` border | `--pending`  | Strikethrough team name     |
+| Pending data          | `rgba(138,133,120,.12)`             | `--pending`  | Italic label                |
 
 ### Class B — Taxonomy chip (what kind of thing)
+
 8px radius · 4px 9px · Figtree 500 · 10px · `.12em` uppercase · `--fog-100` fill · `--ink-soft` text. Tier and division: `Elite16` · `Challenge` · `Futures` · `AVP League` · `Pickup` · `League` · `Clinic` · `Men` · `Women` · `Coed`.
 Division chips (men/women/coed) are **always last** in the chip row and always lower contrast than tier.
 
 ### Class C — Metric chip (a number with a unit)
+
 8px radius · Archivo `wdth 78, wght 700` · 12.5px · tabular. `3 spots` · `+0.14` · `8,360 pts` · `0/20 matches`.
 Turns flare-tinted (`rgba(232,104,58,.13)` / `#B84A20`) **only** on scarcity or live change: ≤3 spots left, rating moved this session, score changed in the last 10s.
 
 ### Class D — Identity chip (who)
+
 Flag + country code, or a partner mark. **Replace all flag emoji with a single SVG flag set** — emoji render differently on every OS and currently break the type line on /pro and event pages. Spec: 16×11px SVG flag, 4px gap, then `SWE` in Figtree 500 10px `.1em` uppercase at 60% opacity.
 
 ### Ordering law
+
 `[Status] [Tier] [Division] … [Metric right-aligned]`. Status left, metric right, taxonomy between. Applied consistently, a scanning eye learns the card in one fixation.
 
 ---
@@ -193,26 +214,29 @@ Flag + country code, or a partner mark. **Replace all flag emoji with a single S
 
 ## 7. Voice and tone
 
-The current copy is already strong — *"Run the business. Keep the game human."* and *"Performance over trophies"* are exactly right. Codify it.
+The current copy is already strong — _"Run the business. Keep the game human."_ and _"Performance over trophies"_ are exactly right. Codify it.
 
 ### Do
+
 - **Short declaratives. Sentence case. Terminal periods on headlines.** "There's always another game."
 - **Name the thing.** "Record a match," not "Log your athletic performance."
 - **Let data speak.** "128 teams. 14 stops. One tour." Never "the most exciting season yet."
-- **Be honest about emptiness.** *"Both teams currently have an even prior because mapped rating data is incomplete."* — this is the best sentence on the site. It explains rather than hides. Write every empty state this way.
+- **Be honest about emptiness.** _"Both teams currently have an even prior because mapped rating data is incomplete."_ — this is the best sentence on the site. It explains rather than hides. Write every empty state this way.
 - **Active verbs on controls.** `Follow the tour` · `See full results` · `Publish the session`. The button that says "Publish" produces a toast that says "Published."
 - **Second person for players, plain third person for the system.** "Your rating moved. Duna reads the whole result."
 
 ### Avoid
-- Hype adjectives: *revolutionary, seamless, powerful, cutting-edge, game-changing, unleash, elevate.*
+
+- Hype adjectives: _revolutionary, seamless, powerful, cutting-edge, game-changing, unleash, elevate._
 - Exclamation marks. Anywhere. Including toasts.
 - Em dashes in UI copy (use a period or a colon).
 - Apologizing errors. State what happened and what to do.
-- Sport clichés: *leave it all on the sand, grind, next level, built different.*
+- Sport clichés: _leave it all on the sand, grind, next level, built different._
 - Anthropomorphizing the model. "Duna reads the result," not "Duna thinks you're improving."
 - Superlatives about our own size. We have 50 profiles. Say 50.
 
 ### Naming consistency (real bug)
+
 The site currently uses **"Sand Rating"** and **"SandRating"** interchangeably — sometimes in the same card. Pick one: **"Sand Rating"** in all prose and headings, `sand-rating` in slugs and code. Search-and-replace "SandRating" out of the UI. Also standardize `Tues` → `Tue` on /pro (currently the only three-letter-plus-s day abbreviation, and it breaks the date rail's optical rhythm).
 
 ---
@@ -228,6 +252,7 @@ Every image in Duna obeys these, whether photographed, licensed, or generated.
 **The feeling:** frozen athleticism inside stillness. A player mid-swing silhouetted against hazy sky. Sand suspended off a dig. An empty court at dawn with the net line dissolving into fog. Motion captured, frame quiet.
 
 **Depth is mandatory.** Build every hero in five plates:
+
 1. **Foreground occlusion** — dune grass, net mesh, a blurred shoulder entering frame. 20–40% blur. Parallax 0.78.
 2. **Subject** — athlete or object, tack sharp. Parallax 0.42.
 3. **Atmosphere** — haze, backlit sand particles, ocean mist. Parallax 0.52.
@@ -243,21 +268,23 @@ Every image in Duna obeys these, whether photographed, licensed, or generated.
 Server: `https://mcp.higgsfield.ai/mcp` (Settings → Connectors → authenticate with the Higgsfield account). Runs on Higgsfield plan credits. Generation is async — the agent submits, polls, returns URLs.
 
 ### 9.1 Model routing
-| Need | Model | Why |
-|---|---|---|
-| Hero plates, venue atmosphere, 4K editorial | **Nano Banana Pro** | Best composition and lighting fidelity at 4K |
-| Anything with legible text, signage, court boards, event posters | **GPT Image 2** | Near-perfect text rendering |
-| Recurring athlete or coach across many screens | **Soul 2.0** + `create_character` | Cast consistency across a multi-shot library |
-| Stylized abstracts, sand texture, net-mesh overlays, empty-state art | **Flux 2** | Fast, controllable, cheap for iteration |
-| Draft/thumbnail passes before committing credits | **Seedream 5.0 Lite** | Cheapest exploration |
+
+| Need                                                                 | Model                             | Why                                          |
+| -------------------------------------------------------------------- | --------------------------------- | -------------------------------------------- |
+| Hero plates, venue atmosphere, 4K editorial                          | **Nano Banana Pro**               | Best composition and lighting fidelity at 4K |
+| Anything with legible text, signage, court boards, event posters     | **GPT Image 2**                   | Near-perfect text rendering                  |
+| Recurring athlete or coach across many screens                       | **Soul 2.0** + `create_character` | Cast consistency across a multi-shot library |
+| Stylized abstracts, sand texture, net-mesh overlays, empty-state art | **Flux 2**                        | Fast, controllable, cheap for iteration      |
+| Draft/thumbnail passes before committing credits                     | **Seedream 5.0 Lite**             | Cheapest exploration                         |
 
 Default to Nano Banana Pro at 4K for anything that ships as a page hero. Explore at Seedream, finish at Nano Banana Pro.
 
 ### 9.2 Seed images — this is the whole ballgame
 
-Generation without seeds produces generic AI beach volleyball. Generation *with* real seeds produces Duna. **Always pass 1–3 reference images.**
+Generation without seeds produces generic AI beach volleyball. Generation _with_ real seeds produces Duna. **Always pass 1–3 reference images.**
 
 **Legal sourcing — required, in this priority order:**
+
 1. Duna's own event and club photography (South Bay, Charlotte, Hermosa, Manhattan Beach).
 2. Athlete-supplied images with written permission — the backer relationships (Dalhausser, Crabb, Sander) make this straightforward.
 3. Licensed federation or tour assets where our agreement covers derivative use — confirm with FIVB/AVP before seeding from official tour photography.
@@ -266,6 +293,7 @@ Generation without seeds produces generic AI beach volleyball. Generation *with*
 **Do not seed from** press photos, scraped social media, other platforms' galleries, or any image whose license you cannot name. **Do not generate a recognizable likeness of a real athlete** unless that athlete has signed off — for real players, use their actual photograph, not a generated one. Generated humans in Duna imagery should be non-identifiable: silhouettes, backs, distance, motion blur, cropped faces.
 
 **Seed selection rules:**
+
 - Seed for **light and composition**, not subject. A dawn frame of your own empty Hermosa court is a better seed for a Hamburg hero than a Hamburg action photo shot at noon.
 - Two seeds beat one: pass one **grade reference** (the color and light you want) plus one **composition reference** (the framing you want).
 - Keep a permanent `/brand/seeds/` folder: `seed-grade-goldenhour-01.jpg`, `seed-comp-lowangle-net.jpg`, `seed-tex-sand-macro.jpg`, `seed-atmo-haze-backlit.jpg`. Reuse the same seeds across the whole library — that is what makes 40 images look like one photographer shot them.
@@ -290,6 +318,7 @@ Locked strings for the last three slots — copy verbatim every time:
 `saturated colors, midday sun, harsh contrast, HDR, lens flare, confetti, crowd, cheering, motivational text, logos, brand marks, watermark, stock photo smile, over-sharpened, plastic skin, cartoon, illustration`
 
 **Worked example — homepage hero subject plate:**
+
 ```
 A lone beach volleyball player at the top of a swing, seen from a low
 three-quarter angle, silhouetted against hazy sky, net line crossing the
@@ -337,22 +366,22 @@ Higgsfield does video up to 15s (Veo 3.1, Kling 3.0). Duna uses it for exactly o
 
 The complete list of images Duna needs. Generate nothing outside it.
 
-| ID | Page | Slot | Subject direction |
-|---|---|---|---|
-| `home-hero-{sky,subject,fore}` | / | Hero, 3 plates | Lone player at top of swing, wide, small in frame |
-| `home-spotlight` | / | Player feature | Portrait, soft backlight, neutral sand background, eyes down |
-| `home-mobile-context` | / | App section | Hands holding phone at a court edge, dawn, phone screen blank for compositing |
-| `club-hero-{sky,subject,fore}` | /run-your-club | Hero, 3 plates | **Empty courts before the day starts** — nets being tensioned, lines freshly raked, no people or one distant figure |
-| `club-people` | /run-your-club | People chapter | A coach mid-instruction with two players, backs to camera, distance |
-| `club-money` | /run-your-club | Money chapter | Abstract: sand texture macro, raking lines, extreme close, near-monochrome |
-| `pro-hero-{sky,subject,fore}` | /pro | Dark hero, 3 plates | Blue hour, stadium court from high behind, floodlights just on, empty seats |
-| `pro-directory` | /pro | Player directory band | Backlit silhouette row of players walking off court |
-| `event-venue-{slug}` | /events/* | Event hero plate | **Per venue.** Hamburg-Horn: racecourse grandstand + show court, low sun, north-European light, cool grade |
-| `event-empty-draw` | /events/* | Pre-event empty state | Bare court, no net yet, chalk line only |
-| `match-court-{cc,c2}` | /match/* | Match ambient plate | Center Court vs Court 2, shot tight and dark, heavily fogged for use behind a scoreboard |
-| `rating-texture` | /methodology | Background | Sand ripple macro, near-abstract, very low contrast |
-| `empty-generic` | global | Empty states | Single volleyball at rest on sand, long shadow, far off-center |
-| `og-{page}` | global | Social cards | 1200×630 crops of the above, never new generations |
+| ID                             | Page           | Slot                  | Subject direction                                                                                                   |
+| ------------------------------ | -------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `home-hero-{sky,subject,fore}` | /              | Hero, 3 plates        | Lone player at top of swing, wide, small in frame                                                                   |
+| `home-spotlight`               | /              | Player feature        | Portrait, soft backlight, neutral sand background, eyes down                                                        |
+| `home-mobile-context`          | /              | App section           | Hands holding phone at a court edge, dawn, phone screen blank for compositing                                       |
+| `club-hero-{sky,subject,fore}` | /run-your-club | Hero, 3 plates        | **Empty courts before the day starts** — nets being tensioned, lines freshly raked, no people or one distant figure |
+| `club-people`                  | /run-your-club | People chapter        | A coach mid-instruction with two players, backs to camera, distance                                                 |
+| `club-money`                   | /run-your-club | Money chapter         | Abstract: sand texture macro, raking lines, extreme close, near-monochrome                                          |
+| `pro-hero-{sky,subject,fore}`  | /pro           | Dark hero, 3 plates   | Blue hour, stadium court from high behind, floodlights just on, empty seats                                         |
+| `pro-directory`                | /pro           | Player directory band | Backlit silhouette row of players walking off court                                                                 |
+| `event-venue-{slug}`           | /events/*      | Event hero plate      | **Per venue.** Hamburg-Horn: racecourse grandstand + show court, low sun, north-European light, cool grade          |
+| `event-empty-draw`             | /events/*      | Pre-event empty state | Bare court, no net yet, chalk line only                                                                             |
+| `match-court-{cc,c2}`          | /match/*       | Match ambient plate   | Center Court vs Court 2, shot tight and dark, heavily fogged for use behind a scoreboard                            |
+| `rating-texture`               | /methodology   | Background            | Sand ripple macro, near-abstract, very low contrast                                                                 |
+| `empty-generic`                | global         | Empty states          | Single volleyball at rest on sand, long shadow, far off-center                                                      |
+| `og-{page}`                    | global         | Social cards          | 1200×630 crops of the above, never new generations                                                                  |
 
 Venue plates scale per event: one per **venue**, not per event, reused across men's/women's divisions and across years. Two dozen plates covers the tour.
 
@@ -376,7 +405,7 @@ Implemented in `duna-homepage-redesign.html`. Summary of the decisions:
 
 ## 12. /run-your-club — audit
 
-**What's working:** the strongest copy on the site. *"Run the business. Keep the game human."* is on-voice and on-brand. Eyebrows here are mostly correct-form category labels. The micro-mocks (Mon/Tue/Wed schedule, Smart Rules chips, payment-recovery status, segment/trigger/action) are genuinely good content — they show rather than claim.
+**What's working:** the strongest copy on the site. _"Run the business. Keep the game human."_ is on-voice and on-brand. Eyebrows here are mostly correct-form category labels. The micro-mocks (Mon/Tue/Wed schedule, Smart Rules chips, payment-recovery status, segment/trigger/action) are genuinely good content — they show rather than claim.
 
 **Problems:**
 
@@ -389,14 +418,14 @@ Implemented in `duna-homepage-redesign.html`. Summary of the decisions:
 
 **Recommendations:**
 
-- **Hero:** golden-hour plate `club-hero-*` — **empty courts before the day starts**, nets being tensioned, lines raked. That single image says "we handle the setup" better than any headline. Keep the current headline verbatim. Add the existing reassurance line *"Start as one coach. Add locations, courts, and a team when you are ready."* directly under the CTAs as a `--pending`-toned micro-line.
+- **Hero:** golden-hour plate `club-hero-*` — **empty courts before the day starts**, nets being tensioned, lines raked. That single image says "we handle the setup" better than any headline. Keep the current headline verbatim. Add the existing reassurance line _"Start as one coach. Add locations, courts, and a team when you are ready."_ directly under the CTAs as a `--pending`-toned micro-line.
 - **Collapse twelve sections into four chapters,** each on an alternating ground, each with one anchor visual and 2–3 sub-features inside it:
   1. **The day** (fog) — synced schedule + Smart Rules. Anchor: the schedule console.
   2. **The money** (marine block) — plans, memberships, payments, wallet/ledger. Anchor: payment-recovery console. This is a performance zone: Archivo tabular everywhere.
   3. **The people** (sand) — marketing, community intelligence, consent routing. Anchor: `club-people` image + the segment/trigger/action mock.
   4. **The brand** (ink) — Theme Kit, profile layout, publish preview. Dark ground makes the palette swatches sing.
 - **Console component:** all micro-mocks become the same object — dark `--marine-900` or ink surface, 24px radius, 15px header row with `DUNA HQ` in Archivo `wdth 88/800` and a `--signal` connected dot, body with Archivo tabular figures. Build it once, reuse eight times. Consistency here is what makes the product look real.
-- **Duna AI callouts** (*"Two courts are quiet after 4 PM"*) get the flare-bordered container: `rgba(232,104,58,.1)` fill, `rgba(232,104,58,.26)` border, pulsing dot, `DUNA AI · TODAY` micro-label. This is a live suggestion, so flare is correct here.
+- **Duna AI callouts** (_"Two courts are quiet after 4 PM"_) get the flare-bordered container: `rgba(232,104,58,.1)` fill, `rgba(232,104,58,.26)` border, pulsing dot, `DUNA AI · TODAY` micro-label. This is a live suggestion, so flare is correct here.
 - **Eyebrow rewrites:** `One system, your shape` → `Scale`. `Everything connected` → `Modules`. `Your club, presented as yours` → `Theme Kit`. `Start at your size` → `Getting started`. `Today at a glance` → keep, it's a real scope label.
 - **Add** an operator proof band (one quote, one club name, monochrome logos) between chapters 2 and 3, and a plain pricing anchor before the closing CTA. Even "starts free, 2.9% + 30¢ on what you sell" beats silence.
 - **Module list** (`Booking + calendar`, `Commerce`, `Wallet + ledger`, `Team`, `Marketing`, `Theme Kit`, `Performance`, `Operations`) becomes a 4×2 grid of small fog-100 cards with Figtree 600 titles and 400 descriptions — not a bulleted list.
@@ -405,7 +434,7 @@ Implemented in `duna-homepage-redesign.html`. Summary of the decisions:
 
 ## 13. /pro — audit
 
-**What's working:** the underlying data is excellent and genuinely differentiated — 105 tracked events, live counts, Sand Rating on pro players, tour marks, a Volleyball World snapshot, a prediction market. Nobody else assembles this. *"The world's game, in one live view."* is a strong headline. *"More dots mean more play on that date"* is a smart, well-explained affordance.
+**What's working:** the underlying data is excellent and genuinely differentiated — 105 tracked events, live counts, Sand Rating on pro players, tour marks, a Volleyball World snapshot, a prediction market. Nobody else assembles this. _"The world's game, in one live view."_ is a strong headline. _"More dots mean more play on that date"_ is a smart, well-explained affordance.
 
 **Problems:**
 
@@ -501,7 +530,7 @@ This is the most important performance surface in the product and currently the 
 - **Team cards:** side by side, each with the two players, avatar initials on a sand→marine gradient, Sand Rating in Archivo `wdth 110/800` when known, the pending chip when not, and the aggregate `Team rating 3.01` in a sand-500 chip. Countries as SVG flag chips.
 - **Collapse the three empty modules into one honest block** titled `Not yet available`, containing three one-line rows: `Head-to-head — no prior verified meetings.` `Broadcast — not yet announced.` `Prediction — even prior; rating data incomplete.` Each expands into a full module the moment it has content. Three dead sections become one truthful one.
 - **Explain the court.** `CC` renders as `Center Court` with `CC` as a small monospaced-feel Archivo chip beside it. On event pages, court `2` renders as `Court 2`.
-- **Keep the model note verbatim.** *"Both teams currently have an even prior because mapped rating data is incomplete."* Set it in Figtree 400 13px `--pending`, italic, under the prediction. It's the most trustworthy sentence on the site.
+- **Keep the model note verbatim.** _"Both teams currently have an even prior because mapped rating data is incomplete."_ Set it in Figtree 400 13px `--pending`, italic, under the prediction. It's the most trustworthy sentence on the site.
 - **Add live-state choreography** for when the match starts: status pill flips scheduled → live with a pulsing flare dot, score numerals slide-flip on change (200ms), a thin flare progress line tracks toward 21, and `Match point` appears as a flare chip at 20. This is the payoff for all the restraint everywhere else.
 
 ---
@@ -525,11 +554,12 @@ This is the most important performance surface in the product and currently the 
 2. **Presented-by (performance):** full color inside a defined glass or dark container with a fixed corner position and an eyebrow-spec `PRESENTED BY` caption. Brand color never leaks outside the container.
 3. **Partner spotlight (dedicated modules, event artwork):** full brand expression inside a Duna-framed canvas. Their imagery, their color as the module's background wash; our typography, radii, spacing, and fog dissolve as the frame.
 
-**Hard rules:** no partner color in any Duna UI control — buttons, links, focus rings, states. `--flare` is the only warm-hot color in the system, which is precisely what makes sponsor reds and oranges read as *theirs*. Never re-color a partner mark to match our palette except in the monochrome at-rest state, and confirm that treatment is permitted in the agreement.
+**Hard rules:** no partner color in any Duna UI control — buttons, links, focus rings, states. `--flare` is the only warm-hot color in the system, which is precisely what makes sponsor reds and oranges read as _theirs_. Never re-color a partner mark to match our palette except in the monochrome at-rest state, and confirm that treatment is permitted in the agreement.
 
 ## 18. Master do / avoid
 
 **Do**
+
 - Fog-dissolve every image into the page.
 - Build heroes in separate parallax plates.
 - Put a serif headline directly above a condensed tabular number at least once per page.
@@ -540,6 +570,7 @@ This is the most important performance surface in the product and currently the 
 - Respect `prefers-reduced-motion` and ship visible keyboard focus.
 
 **Avoid**
+
 - A hard bottom edge on any photograph.
 - Flare used as decoration, as a CTA, or on anything that isn't live.
 - Drop shadows as the primary depth cue.

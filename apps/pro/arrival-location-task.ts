@@ -103,7 +103,7 @@ export async function startCoachArrivalBackgroundUpdates(
       notificationTitle: "Duna Pro arrival reminder is active",
       notificationBody:
         "Keeping your private session ETA current during the arrival window.",
-      notificationColor: "#173A67",
+      notificationColor: "#22343B",
     },
   });
   return true;

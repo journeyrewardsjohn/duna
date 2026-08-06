@@ -106,7 +106,7 @@ export async function startPlayerArrivalBackgroundUpdates(
       notificationTitle: "Duna trip ETA is active",
       notificationBody:
         "Sharing a private arrival estimate during your session window.",
-      notificationColor: "#2367A8",
+      notificationColor: "#3D6672",
     },
   });
   return true;

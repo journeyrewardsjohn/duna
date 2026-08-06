@@ -27,3 +27,13 @@ uses Instrument Serif for shippable digital display typography until web and
 app embedding rights for Awesome Serif are documented. The Awesome Serif files
 must not be copied into a web or native bundle merely because they were supplied
 for design review.
+
+## Generated media
+
+Approved Golden Hour stills and motion plates live in
+`apps/web/public/media/brand`; their provenance and intended use live beside
+them in `imagery-log.json`. The home cinemagraph is progressive enhancement:
+the still remains the canonical frame, and motion is withheld for reduced
+motion, data-saving, and constrained mobile connections. The Player sign-in
+surface reuses the same scene at a mobile-appropriate encode so brand imagery
+does not split across products.

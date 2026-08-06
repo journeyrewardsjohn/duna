@@ -12,7 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.duna.pro",
       "icon": {
-        "light": "./assets/icon.png",
+        "light": "./assets/icon-light.png",
         "dark": "./assets/icon.png",
         "tinted": "./assets/icon-tinted.png"
       },

@@ -9,11 +9,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  FellixText as Text,
+  FellixTextInput as TextInput,
+} from "./fellix-text";
 import { useProRuntime } from "./runtime";
 
 type CreateKind = "session" | "service" | "good" | "plan";
@@ -30,7 +32,7 @@ const createOptions: readonly {
     icon: "▦",
     title: "Session",
     body: "Put a lesson, clinic, or open play on the calendar.",
-    accent: "#2367a8",
+    accent: "#3d6672",
   },
   {
     kind: "service",
@@ -1030,7 +1032,7 @@ export function OperatorCreateScreen({
 }
 
 const styles = StyleSheet.create({
-  safe: { backgroundColor: "#f8f7f3", flex: 1 },
+  safe: { backgroundColor: "#f6f5f1", flex: 1 },
   flex: { flex: 1 },
   topbar: {
     alignItems: "center",
@@ -1042,18 +1044,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   topButton: { justifyContent: "center", minHeight: 48, minWidth: 72 },
-  topButtonText: { color: "#235a96", fontSize: 15, fontWeight: "800" },
-  topTitle: { color: "#101828", fontSize: 17, fontWeight: "900" },
+  topButtonText: { color: "#3d6672", fontSize: 15, fontWeight: "800" },
+  topTitle: { color: "#1b1b19", fontSize: 17, fontWeight: "900" },
   hub: { padding: 20, paddingBottom: 60 },
   hubEyebrow: {
-    color: "#235a96",
+    color: "#3d6672",
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 1.1,
     marginTop: 14,
   },
   hubTitle: {
-    color: "#101828",
+    color: "#1b1b19",
     fontSize: 36,
     fontWeight: "900",
     letterSpacing: -1.3,
@@ -1061,7 +1063,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   hubBody: {
-    color: "#667085",
+    color: "#766f61",
     fontSize: 15,
     lineHeight: 23,
     marginTop: 10,
@@ -1085,13 +1087,13 @@ const styles = StyleSheet.create({
   },
   optionIconText: { color: "#fff", fontSize: 22, fontWeight: "900" },
   optionTitle: {
-    color: "#101828",
+    color: "#1b1b19",
     fontSize: 21,
     fontWeight: "900",
     marginTop: 16,
   },
   optionBody: {
-    color: "#667085",
+    color: "#766f61",
     fontSize: 13,
     lineHeight: 19,
     marginTop: 5,
@@ -1107,16 +1109,16 @@ const styles = StyleSheet.create({
   form: { padding: 20, paddingBottom: 130 },
   progressRow: { flexDirection: "row", gap: 6, marginTop: 8 },
   progress: { backgroundColor: "#dfe3e8", borderRadius: 4, flex: 1, height: 5 },
-  progressOn: { backgroundColor: "#235a96" },
+  progressOn: { backgroundColor: "#3d6672" },
   stepEyebrow: {
-    color: "#235a96",
+    color: "#3d6672",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
     marginTop: 26,
   },
   stepTitle: {
-    color: "#101828",
+    color: "#1b1b19",
     fontSize: 31,
     fontWeight: "900",
     letterSpacing: -1,
@@ -1137,7 +1139,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
   },
   input: {
-    color: "#101828",
+    color: "#1b1b19",
     flex: 1,
     fontSize: 16,
     minHeight: 54,
@@ -1145,7 +1147,7 @@ const styles = StyleSheet.create({
   },
   inputMultiline: { minHeight: 92, textAlignVertical: "top" },
   inputSuffix: {
-    color: "#667085",
+    color: "#766f61",
     fontSize: 12,
     fontWeight: "800",
     marginLeft: 8,
@@ -1162,9 +1164,9 @@ const styles = StyleSheet.create({
     minWidth: 88,
     paddingHorizontal: 16,
   },
-  choiceSelected: { backgroundColor: "#eaf2fb", borderColor: "#235a96" },
-  choiceText: { color: "#667085", fontSize: 13, fontWeight: "800" },
-  choiceTextSelected: { color: "#235a96" },
+  choiceSelected: { backgroundColor: "#edece6", borderColor: "#3d6672" },
+  choiceText: { color: "#766f61", fontSize: 13, fontWeight: "800" },
+  choiceTextSelected: { color: "#3d6672" },
   toggle: {
     alignItems: "center",
     backgroundColor: "#fff",
@@ -1177,8 +1179,8 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   toggleOn: { backgroundColor: "#f2f8f5", borderColor: "#71a48c" },
-  toggleTitle: { color: "#101828", fontSize: 15, fontWeight: "900" },
-  toggleBody: { color: "#667085", fontSize: 11, lineHeight: 16, marginTop: 4 },
+  toggleTitle: { color: "#1b1b19", fontSize: 15, fontWeight: "900" },
+  toggleBody: { color: "#766f61", fontSize: 11, lineHeight: 16, marginTop: 4 },
   switchTrack: {
     backgroundColor: "#cfd5dc",
     borderRadius: 14,
@@ -1218,7 +1220,7 @@ const styles = StyleSheet.create({
   photoThumbnail: { height: "100%", width: "100%" },
   photoRemove: {
     alignItems: "center",
-    backgroundColor: "rgba(16,24,40,0.78)",
+    backgroundColor: "rgba(27,27,25,0.78)",
     borderRadius: 10,
     height: 20,
     justifyContent: "center",
@@ -1234,9 +1236,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#eef3f8",
     justifyContent: "center",
   },
-  photoEmptyIcon: { color: "#235a96", fontSize: 36 },
+  photoEmptyIcon: { color: "#3d6672", fontSize: 36 },
   photoEmptyText: {
-    color: "#667085",
+    color: "#766f61",
     fontSize: 13,
     fontWeight: "800",
     marginTop: 8,
@@ -1250,15 +1252,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: 52,
   },
-  photoButtonText: { color: "#235a96", fontSize: 12, fontWeight: "900" },
+  photoButtonText: { color: "#3d6672", fontSize: 12, fontWeight: "900" },
   inlineSetup: {
     backgroundColor: "#eef3f8",
     borderRadius: 19,
     gap: 14,
     padding: 16,
   },
-  inlineSetupTitle: { color: "#101828", fontSize: 17, fontWeight: "900" },
-  inlineSetupBody: { color: "#667085", fontSize: 12, lineHeight: 18 },
+  inlineSetupTitle: { color: "#1b1b19", fontSize: 17, fontWeight: "900" },
+  inlineSetupBody: { color: "#766f61", fontSize: 12, lineHeight: 18 },
   adviceCard: {
     backgroundColor: "#fff7e8",
     borderColor: "#edd3a6",
@@ -1268,7 +1270,7 @@ const styles = StyleSheet.create({
   },
   adviceTitle: { color: "#80571b", fontSize: 14, fontWeight: "900" },
   adviceBody: { color: "#805f31", fontSize: 12, lineHeight: 18, marginTop: 6 },
-  reviewCard: { backgroundColor: "#173a67", borderRadius: 24, padding: 20 },
+  reviewCard: { backgroundColor: "#22343b", borderRadius: 24, padding: 20 },
   reviewEyebrow: {
     color: "#e7c37f",
     fontSize: 10,
@@ -1305,7 +1307,7 @@ const styles = StyleSheet.create({
   error: {
     backgroundColor: "#fff0f0",
     borderRadius: 12,
-    color: "#b84444",
+    color: "#9a4a2e",
     fontSize: 12,
     lineHeight: 18,
     marginTop: 18,
@@ -1323,7 +1325,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: "center",
-    backgroundColor: "#235a96",
+    backgroundColor: "#3d6672",
     borderRadius: 16,
     justifyContent: "center",
     minHeight: 58,
@@ -1345,16 +1347,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 84,
   },
-  successIconText: { color: "#2f7d57", fontSize: 40, fontWeight: "900" },
+  successIconText: { color: "#2f6b3a", fontSize: 40, fontWeight: "900" },
   successEyebrow: {
-    color: "#2f7d57",
+    color: "#2f6b3a",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.2,
     marginTop: 24,
   },
   successTitle: {
-    color: "#101828",
+    color: "#1b1b19",
     fontSize: 31,
     fontWeight: "900",
     letterSpacing: -1,
@@ -1362,7 +1364,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   successBody: {
-    color: "#667085",
+    color: "#766f61",
     fontSize: 14,
     lineHeight: 21,
     marginBottom: 24,
@@ -1386,5 +1388,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: 54,
   },
-  secondaryButtonText: { color: "#235a96", fontSize: 12, fontWeight: "900" },
+  secondaryButtonText: { color: "#3d6672", fontSize: 12, fontWeight: "900" },
 });

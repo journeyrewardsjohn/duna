@@ -51,12 +51,12 @@ export async function presentNativeEventPayment(input: {
     },
     appearance: {
       colors: {
-        primary: "#235A96",
-        background: "#F8F7F3",
+        primary: "#3D6672",
+        background: "#F6F5F1",
         componentBackground: "#FFFFFF",
         componentBorder: "#D7DEE8",
-        primaryText: "#101828",
-        secondaryText: "#667085",
+        primaryText: "#1b1b19",
+        secondaryText: "#766f61",
       },
       shapes: { borderRadius: 16, borderWidth: 1 },
     },

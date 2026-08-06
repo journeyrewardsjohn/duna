@@ -173,19 +173,19 @@ function storedDefaults(form: CaptureForm): StoredCaptureDefaults {
 }
 
 const palette = {
-  canvas: "#f8f7f3",
+  canvas: "#f6f5f1",
   depth: "#ffffff",
-  ink: "#101828",
-  muted: "#667085",
-  navy: "#173a67",
-  aqua: "#235a96",
-  aquaSoft: "#e8eef7",
-  sand: "#d7bd91",
-  flare: "#de6842",
-  positive: "#2f7d57",
-  warning: "#a86f18",
-  danger: "#b84444",
-  line: "#e4e0d8",
+  ink: "#1b1b19",
+  muted: "#766f61",
+  navy: "#22343b",
+  aqua: "#3d6672",
+  aquaSoft: "#dfe5e4",
+  sand: "#c9a96a",
+  flare: "#e8683a",
+  positive: "#2f6b3a",
+  warning: "#8a6a2f",
+  danger: "#9a4a2e",
+  line: "#dedbd3",
 };
 
 function formatDuration(seconds: number): string {
@@ -1158,7 +1158,6 @@ function CaptureExperience({
       active = false;
     };
     // The capture form is frozen while this screen is mounted.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, matchId, updateSessionState]);
 
   useEffect(() => {
@@ -2120,7 +2119,7 @@ function VideoPlayerModal({
         <View
           style={[styles.playerStage, portrait && styles.playerStagePortrait]}
         >
-          {!uri && !error && <ActivityIndicator color="#63e3db" size="large" />}
+          {!uri && !error && <ActivityIndicator color="#d4b77c" size="large" />}
           {!!error && <Text style={styles.playerError}>{error}</Text>}
           {commonProps &&
             (playback?.dataEnvironmentKey ? (
@@ -2858,11 +2857,11 @@ const styles = StyleSheet.create({
     letterSpacing: -0.7,
     lineHeight: 29,
   },
-  heroBody: { color: "#dce7f5", fontSize: 14, lineHeight: 21 },
+  heroBody: { color: "#dfe5e4", fontSize: 14, lineHeight: 21 },
   complimentaryBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(99,227,219,0.16)",
-    borderColor: "rgba(99,227,219,0.5)",
+    backgroundColor: "rgba(212,183,124,0.16)",
+    borderColor: "rgba(212,183,124,0.5)",
     borderRadius: 20,
     borderWidth: 1,
     paddingHorizontal: 12,
@@ -3383,7 +3382,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   liveDot: {
-    backgroundColor: "#ff6a3d",
+    backgroundColor: "#e8683a",
     borderRadius: 4,
     height: 8,
     width: 8,
@@ -3541,7 +3540,7 @@ const styles = StyleSheet.create({
   visionScoreboardCompact: { bottom: 142, minWidth: 184, right: 16 },
   visionScoreHeader: {
     alignItems: "center",
-    backgroundColor: "rgba(23,58,103,0.92)",
+    backgroundColor: "rgba(34,52,59,0.92)",
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 3,
@@ -3609,6 +3608,7 @@ const styles = StyleSheet.create({
   healthVideoHeart: { color: "#ff6a5f", fontSize: 16 },
   healthVideoValue: {
     color: "#ffffff",
+    fontFamily: "Archivo-ExtraBold",
     fontSize: 14,
     fontVariant: ["tabular-nums"],
     fontWeight: "900",
@@ -3721,7 +3721,7 @@ const styles = StyleSheet.create({
     minHeight: 56,
     paddingHorizontal: 18,
   },
-  headerActionLight: { color: "#63e3db", fontSize: 13, fontWeight: "800" },
+  headerActionLight: { color: "#d4b77c", fontSize: 13, fontWeight: "800" },
   playerDone: { justifyContent: "center", minHeight: 44, minWidth: 52 },
   modalTitleLight: {
     color: "#ffffff",
@@ -3755,7 +3755,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
   },
   playerMeta: { color: "#aaa79e", fontSize: 13, lineHeight: 18 },
-  playerPrivacy: { color: "#63e3db", fontSize: 10, fontWeight: "800" },
+  playerPrivacy: { color: "#d4b77c", fontSize: 10, fontWeight: "800" },
   playerVenue: {
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.07)",
@@ -3765,7 +3765,7 @@ const styles = StyleSheet.create({
     minHeight: 68,
     padding: 13,
   },
-  playerVenueIcon: { color: "#63e3db", fontSize: 22, fontWeight: "900" },
+  playerVenueIcon: { color: "#d4b77c", fontSize: 22, fontWeight: "900" },
   playerVenueName: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
   playerVenueAddress: {
     color: "#aaaeb6",
@@ -3774,8 +3774,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   playerMetricCard: {
-    backgroundColor: "rgba(99,227,219,0.09)",
-    borderColor: "rgba(99,227,219,0.22)",
+    backgroundColor: "rgba(212,183,124,0.09)",
+    borderColor: "rgba(212,183,124,0.22)",
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
@@ -3783,9 +3783,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   playerMetricItem: { alignItems: "center", flex: 1, justifyContent: "center" },
-  playerMetricValue: { color: "#ffffff", fontSize: 17, fontWeight: "800" },
+  playerMetricValue: {
+    color: "#ffffff",
+    fontFamily: "Archivo-ExtraBold",
+    fontSize: 17,
+    fontWeight: "800",
+  },
   playerMetricLabel: {
-    color: "#63e3db",
+    color: "#d4b77c",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.8,
@@ -3818,7 +3823,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     width: "100%",
   },
-  uploadFill: { backgroundColor: "#63e3db", height: 8 },
+  uploadFill: { backgroundColor: "#d4b77c", height: 8 },
   sheetBackdrop: {
     backgroundColor: "rgba(4,10,16,0.56)",
     flex: 1,

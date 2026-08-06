@@ -95,7 +95,7 @@ button {
 
 .organization-switcher > span:first-child {
   align-items: center;
-  background: var(--color-aqua-deep);
+  background: var(--btn-primary-bg);
   border-radius: 9px;
   display: flex;
   font-family: var(--font-display);
@@ -105,7 +105,10 @@ button {
   width: 34px;
 }
 
-.organization-switcher > span:first-child,
+.organization-switcher > span:first-child {
+  color: var(--btn-primary-fg);
+}
+
 .admin-identity > svg {
   color: var(--color-white);
 }
@@ -10198,7 +10201,7 @@ body {
   color: var(--text-3);
   display: block;
   font-family: var(--font-data);
-  font-size: 0.58rem;
+  font-size: 0.625rem;
   font-stretch: 78%;
   font-variation-settings:
     "wdth" 78,

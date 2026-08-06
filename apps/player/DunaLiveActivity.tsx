@@ -32,10 +32,10 @@ export type DunaLiveActivityProps = {
   readonly updatedAt: string;
 };
 
-const navy = "#10263d";
-const sky = "#86c9ef";
+const navy = "#141a1e";
+const sky = "#d4b77c";
 const white = "#ffffff";
-const mist = "#d9e7f2";
+const mist = "#a9b4b8";
 
 function shortLabel(label?: string) {
   if (!label) return "TBD";

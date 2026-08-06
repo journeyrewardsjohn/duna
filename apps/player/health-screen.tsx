@@ -18,8 +18,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
   Linking,
 } from "react-native";
@@ -45,9 +43,28 @@ import {
   healthSyncErrorMessage,
   type AppleHealthSyncState,
 } from "./health-sync-utils";
+import {
+  FellixText as Text,
+  FellixTextInput as TextInput,
+} from "./fellix-text";
 import { usePlayerRuntime } from "./runtime";
 
 type HealthTheme = "light" | "dark";
+const AnimatedSvgPath = Animated.createAnimatedComponent(Path);
+
+function useHealthReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    void AccessibilityInfo.isReduceMotionEnabled().then(setReduced);
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      setReduced,
+    );
+    return () => subscription.remove();
+  }, []);
+  return reduced;
+}
+
 type HealthImportPhase =
   "permission" | "reading" | "protecting" | "processing" | "complete";
 
@@ -1231,6 +1248,7 @@ export function HealthScreen({
             </View>
             {(intelligence?.trends ?? []).slice(0, 3).map((trend) => (
               <HealthTrendCard
+                palette={palette}
                 key={trend.metric}
                 styles={styles}
                 trend={trend}
@@ -1621,12 +1639,16 @@ function ReadinessHero({
 }
 
 function HealthTrendCard({
+  palette,
   styles,
   trend,
 }: {
+  readonly palette: HealthPalette;
   readonly styles: ReturnType<typeof createHealthStyles>;
   readonly trend: HealthDashboard["intelligence"]["trends"][number];
 }) {
+  const reduceMotion = useHealthReducedMotion();
+  const drawProgress = useRef(new Animated.Value(0)).current;
   const width = 330;
   const height = 138;
   const inset = 12;
@@ -1654,6 +1676,19 @@ function HealthTrendCard({
         `${index === 0 ? "M" : "L"} ${x(index).toFixed(1)} ${y(point.value).toFixed(1)}`,
     )
     .join(" ");
+  const plottedPoints = trend.points.map((point, index) => ({
+    x: x(index),
+    y: y(point.value),
+  }));
+  const pathLength = Math.max(
+    1,
+    plottedPoints.slice(1).reduce((total, point, index) => {
+      const previous = plottedPoints[index];
+      return previous
+        ? total + Math.hypot(point.x - previous.x, point.y - previous.y)
+        : total;
+    }, 0),
+  );
   const fillPath = path
     ? `${path} L ${x(trend.points.length - 1).toFixed(1)} ${height - inset} L ${inset} ${height - inset} Z`
     : "";
@@ -1661,6 +1696,26 @@ function HealthTrendCard({
     trend.typicalHigh === undefined ? undefined : y(trend.typicalHigh);
   const bandBottom =
     trend.typicalLow === undefined ? undefined : y(trend.typicalLow);
+
+  useEffect(() => {
+    drawProgress.stopAnimation();
+    if (reduceMotion || !path) {
+      drawProgress.setValue(1);
+      return;
+    }
+    drawProgress.setValue(0);
+    Animated.timing(drawProgress, {
+      duration: 850,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: false,
+    }).start();
+  }, [drawProgress, path, reduceMotion]);
+
+  const strokeOffset = drawProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [pathLength, 0],
+  });
   return (
     <View style={styles.trendCard}>
       <View style={styles.trendHeader}>
@@ -1685,13 +1740,13 @@ function HealthTrendCard({
               y1="0"
               y2="1"
             >
-              <Stop offset="0" stopColor="#49d7ca" stopOpacity="0.32" />
-              <Stop offset="1" stopColor="#dffb83" stopOpacity="0.02" />
+              <Stop offset="0" stopColor={palette.aqua} stopOpacity="0.3" />
+              <Stop offset="1" stopColor={palette.amber} stopOpacity="0.03" />
             </LinearGradient>
           </Defs>
           {bandTop !== undefined && bandBottom !== undefined && (
             <Rect
-              fill="#49d7ca"
+              fill={palette.aqua}
               height={Math.max(2, bandBottom - bandTop)}
               opacity={0.13}
               rx={5}
@@ -1700,11 +1755,17 @@ function HealthTrendCard({
               y={bandTop}
             />
           )}
-          <Path d={fillPath} fill={`url(#trend-${trend.metric})`} />
-          <Path
+          <AnimatedSvgPath
+            d={fillPath}
+            fill={`url(#trend-${trend.metric})`}
+            opacity={drawProgress}
+          />
+          <AnimatedSvgPath
             d={path}
             fill="none"
-            stroke="#132427"
+            stroke={palette.ink}
+            strokeDasharray={`${pathLength} ${pathLength}`}
+            strokeDashoffset={strokeOffset}
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth={2.3}
@@ -1713,10 +1774,10 @@ function HealthTrendCard({
             <Circle
               cx={x(index)}
               cy={y(point.value)}
-              fill={point.anomaly ? "#ff846f" : "#f8f6ef"}
+              fill={point.anomaly ? palette.coral : palette.surface}
               key={`${point.date}-${index}`}
               r={point.anomaly ? 4.2 : 2.8}
-              stroke="#132427"
+              stroke={palette.ink}
               strokeWidth={1.5}
             />
           ))}
@@ -2558,34 +2619,42 @@ function ShareModal({
 }
 
 const lightPalette = {
-  canvas: "#F7F5EF",
+  canvas: "#F6F5F1",
   surface: "#FFFFFF",
-  surfaceSoft: "#ECEBE4",
-  ink: "#121A20",
-  muted: "#67737B",
-  line: "#D9DDD8",
-  aqua: "#157F78",
-  aquaSoft: "#DDF1ED",
-  lime: "#BDEB72",
-  coral: "#D55E42",
-  amber: "#D99A27",
+  surfaceSoft: "#EDECE6",
+  ink: "#1B1B19",
+  muted: "#766F61",
+  line: "#DEDBD3",
+  aqua: "#3D6672",
+  aquaSoft: "#DFE5E4",
+  lime: "#6BAE78",
+  coral: "#E8683A",
+  amber: "#C9A96A",
+  performance: "#141A1E",
+  performanceText: "#EDF1F2",
+  performanceMuted: "#A9B4B8",
+  performanceAccent: "#D4B77C",
   onAccent: "#FFFFFF",
   overlay: "rgba(8,14,17,0.58)",
 } as const;
 
 const darkPalette: HealthPalette = {
-  canvas: "#070B0D",
-  surface: "#0E171B",
-  surfaceSoft: "#142329",
-  ink: "#F2F4EE",
-  muted: "#9CA9A8",
-  line: "#23353A",
-  aqua: "#63E3DB",
-  aquaSoft: "#153B3B",
-  lime: "#BDEB72",
-  coral: "#FF7B5B",
-  amber: "#F2B84B",
-  onAccent: "#071012",
+  canvas: "#0D1114",
+  surface: "#141A1E",
+  surfaceSoft: "#1B2429",
+  ink: "#EDF1F2",
+  muted: "#A9B4B8",
+  line: "#2A363B",
+  aqua: "#B5CCD3",
+  aquaSoft: "#22343B",
+  lime: "#6BAE78",
+  coral: "#F4794C",
+  amber: "#D4B77C",
+  performance: "#101A20",
+  performanceText: "#EDF1F2",
+  performanceMuted: "#A9B4B8",
+  performanceAccent: "#D4B77C",
+  onAccent: "#0D1114",
   overlay: "rgba(0,0,0,0.72)",
 };
 
@@ -2881,8 +2950,8 @@ function createHealthStyles(colors: HealthPalette) {
       fontWeight: "800",
     },
     readinessHero: {
-      backgroundColor: "#F8F6EF",
-      borderColor: "#E1E1D8",
+      backgroundColor: colors.surface,
+      borderColor: colors.line,
       borderRadius: 30,
       borderWidth: 1,
       minHeight: 390,
@@ -2891,7 +2960,7 @@ function createHealthStyles(colors: HealthPalette) {
       position: "relative",
     },
     readinessGlowA: {
-      backgroundColor: "rgba(74, 218, 205, 0.42)",
+      backgroundColor: `${colors.aqua}52`,
       borderRadius: 140,
       height: 250,
       position: "absolute",
@@ -2901,7 +2970,7 @@ function createHealthStyles(colors: HealthPalette) {
       width: 210,
     },
     readinessGlowB: {
-      backgroundColor: "rgba(215, 242, 115, 0.45)",
+      backgroundColor: `${colors.amber}52`,
       borderRadius: 105,
       bottom: 74,
       height: 150,
@@ -2911,7 +2980,7 @@ function createHealthStyles(colors: HealthPalette) {
       width: 175,
     },
     readinessEyebrow: {
-      color: "#172225",
+      color: colors.ink,
       fontSize: 10,
       fontWeight: "900",
       letterSpacing: 1.4,
@@ -2922,14 +2991,16 @@ function createHealthStyles(colors: HealthPalette) {
       marginTop: 42,
     },
     readinessNumber: {
-      color: "#0C1112",
+      color: colors.ink,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 88,
-      fontWeight: "300",
+      fontWeight: "800",
       letterSpacing: -6,
       lineHeight: 94,
     },
     readinessScale: {
-      color: "#3A4443",
+      color: colors.muted,
+      fontFamily: "Archivo-Bold",
       fontSize: 14,
       fontWeight: "700",
       marginBottom: 15,
@@ -2942,19 +3013,19 @@ function createHealthStyles(colors: HealthPalette) {
       marginTop: 4,
     },
     readinessStatusDot: {
-      backgroundColor: "#9DD62D",
+      backgroundColor: colors.lime,
       borderRadius: 5,
       height: 9,
       width: 9,
     },
     readinessStatus: {
-      color: "#172225",
+      color: colors.ink,
       fontSize: 12,
       fontWeight: "800",
       textTransform: "capitalize",
     },
     readinessSummary: {
-      color: "#172225",
+      color: colors.ink,
       fontSize: 17,
       fontWeight: "700",
       lineHeight: 24,
@@ -2962,7 +3033,7 @@ function createHealthStyles(colors: HealthPalette) {
       maxWidth: 315,
     },
     readinessMeta: {
-      color: "#68716E",
+      color: colors.muted,
       fontSize: 10,
       lineHeight: 15,
       marginTop: 13,
@@ -3003,7 +3074,12 @@ function createHealthStyles(colors: HealthPalette) {
       justifyContent: "space-between",
     },
     factorLabel: { color: colors.ink, fontSize: 13, fontWeight: "800" },
-    factorValue: { color: colors.ink, fontSize: 15, fontWeight: "900" },
+    factorValue: {
+      color: colors.ink,
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 15,
+      fontWeight: "900",
+    },
     factorTrack: {
       backgroundColor: colors.surfaceSoft,
       borderRadius: 4,
@@ -3052,29 +3128,29 @@ function createHealthStyles(colors: HealthPalette) {
     },
     checkInArrow: { color: colors.ink, fontSize: 24, fontWeight: "500" },
     recommendationCard: {
-      backgroundColor: "#121919",
+      backgroundColor: colors.performance,
       borderRadius: 22,
       flexDirection: "row",
       gap: 13,
       padding: 18,
     },
-    recommendationMark: { color: "#BEEB71", fontSize: 23 },
+    recommendationMark: { color: colors.performanceAccent, fontSize: 23 },
     recommendationEyebrow: {
-      color: "#79DED6",
+      color: colors.performanceAccent,
       fontSize: 10,
       fontWeight: "900",
       letterSpacing: 1.2,
       marginBottom: 5,
     },
     recommendationText: {
-      color: "#F7F5EE",
+      color: colors.performanceText,
       fontSize: 13,
       fontWeight: "700",
       lineHeight: 19,
     },
     trendCard: {
-      backgroundColor: "#F8F6EF",
-      borderColor: "#E1E1D8",
+      backgroundColor: colors.surface,
+      borderColor: colors.line,
       borderRadius: 22,
       borderWidth: 1,
       overflow: "hidden",
@@ -3086,9 +3162,9 @@ function createHealthStyles(colors: HealthPalette) {
       gap: 12,
       justifyContent: "space-between",
     },
-    trendLabel: { color: "#142123", fontSize: 16, fontWeight: "900" },
+    trendLabel: { color: colors.ink, fontSize: 16, fontWeight: "900" },
     trendDescription: {
-      color: "#67716F",
+      color: colors.muted,
       fontSize: 10,
       lineHeight: 13,
       marginTop: 4,
@@ -3096,28 +3172,34 @@ function createHealthStyles(colors: HealthPalette) {
     },
     trendLatest: { alignItems: "flex-end" },
     trendLatestValue: {
-      color: "#111819",
+      color: colors.ink,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 28,
-      fontWeight: "400",
+      fontWeight: "800",
       letterSpacing: -1,
     },
-    trendUnit: { color: "#68716E", fontSize: 10, fontWeight: "700" },
-    trendEmpty: { color: "#68716E", fontSize: 11, marginVertical: 36 },
+    trendUnit: { color: colors.muted, fontSize: 10, fontWeight: "700" },
+    trendEmpty: { color: colors.muted, fontSize: 11, marginVertical: 36 },
     trendFooter: {
       alignItems: "center",
-      borderTopColor: "#DFE1DA",
+      borderTopColor: colors.line,
       borderTopWidth: StyleSheet.hairlineWidth,
       flexDirection: "row",
       justifyContent: "space-between",
       paddingTop: 10,
     },
     trendBandLabel: {
-      color: "#67716F",
+      color: colors.muted,
       fontSize: 10,
       fontWeight: "900",
       letterSpacing: 1,
     },
-    trendBandValue: { color: "#142123", fontSize: 10, fontWeight: "800" },
+    trendBandValue: {
+      color: colors.ink,
+      fontFamily: "Archivo-Bold",
+      fontSize: 10,
+      fontWeight: "800",
+    },
     sleepCard: {
       backgroundColor: colors.surface,
       borderColor: colors.line,

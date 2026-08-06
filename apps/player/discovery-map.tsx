@@ -32,8 +32,8 @@ const filterOptions: readonly { value: DiscoveryFilter; label: string }[] = [
 ];
 
 const entityColors: Record<DiscoveryEntityType, string> = {
-  event: "#2f75b7",
-  venue: "#35c8bd",
+  event: "#3d6672",
+  venue: "#d4b77c",
   coach: "#ec8064",
   "pro-tour": "#f2c46d",
 };
@@ -165,7 +165,7 @@ function MapLayers({
             entityColors["pro-tour"],
             ["==", ["get", "venue_count"], ["get", "point_count"]],
             entityColors.venue,
-            "#173a63",
+            "#22343b",
           ] as never,
           circleOpacity: 0.94,
           circleRadius: [
@@ -185,7 +185,7 @@ function MapLayers({
         filter={["has", "point_count"] as never}
         id="duna-discovery-cluster-count"
         style={{
-          textColor: "#071b2d",
+          textColor: "#0d1114",
           textField: ["get", "point_count_abbreviated"] as never,
           textSize: 12,
         }}
@@ -786,7 +786,7 @@ const nativeStyles = StyleSheet.create({
     overflow: "hidden",
     position: "absolute",
     right: 0,
-    shadowColor: "#071b2d",
+    shadowColor: "#0d1114",
     shadowOffset: { height: -8, width: 0 },
     shadowOpacity: 0.22,
     shadowRadius: 24,
@@ -797,12 +797,12 @@ const nativeStyles = StyleSheet.create({
     borderRadius: 23,
     height: 46,
     justifyContent: "center",
-    shadowColor: "#071b2d",
+    shadowColor: "#0d1114",
     shadowOpacity: 0.16,
     shadowRadius: 14,
     width: 46,
   },
-  chromeButtonText: { color: "#071b2d", fontSize: 31, lineHeight: 33 },
+  chromeButtonText: { color: "#0d1114", fontSize: 31, lineHeight: 33 },
   emptyText: {
     color: "#67768a",
     fontSize: 13,
@@ -812,7 +812,7 @@ const nativeStyles = StyleSheet.create({
   },
   fallback: {
     alignItems: "center",
-    backgroundColor: "#081522",
+    backgroundColor: "#101a20",
     bottom: 0,
     justifyContent: "center",
     left: 0,
@@ -838,8 +838,8 @@ const nativeStyles = StyleSheet.create({
     textAlign: "center",
   },
   fallbackGlobe: {
-    backgroundColor: "#173a63",
-    borderColor: "#35c8bd",
+    backgroundColor: "#22343b",
+    borderColor: "#d4b77c",
     borderRadius: 42,
     borderWidth: 1,
     height: 84,
@@ -848,11 +848,11 @@ const nativeStyles = StyleSheet.create({
     width: 84,
   },
   fallbackTitle: { color: "#ffffff", fontSize: 15, fontWeight: "800" },
-  fullMap: { backgroundColor: "#081522", flex: 1 },
+  fullMap: { backgroundColor: "#101a20", flex: 1 },
   legendDot: { borderRadius: 4, height: 7, width: 7 },
   legendItem: { alignItems: "center", flexDirection: "row", gap: 4 },
-  legendText: { color: "#071b2d", fontSize: 10, fontWeight: "800" },
-  locateIcon: { color: "#071b2d", fontSize: 22, fontWeight: "800" },
+  legendText: { color: "#0d1114", fontSize: 10, fontWeight: "800" },
+  locateIcon: { color: "#0d1114", fontSize: 22, fontWeight: "800" },
   mapChrome: { left: 0, position: "absolute", right: 0, top: 0 },
   mapFilter: {
     backgroundColor: "rgba(255,255,255,0.9)",
@@ -862,7 +862,7 @@ const nativeStyles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 9,
   },
-  mapFilterActive: { backgroundColor: "#071b2d", borderColor: "#071b2d" },
+  mapFilterActive: { backgroundColor: "#0d1114", borderColor: "#0d1114" },
   mapFilterContent: { gap: 7, paddingHorizontal: 16, paddingRight: 32 },
   mapFilterScroll: { marginTop: 11 },
   mapFilterText: { color: "#526275", fontSize: 10, fontWeight: "700" },
@@ -882,14 +882,14 @@ const nativeStyles = StyleSheet.create({
     gap: 8,
     height: 46,
     paddingHorizontal: 16,
-    shadowColor: "#071b2d",
+    shadowColor: "#0d1114",
     shadowOpacity: 0.16,
     shadowRadius: 14,
   },
-  mapSearchIcon: { color: "#071b2d", fontSize: 22 },
-  mapSearchText: { color: "#071b2d", fontSize: 12, fontWeight: "700" },
+  mapSearchIcon: { color: "#0d1114", fontSize: 22 },
+  mapSearchText: { color: "#0d1114", fontSize: 12, fontWeight: "700" },
   preview: {
-    backgroundColor: "#081522",
+    backgroundColor: "#101a20",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: 22,
     borderWidth: 1,
@@ -899,7 +899,7 @@ const nativeStyles = StyleSheet.create({
     position: "relative",
   },
   previewAction: {
-    color: "#35c8bd",
+    color: "#d4b77c",
     fontSize: 10,
     fontWeight: "900",
     marginTop: 8,
@@ -943,7 +943,7 @@ const nativeStyles = StyleSheet.create({
     fontWeight: "900",
     marginTop: 4,
   },
-  resultArrow: { color: "#35c8bd", fontSize: 26, marginRight: 12 },
+  resultArrow: { color: "#d4b77c", fontSize: 26, marginRight: 12 },
   resultBody: { flex: 1, gap: 3, minWidth: 0 },
   resultCard: {
     alignItems: "center",
@@ -977,7 +977,7 @@ const nativeStyles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   resultSubtitle: { color: "#6b7b8f", fontSize: 10 },
-  resultTitle: { color: "#071b2d", fontSize: 13, fontWeight: "900" },
+  resultTitle: { color: "#0d1114", fontSize: 13, fontWeight: "900" },
   resultType: {
     color: "#617185",
     fontSize: 10,
@@ -988,12 +988,12 @@ const nativeStyles = StyleSheet.create({
   resultTypeRow: { alignItems: "center", flexDirection: "row", gap: 5 },
   searchAreaButton: {
     alignSelf: "center",
-    backgroundColor: "#071b2d",
+    backgroundColor: "#0d1114",
     borderRadius: 22,
     marginTop: 12,
     paddingHorizontal: 17,
     paddingVertical: 12,
-    shadowColor: "#071b2d",
+    shadowColor: "#0d1114",
     shadowOpacity: 0.2,
     shadowRadius: 14,
   },
@@ -1004,7 +1004,7 @@ const nativeStyles = StyleSheet.create({
     justifyContent: "center",
     width: 42,
   },
-  searchBackText: { color: "#071b2d", fontSize: 34, lineHeight: 36 },
+  searchBackText: { color: "#0d1114", fontSize: 34, lineHeight: 36 },
   searchClear: { color: "#617185", fontSize: 22, paddingHorizontal: 5 },
   searchFilter: {
     backgroundColor: "#ffffff",
@@ -1014,11 +1014,11 @@ const nativeStyles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
   },
-  searchFilterActive: { backgroundColor: "#071b2d", borderColor: "#071b2d" },
+  searchFilterActive: { backgroundColor: "#0d1114", borderColor: "#0d1114" },
   searchFilterText: { color: "#556579", fontSize: 10, fontWeight: "700" },
   searchFilterTextActive: { color: "#ffffff", fontWeight: "900" },
   searchFilters: { gap: 7, paddingHorizontal: 18, paddingVertical: 14 },
-  searchInput: { color: "#071b2d", flex: 1, fontSize: 13, height: 50 },
+  searchInput: { color: "#0d1114", flex: 1, fontSize: 13, height: 50 },
   searchInputWrap: {
     alignItems: "center",
     backgroundColor: "#ffffff",
@@ -1036,10 +1036,10 @@ const nativeStyles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: 12,
   },
-  searchModalTitle: { color: "#071b2d", fontSize: 22, fontWeight: "900" },
+  searchModalTitle: { color: "#0d1114", fontSize: 22, fontWeight: "900" },
   searchResultCount: { color: "#617185", fontSize: 11, fontWeight: "800" },
   searchResultEyebrow: {
-    color: "#2f75b7",
+    color: "#3d6672",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.1,
@@ -1053,7 +1053,7 @@ const nativeStyles = StyleSheet.create({
   },
   searchResultList: { gap: 9, padding: 18, paddingBottom: 40 },
   sheetArrow: {
-    color: "#071b2d",
+    color: "#0d1114",
     fontSize: 22,
     fontWeight: "800",
     padding: 10,
@@ -1074,5 +1074,5 @@ const nativeStyles = StyleSheet.create({
   },
   sheetResults: { gap: 9, padding: 14, paddingBottom: 110 },
   sheetSubtitle: { color: "#718095", fontSize: 10, marginTop: 2 },
-  sheetTitle: { color: "#071b2d", fontSize: 15, fontWeight: "900" },
+  sheetTitle: { color: "#0d1114", fontSize: 15, fontWeight: "900" },
 });

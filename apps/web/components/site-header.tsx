@@ -29,6 +29,7 @@ export function SiteHeader() {
             <summary
               aria-label="Open navigation menu"
               className="site-header__menu"
+              role="button"
             >
               <Menu aria-hidden size={21} />
             </summary>

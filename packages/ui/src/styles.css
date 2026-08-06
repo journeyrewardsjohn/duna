@@ -6,6 +6,74 @@
   src: url("/fonts/fellix/FellixVF.woff2") format("woff2-variations");
 }
 
+.duna-loader {
+  align-content: center;
+  background:
+    radial-gradient(
+      circle at 62% 42%,
+      rgb(var(--warning-rgb) / 13%),
+      transparent 28%
+    ),
+    var(--ground);
+  color: var(--text-1);
+  display: grid;
+  gap: 1rem;
+  justify-items: center;
+  min-height: 100svh;
+  padding: 2rem;
+}
+
+.duna-loader__mark .duna-mark__symbol {
+  height: 4.5rem;
+  width: 6rem;
+}
+
+.duna-loader__mark .duna-mark__ridge {
+  animation: duna-loader-draw 1.4s
+    var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) infinite alternate;
+  stroke-dasharray: 72;
+  stroke-dashoffset: 72;
+}
+
+.duna-loader__mark .duna-mark__horizon {
+  animation: duna-loader-horizon 1.4s ease-in-out infinite alternate;
+}
+
+.duna-loader__label {
+  color: var(--text-3);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+@keyframes duna-loader-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes duna-loader-horizon {
+  from {
+    opacity: 0.2;
+  }
+
+  to {
+    opacity: 0.7;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .duna-loader__mark .duna-mark__ridge,
+  .duna-loader__mark .duna-mark__horizon {
+    animation: none;
+  }
+
+  .duna-loader__mark .duna-mark__ridge {
+    stroke-dashoffset: 0;
+  }
+}
+
 :root,
 :root[data-theme="light"] {
   color-scheme: light;

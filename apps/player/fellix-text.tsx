@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 import { useFonts } from "expo-font";
 import {
+  Archivo_400Regular,
+  Archivo_700Bold,
+  Archivo_800ExtraBold,
+} from "@expo-google-fonts/archivo";
+import {
   StyleSheet,
   Text as NativeText,
   TextInput as NativeTextInput,
@@ -15,10 +20,17 @@ const fellixFonts = {
   "Fellix-SemiBold": require("./assets/fonts/Fellix-SemiBold.ttf"),
   "Fellix-Bold": require("./assets/fonts/Fellix-Bold.ttf"),
   "Fellix-ExtraBold": require("./assets/fonts/Fellix-ExtraBold.ttf"),
+  Archivo: Archivo_400Regular,
+  "Archivo-Bold": Archivo_700Bold,
+  "Archivo-ExtraBold": Archivo_800ExtraBold,
 } as const;
 
 function fellixFamily(style: TextProps["style"] | TextInputProps["style"]) {
-  const weight = StyleSheet.flatten(style as TextStyle)?.fontWeight;
+  const flattened = StyleSheet.flatten(style as TextStyle);
+  if (flattened?.fontFamily?.startsWith("Archivo")) {
+    return flattened.fontFamily;
+  }
+  const weight = flattened?.fontWeight;
   const numericWeight =
     weight === "bold"
       ? 700

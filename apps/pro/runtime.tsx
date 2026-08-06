@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
+import Svg, { Line, Path } from "react-native-svg";
 import {
   createSessionNoteRoom,
   createDunaApiClient,
@@ -68,6 +69,31 @@ const authBaseUrl = (
 ).replace(/\/+$/, "");
 const previewEnabled = process.env.EXPO_PUBLIC_DUNA_PREVIEW === "true";
 
+function RuntimeMark() {
+  return (
+    <Svg height="33" viewBox="0 0 64 48" width="44">
+      <Line
+        opacity={0.38}
+        stroke="#d4b77c"
+        strokeLinecap="round"
+        strokeWidth="1.5"
+        x1="5"
+        x2="59"
+        y1="34"
+        y2="34"
+      />
+      <Path
+        d="M6 36.5C17.5 36.5 22.4 31.7 29.2 26.3C36.3 20.7 45 18.4 58 11.5"
+        fill="none"
+        stroke="#d4b77c"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="4.5"
+      />
+    </Svg>
+  );
+}
+
 function CenteredState({
   title,
   body,
@@ -84,10 +110,7 @@ function CenteredState({
   return (
     <View style={runtimeStyles.state}>
       <View style={runtimeStyles.wordmarkRow}>
-        <View style={runtimeStyles.mark}>
-          <View style={runtimeStyles.markArc} />
-          <View style={runtimeStyles.markDot} />
-        </View>
+        <RuntimeMark />
         <Text style={runtimeStyles.wordmark}>DUNA</Text>
         <Text style={runtimeStyles.pro}>PRO</Text>
       </View>
@@ -281,7 +304,7 @@ export function useProRuntime(): ProRuntime {
 }
 
 const runtimeStyles = StyleSheet.create({
-  auth: { backgroundColor: "#f8f7f3", flex: 1 },
+  auth: { backgroundColor: "#f6f5f1", flex: 1 },
   body: {
     color: "#657083",
     fontSize: 15,
@@ -290,45 +313,17 @@ const runtimeStyles = StyleSheet.create({
     textAlign: "center",
   },
   button: {
-    backgroundColor: "#2367a8",
+    backgroundColor: "#3d6672",
     borderRadius: 14,
     marginTop: 12,
     paddingHorizontal: 22,
     paddingVertical: 14,
   },
   buttonText: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
-  mark: {
-    alignItems: "center",
-    borderColor: "#2367a8",
-    borderRadius: 22,
-    borderWidth: 3,
-    height: 44,
-    justifyContent: "center",
-    position: "relative",
-    width: 44,
-  },
-  markArc: {
-    borderColor: "#0b1930",
-    borderRadius: 16,
-    borderTopWidth: 3,
-    height: 18,
-    position: "absolute",
-    top: 12,
-    transform: [{ rotate: "180deg" }],
-    width: 27,
-  },
-  markDot: {
-    backgroundColor: "#2367a8",
-    borderRadius: 3,
-    bottom: 7,
-    height: 5,
-    position: "absolute",
-    width: 5,
-  },
   pro: {
     backgroundColor: "rgba(247,200,107,.12)",
     borderRadius: 6,
-    color: "#2367a8",
+    color: "#3d6672",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
@@ -338,14 +333,14 @@ const runtimeStyles = StyleSheet.create({
   },
   state: {
     alignItems: "center",
-    backgroundColor: "#f8f7f3",
+    backgroundColor: "#f6f5f1",
     flex: 1,
     gap: 14,
     justifyContent: "center",
     padding: 28,
   },
   title: {
-    color: "#0b1930",
+    color: "#101a20",
     fontSize: 26,
     fontWeight: "800",
     letterSpacing: -0.7,
@@ -353,7 +348,7 @@ const runtimeStyles = StyleSheet.create({
     textAlign: "center",
   },
   wordmark: {
-    color: "#0b1930",
+    color: "#101a20",
     fontSize: 19,
     fontWeight: "900",
     letterSpacing: 4,

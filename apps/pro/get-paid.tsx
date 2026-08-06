@@ -15,11 +15,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  FellixText as Text,
+  FellixTextInput as TextInput,
+} from "./fellix-text";
 import type { DunaApiClient } from "./mobile-api";
 import { useProRuntime } from "./runtime";
 
@@ -316,7 +318,7 @@ function GoalCard({
             style={styles.goalSave}
           >
             {busy ? (
-              <ActivityIndicator color="#173a67" />
+              <ActivityIndicator color="#22343b" />
             ) : (
               <Text style={styles.goalSaveText}>Save earnings goal</Text>
             )}
@@ -563,7 +565,7 @@ function GetPaidFlow({
       await terminal.setTapToPayUxConfiguration({
         tapZone: { indicator: "above", bias: 0.1 },
         darkMode: DarkMode.DARK,
-        colors: { primary: "#63E3DB", success: "#85D49B", error: "#F27878" },
+        colors: { primary: "#D4B77C", success: "#85D49B", error: "#F27878" },
       });
     }
     if (!terminal.connectedReader) {
@@ -741,7 +743,7 @@ function GetPaidFlow({
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
-          <ActivityIndicator color="#235a96" size="large" />
+          <ActivityIndicator color="#3d6672" size="large" />
           <Text style={styles.centerText}>Opening payments…</Text>
         </View>
       </SafeAreaView>
@@ -788,7 +790,7 @@ function GetPaidFlow({
           />
           {busy && (
             <View style={styles.secureLine}>
-              <ActivityIndicator color="#235a96" />
+              <ActivityIndicator color="#3d6672" />
               <Text style={styles.secureText}>
                 Keep Duna Pro open while the card is working.
               </Text>
@@ -1230,7 +1232,7 @@ export function GetPaidScreen({
 }
 
 const styles = StyleSheet.create({
-  safe: { backgroundColor: "#f8f7f3", flex: 1 },
+  safe: { backgroundColor: "#f6f5f1", flex: 1 },
   flex: { flex: 1, minWidth: 0 },
   center: {
     alignItems: "center",
@@ -1240,13 +1242,13 @@ const styles = StyleSheet.create({
     padding: 28,
   },
   centerText: {
-    color: "#667085",
+    color: "#766f61",
     fontSize: 14,
     lineHeight: 21,
     textAlign: "center",
   },
   loadTitle: {
-    color: "#101828",
+    color: "#1b1b19",
     fontSize: 26,
     fontWeight: "900",
     textAlign: "center",
@@ -1261,22 +1263,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   topButton: { justifyContent: "center", minHeight: 48, minWidth: 72 },
-  topButtonText: { color: "#235a96", fontSize: 15, fontWeight: "800" },
+  topButtonText: { color: "#3d6672", fontSize: 15, fontWeight: "800" },
   topButtonRight: { textAlign: "right" },
-  topTitle: { color: "#101828", fontSize: 17, fontWeight: "900" },
+  topTitle: { color: "#1b1b19", fontSize: 17, fontWeight: "900" },
   content: { padding: 20, paddingBottom: 128 },
   progressRow: { flexDirection: "row", gap: 6, marginBottom: 28, marginTop: 8 },
   progress: { backgroundColor: "#dfe3e8", borderRadius: 4, flex: 1, height: 5 },
-  progressOn: { backgroundColor: "#235a96" },
+  progressOn: { backgroundColor: "#3d6672" },
   eyebrow: {
-    color: "#235a96",
+    color: "#3d6672",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.1,
     marginTop: 10,
   },
   title: {
-    color: "#101828",
+    color: "#1b1b19",
     fontSize: 34,
     fontWeight: "900",
     letterSpacing: -1.2,
@@ -1292,14 +1294,16 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   amountCurrency: {
-    color: "#235a96",
+    color: "#3d6672",
+    fontFamily: "Archivo-ExtraBold",
     fontSize: 38,
     fontWeight: "900",
     marginRight: 6,
   },
   amountInput: {
-    color: "#101828",
+    color: "#1b1b19",
     flex: 1,
+    fontFamily: "Archivo-ExtraBold",
     fontSize: 56,
     fontWeight: "900",
     letterSpacing: -2,
@@ -1317,9 +1321,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: 50,
   },
-  quickAmountText: { color: "#235a96", fontSize: 13, fontWeight: "900" },
+  quickAmountText: { color: "#3d6672", fontSize: 13, fontWeight: "900" },
   goalCard: {
-    backgroundColor: "#173a67",
+    backgroundColor: "#22343b",
     borderRadius: 22,
     marginBottom: 28,
     padding: 18,
@@ -1335,7 +1339,13 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 1,
   },
-  goalAmount: { color: "#fff", fontSize: 24, fontWeight: "900", marginTop: 4 },
+  goalAmount: {
+    color: "#fff",
+    fontFamily: "Archivo-ExtraBold",
+    fontSize: 24,
+    fontWeight: "900",
+    marginTop: 4,
+  },
   goalButton: {
     alignItems: "center",
     borderColor: "rgba(255,255,255,.22)",
@@ -1353,7 +1363,7 @@ const styles = StyleSheet.create({
     marginTop: 17,
     overflow: "hidden",
   },
-  goalFill: { backgroundColor: "#63e3db", borderRadius: 6, height: 8 },
+  goalFill: { backgroundColor: "#d4b77c", borderRadius: 6, height: 8 },
   goalMeta: {
     color: "rgba(255,255,255,.68)",
     fontSize: 10,
@@ -1395,18 +1405,18 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textTransform: "capitalize",
   },
-  goalPeriodTextOn: { color: "#173a67" },
+  goalPeriodTextOn: { color: "#22343b" },
   goalSave: {
     alignItems: "center",
-    backgroundColor: "#63e3db",
+    backgroundColor: "#d4b77c",
     borderRadius: 12,
     justifyContent: "center",
     minHeight: 48,
   },
-  goalSaveText: { color: "#173a67", fontSize: 11, fontWeight: "900" },
+  goalSaveText: { color: "#22343b", fontSize: 11, fontWeight: "900" },
   inlineError: { color: "#ffd0d0", fontSize: 10, lineHeight: 15 },
   sectionLabel: {
-    color: "#667085",
+    color: "#766f61",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
@@ -1430,23 +1440,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
   },
   historyDot: { borderRadius: 5, height: 10, width: 10 },
-  historyDotGood: { backgroundColor: "#2f7d57" },
-  historyDotBad: { backgroundColor: "#b84444" },
+  historyDotGood: { backgroundColor: "#2f6b3a" },
+  historyDotBad: { backgroundColor: "#9a4a2e" },
   historyDotWait: { backgroundColor: "#ba7d24" },
-  historyTitle: { color: "#101828", fontSize: 12, fontWeight: "900" },
+  historyTitle: { color: "#1b1b19", fontSize: 12, fontWeight: "900" },
   historyMeta: {
-    color: "#667085",
+    color: "#766f61",
     fontSize: 10,
     marginTop: 3,
     textTransform: "capitalize",
   },
-  historyAmount: { color: "#101828", fontSize: 12, fontWeight: "900" },
+  historyAmount: {
+    color: "#1b1b19",
+    fontFamily: "Archivo-Bold",
+    fontSize: 12,
+    fontWeight: "900",
+  },
   search: {
     backgroundColor: "#fff",
     borderColor: "#d9dee7",
     borderRadius: 15,
     borderWidth: 1,
-    color: "#101828",
+    color: "#1b1b19",
     fontSize: 15,
     marginTop: 22,
     minHeight: 56,
@@ -1464,7 +1479,7 @@ const styles = StyleSheet.create({
     minHeight: 76,
     padding: 12,
   },
-  personRowOn: { backgroundColor: "#edf4fb", borderColor: "#235a96" },
+  personRowOn: { backgroundColor: "#edece6", borderColor: "#3d6672" },
   avatar: {
     alignItems: "center",
     backgroundColor: "#e9edf3",
@@ -1473,9 +1488,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 44,
   },
-  avatarText: { color: "#235a96", fontSize: 13, fontWeight: "900" },
-  personName: { color: "#101828", fontSize: 14, fontWeight: "900" },
-  personMeta: { color: "#667085", fontSize: 10, marginTop: 4 },
+  avatarText: { color: "#3d6672", fontSize: 13, fontWeight: "900" },
+  personName: { color: "#1b1b19", fontSize: 14, fontWeight: "900" },
+  personMeta: { color: "#766f61", fontSize: 10, marginTop: 4 },
   radio: {
     alignItems: "center",
     borderColor: "#bfc6d0",
@@ -1485,14 +1500,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 24,
   },
-  radioOn: { borderColor: "#235a96" },
+  radioOn: { borderColor: "#3d6672" },
   radioDot: {
-    backgroundColor: "#235a96",
+    backgroundColor: "#3d6672",
     borderRadius: 6,
     height: 12,
     width: 12,
   },
-  empty: { color: "#667085", fontSize: 13, padding: 24, textAlign: "center" },
+  empty: { color: "#766f61", fontSize: 13, padding: 24, textAlign: "center" },
   referenceRow: {
     alignItems: "center",
     backgroundColor: "#fff",
@@ -1505,7 +1520,7 @@ const styles = StyleSheet.create({
     minHeight: 78,
     padding: 12,
   },
-  referenceRowOn: { backgroundColor: "#edf4fb", borderColor: "#235a96" },
+  referenceRowOn: { backgroundColor: "#edece6", borderColor: "#3d6672" },
   referenceIcon: {
     alignItems: "center",
     backgroundColor: "#eef3f8",
@@ -1514,23 +1529,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 46,
   },
-  referenceIconText: { color: "#235a96", fontSize: 20, fontWeight: "900" },
-  referenceTitle: { color: "#101828", fontSize: 13, fontWeight: "900" },
+  referenceIconText: { color: "#3d6672", fontSize: 20, fontWeight: "900" },
+  referenceTitle: { color: "#1b1b19", fontSize: 13, fontWeight: "900" },
   referenceMeta: {
-    color: "#667085",
+    color: "#766f61",
     fontSize: 10,
     lineHeight: 13,
     marginTop: 4,
   },
-  referencePrice: { color: "#101828", fontSize: 12, fontWeight: "900" },
+  referencePrice: {
+    color: "#1b1b19",
+    fontFamily: "Archivo-Bold",
+    fontSize: 12,
+    fontWeight: "900",
+  },
   summary: {
-    backgroundColor: "#173a67",
+    backgroundColor: "#22343b",
     borderRadius: 20,
     marginTop: 22,
     padding: 18,
   },
   summaryAmount: {
     color: "#fff",
+    fontFamily: "Archivo-ExtraBold",
     fontSize: 34,
     fontWeight: "900",
     letterSpacing: -1,
@@ -1548,18 +1569,18 @@ const styles = StyleSheet.create({
     minHeight: 86,
     padding: 13,
   },
-  tenderOn: { backgroundColor: "#edf4fb", borderColor: "#235a96" },
+  tenderOn: { backgroundColor: "#edece6", borderColor: "#3d6672" },
   tenderIcon: {
     alignItems: "center",
-    backgroundColor: "#173a67",
+    backgroundColor: "#22343b",
     borderRadius: 14,
     height: 48,
     justifyContent: "center",
     width: 48,
   },
-  tenderIconText: { color: "#63e3db", fontSize: 17, fontWeight: "900" },
-  tenderTitle: { color: "#101828", fontSize: 14, fontWeight: "900" },
-  tenderMeta: { color: "#667085", fontSize: 10, lineHeight: 13, marginTop: 4 },
+  tenderIconText: { color: "#d4b77c", fontSize: 17, fontWeight: "900" },
+  tenderTitle: { color: "#1b1b19", fontSize: 14, fontWeight: "900" },
+  tenderMeta: { color: "#766f61", fontSize: 10, lineHeight: 13, marginTop: 4 },
   disabled: { opacity: 0.45 },
   netCard: {
     backgroundColor: "#eef5f1",
@@ -1575,6 +1596,7 @@ const styles = StyleSheet.create({
   },
   netAmount: {
     color: "#245b46",
+    fontFamily: "Archivo-ExtraBold",
     fontSize: 22,
     fontWeight: "900",
     marginTop: 5,
@@ -1583,7 +1605,7 @@ const styles = StyleSheet.create({
   paymentError: {
     backgroundColor: "#fff0f0",
     borderRadius: 13,
-    color: "#b84444",
+    color: "#9a4a2e",
     fontSize: 12,
     lineHeight: 18,
     marginTop: 16,
@@ -1601,7 +1623,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: "center",
-    backgroundColor: "#235a96",
+    backgroundColor: "#3d6672",
     borderRadius: 16,
     justifyContent: "center",
     minHeight: 58,
@@ -1617,9 +1639,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: 56,
   },
-  secondaryButtonText: { color: "#235a96", fontSize: 14, fontWeight: "900" },
+  secondaryButtonText: { color: "#3d6672", fontSize: 14, fontWeight: "900" },
   closeTextButton: { minHeight: 48, padding: 14 },
-  closeText: { color: "#235a96", fontSize: 13, fontWeight: "900" },
+  closeText: { color: "#3d6672", fontSize: 13, fontWeight: "900" },
   resultPage: { padding: 18, paddingBottom: 50 },
   motion: {
     alignItems: "center",
@@ -1630,7 +1652,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   orbit: {
-    borderColor: "#63e3db",
+    borderColor: "#d4b77c",
     borderRadius: 150,
     borderWidth: 2,
     height: 280,
@@ -1657,8 +1679,8 @@ const styles = StyleSheet.create({
   },
   tapZone: {
     alignItems: "center",
-    backgroundColor: "rgba(99,227,219,.12)",
-    borderColor: "#63e3db",
+    backgroundColor: "rgba(212,183,124,.12)",
+    borderColor: "#d4b77c",
     borderRadius: 32,
     borderWidth: 2,
     height: 64,
@@ -1667,7 +1689,7 @@ const styles = StyleSheet.create({
     width: 64,
   },
   tapZoneIcon: {
-    color: "#63e3db",
+    color: "#d4b77c",
     fontSize: 17,
     fontWeight: "900",
     transform: [{ rotate: "90deg" }],
@@ -1714,6 +1736,7 @@ const styles = StyleSheet.create({
   motionAmount: {
     bottom: 64,
     color: "#fff",
+    fontFamily: "Archivo-ExtraBold",
     fontSize: 34,
     fontWeight: "900",
     letterSpacing: -1,
@@ -1735,10 +1758,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 16,
   },
-  secureText: { color: "#667085", fontSize: 10, fontWeight: "700" },
+  secureText: { color: "#766f61", fontSize: 10, fontWeight: "700" },
   resultActions: { gap: 9, marginTop: 18 },
   loggedTrust: {
-    color: "#667085",
+    color: "#766f61",
     fontSize: 10,
     lineHeight: 14,
     marginTop: 15,

@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "collection": "Golden Hour Performance",
   "createdAt": "2026-08-05",
-  "generator": "Higgsfield Nano Banana Pro",
+  "generators": ["Higgsfield Nano Banana Pro", "Higgsfield Seedance 2.0"],
   "policy": {
     "identity": "No real player likenesses or identifiable public figures.",
     "usage": "Atmospheric brand and product storytelling only; never evidence of a real event, venue, or participant.",
@@ -44,6 +44,16 @@
       "jobId": "897a9708-bc6a-487a-a858-a4b541e72230",
       "intent": "A waiting ball and open court for truthful, calm empty states.",
       "reference": "/media/event-library/duna-event-sunrise-tournament.webp"
+    }
+  ],
+  "motionAssets": [
+    {
+      "name": "duna-home-hero-motion-v1",
+      "jobId": "842590b1-ebbf-4eab-aab8-1559ab2a8e3e",
+      "intent": "A restrained first-light cinemagraph with a locked editorial frame, subtle athlete and dune movement, and a still-image dissolve at the loop boundary.",
+      "reference": "duna-home-hero-v1",
+      "durationSeconds": 8.04,
+      "delivery": "Muted progressive enhancement on unconstrained connections; never shown when reduced motion or data saving is active."
     }
   ]
 }

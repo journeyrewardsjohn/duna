@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { AmbientHeroVideo } from "@/components/ambient-hero-video";
 import { RatingOrbit } from "@/components/rating-orbit";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -52,6 +53,7 @@ export default async function HomePage() {
       <section className="campaign-hero">
         <div className="campaign-hero__media" aria-hidden>
           <Image alt="" fill priority sizes="100vw" src={campaignMedia.rally} />
+          <AmbientHeroVideo />
           <div className="campaign-hero__wash" />
           <div className="campaign-hero__grain" />
         </div>
@@ -131,13 +133,13 @@ export default async function HomePage() {
 
       <section className="campaign-trust">
         <div className="campaign-shell campaign-trust__inner">
-          <p>Backed by beach volleyball&apos;s best.</p>
-          <div aria-label="Athlete backers">
-            <span>Phil Dalhausser</span>
+          <p>Built for the whole beach.</p>
+          <div aria-label="Duna community">
+            <span>Players</span>
             <i />
-            <span>Taylor Crabb</span>
+            <span>Coaches</span>
             <i />
-            <span>Taylor Sander</span>
+            <span>Clubs</span>
           </div>
         </div>
       </section>

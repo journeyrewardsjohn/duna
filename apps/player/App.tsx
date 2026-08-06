@@ -33,6 +33,7 @@ import {
   useState,
 } from "react";
 import {
+  AccessibilityInfo,
   Animated,
   Easing,
   Image,
@@ -43,6 +44,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  useColorScheme,
   useWindowDimensions,
   View,
   type ViewStyle,
@@ -239,32 +241,32 @@ type MobilePlayerPerformance = Awaited<
 type MobilePerformanceMatch = MobilePlayerPerformance["history"][number];
 
 const lightColors = {
-  canvas: "#f8f7f3",
-  ink: "#101828",
+  canvas: "#f6f5f1",
+  ink: "#1b1b19",
   depth: "#ffffff",
-  navy: "#f1ece2",
-  navyLift: "#e8eef7",
-  bone: "#101828",
-  muted: "#667085",
-  aqua: "#235a96",
-  aquaDeep: "#173a67",
-  sand: "#d7bd91",
-  flare: "#de6842",
-  positive: "#2f7d57",
-  warning: "#a86f18",
-  danger: "#b84444",
+  navy: "#efe6d3",
+  navyLift: "#edece6",
+  bone: "#1b1b19",
+  muted: "#766f61",
+  aqua: "#22343b",
+  aquaDeep: "#3a3a36",
+  sand: "#c9a96a",
+  flare: "#e8683a",
+  positive: "#2f6b3a",
+  warning: "#8a6a2f",
+  danger: "#9a4a2e",
   onAccent: "#ffffff",
   white: "#ffffff",
-  overlayRgb: "23,58,103",
-  accentRgb: "35,90,150",
-  warningRgb: "168,111,24",
-  positiveRgb: "47,125,87",
-  dangerRgb: "184,68,68",
-  flareRgb: "222,104,66",
-  inkRgb: "16,24,40",
+  overlayRgb: "27,27,25",
+  accentRgb: "34,52,59",
+  warningRgb: "138,106,47",
+  positiveRgb: "47,107,58",
+  dangerRgb: "154,74,46",
+  flareRgb: "232,104,58",
+  inkRgb: "27,27,25",
   depthRgb: "255,255,255",
-  navyRgb: "241,236,226",
-  boneRgb: "16,24,40",
+  navyRgb: "239,230,211",
+  boneRgb: "27,27,25",
   whiteRgb: "255,255,255",
 } as const;
 
@@ -273,36 +275,38 @@ type Palette = {
 };
 
 const darkColors: Palette = {
-  canvas: "#070b0d",
-  ink: "#070b0d",
-  depth: "#0c1418",
-  navy: "#10242b",
-  navyLift: "#17343d",
-  bone: "#f3efe5",
-  muted: "#aaa79e",
-  aqua: "#63e3db",
-  aquaDeep: "#1b9f9a",
-  sand: "#c9a96c",
-  flare: "#ff6a3d",
-  positive: "#85d49b",
-  warning: "#f7c86b",
-  danger: "#f27878",
-  onAccent: "#070b0d",
+  canvas: "#141310",
+  ink: "#0d1114",
+  depth: "#1c1a16",
+  navy: "#16232a",
+  navyLift: "#24211c",
+  bone: "#f2f0ea",
+  muted: "#b8b4a8",
+  aqua: "#b5ccd3",
+  aquaDeep: "#8fb0bc",
+  sand: "#d4b77c",
+  flare: "#f4794c",
+  positive: "#6bae78",
+  warning: "#d4b77c",
+  danger: "#c4785c",
+  onAccent: "#0d1114",
   white: "#ffffff",
-  overlayRgb: "255,255,255",
-  accentRgb: "99,227,219",
-  warningRgb: "247,200,107",
-  positiveRgb: "133,212,155",
-  dangerRgb: "242,120,120",
-  flareRgb: "255,106,61",
-  inkRgb: "7,11,13",
-  depthRgb: "12,20,24",
-  navyRgb: "16,36,43",
-  boneRgb: "243,239,229",
+  overlayRgb: "242,240,234",
+  accentRgb: "181,204,211",
+  warningRgb: "212,183,124",
+  positiveRgb: "107,174,120",
+  dangerRgb: "196,120,92",
+  flareRgb: "244,121,76",
+  inkRgb: "13,17,20",
+  depthRgb: "28,26,22",
+  navyRgb: "22,35,42",
+  boneRgb: "242,240,234",
   whiteRgb: "255,255,255",
 };
 
 type ThemeName = "light" | "dark";
+type ThemePreference = ThemeName | "system";
+const AnimatedSvgPath = Animated.createAnimatedComponent(Path);
 
 let activePalette: Palette = lightColors;
 const colors = new Proxy(lightColors, {
@@ -315,16 +319,30 @@ function rgba(rgb: string, alpha: number) {
   return `rgba(${rgb},${alpha})`;
 }
 
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    void AccessibilityInfo.isReduceMotionEnabled().then(setReduced);
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      setReduced,
+    );
+    return () => subscription.remove();
+  }, []);
+  return reduced;
+}
+
 const ThemeContext = createContext<{
   readonly theme: ThemeName;
+  readonly preference: ThemePreference;
   readonly toggle: () => void;
-}>({ theme: "light", toggle: () => undefined });
+}>({ theme: "light", preference: "system", toggle: () => undefined });
 
 function ThemeButton() {
-  const { theme, toggle } = useContext(ThemeContext);
+  const { preference, theme, toggle } = useContext(ThemeContext);
   return (
     <Pressable
-      accessibilityLabel={`Use ${theme === "light" ? "dark" : "light"} mode`}
+      accessibilityLabel={`Theme: ${preference === "system" ? "match device" : preference}. Change theme`}
       onPress={() => {
         selectionHaptic();
         toggle();
@@ -332,7 +350,7 @@ function ThemeButton() {
       style={styles.themeButton}
     >
       <Text style={styles.themeButtonText}>
-        {theme === "light" ? "☾" : "☀"}
+        {preference === "system" ? "◐" : theme === "light" ? "☾" : "☀"}
       </Text>
     </Pressable>
   );
@@ -460,11 +478,27 @@ function PreviewBanner() {
 function DunaWordmark({ pro = false }: { readonly pro?: boolean }) {
   return (
     <View style={styles.wordmark}>
-      <View style={[styles.mark, pro && { borderColor: colors.warning }]}>
-        <View style={styles.markArc} />
-        <View
-          style={[styles.markDot, pro && { backgroundColor: colors.aqua }]}
-        />
+      <View style={styles.mark}>
+        <Svg height="30" viewBox="0 0 64 48" width="40">
+          <Line
+            opacity={0.38}
+            stroke={pro ? colors.warning : colors.bone}
+            strokeLinecap="round"
+            strokeWidth="1.5"
+            x1="5"
+            x2="59"
+            y1="34"
+            y2="34"
+          />
+          <Path
+            d="M6 36.5C17.5 36.5 22.4 31.7 29.2 26.3C36.3 20.7 45 18.4 58 11.5"
+            fill="none"
+            stroke={pro ? colors.warning : colors.bone}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="4.5"
+          />
+        </Svg>
       </View>
       <Text style={styles.wordmarkText}>DUNA</Text>
       {pro && <Text style={styles.proPill}>PRO</Text>}
@@ -833,6 +867,8 @@ function HomeScreen({
   readonly onAction: (action: HomeQuickAction) => void;
   readonly onBook: (eventIndex: number) => void;
 }) {
+  const reduceMotion = useReducedMotion();
+  const chartDraw = useRef(new Animated.Value(0)).current;
   const {
     client,
     coaches,
@@ -934,9 +970,36 @@ function HomeScreen({
         `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`,
     )
     .join(" ");
+  const chartPathLength = Math.max(
+    1,
+    chartPoints.slice(1).reduce((total, point, index) => {
+      const previous = chartPoints[index];
+      return previous
+        ? total + Math.hypot(point.x - previous.x, point.y - previous.y)
+        : total;
+    }, 0),
+  );
   const chartArea = chartPoints.length
     ? `${chartPath} L ${chartPoints.at(-1)!.x.toFixed(1)} 116 L ${chartPoints[0]!.x.toFixed(1)} 116 Z`
     : "";
+  useEffect(() => {
+    chartDraw.stopAnimation();
+    if (reduceMotion || !chartPath) {
+      chartDraw.setValue(1);
+      return;
+    }
+    chartDraw.setValue(0);
+    Animated.timing(chartDraw, {
+      duration: 760,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: false,
+    }).start();
+  }, [chartDraw, chartPath, reduceMotion]);
+  const chartStrokeOffset = chartDraw.interpolate({
+    inputRange: [0, 1],
+    outputRange: [chartPathLength, 0],
+  });
   const currentRating =
     trend.at(-1)?.rating ??
     performanceHistory[0]?.afterDisplay ??
@@ -1174,11 +1237,17 @@ function HomeScreen({
                     y2={y}
                   />
                 ))}
-                <Path d={chartArea} fill={rgba(colors.accentRgb, 0.09)} />
-                <Path
+                <AnimatedSvgPath
+                  d={chartArea}
+                  fill={rgba(colors.accentRgb, 0.09)}
+                  opacity={chartDraw}
+                />
+                <AnimatedSvgPath
                   d={chartPath}
                   fill="none"
                   stroke={colors.aqua}
+                  strokeDasharray={`${chartPathLength} ${chartPathLength}`}
+                  strokeDashoffset={chartStrokeOffset}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth="4"
@@ -8461,18 +8530,24 @@ function WatchScoreInbox() {
 
 function DunaApp() {
   const runtime = usePlayerRuntime();
+  const deviceTheme: ThemeName = useColorScheme() === "dark" ? "dark" : "light";
+  const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("home");
   const [eventIndex, setEventIndex] = useState<number | null>(null);
   const [discoverIntent, setDiscoverIntent] = useState<{
     readonly key: number;
     readonly kind: Exclude<HomeQuickAction, "record-video">;
   }>();
-  const [theme, setTheme] = useState<ThemeName>("light");
+  const [themePreference, setThemePreference] =
+    useState<ThemePreference>("system");
+  const theme = themePreference === "system" ? deviceTheme : themePreference;
   const screenTransition = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     void AsyncStorage.getItem("duna-theme").then((stored) => {
-      if (stored === "dark") setTheme("dark");
+      if (stored === "dark" || stored === "light" || stored === "system") {
+        setThemePreference(stored);
+      }
     });
   }, []);
 
@@ -8491,6 +8566,10 @@ function DunaApp() {
   }, []);
 
   useEffect(() => {
+    if (reduceMotion) {
+      screenTransition.setValue(1);
+      return;
+    }
     screenTransition.setValue(0);
     Animated.timing(screenTransition, {
       toValue: 1,
@@ -8498,7 +8577,7 @@ function DunaApp() {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [screenTransition, tab]);
+  }, [reduceMotion, screenTransition, tab]);
 
   activePalette = theme === "dark" ? darkColors : lightColors;
   activeStyles = theme === "dark" ? darkStyles : lightStyles;
@@ -8516,9 +8595,15 @@ function DunaApp() {
     <ThemeContext.Provider
       value={{
         theme,
+        preference: themePreference,
         toggle: () => {
-          const next = theme === "light" ? "dark" : "light";
-          setTheme(next);
+          const next: ThemePreference =
+            themePreference === "system"
+              ? "light"
+              : themePreference === "light"
+                ? "dark"
+                : "system";
+          setThemePreference(next);
           void AsyncStorage.setItem("duna-theme", next);
         },
       }}
@@ -9235,34 +9320,13 @@ function createStyles(palette: Palette) {
     wordmark: { alignItems: "center", flexDirection: "row", gap: 8 },
     mark: {
       alignItems: "center",
-      borderColor: colors.aqua,
-      borderRadius: 15,
-      borderWidth: 2,
       height: 30,
       justifyContent: "center",
-      position: "relative",
-      width: 30,
-    },
-    markArc: {
-      borderColor: colors.bone,
-      borderRadius: 15,
-      borderTopWidth: 2,
-      height: 13,
-      position: "absolute",
-      top: 8,
-      transform: [{ rotate: "180deg" }],
-      width: 18,
-    },
-    markDot: {
-      backgroundColor: colors.flare,
-      borderRadius: 2,
-      bottom: 5,
-      height: 4,
-      position: "absolute",
-      width: 4,
+      width: 40,
     },
     wordmarkText: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 17,
       fontWeight: "900",
       letterSpacing: 3,
@@ -9355,6 +9419,7 @@ function createStyles(palette: Palette) {
     },
     homeRatingBadgeValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 17,
       fontWeight: "900",
       letterSpacing: -0.7,
@@ -9495,6 +9560,7 @@ function createStyles(palette: Palette) {
     },
     homePerformanceValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 18,
       fontWeight: "900",
       letterSpacing: -0.5,
@@ -10073,6 +10139,7 @@ function createStyles(palette: Palette) {
     },
     ratingValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 45,
       fontWeight: "900",
       letterSpacing: -3,
@@ -10107,7 +10174,12 @@ function createStyles(palette: Palette) {
       justifyContent: "space-between",
       paddingTop: 14,
     },
-    statValue: { color: colors.bone, fontSize: 15, fontWeight: "800" },
+    statValue: {
+      color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 15,
+      fontWeight: "800",
+    },
     statLabel: { color: colors.muted, fontSize: 10, marginTop: 3 },
     nextDate: {
       color: colors.aqua,
@@ -10181,6 +10253,7 @@ function createStyles(palette: Palette) {
     },
     metricNumber: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 14,
       fontWeight: "800",
       textAlign: "center",
@@ -10450,6 +10523,7 @@ function createStyles(palette: Palette) {
     proBracketWinner: { color: colors.bone, fontWeight: "900" },
     proBracketScore: {
       color: colors.aqua,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 10,
       fontWeight: "900",
     },
@@ -11000,6 +11074,7 @@ function createStyles(palette: Palette) {
     },
     proMobileStatValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 20,
       fontWeight: "900",
       letterSpacing: -0.7,
@@ -11221,6 +11296,7 @@ function createStyles(palette: Palette) {
     },
     mobilePredictionChartLegendValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 18,
       fontWeight: "900",
     },
@@ -11568,6 +11644,7 @@ function createStyles(palette: Palette) {
     proMobileMatchWinner: { color: colors.bone, fontWeight: "900" },
     proMobileMatchScore: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 13,
       fontWeight: "900",
       letterSpacing: 1.1,
@@ -11590,6 +11667,7 @@ function createStyles(palette: Palette) {
     },
     proMobileMatchPredictionValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 10,
       fontWeight: "900",
     },
@@ -12066,6 +12144,7 @@ function createStyles(palette: Palette) {
     weekDayLabel: { color: colors.muted, fontSize: 10 },
     weekDayNumber: {
       color: colors.bone,
+      fontFamily: "Archivo-Bold",
       fontSize: 11,
       fontWeight: "700",
       marginTop: 4,
@@ -12109,7 +12188,12 @@ function createStyles(palette: Palette) {
       width: 38,
     },
     pickupDay: { color: colors.aqua, fontSize: 10, fontWeight: "800" },
-    pickupNumber: { color: colors.bone, fontSize: 15, fontWeight: "900" },
+    pickupNumber: {
+      color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 15,
+      fontWeight: "900",
+    },
     pickupSpots: {
       color: colors.aqua,
       fontSize: 13,
@@ -12258,6 +12342,7 @@ function createStyles(palette: Palette) {
     },
     predictionWalletFactValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 16,
       fontWeight: "900",
     },
@@ -12311,7 +12396,12 @@ function createStyles(palette: Palette) {
       justifyContent: "center",
       width: 34,
     },
-    moneyAmount: { color: colors.bone, fontSize: 10, fontWeight: "800" },
+    moneyAmount: {
+      color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 10,
+      fontWeight: "800",
+    },
     trustNote: {
       alignItems: "flex-start",
       backgroundColor: rgba(colors.accentRgb, 0.05),
@@ -12450,6 +12540,7 @@ function createStyles(palette: Palette) {
     },
     athleteHeroRatingValue: {
       color: colors.white,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 27,
       fontWeight: "900",
       letterSpacing: -1.4,
@@ -12485,6 +12576,7 @@ function createStyles(palette: Palette) {
     },
     athleteMetricValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 31,
       fontWeight: "900",
       letterSpacing: -1.4,
@@ -12567,6 +12659,7 @@ function createStyles(palette: Palette) {
     },
     athleteChartSummaryValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 20,
       fontWeight: "900",
       letterSpacing: -0.7,
@@ -12654,6 +12747,7 @@ function createStyles(palette: Palette) {
     },
     athleteMomentValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 34,
       fontWeight: "900",
       letterSpacing: -1.4,
@@ -12751,7 +12845,11 @@ function createStyles(palette: Palette) {
     },
     athleteResultMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
     athleteResultDelta: { alignItems: "flex-end" },
-    athleteResultDeltaValue: { fontSize: 13, fontWeight: "900" },
+    athleteResultDeltaValue: {
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 13,
+      fontWeight: "900",
+    },
     athleteResultExpected: { color: colors.muted, fontSize: 10, marginTop: 3 },
     athleteFullHistoryButton: {
       alignItems: "center",
@@ -12805,6 +12903,7 @@ function createStyles(palette: Palette) {
     },
     athleteBioFactValue: {
       color: colors.bone,
+      fontFamily: "Archivo-Bold",
       fontSize: 12,
       fontWeight: "800",
       marginTop: 4,
@@ -13290,7 +13389,12 @@ function createStyles(palette: Palette) {
       width: 36,
     },
     mobileQuantityButtonText: { color: "#ffffff", fontSize: 19 },
-    mobileQuantityValue: { color: "#ffffff", fontSize: 15, fontWeight: "900" },
+    mobileQuantityValue: {
+      color: "#ffffff",
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 15,
+      fontWeight: "900",
+    },
     mobileParticipantRail: { marginHorizontal: -13, marginTop: 10 },
     mobileParticipantCard: {
       alignItems: "center",
@@ -13626,7 +13730,12 @@ function createStyles(palette: Palette) {
       marginTop: 8,
       paddingTop: 10,
     },
-    totalAmount: { color: colors.bone, fontSize: 15, fontWeight: "900" },
+    totalAmount: {
+      color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 15,
+      fontWeight: "900",
+    },
     payButton: {
       alignItems: "center",
       backgroundColor: colors.aqua,
