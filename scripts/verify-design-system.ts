@@ -131,10 +131,29 @@ for (const tier of ["score", "monument", "hero", "block", "table", "chip"]) {
 }
 
 const webV3Css = readFileSync(join(root, "apps/web/app/design-v3.css"), "utf8");
+const hqV3Css = readFileSync(join(root, "apps/hq/app/design-v3.css"), "utf8");
 const webGlobalCss = readFileSync(
   join(root, "apps/web/app/globals.css"),
   "utf8",
 );
+for (const [file, source] of [
+  ["apps/web/app/design-v3.css", webV3Css],
+  ["apps/hq/app/design-v3.css", hqV3Css],
+] as const) {
+  const selector = ".duna-numeric[data-numeric-tier].duna-numeric--monument";
+  const selectorStart = source.indexOf(selector);
+  const ruleEnd = source.indexOf("}", selectorStart);
+  const rule = source.slice(selectorStart, ruleEnd);
+  if (
+    selectorStart < 0 ||
+    !rule.includes('font-feature-settings: "pnum" 1') ||
+    !rule.includes("font-variant-numeric: proportional-nums")
+  ) {
+    violations.push(
+      `${file} must override the tabular base with proportional Monument spacing`,
+    );
+  }
+}
 const liveMatchScoreboardSource = readFileSync(
   join(root, "apps/web/components/pro-live-match-scoreboard.tsx"),
   "utf8",
