@@ -19789,7 +19789,6 @@ a.play-day__booking {
 }
 
 .pro-live-stats__metric > .duna-numeric {
-  font-size: clamp(1.5rem, 2vw, 1.85rem);
   text-align: center;
 }
 
@@ -19909,7 +19908,6 @@ a.play-day__booking {
 }
 
 .pro-live-stats__player dd .duna-numeric {
-  font-size: clamp(1.2rem, 1.7vw, 1.55rem);
   letter-spacing: -0.01em;
 }
 
