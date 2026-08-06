@@ -28,11 +28,9 @@ Fellix web and app files in this repository came from the licensed Journey
 Rewards font package supplied for Duna. They may not be redistributed or reused
 outside the licensed product.
 
-The supplied Awesome Serif archive is labeled as a desktop-font package. Duna
-uses Fraunces Variable only for editorial headlines and Fellix for athletic,
-operator, and app display typography. Instrument Serif is retired. The Awesome
-Serif files must not be copied into a web or native bundle merely because they
-were supplied for design review.
+Duna ships exactly two brand families: Fellix for every word and Archivo for
+meaningful numerals and the Duna wordmark. Supplied serif archives are design
+review inputs only and must not be copied into a web or native bundle.
 
 ## Generated media
 

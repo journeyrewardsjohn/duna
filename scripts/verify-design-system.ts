@@ -67,6 +67,10 @@ for (const file of requiredFiles) {
 
 const agentsContract = readFileSync(join(root, "AGENTS.md"), "utf8");
 const designIndex = readFileSync(join(root, "docs/design/README.md"), "utf8");
+const fontGuide = readFileSync(
+  join(root, "docs/design/duna-font-usage-guide.md"),
+  "utf8",
+);
 for (const [file, content] of [
   ["AGENTS.md", agentsContract],
   ["docs/design/README.md", designIndex],
@@ -75,11 +79,81 @@ for (const [file, content] of [
     violations.push(`${file} must reference the authoritative font guide`);
   }
 }
+if (!fontGuide.includes("Duna ships exactly two brand typefaces")) {
+  violations.push(
+    "docs/design/duna-font-usage-guide.md must preserve the two-family rule",
+  );
+}
+if (/Fraunces|Figtree|JetBrains Mono/i.test(fontGuide)) {
+  violations.push(
+    "docs/design/duna-font-usage-guide.md must not restore a third product family",
+  );
+}
 
 const sharedTypographyCss = readFileSync(
   join(root, "packages/ui/src/styles.css"),
   "utf8",
 );
+for (const contract of [
+  '--font-display: "Fellix", sans-serif',
+  '--font-body: "Fellix", sans-serif',
+  "--font-heading: var(--font-display)",
+  "--font-ui: var(--font-body)",
+  "--font-sans: var(--font-body)",
+  '--font-data: "Archivo Variable", "Archivo", "Fellix", sans-serif',
+] as const) {
+  if (!sharedTypographyCss.includes(contract)) {
+    violations.push(
+      `packages/ui/src/styles.css must preserve the two-family contract ${contract}`,
+    );
+  }
+}
+const typographyTokens = readFileSync(
+  join(root, "packages/ui/src/tokens.ts"),
+  "utf8",
+);
+for (const contract of [
+  'display: "Fellix"',
+  'body: "Fellix"',
+  'data: "Archivo"',
+  'mono: "Archivo"',
+] as const) {
+  if (!typographyTokens.includes(contract)) {
+    violations.push(
+      `packages/ui/src/tokens.ts must preserve the two-family contract ${contract}`,
+    );
+  }
+}
+for (const app of ["web", "hq"] as const) {
+  const manifestPath = join(root, "apps", app, "package.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+    readonly dependencies?: Readonly<Record<string, string>>;
+  };
+  for (const dependency of Object.keys(manifest.dependencies ?? {})) {
+    if (
+      (dependency.startsWith("@fontsource") ||
+        dependency.startsWith("@expo-google-fonts")) &&
+      dependency !== "@fontsource-variable/archivo"
+    ) {
+      violations.push(
+        `apps/${app}/package.json loads a third product family through ${dependency}`,
+      );
+    }
+  }
+  const layoutSource = readFileSync(
+    join(root, "apps", app, "app/layout.tsx"),
+    "utf8",
+  );
+  for (const match of layoutSource.matchAll(
+    /import ["']([^"']*fontsource[^"']*)["']/g,
+  )) {
+    if (match[1] !== "@fontsource-variable/archivo") {
+      violations.push(
+        `apps/${app}/app/layout.tsx loads a third product family through ${match[1]}`,
+      );
+    }
+  }
+}
 for (const contract of ["--signal-text: #52630f", "--signal-text: #c9e265"]) {
   if (!sharedTypographyCss.includes(contract)) {
     violations.push(
@@ -434,9 +508,21 @@ const designSources = [
   ...sourceFiles(join(root, "packages")),
 ];
 
+const forbiddenProductFamily =
+  /Fraunces|Figtree|JetBrains(?: Mono)?|Instrument Serif|Awesome Serif/i;
+
 for (const file of designSources) {
+  const fileLabel = relative(root, file);
+  if (forbiddenProductFamily.test(fileLabel)) {
+    violations.push(`${fileLabel} is a retired or third-family font asset`);
+  }
+  if (
+    /\.(?:woff2?|ttf|otf)$/i.test(fileLabel) &&
+    !/(?:Fellix|Archivo)/i.test(fileLabel)
+  ) {
+    violations.push(`${fileLabel} is not an approved Fellix or Archivo asset`);
+  }
   if (extname(file) === ".css") {
-    const fileLabel = relative(root, file);
     const lines = readFileSync(file, "utf8").split("\n");
     lines.forEach((line, index) => {
       if (/font-stretch\s*:/.test(line)) {
@@ -447,6 +533,14 @@ for (const file of designSources) {
       if (/Instrument (?:Serif|Sans)/i.test(line)) {
         violations.push(
           `${fileLabel}:${index + 1} references a retired Instrument font`,
+        );
+      }
+      if (
+        forbiddenProductFamily.test(line) ||
+        /font-family\s*:[^;]*(?:,\s*serif\b|:\s*serif\b)/i.test(line)
+      ) {
+        violations.push(
+          `${fileLabel}:${index + 1} references a third product font family`,
         );
       }
       if (/data-zone=["']performance["']/.test(line)) {
@@ -471,7 +565,6 @@ for (const file of designSources) {
     continue;
   }
   if (![".ts", ".tsx"].includes(extname(file))) continue;
-  const fileLabel = relative(root, file);
   const source = readFileSync(file, "utf8");
   if (/<Numeric\b[^>]*>\s*[A-Za-z][^<{]*<\/Numeric>/s.test(source)) {
     violations.push(
@@ -489,6 +582,12 @@ for (const file of designSources) {
     if (/Instrument (?:Serif|Sans)|@fontsource\/instrument-/i.test(line)) {
       violations.push(
         `${fileLabel}:${index + 1} references a retired Instrument font`,
+      );
+    }
+
+    if (forbiddenProductFamily.test(line)) {
+      violations.push(
+        `${fileLabel}:${index + 1} references a third product font family`,
       );
     }
 
@@ -559,5 +658,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  "Design system verified: authoritative font guidance, six precise Archivo tiers, local app instances, semantic zoning, contrast, identity, icons, imagery, recovery, naming, and country-code policy are intact.",
+  "Design system verified: Fellix and Archivo are the only Duna families, six precise Archivo tiers, local app instances, semantic zoning, contrast, identity, icons, imagery, recovery, naming, and country-code policy are intact.",
 );

@@ -2481,7 +2481,7 @@ export function ThemeKitEditor({
                 <input
                   name="safeFallbackFont"
                   type="hidden"
-                  value="Fellix, Figtree, system-ui, sans-serif"
+                  value="Fellix, sans-serif"
                 />
               </div>
               <input name="fontLicenseConfirmed" type="hidden" value="true" />

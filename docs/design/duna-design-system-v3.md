@@ -52,12 +52,13 @@ Replace darkness with these five devices. Every athletic surface should use at l
 
 Light ground plus these five is the NBA formula. It is also, not coincidentally, closer to the baba reference you started from — which is high-key, luminous, and light.
 
-## 1.4 The serif, settled
+## 1.4 The two-family system, settled
 
-Instrument Serif ships one weight and is delicate by construction. On athletic surfaces it reads as wellness.
+Duna uses Fellix for every word and Archivo for meaningful numerals. The
+previous display-serif layer is retired across every surface.
 
-- **Editorial surfaces** (homepage, run-your-club, about, Sand Rating explainer): serif display, swapped to **Fraunces** at `wght 600–700, opsz 144, SOFT 0, WONK 1`. Sturdier, more character, still editorial.
-- **Athletic surfaces** (player, match, event, /pro, rankings): **no serif at all.** Names in Fellix 800. Numbers in Archivo. Headlines in Fellix 700.
+- **Editorial surfaces** (homepage, run-your-club, about, Sand Rating explainer): Fellix 700 display with airy composition and the shared tracking curve.
+- **Athletic surfaces** (player, match, event, /pro, rankings): Fellix 800 names and primary display, Fellix 700 supporting headlines, and Archivo for meaningful numbers.
 
 And universally: `letter-spacing: -0.018em` max, `word-spacing: 0.04em`, `font-synthesis-weight: none`. The collisions — _Theworld'sgame_, _BPTElite16Hamburg_, _Runthebusiness_ — are all one bad value.
 
@@ -253,11 +254,11 @@ Photos, bios, and sponsor marks are user content on a public profile. Before shi
 
 # PART 5 — FIX ORDER
 
-1. **Tracking and weight** — `letter-spacing: -0.018em`, `font-weight: 400` on serif, `font-synthesis-weight: none`. One commit, fixes every page.
+1. **Tracking and weight** — apply the shared tracking curve, Fellix 700–800 for display, and `font-synthesis-weight: none`. One commit, fixes every page.
 2. **Add the light token column** and correct the `light-dark()` resolution.
 3. **Invert /pro and the player page to light.** Regenerate the /pro plate high-key.
 4. **Purge `#0B2440` and `#3D81B9`**, including the `See women's division` CTA.
-5. **Swap the display serif to Fraunces**; remove serif entirely from athletic surfaces.
+5. **Remove the display-serif layer**; use Fellix for every word on every surface.
 6. **Formalize `--hq-*`** from the signal hue; retire the invented mint.
 7. **Ship `--club-h` / `--club-c` normalization** and the five-slot budget. Theme Kit preview before publish.
 8. Homepage blockers: role chips, live strand, marine block.
@@ -411,12 +412,10 @@ Tracking is a function of size, not a constant. Apply per band, both families.
 
 ## 8.3 Weight discipline
 
-| Family           | Available              | Use                                                                                                 |
-| ---------------- | ---------------------- | --------------------------------------------------------------------------------------------------- |
-| Instrument Serif | **400 only**           | Never request another value                                                                         |
-| Fraunces         | 300–900 variable       | Display at 600–700, `opsz 144`, `SOFT 0`, `WONK 1`                                                  |
-| Fellix / Figtree | 300–900                | 300 subtitles ≥20px · 400 body · 500 labels and eyebrows · 600 buttons · 800 athletic display names |
-| Archivo          | 100–900, `wdth 62–125` | 700 tables · 800 scores and hero stats · 900 ghost type                                             |
+| Family  | Available              | Use                                                                                                                   |
+| ------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Fellix  | 100–900 variable       | 300 subtitles ≥20px · 400 body · 500 labels/eyebrows · 600 buttons · 700 editorial display · 800 athletic/app display |
+| Archivo | 100–900, `wdth 62–125` | 700 tables/chips · 800 hero/block numerals · 900 scores/monuments                                                     |
 
 ## 8.4 Measure and leading
 
