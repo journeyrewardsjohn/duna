@@ -55,6 +55,7 @@ export type WatchVisionEvent = {
 
 export type WatchVisionContext = {
   readonly sessionId: string;
+  readonly captureMode: "record" | "live";
   readonly videoId?: string;
   readonly matchId?: string;
   readonly teamA: string;

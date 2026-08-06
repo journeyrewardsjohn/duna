@@ -1,6 +1,6 @@
 {
-  "id": "34ad3606-387f-4479-b88d-3f826309243a",
-  "prevId": "f7a4f465-51d0-48e0-baaf-1dc103fc338c",
+  "id": "1a687e21-e5ac-4444-a835-18608da58f3e",
+  "prevId": "34ad3606-387f-4479-b88d-3f826309243a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -15514,6 +15514,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "stripe_customer_id": {
+          "name": "stripe_customer_id",
+          "type": "varchar(128)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "phone_e164": {
           "name": "phone_e164",
           "type": "varchar(24)",
@@ -15767,6 +15773,11 @@
           "name": "people_clerk_user_id_unique",
           "nullsNotDistinct": false,
           "columns": ["clerk_user_id"]
+        },
+        "people_stripe_customer_id_unique": {
+          "name": "people_stripe_customer_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["stripe_customer_id"]
         },
         "people_phone_e164_unique": {
           "name": "people_phone_e164_unique",

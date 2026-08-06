@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -30,6 +31,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import VideoCapture, {
   DunaVideoCaptureView,
   type CaptureGuidance,
+  type CapturePoint,
   type DunaCourtCalibration,
   type PreparedVideo,
 } from "./modules/duna-video-capture";
@@ -51,6 +53,22 @@ import {
   type WatchScoreSnapshot,
   type WatchVisionEvent,
 } from "./watch-scoring";
+import {
+  edgeVisibility,
+  geometryFromGuidance,
+  geometrySettings,
+  interpolatePoint,
+  isCapturePointVisible,
+  moveAntennaAnchor,
+  moveCourtCorner,
+  moveNetTopAnchor,
+  toggleAntennas,
+  visibleCornerCount,
+  withFullCourtVisible,
+  withNearLineOffscreen,
+  type CourtCornerIndex,
+  type CourtGeometry,
+} from "./court-calibration";
 
 type VideoStudioData = Awaited<
   ReturnType<DunaApiClient["player"]["videoStudio"]["query"]>
@@ -104,6 +122,7 @@ interface CaptureForm {
   readonly courtLengthMeters: number;
   readonly netHeightMeters: number;
   readonly orientation: CaptureOrientation;
+  readonly contributeCalibration: boolean;
 }
 
 const initialCaptureForm: CaptureForm = {
@@ -117,6 +136,7 @@ const initialCaptureForm: CaptureForm = {
   courtLengthMeters: 16,
   netHeightMeters: 2.43,
   orientation: "landscape",
+  contributeCalibration: false,
 };
 
 interface StoredCaptureDefaults {
@@ -821,6 +841,15 @@ function VideoDetailsForm({
             value={form.hasAudio}
           />
 
+          <ToggleRow
+            body="Opt in to send court landmarks and a low-resolution setup frame to Duna's reviewed training queue. Your video privacy does not change, and examples are never promoted into a model automatically."
+            label="Help improve court detection"
+            onChange={(contributeCalibration) =>
+              onChange({ ...form, contributeCalibration })
+            }
+            value={form.contributeCalibration}
+          />
+
           {captureSetup && (
             <>
               <ChoiceRow
@@ -909,14 +938,18 @@ function CourtLine({
   color,
   dashed = false,
   end,
+  opacity = 1,
   size,
   start,
+  thickness = 2,
 }: {
   readonly color: string;
   readonly dashed?: boolean;
   readonly start: { readonly x: number; readonly y: number };
   readonly end: { readonly x: number; readonly y: number };
+  readonly opacity?: number;
   readonly size: { readonly width: number; readonly height: number };
+  readonly thickness?: number;
 }) {
   const startX = start.x * size.width;
   const startY = start.y * size.height;
@@ -934,8 +967,11 @@ function CourtLine({
           backgroundColor: dashed ? "transparent" : color,
           borderColor: color,
           borderStyle: dashed ? "dashed" : "solid",
+          borderTopWidth: dashed ? thickness : 0,
+          height: thickness,
           left: (startX + endX) / 2 - length / 2,
-          top: (startY + endY) / 2 - 1,
+          opacity,
+          top: (startY + endY) / 2 - thickness / 2,
           transform: [{ rotate: angle }],
           width: length,
         },
@@ -944,22 +980,11 @@ function CourtLine({
   );
 }
 
-function interpolatePoint(
-  from: { readonly x: number; readonly y: number },
-  to: { readonly x: number; readonly y: number },
-  amount: number,
-) {
-  return {
-    x: from.x + (to.x - from.x) * amount,
-    y: from.y + (to.y - from.y) * amount,
-  };
-}
-
 function CourtOverlay({
-  corners,
+  geometry,
   guidance,
 }: {
-  readonly corners?: VisionSettings["corners"];
+  readonly geometry: CourtGeometry;
   readonly guidance?: CaptureGuidance;
 }) {
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -968,25 +993,12 @@ function CourtOverlay({
     setSize({ width, height });
   };
   const color = guidance?.acceptable
-    ? "#67d391"
-    : guidance?.groundPlaneDetected
-      ? "#f7c86b"
+    ? palette.positive
+    : guidance?.groundPlaneDetected || geometry.mode !== "automatic"
+      ? palette.sand
       : "rgba(255,255,255,0.82)";
-  const fallback = [
-    { x: 0.33, y: 0.26 },
-    { x: 0.67, y: 0.26 },
-    { x: 0.92, y: 0.77 },
-    { x: 0.08, y: 0.77 },
-  ] as const;
-  const points =
-    corners?.length === 4
-      ? corners
-      : guidance?.corners?.length === 4
-        ? guidance.corners
-        : fallback;
+  const points = geometry.corners;
   const [topLeft, topRight, bottomRight, bottomLeft] = points;
-  const netLeft = interpolatePoint(topLeft!, bottomLeft!, 0.5);
-  const netRight = interpolatePoint(topRight!, bottomRight!, 0.5);
   const centerFar = interpolatePoint(topLeft!, topRight!, 0.5);
   const centerNear = interpolatePoint(bottomLeft!, bottomRight!, 0.5);
   const courtCenter = interpolatePoint(centerFar, centerNear, 0.5);
@@ -1004,16 +1016,60 @@ function CourtOverlay({
           {points.map((point, index) => (
             <CourtLine
               color={color}
+              dashed={
+                ![
+                  geometry.edgeVisibility.far,
+                  geometry.edgeVisibility.right,
+                  geometry.edgeVisibility.near,
+                  geometry.edgeVisibility.left,
+                ][index]
+              }
               end={points[(index + 1) % points.length]!}
               key={`outside-${index}`}
               size={size}
               start={point}
+              thickness={3}
             />
           ))}
-          <CourtLine color={color} end={netRight} size={size} start={netLeft} />
+          <CourtLine
+            color={color}
+            dashed
+            end={geometry.netLine[1]}
+            opacity={0.72}
+            size={size}
+            start={geometry.netLine[0]}
+          />
+          {geometry.netTopLine && (
+            <CourtLine
+              color={color}
+              end={geometry.netTopLine[1]}
+              size={size}
+              start={geometry.netTopLine[0]}
+              thickness={4}
+            />
+          )}
+          {geometry.netTopLine && geometry.antennaPoints && (
+            <>
+              <CourtLine
+                color={palette.flare}
+                end={geometry.antennaPoints[0]}
+                size={size}
+                start={geometry.netTopLine[0]}
+                thickness={4}
+              />
+              <CourtLine
+                color={palette.flare}
+                end={geometry.antennaPoints[1]}
+                size={size}
+                start={geometry.netTopLine[1]}
+                thickness={4}
+              />
+            </>
+          )}
           <CourtLine
             color={color}
             end={centerNear}
+            opacity={0.42}
             size={size}
             start={centerFar}
           />
@@ -1042,11 +1098,273 @@ function CourtOverlay({
   );
 }
 
+function clampedScreenPoint(point: CapturePoint): CapturePoint {
+  return {
+    x: Math.max(0.035, Math.min(0.965, point.x)),
+    y: Math.max(0.09, Math.min(0.94, point.y)),
+  };
+}
+
+function CalibrationAnchor({
+  label,
+  onMove,
+  point,
+  size,
+  tone = "court",
+}: {
+  readonly label: string;
+  readonly onMove: (point: CapturePoint) => void;
+  readonly point: CapturePoint;
+  readonly size: { readonly width: number; readonly height: number };
+  readonly tone?: "court" | "net" | "antenna";
+}) {
+  const start = useRef(point);
+  start.current = point;
+  const responder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          start.current = point;
+        },
+        onPanResponderMove: (_event, gesture) => {
+          if (size.width <= 0 || size.height <= 0) return;
+          onMove({
+            x: Math.max(
+              -1.5,
+              Math.min(2.5, start.current.x + gesture.dx / size.width),
+            ),
+            y: Math.max(
+              -1.5,
+              Math.min(2.5, start.current.y + gesture.dy / size.height),
+            ),
+          });
+        },
+      }),
+    [onMove, point, size.height, size.width],
+  );
+  const display = clampedScreenPoint(point);
+  const offscreen = !isCapturePointVisible(point);
+  return (
+    <View
+      {...responder.panHandlers}
+      accessibilityLabel={`${label} ${offscreen ? "outside the current frame" : "anchor"}`}
+      accessibilityRole="adjustable"
+      style={[
+        styles.calibrationAnchor,
+        tone === "net" && styles.calibrationAnchorNet,
+        tone === "antenna" && styles.calibrationAnchorAntenna,
+        offscreen && styles.calibrationAnchorOffscreen,
+        {
+          left: display.x * size.width - 23,
+          top: display.y * size.height - 23,
+        },
+      ]}
+    >
+      <View style={styles.calibrationAnchorCore} />
+      <Text style={styles.calibrationAnchorLabel}>
+        {label}
+        {offscreen ? " ↘" : ""}
+      </Text>
+    </View>
+  );
+}
+
+function defaultNetTop(geometry: CourtGeometry): CourtGeometry {
+  const rise = 0.15;
+  const netTopLine = [
+    { x: geometry.netLine[0].x, y: geometry.netLine[0].y - rise },
+    { x: geometry.netLine[1].x, y: geometry.netLine[1].y - rise },
+  ] as const;
+  return {
+    ...geometry,
+    netTopLine,
+    edgeVisibility: edgeVisibility(geometry.corners, netTopLine),
+    mode: "manual",
+  };
+}
+
+function CourtCalibrationEditor({
+  automaticGeometry,
+  geometry,
+  guidance,
+  onCancel,
+  onChange,
+  onSave,
+}: {
+  readonly automaticGeometry: CourtGeometry;
+  readonly geometry: CourtGeometry;
+  readonly guidance?: CaptureGuidance;
+  readonly onCancel: () => void;
+  readonly onChange: (geometry: CourtGeometry) => void;
+  readonly onSave: () => void;
+}) {
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const hasNet = Boolean(geometry.netTopLine);
+  return (
+    <View
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        setSize({ width, height });
+      }}
+      style={styles.calibrationEditor}
+    >
+      <View pointerEvents="none" style={styles.calibrationEditorShade} />
+      <CourtOverlay geometry={geometry} guidance={guidance} />
+      {size.width > 0 &&
+        geometry.corners.map((corner, index) => (
+          <CalibrationAnchor
+            key={`corner-${index}`}
+            label={["FAR L", "FAR R", "NEAR R", "NEAR L"][index]!}
+            onMove={(next) =>
+              onChange(
+                moveCourtCorner(geometry, index as CourtCornerIndex, next),
+              )
+            }
+            point={corner}
+            size={size}
+          />
+        ))}
+      {size.width > 0 &&
+        geometry.netTopLine?.map((anchor, index) => (
+          <CalibrationAnchor
+            key={`net-${index}`}
+            label={index === 0 ? "NET L" : "NET R"}
+            onMove={(next) =>
+              onChange(moveNetTopAnchor(geometry, index as 0 | 1, next))
+            }
+            point={anchor}
+            size={size}
+            tone="net"
+          />
+        ))}
+      {size.width > 0 &&
+        geometry.antennaPoints?.map((anchor, index) => (
+          <CalibrationAnchor
+            key={`antenna-${index}`}
+            label={index === 0 ? "ANT L" : "ANT R"}
+            onMove={(next) =>
+              onChange(moveAntennaAnchor(geometry, index as 0 | 1, next))
+            }
+            point={anchor}
+            size={size}
+            tone="antenna"
+          />
+        ))}
+      <SafeAreaView pointerEvents="box-none" style={styles.calibrationEditorUi}>
+        <View style={styles.calibrationEditorHeader}>
+          <Pressable
+            onPress={onCancel}
+            style={styles.calibrationEditorHeaderButton}
+          >
+            <Text style={styles.calibrationEditorHeaderButtonText}>Cancel</Text>
+          </Pressable>
+          <View style={styles.calibrationEditorHeading}>
+            <Text style={styles.calibrationEditorEyebrow}>
+              COURT CALIBRATION
+            </Text>
+            <Text style={styles.calibrationEditorTitle}>
+              Match the real lines
+            </Text>
+          </View>
+          <Pressable onPress={onSave} style={styles.calibrationEditorSave}>
+            <Text style={styles.calibrationEditorSaveText}>Save</Text>
+          </Pressable>
+        </View>
+        <View style={styles.calibrationEditorBottom}>
+          <Text style={styles.calibrationEditorHelp}>
+            Drag court corners, net tape, and antenna tips. A boundary can sit
+            beyond the screen—Duna keeps its geometry without blocking capture.
+          </Text>
+          <ScrollView
+            contentContainerStyle={styles.calibrationPresetRow}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            <Pressable
+              onPress={() => onChange(automaticGeometry)}
+              style={styles.calibrationPreset}
+            >
+              <Text style={styles.calibrationPresetText}>Auto detect</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => onChange(withNearLineOffscreen(geometry))}
+              style={styles.calibrationPreset}
+            >
+              <Text style={styles.calibrationPresetText}>
+                Near line off-screen
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => onChange(withFullCourtVisible(geometry))}
+              style={styles.calibrationPreset}
+            >
+              <Text style={styles.calibrationPresetText}>
+                All lines visible
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() =>
+                onChange(
+                  hasNet
+                    ? {
+                        ...geometry,
+                        netTopLine: undefined,
+                        antennaPoints: undefined,
+                        edgeVisibility: edgeVisibility(geometry.corners),
+                        mode: "manual",
+                      }
+                    : defaultNetTop(geometry),
+                )
+              }
+              style={[
+                styles.calibrationPreset,
+                hasNet && styles.calibrationPresetSelected,
+              ]}
+            >
+              <Text style={styles.calibrationPresetText}>
+                {hasNet ? "Clear net" : "Mark net top"}
+              </Text>
+            </Pressable>
+            <Pressable
+              disabled={!hasNet}
+              onPress={() =>
+                onChange(toggleAntennas(geometry, !geometry.antennaPoints))
+              }
+              style={[
+                styles.calibrationPreset,
+                geometry.antennaPoints && styles.calibrationPresetSelected,
+                !hasNet && styles.disabled,
+              ]}
+            >
+              <Text style={styles.calibrationPresetText}>Antennas</Text>
+            </Pressable>
+          </ScrollView>
+          <View style={styles.calibrationEditorStatus}>
+            <Text style={styles.calibrationEditorStatusText}>
+              {visibleCornerCount(geometry)}/4 corners visible ·{" "}
+              {hasNet ? "net marked" : "net not marked"}
+            </Text>
+            <Text style={styles.calibrationEditorStatusMeta}>
+              {geometry.mode === "automatic"
+                ? "Automatic"
+                : geometry.mode === "assisted"
+                  ? "Assisted"
+                  : "Manual"}
+            </Text>
+          </View>
+        </View>
+      </SafeAreaView>
+    </View>
+  );
+}
+
 function CaptureExperience({
   client,
   form,
   mode,
   onClose,
+  onFallbackToRecord,
   onFinished,
   onRecorded,
 }: {
@@ -1054,6 +1372,7 @@ function CaptureExperience({
   readonly form: CaptureForm;
   readonly mode: "live" | "record";
   readonly onClose: () => void;
+  readonly onFallbackToRecord: () => void;
   readonly onFinished: () => Promise<void>;
   readonly onRecorded: (
     video: PreparedVideo,
@@ -1074,6 +1393,13 @@ function CaptureExperience({
   );
   const [permissionsReady, setPermissionsReady] = useState(false);
   const [guidance, setGuidance] = useState<CaptureGuidance>();
+  const [automaticGeometry, setAutomaticGeometry] = useState<CourtGeometry>(
+    geometryFromGuidance(undefined),
+  );
+  const [courtGeometry, setCourtGeometry] = useState<CourtGeometry>(
+    geometryFromGuidance(undefined),
+  );
+  const [calibrationDraft, setCalibrationDraft] = useState<CourtGeometry>();
   const [captureError, setCaptureError] = useState<string>();
   const [visionNotice, setVisionNotice] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -1091,6 +1417,7 @@ function CaptureExperience({
   const [visionAccess, setVisionAccess] = useState<VisionSessionAccess>();
   const [visionSession, setVisionSession] = useState<VisionSession>();
   const [visionSettings, setVisionSettings] = useState<VisionSettings>({
+    captureMode: mode,
     courtWidthMeters: form.courtWidthMeters,
     courtLengthMeters: form.courtLengthMeters,
     netHeightMeters: form.netHeightMeters,
@@ -1107,6 +1434,9 @@ function CaptureExperience({
   const permissionRef = useRef(false);
   const sessionRef = useRef<VisionSession | undefined>(undefined);
   const settingsRef = useRef(visionSettings);
+  const geometryRef = useRef(courtGeometry);
+  const guidanceRef = useRef<CaptureGuidance | undefined>(undefined);
+  const manualCalibrationRef = useRef(false);
   const scoreRef = useRef<VisionScore>(initialScore);
   const elapsedRef = useRef(0);
   const captureStartedAtMs = useRef<number | undefined>(undefined);
@@ -1119,6 +1449,8 @@ function CaptureExperience({
 
   sessionRef.current = visionSession;
   settingsRef.current = visionSettings;
+  geometryRef.current = courtGeometry;
+  guidanceRef.current = guidance;
   scoreRef.current = visionScore;
   elapsedRef.current = elapsedSeconds;
   permissionRef.current = permissionsReady;
@@ -1129,6 +1461,20 @@ function CaptureExperience({
     settingsRef.current = next.settings;
     setVisionSession(next);
     setVisionSettings(next.settings);
+    if (next.settings.corners?.length === 4) {
+      const nextGeometry = geometryFromGuidance(guidanceRef.current, {
+        corners: next.settings.corners,
+        netLine: next.settings.netLine,
+        netTopLine: next.settings.netTopLine,
+        antennaPoints: next.settings.antennaPoints,
+        nearLineVisible: next.settings.nearLineVisible,
+        edgeVisibility: next.settings.edgeVisibility,
+        calibrationMode: next.settings.calibrationMode,
+      });
+      manualCalibrationRef.current = nextGeometry.mode !== "automatic";
+      geometryRef.current = nextGeometry;
+      setCourtGeometry(nextGeometry);
+    }
   }, []);
 
   useEffect(() => {
@@ -1224,6 +1570,7 @@ function CaptureExperience({
   const calibration = (): DunaCourtCalibration => {
     const locked = VideoCapture?.lockCalibration();
     const settings = settingsRef.current;
+    const geometry = geometryRef.current;
     const base = locked ?? {
       courtWidthMeters: form.courtWidthMeters,
       courtLengthMeters: form.courtLengthMeters,
@@ -1255,14 +1602,30 @@ function CaptureExperience({
       courtLengthMeters: settings.courtLengthMeters,
       netHeightMeters: settings.netHeightMeters,
       preferredOrientation: form.orientation,
-      corners: settings.corners ?? base.corners,
+      corners: geometry.corners,
+      netLine: geometry.netLine,
+      netTopLine: geometry.netTopLine,
+      antennaPoints: geometry.antennaPoints,
+      visibleCornerCount: visibleCornerCount(geometry),
+      nearLineVisible: geometry.nearLineVisible,
+      partialCourt: visibleCornerCount(geometry) < 4,
+      edgeVisibility: geometry.edgeVisibility,
+      netDetected: Boolean(geometry.netTopLine),
+      antennaDetected: Boolean(geometry.antennaPoints),
+      calibrationMode: geometry.mode,
+      modelVersion: guidance?.modelVersion ?? "court-v2-partial-2026-08-05",
     };
   };
 
   const appendPhoneEvent = async (
-    type: "recording-started" | "favorite" | "recording-stopped",
+    type:
+      | "recording-started"
+      | "favorite"
+      | "recording-stopped"
+      | "calibration-updated",
     label?: string,
     occurredAt = new Date(),
+    payload?: Record<string, unknown>,
   ) => {
     const current = sessionRef.current;
     if (!current) return;
@@ -1281,11 +1644,57 @@ function CaptureExperience({
       occurredAt: occurredAt.toISOString(),
       score: scoreRef.current,
       label,
+      payload,
     };
     await client.player.appendVisionTimelineEvents.mutate({
       sessionId: current.id,
       events: [event],
     });
+  };
+
+  const saveCalibration = async () => {
+    const nextGeometry = calibrationDraft;
+    if (!nextGeometry) return;
+    manualCalibrationRef.current = nextGeometry.mode !== "automatic";
+    geometryRef.current = nextGeometry;
+    setCourtGeometry(nextGeometry);
+    setCalibrationDraft(undefined);
+    const nextSettings: VisionSettings = {
+      ...settingsRef.current,
+      ...geometrySettings(nextGeometry),
+    };
+    settingsRef.current = nextSettings;
+    setVisionSettings(nextSettings);
+    try {
+      if (!sessionRef.current) await visionCreation.current;
+      const current = sessionRef.current;
+      if (current) {
+        const next = await client.player.updateVisionSession.mutate({
+          sessionId: current.id,
+          settings: nextSettings,
+        });
+        updateSessionState(next);
+        await appendPhoneEvent(
+          "calibration-updated",
+          `${nextGeometry.mode} court calibration saved`,
+          new Date(),
+          {
+            ...geometrySettings(nextGeometry),
+            visibleCornerCount: visibleCornerCount(nextGeometry),
+          },
+        );
+      }
+      setVisionNotice(
+        nextGeometry.nearLineVisible
+          ? "Court and net calibration saved."
+          : "Calibration saved with the near line outside the frame.",
+      );
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setVisionNotice(
+        `Calibration is saved on this iPhone but remote sync is waiting: ${displayError(error)}`,
+      );
+    }
   };
 
   const updateVisionStatus = async (
@@ -1331,6 +1740,7 @@ function CaptureExperience({
           liveVisibility: form.liveVisibility,
           recordingVisibility: form.recordingVisibility,
           hasAudio: form.hasAudio,
+          visionLearningConsent: form.contributeCalibration,
           courtCalibration: calibration(),
           idempotencyKey: idempotencyKey(),
         });
@@ -1559,6 +1969,7 @@ function CaptureExperience({
     if (!current || current.status === "expired") return;
     syncVisionSessionToWatch({
       sessionId: current.id,
+      captureMode: mode,
       videoId: current.videoId,
       matchId: current.matchId,
       teamA: visionSettings.teamA,
@@ -1579,6 +1990,7 @@ function CaptureExperience({
     });
   }, [
     matchScoring?.format,
+    mode,
     visionScore,
     visionSession,
     visionSettings.teamA,
@@ -1738,7 +2150,17 @@ function CaptureExperience({
         netHeightMeters={visionSettings.netHeightMeters}
         preferredOrientation={form.orientation}
         onCaptureError={(event) => setCaptureError(event.nativeEvent.message)}
-        onGuidance={(event) => setGuidance(event.nativeEvent)}
+        onGuidance={(event) => {
+          const next = event.nativeEvent;
+          const detected = geometryFromGuidance(next);
+          guidanceRef.current = next;
+          setGuidance(next);
+          setAutomaticGeometry(detected);
+          if (!manualCalibrationRef.current && !calibrationDraft) {
+            geometryRef.current = detected;
+            setCourtGeometry(detected);
+          }
+        }}
         onPreview={(event) =>
           uploadPreview(
             event.nativeEvent.jpegBase64,
@@ -1754,7 +2176,7 @@ function CaptureExperience({
         }}
         style={StyleSheet.absoluteFill}
       />
-      <CourtOverlay corners={visionSettings.corners} guidance={guidance} />
+      <CourtOverlay geometry={courtGeometry} guidance={guidance} />
       {visionSettings.overlayScoreboard && (matchId || isActive) && (
         <VisionScoreboard
           compact
@@ -1781,7 +2203,9 @@ function CaptureExperience({
                   ? `LIVE · ${formatDuration(elapsedSeconds)}`
                   : streamState === "connecting"
                     ? "CONNECTING"
-                    : "COURT ALIGNMENT"}
+                    : mode === "live"
+                      ? "LIVE SETUP"
+                      : "DUNA RECORD SETUP"}
             </Text>
           </View>
           <Pressable
@@ -1814,7 +2238,7 @@ function CaptureExperience({
                 <Text
                   style={[
                     styles.guidanceGrade,
-                    guidance?.acceptable && { color: "#67d391" },
+                    guidance?.acceptable && { color: palette.positive },
                   ]}
                 >
                   {guidance
@@ -1827,20 +2251,61 @@ function CaptureExperience({
               </View>
               <Text style={styles.guidanceWarning}>
                 {guidance?.warnings[0] ??
-                  "Keep the four corners, net line, and both service areas visible."}
+                  "Point at the court and net. Missing boundary lines will not block capture."}
               </Text>
               <Text style={styles.guidanceNote}>
                 {guidance?.projectionSource === "lidar"
-                  ? "LiDAR ground lock · court bounds adjust as you move"
+                  ? "LiDAR ground lock · Duna keeps off-screen court geometry"
                   : guidance?.groundPlaneDetected
-                    ? "Ground lock · move gradually while Duna refines the court"
+                    ? "Ground lock · move gradually or adjust the landmarks yourself"
                     : "Point toward the sand and move slowly to find the ground plane"}
               </Text>
+              <View style={styles.guidanceSignals}>
+                <View style={styles.guidanceSignal}>
+                  <Text style={styles.guidanceSignalText}>
+                    {guidance?.groundPlaneDetected ? "✓ Ground" : "○ Ground"}
+                  </Text>
+                </View>
+                <View style={styles.guidanceSignal}>
+                  <Text style={styles.guidanceSignalText}>
+                    {courtGeometry.netTopLine ? "✓ Net" : "○ Net"}
+                  </Text>
+                </View>
+                <View style={styles.guidanceSignal}>
+                  <Text style={styles.guidanceSignalText}>
+                    {visibleCornerCount(courtGeometry)}/4 corners visible
+                  </Text>
+                </View>
+              </View>
+              <Pressable
+                onPress={() => setCalibrationDraft(courtGeometry)}
+                style={styles.adjustCalibrationButton}
+              >
+                <Text style={styles.adjustCalibrationButtonText}>
+                  Adjust court, net + antennas
+                </Text>
+              </Pressable>
+              {!courtGeometry.nearLineVisible && (
+                <Text style={styles.partialCourtNote}>
+                  Near line is outside the frame. Recording remains available;
+                  advanced trajectory confidence may be lower.
+                </Text>
+              )}
             </View>
           )}
           {!!captureError && (
             <View style={styles.captureError}>
               <Text style={styles.captureErrorText}>{captureError}</Text>
+              {mode === "live" && (
+                <Pressable
+                  onPress={onFallbackToRecord}
+                  style={styles.captureFallbackButton}
+                >
+                  <Text style={styles.captureFallbackButtonText}>
+                    Record with Duna instead
+                  </Text>
+                </Pressable>
+              )}
             </View>
           )}
           {!!visionNotice && (
@@ -1919,6 +2384,16 @@ function CaptureExperience({
           </Pressable>
         </View>
       </SafeAreaView>
+      {calibrationDraft && !isActive && (
+        <CourtCalibrationEditor
+          automaticGeometry={automaticGeometry}
+          geometry={calibrationDraft}
+          guidance={guidance}
+          onCancel={() => setCalibrationDraft(undefined)}
+          onChange={setCalibrationDraft}
+          onSave={() => void saveCalibration()}
+        />
+      )}
       <Modal
         animationType="fade"
         onRequestClose={() => setShowRemote(false)}
@@ -1950,7 +2425,8 @@ function CaptureExperience({
             <Text style={styles.remoteBody}>
               A trusted second device can align court corners, set heights,
               confirm teams, watch the low-resolution preview, and start or end
-              this recording. The link expires automatically.
+              this {mode === "live" ? "live stream" : "recording"}. The link
+              expires automatically.
             </Text>
             {visionAccess ? (
               <View style={styles.qrFrame}>
@@ -2290,7 +2766,6 @@ export function VideoStudioScreen({
   const [preparedCalibration, setPreparedCalibration] =
     useState<DunaCourtCalibration>();
   const [preparingVideo, setPreparingVideo] = useState(false);
-  const [showUploadChoices, setShowUploadChoices] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedVideo, setSelectedVideo] = useState<VideoSummary>();
@@ -2360,7 +2835,6 @@ export function VideoStudioScreen({
   };
 
   const chooseLibrary = async () => {
-    setShowUploadChoices(false);
     if (!VideoCapture) {
       setError("Video upload requires the Duna iOS app.");
       return;
@@ -2387,7 +2861,6 @@ export function VideoStudioScreen({
   };
 
   const recordNew = () => {
-    setShowUploadChoices(false);
     setPreparedVideo(undefined);
     setVisionSessionId(undefined);
     setPreparedCalibration(undefined);
@@ -2415,6 +2888,7 @@ export function VideoStudioScreen({
         recordingVisibility: form.recordingVisibility,
         publishedToProfile: form.publishedToProfile,
         hasAudio: form.hasAudio,
+        visionLearningConsent: form.contributeCalibration,
         originalFileName: preparedVideo.fileName,
         mimeType: preparedVideo.mimeType,
         bytes: preparedVideo.bytes,
@@ -2513,8 +2987,9 @@ export function VideoStudioScreen({
             </View>
           </View>
           <Text style={styles.heroBody}>
-            Stream a match, build a private practice archive, and choose exactly
-            what becomes public.
+            Choose how you want to capture. Both Duna recording and live mode
+            keep Apple Watch scoring, favorite moments, overlays, and the remote
+            camera preview in sync.
           </Text>
           {entitlement?.kind === "complimentary" && (
             <View style={styles.complimentaryBadge}>
@@ -2529,31 +3004,73 @@ export function VideoStudioScreen({
               available on the Duna web experience.
             </Text>
           )}
-          <View style={styles.heroActions}>
+          <View style={styles.captureChoiceStack}>
+            <Pressable
+              disabled={!isIos || !client}
+              onPress={recordNew}
+              style={[
+                styles.captureChoiceCard,
+                styles.captureChoiceCardRecord,
+                (!isIos || !client) && styles.disabled,
+              ]}
+            >
+              <View style={styles.captureChoiceIcon}>
+                <View style={styles.captureChoiceRecordCore} />
+              </View>
+              <View style={styles.captureChoiceCopy}>
+                <View style={styles.captureChoiceHeading}>
+                  <Text style={styles.captureChoiceTitle}>
+                    Record with Duna
+                  </Text>
+                  <Text style={styles.captureChoiceBadge}>PRIVATE FIRST</Text>
+                </View>
+                <Text style={styles.captureChoiceBody}>
+                  Save full-quality video to your Duna archive while your Watch
+                  scores, marks highlights, and checks the camera.
+                </Text>
+              </View>
+            </Pressable>
             <Pressable
               disabled={!isIos || !client || !canBroadcast}
               onPress={openLive}
               style={[
-                styles.goLiveButton,
+                styles.captureChoiceCard,
+                styles.captureChoiceCardLive,
                 (!isIos || !client || !canBroadcast) && styles.disabled,
               ]}
             >
-              <View style={styles.liveButtonDot} />
-              <Text style={styles.goLiveText}>
-                {canBroadcast ? "Go Live" : "Plan required to go live"}
-              </Text>
-            </Pressable>
-            <Pressable
-              disabled={!isIos || !client}
-              onPress={() => setShowUploadChoices(true)}
-              style={[
-                styles.uploadButton,
-                (!isIos || !client) && styles.disabled,
-              ]}
-            >
-              <Text style={styles.uploadButtonText}>Upload video</Text>
+              <View style={styles.captureChoiceIconLive}>
+                <View style={styles.liveButtonDot} />
+              </View>
+              <View style={styles.captureChoiceCopy}>
+                <View style={styles.captureChoiceHeading}>
+                  <Text style={styles.captureChoiceTitleLight}>Go Live</Text>
+                  <Text style={styles.captureChoiceBadgeLight}>
+                    {canBroadcast ? "PREMIUM+" : "PLAN REQUIRED"}
+                  </Text>
+                </View>
+                <Text style={styles.captureChoiceBodyLight}>
+                  Broadcast now with the same Watch controls and decide who can
+                  watch live and after the match.
+                </Text>
+              </View>
             </Pressable>
           </View>
+          <Pressable
+            disabled={!isIos || !client}
+            onPress={() => void chooseLibrary()}
+            style={[
+              styles.libraryButton,
+              (!isIos || !client) && styles.disabled,
+            ]}
+          >
+            <Text style={styles.libraryButtonText}>
+              Upload an existing video
+            </Text>
+            <Text style={styles.libraryButtonMeta}>
+              From your iPhone library
+            </Text>
+          </Pressable>
         </View>
 
         {!!error && (
@@ -2742,10 +3259,15 @@ export function VideoStudioScreen({
           <CaptureExperience
             client={client}
             form={form}
+            key={captureMode}
             mode={captureMode}
             onClose={() => {
               VideoCapture?.releasePreview();
               setCaptureMode(undefined);
+            }}
+            onFallbackToRecord={() => {
+              VideoCapture?.releasePreview();
+              setCaptureMode("record");
             }}
             onFinished={load}
             onRecorded={(video, calibration, nextVisionSessionId) => {
@@ -2758,42 +3280,6 @@ export function VideoStudioScreen({
             }}
           />
         )}
-      </Modal>
-
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setShowUploadChoices(false)}
-        transparent
-        visible={showUploadChoices}
-      >
-        <Pressable
-          onPress={() => setShowUploadChoices(false)}
-          style={styles.sheetBackdrop}
-        >
-          <Pressable style={styles.sheet}>
-            <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>Add a video</Text>
-            <Text style={styles.sheetBody}>
-              Record with court guidance or choose an existing video. Both
-              upload directly to your private Duna archive in Cloudflare R2.
-            </Text>
-            <Pressable onPress={recordNew} style={styles.sheetActionPrimary}>
-              <Text style={styles.sheetActionPrimaryText}>
-                Record with Duna
-              </Text>
-              <Text style={styles.sheetActionMeta}>Vision court guide</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => void chooseLibrary()}
-              style={styles.sheetAction}
-            >
-              <Text style={styles.sheetActionText}>Choose from library</Text>
-              <Text style={styles.sheetActionMeta}>
-                Converted to web-ready MP4
-              </Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
       </Modal>
 
       {selectedVideo && client && (
@@ -2867,38 +3353,103 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
-  complimentaryText: { color: "#8cece5", fontSize: 11, fontWeight: "800" },
-  iosNote: { color: "#f7c86b", fontSize: 12, lineHeight: 18 },
-  heroActions: { flexDirection: "row", gap: 10 },
-  goLiveButton: {
+  complimentaryText: { color: palette.sand, fontSize: 11, fontWeight: "800" },
+  iosNote: { color: palette.sand, fontSize: 12, lineHeight: 18 },
+  captureChoiceStack: { gap: 10 },
+  captureChoiceCard: {
     alignItems: "center",
-    backgroundColor: palette.flare,
-    borderRadius: 14,
-    flex: 1,
+    borderRadius: 18,
     flexDirection: "row",
-    gap: 8,
+    gap: 13,
+    minHeight: 112,
+    padding: 15,
+  },
+  captureChoiceCardRecord: {
+    backgroundColor: "#ffffff",
+    borderColor: "rgba(61,102,114,0.45)",
+    borderWidth: 1,
+  },
+  captureChoiceCardLive: { backgroundColor: palette.flare },
+  captureChoiceIcon: {
+    alignItems: "center",
+    backgroundColor: palette.aquaSoft,
+    borderRadius: 25,
+    height: 50,
     justifyContent: "center",
-    minHeight: 48,
-    paddingHorizontal: 14,
+    width: 50,
+  },
+  captureChoiceIconLive: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 25,
+    height: 50,
+    justifyContent: "center",
+    width: 50,
+  },
+  captureChoiceRecordCore: {
+    backgroundColor: palette.aqua,
+    borderRadius: 11,
+    height: 22,
+    width: 22,
   },
   liveButtonDot: {
     backgroundColor: "#ffffff",
-    borderRadius: 5,
-    height: 10,
-    width: 10,
+    borderRadius: 9,
+    height: 18,
+    width: 18,
   },
-  goLiveText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
-  uploadButton: {
+  captureChoiceCopy: { flex: 1, gap: 6 },
+  captureChoiceHeading: {
     alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  captureChoiceTitle: { color: palette.ink, fontSize: 17, fontWeight: "900" },
+  captureChoiceTitleLight: {
+    color: "#ffffff",
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  captureChoiceBadge: {
+    backgroundColor: palette.aquaSoft,
+    borderRadius: 10,
+    color: palette.navy,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+    overflow: "hidden",
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
+  captureChoiceBadgeLight: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 10,
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+    overflow: "hidden",
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
+  captureChoiceBody: { color: palette.muted, fontSize: 11, lineHeight: 16 },
+  captureChoiceBodyLight: {
+    color: "rgba(255,255,255,0.88)",
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  libraryButton: {
     borderColor: "rgba(255,255,255,0.36)",
     borderRadius: 14,
     borderWidth: 1,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 48,
-    paddingHorizontal: 14,
+    gap: 2,
+    minHeight: 54,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
   },
-  uploadButtonText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
+  libraryButtonText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
+  libraryButtonMeta: { color: "rgba(255,255,255,0.65)", fontSize: 10 },
   disabled: { opacity: 0.42 },
   errorCard: {
     alignItems: "center",
@@ -3282,6 +3833,147 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: "3%",
   },
+  calibrationEditor: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 20,
+  },
+  calibrationEditorShade: {
+    backgroundColor: "rgba(0,0,0,0.2)",
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
+  calibrationEditorUi: {
+    flex: 1,
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  calibrationEditorHeader: {
+    alignItems: "center",
+    backgroundColor: "rgba(3,9,12,0.82)",
+    borderColor: "rgba(255,255,255,0.2)",
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 62,
+    padding: 9,
+  },
+  calibrationEditorHeaderButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    minWidth: 58,
+  },
+  calibrationEditorHeaderButtonText: {
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  calibrationEditorHeading: { alignItems: "center", flex: 1 },
+  calibrationEditorEyebrow: {
+    color: palette.sand,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+  },
+  calibrationEditorTitle: { color: "#ffffff", fontSize: 15, fontWeight: "900" },
+  calibrationEditorSave: {
+    alignItems: "center",
+    backgroundColor: palette.aqua,
+    borderRadius: 13,
+    justifyContent: "center",
+    minHeight: 44,
+    minWidth: 58,
+  },
+  calibrationEditorSaveText: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  calibrationEditorBottom: {
+    backgroundColor: "rgba(3,9,12,0.88)",
+    borderColor: "rgba(255,255,255,0.22)",
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 10,
+    padding: 13,
+  },
+  calibrationEditorHelp: {
+    color: "rgba(255,255,255,0.82)",
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  calibrationPresetRow: { gap: 8, paddingRight: 12 },
+  calibrationPreset: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderColor: "rgba(255,255,255,0.2)",
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 46,
+    paddingHorizontal: 13,
+  },
+  calibrationPresetSelected: {
+    backgroundColor: "rgba(61,102,114,0.22)",
+    borderColor: palette.aqua,
+  },
+  calibrationPresetText: { color: "#ffffff", fontSize: 10, fontWeight: "800" },
+  calibrationEditorStatus: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  calibrationEditorStatusText: {
+    color: palette.sand,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  calibrationEditorStatusMeta: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 10,
+  },
+  calibrationAnchor: {
+    alignItems: "center",
+    backgroundColor: "rgba(201,169,106,0.24)",
+    borderColor: palette.sand,
+    borderRadius: 23,
+    borderWidth: 2,
+    height: 46,
+    justifyContent: "center",
+    position: "absolute",
+    width: 46,
+    zIndex: 24,
+  },
+  calibrationAnchorNet: {
+    backgroundColor: "rgba(61,102,114,0.24)",
+    borderColor: palette.aqua,
+  },
+  calibrationAnchorAntenna: {
+    backgroundColor: "rgba(232,104,58,0.25)",
+    borderColor: palette.flare,
+  },
+  calibrationAnchorOffscreen: { borderStyle: "dashed" },
+  calibrationAnchorCore: {
+    backgroundColor: "#ffffff",
+    borderRadius: 5,
+    height: 10,
+    width: 10,
+  },
+  calibrationAnchorLabel: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "900",
+    marginTop: 2,
+  },
   courtOverlay: {
     bottom: "24%",
     left: "8%",
@@ -3359,7 +4051,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 58,
   },
-  remoteButtonIcon: { color: "#8cece5", fontSize: 15, fontWeight: "900" },
+  remoteButtonIcon: { color: palette.sand, fontSize: 15, fontWeight: "900" },
   remoteButtonText: {
     color: "#ffffff",
     fontSize: 10,
@@ -3399,8 +4091,8 @@ const styles = StyleSheet.create({
   },
   orientationWarning: {
     alignItems: "center",
-    backgroundColor: "rgba(247,200,107,0.15)",
-    borderColor: "rgba(247,200,107,0.7)",
+    backgroundColor: "rgba(201,169,106,0.15)",
+    borderColor: "rgba(201,169,106,0.7)",
     borderRadius: 13,
     borderWidth: 1,
     flexDirection: "row",
@@ -3409,7 +4101,7 @@ const styles = StyleSheet.create({
     padding: 11,
   },
   orientationWarningIcon: {
-    color: "#f7c86b",
+    color: palette.sand,
     fontSize: 24,
     fontWeight: "900",
   },
@@ -3430,13 +4122,55 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  guidanceGrade: { color: "#f7c86b", flex: 1, fontSize: 11, fontWeight: "800" },
+  guidanceGrade: {
+    color: palette.sand,
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "800",
+  },
   guidanceScore: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
   guidanceWarning: { color: "#ffffff", fontSize: 13, fontWeight: "700" },
   guidanceNote: {
     color: "rgba(255,255,255,0.66)",
     fontSize: 10,
     lineHeight: 14,
+  },
+  guidanceSignals: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 3,
+  },
+  guidanceSignal: {
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 9,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  guidanceSignalText: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  adjustCalibrationButton: {
+    alignItems: "center",
+    borderColor: "rgba(201,169,106,0.66)",
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: "center",
+    marginTop: 3,
+    minHeight: 44,
+  },
+  adjustCalibrationButtonText: {
+    color: palette.sand,
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  partialCourtNote: {
+    color: palette.sand,
+    fontSize: 10,
+    lineHeight: 13,
+    marginTop: 2,
   },
   captureError: {
     alignSelf: "stretch",
@@ -3445,6 +4179,19 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   captureErrorText: { color: "#ffffff", fontSize: 11, textAlign: "center" },
+  captureFallbackButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderRadius: 11,
+    justifyContent: "center",
+    marginTop: 9,
+    minHeight: 44,
+  },
+  captureFallbackButtonText: {
+    color: "#7f1d1d",
+    fontSize: 10,
+    fontWeight: "900",
+  },
   visionNotice: {
     alignSelf: "stretch",
     backgroundColor: "rgba(19,58,103,0.88)",
@@ -3483,7 +4230,7 @@ const styles = StyleSheet.create({
     minHeight: 42,
     paddingHorizontal: 14,
   },
-  favoriteMomentStar: { color: "#f7c86b", fontSize: 19 },
+  favoriteMomentStar: { color: palette.sand, fontSize: 19 },
   favoriteMomentText: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
   remoteStatusPill: {
     alignItems: "center",
@@ -3502,11 +4249,11 @@ const styles = StyleSheet.create({
     height: 8,
     width: 8,
   },
-  remoteStatusDotLive: { backgroundColor: "#67d391" },
+  remoteStatusDotLive: { backgroundColor: palette.positive },
   remoteStatusText: { color: "#ffffff", fontSize: 10, fontWeight: "800" },
   captureButton: {
     alignItems: "center",
-    backgroundColor: "rgba(222,104,66,0.94)",
+    backgroundColor: "rgba(232,104,58,0.94)",
     borderColor: "#ffffff",
     borderRadius: 32,
     borderWidth: 2,
@@ -3548,7 +4295,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   visionScoreBrand: {
-    color: "#8cece5",
+    color: palette.sand,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.2,
@@ -3562,7 +4309,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   visionServeDot: {
-    backgroundColor: "#67d391",
+    backgroundColor: palette.positive,
     borderRadius: 3,
     height: 6,
     width: 6,

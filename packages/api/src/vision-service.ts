@@ -4,6 +4,7 @@ import {
   getDatabase,
   matches,
   videos,
+  visionCalibrationSamples,
   visionSessions,
   visionTimelineEvents,
 } from "@duna/db";
@@ -409,7 +410,13 @@ export async function attachVisionSessionToVideo(input: {
   const [session, video] = await Promise.all([
     ownedSession(input.actor.personId, input.sessionId),
     database.query.videos.findFirst({
-      columns: { id: true, matchId: true, ownerPersonId: true },
+      columns: {
+        id: true,
+        matchId: true,
+        ownerPersonId: true,
+        courtCalibration: true,
+        visionLearningConsent: true,
+      },
       where: and(
         eq(videos.id, input.videoId),
         eq(videos.ownerPersonId, input.actor.personId),
@@ -427,6 +434,34 @@ export async function attachVisionSessionToVideo(input: {
       updatedAt: input.now,
     })
     .where(eq(visionSessions.id, session.id));
+  if (video.visionLearningConsent) {
+    const calibration = video.courtCalibration;
+    await database
+      .insert(visionCalibrationSamples)
+      .values({
+        videoId: video.id,
+        sessionId: session.id,
+        ownerPersonId: video.ownerPersonId,
+        sourceModelVersion: calibration?.modelVersion,
+        qualityScore: calibration?.qualityScore,
+        geometry: calibration ? { ...calibration } : { ...session.settings },
+        previewCapturedAt: session.previewCapturedAt,
+        status: "pending",
+        createdAt: input.now,
+        updatedAt: input.now,
+      })
+      .onConflictDoNothing({ target: visionCalibrationSamples.videoId });
+    await recordAudit({
+      actorPersonId: input.actor.personId,
+      action: "vision.calibration-sample-queued",
+      entityId: session.id,
+      reason:
+        "Player consented to a human-reviewed court calibration example; no automatic model training was started.",
+      requestId: input.requestId,
+      ipAddress: input.ipAddress,
+      now: input.now,
+    });
+  }
   await recordAudit({
     actorPersonId: input.actor.personId,
     action: "vision.video-attached",

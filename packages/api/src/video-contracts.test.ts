@@ -11,6 +11,7 @@ import {
 } from "./contracts";
 import {
   buildMuxLiveStreamInput,
+  isMuxLivePlanUnavailable,
   isMuxSignedPlaybackConfigured,
   isMuxVideoConfigured,
   isR2VideoConfigured,
@@ -171,7 +172,7 @@ describe("Duna Video contracts", () => {
     ).toThrow();
   });
 
-  it("keeps remote calibration normalized and explicitly controls score overlays", () => {
+  it("keeps bounded off-screen calibration and explicitly controls score overlays", () => {
     const settings = visionSessionSettingsSchema.parse({
       courtWidthMeters: 8,
       courtLengthMeters: 16,
@@ -191,11 +192,23 @@ describe("Duna Video contracts", () => {
       overlayScoreboard: true,
       cameraHeightMeters: 2.1,
     });
+    const partial = visionSessionSettingsSchema.parse({
+      ...settings,
+      nearLineVisible: false,
+      calibrationMode: "assisted",
+      corners: settings.corners?.map((corner, index) =>
+        index >= 2 ? { x: corner.x, y: 1.14 } : corner,
+      ),
+    });
+    expect(partial).toMatchObject({
+      nearLineVisible: false,
+      calibrationMode: "assisted",
+    });
     expect(() =>
       visionSessionSettingsSchema.parse({
-        ...settings,
-        corners: settings.corners?.map((corner, index) =>
-          index === 0 ? { x: -0.1, y: corner.y } : corner,
+        ...partial,
+        corners: partial.corners?.map((corner, index) =>
+          index === 0 ? { x: -2, y: corner.y } : corner,
         ),
       }),
     ).toThrow();
@@ -260,6 +273,19 @@ describe("Duna Video contracts", () => {
       activeStreams: [],
       topUsage: [],
       grants: [],
+      visionLearning: {
+        automaticTraining: false,
+        reviewRequired: true,
+        counts: {
+          pending: 0,
+          approved: 0,
+          rejected: 0,
+          training: 0,
+          trained: 0,
+        },
+        insightFeedback: { helpful: 0, notHelpful: 0 },
+        calibrationSamples: [],
+      },
       muxConfigured: false,
       r2Configured: true,
     });
@@ -324,5 +350,22 @@ describe("Duna Video provider readiness", () => {
       },
     });
     expect(built.request.new_asset_settings).not.toHaveProperty("passthrough");
+  });
+
+  it("recognizes the Mux free-plan live gate without treating other 400s as it", () => {
+    expect(
+      isMuxLivePlanUnavailable({
+        status: 400,
+        error: {
+          type: "invalid_parameters",
+          messages: ["Live streams are unavailable on the free plan"],
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isMuxLivePlanUnavailable(
+        new Error("Mux rejected an invalid playback policy"),
+      ),
+    ).toBe(false);
   });
 });
