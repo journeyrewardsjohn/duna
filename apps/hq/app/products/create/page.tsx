@@ -5,10 +5,10 @@ export const metadata = { title: "Create a product" };
 export default function CreateProductPage() {
   return (
     <OperatorCreatePage
-      description="Use a purpose-built path for a service, plan, or good. Events now stay in the dedicated event builder."
-      eyebrow="Products · focused workspace"
+      description="Choose a guided path for a bookable service, customer plan, or physical good. Duna keeps the result private until you are ready to review it."
+      eyebrow="Products · Offer studio"
       module="products"
-      title="Add a service, plan, or good."
+      title="Create an offer."
     />
   );
 }

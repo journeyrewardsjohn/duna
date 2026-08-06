@@ -21,6 +21,12 @@ export async function OperatorCreatePage({
     caller.operator.dashboard(),
     caller.operator.workspace(),
   ]);
+  const moduleLabel =
+    module === "members"
+      ? "people"
+      : module === "messages"
+        ? "marketing"
+        : module;
   return (
     <OperatorShell
       active={module}
@@ -29,15 +35,15 @@ export async function OperatorCreatePage({
     >
       <main className="hq-page operator-create-page">
         <header className="hq-page-heading operator-create-page__heading">
-          <div>
-            <Link href={`/${module}`}>
-              <ArrowLeft aria-hidden size={16} /> Back to{" "}
-              {module === "members"
-                ? "people"
-                : module === "messages"
-                  ? "marketing"
-                  : module}
-            </Link>
+          <Link
+            aria-label={`Back to ${moduleLabel}`}
+            className="operator-create-page__back"
+            href={`/${module}`}
+            title={`Back to ${moduleLabel}`}
+          >
+            <ArrowLeft aria-hidden size={20} />
+          </Link>
+          <div className="operator-create-page__copy">
             <span className="hq-eyebrow">{eyebrow}</span>
             <h1>{title}</h1>
             <p>{description}</p>
