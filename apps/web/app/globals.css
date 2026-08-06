@@ -19951,6 +19951,7 @@ a.play-day__booking {
   .pro-match-hero[data-zone="athletic"] {
     padding-left: 0.8rem;
     padding-right: 0.8rem;
+    padding-top: calc(6.75rem + env(safe-area-inset-top));
   }
 
   .pro-match-hero[data-zone="athletic"] h1 {
