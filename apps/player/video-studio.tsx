@@ -3415,7 +3415,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#eaf8f7",
     borderRadius: 10,
     color: palette.navy,
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.7,
     overflow: "hidden",
@@ -3426,7 +3426,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.2)",
     borderRadius: 10,
     color: "#ffffff",
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.7,
     overflow: "hidden",
@@ -3880,7 +3880,7 @@ const styles = StyleSheet.create({
   calibrationEditorHeading: { alignItems: "center", flex: 1 },
   calibrationEditorEyebrow: {
     color: "#8cece5",
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.1,
   },
@@ -3937,7 +3937,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
   },
-  calibrationEditorStatusMeta: { color: "rgba(255,255,255,0.6)", fontSize: 9 },
+  calibrationEditorStatusMeta: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 10,
+  },
   calibrationAnchor: {
     alignItems: "center",
     backgroundColor: "rgba(247,200,107,0.24)",
@@ -3967,7 +3970,7 @@ const styles = StyleSheet.create({
   },
   calibrationAnchorLabel: {
     color: "#ffffff",
-    fontSize: 7,
+    fontSize: 10,
     fontWeight: "900",
     marginTop: 2,
   },
@@ -4141,7 +4144,7 @@ const styles = StyleSheet.create({
   },
   guidanceSignalText: {
     color: "rgba(255,255,255,0.85)",
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "800",
   },
   adjustCalibrationButton: {
@@ -4160,7 +4163,7 @@ const styles = StyleSheet.create({
   },
   partialCourtNote: {
     color: "#f7c86b",
-    fontSize: 9,
+    fontSize: 10,
     lineHeight: 13,
     marginTop: 2,
   },
