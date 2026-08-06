@@ -1,5 +1,6 @@
 import { normalizePersonName } from "./normalize";
 import { scrapeHtml, scrapeJson } from "./http";
+import type { ExternalMatchRecord } from "./types";
 
 const volleyballWorldOrigin = "https://en.volleyballworld.com";
 const volleyballWorldLiveOrigin = "https://en-live.volleyballworld.com";
@@ -394,6 +395,225 @@ export function parseVolleyballWorldSchedule(
     ];
   });
   return { matches, teams };
+}
+
+export interface OfficialFivbRosterCandidate {
+  readonly teamNo?: number;
+  readonly countryCode?: string;
+  readonly provisional?: boolean;
+  readonly participants: readonly {
+    readonly externalPersonId: string;
+    readonly name: string;
+    readonly personId?: string;
+  }[];
+}
+
+export function officialFivbPhase(
+  value: string | undefined,
+): "main-draw" | "qualification" | undefined {
+  const normalized = normalizePersonName(value ?? "");
+  if (normalized.includes("qualification")) return "qualification";
+  if (normalized.includes("main draw")) return "main-draw";
+  return undefined;
+}
+
+function officialRosterNameScore(
+  officialName: string,
+  candidateName: string,
+): number {
+  const official = normalizePersonName(officialName);
+  const candidate = normalizePersonName(candidateName);
+  if (!official || !candidate) return 0;
+  if (official === candidate) return 100;
+  if (candidate.includes(official)) return 90;
+  if (official.includes(candidate)) return 80;
+  const officialParts = official.split(" ");
+  const candidateParts = candidate.split(" ");
+  const lastName = officialParts.at(-1);
+  if (!lastName || !candidateParts.includes(lastName)) return 0;
+  return officialParts[0] === candidateParts[0] ? 70 : 55;
+}
+
+function officialRosterCandidateScore(input: {
+  readonly team: VolleyballWorldTeam;
+  readonly candidate: OfficialFivbRosterCandidate;
+}): number {
+  if (input.candidate.participants.length !== 2) return -Infinity;
+  if (
+    input.team.countryCode &&
+    input.candidate.countryCode &&
+    input.team.countryCode.toUpperCase() !==
+      input.candidate.countryCode.toUpperCase()
+  ) {
+    return -Infinity;
+  }
+  const officialNames = input.team.name
+    .split("/")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  if (officialNames.length !== 2) return -Infinity;
+  const [first, second] = input.candidate.participants;
+  if (!first || !second) return -Infinity;
+  const direct = [
+    officialRosterNameScore(officialNames[0] ?? "", first.name),
+    officialRosterNameScore(officialNames[1] ?? "", second.name),
+  ];
+  const swapped = [
+    officialRosterNameScore(officialNames[0] ?? "", second.name),
+    officialRosterNameScore(officialNames[1] ?? "", first.name),
+  ];
+  const nameScore = Math.max(
+    direct.every((score) => score > 0)
+      ? direct.reduce((total, score) => total + score, 0)
+      : -Infinity,
+    swapped.every((score) => score > 0)
+      ? swapped.reduce((total, score) => total + score, 0)
+      : -Infinity,
+  );
+  if (!Number.isFinite(nameScore)) return -Infinity;
+  return (
+    nameScore +
+    (input.candidate.teamNo === input.team.teamNo &&
+    !input.candidate.provisional
+      ? 10_000
+      : 0) +
+    (input.team.countryCode && input.candidate.countryCode ? 100 : 0) -
+    (input.candidate.provisional ? 50 : 0)
+  );
+}
+
+export function officialFivbTeamRoster(input: {
+  readonly team: VolleyballWorldTeam;
+  readonly candidates: readonly OfficialFivbRosterCandidate[];
+}): OfficialFivbRosterCandidate["participants"] | undefined {
+  const ranked = input.candidates
+    .map((candidate) => ({
+      candidate,
+      score: officialRosterCandidateScore({ team: input.team, candidate }),
+      key: candidate.participants
+        .map((participant) => participant.externalPersonId)
+        .sort()
+        .join(":"),
+    }))
+    .filter(({ score }) => Number.isFinite(score))
+    .sort((left, right) => right.score - left.score);
+  const best = ranked[0];
+  if (!best) return undefined;
+  if (
+    ranked.some(
+      (candidate, index) =>
+        index > 0 &&
+        candidate.score === best.score &&
+        candidate.key !== best.key,
+    )
+  ) {
+    return undefined;
+  }
+  return best.candidate.participants;
+}
+
+function fallbackOfficialFivbRoster(
+  team: VolleyballWorldTeam,
+): OfficialFivbRosterCandidate["participants"] | undefined {
+  const names = team.name
+    .split("/")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  return names.length === 2
+    ? names.map((name, index) => ({
+        externalPersonId: `volleyball-world-team-${team.teamNo}-player-${index + 1}`,
+        name,
+      }))
+    : undefined;
+}
+
+function officialRoundLabel(match: {
+  readonly phase?: string;
+  readonly roundName?: string;
+}): string | undefined {
+  const labels = [match.phase, match.roundName].filter(Boolean);
+  return labels.length > 0 ? [...new Set(labels)].join(" - ") : undefined;
+}
+
+export function buildOfficialFivbMatchRecord(input: {
+  readonly eventExternalId: string;
+  readonly eventName: string;
+  readonly eventGender: "men" | "women" | "coed";
+  readonly scheduled: VolleyballWorldScheduledMatch;
+  readonly teamA: VolleyballWorldTeam;
+  readonly teamB: VolleyballWorldTeam;
+  readonly rosterCandidates: readonly OfficialFivbRosterCandidate[];
+}): ExternalMatchRecord | undefined {
+  const phase = officialFivbPhase(input.scheduled.phase);
+  if (!phase) return undefined;
+  const rosterA =
+    officialFivbTeamRoster({
+      team: input.teamA,
+      candidates: input.rosterCandidates,
+    }) ?? fallbackOfficialFivbRoster(input.teamA);
+  const rosterB =
+    officialFivbTeamRoster({
+      team: input.teamB,
+      candidates: input.rosterCandidates,
+    }) ?? fallbackOfficialFivbRoster(input.teamB);
+  if (!rosterA || !rosterB) return undefined;
+  const watchOptions = [
+    ...(input.scheduled.volleyballTvUrl
+      ? [
+          {
+            id: "volleyball-world-vbtv",
+            kind: "vbtv",
+            label: "VBTV",
+            url: input.scheduled.volleyballTvUrl,
+          },
+        ]
+      : []),
+    ...(input.scheduled.youtubeUrl
+      ? [
+          {
+            id: "volleyball-world-youtube",
+            kind: "youtube",
+            label: "YouTube",
+            url: input.scheduled.youtubeUrl,
+          },
+        ]
+      : []),
+  ];
+  return {
+    externalMatchId: `${input.eventExternalId}:${phase}:${input.scheduled.matchNoInTournament}`,
+    externalEventId: input.eventExternalId,
+    sourceUrl: input.scheduled.sourceUrl,
+    title: input.eventName,
+    roundLabel: officialRoundLabel(input.scheduled),
+    location:
+      [input.scheduled.city, input.scheduled.country]
+        .filter(Boolean)
+        .join(", ") || undefined,
+    genderCategory:
+      input.scheduled.gender ??
+      (input.eventGender === "coed" ? "coed" : input.eventGender),
+    playedAt: input.scheduled.scheduledAt,
+    participants: [
+      ...rosterA.map((participant) => ({ ...participant, side: "A" as const })),
+      ...rosterB.map((participant) => ({ ...participant, side: "B" as const })),
+    ],
+    sets: input.scheduled.sets.map((set) => ({ a: set.a, b: set.b })),
+    winnerSide: input.scheduled.winnerSide,
+    raw: {
+      matchNumber: input.scheduled.matchNoInTournament,
+      phase,
+      volleyballWorldMatchNo: input.scheduled.matchNo,
+      teamANo: input.teamA.teamNo,
+      teamBNo: input.teamB.teamNo,
+      teamAName: input.teamA.name,
+      teamBName: input.teamB.name,
+      ...(input.scheduled.localStartsAt
+        ? { time: input.scheduled.localStartsAt.slice(11, 16) }
+        : {}),
+      ...(input.scheduled.court ? { court: input.scheduled.court } : {}),
+      ...(watchOptions.length > 0 ? { watchOptions } : {}),
+    },
+  };
 }
 
 export interface VolleyballWorldTeamStat {

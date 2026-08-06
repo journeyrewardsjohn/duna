@@ -33,6 +33,15 @@ draw, so Duna's 12ndr external identity must include the phase:
 The immutable Volleyball World `matchNo` is stored on that Duna match after the
 schedule has been reconciled by phase, date, round, court, and participants.
 
+The official schedule is also the recovery source when a slower 12ndr result
+row is absent. Duna reconstructs the phase-scoped match, reuses a roster only
+when both player names agree, rejects a conflicting known federation, and
+prefers an exact official team ID. Existing canonical player links are
+preserved. If a hydrated roster is not yet available, the match is staged with
+deterministic provisional player IDs; a later detail sync replaces those IDs
+with the source roster. This closes gaps without inventing a canonical player
+or conflating qualification and main-draw matches that share a visible number.
+
 ## Live REST snapshots
 
 - One match:

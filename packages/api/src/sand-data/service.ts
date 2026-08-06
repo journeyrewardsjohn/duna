@@ -105,6 +105,7 @@ import {
   type SourceImportResult,
 } from "./types";
 import {
+  buildOfficialFivbMatchRecord,
   discoverVolleyballWorldEvent,
   fetchVolleyballWorldLiveMatch,
   fetchVolleyballWorldLiveMatches,
@@ -114,6 +115,7 @@ import {
   parseVolleyballWorldBinding,
   storedVolleyballWorldMatch,
   type VolleyballWorldBinding,
+  type OfficialFivbRosterCandidate,
   type VolleyballWorldSchedule,
   type VolleyballWorldScheduledMatch,
   type VolleyballWorldStoredMatch,
@@ -951,7 +953,7 @@ function hasDecisiveImportedScore(
 async function persistImportedMatches(input: {
   readonly result: SourceImportResult;
   readonly sourceId: string;
-  readonly runId: string;
+  readonly runId?: string;
   readonly now: Date;
 }): Promise<{
   readonly staged: number;
@@ -1150,11 +1152,16 @@ async function persistImportedMatches(input: {
         return incoming ? [incoming] : [];
       })(),
     ];
-    const sameSourceCandidates = crossCandidates.filter(
-      (candidate) =>
-        candidate.sourceId === input.sourceId &&
-        candidate.externalMatchId !== match.externalMatchId,
-    );
+    const authoritativeFivbIdentity =
+      input.result.source === "fivb-12ndr" &&
+      /:(?:main-draw|qualification):\d+$/.test(match.externalMatchId);
+    const sameSourceCandidates = authoritativeFivbIdentity
+      ? []
+      : crossCandidates.filter(
+          (candidate) =>
+            candidate.sourceId === input.sourceId &&
+            candidate.externalMatchId !== match.externalMatchId,
+        );
     const duplicateWinnerExternalId = [
       match.externalMatchId,
       ...sameSourceCandidates.map((candidate) => candidate.externalMatchId),
@@ -1185,7 +1192,9 @@ async function persistImportedMatches(input: {
     const shouldMarkDuplicate = Boolean(distinctDuplicate);
     const participants = match.participants.map((participant) => ({
       ...participant,
-      personId: peopleByExternalId.get(participant.externalPersonId),
+      personId:
+        peopleByExternalId.get(participant.externalPersonId) ??
+        optionalSnapshotString(unknownRecord(participant).personId),
     }));
     const allMapped = participants.every((participant) => participant.personId);
     const complete = hasDecisiveImportedScore(match.sets, match.winnerSide);
@@ -1856,6 +1865,71 @@ function officialScheduledMatch(input: {
   return ranked[0]?.candidate;
 }
 
+function officialFivbRosterCandidates(input: {
+  readonly eventPayload: unknown;
+  readonly rows: readonly (typeof importedMatches.$inferSelect)[];
+}): readonly OfficialFivbRosterCandidate[] {
+  const event = unknownRecord(input.eventPayload);
+  const eventCandidates = Array.isArray(event.teamEntries)
+    ? event.teamEntries.flatMap<OfficialFivbRosterCandidate>((value) => {
+        const entry = unknownRecord(value);
+        const participants = Array.isArray(entry.players)
+          ? entry.players.flatMap((value) => {
+              const player = unknownRecord(value);
+              const externalPersonId = optionalSnapshotString(
+                player.externalPersonId,
+              );
+              const name = optionalSnapshotString(player.displayName);
+              return externalPersonId && name
+                ? [{ externalPersonId, name }]
+                : [];
+            })
+          : [];
+        return participants.length === 2
+          ? [
+              {
+                ...(optionalSnapshotString(entry.countryCode)
+                  ? {
+                      countryCode: optionalSnapshotString(
+                        entry.countryCode,
+                      )?.toUpperCase(),
+                    }
+                  : {}),
+                participants,
+              },
+            ]
+          : [];
+      })
+    : [];
+  const rowCandidates = input.rows.flatMap<OfficialFivbRosterCandidate>(
+    (row) => {
+      const stored = parseStoredVolleyballWorldMatch(row.rawPayload);
+      return (["A", "B"] as const).flatMap((side) => {
+        const participants = row.participants
+          .filter((participant) => participant.side === side)
+          .map((participant) => ({
+            externalPersonId: participant.externalPersonId,
+            name: participant.name,
+            ...(participant.personId ? { personId: participant.personId } : {}),
+          }));
+        if (participants.length !== 2) return [];
+        const team = side === "A" ? stored?.teamA : stored?.teamB;
+        return [
+          {
+            ...(team?.teamNo ? { teamNo: team.teamNo } : {}),
+            ...(team?.countryCode ? { countryCode: team.countryCode } : {}),
+            provisional: participants.every((participant) =>
+              participant.externalPersonId.startsWith("volleyball-world-team-"),
+            ),
+            participants,
+          },
+        ];
+      });
+    },
+  );
+  return [...rowCandidates, ...eventCandidates];
+}
+
 async function volleyballWorldEventSource(input: {
   readonly event: typeof professionalEvents.$inferSelect;
   readonly now: Date;
@@ -1937,7 +2011,7 @@ export async function refreshVolleyballWorldEvent(input: {
   const teamByNo = new Map(
     schedule.teams.map((team) => [team.teamNo, team] as const),
   );
-  const rows = await database
+  let rows = await database
     .select()
     .from(importedMatches)
     .where(
@@ -1946,9 +2020,74 @@ export async function refreshVolleyballWorldEvent(input: {
         eq(importedMatches.externalEventId, event.externalEventId),
       ),
     );
+  const existingExternalMatchIds = new Set(
+    rows.map((row) => row.externalMatchId),
+  );
+  const rosterCandidates = officialFivbRosterCandidates({
+    eventPayload: event.rawPayload,
+    rows,
+  });
+  const officialRecords = schedule.matches.flatMap((scheduled) => {
+    if (
+      scheduled.tournamentNo !== binding.tournamentNo ||
+      !scheduled.teamANo ||
+      !scheduled.teamBNo
+    ) {
+      return [];
+    }
+    const teamA = teamByNo.get(scheduled.teamANo);
+    const teamB = teamByNo.get(scheduled.teamBNo);
+    if (!teamA || !teamB) return [];
+    const record = buildOfficialFivbMatchRecord({
+      eventExternalId: event.externalEventId,
+      eventName: event.name,
+      eventGender:
+        event.genderCategory === "women"
+          ? "women"
+          : event.genderCategory === "coed"
+            ? "coed"
+            : "men",
+      scheduled,
+      teamA,
+      teamB,
+      rosterCandidates,
+    });
+    return record && !existingExternalMatchIds.has(record.externalMatchId)
+      ? [record]
+      : [];
+  });
+  if (officialRecords.length > 0) {
+    await persistImportedMatches({
+      result: {
+        source: "fivb-12ndr",
+        players: [],
+        matches: officialRecords,
+      },
+      sourceId: source.id,
+      now,
+    });
+    rows = await database
+      .select()
+      .from(importedMatches)
+      .where(
+        and(
+          eq(importedMatches.sourceId, source.id),
+          eq(importedMatches.externalEventId, event.externalEventId),
+        ),
+      );
+  }
+  const recoveredExternalMatchIds = new Set(
+    officialRecords.map((match) => match.externalMatchId),
+  );
+  const backfilled = rows.filter(
+    (row) =>
+      recoveredExternalMatchIds.has(row.externalMatchId) &&
+      !existingExternalMatchIds.has(row.externalMatchId),
+  ).length;
   let linked = 0;
   let live = 0;
   let completed = 0;
+  const linkedOfficialMatchNos = new Set<number>();
   for (const row of rows) {
     const matchNumber = optionalNumber(
       unknownRecord(row.rawPayload).matchNumber,
@@ -1962,6 +2101,7 @@ export async function refreshVolleyballWorldEvent(input: {
       teamByNo,
     });
     if (!scheduled) continue;
+    if (linkedOfficialMatchNos.has(scheduled.matchNo)) continue;
     const current = liveByMatchNo.get(scheduled.matchNo);
     const existingOfficial = parseStoredVolleyballWorldMatch(row.rawPayload);
     let statistics = existingOfficial?.statistics;
@@ -2102,6 +2242,7 @@ export async function refreshVolleyballWorldEvent(input: {
         updatedAt: now,
       })
       .where(eq(importedMatches.id, row.id));
+    linkedOfficialMatchNos.add(scheduled.matchNo);
     linked += 1;
     if (stored.status === "live") live += 1;
     if (stored.status === "completed") completed += 1;
@@ -2129,6 +2270,7 @@ export async function refreshVolleyballWorldEvent(input: {
     competitionName: binding.competitionName,
     competitionUrl: binding.competitionUrl,
     tournamentNo: binding.tournamentNo,
+    backfilled,
     linked,
     live,
     completed,
