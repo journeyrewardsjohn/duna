@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  dedupeProfessionalMatchRowsForDisplay,
   inferHistoricalPersonId,
   inheritProfessionalEventEditorial,
   matchProfessionalStatisticsToPlayers,
@@ -24,6 +25,59 @@ import {
 } from "./volleyball-world-live";
 
 describe("FIVB event detail refresh", () => {
+  it("hides a stale fixture duplicate when an official live row is available", () => {
+    const participants = [
+      { side: "A", name: "Anders Mol" },
+      { side: "A", name: "Christian Sørum" },
+      { side: "B", name: "Nils Ehlers" },
+      { side: "B", name: "Lui Wüst" },
+    ];
+    const sourceRow = {
+      id: "source-row",
+      playedAt: new Date("2026-08-06T18:30:00.000Z"),
+      rawPayload: { time: "20:30" },
+      participants,
+      sets: [],
+      winnerSide: null,
+    };
+    const officialRow = {
+      ...sourceRow,
+      id: "official-row",
+      sets: [{ a: 21, b: 16 }],
+      rawPayload: {
+        time: "20:30",
+        volleyballWorld: {
+          provider: "volleyball-world",
+          transport: "rest",
+          matchNo: 544972,
+          tournamentNo: 9229,
+          status: "live",
+          statusLabel: "Live",
+          matchPoints: { a: 1, b: 0 },
+          sets: [{ number: 1, a: 21, b: 16 }],
+          hasLineup: true,
+          syncedAt: "2026-08-06T19:03:22.743Z",
+          pollingMs: 15_000,
+        },
+      },
+    };
+    expect(
+      dedupeProfessionalMatchRowsForDisplay([sourceRow, officialRow]).map(
+        (row) => row.id,
+      ),
+    ).toEqual(["official-row"]);
+    expect(
+      dedupeProfessionalMatchRowsForDisplay([
+        sourceRow,
+        {
+          ...sourceRow,
+          id: "later-fixture",
+          rawPayload: { time: "21:30" },
+        },
+      ]).map((row) => row.id),
+    ).toEqual(["source-row", "later-fixture"]);
+  });
+
   it("preserves hydrated registration details during a lightweight index refresh", () => {
     const syncedAt = new Date("2026-08-04T14:00:00.000Z");
     expect(
