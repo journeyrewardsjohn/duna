@@ -18,7 +18,7 @@
 | Default ground     | Dusk wash → fog (light, warm)                 | Fog → ink (neutral, cool)                           |
 | Density            | Generous. One decision per screen.            | Dense. Many facts per screen.                       |
 | Atmosphere budget  | High — imagery, gradients, motion             | Low — imagery almost never                          |
-| Serif usage        | Frequent (headers, rating, event names)       | Rare (page titles only)                             |
+| Fellix display     | Expressive (headers, rating, event names)     | Restrained (page titles and hierarchy)              |
 | Archivo usage      | Moderate (scores, rating)                     | Constant (every table, every figure)                |
 | Persistent element | **The Strand** — docked bottom                | **The Watch** — docked top                          |
 | Used               | At the beach, in sun, one hand, sandy         | Courtside or office, two hands, focused             |
@@ -71,19 +71,21 @@ Design for someone holding a phone with one sandy hand while carrying a ball bag
 
 ## 4. Type on mobile
 
-Same three roles. Tighter scale, heavier minimums.
+The apps ship the same two families as every Duna surface, with a tighter scale
+and heavier minimums.
 
-| Role                                          | Mobile use                                                                 | Sizes                                                                                                                          |
-| --------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **Instrument Serif** (or Awesome Serif Light) | Screen titles, event names, rating hero, onboarding, empty-state headlines | 28 / 34 / 44. **Never below 24 on mobile.**                                                                                    |
-| **Figtree** (or Fellix)                       | Everything else                                                            | Body 16/24 · secondary 14.5/21 · caption 13/18 · micro 11.5/15 · tab label 10.5                                                |
-| **Archivo**, `tnum` on                        | Every meaningful number                                                    | Live score `wdth 66 / wght 800` @ 56–72 · rating `wdth 112 / 800` @ 38–48 · table figures `wdth 78 / 700` @ 13–15 · chips 12.5 |
+| Role                   | Mobile use                                                     | Sizes                                                                                                                          |
+| ---------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Fellix**             | Every word, title, label, control, and empty-state headline    | Display 28 / 34 / 44 · body 16/24 · secondary 14.5/21 · caption 13/18 · micro 11.5/15 · tab label 10.5                         |
+| **Archivo**, `tnum` on | Every meaningful number; Monument alone uses proportional nums | Live score `wdth 66 / wght 800` @ 56–72 · rating `wdth 112 / 800` @ 38–48 · table figures `wdth 78 / 700` @ 13–15 · chips 12.5 |
 
 Rules:
 
 - **Body text never below 15pt.** 16 is the target. Respect Dynamic Type up to at least 200%; test the scoreboard and the schedule at that size.
-- Serif is a **moment**, not a texture. Roughly one serif element per screen in Players, and only the screen title in Pro.
-- Line length caps at ~40 characters for serif, ~60 for body.
+- Fellix display is a **moment**, not a texture. Use 700 for editorial emphasis
+  and 800 for athletic/app display; hierarchy comes from weight, scale, and
+  composition rather than another family.
+- Line length caps at ~40 characters for display, ~60 for body.
 - Never letter-space body copy. Only eyebrows and tabs get tracking.
 
 ---
@@ -162,7 +164,7 @@ Beaches have bad signal. Design for it as a normal condition, not an error.
 - **Scoring is offline-first.** A match in progress writes to local storage and syncs when it can. The UI shows a small `--pending` cloud chip reading `Saved on device` — never a blocking modal, never a lost point.
 - **Stale data gets a timestamp, not a spinner.** `Updated 4 min ago` in `--pending` micro type beats a skeleton that lies about freshness.
 - **Three empty-state tiers**, all following the system's honesty rule:
-  1. **Nothing yet, and that's fine** — serif headline, one line of plain explanation, one action. _"No matches recorded. Your first verified result starts your rating."_ → `Record a match`
+  1. **Nothing yet, and that's fine** — Fellix 700 headline, one line of plain explanation, one action. _"No matches recorded. Your first verified result starts your rating."_ → `Record a match`
   2. **Nothing yet, and it's the sport's fault** — `--pending` chip and one sentence, no illustration. _"Broadcast not yet announced."_
   3. **Something is missing that we can name** — explain the mechanism. _"This player's tour profile isn't mapped to a Duna profile yet."_
 - Use the `empty-generic` image (single ball at rest on sand, long shadow) for tier 1 only, at 30% opacity behind the text. Tiers 2 and 3 get no artwork.
@@ -231,23 +233,23 @@ The web homepage's signature is a live ticker on the fog line. The app's signatu
 4. Your most recent rating movement, for 24h after → `Sand Rating 3.14 · ▲ 0.14`
 5. Nothing → the Strand hides entirely. It never shows filler.
 
-Glass at 72%, full radius, one line, Archivo for the number, Figtree 500 for the label, a chevron at the right. **Tap expands it to full screen; the expansion is a shared-element transition, not a modal.** Swipe it down to dismiss for the session.
+Glass at 72%, full radius, one line, Archivo for the number, Fellix 500 for the label, a chevron at the right. **Tap expands it to full screen; the expansion is a shared-element transition, not a modal.** Swipe it down to dismiss for the session.
 
 This one component gives the app a heartbeat, keeps the live product one thumb away from anywhere, and directly mirrors the web. It's the thing that makes the two feel like one brand.
 
 ## 14. Screen direction
 
-**Today** — dusk wash. Header: avatar, `Hi, welcome back` / name, bell with flare badge. Then the week rail (7 date pills, active fill `--dusk-deep`). Then today's sessions as white cards with time in Archivo `wdth 74`, title Figtree 600, venue 400, and a `--signal` dot for confirmed. Below: `Sand Rating` compact card with the value in Archivo Expanded and its delta. Bottom: one contextual suggestion in a flare-bordered container when there's a real reason — _"Two courts are open at Hermosa at 6."_ No suggestion is better than a manufactured one.
+**Today** — dusk wash. Header: avatar, `Hi, welcome back` / name, bell with flare badge. Then the week rail (7 date pills, active fill `--dusk-deep`). Then today's sessions as white cards with time in Archivo `wdth 74`, title Fellix 600, venue 400, and a `--signal` dot for confirmed. Below: `Sand Rating` compact card with the value in Archivo Expanded and its delta. Bottom: one contextual suggestion in a flare-bordered container when there's a real reason — _"Two courts are open at Hermosa at 6."_ No suggestion is better than a manufactured one.
 
-**Play (Discover)** — fog ground. A filter row of Class B chips (`Pickup` `Clinic` `League` `Tournament` · `Tonight` `This week`), then a list of session cards using the strict card anatomy from the design system: `[Status] [Tier]` top-left, serif title, venue line, then a footer with price left and a Class C metric chip right that turns flare at ≤3 spots. Map view is a toggle, not a separate tab.
+**Play (Discover)** — fog ground. A filter row of Class B chips (`Pickup` `Clinic` `League` `Tournament` · `Tonight` `This week`), then a list of session cards using the strict card anatomy from the design system: `[Status] [Tier]` top-left, Fellix 600 title, venue line, then a footer with price left and a Class C metric chip right that turns flare at ≤3 spots. Map view is a toggle, not a separate tab.
 
 **Score** — the app's most important surface, and a full dark takeover from the moment it opens.
 
 - Setup: two team rows, tap to assign players from recents or search, court and format chips. One `Start match` pill.
-- Live: `--ink` ground. Team names Figtree 500 at 18. Two enormous Archivo numerals, `wdth 66 / 800` at 72pt. **Left half of the screen scores left; right half scores right.** A persistent 56pt `Undo` pill bottom-center. Set strip along the top. Serving indicator as a `--signal` dot that moves. At 20 points, a `Match point` flare chip appears.
+- Live: `--ink` ground. Team names Fellix 500 at 18. Two enormous Archivo numerals, `wdth 66 / 800` at 72pt. **Left half of the screen scores left; right half scores right.** A persistent 56pt `Undo` pill bottom-center. Set strip along the top. Serving indicator as a `--signal` dot that moves. At 20 points, a `Match point` flare chip appears.
 - Result: sand-gold wash sweep once, then the verified-result summary with the rating delta animating in. Then one action: `Confirm result`. Opponent verification is a push, not a blocker.
 
-**Rating** — dusk wash, and the app's most editorial screen. The value in Archivo Expanded `wdth 112 / 800` at 48pt, delta beside it, a sparkline beneath with a flare endpoint dot. Then **"Why it moved"** — the three-row breakdown from the web card (`Beat a 3.4 pair, 21–19 / 15–12 → +0.09`), which is the most trust-building content in the product. Then match history as a compact list, then a link to methodology. Serif headline: _"A rating that moves when your game does."_
+**Rating** — dusk wash, and the app's most editorial screen. The value in Archivo Expanded `wdth 112 / 800` at 48pt, delta beside it, a sparkline beneath with a flare endpoint dot. Then **"Why it moved"** — the three-row breakdown from the web card (`Beat a 3.4 pair, 21–19 / 15–12 → +0.09`), which is the most trust-building content in the product. Then match history as a compact list, then a link to methodology. Fellix 700 headline: _"A rating that moves when your game does."_
 
 **Tour** — the only Players screen that inherits the web's dark performance treatment by default. Live matches at top with the two-line collapsed card, then today's schedule, then rankings. Event artwork appears only inside a contained card, never full-bleed. Following a player adds their live matches to your Strand priority.
 
@@ -320,11 +322,11 @@ The mirroring is deliberate: Players' signature docks at the bottom because it's
 
 ## 20. Screen direction
 
-**Today** — fog ground. Below the Watch, the **day view as court lanes**: a horizontally scrolling hour axis with one lane per court, sessions as 18px-radius blocks. This is the single most operator-native view we can build — a facility manager thinks in courts and hours, not in a list. Blocks carry: title (Figtree 600 13), coach initials, attendance as `7/12` in Archivo tabular, and a flare left-border when under minimum. Tap a block for a sheet: attendance list, message the group, move, cancel.
+**Today** — fog ground. Below the Watch, the **day view as court lanes**: a horizontally scrolling hour axis with one lane per court, sessions as 18px-radius blocks. This is the single most operator-native view we can build — a facility manager thinks in courts and hours, not in a list. Blocks carry: title (Fellix 600 13), coach initials, attendance as `7/12` in Archivo tabular, and a flare left-border when under minimum. Tap a block for a sheet: attendance list, message the group, move, cancel.
 
 Under the lanes: `Needs attention` as a stack of exception cards, then `Duna AI` suggestions in the flare-bordered container (_"Two courts are quiet after 4 PM. Publish a level-matched pickup?"_ → `Review` / `Dismiss`). AI suggestions cap at two visible; the rest collapse.
 
-**People** — fog ground, dense list. Search pinned. Segment chips: `Members` `At risk` `New` `Staff`. Rows are compact: avatar, name Figtree 500, one line of context (`Last booked 24 days ago`), and a right-aligned state chip. **Retention signals must show their reason inline** — the web copy already promises _"Every reason is visible; no mystery score pretends to know more than the data."_ Honor that: `At risk · no booking in 24 days`, never a bare score. Swipe a row to message.
+**People** — fog ground, dense list. Search pinned. Segment chips: `Members` `At risk` `New` `Staff`. Rows are compact: avatar, name Fellix 500, one line of context (`Last booked 24 days ago`), and a right-aligned state chip. **Retention signals must show their reason inline** — the web copy already promises _"Every reason is visible; no mystery score pretends to know more than the data."_ Honor that: `At risk · no booking in 24 days`, never a bare score. Swipe a row to message.
 
 **Money** — this is a console surface: `--marine-900` ground. Today's takings in Archivo Expanded at the top, then a 7-day bar strip, then sections for `Failed payments` (flare-bordered, one-tap retry), `Upcoming payouts`, `Active plans`. All figures tabular, right-aligned, in a consistent column so the eye can scan a stack of numbers without re-anchoring. No charts beyond the bar strip — an operator on a phone wants amounts, not analytics.
 
@@ -396,7 +398,7 @@ Everything else in both apps is typography, data, and color. That restraint is w
 **Avoid**
 
 - Glass on scrolling lists, or anywhere in Pro's dense views.
-- Serif below 24pt, or serif anywhere in a Pro table.
+- Any third type family or serif anywhere in either app.
 - Porting desktop Duna HQ workflows into the phone app. Hand off instead.
 - Any red. Exceptions use flare with a border, never a red fill.
 - Streak mechanics, badges for showing up, or notification guilt. Duna's dignity is a feature.

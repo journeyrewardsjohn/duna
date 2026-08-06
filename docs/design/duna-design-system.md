@@ -3,7 +3,8 @@
 **Product:** Duna — the operating system for sand. Player network, Sand Rating, pro tour coverage, and Duna HQ club operations.
 **Thesis:** the calm, atmospheric, editorial language of luxury wellness, applied to elite sport. Serene surfaces, serious data. Energy lives in the athletes and the numbers, never in the chrome.
 **Audience:** players who compete, operators who run the sand, and fans who follow the world tour.
-**Status:** v2 supersedes v1. This document is the single source of truth for humans and for AI agents building Duna surfaces.
+**Status:** v2 supersedes v1 for the foundations retained here. The authoritative
+font guide and v3 amendment supersede its typography and zoning language.
 
 ---
 
@@ -17,7 +18,7 @@ Duna carries two conflicting obligations. Our aesthetic is quiet. Our partners �
 | ------------------ | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | **Where**          | Homepage, run-your-club, About, Sand Rating explainer, player features, marketing | Live match, match detail, event pages, /pro, brackets, standings, Duna HQ console |
 | **Ground**         | Fog `#F6F5F1`, sand, marine                                                       | Ink `#1B1B19`, marine-900 `#22343B`                                               |
-| **Display type**   | Serif, large, airy                                                                | Condensed tabular numerals                                                        |
+| **Display type**   | Fellix 700, large, airy                                                           | Fellix 800 with expressive Archivo numerals                                       |
 | **Motion**         | Max one ambient element per viewport                                              | Unrestricted but purposeful                                                       |
 | **Partner brands** | Monochrome at rest, color on hover only                                           | Full color, inside a contained frame                                              |
 | **Feeling**        | Still                                                                             | Alive                                                                             |
@@ -86,56 +87,38 @@ Fog + shell 60% · sand 15% · marine 15% · ink 8% · accents ≤2%. Dark perfo
 
 ## 3. Typography
 
-You are cleared to ship the free stack. Structure is identical either way — the licensed upgrade is a font-file swap, nothing more.
+Duna ships exactly two brand families. The authoritative details and six
+numeral tiers live in `duna-font-usage-guide.md`.
 
-### Role 1 — Display (serif)
+### Role 1 — Language and display
 
-- **Shipping:** Instrument Serif, 400. **Optional upgrade:** Awesome Serif Light (~300).
-- Stack: `"Awesome Serif","Instrument Serif",Georgia,serif`
-- Line height 1.02–1.10. Letter-spacing −0.015 to −0.022em. **Sentence case with a terminal period.**
-- Sizes: hero `clamp(46px,8.4vw,116px)` · section `clamp(34px,4.6vw,60px)` · card `25–32px`
-- **Use it for:** hero headlines, section headlines, card titles in editorial zones, pull quotes, event names on event heroes.
-- **Never use it for:** buttons, labels, table cells, nav, any number, any UI in the app, anything under 20px.
+- **Fellix** is the family for every word: headlines, body, navigation, labels,
+  buttons, names, tables, forms, editorial copy, operator UI, and native UI.
+- Weight map: 300 ledes at 20px+ · 400 body · 500 labels and names · 600 buttons
+  and card titles · 700 editorial display · 800 athletic and app display.
+- Hero `clamp(46px,7.2vw,104px)` · section
+  `clamp(34px,4.4vw,56px)` · card 20–32px. Tracking never exceeds −0.030em.
 
-### Role 2 — Text / UI (sans)
+### Role 2 — Data and score
 
-- **Shipping:** Figtree. **Optional upgrade:** Fellix.
-- Stack: `"Fellix","Figtree",-apple-system,sans-serif`
-- Weight map — treat as law:
-  - **300** subtitles ≥20px only
-  - **400** body, descriptions, table cells
-  - **500** nav links, labels, player names, team names, eyebrows
-  - **600** buttons, card titles in performance zones, emphasis in proof lines
-  - **700** reserved; only for a chip that must out-rank a 600 next to it
-  - **800+** never in this role — that's Archivo's job
-- Sizes: body 16/26 · secondary 14.5/23 · caption 13/18 · micro 11.5/16
-
-### Role 3 — Data / Score (condensed + expanded)
-
-- **Archivo** (Google Fonts, SIL OFL). Variable: `wdth 62–125`, `wght 100–900`. One file, both jobs.
-- Always: `font-variant-numeric: tabular-nums; font-feature-settings:"tnum" 1;`
-- Width map:
-  - `wdth 66–72, wght 800` — live scores, huge match numerals
-  - `wdth 76–80, wght 700` — table figures, seeds, points, deltas, timestamps, chips
-  - `wdth 88–92, wght 800` — the DUNA wordmark, section counts
-  - `wdth 110–120, wght 800` — hero statistics and the Sand Rating value (the only "expanded" moments)
-- **Use it for:** every number that means something. Scores, sets, seeds, ranks, points, ratings, percentages, credit volume, counts, times, dates in cards.
-- **Never use it for:** prose, headlines, buttons, or numbers inside a sentence ("we tracked 105 events" stays in Figtree).
+- **Archivo** owns every meaningful numeral and the Duna wordmark. Its width
+  axis distinguishes condensed live scores from wide monumental ranks.
+- Score, Hero, Block, Table, and Chip tiers use tabular figures. Monument alone
+  uses proportional figures.
+- Archivo never carries words. A number inside prose stays Fellix because the
+  sentence is language.
 
 ### The signature contrast
 
-A serif headline sitting directly above a condensed tabular scoreline is the entire brand in one frame. Poetry above, precision below. Design at least one such pairing into every major page.
+A Fellix headline directly above or beside an expressive Archivo score, rank,
+or rating is the brand in one frame: language and precision, without a third
+face.
 
 ### Loading
 
-```html
-<link
-  href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Figtree:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap"
-  rel="stylesheet"
-/>
-```
-
-Self-host in production. Subset Archivo to Latin + numerals + `–` en dash. Preload the serif — it is above the fold on every page.
+Self-host the licensed Fellix variable file and load Archivo Variable. Preload
+and subset both according to route needs with `font-display: swap`. Do not
+request or bundle a third brand family.
 
 ---
 
@@ -143,7 +126,7 @@ Self-host in production. Subset Archivo to Latin + numerals + `–` en dash. Pre
 
 Eyebrows are the most-used and most-abused device on the current site. They are doing real work: they tell you what _kind_ of thing you're about to read. Formalize them.
 
-**Spec:** Figtree 500 · 11px · `letter-spacing: .14em` · uppercase · `--ink-soft` at 72% opacity (or `--sand-300` at 90% on dark) · 16px below it before the headline.
+**Spec:** Fellix 500 · 11px · `letter-spacing: .14em` · uppercase · `--ink-soft` at 72% opacity (or `--sand-300` at 90% on dark) · 16px below it before the headline.
 
 **An eyebrow must be a category, a scope, or a source.** Three legal forms:
 
@@ -171,7 +154,7 @@ Tags carry state and taxonomy. On the current site they run together as undiffer
 
 ### Class A — Status pill (what is happening)
 
-Full radius · 5px 11px · Figtree 600 · 9.5px · `.16em` uppercase. **One per card, always first, always leftmost.**
+Full radius · 5px 11px · Fellix 600 · 9.5px · `.16em` uppercase. **One per card, always first, always leftmost.**
 
 | State                 | Fill                                | Text         | Notes                       |
 | --------------------- | ----------------------------------- | ------------ | --------------------------- |
@@ -183,7 +166,7 @@ Full radius · 5px 11px · Figtree 600 · 9.5px · `.16em` uppercase. **One per 
 
 ### Class B — Taxonomy chip (what kind of thing)
 
-8px radius · 4px 9px · Figtree 500 · 10px · `.12em` uppercase · `--fog-100` fill · `--ink-soft` text. Tier and division: `Elite16` · `Challenge` · `Futures` · `AVP League` · `Pickup` · `League` · `Clinic` · `Men` · `Women` · `Coed`.
+8px radius · 4px 9px · Fellix 500 · 10px · `.12em` uppercase · `--fog-100` fill · `--ink-soft` text. Tier and division: `Elite16` · `Challenge` · `Futures` · `AVP League` · `Pickup` · `League` · `Clinic` · `Men` · `Women` · `Coed`.
 Division chips (men/women/coed) are **always last** in the chip row and always lower contrast than tier.
 
 ### Class C — Metric chip (a number with a unit)
@@ -193,7 +176,7 @@ Turns flare-tinted (`rgba(232,104,58,.13)` / `#B84A20`) **only** on scarcity or 
 
 ### Class D — Identity chip (who)
 
-Flag + country code, or a partner mark. **Replace all flag emoji with a single SVG flag set** — emoji render differently on every OS and currently break the type line on /pro and event pages. Spec: 16×11px SVG flag, 4px gap, then `SWE` in Figtree 500 10px `.1em` uppercase at 60% opacity.
+Flag + country code, or a partner mark. **Replace all flag emoji with a single SVG flag set** — emoji render differently on every OS and currently break the type line on /pro and event pages. Spec: 16×11px SVG flag, 4px gap, then `SWE` in Fellix 500 10px `.1em` uppercase at 60% opacity.
 
 ### Ordering law
 
@@ -428,7 +411,7 @@ Implemented in `duna-homepage-redesign.html`. Summary of the decisions:
 - **Duna AI callouts** (_"Two courts are quiet after 4 PM"_) get the flare-bordered container: `rgba(232,104,58,.1)` fill, `rgba(232,104,58,.26)` border, pulsing dot, `DUNA AI · TODAY` micro-label. This is a live suggestion, so flare is correct here.
 - **Eyebrow rewrites:** `One system, your shape` → `Scale`. `Everything connected` → `Modules`. `Your club, presented as yours` → `Theme Kit`. `Start at your size` → `Getting started`. `Today at a glance` → keep, it's a real scope label.
 - **Add** an operator proof band (one quote, one club name, monochrome logos) between chapters 2 and 3, and a plain pricing anchor before the closing CTA. Even "starts free, 2.9% + 30¢ on what you sell" beats silence.
-- **Module list** (`Booking + calendar`, `Commerce`, `Wallet + ledger`, `Team`, `Marketing`, `Theme Kit`, `Performance`, `Operations`) becomes a 4×2 grid of small fog-100 cards with Figtree 600 titles and 400 descriptions — not a bulleted list.
+- **Module list** (`Booking + calendar`, `Commerce`, `Wallet + ledger`, `Team`, `Marketing`, `Theme Kit`, `Performance`, `Operations`) becomes a 4×2 grid of small fog-100 cards with Fellix 600 titles and 400 descriptions — not a bulleted list.
 
 ---
 
@@ -449,15 +432,15 @@ Implemented in `duna-homepage-redesign.html`. Summary of the decisions:
 
 **Recommendations:**
 
-- **Invert the ground.** /pro opens dark: `pro-hero-*` plates at blue hour behind a `--marine-900` scrim, `2 LIVE NOW` as a flare status pill, `105` in Archivo Expanded, headline in serif reversed on dark. Below the hero, return to fog for browsing. Dark hero, light body — the page announces itself as live, then becomes readable.
+- **Invert the ground.** /pro opens dark: `pro-hero-*` plates at blue hour behind a `--marine-900` scrim, `2 LIVE NOW` as a flare status pill, `105` in Archivo Expanded, headline in Fellix 800 reversed on dark. Below the hero, return to fog for browsing. Dark hero, light body — the page announces itself as live, then becomes readable.
 - **Rebuild the date rail as a density strip.** Fixed 44px-wide day cells in a horizontally scrolling track with snap points, a sticky month divider, `Tue` three letters, weekend cells tinted `--sand-100`. Under each cell, the existing dot density becomes a 3px bar whose height maps to match count, ink-toned, flare-toned on live days. Today gets a full-radius ink pill. Add a `Jump to today` control. The whole rail collapses to 96px tall.
 - **Event card anatomy — one strict template:**
   ```
   ┌──────────────────────────────────────────┐
   │ [LIVE]  [Elite16]  [Men]                 │  Class A, B, B
   │                                          │
-  │ BPT Elite16 Hamburg                      │  Serif 25px
-  │ Hamburg, Germany                         │  Figtree 400 13.5
+  │ BPT Elite16 Hamburg                      │  Fellix 700 25px
+  │ Hamburg, Germany                         │  Fellix 400 13.5
   │                                          │
   │ Aug 5 – 9              ▓▓▓▓▓░░░░░  8/20  │  Archivo tabular + progress
   └──────────────────────────────────────────┘
@@ -488,14 +471,14 @@ Implemented in `duna-homepage-redesign.html`. Summary of the decisions:
 **Recommendations:**
 
 - **Split the hero in two.** Duna generates `event-venue-hamburg` (racecourse grandstand, show court, low north-European sun, cool grade) as the full-bleed atmospheric hero with fog dissolve. The **official artwork becomes a contained card** in the hero's lower-left: 24px radius, 1px white border, fixed 3:4 or 16:9 crop, caption `Official event artwork` in eyebrow spec. Brand owns the fill, Duna owns the frame. This gives FIVB a genuine, respectful placement while the page stays ours.
-- **Hero content:** `LIVE` status pill + `Elite16` + `Men` chips → event name in serif → `Aug 5 – 9, 2026 · Hamburg-Horn racecourse · 16 teams` in Figtree 400 → two ghost CTAs (`Women's division`, `Official source`) → a glass strand along the fog line showing next matches with court and time.
-- **Teams: one table, four filters.** Replace four stacked tables with a single table plus a segmented control — `Main draw (12) · Qualification (16) · Reserve (23) · Withdrawn (45)`. Default to Main draw, sticky header, seed in Archivo `wdth 72` at 55%, team name Figtree 500 with player links in 400, SVG flag chip, entry and technical points right-aligned tabular. Withdrawn rows: name struck through, row at 55% opacity, Class A cancelled pill.
+- **Hero content:** `LIVE` status pill + `Elite16` + `Men` chips → event name in Fellix 800 → `Aug 5 – 9, 2026 · Hamburg-Horn racecourse · 16 teams` in Fellix 400 → two ghost CTAs (`Women's division`, `Official source`) → a glass strand along the fog line showing next matches with court and time.
+- **Teams: one table, four filters.** Replace four stacked tables with a single table plus a segmented control — `Main draw (12) · Qualification (16) · Reserve (23) · Withdrawn (45)`. Default to Main draw, sticky header, seed in Archivo `wdth 72` at 55%, team name Fellix 500 with player links in 400, SVG flag chip, entry and technical points right-aligned tabular. Withdrawn rows: name struck through, row at 55% opacity, Class A cancelled pill.
 - **Design the pre-event state as a first-class state, not an empty table.** Before any match completes, pool standings should not render as grids of zeros. Show each pool as a **card of three teams in seed order** with the label `Pool A · starts Aug 6, 11:00` and no W/L/Sets/Pts columns at all. The moment the first match finishes, the card transforms into the full standings table. Same for live standings.
 - **Suppress medals until earned.** No 🥇🥈🥉 until at least one match in the event is final. Pre-event, show seed-order rank as Archivo `wdth 72`. Post-first-match, replace emoji with a small `--sand-500` filled rank badge for 1st, `--marine-400` for 2nd, `--sand-300` for 3rd. Consistent, on-palette, and it doesn't claim results that don't exist.
 - **Flat-prior market:** collapse the twelve 8.3% rows into a single `Even field · 12 teams` state with the explanation and the `Sign in to predict` CTA. Render individual probabilities only once they diverge. Keep the credits disclaimer — it's clear and correctly cautious.
 - **Merge the two standings tables.** One `Standings` section with a `By pool / Overall` toggle.
 - **Broadcast section:** don't give "not announced" a full section. Collapse to a single glass strip under the hero: `Broadcast · not yet announced. Duna will show VBTV, YouTube, or TV coverage here when confirmed.` Promote it to a full module only when there's something to link.
-- **Add a breadcrumb component.** `Pro tour → BPT Elite16 Hamburg` in Figtree 500 11px `.1em` uppercase, chevron in `--pending`. Needed on both event and match pages.
+- **Add a breadcrumb component.** `Pro tour → BPT Elite16 Hamburg` in Fellix 500 11px `.1em` uppercase, chevron in `--pending`. Needed on both event and match pages.
 
 ---
 
@@ -524,13 +507,13 @@ This is the most important performance surface in the product and currently the 
   ─────────────────────────────────────────────────────
   Starts in 2h 14m                    Team rating 3.01
   ```
-  Names Figtree 500 20px. Set columns Archivo `wdth 68/800`, 34px for the current set, 19px at 42% opacity for completed sets. Serving indicator `--signal` dot. Pre-match, the dashes become an Archivo em-dash at 30% opacity — deliberate, not accidental.
-- **Fix the h1.** Page title becomes the matchup in serif at a size that fits: `Lorenz / Rietschel` **vs** `Tiisaar / Korotkov` on two lines with a small ink `vs` between, surnames only. Full names live in the team cards below. Keep the long form in `<title>` and og tags for SEO — that's where it belongs.
+  Names Fellix 500 20px. Set columns Archivo `wdth 68/800`, 34px for the current set, 19px at 42% opacity for completed sets. Serving indicator `--signal` dot. Pre-match, the dashes become an Archivo em-dash at 30% opacity — deliberate, not accidental.
+- **Fix the h1.** Page title becomes the matchup in Fellix 800 at a size that fits: `Lorenz / Rietschel` **vs** `Tiisaar / Korotkov` on two lines with a small ink `vs` between, surnames only. Full names live in the team cards below. Keep the long form in `<title>` and og tags for SEO — that's where it belongs.
 - **Design the pending state once, use it everywhere.** A `--pending` chip reading `Rating pending` with a tooltip: `This player's tour profile isn't mapped to a Duna profile yet.` Show it **once per team**, not once per player, when both are pending. Six strings become two.
 - **Team cards:** side by side, each with the two players, avatar initials on a sand→marine gradient, Sand Rating in Archivo `wdth 110/800` when known, the pending chip when not, and the aggregate `Team rating 3.01` in a sand-500 chip. Countries as SVG flag chips.
 - **Collapse the three empty modules into one honest block** titled `Not yet available`, containing three one-line rows: `Head-to-head — no prior verified meetings.` `Broadcast — not yet announced.` `Prediction — even prior; rating data incomplete.` Each expands into a full module the moment it has content. Three dead sections become one truthful one.
 - **Explain the court.** `CC` renders as `Center Court` with `CC` as a small monospaced-feel Archivo chip beside it. On event pages, court `2` renders as `Court 2`.
-- **Keep the model note verbatim.** _"Both teams currently have an even prior because mapped rating data is incomplete."_ Set it in Figtree 400 13px `--pending`, italic, under the prediction. It's the most trustworthy sentence on the site.
+- **Keep the model note verbatim.** _"Both teams currently have an even prior because mapped rating data is incomplete."_ Set it in Fellix 400 13px `--pending`, italic, under the prediction. It's the most trustworthy sentence on the site.
 - **Add live-state choreography** for when the match starts: status pill flips scheduled → live with a pulsing flare dot, score numerals slide-flip on change (200ms), a thin flare progress line tracks toward 21, and `Match point` appears as a flare chip at 20. This is the payoff for all the restraint everywhere else.
 
 ---
@@ -539,7 +522,7 @@ This is the most important performance surface in the product and currently the 
 
 - **Temperature rule:** dusk-pink wash (`#FBF3F4 → #FFFFFF`) on planning surfaces — home, schedule, discover, profile. Full `--ink` on competition surfaces — live match, scoring, results. The screen's temperature tells you what mode you're in before you read a word.
 - Components on the pink wash stay **white, ink, and gray**. Pink is atmosphere, never a component fill.
-- Date pills: active state `--dusk-deep`. Session cards: white, 18px radius, avatar, Figtree 600 title, 400 sub, `--signal` dot for confirmed.
+- Date pills: active state `--dusk-deep`. Session cards: white, 18px radius, avatar, Fellix 600 title, 400 sub, `--signal` dot for confirmed.
 - Sand Rating on the profile screen: Archivo `wdth 112/800` at 38–48px with a `--gain` delta.
 - Live match screen: full dark, Archivo `wdth 66/800` at 60px+, flare accents, set strip beneath.
 - Radii 24 / 16 / full-pill. Shadows near zero.
@@ -562,7 +545,7 @@ This is the most important performance surface in the product and currently the 
 
 - Fog-dissolve every image into the page.
 - Build heroes in separate parallax plates.
-- Put a serif headline directly above a condensed tabular number at least once per page.
+- Pair a Fellix headline with a contrasting Archivo numeral at least once on every data-led page.
 - Use Archivo for every number that means something, with `tnum` on.
 - Give every empty state a designed treatment and an honest sentence.
 - Keep one Class A status pill per card, leftmost.
@@ -574,7 +557,7 @@ This is the most important performance surface in the product and currently the 
 - A hard bottom edge on any photograph.
 - Flare used as decoration, as a CTA, or on anything that isn't live.
 - Drop shadows as the primary depth cue.
-- Serif below 20px, or in any table, button, or app UI.
+- Any third brand family or serif in a Duna-owned surface.
 - More than three chips on a card, or two Class A pills anywhere.
 - Rendering `0/0`, `0–0`, `50% / 50%`, or a medal before a ball is served.
 - Flag emoji.
@@ -585,4 +568,4 @@ This is the most important performance surface in the product and currently the 
 
 ## 19. North-star brief — paste into any AI design or image tool
 
-> Duna is a beach volleyball platform with a "golden hour performance" aesthetic: the calm, atmospheric, editorial language of luxury wellness applied to elite sport. Fog-white and shell neutrals, marine haze blue, dune gold sand tones, court ink black; one hot accent, sun-flare coral `#E8683A`, reserved exclusively for live states; a dusk-pink wash used only as mobile planning atmosphere. Type is three roles: Instrument Serif (or Awesome Serif Light) for editorial display, Figtree (or Fellix) 400–600 for all UI and body, and Archivo with tabular numerals for every meaningful number — condensed for scores and tables, expanded for hero stats and ratings. Imagery is ultra-high-resolution golden-hour photography with a muted filmic grade, generated via Higgsfield MCP from real, licensed beach volleyball seed images, always built in separate depth plates — blurred dune-grass foreground, sharp subject, haze, graded sky — and always dissolved into the page with a tall fog gradient. Surfaces are glassmorphic pills and 24px cards; depth comes from translucency and layering, never drop shadows. Editorial zones are light and still; performance zones — live matches, results, brackets, the operator console — are dark and kinetic. Partner brands appear monochrome at rest and full-color only inside contained frames: brand owns the fill, Duna owns the frame.
+> Duna is a beach volleyball platform with a "golden hour performance" aesthetic: the calm, atmospheric, editorial language of luxury wellness applied to elite sport. Fog-white and shell neutrals, marine haze blue, dune gold sand tones, court ink black; one hot accent, sun-flare coral `#E8683A`, reserved exclusively for live states; a dusk-pink wash used only as mobile planning atmosphere. Typography uses exactly two families: Fellix for every word and Archivo for every meaningful numeral and the Duna wordmark. Fellix 700 carries editorial display; Fellix 800 carries athletic and app display. Archivo moves from condensed, tabular live scores to expanded monumental ranks and hero stats through six precise tiers. Imagery is ultra-high-resolution golden-hour photography with a muted filmic grade, generated from licensed or approved beach-volleyball seeds, always built in separate depth plates — blurred dune-grass foreground, sharp subject, haze, graded sky — and always dissolved into the page with a tall fog gradient. Surfaces are glassmorphic pills and 24px cards; depth comes from translucency and layering, never drop shadows. Editorial zones are light and still; live matches and courtside scoring are dark and kinetic. Partner brands appear monochrome at rest and full-color only inside contained frames: brand owns the fill, Duna owns the frame.

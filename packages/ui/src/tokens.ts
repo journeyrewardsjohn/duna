@@ -336,7 +336,7 @@ export const radii = {
 } as const;
 
 export const typography = {
-  display: "Fraunces",
+  display: "Fellix",
   body: "Fellix",
   data: "Archivo",
   mono: "Archivo",

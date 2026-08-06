@@ -234,11 +234,11 @@
 }
 
 :root {
-  --font-display:
-    "Fraunces Variable", "Fraunces", Georgia, "Times New Roman", serif;
+  --font-display: "Fellix", sans-serif;
   --font-heading: var(--font-display);
-  --font-body: "Fellix", Figtree, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: "Fellix", sans-serif;
   --font-ui: var(--font-body);
+  --font-sans: var(--font-body);
   --font-data: "Archivo Variable", "Archivo", "Fellix", sans-serif;
   --font-monument: var(--font-data);
   --font-mono: var(--font-data);

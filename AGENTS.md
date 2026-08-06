@@ -54,12 +54,12 @@ When the documents appear to conflict, preserve these invariants:
   shared token resolver. Never use the retired `performance` zone.
 - Every theme supports Light, Dark, and Match device. Never hardcode a fog
   dissolve: it must resolve to the active zone ground.
-- Use Fellix for all product text, controls, labels, names, and athletic or
-  operator display; Fraunces 600–700 only for editorial headlines at least
-  24px; and Archivo for every meaningful numeral. Athletic, operator, and app
-  surfaces contain no serif. Instrument Serif is retired. Awesome Serif must
-  not enter a product bundle without documented embedding rights and a future
-  amendment to the authoritative font guide.
+- Duna ships exactly two brand typefaces. Use Fellix for every word, including
+  editorial, athletic, operator, and app display; use Archivo for every
+  meaningful numeral and the Duna wordmark. No serif, optional monument face,
+  or third brand family may enter a product bundle. Generic `sans-serif` is a
+  failure fallback only. Club-configured theme fonts remain contained tenant
+  content and never replace Duna chrome.
 - Never synthesize a font weight. Tracking follows the v3 size curve and is
   never tighter than `-0.030em`; display word spacing compensates negative
   tracking.
@@ -71,9 +71,8 @@ When the documents appear to conflict, preserve these invariants:
   moderation gates.
 - Meaningful numbers use the six Archivo tiers from the font guide. Score,
   Hero, Block, Table, and Chip use tabular figures; Monument is deliberately
-  proportional. Use `font-variation-settings`, never `font-stretch`. Serif
-  never appears in buttons, tables, labels, athletic/operator surfaces, or
-  either native app.
+  proportional. Use `font-variation-settings`, never `font-stretch`. Fellix is
+  the only family for words across web, HQ, Super Admin, and both native apps.
 - Use the four chip classes from the design system. Do not render status,
   taxonomy, identity, and metrics as undifferentiated badges.
 - Do not render misleading empty data such as `0/0`, `0–0`, undifferentiated

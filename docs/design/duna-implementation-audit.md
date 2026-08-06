@@ -250,9 +250,11 @@ Verified collisions this fixes: _Playmore._ · _Thegamefinallyhasahome._ · _The
 | All eyebrows                       | Archivo 700, `#235A96` cobalt | **Fellix 500**, `--ink-soft` @72%              |
 | Event card dates (`03`)            | Instrument Serif 27px         | **Archivo** `wdth 74 / wght 800`, tabular      |
 | Player name, match teams, rankings | Serif                         | **Fellix 800** — no serif on athletic surfaces |
-| Editorial headlines                | Instrument Serif              | **Fraunces** 600–700, `opsz 144`, `WONK 1`     |
+| Editorial headlines                | Instrument Serif              | **Fellix 700** with the shared display rhythm  |
 
-Archivo is the data font. Instrument Serif is the editorial font. Neither may take the other's job. Three violations are live right now.
+Archivo is the data font. Fellix is the language and display font. Neither may
+take the other's job. The legacy observations above remain evidence of the
+failure that the current two-family contract removes.
 
 ## A3. Positioning and layout errors
 

@@ -15,7 +15,6 @@
     "@duna/core": "workspace:*",
     "@duna/ui": "workspace:*",
     "@fontsource-variable/archivo": "^5.3.0",
-    "@fontsource/jetbrains-mono": "^5.3.0",
     "@livekit/protocol": "1.50.4",
     "@vercel/blob": "^2.6.1",
     "@workos-inc/authkit-nextjs": "4.3.1",

@@ -66,12 +66,8 @@ body {
 [data-zone="editorial"] h2,
 [data-zone="editorial"] h3,
 [data-zone="editorial"] .display {
-  font-family: var(--font-display);
-  font-variation-settings:
-    "opsz" 144,
-    "SOFT" 0,
-    "WONK" 1;
-  font-weight: 650;
+  font-family: var(--font-body);
+  font-weight: 700;
 }
 
 [data-zone="athletic"],
