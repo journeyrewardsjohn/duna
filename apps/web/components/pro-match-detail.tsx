@@ -39,6 +39,9 @@ export function ProMatchDetail({
   const matchStatus = match.liveScore?.status ?? match.status;
   const isLive = matchStatus === "live";
   const structuredData = professionalMatchJsonLd(detail);
+  const eventReturnLabel =
+    event.name.replace(/^BPT\s+(?:Elite16|Challenge|Futures)\s+/i, "").trim() ||
+    event.name;
   return (
     <main className="pro-match-page" data-zone="athletic">
       <SiteHeader />
@@ -50,11 +53,16 @@ export function ProMatchDetail({
         className="pro-match-hero"
         data-zone={isLive ? "live" : "athletic"}
       >
-        <div>
+        <nav
+          aria-label="Return to professional event"
+          className="pro-match-hero__breadcrumb"
+        >
           <Link href={`/events/${event.slug}`}>
             <ArrowLeft aria-hidden size={15} />
-            {event.name}
+            Back to {eventReturnLabel}
           </Link>
+        </nav>
+        <div className="pro-match-hero__intro">
           <div>
             <Badge tone={isLive ? "danger" : "neutral"}>
               {isLive && <Radio aria-hidden size={11} />}

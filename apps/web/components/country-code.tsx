@@ -11,13 +11,27 @@ export function CountryCode({
   readonly fallback?: string;
 }) {
   const normalized = countryCode(code);
-  const value = normalized ?? fallback;
+  if (normalized) {
+    return (
+      <span
+        aria-label={`${normalized} flag`}
+        className={[
+          "duna-country-flag",
+          "fi",
+          "fis",
+          `fi-${normalized.toLowerCase()}`,
+          className,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        role="img"
+      />
+    );
+  }
+
   return (
-    <IdentityChip
-      aria-label={normalized ? `Country ${normalized}` : "International"}
-      className={className}
-    >
-      {value}
+    <IdentityChip aria-label="International" className={className}>
+      {fallback}
     </IdentityChip>
   );
 }

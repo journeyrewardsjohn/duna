@@ -161,12 +161,28 @@ if (
 }
 if (
   !webGlobalCss.includes(
-    ".pro-live-scoreboard__team--winner .pro-live-scoreboard__match-points {\n  color: var(--signal-text);",
+    ".pro-live-scoreboard__team--winner .pro-live-scoreboard__match-points {\n  background: color-mix(in srgb, var(--gain) 14%, var(--surface-2));\n  color: var(--text-1);",
   )
 ) {
   violations.push(
-    "apps/web/app/globals.css must preserve accessible winner-score ink in light mode",
+    "apps/web/app/globals.css must preserve accessible winner-score ink and emphasis in light mode",
   );
+}
+for (const selector of [
+  ".pro-live-stats__metric > .duna-numeric",
+  ".pro-live-stats__player dd .duna-numeric",
+] as const) {
+  const selectorStart = webV3Css.indexOf(selector);
+  const ruleEnd = webV3Css.indexOf("}", selectorStart);
+  const rule = webV3Css.slice(selectorStart, ruleEnd);
+  if (
+    selectorStart < 0 ||
+    !rule.includes("font-size: clamp(2rem, 3vw, 2.875rem)")
+  ) {
+    violations.push(
+      `apps/web/app/design-v3.css must preserve ${selector} within the Block tier`,
+    );
+  }
 }
 for (const [contract, message] of [
   [

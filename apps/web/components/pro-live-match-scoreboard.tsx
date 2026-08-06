@@ -139,6 +139,8 @@ function PlayerIdentity({
     <>
       {player.avatarUrl ? (
         <img alt="" src={player.avatarUrl} />
+      ) : countryCode ? (
+        <CountryCode code={countryCode} fallback={player.name.slice(0, 2)} />
       ) : flagUrl ? (
         <img alt={`${countryCode ?? "Team"} flag`} src={flagUrl} />
       ) : (
@@ -254,6 +256,11 @@ function PlayerStatCard({
       <div>
         {player?.avatarUrl ? (
           <img alt="" src={player.avatarUrl} />
+        ) : team.countryCode ? (
+          <CountryCode
+            code={team.countryCode}
+            fallback={stat.name.slice(0, 2)}
+          />
         ) : team.flagUrl ? (
           <img alt={`${team.countryCode ?? "Team"} flag`} src={team.flagUrl} />
         ) : (

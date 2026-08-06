@@ -1,6 +1,7 @@
 import "@fontsource-variable/archivo";
 import "@fontsource-variable/fraunces";
 import "@duna/ui/styles.css";
+import "flag-icons/css/flag-icons.min.css";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "./globals.css";
 import "./design-v3.css";

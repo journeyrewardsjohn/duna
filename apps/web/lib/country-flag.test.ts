@@ -9,6 +9,13 @@ describe("countryFlag", () => {
     expect(countryCode("ISR")).toBe("IL");
     expect(countryCode("SVK")).toBe("SK");
     expect(countryCode("TUR")).toBe("TR");
+    expect(countryCode("GER")).toBe("DE");
+  });
+
+  it("covers standard ISO alpha-3 countries beyond the tour aliases", () => {
+    expect(countryCode("DEU")).toBe("DE");
+    expect(countryCode("KAZ")).toBe("KZ");
+    expect(countryCode("ZAF")).toBe("ZA");
   });
 
   it("uses a neutral flag when the federation is unknown", () => {
