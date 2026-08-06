@@ -2489,12 +2489,12 @@ body {
   font-size: 0.75rem;
 }
 
-.pro-live-stats__metric > .duna-numeric {
-  font-size: clamp(2rem, 3vw, 2.875rem);
+.pro-live-stats__metric > .duna-numeric--block {
+  font-size: clamp(2rem, 2vw, 2.25rem);
 }
 
-.pro-live-stats__player dd .duna-numeric {
-  font-size: clamp(2rem, 3vw, 2.875rem);
+.pro-live-stats__player dd .duna-numeric--block {
+  font-size: clamp(2rem, 1.8vw, 2.125rem);
 }
 
 .pro-match-prediction__labels .duna-numeric {
