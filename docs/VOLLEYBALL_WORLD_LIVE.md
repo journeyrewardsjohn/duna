@@ -86,7 +86,9 @@ matches so a newly linked tournament cannot starve or time out the live scorer.
 
 ## Operations
 
-- GitHub Actions refreshes official live snapshots every five minutes.
+- Vercel Cron refreshes official live snapshots every five minutes. Keeping the
+  scheduler with the production function avoids making live scoring dependent
+  on an external CI runner.
 - The slower 12ndr detail import runs every two hours.
 - An open match page polls Duna every 30 seconds and uses the match-specific
   WebSocket while the match is live.
