@@ -15,11 +15,21 @@ const ignoredDirectories = new Set([
 const requiredFiles = [
   "AGENTS.md",
   "docs/design/duna-design-system.md",
+  "docs/design/duna-design-system-v3.md",
+  "docs/design/duna-implementation-audit.md",
   "docs/design/duna-mobile-design-guide.md",
   "docs/design/duna-theming-light-dark.md",
+  "apps/web/app/design-v3.css",
+  "apps/hq/app/design-v3.css",
   "apps/web/public/brand/duna-mark.svg",
   "apps/web/public/media/brand/imagery-log.json",
   "apps/web/public/media/brand/duna-home-hero-motion-v1.mp4",
+  "apps/web/public/media/brand/duna-home-rally-v3.avif",
+  "apps/web/public/media/brand/duna-home-rally-v3.webp",
+  "apps/web/public/media/brand/duna-pro-hero-v3.avif",
+  "apps/web/public/media/brand/duna-pro-hero-v3.webp",
+  "apps/web/public/media/brand/duna-event-venue-hamburg-v1.avif",
+  "apps/web/public/media/brand/duna-event-venue-hamburg-v1.webp",
   "apps/player/assets/duna-hero.mp4",
   "apps/player/assets/duna-hero-poster.jpg",
   "apps/player/assets/icon-dark.png",
@@ -28,6 +38,8 @@ const requiredFiles = [
   "apps/pro/assets/icon-light.png",
   "apps/pro/assets/icon-tinted.png",
   "apps/pro/assets/monochrome-icon.png",
+  "packages/ui/src/brand.ts",
+  "packages/ui/src/brand.test.ts",
 ];
 
 for (const file of requiredFiles) {
@@ -115,11 +127,52 @@ const retiredPaletteColors = new Set([
   "#86c9ef",
 ]);
 
-for (const file of sourceFiles(join(root, "apps"))) {
+const forbiddenLegacyColors = new Set(["#0b2440", "#3d81b9", "#235a96"]);
+
+const designSources = [
+  ...sourceFiles(join(root, "apps")),
+  ...sourceFiles(join(root, "packages")),
+];
+
+for (const file of designSources) {
+  if (extname(file) === ".css") {
+    const fileLabel = relative(root, file);
+    const lines = readFileSync(file, "utf8").split("\n");
+    lines.forEach((line, index) => {
+      const tracking = line.match(/letter-spacing:\s*(-?\d*\.?\d+)em/);
+      if (tracking?.[1] && Number(tracking[1]) < -0.03) {
+        violations.push(
+          `${fileLabel}:${index + 1} tracks tighter than -0.030em`,
+        );
+      }
+      for (const match of line.matchAll(/#[\da-fA-F]{6}/g)) {
+        if (forbiddenLegacyColors.has(match[0].toLowerCase())) {
+          violations.push(
+            `${fileLabel}:${index + 1} uses a forbidden legacy brand color`,
+          );
+        }
+      }
+    });
+    continue;
+  }
   if (![".ts", ".tsx"].includes(extname(file))) continue;
   const fileLabel = relative(root, file);
   const lines = readFileSync(file, "utf8").split("\n");
   lines.forEach((line, index) => {
+    if (/data-zone=["'{]*performance/.test(line)) {
+      violations.push(
+        `${fileLabel}:${index + 1} uses the retired performance zone; use athletic or live`,
+      );
+    }
+
+    for (const match of line.matchAll(/#[\da-fA-F]{6}/g)) {
+      if (forbiddenLegacyColors.has(match[0].toLowerCase())) {
+        violations.push(
+          `${fileLabel}:${index + 1} uses a forbidden legacy brand color`,
+        );
+      }
+    }
+
     if (/[\u{1F1E6}-\u{1F1FF}]/u.test(line)) {
       violations.push(`${fileLabel}:${index + 1} renders an emoji flag`);
     }
@@ -142,7 +195,7 @@ for (const file of sourceFiles(join(root, "apps"))) {
     const allowed = allowedInternalSandRating.some((pattern) =>
       pattern.test(pattern.source.includes("test") ? fileLabel : line),
     );
-    if (appearsUserFacing && !allowed) {
+    if (fileLabel.startsWith("apps/") && appearsUserFacing && !allowed) {
       violations.push(
         `${fileLabel}:${index + 1} must spell user-facing Sand Rating as two words`,
       );
@@ -173,5 +226,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  "Design system verified: references, icon variants, generated imagery, theme behavior, naming, and country-code policy are intact.",
+  "Design system verified: v3 references, zoning, typography limits, club/player identity, icon variants, generated imagery, theme behavior, naming, and country-code policy are intact.",
 );

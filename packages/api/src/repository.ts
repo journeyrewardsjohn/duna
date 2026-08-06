@@ -77,6 +77,10 @@ export const demoRepository = {
         configured: Boolean(process.env.STRIPE_SECRET_KEY),
         status: "not-started" as const,
       },
+      publicIdentity: {
+        tier: "verified-pro" as const,
+        accentId: "dune-gold" as const,
+      },
       sourceConnections: [],
       voiceOnboarding: {
         configured: Boolean(

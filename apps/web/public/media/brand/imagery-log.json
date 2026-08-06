@@ -2,7 +2,12 @@
   "schemaVersion": 2,
   "collection": "Golden Hour Performance",
   "createdAt": "2026-08-05",
-  "generators": ["Higgsfield Nano Banana Pro", "Higgsfield Seedance 2.0"],
+  "generators": [
+    "Higgsfield Nano Banana Pro",
+    "Higgsfield Seedance 2.0",
+    "Higgsfield Soul Location",
+    "Higgsfield GPT Image 2"
+  ],
   "policy": {
     "identity": "No real player likenesses or identifiable public figures.",
     "usage": "Atmospheric brand and product storytelling only; never evidence of a real event, venue, or participant.",
@@ -44,6 +49,24 @@
       "jobId": "897a9708-bc6a-487a-a858-a4b541e72230",
       "intent": "A waiting ball and open court for truthful, calm empty states.",
       "reference": "/media/event-library/duna-event-sunrise-tournament.webp"
+    },
+    {
+      "name": "duna-pro-hero-v3",
+      "jobId": "a84b7b3c-f9be-4abf-bf17-62fe285e8dc9",
+      "intent": "High-key empty beach arena with pale sky and quiet stands for light-ground professional-tour browsing.",
+      "reference": "Higgsfield Soul Location · synthetic atmosphere, not a real event or venue record"
+    },
+    {
+      "name": "duna-event-venue-hamburg-v1",
+      "jobId": "f4488580-09bc-4ff8-90a8-e721a88aa220",
+      "intent": "Luminous waterfront sand-court venue plate for the Hamburg event composition.",
+      "reference": "Higgsfield Soul Location · illustrative venue atmosphere, not official Hamburg event evidence"
+    },
+    {
+      "name": "duna-home-rally-v3",
+      "jobId": "231c7ae1-5e53-4c44-a42b-d5a4d8bff750",
+      "intent": "Anonymous backlit elite rally with obscured identity, suspended sand, no crowd, marks, or sponsor boards.",
+      "reference": "Higgsfield GPT Image 2 · text-only generation, no real athlete likeness"
     }
   ],
   "motionAssets": [

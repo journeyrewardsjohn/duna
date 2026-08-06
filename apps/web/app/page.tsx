@@ -23,7 +23,7 @@ import { getServerCaller } from "@/lib/api";
 const campaignMedia = {
   rally: "/media/brand/duna-home-hero-v1.webp",
   serve: "/media/duna-action-serve.webp",
-  celebrate: "/media/duna-action-dive.webp",
+  liveRally: "/media/brand/duna-home-rally-v3.webp",
   rating: "/media/brand/duna-rating-texture-v1.webp",
   operator: "/media/brand/duna-club-hero-v1.webp",
 } as const;
@@ -104,30 +104,29 @@ export default async function HomePage() {
             </div>
           </div>
 
-          <Link
-            className="campaign-now"
-            href={
-              featuredEvent ? `/events/${featuredEvent.slug}` : "/app/discover"
-            }
-          >
-            <span className="campaign-now__status">
+          <div className="campaign-strand" aria-label="Happening on Duna">
+            <span className="campaign-strand__label">
               <Radio aria-hidden size={15} />
-              {featuredEvent?.live ? "Live now" : "Up next"}
+              The strand
             </span>
-            <span className="campaign-now__title">
-              <strong>
-                {featuredEvent?.title ?? "Discover play near you"}
-              </strong>
-              <small>
-                {featuredEvent
-                  ? `${featuredEvent.venueName} · ${featuredEvent.spotsRemaining} spots`
-                  : "Courts, clinics, pickups, leagues + tournaments"}
-              </small>
-            </span>
-            <span className="campaign-now__arrow">
-              <ArrowRight aria-hidden size={18} />
-            </span>
-          </Link>
+            {events.length > 0 ? (
+              events.slice(0, 3).map((event) => (
+                <Link href={`/events/${event.slug}`} key={event.id}>
+                  <span>{event.live ? "Live now" : "Up next"}</span>
+                  <strong>{event.title}</strong>
+                  <small>{event.venueName}</small>
+                  <ArrowRight aria-hidden size={16} />
+                </Link>
+              ))
+            ) : (
+              <Link href="/app/discover">
+                <span>Discover</span>
+                <strong>Find play near you</strong>
+                <small>Courts, clinics, leagues + tournaments</small>
+                <ArrowRight aria-hidden size={16} />
+              </Link>
+            )}
+          </div>
         </div>
       </section>
 
@@ -147,7 +146,7 @@ export default async function HomePage() {
       <section className="campaign-shell campaign-intro">
         <div className="campaign-intro__heading">
           <span className="campaign-kicker campaign-kicker--blue">
-            One network. Every side of the sport.
+            The network
           </span>
           <h2>The game finally has a home.</h2>
           <p>
@@ -158,7 +157,7 @@ export default async function HomePage() {
 
         <div className="campaign-paths">
           <Link href="/app/discover">
-            <span className="campaign-paths__number">01</span>
+            <span className="campaign-paths__role">For players</span>
             <span className="campaign-paths__icon">
               <CalendarDays aria-hidden />
             </span>
@@ -172,7 +171,7 @@ export default async function HomePage() {
             </span>
           </Link>
           <Link href="/app/profile">
-            <span className="campaign-paths__number">02</span>
+            <span className="campaign-paths__role">For competitors</span>
             <span className="campaign-paths__icon">
               <ChartNoAxesCombined aria-hidden />
             </span>
@@ -186,7 +185,7 @@ export default async function HomePage() {
             </span>
           </Link>
           <Link href="/run-your-club">
-            <span className="campaign-paths__number">03</span>
+            <span className="campaign-paths__role">For operators</span>
             <span className="campaign-paths__icon">
               <Building2 aria-hidden />
             </span>
@@ -202,7 +201,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="campaign-live" data-zone="performance">
+      <section className="campaign-live" data-zone="athletic">
         <div className="campaign-shell campaign-live__grid">
           <div className="campaign-live__copy">
             <span className="campaign-kicker campaign-kicker--sand">
@@ -295,16 +294,40 @@ export default async function HomePage() {
 
           <div className="campaign-live__image">
             <Image
-              alt="Elite beach volleyball players celebrating together after a point"
+              alt="Two anonymous beach volleyball players in a backlit rally"
               fill
               sizes="(max-width: 900px) 100vw, 48vw"
-              src={campaignMedia.celebrate}
+              src={campaignMedia.liveRally}
             />
             <div className="campaign-live__image-wash" />
             <div className="campaign-live__caption">
               <span>More than a booking.</span>
               <strong>It&apos;s who you meet there.</strong>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="campaign-tour" data-zone="athletic">
+        <span aria-hidden className="campaign-tour__ghost">
+          TOUR
+        </span>
+        <div className="campaign-shell campaign-tour__inner">
+          <div>
+            <span className="campaign-kicker">Professional tour</span>
+            <h2>The world&apos;s game. One living record.</h2>
+            <p>
+              Follow professional events, teams, match states, broadcasts, and
+              the verified player history behind every result.
+            </p>
+            <Link className="campaign-button" href="/pro">
+              Enter the tour <ArrowRight aria-hidden size={17} />
+            </Link>
+          </div>
+          <div className="campaign-tour__stat">
+            <small>Connected profiles</small>
+            <Numeric>{people.length}</Numeric>
+            <span>Ratings, results + form</span>
           </div>
         </div>
       </section>
@@ -324,15 +347,6 @@ export default async function HomePage() {
               delta={featuredPlayer?.rating.delta}
               value={featuredPlayer?.rating.display ?? 1}
             />
-            <span>
-              <small>Sand Rating</small>
-              <strong>
-                {featuredPlayer?.rating.display.toFixed(2) ?? "—"}
-              </strong>
-              <em>
-                {featuredPlayer?.rating.confidence ?? "Provisional"} confidence
-              </em>
-            </span>
           </div>
         </div>
 

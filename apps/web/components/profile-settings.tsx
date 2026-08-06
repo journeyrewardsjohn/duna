@@ -1,24 +1,46 @@
 "use client";
 
 import type { PlayerSettings } from "@duna/api";
-import { Badge } from "@duna/ui";
-import { CalendarDays, Save, UserRound } from "lucide-react";
+import { Badge, playerAccents, type PlayerAccentId } from "@duna/ui";
+import {
+  CalendarDays,
+  Palette,
+  Save,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState, useTransition } from "react";
+import {
+  type CSSProperties,
+  FormEvent,
+  useEffect,
+  useState,
+  useTransition,
+} from "react";
 import {
   checkHandleAvailabilityAction,
   recordBirthDateAction,
+  updateProfileAccentAction,
   updateProfileAction,
 } from "@/app/app/settings/actions";
 
 type Profile = PlayerSettings["profile"];
 
-export function ProfileSettings({ profile }: { readonly profile: Profile }) {
+export function ProfileSettings({
+  profile,
+  publicIdentity,
+}: {
+  readonly profile: Profile;
+  readonly publicIdentity: PlayerSettings["publicIdentity"];
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [birthDate, setBirthDate] = useState("");
+  const [accentId, setAccentId] = useState<PlayerAccentId>(
+    publicIdentity.accentId,
+  );
   const [handleStatus, setHandleStatus] = useState<{
     tone: "checking" | "available" | "unavailable" | "invalid";
     message: string;
@@ -104,6 +126,22 @@ export function ProfileSettings({ profile }: { readonly profile: Profile }) {
           ? "Birth date recorded. A verified guardian must manage registrations, payments, and consent for this account."
           : "Birth date recorded. Adult account controls are now available.",
       );
+      router.refresh();
+    });
+  };
+
+  const updateAccent = (nextAccent: PlayerAccentId) => {
+    setError(undefined);
+    setNotice(undefined);
+    setAccentId(nextAccent);
+    startTransition(async () => {
+      const response = await updateProfileAccentAction(nextAccent);
+      if (!response.ok) {
+        setAccentId(publicIdentity.accentId);
+        setError(response.error);
+        return;
+      }
+      setNotice("Profile accent saved to your public identity.");
       router.refresh();
     });
   };
@@ -295,6 +333,55 @@ export function ProfileSettings({ profile }: { readonly profile: Profile }) {
           {isPending ? "Saving…" : "Save profile"}
         </button>
       </form>
+
+      <article className="settings-identity-style">
+        <div className="settings-form__title">
+          <Palette aria-hidden size={20} />
+          <span>
+            <strong>Public identity accent</strong>
+            <small>
+              Personality without changing ratings, records, layout, or
+              evidence.
+            </small>
+          </span>
+          <Badge
+            tone={
+              publicIdentity.tier === "verified-pro" ? "positive" : "neutral"
+            }
+          >
+            {publicIdentity.tier === "verified-pro"
+              ? "Verified pro"
+              : "Claimed"}
+          </Badge>
+        </div>
+        <div
+          aria-label="Curated player accents"
+          className="settings-player-accents"
+          role="group"
+        >
+          {playerAccents.map((accent) => (
+            <button
+              aria-label={accent.label}
+              aria-pressed={accentId === accent.id}
+              disabled={isPending || publicIdentity.tier !== "verified-pro"}
+              key={accent.id}
+              onClick={() => updateAccent(accent.id)}
+              style={{ "--player-accent": accent.color } as CSSProperties}
+              type="button"
+            >
+              <i />
+              <span>{accent.label}</span>
+            </button>
+          ))}
+        </div>
+        {publicIdentity.tier !== "verified-pro" && (
+          <p>
+            <ShieldCheck aria-hidden size={16} />
+            Verified professionals unlock the curated accent set. Sponsor marks
+            and custom cutouts remain review-gated before publication.
+          </p>
+        )}
+      </article>
 
       {profile.birthDate ? (
         <article className="settings-row">

@@ -45,14 +45,20 @@ export function ProPlayerDiscovery({
   const [gender, setGender] = useState<"men" | "women">("men");
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase());
-  const topPlayers = useMemo(
-    () =>
-      players
-        .filter((player) => player.gender === gender)
-        .sort((left, right) => left.worldRank - right.worldRank)
-        .slice(0, 8),
-    [gender, players],
-  );
+  const topTeams = useMemo(() => {
+    const grouped = new Map<string, ProDiscoveryPlayer[]>();
+    for (const player of players
+      .filter((candidate) => candidate.gender === gender)
+      .toSorted(
+        (left, right) =>
+          left.worldRank - right.worldRank ||
+          left.displayName.localeCompare(right.displayName),
+      )) {
+      const key = `${player.worldRank}:${player.points}`;
+      grouped.set(key, [...(grouped.get(key) ?? []), player]);
+    }
+    return [...grouped.values()].map((team) => team.slice(0, 2)).slice(0, 8);
+  }, [gender, players]);
   const searchResults = useMemo(() => {
     if (!deferredQuery) return [];
     return players
@@ -104,49 +110,83 @@ export function ProPlayerDiscovery({
         </Link>
       </div>
       <div className="pro-player-discovery__grid">
-        {topPlayers.map((player) => (
-          <Link
-            aria-label={`View ${player.displayName}'s player profile`}
-            className="pro-player-card"
-            href={player.publicPath}
-            key={`${player.gender}-${player.id}`}
-          >
-            <div
-              className="pro-player-card__portrait"
-              style={
-                player.avatarUrl
-                  ? { backgroundImage: `url("${player.avatarUrl}")` }
-                  : undefined
-              }
+        {topTeams.map((team) => {
+          const lead = team[0]!;
+          const teamRating = team
+            .map((player) => player.sandRating)
+            .filter((rating): rating is number => rating !== undefined);
+          return (
+            <article
+              className="pro-player-card pro-player-team-card"
+              key={`${lead.gender}-${lead.worldRank}-${lead.points}`}
             >
-              <span className="pro-player-card__rank">
-                World #{player.worldRank}
-              </span>
-              {!player.avatarUrl && (
-                <strong>{initials(player.displayName)}</strong>
-              )}
-            </div>
-            <div className="pro-player-card__copy">
-              <span>
-                <CountryCode code={player.countryCode} />
-              </span>
-              <h3>{player.displayName}</h3>
-              <dl>
-                <div>
-                  <dt>Tour points</dt>
-                  <dd>{player.points.toLocaleString("en-US")}</dd>
-                </div>
-                <div>
-                  <dt>Sand Rating</dt>
-                  <dd>{player.sandRating?.toFixed(2) ?? "—"}</dd>
-                </div>
-              </dl>
-              <span className="pro-player-card__open">
-                Player profile <ArrowRight aria-hidden size={14} />
-              </span>
-            </div>
-          </Link>
-        ))}
+              <div className="pro-player-card__portrait pro-player-team-card__portraits">
+                <span className="pro-player-card__rank">
+                  World #{lead.worldRank}
+                </span>
+                {team.map((player) => (
+                  <Link
+                    aria-label={`View ${player.displayName}'s player profile`}
+                    href={player.publicPath}
+                    key={player.id}
+                    style={
+                      player.avatarUrl
+                        ? {
+                            backgroundImage: `url("${player.avatarUrl}")`,
+                          }
+                        : undefined
+                    }
+                  >
+                    {!player.avatarUrl && (
+                      <strong>{initials(player.displayName)}</strong>
+                    )}
+                  </Link>
+                ))}
+              </div>
+              <div className="pro-player-card__copy">
+                <span>
+                  {team.map((player) => (
+                    <CountryCode
+                      code={player.countryCode}
+                      key={`country-${player.id}`}
+                    />
+                  ))}
+                </span>
+                <h3>
+                  {team.map((player, index) => (
+                    <span key={player.id}>
+                      {index > 0 && <i aria-hidden> / </i>}
+                      <Link href={player.publicPath}>{player.displayName}</Link>
+                    </span>
+                  ))}
+                </h3>
+                <dl>
+                  <div>
+                    <dt>Tour points</dt>
+                    <dd>{lead.points.toLocaleString("en-US")}</dd>
+                  </div>
+                  <div>
+                    <dt>Team rating</dt>
+                    <dd>
+                      {teamRating.length
+                        ? (
+                            teamRating.reduce(
+                              (sum, rating) => sum + rating,
+                              0,
+                            ) / teamRating.length
+                          ).toFixed(2)
+                        : "—"}
+                    </dd>
+                  </div>
+                </dl>
+                <span className="pro-player-card__open">
+                  {team.length === 2 ? "Two player profiles" : "Player profile"}
+                  <ArrowRight aria-hidden size={14} />
+                </span>
+              </div>
+            </article>
+          );
+        })}
       </div>
 
       <div className="pro-player-search">

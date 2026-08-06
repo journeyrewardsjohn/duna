@@ -120,8 +120,8 @@
   --flare-rgb: 232 104 58;
 }
 
-:root[data-theme="light"] [data-zone="performance"],
-:root[data-theme="light"][data-zone="performance"] {
+:root[data-theme="light"] [data-zone="live"],
+:root[data-theme="light"][data-zone="live"] {
   color-scheme: dark;
   --ground: #1b1b19;
   --ground-warm: #231f19;
@@ -203,8 +203,8 @@
   --flare-rgb: 244 121 76;
 }
 
-:root[data-theme="dark"] [data-zone="performance"],
-:root[data-theme="dark"][data-zone="performance"] {
+:root[data-theme="dark"] [data-zone="live"],
+:root[data-theme="dark"][data-zone="live"] {
   --ground: #0d1114;
   --ground-warm: #171410;
   --ground-cool: #101a20;
@@ -232,11 +232,34 @@
 }
 
 :root {
-  --font-display: "Instrument Serif", Georgia, serif;
-  --font-heading: "Instrument Serif", Georgia, serif;
+  --font-display: "Fraunces Variable", "Fraunces", Georgia, serif;
+  --font-heading: "Fraunces Variable", "Fraunces", Georgia, serif;
   --font-body: "Fellix", "Helvetica Neue", Arial, sans-serif;
   --font-data: "Archivo Variable", "Archivo", "Arial Narrow", sans-serif;
   --font-mono: var(--font-data);
+  --sand-100: #efe6d3;
+  --sand-300: #e2cfa6;
+  --sand-500: #c9a96a;
+  --marine-200: #b5ccd3;
+  --marine-400: #8fb0bc;
+  --marine-900: #22343b;
+  --ink: #1b1b19;
+  --ink-soft: #3a3a36;
+  --fog-50: #f6f5f1;
+  --fog-100: #edece6;
+  --dusk: #fbf3f4;
+  --dusk-deep: #edd3d9;
+  --pending: #8a8578;
+  --hq-tint: #e8f2d4;
+  --hq-core: #a9c463;
+  --hq-ink: #3f5417;
+  --hq-deep: #1e2a0e;
+  --club-h: 205;
+  --club-c: 0.07;
+  --club-tint: oklch(0.95 calc(var(--club-c) * 0.28) var(--club-h));
+  --club-edge: oklch(0.85 calc(var(--club-c) * 0.5) var(--club-h));
+  --club-core: oklch(0.55 var(--club-c) var(--club-h));
+  --club-ink: oklch(0.4 calc(var(--club-c) * 0.85) var(--club-h));
   --radius-chip: 8px;
   --radius-input: 8px;
   --radius-nested: 16px;
@@ -278,6 +301,7 @@
 
 :where(*, *::before, *::after) {
   box-sizing: border-box;
+  font-synthesis: none;
 }
 
 :where(button, input, select, textarea) {
@@ -301,7 +325,8 @@
   transition-duration: 220ms;
 }
 
-[data-zone="performance"] {
+[data-zone="athletic"],
+[data-zone="live"] {
   background-color: var(--ground);
   box-shadow: inset 0 1px 0 var(--edge-light);
   color: var(--text-1);
@@ -482,7 +507,7 @@
   text-transform: uppercase;
 }
 
-[data-zone="performance"] .duna-eyebrow {
+[data-zone="live"] .duna-eyebrow {
   color: color-mix(in srgb, var(--gold) 90%, var(--text-1));
 }
 

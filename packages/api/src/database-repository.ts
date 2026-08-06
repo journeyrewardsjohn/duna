@@ -136,6 +136,29 @@ function currency(value: string): Currency {
   return supported.includes(value as Currency) ? (value as Currency) : "USD";
 }
 
+const playerAccentIds = [
+  "dune-gold",
+  "marine",
+  "deep-coral",
+  "moss",
+  "terracotta",
+  "slate-blue",
+  "ochre",
+  "plum",
+  "sea-green",
+  "ink",
+] as const satisfies readonly PlayerSettings["publicIdentity"]["accentId"][];
+
+function playerAccentId(
+  value: string | null | undefined,
+): PlayerSettings["publicIdentity"]["accentId"] {
+  return playerAccentIds.includes(
+    value as PlayerSettings["publicIdentity"]["accentId"],
+  )
+    ? (value as PlayerSettings["publicIdentity"]["accentId"])
+    : "dune-gold";
+}
+
 function plan(value: string): OrganizationSummary["plan"] {
   const supported: readonly OrganizationSummary["plan"][] = [
     "coach",
@@ -1766,6 +1789,7 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
     sourceConnectionRows,
     guardianInvitation,
     identityVerification,
+    publicProfile,
     dunaPlus,
   ] = await Promise.all([
     database.query.people.findFirst({ where: eq(people.id, personId) }),
@@ -1840,6 +1864,9 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
       orderBy: desc(guardianInvitations.createdAt),
     }),
     loadIdentityVerification(personId),
+    database.query.playerPublicProfiles.findFirst({
+      where: eq(playerPublicProfiles.personId, personId),
+    }),
     getDunaPlusEntitlement(personId),
   ]);
   if (!person || !summary) throw new Error("Player profile was not found");
@@ -1971,6 +1998,13 @@ async function loadPlayerSettings(personId: string): Promise<PlayerSettings> {
       onboardingCompletedAt: person.profileOnboardingCompletedAt?.toISOString(),
     },
     identityVerification,
+    publicIdentity: {
+      tier:
+        person.isProfessional && identityVerification.status === "verified"
+          ? "verified-pro"
+          : "claimed",
+      accentId: playerAccentId(publicProfile?.accentId),
+    },
     sourceConnections: sourceConnectionRows.flatMap((connection) => {
       if (
         connection.source !== "volleyball-life" &&

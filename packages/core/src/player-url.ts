@@ -32,9 +32,9 @@ function publicName(displayName: string) {
 function publicCity(homeMarket?: string | null) {
   const value = homeMarket?.trim();
   if (!value || /^(market|city|location) not set$/i.test(value)) {
-    return "city-not-listed";
+    return undefined;
   }
-  return value.split(",")[0]?.trim() || "city-not-listed";
+  return value.split(",")[0]?.trim() || undefined;
 }
 
 export function publicPlayerGeneratedIdentifier(input: PublicPlayerRouteInput) {
@@ -44,8 +44,9 @@ export function publicPlayerGeneratedIdentifier(input: PublicPlayerRouteInput) {
     "international",
     24,
   );
-  const city = slugPart(publicCity(input.homeMarket), "city-not-listed", 42);
-  return `${name}-${country}-${city}-${input.id.toLowerCase()}`;
+  const city = publicCity(input.homeMarket);
+  const location = city ? `-${slugPart(city, "", 42)}` : "";
+  return `${name}-${country}${location}-${input.id.toLowerCase()}`;
 }
 
 export function publicPlayerIdentifier(input: PublicPlayerRouteInput) {

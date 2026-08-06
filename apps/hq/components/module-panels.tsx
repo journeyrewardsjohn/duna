@@ -1250,9 +1250,13 @@ function SettingsPanel({
             "Add a player-facing tagline, hero image or video, and a compact color system."}
         </p>
         <div className="theme-swatches">
-          {Object.entries(workspace.theme.palette).map(([name, value]) => (
-            <span key={name} style={{ background: value }} title={name} />
-          ))}
+          {Object.entries(workspace.theme.palette).flatMap(([name, value]) =>
+            typeof value === "string" ? (
+              <span key={name} style={{ background: value }} title={name} />
+            ) : (
+              []
+            ),
+          )}
         </div>
         <Badge tone={workspace.theme.publishedAt ? "live" : "warning"}>
           {workspace.theme.publishedAt ? "published" : "draft"}

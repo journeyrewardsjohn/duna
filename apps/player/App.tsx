@@ -336,7 +336,7 @@ const ThemeContext = createContext<{
   readonly theme: ThemeName;
   readonly preference: ThemePreference;
   readonly toggle: () => void;
-}>({ theme: "light", preference: "system", toggle: () => undefined });
+}>({ theme: "light", preference: "light", toggle: () => undefined });
 
 function ThemeButton() {
   const { preference, theme, toggle } = useContext(ThemeContext);
@@ -8539,7 +8539,7 @@ function DunaApp() {
     readonly kind: Exclude<HomeQuickAction, "record-video">;
   }>();
   const [themePreference, setThemePreference] =
-    useState<ThemePreference>("system");
+    useState<ThemePreference>("light");
   const theme = themePreference === "system" ? deviceTheme : themePreference;
   const screenTransition = useRef(new Animated.Value(1)).current;
 

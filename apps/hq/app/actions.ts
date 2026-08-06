@@ -1,5 +1,6 @@
 "use server";
 
+import { normalizeClubColor } from "@duna/ui";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getServerCaller } from "@/lib/api";
@@ -490,12 +491,20 @@ export async function updateThemeAction(
     const headingFont = field(formData, "headingFont");
     const bodyFont = field(formData, "bodyFont");
     const validHeadingFonts = [
+      "Fellix",
+      "Fraunces",
       "Instrument Sans",
       "DM Sans",
       "Space Grotesk",
       "Playfair Display",
     ];
-    const validBodyFonts = ["Archivo", "Inter", "DM Sans", "Source Sans 3"];
+    const validBodyFonts = [
+      "Fellix",
+      "Archivo",
+      "Inter",
+      "DM Sans",
+      "Source Sans 3",
+    ];
     if (!validHeadingFonts.includes(headingFont)) {
       throw new Error("Choose a valid heading font.");
     }
@@ -509,6 +518,12 @@ export async function updateThemeAction(
       profileLayout !== "compact"
     ) {
       throw new Error("Choose a valid profile layout.");
+    }
+    const clubColor = normalizeClubColor(field(formData, "submittedClubColor"));
+    if (clubColor.conflictsWithFlare) {
+      throw new Error(
+        "Choose a club color farther from Duna live coral so status remains unmistakable.",
+      );
     }
     const caller = await getServerCaller();
     await caller.operator.updateTheme({
@@ -525,17 +540,25 @@ export async function updateThemeAction(
       profileSummary: optionalField(formData, "profileSummary"),
       brandVoice: optionalField(formData, "brandVoice"),
       palette: {
-        primary: field(formData, "primary"),
-        accent: field(formData, "accent"),
-        sand: field(formData, "sand"),
-        ink: field(formData, "ink"),
-        canvas: field(formData, "canvas"),
-        success: field(formData, "success"),
+        primary: clubColor.core,
+        accent: clubColor.edge,
+        sand: clubColor.tint,
+        ink: "#1B1B19",
+        canvas: "#F6F5F1",
+        success: "#2F6B3A",
+        clubHue: clubColor.hue,
+        clubChroma: clubColor.chroma,
       },
       typography: {
         heading: headingFont as
-          "Instrument Sans" | "DM Sans" | "Space Grotesk" | "Playfair Display",
-        body: bodyFont as "Archivo" | "Inter" | "DM Sans" | "Source Sans 3",
+          | "Fellix"
+          | "Fraunces"
+          | "Instrument Sans"
+          | "DM Sans"
+          | "Space Grotesk"
+          | "Playfair Display",
+        body: bodyFont as
+          "Fellix" | "Archivo" | "Inter" | "DM Sans" | "Source Sans 3",
       },
       fontLicenseConfirmed: field(formData, "fontLicenseConfirmed") === "true",
       safeFallbackFont:

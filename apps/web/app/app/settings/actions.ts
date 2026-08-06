@@ -170,6 +170,39 @@ export async function updateProfileAction(input: {
   }
 }
 
+export async function updateProfileAccentAction(
+  accentId:
+    | "dune-gold"
+    | "marine"
+    | "deep-coral"
+    | "moss"
+    | "terracotta"
+    | "slate-blue"
+    | "ochre"
+    | "plum"
+    | "sea-green"
+    | "ink",
+) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.updateProfileAccent({
+      accentId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/app/settings");
+    revalidatePath("/players", "layout");
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Your profile accent could not be updated.",
+    };
+  }
+}
+
 export async function checkHandleAvailabilityAction(handle: string) {
   try {
     const caller = await getServerCaller();

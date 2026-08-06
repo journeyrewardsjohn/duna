@@ -402,14 +402,17 @@ export function SettingsCenter({
                 tone={themeReady ? "live" : "warning"}
               >
                 <div className="settings-theme-swatches">
-                  {Object.entries(workspace.theme.palette).map(
-                    ([name, value]) => (
-                      <i
-                        key={name}
-                        style={{ backgroundColor: value }}
-                        title={`${name}: ${value}`}
-                      />
-                    ),
+                  {Object.entries(workspace.theme.palette).flatMap(
+                    ([name, value]) =>
+                      typeof value === "string" ? (
+                        <i
+                          key={name}
+                          style={{ backgroundColor: value }}
+                          title={`${name}: ${value}`}
+                        />
+                      ) : (
+                        []
+                      ),
                   )}
                 </div>
               </SummaryCard>

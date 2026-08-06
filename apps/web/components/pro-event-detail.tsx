@@ -23,6 +23,7 @@ import {
 import Link from "next/link";
 import { TournamentPredictionMarkets } from "@/components/prediction-market";
 import { ProfessionalMatchCard } from "@/components/professional-match-card";
+import { ProEntryListBrowser } from "@/components/pro-entry-list-browser";
 import { ProEventVenueCard } from "@/components/pro-event-venue-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -130,14 +131,6 @@ function PodiumTeam({
     </article>
   );
 }
-
-const entryListLabels = {
-  "main-draw": "Main draw teams",
-  qualification: "Qualification teams",
-  reserve: "Reserve teams",
-  withdrawn: "Withdrawn teams",
-  league: "League teams",
-} as const;
 
 function AvpRoster({ team }: { readonly team: AvpDivisionTeam }) {
   return (
@@ -309,13 +302,9 @@ export function ProEventDetail({
   const matchBroadcasts = event.matches.filter(
     (match) => match.watchOptions.length > 0,
   );
-  const entryGroups = (
-    ["main-draw", "qualification", "reserve", "withdrawn", "league"] as const
-  ).flatMap((list) => {
-    if (list === "league" && event.avpLeague) return [];
-    const teams = event.teamEntries.filter((entry) => entry.list === list);
-    return teams.length > 0 ? [{ list, teams }] : [];
-  });
+  const browsableEntries = event.teamEntries.filter(
+    (entry) => entry.list !== "league" || !event.avpLeague,
+  );
   const featuredMedia =
     event.editorial.media.find((media) => media.featured) ??
     event.editorial.media[0];
@@ -334,6 +323,12 @@ export function ProEventDetail({
     venue?.formattedAddress ||
     structuredVenueAddress ||
     event.editorial.venueAddress;
+  const usesHamburgVenuePlate = [
+    event.name,
+    event.location,
+    event.editorial.venueName,
+    venueAddress,
+  ].some((value) => /hamburg/i.test(value ?? ""));
   const venueMapParameters = new URLSearchParams();
   if (venue?.latitude !== undefined && venue.longitude !== undefined) {
     venueMapParameters.set("latitude", String(venue.latitude));
@@ -372,7 +367,7 @@ export function ProEventDetail({
   const structuredData = professionalEventJsonLd(event);
 
   return (
-    <main className="pro-event-page">
+    <main className="pro-event-page" data-zone="athletic">
       <SiteHeader />
       <script
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
@@ -395,9 +390,8 @@ export function ProEventDetail({
                 event.status
               )}
             </Badge>
-            <Badge>{event.genderCategory}</Badge>
             <Badge>{event.category ?? "FIVB"}</Badge>
-            {event.currentRound && <Badge>{event.currentRound}</Badge>}
+            <Badge>{event.genderCategory}</Badge>
           </div>
           <h1>{event.name}</h1>
           <div className="pro-event-hero__facts">
@@ -473,17 +467,28 @@ export function ProEventDetail({
           )}
           <div className="pro-event-hero__scorecard">
             <span>{event.currentRound ?? "Tournament desk"}</span>
-            <strong>
-              <Numeric>{completedMatchCount}</Numeric>
-              <small> / {event.matchCount} matches</small>
-            </strong>
-            <div>
-              <i
-                style={{
-                  width: `${event.matchCount ? Math.min(100, (completedMatchCount / event.matchCount) * 100) : 0}%`,
-                }}
-              />
-            </div>
+            {event.matchCount > 0 ? (
+              <>
+                <strong>
+                  <Numeric>{completedMatchCount}</Numeric>
+                  <small> / {event.matchCount} matches</small>
+                </strong>
+                <div>
+                  <i
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        (completedMatchCount / event.matchCount) * 100,
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </>
+            ) : (
+              <strong className="pro-event-hero__schedule-pending">
+                Schedule connecting
+              </strong>
+            )}
             <small>
               Updated{" "}
               {new Intl.DateTimeFormat("en-US", {
@@ -500,6 +505,17 @@ export function ProEventDetail({
       <div
         className={`pro-event-content${event.live ? " pro-event-content--live" : ""}`}
       >
+        {usesHamburgVenuePlate && (
+          <figure className="pro-event-venue-plate">
+            <img
+              alt="Atmospheric waterfront sand courts at first light"
+              src="/media/brand/duna-event-venue-hamburg-v1.webp"
+            />
+            <figcaption>
+              Venue atmosphere · Duna illustration, not official event imagery
+            </figcaption>
+          </figure>
+        )}
         {venueAddress && venueMapHref && (
           <ProEventVenueCard
             address={venueAddress}
@@ -632,7 +648,7 @@ export function ProEventDetail({
           </section>
         )}
 
-        {entryGroups.length > 0 && (
+        {browsableEntries.length > 0 && (
           <section className="pro-event-section pro-entry-lists">
             <header>
               <div>
@@ -641,111 +657,48 @@ export function ProEventDetail({
               </div>
               <Badge>{event.teamEntries.length}</Badge>
             </header>
-            <div className="pro-entry-lists__groups">
-              {entryGroups.map((group) => (
-                <section key={group.list}>
-                  <header>
-                    <h3>{entryListLabels[group.list]}</h3>
-                    <span>{group.teams.length}</span>
-                  </header>
-                  <div className="pro-entry-list__head">
-                    <span>Seed</span>
-                    <span>Team</span>
-                    <span>Country</span>
-                    <span>Entry pts</span>
-                    <span>Technical</span>
-                  </div>
-                  {group.teams.map((team) => (
-                    <article
-                      className={
-                        group.list === "withdrawn"
-                          ? "pro-entry-team pro-entry-team--withdrawn"
-                          : "pro-entry-team"
-                      }
-                      key={`${group.list}-${team.externalTeamId}`}
-                    >
-                      <Numeric>{team.seed ?? "—"}</Numeric>
-                      <div>
-                        <strong>{team.label}</strong>
-                        <span>
-                          {team.players.map((player, index) => (
-                            <span
-                              key={player.personId ?? player.externalPersonId}
-                            >
-                              {index > 0 && " / "}
-                              {(player.publicPath ?? player.handle) ? (
-                                <Link
-                                  href={
-                                    player.publicPath ??
-                                    `/players/${player.handle}`
-                                  }
-                                >
-                                  {player.name}
-                                </Link>
-                              ) : (
-                                player.name
-                              )}
-                            </span>
-                          ))}
-                        </span>
-                      </div>
-                      <span
-                        aria-label={team.countryCode ?? "Country pending"}
-                        className="pro-entry-team__country"
-                      >
-                        <CountryCode code={team.countryCode} fallback="—" />
-                      </span>
-                      <span>
-                        {team.entryPoints?.toLocaleString("en-US") ?? "—"}
-                      </span>
-                      <span>
-                        {team.entryTechnicalPoints?.toLocaleString("en-US") ??
-                          "—"}
-                      </span>
-                    </article>
-                  ))}
-                </section>
-              ))}
-            </div>
+            <ProEntryListBrowser entries={browsableEntries} />
           </section>
         )}
 
-        {(event.podium.champion ||
-          event.podium.runnerUp ||
-          event.podium.thirdPlace) && (
-          <section className="pro-event-section pro-podium">
-            <header>
+        {event.status === "completed" &&
+          !event.live &&
+          (event.podium.champion ||
+            event.podium.runnerUp ||
+            event.podium.thirdPlace) && (
+            <section className="pro-event-section pro-podium">
+              <header>
+                <div>
+                  <span className="page-eyebrow">Final results</span>
+                  <h2>Podium</h2>
+                </div>
+                <Trophy aria-hidden size={24} />
+              </header>
               <div>
-                <span className="page-eyebrow">Final results</span>
-                <h2>Podium</h2>
+                {event.podium.champion && (
+                  <PodiumTeam
+                    label="Champion"
+                    place={1}
+                    team={event.podium.champion}
+                  />
+                )}
+                {event.podium.runnerUp && (
+                  <PodiumTeam
+                    label="Runner-up"
+                    place={2}
+                    team={event.podium.runnerUp}
+                  />
+                )}
+                {event.podium.thirdPlace && (
+                  <PodiumTeam
+                    label="Third place"
+                    place={3}
+                    team={event.podium.thirdPlace}
+                  />
+                )}
               </div>
-              <Trophy aria-hidden size={24} />
-            </header>
-            <div>
-              {event.podium.champion && (
-                <PodiumTeam
-                  label="Champion"
-                  place={1}
-                  team={event.podium.champion}
-                />
-              )}
-              {event.podium.runnerUp && (
-                <PodiumTeam
-                  label="Runner-up"
-                  place={2}
-                  team={event.podium.runnerUp}
-                />
-              )}
-              {event.podium.thirdPlace && (
-                <PodiumTeam
-                  label="Third place"
-                  place={3}
-                  team={event.podium.thirdPlace}
-                />
-              )}
-            </div>
-          </section>
-        )}
+            </section>
+          )}
 
         {confirmedBracket.length > 0 && (
           <section className="pro-event-section pro-bracket">
@@ -864,7 +817,10 @@ export function ProEventDetail({
         )}
 
         {!event.avpLeague && event.liveStandings.length > 0 && (
-          <section className="pro-event-section pro-live-table">
+          <section
+            className="pro-event-section pro-live-table"
+            data-zone={event.live ? "live" : "athletic"}
+          >
             <header>
               <div>
                 <span className="page-eyebrow">
@@ -873,7 +829,6 @@ export function ProEventDetail({
                 <h2>{event.live ? "Live standings" : "Standings"}</h2>
               </div>
               <div className="pro-live-table__status">
-                {event.live && <Badge>Medals provisional</Badge>}
                 <Activity aria-hidden size={23} />
               </div>
             </header>
@@ -891,18 +846,7 @@ export function ProEventDetail({
                   aria-label={`Place ${index + 1}`}
                   className="pro-live-table__place"
                 >
-                  {standing.medal === 1 ||
-                  (event.live && !standing.medal && index === 0) ? (
-                    "🥇"
-                  ) : standing.medal === 2 ||
-                    (event.live && !standing.medal && index === 1) ? (
-                    "🥈"
-                  ) : standing.medal === 3 ||
-                    (event.live && !standing.medal && index === 2) ? (
-                    "🥉"
-                  ) : (
-                    <Numeric>{index + 1}</Numeric>
-                  )}
+                  <Numeric>{standing.medal ?? index + 1}</Numeric>
                 </span>
                 <div className="pro-live-table__team">
                   <TeamName compact team={standing.team} />

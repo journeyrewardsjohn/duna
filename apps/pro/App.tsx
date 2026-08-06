@@ -141,7 +141,7 @@ const ThemeContext = createContext<{
   readonly theme: ThemeName;
   readonly preference: ThemePreference;
   readonly toggle: () => void;
-}>({ theme: "light", preference: "system", toggle: () => undefined });
+}>({ theme: "light", preference: "light", toggle: () => undefined });
 
 function ThemeButton() {
   const { preference, theme, toggle } = useContext(ThemeContext);
@@ -3736,8 +3736,11 @@ function ProApp() {
   const [sessionNotesId, setSessionNotesId] = useState<string>();
   const [calendarEntryId, setCalendarEntryId] = useState<string>();
   const [themePreference, setThemePreference] =
-    useState<ThemePreference>("system");
+    useState<ThemePreference>("light");
   const theme = themePreference === "system" ? deviceTheme : themePreference;
+  // v3 ground inversion: operational browsing follows the chosen appearance,
+  // while courtside scoring is always the rare, high-focus live ground.
+  const surfaceTheme: ThemeName = surface === "score" ? "dark" : theme;
   const screenTransition = useRef(new Animated.Value(1)).current;
 
   const openCalendar = (entryId?: string) => {
@@ -3791,8 +3794,8 @@ function ProApp() {
     }).start();
   }, [reduceMotion, screenTransition, tab]);
 
-  activePalette = theme === "dark" ? darkColors : lightColors;
-  activeStyles = theme === "dark" ? darkStyles : lightStyles;
+  activePalette = surfaceTheme === "dark" ? darkColors : lightColors;
+  activeStyles = surfaceTheme === "dark" ? darkStyles : lightStyles;
 
   return (
     <ThemeContext.Provider

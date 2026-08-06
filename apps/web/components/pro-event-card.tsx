@@ -67,12 +67,18 @@ export function ProEventCard({ event }: { readonly event: ProEvent }) {
           </span>
           <span>{event.location ?? "Location pending"}</span>
         </footer>
-        <div className="pro-event-card__progress" aria-hidden>
-          <span style={{ width: `${progress}%` }} />
-        </div>
-        <small>
-          {event.completedMatchCount}/{event.matchCount} matches complete
-        </small>
+        {event.matchCount > 0 ? (
+          <>
+            <div className="pro-event-card__progress" aria-hidden>
+              <span style={{ width: `${progress}%` }} />
+            </div>
+            <small>
+              {event.completedMatchCount}/{event.matchCount} matches complete
+            </small>
+          </>
+        ) : (
+          <small>Match schedule connecting</small>
+        )}
       </div>
     </Link>
   );

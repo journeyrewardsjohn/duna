@@ -1641,6 +1641,21 @@ export const playerSettingsSchema = z.object({
     verifiedAt: z.iso.datetime().optional(),
     lastErrorCode: z.string().optional(),
   }),
+  publicIdentity: z.object({
+    tier: z.enum(["claimed", "verified-pro"]),
+    accentId: z.enum([
+      "dune-gold",
+      "marine",
+      "deep-coral",
+      "moss",
+      "terracotta",
+      "slate-blue",
+      "ochre",
+      "plum",
+      "sea-green",
+      "ink",
+    ]),
+  }),
   sourceConnections: z
     .array(
       z.object({
@@ -2950,6 +2965,8 @@ export const operatorThemeSchema = z.object({
     ink: z.string(),
     canvas: z.string(),
     success: z.string(),
+    clubHue: z.number().min(0).max(360).optional(),
+    clubChroma: z.number().min(0.04).max(0.15).optional(),
   }),
   typography: z.object({
     heading: z.string(),

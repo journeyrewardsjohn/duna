@@ -443,7 +443,7 @@ export function ProLiveMatchScoreboard({
       aria-label={`${match.teamA.label} versus ${match.teamB.label}. ${statusLabel}.`}
       aria-live={displayStatus === "live" ? "polite" : undefined}
       className="pro-live-scoreboard"
-      data-zone="performance"
+      data-zone={displayStatus === "live" ? "live" : "athletic"}
     >
       <header className="pro-live-scoreboard__header">
         <div>

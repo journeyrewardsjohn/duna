@@ -60,7 +60,10 @@ export default async function SettingsPage({
             membership={settings.membership}
             plans={settings.dunaPlusPlans}
           />
-          <ProfileSettings profile={settings.profile} />
+          <ProfileSettings
+            profile={settings.profile}
+            publicIdentity={settings.publicIdentity}
+          />
           <PlayingProfileSettings settings={settings} />
           {playerMediaStudio && (
             <PlayerMediaStudio studio={playerMediaStudio} />

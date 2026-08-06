@@ -29,7 +29,7 @@ export function PublicLiveScore({
   }, [match.matchId, match.status]);
   const current = match.score.sets[match.score.setIndex] ?? { a: 0, b: 0 };
   return (
-    <main className="public-live">
+    <main className="public-live" data-zone="live">
       <header>
         <DunaMark />
         <Badge tone={match.status === "live" ? "live" : "positive"}>

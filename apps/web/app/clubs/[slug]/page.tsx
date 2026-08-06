@@ -1,5 +1,5 @@
 import type { OperatorWorkspace, PublicCatalogItem } from "@duna/api";
-import { Badge, Numeric } from "@duna/ui";
+import { Badge, clubColorCssVariables, Numeric } from "@duna/ui";
 import {
   ArrowRight,
   CalendarDays,
@@ -164,27 +164,31 @@ export default async function ClubPage({
     .toUpperCase();
   const theme: OperatorWorkspace["theme"] = storefront?.theme ?? {
     palette: {
-      primary: "#173A63",
-      accent: "#2B67A4",
-      sand: "#E9DFC9",
-      ink: "#101828",
-      canvas: "#FAFAF7",
-      success: "#3E7A5D",
+      primary: "#517986",
+      accent: "#BDD2D9",
+      sand: "#E5F1F5",
+      ink: "#2D4D57",
+      canvas: "#F6F5F1",
+      success: "#2F6B3A",
+      clubHue: 220.25,
+      clubChroma: 0.0489,
     },
-    typography: { heading: "Instrument Sans", body: "Archivo" },
+    typography: { heading: "Fellix", body: "Fellix" },
     fontLicenseConfirmed: false,
     safeFallbackFont: "Arial, Helvetica, sans-serif",
     cardStyle: "soft" as const,
     profileLayout: "editorial",
   };
+  const normalizedClubColor = clubColorCssVariables(theme.palette.primary);
   const themeStyle = {
-    "--club-primary": theme.palette.primary,
-    "--club-accent": theme.palette.accent,
-    "--club-sand": theme.palette.sand,
-    "--club-ink": theme.palette.ink,
+    ...normalizedClubColor,
+    "--club-primary": normalizedClubColor["--club-core"],
+    "--club-accent": normalizedClubColor["--club-edge"],
+    "--club-sand": normalizedClubColor["--club-tint"],
+    "--club-ink": "#1B1B19",
     "--club-canvas": theme.palette.canvas,
-    "--club-heading": `"${theme.typography.heading}", "Instrument Sans", sans-serif`,
-    "--club-body": `"${theme.typography.body}", "Archivo", sans-serif`,
+    "--club-heading": `"${theme.typography.heading}", "Fellix", sans-serif`,
+    "--club-body": `"${theme.typography.body}", "Fellix", sans-serif`,
   } as CSSProperties;
   const catalog = storefront?.catalog ?? [];
   const catalogEvents = catalog.filter((item) => item.type === "event");

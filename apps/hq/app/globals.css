@@ -363,7 +363,7 @@ button {
 .hq-page-heading h1 {
   font-family: var(--font-display);
   font-size: clamp(2.6rem, 4.6vw, 5rem);
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
   margin: 0.55rem 0 0.5rem;
 }
@@ -446,7 +446,7 @@ button {
 .hq-page-header h1 {
   font-family: var(--font-display);
   font-size: clamp(2.8rem, 5vw, 5.5rem);
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
   margin: 0.55rem 0 0.75rem;
 }
@@ -493,7 +493,7 @@ button {
 .hq-danger-zone h2 {
   font-family: var(--font-display);
   font-size: clamp(1.5rem, 2.5vw, 2.25rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   margin: 0.45rem 0 0.6rem;
 }
 
@@ -671,7 +671,7 @@ button {
   font-family: var(--font-display);
   font-size: clamp(1.7rem, 2.4vw, 2.5rem);
   font-weight: 700;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   margin-top: 1rem;
 }
 
@@ -788,7 +788,7 @@ button {
 .hq-card-heading h2 {
   font-family: var(--font-display);
   font-size: 1.45rem;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   margin: 0.35rem 0 0;
 }
 
@@ -1079,7 +1079,7 @@ button {
 .ai-brief-card h2 {
   font-family: var(--font-display);
   font-size: 1.8rem;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   line-height: 1;
 }
 
@@ -1133,7 +1133,7 @@ button {
 .quick-action-strip h2 {
   font-family: var(--font-display);
   font-size: 1.45rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.2rem 0 0;
 }
 
@@ -1230,7 +1230,7 @@ button {
 .module-feature-card h2 {
   font-family: var(--font-display);
   font-size: 1.65rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.4rem 0;
 }
 
@@ -1955,7 +1955,7 @@ button {
 .program-card h2 {
   font-family: var(--font-display);
   font-size: 1.3rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.35rem 0 1rem;
 }
 
@@ -2015,7 +2015,7 @@ button {
 .event-ops-feature h2 {
   font-family: var(--font-display);
   font-size: clamp(1.8rem, 3.2vw, 3.3rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin: 1rem 0;
   max-width: 720px;
@@ -2136,7 +2136,7 @@ button {
 .league-builder__main > header h2 {
   font-family: var(--font-display);
   font-size: 2.2rem;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   margin: 0.8rem 0 0.3rem;
 }
 
@@ -2254,7 +2254,7 @@ button {
 .league-ai h2 {
   font-family: var(--font-display);
   font-size: 2rem;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   line-height: 1;
 }
 
@@ -2340,7 +2340,7 @@ button {
   font-family: var(--font-display);
   font-size: clamp(2.4rem, 4.5vw, 4.6rem);
   font-weight: 700;
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   margin-top: 0.4rem;
 }
 
@@ -2859,7 +2859,7 @@ button {
 .report-library h2 {
   font-family: var(--font-display);
   font-size: 1.6rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.3rem 0;
 }
 
@@ -3291,7 +3291,7 @@ button {
 .settings-form-card > header h2 {
   font-family: var(--font-display);
   font-size: 1.5rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.35rem 0 0;
 }
 
@@ -3421,7 +3421,7 @@ button {
 .settings-placeholder h3 {
   font-family: var(--font-display);
   font-size: 1.5rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
 }
 
 .settings-placeholder p {
@@ -3883,7 +3883,7 @@ button {
 .trust-case h2 {
   font-family: var(--font-display);
   font-size: 1.7rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.7rem 0 0.25rem;
 }
 
@@ -4057,7 +4057,7 @@ button {
 .rating-integrity > h2 {
   font-family: var(--font-display);
   font-size: 1.7rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
 }
 
 .rating-integrity > div {
@@ -4126,7 +4126,7 @@ button {
   font-family: var(--font-display);
   font-size: clamp(2.6rem, 4vw, 4.5rem);
   font-weight: 700;
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   margin-top: 0.4rem;
 }
 
@@ -4330,7 +4330,7 @@ button {
 .health-banner h2 {
   font-family: var(--font-display);
   font-size: 1.6rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
@@ -4375,7 +4375,7 @@ button {
 .freshness-card h2 {
   font-family: var(--font-display);
   font-size: 1.6rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
 }
 
 .freshness-card > div {
@@ -5318,7 +5318,7 @@ button {
   font-family: var(--font-display);
   font-size: clamp(1.4rem, 2.4vw, 2rem);
   font-weight: 700;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   max-width: 720px;
 }
 
@@ -5471,7 +5471,7 @@ button {
 .marketing-canvas-node__body strong {
   font-family: var(--font-display);
   font-size: clamp(0.92rem, 1.25vw, 1.14rem);
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   line-height: 1.08;
 }
 
@@ -5651,7 +5651,7 @@ button {
 .marketing-flow-inspector > header > strong {
   font-family: var(--font-display);
   font-size: 1.2rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
 }
 
 .marketing-flow-inspector > header > p {
@@ -6182,7 +6182,7 @@ button {
   font-family: var(--font-display);
   font-size: 2rem;
   font-weight: 850;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 1;
 }
 
@@ -6252,7 +6252,7 @@ button {
 .event-video-card h2,
 .member-next-card h2 {
   font-family: var(--font-display);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   margin: 0.15rem 0 0;
 }
 
@@ -6644,7 +6644,7 @@ button {
 .event-operations-hero h1 {
   font-family: var(--font-display);
   font-size: clamp(2.7rem, 5vw, 5rem);
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
   margin: 0.25rem 0 0.45rem;
 }
@@ -6735,7 +6735,7 @@ button {
   font-family: var(--font-display);
   font-size: 1.85rem;
   font-weight: 850;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   margin: auto 0 0.2rem;
 }
 
@@ -6791,7 +6791,7 @@ button {
 .event-live-arrivals h2 {
   font-family: var(--font-display);
   font-size: 1.25rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.15rem 0 0;
 }
 
@@ -7352,7 +7352,7 @@ button {
 .member-health-metrics strong {
   font-family: var(--font-display);
   font-size: 1.45rem;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   margin: auto 0 0.15rem;
 }
 
@@ -7433,7 +7433,7 @@ button {
 .member-action-panel > header h2 {
   font-family: var(--font-display);
   font-size: 1.65rem;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   margin: 0.2rem 0 0;
 }
 
@@ -7956,7 +7956,7 @@ button {
 .session-note-recorder__body strong {
   font-family: var(--font-display);
   font-size: 1.05rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
 }
 
 .session-note-recorder__body small {
@@ -8740,7 +8740,7 @@ button {
 .event-draft-card > header > span > strong {
   font-family: var(--font-display);
   font-size: 1.08rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
 }
 
 .event-draft-card > header small {
@@ -8998,7 +8998,7 @@ button {
 .operator-facility__hero > span > strong {
   font-family: var(--font-display);
   font-size: clamp(1.35rem, 3vw, 2.35rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin-top: 0.35rem;
 }
@@ -9094,7 +9094,7 @@ button {
 .operator-court-card__body > header strong {
   font-family: var(--font-display);
   font-size: 1.15rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
 }
 
 .operator-court-card__capacity {
@@ -9464,7 +9464,7 @@ button {
 .court-builder__preview > footer strong {
   font-family: var(--font-display);
   font-size: clamp(1.4rem, 3vw, 2.45rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.96;
   margin-top: 0.25rem;
 }
@@ -9669,7 +9669,7 @@ button {
 .venue-weather-now strong {
   font-family: var(--font-display);
   font-size: 1.05rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
 }
 
 .venue-weather-now small,
@@ -9691,7 +9691,7 @@ button {
 .venue-portfolio-card > div > h2 {
   font-family: var(--font-display);
   font-size: clamp(1.8rem, 3.3vw, 3.4rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.94;
   margin: 0.45rem 0 0.75rem;
 }
@@ -9895,7 +9895,7 @@ button {
 .admin-access-denied h1 {
   font-family: var(--font-display);
   font-size: clamp(2.4rem, 7vw, 4.6rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin: 0.6rem 0 1.2rem;
 }
@@ -10277,7 +10277,7 @@ body {
 .hq-page-header h1,
 .hq-overview-heading h1 {
   font-weight: 400;
-  letter-spacing: -0.048em;
+  letter-spacing: -0.03em;
   line-height: 0.94;
 }
 
@@ -11007,7 +11007,7 @@ body {
 .pro-admin-research-proposal > header h3 {
   font-family: var(--font-display);
   font-size: clamp(1.3rem, 3vw, 1.9rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.2rem 0 0;
 }
 
@@ -11284,7 +11284,7 @@ body {
 .guided-create-card h2 {
   font-family: var(--font-display);
   font-size: clamp(1.25rem, 2vw, 1.8rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   margin: 0.35rem 0 0.4rem;
 }
 
@@ -11334,7 +11334,7 @@ body {
 .event-builder__header h1 {
   font-family: var(--font-display);
   font-size: clamp(2.7rem, 5.8vw, 6.2rem);
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
   margin: 0.65rem 0 0.8rem;
   max-width: 900px;
@@ -11474,7 +11474,7 @@ body {
 .event-builder__step-heading h2 {
   font-family: var(--font-display);
   font-size: 1.2rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
@@ -11512,7 +11512,7 @@ body {
 .event-builder-panel > header h3 {
   font-family: var(--font-display);
   font-size: clamp(1.2rem, 2vw, 1.6rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   margin: 0 0 0.15rem;
 }
 
@@ -11588,7 +11588,7 @@ body {
 .event-type-grid h3 {
   font-family: var(--font-display);
   font-size: clamp(1.5rem, 2.5vw, 2.15rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   margin: 1rem 0 0.65rem;
 }
 
@@ -12562,7 +12562,7 @@ body {
 .event-review__hero h3 {
   font-family: var(--font-display);
   font-size: clamp(2rem, 4vw, 3.8rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 0.98;
   margin: 0.9rem 0 0.5rem;
   max-width: 800px;
@@ -12677,7 +12677,7 @@ body {
 .event-money-gate h3 {
   font-family: var(--font-display);
   font-size: 1rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   margin: 0.45rem 0 0.2rem;
 }
 
@@ -13084,7 +13084,7 @@ body {
 .organization-onboarding h1 {
   font-family: var(--font-display);
   font-size: clamp(2.4rem, 6vw, 5rem);
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   line-height: 0.92;
   margin: 2rem 0 1rem;
 }
@@ -13198,7 +13198,7 @@ body {
 .workspace-create-form h2 {
   font-family: var(--font-display);
   font-size: clamp(1.5rem, 3vw, 2.2rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   margin: 0.2rem 0;
 }
 
@@ -13755,7 +13755,7 @@ body {
 .ratings-lab__metrics .duna-numeric {
   font-family: var(--font-display);
   font-size: 2.25rem;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   margin-top: auto;
 }
 
@@ -14981,7 +14981,7 @@ body {
 .hq-analytics-board > header h2 {
   font-family: var(--font-display);
   font-size: 1.35rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   margin: 0.2rem 0 0;
 }
 
@@ -15042,7 +15042,7 @@ body {
 .hq-lead-metric > div > .duna-numeric {
   font-family: var(--font-display);
   font-size: clamp(2.7rem, 5vw, 5rem);
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 1;
 }
 
@@ -15084,7 +15084,7 @@ body {
   display: block;
   font-family: var(--font-display);
   font-size: clamp(1.6rem, 3vw, 2.5rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   margin-top: 1.1rem;
 }
 
@@ -15131,7 +15131,7 @@ body {
 .hq-quick-actions h2 {
   font-family: var(--font-display);
   font-size: 1.2rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   margin: 0.2rem 0 0;
 }
 
@@ -15218,7 +15218,7 @@ body {
   font-family: var(--font-display);
   font-size: clamp(1.65rem, 3vw, 2.65rem);
   font-weight: 500;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 0.55rem 0 0.8rem;
 }
@@ -15495,7 +15495,7 @@ body {
 .product-kind-card h2 {
   font-family: var(--font-display);
   font-size: 1.25rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 1.25rem 0 0.35rem;
 }
 
@@ -15709,7 +15709,7 @@ body {
 .catalog-editor__hero h1 {
   font-family: var(--font-display);
   font-size: clamp(2.75rem, 6vw, 5.75rem);
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.88;
   margin: 0.25rem 0 0.7rem;
 }
@@ -15738,7 +15738,7 @@ body {
 .catalog-editor__publication h2 {
   font-family: var(--font-display);
   font-size: 1.55rem;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   margin: 0.25rem 0;
 }
 
@@ -16302,7 +16302,7 @@ body {
 .schedule-calendar__toolbar h2 {
   font-family: var(--font-display);
   font-size: 1.35rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.3rem 0;
 }
 
@@ -17736,7 +17736,7 @@ body {
 .team-member-editor__hero h1 {
   font-family: var(--font-display);
   font-size: clamp(2rem, 5vw, 4.4rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin: 0.35rem 0 0.6rem;
 }
@@ -17872,7 +17872,7 @@ body {
   color: white;
   font-family: var(--font-display);
   font-size: clamp(1.85rem, 4vw, 3.45rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 0.96;
   margin: 0;
 }
@@ -18165,7 +18165,7 @@ body {
 .theme-kit-preview__copy h3 {
   font-family: var(--theme-preview-heading);
   font-size: clamp(1.6rem, 3vw, 2.5rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.98;
   margin: 0;
 }
@@ -18285,7 +18285,7 @@ body {
 .brand-knowledge-library__heading h4 {
   color: var(--color-ink);
   font-family: var(--font-display);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
@@ -18458,7 +18458,7 @@ body {
   color: white;
   font-family: var(--font-display);
   font-size: clamp(1.15rem, 2vw, 1.6rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
 }
 
 .brand-knowledge-context__preview,
@@ -18979,7 +18979,7 @@ body {
   font-family: var(--font-display);
   font-size: clamp(1.65rem, 3vw, 2.25rem);
   font-weight: 900;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
 }
 
 .settings-readiness__score small {
@@ -19004,7 +19004,7 @@ body {
   color: white;
   font-family: var(--font-display);
   font-size: clamp(1.55rem, 3.2vw, 2.8rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 0;
 }
@@ -19095,7 +19095,7 @@ body {
   color: var(--color-bone);
   font-family: var(--font-display);
   font-size: clamp(1.25rem, 2.4vw, 1.9rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   line-height: 1.05;
   margin: 0;
 }
@@ -19194,7 +19194,7 @@ body {
   color: var(--color-bone);
   font-family: var(--font-display);
   font-size: clamp(1.55rem, 3.2vw, 2.7rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 0;
 }
@@ -19260,7 +19260,7 @@ body {
   color: var(--color-bone);
   font-family: var(--font-display);
   font-size: clamp(1.6rem, 3vw, 2.4rem);
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   margin: 0;
   text-transform: capitalize;
 }
@@ -19297,7 +19297,7 @@ body {
   color: var(--color-bone);
   font-family: var(--font-display);
   font-size: clamp(1.35rem, 2.5vw, 2rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
@@ -19339,7 +19339,7 @@ body {
   color: var(--color-bone);
   font-family: var(--font-display);
   font-size: clamp(1.45rem, 2.4vw, 2.05rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
 }
 
 .organization-plan-settings__grid > article > strong small {
@@ -19506,7 +19506,7 @@ body {
   color: var(--settings-theme-ink);
   font-family: var(--font-display);
   font-size: clamp(1.6rem, 3.3vw, 2.75rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.98;
   margin: 0;
 }
@@ -19535,7 +19535,7 @@ body {
   color: var(--color-bone);
   font-family: var(--font-display);
   font-size: clamp(1.25rem, 2vw, 1.7rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.15rem 0 0;
 }
 
@@ -19589,7 +19589,7 @@ body {
   color: var(--color-bone);
   font-family: var(--font-display);
   font-size: clamp(1.25rem, 2.5vw, 1.85rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   line-height: 1.05;
   margin: 0.15rem 0 0;
 }
@@ -21078,7 +21078,7 @@ body {
 .admin-organization-hero h1 {
   font-family: var(--font-display);
   font-size: clamp(2.25rem, 4vw, 4.6rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 0.92;
   margin: 0.45rem 0 0.55rem;
 }
@@ -21172,7 +21172,7 @@ body {
   display: block;
   font-family: var(--font-display);
   font-size: clamp(2.5rem, 4vw, 4.5rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   margin-top: 1rem;
 }
 
@@ -21723,7 +21723,7 @@ body {
   font-weight: 950;
   height: 42px;
   justify-content: center;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   width: 42px;
 }
 
@@ -21893,7 +21893,7 @@ body {
 .pro-admin-team-card h3,
 .pro-admin-broadcast__workspace aside h3 {
   font-family: var(--font-display);
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
@@ -23427,7 +23427,7 @@ body {
 .event-draft-card__cover > .event-draft-card__date strong {
   font-family: var(--font-display);
   font-size: 1.45rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   line-height: 1;
 }
 
@@ -23461,7 +23461,7 @@ body {
 .event-draft-card__content h3 {
   font-family: var(--font-display);
   font-size: clamp(1.22rem, 2vw, 1.65rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   line-height: 1.05;
   margin: 0.3rem 0 0.35rem;
 }
@@ -23759,7 +23759,7 @@ body {
 .event-player-preview__hero h3 {
   font-family: var(--font-display);
   font-size: clamp(2rem, 5vw, 4rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 0.92;
   margin: 0.65rem 0 0.75rem;
 }
@@ -23958,7 +23958,7 @@ body {
 .event-poster-preview__stage h3 {
   font-family: var(--font-display);
   font-size: clamp(2.2rem, 5vw, 3.5rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
   margin: 0.5rem 0 0.6rem;
 }
@@ -23979,7 +23979,7 @@ body {
 .event-poster-preview__context h3 {
   font-family: var(--font-display);
   font-size: clamp(1.8rem, 4vw, 3.4rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin: 0.6rem 0 0.8rem;
 }
@@ -24317,7 +24317,7 @@ body {
 .guided-product-builder__header h2 {
   font-family: var(--font-display);
   font-size: clamp(1.65rem, 4vw, 2.7rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 0.35rem 0 0.55rem;
 }
@@ -24529,7 +24529,7 @@ body {
 .guided-product-stage h3 {
   font-family: var(--font-display);
   font-size: clamp(1.55rem, 4vw, 2.55rem);
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 0;
 }
@@ -25059,7 +25059,7 @@ body {
 .catalog-inventory-sale-conversion h2 {
   font-family: var(--font-display);
   font-size: 1.55rem;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   margin: 0.25rem 0;
 }
 
@@ -25541,7 +25541,7 @@ body {
 .guided-product-guide > header > strong {
   font-family: var(--font-display);
   font-size: 1.25rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
 }
 
 .guided-product-progress,
@@ -25862,7 +25862,7 @@ body {
 .guided-offer-preview__hero strong {
   font-family: var(--font-display);
   font-size: 1.18rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   overflow-wrap: anywhere;
 }
 
@@ -26368,7 +26368,7 @@ body {
   color: var(--color-bone);
   font-family: var(--font-display);
   font-size: clamp(2rem, 4vw, 3.25rem);
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   margin: auto 0 0.25rem;
 }
 
@@ -26686,7 +26686,7 @@ body {
 .player-intelligence-detail-heading h2 {
   font-family: var(--font-display);
   font-size: clamp(2rem, 4vw, 3.6rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin: 0.18rem 0;
 }

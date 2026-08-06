@@ -108,7 +108,7 @@
   color: white;
   font-size: clamp(3rem, 6vw, 6.6rem);
   line-height: 0.88;
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
 }
 
 .discover-v2-hero__copy > p {
@@ -373,7 +373,7 @@
   margin: 8px 0 2px;
   color: white;
   font-size: clamp(1.8rem, 3.5vw, 3.2rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
 }
 
 .discover-v2-pro-feature p {
@@ -581,7 +581,7 @@
   color: var(--discover-ink);
   font-size: clamp(1.9rem, 3.2vw, 3.6rem);
   line-height: 1;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
 }
 
 .discover-v2-section-heading > a,
@@ -773,7 +773,7 @@
   color: var(--discover-ink);
   font-size: clamp(2rem, 4vw, 4.5rem);
   line-height: 0.96;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
 }
 
 .discover-v2-map-page > header p {
@@ -1291,7 +1291,7 @@ body {
 .campaign-operator h2,
 .campaign-closing h2 {
   font-weight: 400;
-  letter-spacing: -0.052em;
+  letter-spacing: -0.03em;
 }
 
 .campaign-hero h1 {
@@ -1514,7 +1514,7 @@ body {
 
 .pro-tour-hero h1 {
   font-weight: 400;
-  letter-spacing: -0.052em;
+  letter-spacing: -0.03em;
   line-height: 0.88;
 }
 
@@ -1615,7 +1615,7 @@ body {
 .club-marketing-feature > h2 {
   font-family: var(--font-display);
   font-weight: 400;
-  letter-spacing: -0.048em;
+  letter-spacing: -0.03em;
 }
 
 .club-marketing-hero__copy > p,
@@ -1961,7 +1961,7 @@ body {
 
 .vision-remote__hero h1 {
   font-size: clamp(36px, 6vw, 76px);
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   line-height: 0.96;
   margin: 10px 0 16px;
 }
@@ -2402,7 +2402,7 @@ body {
 .date-pill-filter > header strong {
   font-family: var(--font-display);
   font-size: clamp(1.45rem, 3vw, 2.2rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
 }
 
 .date-pill-filter > header > span {
@@ -2459,7 +2459,7 @@ body {
 .date-pill-filter__rail a > strong {
   font-family: var(--font-display);
   font-size: 1.35rem;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
 }
 
 .date-pill-filter__rail .date-pill-filter__all {
@@ -2917,7 +2917,7 @@ a.professional-match-card:hover {
 
 .health-page__heading h1 {
   font-size: clamp(2.1rem, 5vw, 4.75rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 0.98;
   margin-top: 0.55rem;
   max-width: 840px;
@@ -3043,7 +3043,7 @@ a.professional-match-card:hover {
 .health-readiness-hero__score strong {
   font-size: clamp(6.4rem, 14vw, 11.5rem);
   font-weight: 250;
-  letter-spacing: -0.09em;
+  letter-spacing: -0.03em;
   line-height: 0.76;
 }
 
@@ -3073,7 +3073,7 @@ a.professional-match-card:hover {
 
 .health-readiness-hero h2 {
   font-size: clamp(1.65rem, 3vw, 2.65rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   line-height: 1.06;
   margin-top: clamp(3rem, 6vw, 5rem);
   max-width: 570px;
@@ -3115,7 +3115,7 @@ a.professional-match-card:hover {
 .health-method h2,
 .health-sharing-summary h2 {
   font-size: clamp(1.45rem, 2.4vw, 2.1rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin-top: 0.35rem;
 }
 
@@ -3227,7 +3227,7 @@ a.professional-match-card:hover {
 .health-section-heading h2,
 .health-research h2 {
   font-size: clamp(2rem, 4vw, 3.6rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin-top: 0.4rem;
 }
@@ -3263,7 +3263,7 @@ a.professional-match-card:hover {
 
 .health-trend-card h3 {
   font-size: 1.3rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   margin-top: 0.28rem;
 }
 
@@ -3287,7 +3287,7 @@ a.professional-match-card:hover {
 .health-trend-card__latest strong {
   font-size: 2.1rem;
   font-weight: 350;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
 }
 
 .health-trend-card__latest small {
@@ -3401,7 +3401,7 @@ a.professional-match-card:hover {
 
 .health-sleep-card h2 {
   font-size: clamp(1.7rem, 3.2vw, 2.8rem);
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   margin-top: 0.32rem;
 }
 
@@ -3532,7 +3532,7 @@ a.professional-match-card:hover {
 .health-strain-card header strong {
   font-size: clamp(3.8rem, 7vw, 6.7rem);
   font-weight: 250;
-  letter-spacing: -0.08em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
 }
 
@@ -3629,7 +3629,7 @@ a.professional-match-card:hover {
 
 .health-match-impact > header h2 {
   font-size: clamp(1.8rem, 3.5vw, 3rem);
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   margin-top: 0.35rem;
 }
 
@@ -3719,7 +3719,7 @@ a.professional-match-card:hover {
 
 .health-patterns h3 {
   font-size: 1.2rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   line-height: 1.1;
   margin-top: 0.35rem;
 }
@@ -3774,7 +3774,7 @@ a.professional-match-card:hover {
 
 .health-checkin h2 {
   font-size: clamp(1.7rem, 3.5vw, 3rem);
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   margin-top: 0.35rem;
 }
 
@@ -5079,7 +5079,7 @@ a.professional-match-card:hover {
   color: var(--color-white);
   font-family: var(--font-display);
   font-size: clamp(4rem, 8vw, 8rem);
-  letter-spacing: -0.085em;
+  letter-spacing: -0.03em;
   line-height: 0.84;
   margin: 1.25rem 0;
 }
@@ -5129,7 +5129,7 @@ a.professional-match-card:hover {
   color: var(--color-white);
   font-family: var(--font-display);
   font-size: clamp(4.5rem, 8vw, 7rem);
-  letter-spacing: -0.08em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
   margin-top: 0.4rem;
 }
@@ -5281,7 +5281,7 @@ a.professional-match-card:hover {
 .event-guest-lineup__copy h3 {
   font-family: var(--font-display);
   font-size: clamp(2.3rem, 5vw, 4.5rem);
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
   margin: 0.65rem 0 0.5rem;
 }
@@ -5569,7 +5569,7 @@ a.professional-match-card:hover {
 .division-explorer__title h3 {
   font-family: var(--font-display);
   font-size: clamp(1.65rem, 3vw, 2.5rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin: 0;
 }
@@ -5769,7 +5769,7 @@ a.professional-match-card:hover {
 .ticket-selector__card h3 {
   font-family: var(--font-display);
   font-size: clamp(2.3rem, 4vw, 3.4rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin: 0 0 1rem;
 }
@@ -6406,7 +6406,7 @@ a.professional-match-card:hover {
   font-family: var(--font-display);
   font-size: 7rem;
   left: 1rem;
-  letter-spacing: -0.08em;
+  letter-spacing: -0.03em;
   line-height: 1;
   position: absolute;
   top: 0.7rem;
@@ -6429,7 +6429,7 @@ a.professional-match-card:hover {
   font-size: 5rem;
   height: 100%;
   justify-content: center;
-  letter-spacing: -0.08em;
+  letter-spacing: -0.03em;
 }
 
 .ranking-podium__copy {
@@ -6447,7 +6447,7 @@ a.professional-match-card:hover {
 .ranking-podium__copy h2 {
   font-family: var(--font-display);
   font-size: clamp(1.7rem, 3vw, 2.4rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.94;
   margin: 0;
 }
@@ -7059,7 +7059,7 @@ a.professional-match-card:hover {
 .pro-event-section.pro-event-venue .pro-event-venue__details h2 {
   font-family: var(--font-display);
   font-size: clamp(1.35rem, 2.4vw, 2rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   line-height: 1.05;
   margin: 0.45rem 0 0;
 }
@@ -7171,7 +7171,7 @@ a.professional-match-card:hover {
 .pro-event-map-dialog > header h2 {
   font-family: var(--font-display);
   font-size: clamp(1.2rem, 2vw, 1.7rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.3rem 0 0.2rem;
 }
 
@@ -7370,7 +7370,7 @@ a.professional-match-card:hover {
   color: var(--color-ink);
   font-family: var(--font-display);
   font-size: 1.55rem;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 0.45rem 0 0.35rem;
 }
@@ -7466,7 +7466,7 @@ a.professional-match-card:hover {
 .calendar-dialog__header h2 {
   font-family: var(--font-display);
   font-size: clamp(1.7rem, 4vw, 2.7rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 0.35rem 0 0.4rem;
 }
@@ -8002,7 +8002,7 @@ a.play-day__booking {
   color: #fff;
   font-size: clamp(2rem, 4vw, 4rem);
   line-height: 0.98;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
 }
 
 .duna-video-gallery__header p {
@@ -8343,7 +8343,7 @@ a.play-day__booking {
   color: #0a1b26;
   font-size: clamp(2.8rem, 7vw, 6.8rem);
   line-height: 0.9;
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
 }
 
 .video-match-page__hero p {
@@ -8439,7 +8439,7 @@ a.play-day__booking {
 .organization-invite-card h1 {
   font-family: var(--font-display);
   font-size: clamp(2.4rem, 7vw, 5rem);
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
   margin: 0;
 }
@@ -8534,7 +8534,7 @@ a.play-day__booking {
 .booking-invite-panel > header h1 {
   font-family: var(--font-display);
   font-size: clamp(2.2rem, 6vw, 4.4rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 0.94;
   margin: 0.5rem 0 0.8rem;
 }
@@ -8690,7 +8690,7 @@ a.play-day__booking {
 .venue-booking-heading h2 {
   font-family: var(--font-display);
   font-size: clamp(1.7rem, 4vw, 2.9rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 0.45rem 0 0;
 }
@@ -8904,7 +8904,7 @@ a.play-day__booking {
 .booking-player-picker h3 {
   font-family: var(--font-display);
   font-size: 1.4rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.3rem 0 0;
 }
 
@@ -9001,7 +9001,7 @@ a.play-day__booking {
 .booking-review-sheet > header h2 {
   font-family: var(--font-display);
   font-size: 2rem;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   margin: 0.25rem 0 0;
 }
 
@@ -9380,7 +9380,7 @@ a.play-day__booking {
   color: #2b6da0;
   font-family: var(--font-display);
   font-size: 1.8rem;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
 }
 
 .booking-review-submit {
@@ -9508,7 +9508,7 @@ a.play-day__booking {
 .checkout-main .checkout-intro h1 {
   font-family: var(--font-display);
   font-size: clamp(3rem, 6vw, 5.7rem);
-  letter-spacing: -0.072em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
   margin: 0.55rem 0 0.7rem;
   max-width: 740px;
@@ -10149,7 +10149,7 @@ a.play-day__booking {
 .team-claim-card h1 {
   font-family: var(--font-display);
   font-size: clamp(2.5rem, 7vw, 4.6rem);
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   line-height: 0.92;
   margin: 0.7rem 0;
 }
@@ -10530,7 +10530,7 @@ a.play-day__booking {
 .public-create__intro h1 {
   font-family: var(--font-display);
   font-size: clamp(4.2rem, 8vw, 8rem);
-  letter-spacing: -0.08em;
+  letter-spacing: -0.03em;
   line-height: 0.84;
   margin: 1.1rem 0;
 }
@@ -10615,7 +10615,7 @@ a.play-day__booking {
 .public-create__form h2 {
   font-family: var(--font-display);
   font-size: 2rem;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   margin: 0.55rem 0 1.2rem;
 }
 
@@ -10965,7 +10965,7 @@ a.play-day__booking {
   font-weight: 800;
   height: 84px;
   justify-content: center;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   width: 84px;
 }
 
@@ -10980,7 +10980,7 @@ a.play-day__booking {
 .public-profile-hero h1 {
   font-family: var(--font-display);
   font-size: clamp(2.2rem, 4vw, 4rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin: 0;
 }
@@ -11147,7 +11147,7 @@ a.play-day__booking {
 .chemistry-card h2 {
   font-family: var(--font-display);
   font-size: 1.8rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 0.65rem 0 1.8rem;
 }
@@ -11295,7 +11295,7 @@ a.play-day__booking {
 .duna-plus-panel h2 {
   font-family: var(--font-display);
   font-size: 1.8rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.8rem 0 0.4rem;
 }
 
@@ -11352,7 +11352,7 @@ a.play-day__booking {
 .pickup-builder h1 {
   font-family: var(--font-display);
   font-size: clamp(2.7rem, 6vw, 5rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
   margin: 0.45rem 0;
 }
@@ -11587,7 +11587,7 @@ a.play-day__booking {
 .pickup-preview h2 {
   font-family: var(--font-display);
   font-size: 1.55rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.8rem 0 0.35rem;
 }
 
@@ -11638,7 +11638,7 @@ a.play-day__booking {
 .checkout-complete h1 {
   font-family: var(--font-display);
   font-size: clamp(2.6rem, 6vw, 5rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 0.92;
   margin: 1rem 0;
 }
@@ -11668,7 +11668,7 @@ a.play-day__booking {
 .checkout-main > div:first-child h1 {
   font-family: var(--font-display);
   font-size: clamp(3rem, 6vw, 5.2rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
   margin: 0.5rem 0;
 }
@@ -11878,7 +11878,7 @@ a.play-day__booking {
 .checkout-summary h2 {
   font-family: var(--font-display);
   font-size: 1.6rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 1rem 0 0.3rem;
 }
 
@@ -12006,7 +12006,7 @@ a.play-day__booking {
 .settings-section__heading h2 {
   font-family: var(--font-display);
   font-size: 1.8rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.25rem 0 0;
 }
 
@@ -12928,7 +12928,7 @@ a.play-day__booking {
 .score-setup h1 {
   font-family: var(--font-display);
   font-size: clamp(3.5rem, 8vw, 7rem);
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.82;
   margin: 0.8rem 0 1.2rem;
 }
@@ -13046,7 +13046,7 @@ a.play-day__booking {
 .match-recorder__intro h1 {
   font-family: var(--font-display);
   font-size: clamp(3.2rem, 7vw, 6rem);
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.88;
   margin: 0;
 }
@@ -13200,7 +13200,7 @@ a.play-day__booking {
 .match-recorder__section-heading h2 {
   font-family: var(--font-display);
   font-size: 1.25rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
@@ -13832,7 +13832,7 @@ a.play-day__booking {
 .player-picker__panel h2 {
   font-family: var(--font-display);
   font-size: 2rem;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
@@ -13985,7 +13985,7 @@ a.play-day__booking {
 .match-detail__hero > h1 {
   font-family: var(--font-display);
   font-size: clamp(2rem, 5vw, 4rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
 }
 
 .match-detail__context {
@@ -14528,7 +14528,7 @@ a.play-day__booking {
   font-family: var(--font-display);
   font-size: clamp(8rem, 22vw, 21rem);
   font-weight: 800;
-  letter-spacing: -0.1em;
+  letter-spacing: -0.03em;
   line-height: 0.78;
   margin: 2rem 0;
 }
@@ -14760,7 +14760,7 @@ a.play-day__booking {
 .public-method-note h2 {
   font-family: var(--font-display);
   font-size: 2rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 0.7rem 0;
 }
@@ -14837,7 +14837,7 @@ a.play-day__booking {
 .club-hero h1 {
   font-family: var(--font-display);
   font-size: clamp(3.5rem, 7vw, 7rem);
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.8;
   margin: 1.5rem 0;
 }
@@ -14917,7 +14917,7 @@ a.play-day__booking {
 .club-locations h2 {
   font-family: var(--font-display);
   font-size: 2.6rem;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   line-height: 1;
 }
 
@@ -15004,7 +15004,7 @@ a.play-day__booking {
 .event-detail-hero h1 {
   font-family: var(--font-display);
   font-size: clamp(4rem, 9vw, 8rem);
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.8;
   margin: 1.2rem 0;
 }
@@ -15041,7 +15041,7 @@ a.play-day__booking {
 .event-detail-copy > h2 {
   font-family: var(--font-display);
   font-size: 3rem;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 0.8rem 0;
 }
@@ -15317,14 +15317,14 @@ a.play-day__booking {
 .public-live__score h1 {
   font-family: var(--font-display);
   font-size: clamp(1.5rem, 3vw, 2.6rem);
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
 }
 
 .public-live__score article > .duna-numeric {
   font-family: var(--font-display);
   font-size: clamp(7rem, 16vw, 14rem);
   font-weight: 800;
-  letter-spacing: -0.09em;
+  letter-spacing: -0.03em;
   line-height: 0.75;
   margin-bottom: 1rem;
 }
@@ -15382,7 +15382,7 @@ a.play-day__booking {
 .editorial-hero h1 {
   font-family: var(--font-display);
   font-size: clamp(3.5rem, 8vw, 7rem);
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   line-height: 0.86;
   margin: 1.2rem 0;
 }
@@ -15408,7 +15408,7 @@ a.play-day__booking {
   color: var(--color-bone);
   font-family: var(--font-display);
   font-size: 2.2rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   line-height: 1.1;
   margin-top: 3rem;
 }
@@ -15765,7 +15765,7 @@ a.play-day__booking {
 .auth-setup-card h1 {
   font-family: var(--font-display);
   font-size: clamp(2.5rem, 7vw, 5.5rem);
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
   margin: 2rem 0 1rem;
 }
@@ -15883,7 +15883,7 @@ a.play-day__booking {
 .public-match-history h2 {
   font-family: var(--font-display);
   font-size: 1.35rem;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   margin: 0.35rem 0 0;
 }
 
@@ -16077,7 +16077,7 @@ a.play-day__booking {
 .pro-tour-hero h1 {
   font-family: var(--font-display);
   font-size: clamp(4rem, 9vw, 8.6rem);
-  letter-spacing: -0.085em;
+  letter-spacing: -0.03em;
   line-height: 0.84;
   margin: 1.3rem 0;
 }
@@ -16106,7 +16106,7 @@ a.play-day__booking {
 .pro-tour-hero__orb .duna-numeric {
   font-family: var(--font-display);
   font-size: 3.5rem;
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   margin-top: 0.7rem;
 }
 
@@ -16198,7 +16198,7 @@ a.play-day__booking {
 .pro-schedule-calendar > header h2 {
   font-family: var(--font-display);
   font-size: clamp(1.8rem, 4vw, 3.3rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 0.96;
   margin: 0.3rem 0 0;
 }
@@ -16371,7 +16371,7 @@ a.play-day__booking {
 .world-ranking-section h2 {
   font-family: var(--font-display);
   font-size: clamp(2.2rem, 5vw, 4.4rem);
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   line-height: 0.92;
   margin: 0.35rem 0 0;
 }
@@ -16422,7 +16422,7 @@ a.play-day__booking {
 .pro-event-grid h3 {
   font-family: var(--font-display);
   font-size: 1.2rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
@@ -16478,7 +16478,7 @@ a.play-day__booking {
   color: var(--color-white);
   font-family: var(--font-display);
   font-size: clamp(3rem, 6.5vw, 6.2rem);
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.88;
   margin: 0.5rem 0 0.8rem;
 }
@@ -16601,7 +16601,7 @@ a.play-day__booking {
   color: rgb(255 255 255 / 78%);
   font-family: var(--font-display);
   font-size: clamp(2.4rem, 5vw, 4.4rem);
-  letter-spacing: -0.08em;
+  letter-spacing: -0.03em;
 }
 
 .pro-player-card__rank {
@@ -16636,7 +16636,7 @@ a.play-day__booking {
   color: var(--color-white);
   font-family: var(--font-display);
   font-size: clamp(1.25rem, 2vw, 1.7rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 0;
 }
@@ -16696,7 +16696,7 @@ a.play-day__booking {
   font-family: var(--font-display);
   font-size: 1.4rem;
   font-weight: 850;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
 }
 
 .pro-player-search > div:first-child p {
@@ -17113,7 +17113,7 @@ a.play-day__booking {
 .rankings-hero h1 {
   font-family: var(--font-display);
   font-size: clamp(4rem, 8vw, 8rem);
-  letter-spacing: -0.08em;
+  letter-spacing: -0.03em;
   line-height: 0.82;
   margin: 1.5rem 0;
   max-width: 900px;
@@ -17169,7 +17169,7 @@ a.play-day__booking {
   color: var(--color-aqua);
   font-family: var(--font-display);
   font-size: clamp(5rem, 12vw, 10rem);
-  letter-spacing: -0.09em;
+  letter-spacing: -0.03em;
   line-height: 0.85;
   margin-top: 1rem;
 }
@@ -17222,7 +17222,7 @@ a.play-day__booking {
 .rankings-explainer h2,
 .rankings-list-header h2 {
   font-family: var(--font-display);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
 }
 
@@ -17825,7 +17825,7 @@ a.play-day__booking {
 .pro-match-hero h1 {
   font-family: var(--font-display);
   font-size: clamp(3.2rem, 7.5vw, 7.4rem);
-  letter-spacing: -0.08em;
+  letter-spacing: -0.03em;
   line-height: 0.88;
   margin: 1.1rem 0 1.5rem;
   max-width: 950px;
@@ -17973,7 +17973,7 @@ a.play-day__booking {
   font-family: var(--font-display);
   font-size: 3.8rem;
   gap: 0.4rem;
-  letter-spacing: -0.08em;
+  letter-spacing: -0.03em;
   margin: auto 0 1rem;
 }
 
@@ -18034,7 +18034,7 @@ a.play-day__booking {
 .pro-match-panel > header h2 {
   font-family: var(--font-display);
   font-size: clamp(2rem, 5vw, 4.2rem);
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
   margin: 0.35rem 0 0;
 }
@@ -18274,7 +18274,7 @@ a.play-day__booking {
 .pro-avp-table > header h3 {
   font-family: var(--font-display);
   font-size: 1.15rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
@@ -18759,7 +18759,7 @@ a.play-day__booking {
   font-family: var(--font-display);
   font-size: clamp(3.6rem, 7vw, 5rem);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
 }
 
@@ -19271,7 +19271,7 @@ a.play-day__booking {
   font-family: var(--font-display);
   font-size: clamp(1.7rem, 4vw, 2.8rem);
   gap: 0.38rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
 }
 
 .pro-live-scoreboard__now > strong small {
@@ -19420,7 +19420,7 @@ a.play-day__booking {
 .pro-live-scoreboard__match-points {
   background: color-mix(in srgb, var(--ground-cool) 72%, transparent);
   font-size: clamp(2.25rem, 5vw, 4rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
 }
 
 .pro-live-scoreboard__team--winner .pro-live-scoreboard__match-points {
@@ -19453,7 +19453,7 @@ a.play-day__booking {
 .pro-live-stats > header h2 {
   font-family: var(--font-display);
   font-size: clamp(2.1rem, 5vw, 4.4rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 0.92;
   margin: 0.35rem 0 0;
 }
@@ -19841,7 +19841,7 @@ html {
 .prediction-market-detail__chart > header h2 {
   font-family: var(--font-display);
   font-size: clamp(1.8rem, 4vw, 3.2rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   margin: 0.25rem 0 0;
 }
 
@@ -20374,7 +20374,7 @@ html {
 .tournament-markets__focus > header h3 {
   font-family: var(--font-display);
   font-size: 1.5rem;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   margin: 0.2rem 0 0;
 }
 
@@ -20429,7 +20429,7 @@ html {
 .prediction-wallet-summary .duna-numeric {
   font-family: var(--font-display);
   font-size: 2.5rem;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
 }
 
 .prediction-wallet-summary p {
@@ -20596,7 +20596,7 @@ html {
 .event-public__hero h1 {
   font-family: var(--font-display);
   font-size: clamp(4.2rem, 8vw, 8.2rem);
-  letter-spacing: -0.083em;
+  letter-spacing: -0.03em;
   line-height: 0.83;
   margin: 0;
   max-width: 780px;
@@ -20825,7 +20825,7 @@ html {
 .event-public__section > header h2 {
   font-family: var(--font-display);
   font-size: clamp(2rem, 4vw, 3.8rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 0.98;
   margin: 0.65rem 0 0.75rem;
 }
@@ -20909,7 +20909,7 @@ html {
 .event-feature-grid h3 {
   font-family: var(--font-display);
   font-size: 1rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   margin: 0.8rem 0 0.4rem;
 }
 
@@ -20958,7 +20958,7 @@ html {
 .event-division-grid h3 {
   font-family: var(--font-display);
   font-size: clamp(1.5rem, 3vw, 2.4rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   margin: 1rem 0 0.35rem;
 }
 
@@ -21542,7 +21542,7 @@ html {
 .event-public__booking > h2 {
   font-family: var(--font-display);
   font-size: 1.5rem;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   margin: 1.1rem 0 0.35rem;
 }
 
@@ -21842,7 +21842,7 @@ html {
   color: #0d1c2d;
   font-family: var(--font-display);
   font-size: clamp(2.65rem, 6vw, 5.8rem);
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   line-height: 0.92;
   margin: 0.55rem auto 1rem;
   text-wrap: balance;
@@ -22057,7 +22057,7 @@ html {
 .voice-guide h3 {
   font-family: var(--font-display);
   font-size: clamp(2rem, 5vw, 3.8rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin: 0;
 }
@@ -22435,7 +22435,7 @@ html {
   color: #10283b;
   font-family: var(--font-display);
   font-size: 1.45rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
@@ -22708,7 +22708,7 @@ html {
   color: #0e2233;
   font-family: var(--font-display);
   font-size: clamp(2.2rem, 5vw, 4.6rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 0.94;
   margin: 0.8rem 0;
   max-width: 760px;
@@ -22917,7 +22917,7 @@ html {
 .member-home__header h2 {
   font-family: var(--font-display);
   font-size: clamp(1.9rem, 4vw, 3.3rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 0.96;
   margin: 0.3rem 0 0.6rem;
 }
@@ -23140,7 +23140,7 @@ html {
 .coach-profile-hero__copy h1 {
   font-family: var(--font-display);
   font-size: clamp(4rem, 10vw, 8rem);
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.84;
   margin: 0.75rem 0 1.2rem;
 }
@@ -23237,7 +23237,7 @@ html {
 
 .coach-availability h2 {
   font-size: 1.8rem;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   margin: 0.45rem 0 1.2rem;
 }
 
@@ -23446,7 +23446,7 @@ html {
   color: #fff;
   font-family: var(--font-display);
   font-size: clamp(4rem, 8vw, 7.9rem);
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.82;
   margin: 1.25rem 0 1.5rem;
 }
@@ -23499,7 +23499,7 @@ html {
   color: #0b1930;
   font-family: var(--font-display);
   font-size: clamp(2.1rem, 3.8vw, 3.4rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.96;
   margin: 1rem 0;
 }
@@ -23642,8 +23642,8 @@ html {
 /* August 2026 Duna campaign homepage */
 
 .campaign-home {
-  --campaign-blue: #0b2440;
-  --campaign-blue-bright: #235a96;
+  --campaign-blue: var(--text-1);
+  --campaign-blue-bright: var(--flare-text);
   --campaign-cream: #f4f0e7;
   --campaign-ink: #0e1828;
   --campaign-muted: #647084;
@@ -23875,7 +23875,7 @@ html {
   font-family: var(--font-display);
   font-size: clamp(4.6rem, 8.6vw, 8.4rem);
   font-weight: 860;
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.8;
   margin: 1.55rem 0 1.7rem;
   text-wrap: balance;
@@ -23919,7 +23919,7 @@ html {
   font-family: var(--font-display);
   font-size: clamp(1.7rem, 3vw, 2.7rem);
   font-weight: 820;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   line-height: 1;
 }
 
@@ -24063,7 +24063,7 @@ html {
   font-family: var(--font-display);
   font-size: clamp(3rem, 6vw, 6.5rem);
   font-weight: 820;
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.88;
   margin: 0;
 }
@@ -24129,7 +24129,7 @@ html {
 .campaign-paths h3 {
   font-family: var(--font-display);
   font-size: clamp(1.6rem, 3vw, 2.5rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin: 1.5rem 0 1rem;
 }
@@ -24325,7 +24325,7 @@ html {
 .campaign-live__caption strong {
   font-family: var(--font-display);
   font-size: clamp(1.8rem, 4vw, 3.5rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin-top: 0.45rem;
 }
@@ -24385,7 +24385,7 @@ html {
   color: var(--campaign-ink);
   font-family: var(--font-display);
   font-size: 2.2rem;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin-top: 0.2rem;
 }
@@ -24522,7 +24522,7 @@ html {
 .campaign-operator__metric--hero strong {
   font-family: var(--font-display);
   font-size: clamp(2rem, 4vw, 3.5rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin-top: auto;
 }
@@ -24573,7 +24573,7 @@ html {
   font-size: 2rem;
   font-weight: 800;
   grid-column: 1 / -1;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
 }
 
 .campaign-operator__insight {
@@ -25437,7 +25437,7 @@ html {
 .club-offerings h2 {
   color: var(--club-ink);
   font-size: clamp(2rem, 4vw, 3.4rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   margin: 0.3rem 0 0.55rem;
 }
 
@@ -25744,7 +25744,7 @@ html {
 .catalog-product-copy h1 {
   color: #101828;
   font-size: clamp(2.3rem, 6vw, 5rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 0.94;
   margin: 0.55rem 0 1rem;
 }
@@ -25928,7 +25928,7 @@ html {
 .catalog-checkout-total strong {
   color: #173a63;
   font-size: 1.55rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
 }
 
 .catalog-checkout-button {
@@ -26197,7 +26197,7 @@ a {
   font-size: clamp(4.3rem, 7.6vw, 8.2rem);
   font-stretch: expanded;
   font-weight: 800;
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.82;
   margin: 0;
   text-transform: uppercase;
@@ -26603,7 +26603,7 @@ a {
 .rating-orbit__content > .duna-numeric {
   font-size: 3.7rem;
   font-weight: 600;
-  letter-spacing: -0.08em;
+  letter-spacing: -0.03em;
   line-height: 1.1;
 }
 
@@ -26700,7 +26700,7 @@ a {
   font-family: var(--font-display);
   font-size: clamp(2.5rem, 4.8vw, 5rem);
   font-weight: 700;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.98;
   margin: 0;
 }
@@ -26855,7 +26855,7 @@ a {
 .event-card h3 {
   font-family: var(--font-display);
   font-size: 1.28rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   line-height: 1.05;
   margin: 0;
 }
@@ -27066,7 +27066,7 @@ a {
 .moments h3 {
   font-family: var(--font-display);
   font-size: 1.4rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   margin: 0 0 0.85rem;
 }
 
@@ -27360,7 +27360,7 @@ a {
 .legal-center-hero h1 {
   font-family: var(--font-display);
   font-size: clamp(3rem, 7vw, 6.5rem);
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.92;
   margin: 1.1rem 0;
   max-width: 960px;
@@ -27480,7 +27480,7 @@ a {
 .legal-body h2 {
   font-family: var(--font-display);
   font-size: clamp(1.4rem, 2vw, 1.8rem);
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   margin: 0 0 1rem;
 }
 
@@ -27554,7 +27554,7 @@ a {
 .legal-card-grid h2 {
   font-family: var(--font-display);
   font-size: clamp(1.8rem, 3vw, 2.7rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   margin: 0.55rem 0;
 }
 
@@ -27585,7 +27585,7 @@ a {
 .legal-contact h2 {
   font-family: var(--font-display);
   font-size: clamp(2rem, 5vw, 4.5rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   margin: 0.5rem 0 2rem;
 }
 
@@ -28255,7 +28255,7 @@ a {
   font-family: var(--font-display);
   font-size: clamp(2.3rem, 4vw, 4.15rem);
   font-weight: 700;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin: 0;
 }
@@ -28410,7 +28410,7 @@ a {
 .dashboard-section h2 {
   font-family: var(--font-display);
   font-size: 1.35rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   margin: 0.75rem 0 0;
 }
 
@@ -28545,7 +28545,7 @@ a {
 
 .next-up-panel__time .duna-numeric {
   font-size: 3.5rem;
-  letter-spacing: -0.08em;
+  letter-spacing: -0.03em;
 }
 
 .next-up-panel__time > span {
@@ -28686,7 +28686,7 @@ a {
 .dashboard-section__heading h2 {
   font-family: var(--font-display);
   font-size: 1.75rem;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
@@ -29738,7 +29738,7 @@ a {
 .pickup-prompt h2 {
   font-family: var(--font-display);
   font-size: 1.75rem;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   line-height: 1.05;
   margin: 1rem 0 0.6rem;
 }
@@ -29933,7 +29933,7 @@ a {
 .match-rating-card > .duna-numeric {
   color: var(--color-aqua);
   font-size: 3rem;
-  letter-spacing: -0.08em;
+  letter-spacing: -0.03em;
 }
 
 .match-rating-card small {
@@ -30031,7 +30031,7 @@ a {
 .wallet-balance-card > .duna-numeric {
   font-size: clamp(3.2rem, 6vw, 5rem);
   font-weight: 600;
-  letter-spacing: -0.09em;
+  letter-spacing: -0.03em;
   line-height: 1;
 }
 
@@ -30156,7 +30156,7 @@ a {
 
 .organization-credit-grid > article > .duna-numeric {
   font-size: 2.8rem;
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   line-height: 1;
 }
 
@@ -30320,7 +30320,7 @@ a {
 .court-booking-hero h1 {
   font-family: var(--font-display);
   font-size: clamp(2.7rem, 6vw, 5.4rem);
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
   margin: 0.45rem 0 0.7rem;
 }
@@ -30394,7 +30394,7 @@ a {
 .court-booking-summary h2 {
   font-family: var(--font-display);
   font-size: 1.65rem;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   margin: 0.35rem 0 0;
 }
 
@@ -30824,7 +30824,7 @@ a {
 .hero h1 {
   font-size: clamp(4rem, 6.8vw, 7.4rem);
   font-weight: 700;
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.88;
   text-transform: none;
 }
@@ -31015,7 +31015,7 @@ a {
 .play-agenda__heading h2 {
   font-family: var(--font-display);
   font-size: clamp(1.35rem, 2.4vw, 2rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
@@ -31231,7 +31231,7 @@ a {
 .play-create-card h2 {
   font-family: var(--font-display);
   font-size: clamp(1.55rem, 2.8vw, 2.25rem);
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 1.5rem 0 1rem;
 }
@@ -32323,7 +32323,7 @@ button.selected > .choice-radio {
 
 .club-marketing-hero__copy h1 {
   font-size: clamp(4rem, 8.5vw, 8.5rem);
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.84;
   margin: 0;
 }
@@ -32428,7 +32428,7 @@ button.selected > .choice-radio {
 
 .club-marketing-product-grid h2 {
   font-size: clamp(1.7rem, 3vw, 3rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 0.45rem 0 1.5rem;
 }
@@ -32452,7 +32452,7 @@ button.selected > .choice-radio {
 
 .club-marketing-product-grid > aside h3 {
   font-size: 1.35rem;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   line-height: 1.1;
 }
 
@@ -32528,7 +32528,7 @@ button.selected > .choice-radio {
 .club-marketing-theme-story h2,
 .club-marketing-cta h2 {
   font-size: clamp(2.5rem, 5vw, 5.5rem);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin: 0.5rem 0;
 }
@@ -32596,7 +32596,7 @@ button.selected > .choice-radio {
 
 .club-marketing-feature > h2 {
   font-size: clamp(2rem, 3.7vw, 4rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 0.98;
   margin: 0.55rem 0 0.8rem;
 }
@@ -32695,7 +32695,7 @@ button.selected > .choice-radio {
   font-size: clamp(1.6rem, 3vw, 3rem);
   font-weight: 800;
   height: 185px;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   padding: 1.1rem;
   position: absolute;
   width: min(58%, 330px);
@@ -32888,7 +32888,7 @@ button.selected > .choice-radio {
 
 .club-marketing-theme-preview article h3 {
   font-size: clamp(2rem, 4vw, 4rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin: 4.5rem 0 1rem;
 }
@@ -33133,7 +33133,7 @@ button.selected > .choice-radio {
 .rating-trend-card h2 {
   font-family: var(--font-display);
   font-size: clamp(1.35rem, 2.5vw, 2rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.15rem 0 0;
 }
 
@@ -33172,7 +33172,7 @@ button.selected > .choice-radio {
 .rating-trend-chart__summary strong {
   font-family: var(--font-display);
   font-size: 1.25rem;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
 }
 
 .rating-trend-chart__summary span[data-direction="up"] strong {
@@ -33354,7 +33354,7 @@ button.selected > .choice-radio {
   color: var(--color-white);
   font-family: var(--font-display);
   font-size: clamp(4rem, 7.4vw, 7.8rem);
-  letter-spacing: -0.085em;
+  letter-spacing: -0.03em;
   line-height: 0.82;
   margin: 1rem 0 1.35rem;
   max-width: 780px;
@@ -33539,7 +33539,7 @@ button.selected > .choice-radio {
 .athlete-hero__rating .duna-numeric {
   font-family: var(--font-display);
   font-size: 3.4rem;
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 0.3rem 0;
 }
@@ -33589,7 +33589,7 @@ button.selected > .choice-radio {
   color: var(--color-aqua);
   font-family: var(--font-display);
   font-size: 2rem;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
 }
 
 .athlete-profile-body {
@@ -33637,7 +33637,7 @@ button.selected > .choice-radio {
 .athlete-trust-note h2 {
   font-family: var(--font-display);
   font-size: clamp(1.8rem, 3vw, 2.65rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.98;
   margin: 0.5rem 0;
 }
@@ -33753,7 +33753,7 @@ button.selected > .choice-radio {
 .athlete-insight-stack strong {
   font-family: var(--font-display);
   font-size: 1.55rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
 }
 
 .signature-results,
@@ -33817,7 +33817,7 @@ button.selected > .choice-radio {
 .signature-results .duna-numeric {
   font-family: var(--font-display);
   font-size: 1.8rem;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
 }
 
 .athlete-upcoming > header > a {
@@ -34402,7 +34402,7 @@ button.selected > .choice-radio {
   font-size: clamp(7rem, 15vw, 17rem);
   font-weight: 900;
   left: 48%;
-  letter-spacing: -0.09em;
+  letter-spacing: -0.03em;
   line-height: 0.72;
   max-width: 72%;
   overflow: hidden;
@@ -34446,7 +34446,7 @@ button.selected > .choice-radio {
 .athlete-stage .athlete-hero h1 > span {
   font-size: 0.52em;
   font-weight: 650;
-  letter-spacing: -0.065em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin-bottom: 0.15em;
 }
@@ -34485,7 +34485,7 @@ button.selected > .choice-radio {
   font-size: clamp(6rem, 11vw, 12.5rem);
   font-weight: 900;
   left: 0;
-  letter-spacing: -0.09em;
+  letter-spacing: -0.03em;
   line-height: 0.8;
   pointer-events: none;
   position: absolute;
@@ -34599,7 +34599,7 @@ button.selected > .choice-radio {
 .athlete-hero-card--result > strong {
   font-family: var(--font-display);
   font-size: clamp(1.35rem, 2vw, 2rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   line-height: 1.05;
 }
 
@@ -34645,7 +34645,7 @@ button.selected > .choice-radio {
 .athlete-hero-card--next > strong {
   font-family: var(--font-display);
   font-size: clamp(1.35rem, 1.8vw, 1.85rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   line-height: 1.05;
   margin-top: auto;
 }
@@ -34971,7 +34971,7 @@ button.selected > .choice-radio {
   color: var(--color-bone);
   font-family: var(--font-display);
   font-size: 1.7rem;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   line-height: 1;
 }
 
@@ -35041,7 +35041,7 @@ button.selected > .choice-radio {
 .match-detail__rating-story h2 {
   font-family: var(--font-display);
   font-size: clamp(1.35rem, 2.8vw, 2rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.15rem 0 0.55rem;
 }
 
@@ -35189,7 +35189,7 @@ button.selected > .choice-radio {
 .match-performance__header h2 {
   font-family: var(--font-display);
   font-size: clamp(1.6rem, 3vw, 2.35rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 1;
   margin: 0.25rem 0 0.45rem;
 }
@@ -35314,7 +35314,7 @@ button.selected > .choice-radio {
 .match-performance__selected-value > strong {
   font-family: var(--font-mono);
   font-size: clamp(2.25rem, 5vw, 3.6rem);
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   line-height: 1;
 }
 
@@ -35654,7 +35654,7 @@ button.selected > .choice-radio {
 .match-history-month__header h3 {
   font-family: var(--font-display);
   font-size: clamp(1.25rem, 2vw, 1.6rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
@@ -35699,7 +35699,7 @@ button.selected > .choice-radio {
 .match-history-day__marker strong {
   font-family: var(--font-display);
   font-size: 2rem;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 1.05;
 }
 
@@ -36289,7 +36289,7 @@ button.selected > .choice-radio {
 .tournament-markets__overview > header h3 {
   font-family: var(--font-display);
   font-size: clamp(1.8rem, 3vw, 2.7rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   margin: 0.2rem 0 0;
 }
 
