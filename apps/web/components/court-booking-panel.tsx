@@ -894,7 +894,7 @@ export function CourtBookingPanel({
                         <span>
                           <strong>{person.displayName}</strong>
                           <small>
-                            SandRating {person.rating.display.toFixed(2)}
+                            Sand Rating {person.rating.display.toFixed(2)}
                           </small>
                         </span>
                         <Plus aria-hidden size={16} />

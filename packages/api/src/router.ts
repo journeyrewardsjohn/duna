@@ -5432,6 +5432,7 @@ const playerRouter = router({
           .max(64)
           .default([]),
         isDunaPlus: z.boolean(),
+        paymentSurface: z.enum(["hosted", "native"]).default("hosted"),
         successUrl: z.url(),
         cancelUrl: z.url(),
         idempotencyKey: z.string().uuid(),
@@ -5459,6 +5460,7 @@ const playerRouter = router({
               acceptedPolicyIds: input.acceptedPolicyIds,
               readPolicyIds: input.readPolicyIds,
               isDunaPlus: input.isDunaPlus,
+              paymentSurface: input.paymentSurface,
               successUrl: input.successUrl,
               cancelUrl: input.cancelUrl,
               idempotencyKey: input.idempotencyKey,
@@ -5473,13 +5475,25 @@ const playerRouter = router({
       }),
     ),
   checkoutStatus: protectedProcedure
-    .input(z.object({ checkoutSessionId: z.string().min(1).max(255) }))
+    .input(
+      z
+        .object({
+          checkoutSessionId: z.string().min(1).max(255).optional(),
+          paymentIntentId: z.string().min(1).max(255).optional(),
+        })
+        .refine(
+          (input) =>
+            Boolean(input.checkoutSessionId) !== Boolean(input.paymentIntentId),
+          "Provide exactly one Stripe checkout reference.",
+        ),
+    )
     .output(eventCheckoutStatusSchema)
     .query(async ({ input, ctx }) => {
       try {
         return await getEventCheckoutStatus({
           actor: ctx.actor!,
           checkoutSessionId: input.checkoutSessionId,
+          paymentIntentId: input.paymentIntentId,
         });
       } catch (error) {
         return throwDomainError(error);

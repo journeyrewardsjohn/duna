@@ -367,7 +367,7 @@ export function SessionArrivalCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#10263d",
+    backgroundColor: "#141a1e",
     borderRadius: 22,
     marginTop: 14,
     overflow: "hidden",
@@ -383,9 +383,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 42,
   },
-  liveMarkText: { color: "#86c9ef", fontSize: 18, fontWeight: "900" },
+  liveMarkText: { color: "#b5ccd3", fontSize: 18, fontWeight: "900" },
   eyebrow: {
-    color: "#86c9ef",
+    color: "#b5ccd3",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.2,
@@ -403,7 +403,7 @@ const styles = StyleSheet.create({
     height: 9,
     width: 9,
   },
-  body: { color: "#c8d6e2", fontSize: 11, lineHeight: 17, marginTop: 14 },
+  body: { color: "#a9b4b8", fontSize: 11, lineHeight: 17, marginTop: 14 },
   metrics: {
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,.06)",
@@ -413,9 +413,10 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   metric: { alignItems: "center", flex: 1 },
-  metricLabel: { color: "#86c9ef", fontSize: 10, fontWeight: "900" },
+  metricLabel: { color: "#b5ccd3", fontSize: 10, fontWeight: "900" },
   metricValue: {
     color: "#ffffff",
+    fontFamily: "Archivo-ExtraBold",
     fontSize: 16,
     fontWeight: "900",
     marginTop: 4,
@@ -429,7 +430,7 @@ const styles = StyleSheet.create({
   divider: { backgroundColor: "rgba(255,255,255,.12)", height: 31, width: 1 },
   button: {
     alignItems: "center",
-    backgroundColor: "#86c9ef",
+    backgroundColor: "#b5ccd3",
     borderRadius: 14,
     marginTop: 14,
     minHeight: 46,
@@ -437,10 +438,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   buttonStop: { backgroundColor: "rgba(255,255,255,.1)" },
-  buttonText: { color: "#10263d", fontSize: 12, fontWeight: "900" },
+  buttonText: { color: "#141a1e", fontSize: 12, fontWeight: "900" },
   buttonTextStop: { color: "#ffffff" },
   message: {
-    color: "#c8d6e2",
+    color: "#a9b4b8",
     fontSize: 10,
     lineHeight: 14,
     marginTop: 9,

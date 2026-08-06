@@ -31,6 +31,62 @@ export function getStripeClient(): Stripe {
   return stripeClient;
 }
 
+export function getStripePublishableKey(): string {
+  const publishableKey =
+    process.env.STRIPE_PUBLISHABLE_KEY ??
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+  if (!publishableKey?.startsWith("pk_")) {
+    throw new Error("STRIPE_PUBLISHABLE_KEY is not configured");
+  }
+  return publishableKey;
+}
+
+export async function getOrCreatePlayerStripeCustomer(input: {
+  readonly personId: string;
+  readonly existingCustomerId?: string;
+  readonly email?: string;
+  readonly displayName?: string;
+}): Promise<string> {
+  if (input.existingCustomerId) return input.existingCustomerId;
+
+  const stripe = getStripeClient();
+  const matchingCustomers = await stripe.customers.search({
+    query: `metadata['dunaPersonId']:'${input.personId}'`,
+    limit: 1,
+  });
+  const existingCustomer = matchingCustomers.data[0];
+  if (existingCustomer) return existingCustomer.id;
+
+  const customer = await stripe.customers.create(
+    {
+      email: input.email,
+      name: input.displayName,
+      metadata: { dunaPersonId: input.personId },
+    },
+    { idempotencyKey: `duna-player-customer:${input.personId}` },
+  );
+  return customer.id;
+}
+
+export async function createMobilePaymentCustomerSession(
+  customerId: string,
+): Promise<string> {
+  const session = await getStripeClient().customerSessions.create({
+    customer: customerId,
+    components: {
+      mobile_payment_element: {
+        enabled: true,
+        features: {
+          payment_method_save: "enabled",
+          payment_method_redisplay: "enabled",
+          payment_method_remove: "enabled",
+        },
+      },
+    },
+  });
+  return session.client_secret;
+}
+
 export function membershipPriceId(
   plan: PaidMembershipPlanId,
   interval: MembershipBillingInterval,
@@ -278,6 +334,66 @@ export async function createEventCheckoutSession(input: {
     url: session.url,
     expiresAt: new Date(session.expires_at * 1_000).toISOString(),
   };
+}
+
+export async function createEventPaymentIntent(input: {
+  readonly orderId: string;
+  readonly personId: string;
+  readonly customerId: string;
+  readonly customerEmail?: string;
+  readonly eventId: string;
+  readonly eventTitle: string;
+  readonly amountMinor: number;
+  readonly currency: string;
+  readonly applicationFeeMinor: number;
+  readonly organizationCommissionMinor: number;
+  readonly organizationCommissionRateBps: number;
+  readonly connectedAccountId: string;
+  readonly idempotencyKey: string;
+}): Promise<{
+  readonly id: string;
+  readonly clientSecret: string;
+}> {
+  if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
+    throw new Error("Payment amount must be a positive minor-unit integer");
+  }
+  if (
+    !Number.isSafeInteger(input.applicationFeeMinor) ||
+    input.applicationFeeMinor < 0 ||
+    input.applicationFeeMinor > input.amountMinor
+  ) {
+    throw new Error("Connected payment application fee is invalid");
+  }
+
+  const intent = await getStripeClient().paymentIntents.create(
+    {
+      amount: input.amountMinor,
+      currency: input.currency.toLowerCase(),
+      customer: input.customerId,
+      receipt_email: input.customerEmail,
+      description: input.eventTitle,
+      automatic_payment_methods: { enabled: true },
+      application_fee_amount: input.applicationFeeMinor,
+      transfer_data: { destination: input.connectedAccountId },
+      metadata: {
+        dunaOrderId: input.orderId,
+        dunaEventId: input.eventId,
+        dunaPersonId: input.personId,
+        dunaOrganizationCommissionMinor: String(
+          input.organizationCommissionMinor,
+        ),
+        dunaOrganizationCommissionRateBps: String(
+          input.organizationCommissionRateBps,
+        ),
+        channel: "native-payment-sheet",
+      },
+    },
+    { idempotencyKey: `${input.idempotencyKey}:native-payment` },
+  );
+  if (!intent.client_secret) {
+    throw new Error("Stripe did not return a PaymentIntent client secret");
+  }
+  return { id: intent.id, clientSecret: intent.client_secret };
 }
 
 export async function createCourtCheckoutSession(input: {

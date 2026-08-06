@@ -5,22 +5,36 @@ import { Badge } from "@duna/ui";
 import { upload } from "@vercel/blob/client";
 import {
   ArrowRight,
+  BookOpenCheck,
+  Box,
   Boxes,
   CalendarClock,
   Check,
   ChevronLeft,
   CircleAlert,
+  CircleDollarSign,
+  ClipboardCheck,
+  Coins,
   CreditCard,
+  Crown,
+  Dumbbell,
   ImagePlus,
   Layers3,
+  Lightbulb,
+  Package,
   PackageCheck,
   Plus,
   ReceiptText,
+  Route,
+  ShieldCheck,
+  Shirt,
   ShoppingBag,
   Sparkles,
+  Target,
   Trash2,
   UploadCloud,
   UserRound,
+  Users,
   Video,
 } from "lucide-react";
 import Link from "next/link";
@@ -58,18 +72,21 @@ const productTypes = [
   {
     value: "service" as const,
     label: "Service",
+    kicker: "Book time",
     detail: "A bookable lesson, assessment, or coaching program.",
     icon: CalendarClock,
   },
   {
     value: "plan" as const,
     label: "Plan",
+    kicker: "Grow loyalty",
     detail: "A membership, credit pack, or early bundle.",
     icon: CreditCard,
   },
   {
     value: "good" as const,
-    label: "Good",
+    label: "Physical good",
+    kicker: "Sell or track",
     detail: "Inventory, merchandise, equipment, or consumables.",
     icon: ShoppingBag,
   },
@@ -81,27 +98,106 @@ const stepNames: Record<ProductType, readonly string[]> = {
   good: ["Purpose", "Variants", "Story + media", "Stock + price", "Review"],
 };
 
+const stepGuidance: Record<
+  ProductType,
+  readonly {
+    readonly detail: string;
+    readonly tip: string;
+  }[]
+> = {
+  service: [
+    {
+      detail: "Choose the booking experience",
+      tip: "Start with how a player experiences the service. Duna will adapt the operational questions around that choice.",
+    },
+    {
+      detail: "Explain the player outcome",
+      tip: "Lead with the result a player or parent wants, then describe what is included and what happens next.",
+    },
+    {
+      detail: "Set the booking guardrails",
+      tip: "Duna turns coach availability, venue, duration, and capacity into bookable time without exposing internal complexity.",
+    },
+    {
+      detail: "Make checkout predictable",
+      tip: "Choose only the payment methods staff can support. You can keep the offer private while pricing is reviewed.",
+    },
+    {
+      detail: "Confirm the customer journey",
+      tip: "Review the offer as a customer and an operator. Nothing publishes from this builder; Duna creates a private draft.",
+    },
+  ],
+  plan: [
+    {
+      detail: "Choose the loyalty model",
+      tip: "Decide whether customers are joining, prepaying for credits, or buying a curated bundle. The remaining steps will match that model.",
+    },
+    {
+      detail: "Tell the plan story",
+      tip: "Name the ongoing value, not the billing mechanism. A strong plan is easy to explain in one sentence.",
+    },
+    {
+      detail: "Define exactly what unlocks",
+      tip: "Keep benefits concrete and operationally deliverable. Duna will show the promise back to you before the draft is created.",
+    },
+    {
+      detail: "Set a clear commitment",
+      tip: "Make renewal cadence, payment options, and any installments obvious so customers know what they are agreeing to.",
+    },
+    {
+      detail: "Review value and controls",
+      tip: "Confirm the plan promise, audience, and checkout behavior together. The result stays private until a separate publication review.",
+    },
+  ],
+  good: [
+    {
+      detail: "Choose how the item is used",
+      tip: "Selling and inventory tracking are separate. Select one or both so Duna only asks for the controls you need.",
+    },
+    {
+      detail: "Model real buying choices",
+      tip: "Only add options a customer or staff member must choose, such as size or color. Every combination becomes a variant.",
+    },
+    {
+      detail: "Build a confident product story",
+      tip: "Use a clear name, one-sentence benefit, and at least one strong image. Media can be connected to specific variants.",
+    },
+    {
+      detail: "Connect stock to margin",
+      tip: "Duna keeps the first receipt, cost layer, sale price, and expected margin together so the inventory has a trustworthy starting point.",
+    },
+    {
+      detail: "Review sale and inventory rules",
+      tip: "Check the customer-facing offer and the internal stock setup together. The item is created as a private draft.",
+    },
+  ],
+};
+
 const subtypeChoices = {
   service: [
     {
       value: "private-lesson",
       label: "Private lesson",
       detail: "One player or a private group books a coach.",
+      icon: UserRound,
     },
     {
       value: "group-lesson",
       label: "Group lesson",
       detail: "A capacity-based session led by one or more coaches.",
+      icon: Users,
     },
     {
       value: "program",
       label: "Program",
       detail: "A structured multi-session coaching journey.",
+      icon: Route,
     },
     {
       value: "assessment",
       label: "Player assessment",
       detail: "A guided evaluation with notes or recommendations.",
+      icon: ClipboardCheck,
     },
   ],
   plan: [
@@ -109,17 +205,20 @@ const subtypeChoices = {
       value: "membership",
       label: "Membership",
       detail: "Recurring access, benefits, credits, and member pricing.",
+      icon: Crown,
     },
     {
       value: "credit-pack",
       label: "Credit pack",
       detail: "A one-time purchase of organization-specific credits.",
+      icon: Coins,
     },
     {
       value: "bundle",
       label: "Bundle",
       detail: "Early access: package several existing offers together.",
       badge: "Early",
+      icon: Layers3,
     },
   ],
   good: [
@@ -127,26 +226,31 @@ const subtypeChoices = {
       value: "swag",
       label: "Merchandise",
       detail: "Club-branded goods and everyday merchandise.",
+      icon: Package,
     },
     {
       value: "apparel",
       label: "Apparel",
       detail: "Sized clothing with optional color or style variants.",
+      icon: Shirt,
     },
     {
       value: "equipment",
       label: "Equipment",
       detail: "Durable gear that may be sold, rented, or used internally.",
+      icon: Dumbbell,
     },
     {
       value: "consumable",
       label: "Consumable",
       detail: "Balls, tape, hydration, and other replenished stock.",
+      icon: Box,
     },
     {
       value: "other",
-      label: "Other good",
+      label: "Other product",
       detail: "Anything physical that does not fit the choices above.",
+      icon: ShoppingBag,
     },
   ],
 } as const;
@@ -245,15 +349,15 @@ function ChoiceCard({
       onClick={onClick}
       type="button"
     >
-      {icon}
-      <span>
+      {icon && <span className="guided-choice__icon">{icon}</span>}
+      <span className="guided-choice__copy">
         <strong>
           {label}
           {badge && <Badge>{badge}</Badge>}
         </strong>
         <small>{detail}</small>
       </span>
-      <i aria-hidden />
+      <i aria-hidden>{active && <Check size={12} strokeWidth={3} />}</i>
     </button>
   );
 }
@@ -410,7 +514,7 @@ export function GuidedProductBuilder({
       coordinates.map((coordinate, index) => {
         const values = Object.values(coordinate);
         return values.length > 0
-          ? `${title || "Good"} · ${values.join(" / ")}`
+          ? `${title || "Product"} · ${values.join(" / ")}`
           : title || `Default variant ${index + 1}`;
       }),
     [coordinates, title],
@@ -525,41 +629,120 @@ export function GuidedProductBuilder({
     }
   };
 
-  const canContinue = (() => {
-    if (step === 0) {
-      return type !== "good" || trackInventory || sellEnabled;
-    }
-    if (step === 1) {
-      if (type === "good") return coordinates.length <= 500;
-      return title.trim().length >= 2;
-    }
-    if (step === 2) {
-      if (type === "good") {
-        return (
-          title.trim().length >= 2 &&
-          media.some((item) => item.kind === "image")
-        );
-      }
-      if (type === "service") {
-        return (
-          (deliveryMode !== "venue" || Boolean(venueId)) &&
-          (coachMode !== "selected" || selectedCoachIds.length > 0)
-        );
-      }
-      if (isCreditPack) return creditsGranted > 0;
-      if (isBundle) return includedCatalogItemIds.length >= 2;
-      return true;
-    }
-    if (step === 3) {
-      if (type === "good" && !sellEnabled) return true;
-      return (
-        salePriceMinor !== undefined &&
-        (allowCard || allowCash || allowCredits) &&
-        (!allowCredits || creditCost > 0)
-      );
-    }
-    return confirmed;
-  })();
+  const storyReady = title.trim().length >= 2;
+  const bookingReady =
+    (deliveryMode !== "venue" || Boolean(venueId)) &&
+    (coachMode !== "selected" || selectedCoachIds.length > 0);
+  const planStructureReady = isCreditPack
+    ? creditsGranted > 0
+    : isBundle
+      ? includedCatalogItemIds.length >= 2
+      : true;
+  const checkoutReady =
+    salePriceMinor !== undefined &&
+    (allowCard || allowCash || allowCredits) &&
+    (!allowCredits || creditCost > 0);
+  const stepReadiness: readonly boolean[] =
+    type === "service"
+      ? [true, storyReady, bookingReady, checkoutReady, confirmed]
+      : type === "plan"
+        ? [true, storyReady, planStructureReady, checkoutReady, confirmed]
+        : [
+            trackInventory || sellEnabled,
+            coordinates.length <= 500,
+            storyReady && media.some((item) => item.kind === "image"),
+            !sellEnabled || checkoutReady,
+            confirmed,
+          ];
+  const canContinue = stepReadiness[step] ?? false;
+  const activeProductType = productTypes.find(
+    (productType) => productType.value === type,
+  )!;
+  const ActiveProductIcon = activeProductType.icon;
+  const activeSubtypeLabel =
+    subtypeChoices[type].find(
+      (choice: { readonly value: string; readonly label: string }) =>
+        choice.value === subtype,
+    )?.label ?? subtype.replaceAll("-", " ");
+  const currentGuidance = stepGuidance[type][step] ?? stepGuidance[type][0]!;
+  const reachedReadiness = stepReadiness.reduce(
+    (total, ready, index) => total + (ready && index <= step ? 1 : 0),
+    0,
+  );
+  const readinessPercent = Math.round(
+    (reachedReadiness / currentSteps.length) * 100,
+  );
+  const pricePreview =
+    type === "good" && !sellEnabled
+      ? "Inventory only"
+      : salePriceMinor === undefined
+        ? "Price not set"
+        : `${moneyLabel(salePriceMinor, workspace.organization.currency)}${isMembership ? ` / ${billingMode}` : ""}`;
+  const previewHighlights =
+    type === "service"
+      ? [
+          { label: "Format", value: activeSubtypeLabel },
+          {
+            label: "Session",
+            value: `${durationMinutes} min · ${capacity} max`,
+          },
+          {
+            label: "Delivery",
+            value: deliveryMode === "venue" ? "At a venue" : "Online",
+          },
+        ]
+      : type === "plan"
+        ? [
+            { label: "Plan", value: activeSubtypeLabel },
+            {
+              label: "Value",
+              value: isCreditPack
+                ? `${creditsGranted} credits`
+                : isBundle
+                  ? `${includedCatalogItemIds.length} offers`
+                  : `${membershipCredits} credits / cycle`,
+            },
+            {
+              label: "Billing",
+              value: isMembership
+                ? billingMode === "month"
+                  ? "Monthly"
+                  : "Annual"
+                : "One time",
+            },
+          ]
+        : [
+            { label: "Item", value: activeSubtypeLabel },
+            {
+              label: "Variants",
+              value: `${coordinates.length} configured`,
+            },
+            {
+              label: "Inventory",
+              value: trackInventory ? "Tracked" : "Not tracked",
+            },
+          ];
+  const continueHint = canContinue
+    ? step < currentSteps.length - 1
+      ? `Ready for ${currentSteps[step + 1]?.toLowerCase() ?? "the next step"}.`
+      : "Ready to create the private draft."
+    : step === 0
+      ? "Choose at least one purpose to continue."
+      : (type !== "good" && step === 1) || (type === "good" && step === 2)
+        ? type === "good"
+          ? "Add a name and at least one image to continue."
+          : "Add a name with at least two characters to continue."
+        : step === 1 && type === "good"
+          ? "Reduce the variant combinations to 500 or fewer."
+          : step === 2 && type === "service"
+            ? "Choose a valid venue and at least one coach when required."
+            : step === 2 && isBundle
+              ? "Choose at least two offers for this bundle."
+              : step === 2 && isCreditPack
+                ? "Add at least one credit to continue."
+                : step === 3
+                  ? "Set a valid price and at least one payment method."
+                  : "Confirm that you reviewed the setup.";
 
   const configuration = {
     source: "hq-guided-product-builder",
@@ -654,13 +837,23 @@ export function GuidedProductBuilder({
   return (
     <section className="hq-card guided-product-builder">
       <header className="guided-product-builder__header">
-        <div>
-          <span className="hq-eyebrow">Guided product setup</span>
-          <h2>Choose the flow that matches the offer.</h2>
+        <div className="guided-product-builder__intro">
+          <span className="guided-product-builder__label">
+            <Sparkles aria-hidden size={14} /> Guided offer studio
+          </span>
+          <h2>Build an offer people understand.</h2>
           <p>
-            Each path asks only for the story, delivery, pricing, and controls
-            that belong to that product.
+            Start with the customer outcome. Duna will guide you through only
+            the story, delivery, pricing, and controls that belong to it.
           </p>
+          <div className="guided-product-builder__trust">
+            <span>
+              <ShieldCheck aria-hidden size={15} /> Private by default
+            </span>
+            <span>
+              <BookOpenCheck aria-hidden size={15} /> Five clear decisions
+            </span>
+          </div>
         </div>
         <Link className="guided-event-link" href="/events/create">
           <CalendarClock aria-hidden size={18} />
@@ -672,26 +865,47 @@ export function GuidedProductBuilder({
         </Link>
       </header>
 
-      <div className="guided-product-type-row">
-        {productTypes.map((productType) => {
-          const Icon = productType.icon;
-          return (
-            <button
-              aria-pressed={type === productType.value}
-              className={type === productType.value ? "active" : undefined}
-              key={productType.value}
-              onClick={() => chooseType(productType.value)}
-              type="button"
-            >
-              <Icon aria-hidden size={20} />
-              <span>
-                <strong>{productType.label}</strong>
-                <small>{productType.detail}</small>
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <section className="guided-product-paths">
+        <header>
+          <span className="guided-product-paths__icon">
+            <Target aria-hidden size={18} />
+          </span>
+          <div>
+            <span className="hq-eyebrow">Start with the outcome</span>
+            <strong>What are you creating?</strong>
+          </div>
+          <small>The questions adapt to your choice.</small>
+        </header>
+        <div className="guided-product-type-row">
+          {productTypes.map((productType, index) => {
+            const Icon = productType.icon;
+            const active = type === productType.value;
+            return (
+              <button
+                aria-pressed={active}
+                className={active ? "active" : undefined}
+                key={productType.value}
+                onClick={() => chooseType(productType.value)}
+                type="button"
+              >
+                <span className="guided-product-type-row__icon">
+                  <Icon aria-hidden size={21} />
+                </span>
+                <span className="guided-product-type-row__copy">
+                  <small>
+                    0{index + 1} · {productType.kicker}
+                  </small>
+                  <strong>{productType.label}</strong>
+                  <span>{productType.detail}</span>
+                </span>
+                <i aria-hidden>
+                  {active && <Check size={13} strokeWidth={3} />}
+                </i>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       <form action={action} className="guided-product-form">
         <input name="type" type="hidden" value={type} />
@@ -782,29 +996,60 @@ export function GuidedProductBuilder({
           value={confirmed ? "true" : "false"}
         />
 
-        <nav
-          aria-label={`${type} setup progress`}
-          className="guided-product-steps"
-        >
-          {currentSteps.map((name, index) => (
-            <button
-              aria-current={step === index ? "step" : undefined}
-              className={
-                step === index
-                  ? "active"
-                  : index < step
-                    ? "complete"
-                    : undefined
-              }
-              key={name}
-              onClick={() => index <= step && setStep(index)}
-              type="button"
+        <aside className="guided-product-guide">
+          <header>
+            <span>
+              <BookOpenCheck aria-hidden size={17} /> Your setup map
+            </span>
+            <strong>
+              Step {step + 1} of {currentSteps.length}
+            </strong>
+            <div
+              aria-label={`${readinessPercent}% of reached steps ready`}
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={readinessPercent}
+              className="guided-product-progress"
+              role="progressbar"
             >
-              <i>{index < step ? <Check size={13} /> : index + 1}</i>
-              <span>{name}</span>
-            </button>
-          ))}
-        </nav>
+              <i style={{ width: `${readinessPercent}%` }} />
+            </div>
+          </header>
+          <nav
+            aria-label={`${type} setup progress`}
+            className="guided-product-steps"
+          >
+            {currentSteps.map((name, index) => (
+              <button
+                aria-current={step === index ? "step" : undefined}
+                className={
+                  step === index
+                    ? "active"
+                    : index < step
+                      ? "complete"
+                      : undefined
+                }
+                disabled={index > step}
+                key={name}
+                onClick={() => setStep(index)}
+                type="button"
+              >
+                <i>{index < step ? <Check size={13} /> : index + 1}</i>
+                <span>
+                  <strong>{name}</strong>
+                  <small>{stepGuidance[type][index]?.detail}</small>
+                </span>
+              </button>
+            ))}
+          </nav>
+          <div className="guided-product-assist">
+            <Lightbulb aria-hidden size={17} />
+            <span>
+              <strong>Why this matters</strong>
+              <small>{currentGuidance.tip}</small>
+            </span>
+          </div>
+        </aside>
 
         <div className="guided-product-stage">
           {step === 0 && (
@@ -815,7 +1060,7 @@ export function GuidedProductBuilder({
                   ? "What kind of service is this?"
                   : type === "plan"
                     ? "What should this plan unlock?"
-                    : "How will this good be used?"}
+                    : "How will this product be used?"}
               </h3>
               <p>
                 {type === "good"
@@ -824,23 +1069,27 @@ export function GuidedProductBuilder({
               </p>
               {type !== "good" ? (
                 <ChoiceGrid>
-                  {subtypeChoices[type].map((choice) => (
-                    <ChoiceCard
-                      active={subtype === choice.value}
-                      badge={"badge" in choice ? choice.badge : undefined}
-                      detail={choice.detail}
-                      key={choice.value}
-                      label={choice.label}
-                      onClick={() => {
-                        setSubtype(choice.value);
-                        if (type === "service") {
-                          setCapacity(
-                            choice.value === "private-lesson" ? 1 : 8,
-                          );
-                        }
-                      }}
-                    />
-                  ))}
+                  {subtypeChoices[type].map((choice) => {
+                    const ChoiceIcon = choice.icon;
+                    return (
+                      <ChoiceCard
+                        active={subtype === choice.value}
+                        badge={"badge" in choice ? choice.badge : undefined}
+                        detail={choice.detail}
+                        icon={<ChoiceIcon aria-hidden size={21} />}
+                        key={choice.value}
+                        label={choice.label}
+                        onClick={() => {
+                          setSubtype(choice.value);
+                          if (type === "service") {
+                            setCapacity(
+                              choice.value === "private-lesson" ? 1 : 8,
+                            );
+                          }
+                        }}
+                      />
+                    );
+                  })}
                 </ChoiceGrid>
               ) : (
                 <>
@@ -854,7 +1103,7 @@ export function GuidedProductBuilder({
                     />
                     <ChoiceCard
                       active={sellEnabled}
-                      detail="Set a customer price and make the good eligible for checkout after review."
+                      detail="Set a customer price and make the product eligible for checkout after review."
                       icon={<ShoppingBag aria-hidden size={22} />}
                       label="Offer for sale"
                       onClick={() => setSellEnabled((current) => !current)}
@@ -866,17 +1115,21 @@ export function GuidedProductBuilder({
                     </p>
                   )}
                   <div className="guided-product-subsection">
-                    <strong>What kind of good is it?</strong>
+                    <strong>What kind of product is it?</strong>
                     <ChoiceGrid>
-                      {subtypeChoices.good.map((choice) => (
-                        <ChoiceCard
-                          active={subtype === choice.value}
-                          detail={choice.detail}
-                          key={choice.value}
-                          label={choice.label}
-                          onClick={() => setSubtype(choice.value)}
-                        />
-                      ))}
+                      {subtypeChoices.good.map((choice) => {
+                        const ChoiceIcon = choice.icon;
+                        return (
+                          <ChoiceCard
+                            active={subtype === choice.value}
+                            detail={choice.detail}
+                            icon={<ChoiceIcon aria-hidden size={21} />}
+                            key={choice.value}
+                            label={choice.label}
+                            onClick={() => setSubtype(choice.value)}
+                          />
+                        );
+                      })}
                     </ChoiceGrid>
                   </div>
                 </>
@@ -1442,7 +1695,7 @@ export function GuidedProductBuilder({
               <span className="hq-eyebrow">Step 2 · Variants</span>
               <h3>Only add options customers or staff truly need.</h3>
               <p>
-                A good without size, color, or style choices gets one default
+                A product without size, color, or style choices gets one default
                 variant. Gallery media can be assigned after the variants are
                 defined.
               </p>
@@ -1673,7 +1926,7 @@ export function GuidedProductBuilder({
           {step === 3 && type === "good" && (
             <section>
               <span className="hq-eyebrow">Step 4 · Stock + price</span>
-              <h3>Connect every receipt to the economics of the good.</h3>
+              <h3>Connect every receipt to the product economics.</h3>
               <p>
                 Each receipt becomes its own cost layer, so later purchases at a
                 different price remain historically accurate.
@@ -1751,8 +2004,8 @@ export function GuidedProductBuilder({
                     />
                     <span>
                       <strong>Receive the first stock now</strong>
-                      You can also save the good first and record every receipt
-                      later.
+                      You can also save the product first and record every
+                      receipt later.
                     </span>
                   </label>
                   {receiveNow && (
@@ -1966,7 +2219,7 @@ export function GuidedProductBuilder({
                       type="checkbox"
                     />
                     <span>
-                      <strong>Taxable good</strong>Use the organization or
+                      <strong>Charge sales tax</strong>Use the organization or
                       shipping tax location at checkout.
                     </span>
                   </label>
@@ -1994,10 +2247,10 @@ export function GuidedProductBuilder({
               </p>
               <div className="guided-product-review">
                 <article>
-                  <small>{type}</small>
+                  <small>{activeProductType.label}</small>
                   <strong>{title || "Untitled draft"}</strong>
                   <span>
-                    {subtype.replaceAll("-", " ")} · {visibility}
+                    {activeSubtypeLabel} · {visibility}
                   </span>
                 </article>
                 <article>
@@ -2055,8 +2308,9 @@ export function GuidedProductBuilder({
                         : "Not tracked"}
                     </strong>
                     <span>
-                      {media.length} gallery item{media.length === 1 ? "" : "s"}{" "}
-                      · {coordinates.length} variant
+                      {media.length} gallery item
+                      {media.length === 1 ? "" : "s"} · {coordinates.length}{" "}
+                      variant
                       {coordinates.length === 1 ? "" : "s"}
                     </span>
                   </article>
@@ -2099,6 +2353,86 @@ export function GuidedProductBuilder({
           )}
         </div>
 
+        <aside className="guided-offer-preview" aria-label="Live offer summary">
+          <div className="guided-offer-preview__card">
+            <header>
+              <span>Live offer summary</span>
+              <Badge>Private draft</Badge>
+            </header>
+            <div className="guided-offer-preview__hero">
+              <span className="guided-offer-preview__icon">
+                <ActiveProductIcon aria-hidden size={22} />
+              </span>
+              <div>
+                <small>{activeProductType.label}</small>
+                <strong>{title.trim() || activeSubtypeLabel}</strong>
+                <p>
+                  {shortSummary.trim() ||
+                    "Your customer-facing summary will appear here as you build."}
+                </p>
+              </div>
+            </div>
+            <div className="guided-offer-preview__price">
+              <CircleDollarSign aria-hidden size={19} />
+              <span>
+                <small>Customer price</small>
+                <strong>{pricePreview}</strong>
+              </span>
+            </div>
+            <dl className="guided-offer-preview__details">
+              {previewHighlights.map((highlight) => (
+                <div key={highlight.label}>
+                  <dt>{highlight.label}</dt>
+                  <dd>{highlight.value}</dd>
+                </div>
+              ))}
+              <div>
+                <dt>Audience</dt>
+                <dd>{visibility === "public" ? "Everyone" : visibility}</dd>
+              </div>
+            </dl>
+            <section className="guided-offer-preview__readiness">
+              <header>
+                <strong>Setup readiness</strong>
+                <span>{readinessPercent}%</span>
+              </header>
+              <div aria-hidden>
+                <i style={{ width: `${readinessPercent}%` }} />
+              </div>
+              <ul>
+                {currentSteps.map((name, index) => {
+                  const reached = index <= step;
+                  const ready = reached && stepReadiness[index];
+                  return (
+                    <li
+                      className={
+                        ready ? "ready" : reached ? "current" : undefined
+                      }
+                      key={name}
+                    >
+                      <i aria-hidden>
+                        {ready ? (
+                          <Check size={11} strokeWidth={3} />
+                        ) : (
+                          index + 1
+                        )}
+                      </i>
+                      <span>{name}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+            <div className="guided-offer-preview__safety">
+              <ShieldCheck aria-hidden size={17} />
+              <span>
+                <strong>Safe to keep refining</strong>
+                Nothing is published from this builder.
+              </span>
+            </div>
+          </div>
+        </aside>
+
         <footer className="guided-product-footer">
           <button
             className="hq-button hq-button--secondary"
@@ -2108,12 +2442,22 @@ export function GuidedProductBuilder({
           >
             <ChevronLeft aria-hidden size={16} /> Back
           </button>
-          <span>
+          <div className="guided-product-footer__status">
             <ActionNotice state={state} />
+            <p className={canContinue ? "ready" : undefined}>
+              {canContinue ? (
+                <Check aria-hidden size={15} />
+              ) : (
+                <CircleAlert aria-hidden size={15} />
+              )}
+              {continueHint}
+            </p>
+          </div>
+          <div className="guided-product-footer__actions">
             {step < currentSteps.length - 1 ? (
               <button
                 className="hq-button hq-button--primary"
-                disabled={!canContinue}
+                disabled={!canContinue || pending}
                 onClick={() =>
                   setStep((current) =>
                     Math.min(currentSteps.length - 1, current + 1),
@@ -2121,7 +2465,8 @@ export function GuidedProductBuilder({
                 }
                 type="button"
               >
-                Continue <ArrowRight aria-hidden size={16} />
+                Continue to {currentSteps[step + 1]}
+                <ArrowRight aria-hidden size={16} />
               </button>
             ) : (
               <button
@@ -2132,7 +2477,7 @@ export function GuidedProductBuilder({
                 {pending ? "Creating…" : "Create private draft"}
               </button>
             )}
-          </span>
+          </div>
         </footer>
       </form>
     </section>

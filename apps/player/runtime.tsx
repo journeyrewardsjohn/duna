@@ -21,6 +21,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import Svg, { Line, Path } from "react-native-svg";
 import { createDunaApiClient, type DunaApiClient } from "./mobile-api";
 import { FellixText as Text } from "./fellix-text";
 
@@ -91,6 +92,37 @@ const dunaHeroVideo = require("./assets/duna-hero.mp4");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaHeroPoster = require("./assets/duna-hero-poster.jpg");
 
+function RuntimeMark({
+  color,
+  size,
+}: {
+  readonly color: string;
+  readonly size: number;
+}) {
+  return (
+    <Svg height={size * 0.75} viewBox="0 0 64 48" width={size}>
+      <Line
+        opacity={0.38}
+        stroke={color}
+        strokeLinecap="round"
+        strokeWidth="1.5"
+        x1="5"
+        x2="59"
+        y1="34"
+        y2="34"
+      />
+      <Path
+        d="M6 36.5C17.5 36.5 22.4 31.7 29.2 26.3C36.3 20.7 45 18.4 58 11.5"
+        fill="none"
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="4.5"
+      />
+    </Svg>
+  );
+}
+
 function CenteredState({
   title,
   body,
@@ -106,14 +138,11 @@ function CenteredState({
 }) {
   return (
     <View style={runtimeStyles.state}>
-      <View style={runtimeStyles.mark}>
-        <View style={runtimeStyles.markArc} />
-        <View style={runtimeStyles.markDot} />
-      </View>
+      <RuntimeMark color="#3d6672" size={56} />
       <Text style={runtimeStyles.wordmark}>DUNA</Text>
       <Text style={runtimeStyles.title}>{title}</Text>
       <Text style={runtimeStyles.body}>{body}</Text>
-      {busy && <ActivityIndicator color="#63e3db" size="small" />}
+      {busy && <ActivityIndicator color="#d4b77c" size="small" />}
       {action && onAction && (
         <Pressable onPress={onAction} style={runtimeStyles.button}>
           <Text style={runtimeStyles.buttonText}>{action}</Text>
@@ -177,9 +206,7 @@ function SignedOutState({
 
       <View style={runtimeStyles.entryTop}>
         <View style={runtimeStyles.entryBrand}>
-          <View style={runtimeStyles.entryBrandMark}>
-            <View style={runtimeStyles.entryBrandArc} />
-          </View>
+          <RuntimeMark color="#ffffff" size={36} />
           <Text style={runtimeStyles.entryWordmark}>DUNA</Text>
         </View>
         <Text style={runtimeStyles.entryEyebrow}>THE HOME OF YOUR GAME</Text>
@@ -455,7 +482,7 @@ export function usePlayerRuntime(): PlayerRuntime {
 }
 
 const runtimeStyles = StyleSheet.create({
-  auth: { backgroundColor: "#f8f7f3", flex: 1 },
+  auth: { backgroundColor: "#f6f5f1", flex: 1 },
   body: {
     color: "#657083",
     fontSize: 15,
@@ -464,7 +491,7 @@ const runtimeStyles = StyleSheet.create({
     textAlign: "center",
   },
   button: {
-    backgroundColor: "#2367a8",
+    backgroundColor: "#3d6672",
     borderRadius: 14,
     marginTop: 12,
     paddingHorizontal: 22,
@@ -472,7 +499,7 @@ const runtimeStyles = StyleSheet.create({
   },
   buttonText: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
   entry: {
-    backgroundColor: "#07182a",
+    backgroundColor: "#0d1114",
     flex: 1,
     justifyContent: "space-between",
     overflow: "hidden",
@@ -485,7 +512,7 @@ const runtimeStyles = StyleSheet.create({
     paddingLeft: 12,
   },
   entryBenefitLabel: {
-    color: "#cfe7f5",
+    color: "#dfe5e4",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.5,
@@ -519,20 +546,6 @@ const runtimeStyles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
-  entryBrandArc: {
-    borderColor: "#ffffff",
-    borderRadius: 13,
-    borderTopWidth: 3,
-    height: 14,
-    transform: [{ rotate: "168deg" }],
-    width: 23,
-  },
-  entryBrandMark: {
-    alignItems: "center",
-    height: 24,
-    justifyContent: "center",
-    width: 28,
-  },
   entryButton: {
     alignItems: "center",
     backgroundColor: "#ffffff",
@@ -543,7 +556,7 @@ const runtimeStyles = StyleSheet.create({
     paddingHorizontal: 21,
   },
   entryButtonArrow: {
-    color: "#0b1930",
+    color: "#101a20",
     fontSize: 22,
     fontWeight: "500",
   },
@@ -552,7 +565,7 @@ const runtimeStyles = StyleSheet.create({
     transform: [{ scale: 0.985 }],
   },
   entryButtonText: {
-    color: "#0b1930",
+    color: "#101a20",
     fontSize: 16,
     fontWeight: "900",
   },
@@ -629,44 +642,16 @@ const runtimeStyles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 3.6,
   },
-  mark: {
-    alignItems: "center",
-    borderColor: "#2367a8",
-    borderRadius: 28,
-    borderWidth: 3,
-    height: 56,
-    justifyContent: "center",
-    position: "relative",
-    width: 56,
-  },
-  markArc: {
-    borderColor: "#0b1930",
-    borderRadius: 20,
-    borderTopWidth: 3,
-    height: 23,
-    position: "absolute",
-    top: 15,
-    transform: [{ rotate: "180deg" }],
-    width: 34,
-  },
-  markDot: {
-    backgroundColor: "#2367a8",
-    borderRadius: 3,
-    bottom: 9,
-    height: 6,
-    position: "absolute",
-    width: 6,
-  },
   state: {
     alignItems: "center",
-    backgroundColor: "#f8f7f3",
+    backgroundColor: "#f6f5f1",
     flex: 1,
     gap: 14,
     justifyContent: "center",
     padding: 28,
   },
   title: {
-    color: "#0b1930",
+    color: "#101a20",
     fontSize: 26,
     fontWeight: "800",
     letterSpacing: -0.7,
@@ -674,7 +659,7 @@ const runtimeStyles = StyleSheet.create({
     textAlign: "center",
   },
   wordmark: {
-    color: "#0b1930",
+    color: "#101a20",
     fontSize: 19,
     fontWeight: "900",
     letterSpacing: 4,

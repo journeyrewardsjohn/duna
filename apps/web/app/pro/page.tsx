@@ -1,6 +1,7 @@
 import type { PredictionMarketView, PublicProCoverage } from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
 import { Activity, Globe2, Radio } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { ProScheduleCalendar } from "@/components/pro-schedule-calendar";
@@ -24,7 +25,7 @@ import {
 const proTourSocialImage = professionalOgImageUrl({
   title: "The world’s game, in one live view.",
   eyebrow: "Professional beach volleyball",
-  detail: "Beach Pro Tour · AVP League · live scores · SandRating",
+  detail: "Beach Pro Tour · AVP League · live scores · Sand Rating",
 });
 
 export const metadata: Metadata = {
@@ -35,7 +36,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Pro beach volleyball live events and results",
     description:
-      "Follow Beach Pro Tour and AVP events, teams, schedules, scores, broadcasts, rankings, and SandRating context on Duna.",
+      "Follow Beach Pro Tour and AVP events, teams, schedules, scores, broadcasts, rankings, and Sand Rating context on Duna.",
     type: "website",
     url: "/pro",
     siteName: "Duna",
@@ -321,13 +322,13 @@ export default async function ProTourPage({
   };
 
   return (
-    <main className="pro-tour-page">
+    <main className="pro-tour-page" data-zone="editorial">
       <SiteHeader />
       <script
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
         type="application/ld+json"
       />
-      <section className="pro-tour-hero">
+      <section className="pro-tour-hero" data-zone="performance">
         <div>
           <Badge tone={liveEvents.length ? "danger" : "neutral"}>
             <Radio aria-hidden size={12} />
@@ -345,6 +346,16 @@ export default async function ProTourPage({
           <Numeric>{coverage?.events.length ?? 0}</Numeric>
           <span>tracked events</span>
         </div>
+        <div className="pro-tour-hero__media" aria-hidden>
+          <Image
+            alt=""
+            fill
+            priority
+            sizes="(max-width: 900px) 100vw, 1480px"
+            src="/media/brand/duna-pro-hero-v1.webp"
+          />
+        </div>
+        <div className="pro-tour-hero__veil" aria-hidden />
       </section>
 
       <section className="pro-tour-content">

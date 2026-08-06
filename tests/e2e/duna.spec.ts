@@ -26,11 +26,11 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   ).toBeVisible();
   await expect(page.locator(".campaign-hero video")).toHaveAttribute(
     "poster",
-    "/media/duna-hero-poster.webp",
+    "/media/brand/duna-home-hero-v1.webp",
   );
   await expect(
     page.locator('.campaign-hero video source[type="video/mp4"]'),
-  ).toHaveAttribute("src", "/media/duna-hero.mp4");
+  ).toHaveAttribute("src", "/media/brand/duna-home-hero-motion-v1.mp4");
   await expect(
     page.getByRole("link", { name: "Duna HQ" }).first(),
   ).toHaveAttribute("href", /.+/);
@@ -125,8 +125,18 @@ test("light mode starts cleanly and the dark choice persists", async ({
 }) => {
   await page.goto("/");
   const themeToggle = page
-    .getByRole("button", { name: /Toggle color theme/ })
+    .getByRole("button", { name: /Color theme:/ })
     .first();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-theme-preference",
+    "system",
+  );
+  await themeToggle.click();
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-theme-preference",
+    "light",
+  );
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await themeToggle.click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -234,7 +244,9 @@ test("tournament pages and checkout expose divisions, tickets, teams, and waiver
   const weatherAgreement = page
     .locator(".checkout-agreement-list article")
     .filter({ hasText: "Weather and event policy" });
-  await weatherAgreement.locator('input[type="checkbox"]').check();
+  const weatherCheckbox = weatherAgreement.locator('input[type="checkbox"]');
+  await weatherAgreement.locator("label").click();
+  await expect(weatherCheckbox).toBeChecked();
   const waiverAgreement = page
     .locator(".checkout-agreement-list article")
     .filter({ hasText: "Participation waiver" });
@@ -247,7 +259,8 @@ test("tournament pages and checkout expose divisions, tickets, teams, and waiver
       element.dispatchEvent(new Event("scroll", { bubbles: true }));
     });
   await expect(waiverCheckbox).toBeEnabled();
-  await waiverCheckbox.check();
+  await waiverAgreement.locator("label").click();
+  await expect(waiverCheckbox).toBeChecked();
   await expect(
     page.getByRole("button", { name: /Continue to payment/ }),
   ).toBeEnabled();

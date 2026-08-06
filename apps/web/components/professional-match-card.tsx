@@ -70,8 +70,8 @@ function TeamResultRow({
             <strong>{player.name}</strong>
             <small>
               {player.rating !== undefined
-                ? `SandRating ${player.rating.toFixed(2)}`
-                : "SandRating pending"}
+                ? `Sand Rating ${player.rating.toFixed(2)}`
+                : "Sand Rating pending"}
             </small>
           </span>
         ))}

@@ -14,28 +14,27 @@ export function SiteFooter() {
           <div>
             <strong>Play</strong>
             <Link href="/app/discover">Discover</Link>
-            <Link href="/app/play">Pickup</Link>
+            <Link href="/events">Events</Link>
             <Link href="/app/matches">Record a match</Link>
+          </div>
+          <div>
+            <strong>Watch</strong>
+            <Link href="/pro">Pro tour</Link>
+            <Link href="/live">Live</Link>
+            <Link href="/rankings">World rankings</Link>
           </div>
           <div>
             <strong>Run</strong>
             <a href={DUNA_HQ_URL}>Duna HQ</a>
-            <Link href="/clubs/south-bay-volleyball">Clubs</Link>
-            <Link href="/app/discover">Coaches</Link>
+            <Link href="/run-your-club">For clubs + coaches</Link>
+            <Link href="/create">Create an event</Link>
           </div>
           <div>
             <strong>Duna</strong>
             <Link href="/about">About</Link>
-            <Link href="/safety">Safety</Link>
-            <Link href="/rankings">World rankings</Link>
             <Link href="/methodology">Rating methodology</Link>
-          </div>
-          <div>
-            <strong>Legal</strong>
-            <Link href="/legal/terms">Terms</Link>
+            <Link href="/safety">Safety</Link>
             <Link href="/legal/privacy">Privacy</Link>
-            <Link href="/legal/eula">Mobile EULA</Link>
-            <Link href="/legal/hq-terms">HQ terms</Link>
           </div>
         </div>
       </div>

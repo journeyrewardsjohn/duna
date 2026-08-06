@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { AskDuna } from "./ask-duna";
 import { PlayerAccountMenu } from "./player-account-menu";
 
@@ -40,6 +40,7 @@ export function PlayerShell({
 }) {
   const pathname = usePathname();
   const focusedFlow = pathname === "/app/onboarding";
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div
@@ -62,6 +63,7 @@ export function PlayerShell({
                 href === "/app" ? pathname === href : pathname.startsWith(href);
               return (
                 <Link
+                  aria-current={active ? "page" : undefined}
                   className={active ? "active" : undefined}
                   href={href}
                   key={href}
@@ -102,8 +104,12 @@ export function PlayerShell({
         {!focusedFlow && (
           <header className="player-topbar">
             <button
+              aria-controls="player-mobile-menu"
+              aria-expanded={mobileMenuOpen}
               aria-label="Open navigation"
               className="player-topbar__menu"
+              onClick={() => setMobileMenuOpen((open) => !open)}
+              type="button"
             >
               <Menu aria-hidden size={21} />
             </button>
@@ -135,6 +141,38 @@ export function PlayerShell({
             </div>
           </header>
         )}
+        {!focusedFlow && mobileMenuOpen ? (
+          <nav
+            aria-label="Player menu"
+            className="player-mobile-menu"
+            id="player-mobile-menu"
+          >
+            {navigation.map(({ label, href, icon: Icon }) => {
+              const active =
+                href === "/app" ? pathname === href : pathname.startsWith(href);
+              return (
+                <Link
+                  aria-current={active ? "page" : undefined}
+                  className={active ? "active" : undefined}
+                  href={href}
+                  key={href}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <Icon aria-hidden size={19} />
+                  <span>{label}</span>
+                </Link>
+              );
+            })}
+            <Link href="/app/score" onClick={() => setMobileMenuOpen(false)}>
+              <Plus aria-hidden size={19} />
+              <span>Record a match</span>
+            </Link>
+            <Link href="/app/settings" onClick={() => setMobileMenuOpen(false)}>
+              <span className="avatar">{player.initials}</span>
+              <span>Account + settings</span>
+            </Link>
+          </nav>
+        ) : null}
         <div className="player-content">{children}</div>
       </div>
 
@@ -149,6 +187,7 @@ export function PlayerShell({
                 href === "/app" ? pathname === href : pathname.startsWith(href);
               return (
                 <Link
+                  aria-current={active ? "page" : undefined}
                   className={active ? "active" : undefined}
                   href={href}
                   key={href}

@@ -4,6 +4,7 @@ import {
   type CheckoutPolicy,
   validatePolicyAcceptances,
 } from "./checkout";
+import { eventCheckoutResultSchema } from "./contracts";
 
 const policy: CheckoutPolicy = {
   id: "weather-policy",
@@ -67,5 +68,44 @@ describe("event policy acceptance", () => {
         readPolicyIds: [],
       }),
     ).toThrow(/policy changed/);
+  });
+});
+
+describe("native event payment contract", () => {
+  const nativeResult = {
+    mode: "stripe" as const,
+    orderId: "7ca11da7-6ddb-4956-bce3-d2f2f5a450e9",
+    paymentSheet: {
+      publishableKey: "pk_test_duna",
+      paymentIntentId: "pi_duna",
+      paymentIntentClientSecret: "pi_duna_secret_test",
+      customerId: "cus_duna",
+      customerSessionClientSecret: "cuss_test_duna",
+    },
+    expiresAt: "2026-08-05T20:00:00.000Z",
+    pricing: {
+      subtotalMinor: 4500,
+      feeTotalMinor: 350,
+      totalMinor: 4850,
+      currency: "USD" as const,
+    },
+  };
+
+  it("returns one complete PaymentSheet credential bundle", () => {
+    expect(eventCheckoutResultSchema.parse(nativeResult)).toEqual(nativeResult);
+  });
+
+  it("rejects a partial PaymentSheet credential bundle", () => {
+    const partialPaymentSheet = Object.fromEntries(
+      Object.entries(nativeResult.paymentSheet).filter(
+        ([key]) => key !== "customerSessionClientSecret",
+      ),
+    );
+    expect(() =>
+      eventCheckoutResultSchema.parse({
+        ...nativeResult,
+        paymentSheet: partialPaymentSheet,
+      }),
+    ).toThrow();
   });
 });

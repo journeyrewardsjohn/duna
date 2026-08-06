@@ -16,6 +16,7 @@ import {
   WandSparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -101,9 +102,18 @@ export default function RunYourClubPage() {
     [ShieldCheck, "Operations", "Scoped access and reviewable changes"],
   ];
   return (
-    <main className="club-marketing-page">
+    <main className="club-marketing-page" data-zone="editorial">
       <SiteHeader />
       <section className="club-marketing-hero">
+        <div className="club-marketing-hero__media" aria-hidden>
+          <Image
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            src="/media/brand/duna-club-hero-v1.webp"
+          />
+        </div>
         <div className="club-marketing-hero__copy">
           <Badge tone="positive">
             <Sparkles size={13} /> Built for clubs and independent coaches
@@ -131,7 +141,7 @@ export default function RunYourClubPage() {
             ready.
           </small>
         </div>
-        <div className="club-marketing-hero__product">
+        <div className="club-marketing-hero__product" data-zone="performance">
           <div className="club-marketing-product-bar">
             <span>DUNA HQ</span>
             <Badge>Today</Badge>

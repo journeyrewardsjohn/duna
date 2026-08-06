@@ -172,8 +172,8 @@ export function PickupForm() {
                     </span>
                     <strong>Competitive</strong>
                     <small>
-                      Challenge your level. Confirmed results can move your
-                      SandRating.
+                      Challenge your level. Confirmed results can move your Sand
+                      Rating.
                     </small>
                     <span className="match-style-grid__art match-style-grid__art--competitive">
                       <Gauge aria-hidden size={32} />
@@ -209,7 +209,7 @@ export function PickupForm() {
                   <div className="pickup-level-card__heading">
                     <span>
                       <Gauge aria-hidden size={19} />
-                      SandRating range
+                      Sand Rating range
                     </span>
                     <strong>
                       {ratingMinimum.toFixed(1)}–{ratingMaximum.toFixed(1)}
@@ -219,7 +219,7 @@ export function PickupForm() {
                     <label>
                       <span>Minimum {ratingMinimum.toFixed(1)}</span>
                       <input
-                        aria-label="Minimum SandRating"
+                        aria-label="Minimum Sand Rating"
                         max={ratingMaximum}
                         min="1"
                         onChange={(event) =>
@@ -233,7 +233,7 @@ export function PickupForm() {
                     <label>
                       <span>Maximum {ratingMaximum.toFixed(1)}</span>
                       <input
-                        aria-label="Maximum SandRating"
+                        aria-label="Maximum Sand Rating"
                         max="8"
                         min={ratingMinimum}
                         onChange={(event) =>

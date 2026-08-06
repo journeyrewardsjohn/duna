@@ -446,7 +446,7 @@ async function synthesize(
           content: [
             {
               type: "input_text",
-              text: `Research one beach-volleyball player using only the supplied evidence. Every claim needs one or more exact evidence URLs from the supplied set. Return no claim when sources conflict or do not support it. Biography must be factual, current, under 220 words, and contain no quotes, injuries, relationship details, or speculation. shortBio is one sentence. countryCode is ISO alpha-2 or alpha-3. playingRole is only blocker, defender, or all-around when explicitly sourced. Money uses integer minor units with a three-letter currency. Distinguish event wins from match wins. News must be a genuine article about the player and use its own URL. Do not cite or mention SandRating; Duna calculates Sand Rating from its connected match archive.`,
+              text: `Research one beach-volleyball player using only the supplied evidence. Every claim needs one or more exact evidence URLs from the supplied set. Return no claim when sources conflict or do not support it. Biography must be factual, current, under 220 words, and contain no quotes, injuries, relationship details, or speculation. shortBio is one sentence. countryCode is ISO alpha-2 or alpha-3. playingRole is only blocker, defender, or all-around when explicitly sourced. Money uses integer minor units with a three-letter currency. Distinguish event wins from match wins. News must be a genuine article about the player and use its own URL. Do not cite or mention Sand Rating; Duna calculates Sand Rating from its connected match archive.`,
             },
           ],
         },

@@ -68,7 +68,7 @@ function TeamCard({
               )}
               <small>
                 {player.rating !== undefined
-                  ? `SandRating ${player.rating.toFixed(2)}`
+                  ? `Sand Rating ${player.rating.toFixed(2)}`
                   : "Profile mapping pending"}
               </small>
             </div>
@@ -137,7 +137,7 @@ export function ProMatchDetail({
             {match.teamA.label} <span>vs</span> {match.teamB.label}
           </h1>
           <p>
-            Set-by-set result, mapped player profiles, and SandRating win
+            Set-by-set result, mapped player profiles, and Sand Rating win
             prediction for {event.name}.
           </p>
           <div className="pro-match-hero__facts">

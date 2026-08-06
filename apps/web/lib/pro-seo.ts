@@ -56,7 +56,7 @@ export function serializeJsonLd(value: JsonLdValue): string {
 export function professionalEventDescription(event: PublicProEvent): string {
   return (
     event.editorial.summary ??
-    `${event.name} is a ${event.genderCategory.toLowerCase()} ${event.category ?? "professional beach volleyball"} event in ${event.location ?? "the Beach Pro Tour calendar"}. Follow teams, schedule, scores, standings, broadcasts, and SandRating context on Duna.`
+    `${event.name} is a ${event.genderCategory.toLowerCase()} ${event.category ?? "professional beach volleyball"} event in ${event.location ?? "the Beach Pro Tour calendar"}. Follow teams, schedule, scores, standings, broadcasts, and Sand Rating context on Duna.`
   );
 }
 
@@ -185,7 +185,7 @@ function teamEntity(team: TeamLike, eventUrl: string, idSuffix?: string) {
         player.rating !== undefined
           ? {
               "@type": "PropertyValue",
-              name: "SandRating",
+              name: "Sand Rating",
               value: player.rating,
             }
           : undefined,
@@ -343,7 +343,7 @@ export function professionalMatchDescription(
   const result = match.sets.length
     ? ` Set scores: ${match.sets.map((set) => `${set.a}-${set.b}`).join(", ")}.`
     : "";
-  return `${match.teamA.label} vs ${match.teamB.label} at ${event.name}. View the schedule, live status, set scores, player SandRatings, prediction, and broadcast details.${result}`;
+  return `${match.teamA.label} vs ${match.teamB.label} at ${event.name}. View the schedule, live status, set scores, player Sand Ratings, prediction, and broadcast details.${result}`;
 }
 
 export function professionalMatchJsonLd(

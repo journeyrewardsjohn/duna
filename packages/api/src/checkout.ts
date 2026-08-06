@@ -45,7 +45,11 @@ import { sendTransactionalEmail } from "./resend";
 import { sendTemplateSms } from "./sent";
 import {
   createEventCheckoutSession,
+  createEventPaymentIntent,
+  createMobilePaymentCustomerSession,
+  getOrCreatePlayerStripeCustomer,
   getStripeClient,
+  getStripePublishableKey,
   isStripeConfigured,
 } from "./payments";
 
@@ -73,6 +77,13 @@ export interface EventCheckoutResult {
   readonly teamClaimToken?: string;
   readonly checkoutSessionId?: string;
   readonly checkoutUrl?: string;
+  readonly paymentSheet?: {
+    readonly publishableKey: string;
+    readonly paymentIntentId: string;
+    readonly paymentIntentClientSecret: string;
+    readonly customerId: string;
+    readonly customerSessionClientSecret: string;
+  };
   readonly expiresAt?: string;
   readonly pricing: {
     readonly subtotalMinor: number;
@@ -845,14 +856,47 @@ async function existingCheckoutResult(input: {
   readonly orderId: string;
   readonly registrationId?: string;
   readonly teamClaimToken?: string;
+  readonly paymentSurface: "hosted" | "native";
   readonly pricing: EventCheckoutResult["pricing"];
 }): Promise<EventCheckoutResult | undefined> {
   const order = await getDatabase().query.orders.findFirst({
     where: eq(orders.id, input.orderId),
   });
-  if (!order?.stripeCheckoutSessionId || !isStripeConfigured()) {
+  if (!order || !isStripeConfigured()) {
     return undefined;
   }
+
+  if (input.paymentSurface === "native") {
+    if (!order.stripePaymentIntentId) return undefined;
+    const intent = await getStripeClient().paymentIntents.retrieve(
+      order.stripePaymentIntentId,
+    );
+    if (intent.status === "canceled" || !intent.client_secret) return undefined;
+    const customerId =
+      typeof intent.customer === "string"
+        ? intent.customer
+        : intent.customer?.id;
+    if (!customerId) return undefined;
+    return {
+      mode: "stripe",
+      orderId: order.id,
+      registrationId: input.registrationId,
+      registrationStatus: "pending",
+      teamClaimToken: input.teamClaimToken,
+      paymentSheet: {
+        publishableKey: getStripePublishableKey(),
+        paymentIntentId: intent.id,
+        paymentIntentClientSecret: intent.client_secret,
+        customerId,
+        customerSessionClientSecret:
+          await createMobilePaymentCustomerSession(customerId),
+      },
+      expiresAt: order.expiresAt?.toISOString(),
+      pricing: input.pricing,
+    };
+  }
+
+  if (!order.stripeCheckoutSessionId) return undefined;
   const checkout = await getStripeClient().checkout.sessions.retrieve(
     order.stripeCheckoutSessionId,
   );
@@ -1054,6 +1098,7 @@ export async function startEventCheckout(input: {
   readonly acceptedPolicyIds?: readonly string[];
   readonly readPolicyIds?: readonly string[];
   readonly isDunaPlus: boolean;
+  readonly paymentSurface?: "hosted" | "native";
   readonly successUrl: string;
   readonly cancelUrl: string;
   readonly idempotencyKey: string;
@@ -1628,6 +1673,7 @@ export async function startEventCheckout(input: {
         orderId: heldRegistration.orderId,
         registrationId: heldRegistration.id,
         teamClaimToken,
+        paymentSurface: input.paymentSurface ?? "hosted",
         pricing,
       });
       if (resumed) return resumed;
@@ -1640,6 +1686,7 @@ export async function startEventCheckout(input: {
       orderId,
       registrationId: hold.registration_id,
       teamClaimToken,
+      paymentSurface: input.paymentSurface ?? "hosted",
       pricing,
     });
     if (resumed) return resumed;
@@ -1680,6 +1727,64 @@ export async function startEventCheckout(input: {
         operatorProcessingFee.amountMinor +
         organizationCommissionFee.amountMinor,
     );
+    if (input.paymentSurface === "native") {
+      const publishableKey = getStripePublishableKey();
+      const customerId = await getOrCreatePlayerStripeCustomer({
+        personId: input.actor.personId,
+        existingCustomerId: buyer?.stripeCustomerId ?? undefined,
+        email: buyer?.email ?? undefined,
+        displayName: buyer?.displayName,
+      });
+      if (buyer?.stripeCustomerId !== customerId) {
+        await database
+          .update(people)
+          .set({ stripeCustomerId: customerId, updatedAt: input.now })
+          .where(eq(people.id, input.actor.personId));
+      }
+      const [paymentIntent, customerSessionClientSecret] = await Promise.all([
+        createEventPaymentIntent({
+          orderId,
+          personId: input.actor.personId,
+          customerId,
+          customerEmail: buyer?.email ?? undefined,
+          eventId: event.id,
+          eventTitle: event.title,
+          amountMinor: priced.totalMinor,
+          currency: priced.currency,
+          applicationFeeMinor,
+          organizationCommissionMinor: organizationCommissionFee.amountMinor,
+          organizationCommissionRateBps: commissionPolicy.rateBps,
+          connectedAccountId: event.organization.stripeAccountId,
+          idempotencyKey: input.idempotencyKey,
+        }),
+        createMobilePaymentCustomerSession(customerId),
+      ]);
+      await database
+        .update(orders)
+        .set({
+          stripePaymentIntentId: paymentIntent.id,
+          expiresAt: checkoutExpiresAt,
+          updatedAt: input.now,
+        })
+        .where(eq(orders.id, orderId));
+      return {
+        mode: "stripe",
+        orderId,
+        registrationId: hold?.registration_id ?? undefined,
+        registrationStatus: event.ticketTypeId ? undefined : "pending",
+        teamClaimToken,
+        paymentSheet: {
+          publishableKey,
+          paymentIntentId: paymentIntent.id,
+          paymentIntentClientSecret: paymentIntent.clientSecret,
+          customerId,
+          customerSessionClientSecret,
+        },
+        expiresAt: checkoutExpiresAt.toISOString(),
+        pricing,
+      };
+    }
+
     const checkout = await createEventCheckoutSession({
       orderId,
       personId: input.actor.personId,
@@ -1886,7 +1991,8 @@ export async function approveTicketOrder(input: {
 
 export async function getEventCheckoutStatus(input: {
   readonly actor: ApiActor;
-  readonly checkoutSessionId: string;
+  readonly checkoutSessionId?: string;
+  readonly paymentIntentId?: string;
 }): Promise<EventCheckoutStatus> {
   if (!process.env.DATABASE_URL) {
     throw new CheckoutError(
@@ -1894,9 +2000,17 @@ export async function getEventCheckoutStatus(input: {
       "Checkout status requires the connected Duna database.",
     );
   }
+  if (Boolean(input.checkoutSessionId) === Boolean(input.paymentIntentId)) {
+    throw new CheckoutError(
+      "CHECKOUT_UNAVAILABLE",
+      "Provide one Stripe checkout reference.",
+    );
+  }
   const database = getDatabase();
   const order = await database.query.orders.findFirst({
-    where: eq(orders.stripeCheckoutSessionId, input.checkoutSessionId),
+    where: input.paymentIntentId
+      ? eq(orders.stripePaymentIntentId, input.paymentIntentId)
+      : eq(orders.stripeCheckoutSessionId, input.checkoutSessionId!),
   });
   if (!order || order.buyerPersonId !== input.actor.personId) {
     throw new CheckoutError(

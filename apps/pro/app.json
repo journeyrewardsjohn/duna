@@ -6,11 +6,16 @@
     "version": "1.1.0",
     "platforms": ["ios", "android"],
     "orientation": "default",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.duna.pro",
+      "icon": {
+        "light": "./assets/icon-light.png",
+        "dark": "./assets/icon.png",
+        "tinted": "./assets/icon-tinted.png"
+      },
       "entitlements": {
         "com.apple.developer.proximity-reader.payment.acceptance": true
       },
@@ -32,7 +37,8 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#F7F3EA"
+        "monochromeImage": "./assets/monochrome-icon.png",
+        "backgroundColor": "#0D1114"
       },
       "package": "com.duna.pro",
       "permissions": [
@@ -99,10 +105,14 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/splash.png",
+          "image": "./assets/splash-light.png",
           "imageWidth": 220,
           "resizeMode": "contain",
-          "backgroundColor": "#F7F3EA"
+          "backgroundColor": "#F6F5F1",
+          "dark": {
+            "image": "./assets/splash.png",
+            "backgroundColor": "#0D1114"
+          }
         }
       ],
       [

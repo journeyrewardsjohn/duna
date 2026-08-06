@@ -6,12 +6,17 @@
     "version": "1.2.0",
     "platforms": ["ios", "android"],
     "orientation": "default",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.duna.player",
       "appleTeamId": "4AMCKQA9GL",
+      "icon": {
+        "light": "./assets/icon.png",
+        "dark": "./assets/icon-dark.png",
+        "tinted": "./assets/icon-tinted.png"
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSSupportsLiveActivities": true,
@@ -34,7 +39,8 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#F7F3EA"
+        "monochromeImage": "./assets/monochrome-icon.png",
+        "backgroundColor": "#EFE6D3"
       },
       "package": "com.duna.player",
       "permissions": [
@@ -79,10 +85,21 @@
           "image": "./assets/splash.png",
           "imageWidth": 220,
           "resizeMode": "contain",
-          "backgroundColor": "#F7F3EA"
+          "backgroundColor": "#F6F5F1",
+          "dark": {
+            "image": "./assets/splash-dark.png",
+            "backgroundColor": "#0D1114"
+          }
         }
       ],
-      "expo-video"
+      "expo-video",
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": [],
+          "enableGooglePay": false
+        }
+      ]
     ],
     "extra": {
       "eas": {

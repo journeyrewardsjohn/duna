@@ -9,7 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "export": "expo export --platform all --output-dir dist",
-    "lint": "eslint App.tsx DunaProLiveActivity.tsx arrival-location-task.ts index.js get-paid.tsx live-activities.ts mobile-api.ts operator-create.tsx runtime.tsx session-arrival-board.tsx session-notes.tsx",
+    "lint": "eslint App.tsx DunaProLiveActivity.tsx arrival-location-task.ts fellix-text.tsx get-paid.tsx index.js live-activities.ts mobile-api.ts operator-create.tsx runtime.tsx session-arrival-board.tsx session-notes.tsx",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
@@ -19,6 +19,7 @@
     "@duna/core": "workspace:*",
     "@duna/league-engine": "workspace:*",
     "@duna/mobile-auth": "workspace:*",
+    "@expo-google-fonts/archivo": "^0.4.2",
     "@expo/ui": "~57.0.9",
     "@livekit/react-native": "2.12.0",
     "@livekit/react-native-expo-plugin": "1.0.2",
@@ -46,7 +47,8 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.2",
-    "react-native-safe-area-context": "~5.7.0"
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-svg": "15.15.4"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",

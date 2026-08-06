@@ -3,7 +3,7 @@
 import { ArrowRight, Search, Trophy, X } from "lucide-react";
 import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
-import { countryFlag } from "@/lib/country-flag";
+import { CountryCode } from "@/components/country-code";
 
 export interface ProDiscoveryPlayer {
   readonly id: string;
@@ -128,8 +128,7 @@ export function ProPlayerDiscovery({
             </div>
             <div className="pro-player-card__copy">
               <span>
-                <span aria-hidden>{countryFlag(player.countryCode)}</span>{" "}
-                {player.countryCode ?? "International"}
+                <CountryCode code={player.countryCode} />
               </span>
               <h3>{player.displayName}</h3>
               <dl>
@@ -204,10 +203,7 @@ export function ProPlayerDiscovery({
                     <span>
                       <strong>{player.displayName}</strong>
                       <small>
-                        <span aria-hidden>
-                          {countryFlag(player.countryCode)}
-                        </span>{" "}
-                        {player.countryCode ?? "International"} · World #
+                        <CountryCode code={player.countryCode} /> · World #
                         {player.worldRank} · {player.gender}
                       </small>
                     </span>

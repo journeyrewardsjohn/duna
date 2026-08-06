@@ -28,7 +28,7 @@ function distance(value: number) {
 function signalColor(status: string) {
   if (status === "running-late") return "#c74e3f";
   if (status === "leave-now") return "#b47b20";
-  if (status === "arrived") return "#2f7d57";
+  if (status === "arrived") return "#2f6b3a";
   return "#2f6fb1";
 }
 
@@ -441,7 +441,7 @@ export function SessionArrivalBoard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#10263d",
+    backgroundColor: "#141a1e",
     borderRadius: 22,
     marginTop: 16,
     overflow: "hidden",
@@ -457,15 +457,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 42,
   },
-  markText: { color: "#86c9ef", fontSize: 18, fontWeight: "900" },
+  markText: { color: "#b5ccd3", fontSize: 18, fontWeight: "900" },
   eyebrow: {
-    color: "#86c9ef",
+    color: "#b5ccd3",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.1,
   },
   title: { color: "#ffffff", fontSize: 16, fontWeight: "900", marginTop: 3 },
-  summary: { color: "#c8d6e2", fontSize: 10, marginTop: 3 },
+  summary: { color: "#a9b4b8", fontSize: 10, marginTop: 3 },
   pulse: { backgroundColor: "#77d89b", borderRadius: 5, height: 9, width: 9 },
   list: {
     backgroundColor: "rgba(255,255,255,.05)",
@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
   avatarText: { color: "#ffffff", fontSize: 10, fontWeight: "900" },
   name: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
   meta: {
-    color: "#c8d6e2",
+    color: "#a9b4b8",
     fontSize: 10,
     marginTop: 3,
     textTransform: "capitalize",
@@ -504,10 +504,10 @@ const styles = StyleSheet.create({
   etaLabel: { color: "#8da0b2", fontSize: 10, fontWeight: "900", marginTop: 2 },
   empty: { padding: 16 },
   emptyTitle: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
-  emptyBody: { color: "#c8d6e2", fontSize: 10, lineHeight: 14, marginTop: 4 },
+  emptyBody: { color: "#a9b4b8", fontSize: 10, lineHeight: 14, marginTop: 4 },
   button: {
     alignItems: "center",
-    backgroundColor: "#86c9ef",
+    backgroundColor: "#b5ccd3",
     borderRadius: 14,
     justifyContent: "center",
     marginTop: 14,
@@ -515,7 +515,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   buttonStop: { backgroundColor: "rgba(255,255,255,.1)" },
-  buttonText: { color: "#10263d", fontSize: 11, fontWeight: "900" },
+  buttonText: { color: "#141a1e", fontSize: 11, fontWeight: "900" },
   buttonTextStop: { color: "#ffffff" },
   privacy: {
     color: "#8da0b2",
@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   message: {
-    color: "#c8d6e2",
+    color: "#a9b4b8",
     fontSize: 10,
     lineHeight: 14,
     marginTop: 7,

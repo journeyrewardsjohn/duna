@@ -193,19 +193,19 @@ function storedDefaults(form: CaptureForm): StoredCaptureDefaults {
 }
 
 const palette = {
-  canvas: "#f8f7f3",
+  canvas: "#f6f5f1",
   depth: "#ffffff",
-  ink: "#101828",
-  muted: "#667085",
-  navy: "#173a67",
-  aqua: "#235a96",
-  aquaSoft: "#e8eef7",
-  sand: "#d7bd91",
-  flare: "#de6842",
-  positive: "#2f7d57",
-  warning: "#a86f18",
-  danger: "#b84444",
-  line: "#e4e0d8",
+  ink: "#1b1b19",
+  muted: "#766f61",
+  navy: "#22343b",
+  aqua: "#3d6672",
+  aquaSoft: "#dfe5e4",
+  sand: "#c9a96a",
+  flare: "#e8683a",
+  positive: "#2f6b3a",
+  warning: "#8a6a2f",
+  danger: "#9a4a2e",
+  line: "#dedbd3",
 };
 
 function formatDuration(seconds: number): string {
@@ -993,9 +993,9 @@ function CourtOverlay({
     setSize({ width, height });
   };
   const color = guidance?.acceptable
-    ? "#67d391"
+    ? palette.positive
     : guidance?.groundPlaneDetected || geometry.mode !== "automatic"
-      ? "#f7c86b"
+      ? palette.sand
       : "rgba(255,255,255,0.82)";
   const points = geometry.corners;
   const [topLeft, topRight, bottomRight, bottomLeft] = points;
@@ -1051,14 +1051,14 @@ function CourtOverlay({
           {geometry.netTopLine && geometry.antennaPoints && (
             <>
               <CourtLine
-                color="#ff7a66"
+                color={palette.flare}
                 end={geometry.antennaPoints[0]}
                 size={size}
                 start={geometry.netTopLine[0]}
                 thickness={4}
               />
               <CourtLine
-                color="#ff7a66"
+                color={palette.flare}
                 end={geometry.antennaPoints[1]}
                 size={size}
                 start={geometry.netTopLine[1]}
@@ -2238,7 +2238,7 @@ function CaptureExperience({
                 <Text
                   style={[
                     styles.guidanceGrade,
-                    guidance?.acceptable && { color: "#67d391" },
+                    guidance?.acceptable && { color: palette.positive },
                   ]}
                 >
                   {guidance
@@ -2595,7 +2595,7 @@ function VideoPlayerModal({
         <View
           style={[styles.playerStage, portrait && styles.playerStagePortrait]}
         >
-          {!uri && !error && <ActivityIndicator color="#63e3db" size="large" />}
+          {!uri && !error && <ActivityIndicator color="#d4b77c" size="large" />}
           {!!error && <Text style={styles.playerError}>{error}</Text>}
           {commonProps &&
             (playback?.dataEnvironmentKey ? (
@@ -3343,18 +3343,18 @@ const styles = StyleSheet.create({
     letterSpacing: -0.7,
     lineHeight: 29,
   },
-  heroBody: { color: "#dce7f5", fontSize: 14, lineHeight: 21 },
+  heroBody: { color: "#dfe5e4", fontSize: 14, lineHeight: 21 },
   complimentaryBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(99,227,219,0.16)",
-    borderColor: "rgba(99,227,219,0.5)",
+    backgroundColor: "rgba(212,183,124,0.16)",
+    borderColor: "rgba(212,183,124,0.5)",
     borderRadius: 20,
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
-  complimentaryText: { color: "#8cece5", fontSize: 11, fontWeight: "800" },
-  iosNote: { color: "#f7c86b", fontSize: 12, lineHeight: 18 },
+  complimentaryText: { color: palette.sand, fontSize: 11, fontWeight: "800" },
+  iosNote: { color: palette.sand, fontSize: 12, lineHeight: 18 },
   captureChoiceStack: { gap: 10 },
   captureChoiceCard: {
     alignItems: "center",
@@ -3366,13 +3366,13 @@ const styles = StyleSheet.create({
   },
   captureChoiceCardRecord: {
     backgroundColor: "#ffffff",
-    borderColor: "rgba(99,227,219,0.45)",
+    borderColor: "rgba(61,102,114,0.45)",
     borderWidth: 1,
   },
   captureChoiceCardLive: { backgroundColor: palette.flare },
   captureChoiceIcon: {
     alignItems: "center",
-    backgroundColor: "#eaf8f7",
+    backgroundColor: palette.aquaSoft,
     borderRadius: 25,
     height: 50,
     justifyContent: "center",
@@ -3412,7 +3412,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   captureChoiceBadge: {
-    backgroundColor: "#eaf8f7",
+    backgroundColor: palette.aquaSoft,
     borderRadius: 10,
     color: palette.navy,
     fontSize: 10,
@@ -3879,7 +3879,7 @@ const styles = StyleSheet.create({
   },
   calibrationEditorHeading: { alignItems: "center", flex: 1 },
   calibrationEditorEyebrow: {
-    color: "#8cece5",
+    color: palette.sand,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.1,
@@ -3923,8 +3923,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
   },
   calibrationPresetSelected: {
-    backgroundColor: "rgba(99,227,219,0.22)",
-    borderColor: "#63e3db",
+    backgroundColor: "rgba(61,102,114,0.22)",
+    borderColor: palette.aqua,
   },
   calibrationPresetText: { color: "#ffffff", fontSize: 10, fontWeight: "800" },
   calibrationEditorStatus: {
@@ -3933,7 +3933,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   calibrationEditorStatusText: {
-    color: "#f7c86b",
+    color: palette.sand,
     fontSize: 10,
     fontWeight: "800",
   },
@@ -3943,8 +3943,8 @@ const styles = StyleSheet.create({
   },
   calibrationAnchor: {
     alignItems: "center",
-    backgroundColor: "rgba(247,200,107,0.24)",
-    borderColor: "#f7c86b",
+    backgroundColor: "rgba(201,169,106,0.24)",
+    borderColor: palette.sand,
     borderRadius: 23,
     borderWidth: 2,
     height: 46,
@@ -3954,12 +3954,12 @@ const styles = StyleSheet.create({
     zIndex: 24,
   },
   calibrationAnchorNet: {
-    backgroundColor: "rgba(99,227,219,0.24)",
-    borderColor: "#63e3db",
+    backgroundColor: "rgba(61,102,114,0.24)",
+    borderColor: palette.aqua,
   },
   calibrationAnchorAntenna: {
-    backgroundColor: "rgba(255,122,102,0.25)",
-    borderColor: "#ff7a66",
+    backgroundColor: "rgba(232,104,58,0.25)",
+    borderColor: palette.flare,
   },
   calibrationAnchorOffscreen: { borderStyle: "dashed" },
   calibrationAnchorCore: {
@@ -4051,7 +4051,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 58,
   },
-  remoteButtonIcon: { color: "#8cece5", fontSize: 15, fontWeight: "900" },
+  remoteButtonIcon: { color: palette.sand, fontSize: 15, fontWeight: "900" },
   remoteButtonText: {
     color: "#ffffff",
     fontSize: 10,
@@ -4074,7 +4074,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   liveDot: {
-    backgroundColor: "#ff6a3d",
+    backgroundColor: "#e8683a",
     borderRadius: 4,
     height: 8,
     width: 8,
@@ -4091,8 +4091,8 @@ const styles = StyleSheet.create({
   },
   orientationWarning: {
     alignItems: "center",
-    backgroundColor: "rgba(247,200,107,0.15)",
-    borderColor: "rgba(247,200,107,0.7)",
+    backgroundColor: "rgba(201,169,106,0.15)",
+    borderColor: "rgba(201,169,106,0.7)",
     borderRadius: 13,
     borderWidth: 1,
     flexDirection: "row",
@@ -4101,7 +4101,7 @@ const styles = StyleSheet.create({
     padding: 11,
   },
   orientationWarningIcon: {
-    color: "#f7c86b",
+    color: palette.sand,
     fontSize: 24,
     fontWeight: "900",
   },
@@ -4122,7 +4122,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  guidanceGrade: { color: "#f7c86b", flex: 1, fontSize: 11, fontWeight: "800" },
+  guidanceGrade: {
+    color: palette.sand,
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "800",
+  },
   guidanceScore: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
   guidanceWarning: { color: "#ffffff", fontSize: 13, fontWeight: "700" },
   guidanceNote: {
@@ -4149,7 +4154,7 @@ const styles = StyleSheet.create({
   },
   adjustCalibrationButton: {
     alignItems: "center",
-    borderColor: "rgba(99,227,219,0.66)",
+    borderColor: "rgba(201,169,106,0.66)",
     borderRadius: 12,
     borderWidth: 1,
     justifyContent: "center",
@@ -4157,12 +4162,12 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   adjustCalibrationButtonText: {
-    color: "#8cece5",
+    color: palette.sand,
     fontSize: 10,
     fontWeight: "900",
   },
   partialCourtNote: {
-    color: "#f7c86b",
+    color: palette.sand,
     fontSize: 10,
     lineHeight: 13,
     marginTop: 2,
@@ -4225,7 +4230,7 @@ const styles = StyleSheet.create({
     minHeight: 42,
     paddingHorizontal: 14,
   },
-  favoriteMomentStar: { color: "#f7c86b", fontSize: 19 },
+  favoriteMomentStar: { color: palette.sand, fontSize: 19 },
   favoriteMomentText: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
   remoteStatusPill: {
     alignItems: "center",
@@ -4244,11 +4249,11 @@ const styles = StyleSheet.create({
     height: 8,
     width: 8,
   },
-  remoteStatusDotLive: { backgroundColor: "#67d391" },
+  remoteStatusDotLive: { backgroundColor: palette.positive },
   remoteStatusText: { color: "#ffffff", fontSize: 10, fontWeight: "800" },
   captureButton: {
     alignItems: "center",
-    backgroundColor: "rgba(222,104,66,0.94)",
+    backgroundColor: "rgba(232,104,58,0.94)",
     borderColor: "#ffffff",
     borderRadius: 32,
     borderWidth: 2,
@@ -4282,7 +4287,7 @@ const styles = StyleSheet.create({
   visionScoreboardCompact: { bottom: 142, minWidth: 184, right: 16 },
   visionScoreHeader: {
     alignItems: "center",
-    backgroundColor: "rgba(23,58,103,0.92)",
+    backgroundColor: "rgba(34,52,59,0.92)",
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 3,
@@ -4290,7 +4295,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   visionScoreBrand: {
-    color: "#8cece5",
+    color: palette.sand,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.2,
@@ -4304,7 +4309,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   visionServeDot: {
-    backgroundColor: "#67d391",
+    backgroundColor: palette.positive,
     borderRadius: 3,
     height: 6,
     width: 6,
@@ -4350,6 +4355,7 @@ const styles = StyleSheet.create({
   healthVideoHeart: { color: "#ff6a5f", fontSize: 16 },
   healthVideoValue: {
     color: "#ffffff",
+    fontFamily: "Archivo-ExtraBold",
     fontSize: 14,
     fontVariant: ["tabular-nums"],
     fontWeight: "900",
@@ -4462,7 +4468,7 @@ const styles = StyleSheet.create({
     minHeight: 56,
     paddingHorizontal: 18,
   },
-  headerActionLight: { color: "#63e3db", fontSize: 13, fontWeight: "800" },
+  headerActionLight: { color: "#d4b77c", fontSize: 13, fontWeight: "800" },
   playerDone: { justifyContent: "center", minHeight: 44, minWidth: 52 },
   modalTitleLight: {
     color: "#ffffff",
@@ -4496,7 +4502,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
   },
   playerMeta: { color: "#aaa79e", fontSize: 13, lineHeight: 18 },
-  playerPrivacy: { color: "#63e3db", fontSize: 10, fontWeight: "800" },
+  playerPrivacy: { color: "#d4b77c", fontSize: 10, fontWeight: "800" },
   playerVenue: {
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.07)",
@@ -4506,7 +4512,7 @@ const styles = StyleSheet.create({
     minHeight: 68,
     padding: 13,
   },
-  playerVenueIcon: { color: "#63e3db", fontSize: 22, fontWeight: "900" },
+  playerVenueIcon: { color: "#d4b77c", fontSize: 22, fontWeight: "900" },
   playerVenueName: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
   playerVenueAddress: {
     color: "#aaaeb6",
@@ -4515,8 +4521,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   playerMetricCard: {
-    backgroundColor: "rgba(99,227,219,0.09)",
-    borderColor: "rgba(99,227,219,0.22)",
+    backgroundColor: "rgba(212,183,124,0.09)",
+    borderColor: "rgba(212,183,124,0.22)",
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
@@ -4524,9 +4530,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   playerMetricItem: { alignItems: "center", flex: 1, justifyContent: "center" },
-  playerMetricValue: { color: "#ffffff", fontSize: 17, fontWeight: "800" },
+  playerMetricValue: {
+    color: "#ffffff",
+    fontFamily: "Archivo-ExtraBold",
+    fontSize: 17,
+    fontWeight: "800",
+  },
   playerMetricLabel: {
-    color: "#63e3db",
+    color: "#d4b77c",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.8,
@@ -4559,7 +4570,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     width: "100%",
   },
-  uploadFill: { backgroundColor: "#63e3db", height: 8 },
+  uploadFill: { backgroundColor: "#d4b77c", height: 8 },
   sheetBackdrop: {
     backgroundColor: "rgba(4,10,16,0.56)",
     flex: 1,

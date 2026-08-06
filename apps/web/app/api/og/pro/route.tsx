@@ -16,7 +16,7 @@ export function GET(request: Request) {
   const eyebrow = copy(parameters.get("eyebrow"), "Duna Pro Tour", 80);
   const detail = copy(
     parameters.get("detail"),
-    "Events · teams · scores · broadcasts · SandRating",
+    "Events · teams · scores · broadcasts · Sand Rating",
     140,
   );
 

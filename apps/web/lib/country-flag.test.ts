@@ -1,17 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { countryFlag } from "./country-flag";
+import { countryCode, countryFlag } from "./country-flag";
 
 describe("countryFlag", () => {
   it("renders two and three letter federation codes", () => {
-    expect(countryFlag("SWE")).toBe("🇸🇪");
-    expect(countryFlag("US")).toBe("🇺🇸");
-    expect(countryFlag("BLR")).toBe("🇧🇾");
-    expect(countryFlag("ISR")).toBe("🇮🇱");
-    expect(countryFlag("SVK")).toBe("🇸🇰");
-    expect(countryFlag("TUR")).toBe("🇹🇷");
+    expect(countryCode("SWE")).toBe("SE");
+    expect(countryCode("US")).toBe("US");
+    expect(countryCode("BLR")).toBe("BY");
+    expect(countryCode("ISR")).toBe("IL");
+    expect(countryCode("SVK")).toBe("SK");
+    expect(countryCode("TUR")).toBe("TR");
   });
 
   it("uses a neutral flag when the federation is unknown", () => {
-    expect(countryFlag("XYZ")).toBe("🏳️");
+    expect(countryCode("XYZ")).toBeUndefined();
+    expect(countryFlag("XYZ")).toBe("INTL");
   });
 });

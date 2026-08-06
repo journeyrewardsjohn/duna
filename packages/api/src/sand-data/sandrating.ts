@@ -215,7 +215,7 @@ function displayNameFor(
   id: number,
   users: ReadonlyMap<number, SandRatingUser>,
 ): string {
-  return users.get(id)?.name?.trim() || `SandRating player ${id}`;
+  return users.get(id)?.name?.trim() || `Sand Rating player ${id}`;
 }
 
 /**
@@ -456,7 +456,7 @@ export function buildSandRatingNetwork(
         ? String(row.match.tournamentId)
         : undefined,
       sourceUrl: `${sandRatingBase}/matches/${row.match.id}`,
-      title: location ?? "SandRating match",
+      title: location ?? "Sand Rating match",
       location,
       genderCategory: inferredMatchGender(row, users),
       playedAt: dateSpan ? `${dateSpan.start}T12:00:00.000Z` : undefined,

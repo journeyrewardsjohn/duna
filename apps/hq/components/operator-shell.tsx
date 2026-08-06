@@ -4,7 +4,7 @@ import { DunaMark } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { Bell, ChevronDown, Search, ShieldCheck, Sparkles } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { operatorModules, type OperatorModule } from "./navigation";
 import { AuthControls } from "./auth-controls";
 
@@ -35,19 +35,26 @@ export function OperatorShell({
         <nav aria-label="Operator modules">
           {operatorModules.map((item) => {
             const Icon = item.icon;
+            const index = operatorModules.indexOf(item);
+            const startsGroup =
+              operatorModules[index - 1]?.group !== item.group;
             return (
-              <Link
-                className={active === item.slug ? "active" : undefined}
-                href={item.slug === "overview" ? "/" : `/${item.slug}`}
-                key={item.slug}
-                title={item.label}
-              >
-                <Icon aria-hidden size={18} />
-                <span>{item.label}</span>
-                {item.slug === "messages" && messageDraftCount > 0 && (
-                  <i>{messageDraftCount}</i>
+              <Fragment key={item.slug}>
+                {startsGroup && (
+                  <span className="hq-sidebar__section">{item.group}</span>
                 )}
-              </Link>
+                <Link
+                  className={active === item.slug ? "active" : undefined}
+                  href={item.slug === "overview" ? "/" : `/${item.slug}`}
+                  title={item.label}
+                >
+                  <Icon aria-hidden size={18} />
+                  <span>{item.label}</span>
+                  {item.slug === "messages" && messageDraftCount > 0 && (
+                    <i>{messageDraftCount}</i>
+                  )}
+                </Link>
+              </Fragment>
             );
           })}
         </nav>

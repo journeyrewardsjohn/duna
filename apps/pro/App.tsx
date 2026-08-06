@@ -21,6 +21,7 @@ import {
   useState,
 } from "react";
 import {
+  AccessibilityInfo,
   Animated,
   Easing,
   Linking,
@@ -29,11 +30,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  useColorScheme,
   useWindowDimensions,
   View,
   type ViewStyle,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Line, Path } from "react-native-svg";
 import { GetPaidScreen } from "./get-paid";
 import { OperatorCreateScreen } from "./operator-create";
 import { SessionArrivalBoard } from "./session-arrival-board";
@@ -52,28 +55,28 @@ import {
 } from "./fellix-text";
 
 const lightColors = {
-  canvas: "#f8f7f3",
-  ink: "#101828",
+  canvas: "#f6f5f1",
+  ink: "#1b1b19",
   depth: "#ffffff",
-  navy: "#f1ece2",
-  navyLift: "#e8eef7",
-  bone: "#101828",
-  muted: "#667085",
-  aqua: "#235a96",
-  aquaDeep: "#173a67",
-  sand: "#d7bd91",
-  flare: "#de6842",
-  positive: "#2f7d57",
-  warning: "#a86f18",
-  danger: "#b84444",
+  navy: "#b5ccd3",
+  navyLift: "#edece6",
+  bone: "#1b1b19",
+  muted: "#766f61",
+  aqua: "#22343b",
+  aquaDeep: "#3a3a36",
+  sand: "#c9a96a",
+  flare: "#e8683a",
+  positive: "#2f6b3a",
+  warning: "#8a6a2f",
+  danger: "#9a4a2e",
   onAccent: "#ffffff",
-  overlayRgb: "23,58,103",
-  accentRgb: "35,90,150",
-  warningRgb: "168,111,24",
-  positiveRgb: "47,125,87",
-  dangerRgb: "184,68,68",
-  flareRgb: "222,104,66",
-  inkRgb: "16,24,40",
+  overlayRgb: "27,27,25",
+  accentRgb: "34,52,59",
+  warningRgb: "138,106,47",
+  positiveRgb: "47,107,58",
+  dangerRgb: "154,74,46",
+  flareRgb: "232,104,58",
+  inkRgb: "27,27,25",
   depthRgb: "255,255,255",
 } as const;
 
@@ -82,32 +85,33 @@ type Palette = {
 };
 
 const darkColors: Palette = {
-  canvas: "#070b0d",
-  ink: "#070b0d",
-  depth: "#0c1418",
-  navy: "#10242b",
-  navyLift: "#17343d",
-  bone: "#f3efe5",
-  muted: "#aaa79e",
-  aqua: "#63e3db",
-  aquaDeep: "#1b9f9a",
-  sand: "#c9a96c",
-  flare: "#ff6a3d",
-  positive: "#85d49b",
-  warning: "#f7c86b",
-  danger: "#f27878",
-  onAccent: "#070b0d",
-  overlayRgb: "255,255,255",
-  accentRgb: "99,227,219",
-  warningRgb: "247,200,107",
-  positiveRgb: "133,212,155",
-  dangerRgb: "242,120,120",
-  flareRgb: "255,106,61",
-  inkRgb: "7,11,13",
-  depthRgb: "12,20,24",
+  canvas: "#0d1114",
+  ink: "#0d1114",
+  depth: "#141a1e",
+  navy: "#101a20",
+  navyLift: "#1b2429",
+  bone: "#edf1f2",
+  muted: "#a9b4b8",
+  aqua: "#b5ccd3",
+  aquaDeep: "#8fb0bc",
+  sand: "#d4b77c",
+  flare: "#f4794c",
+  positive: "#6bae78",
+  warning: "#d4b77c",
+  danger: "#c4785c",
+  onAccent: "#0d1114",
+  overlayRgb: "237,241,242",
+  accentRgb: "181,204,211",
+  warningRgb: "212,183,124",
+  positiveRgb: "107,174,120",
+  dangerRgb: "196,120,92",
+  flareRgb: "244,121,76",
+  inkRgb: "13,17,20",
+  depthRgb: "20,26,30",
 };
 
 type ThemeName = "light" | "dark";
+type ThemePreference = ThemeName | "system";
 
 let activePalette: Palette = lightColors;
 const colors = new Proxy(lightColors, {
@@ -120,16 +124,30 @@ function rgba(rgb: string, alpha: number) {
   return `rgba(${rgb},${alpha})`;
 }
 
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    void AccessibilityInfo.isReduceMotionEnabled().then(setReduced);
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      setReduced,
+    );
+    return () => subscription.remove();
+  }, []);
+  return reduced;
+}
+
 const ThemeContext = createContext<{
   readonly theme: ThemeName;
+  readonly preference: ThemePreference;
   readonly toggle: () => void;
-}>({ theme: "light", toggle: () => undefined });
+}>({ theme: "light", preference: "system", toggle: () => undefined });
 
 function ThemeButton() {
-  const { theme, toggle } = useContext(ThemeContext);
+  const { preference, theme, toggle } = useContext(ThemeContext);
   return (
     <Pressable
-      accessibilityLabel={`Use ${theme === "light" ? "dark" : "light"} mode`}
+      accessibilityLabel={`Theme: ${preference === "system" ? "match device" : preference}. Change theme`}
       onPress={() => {
         selectionHaptic();
         toggle();
@@ -137,7 +155,7 @@ function ThemeButton() {
       style={styles.themeButton}
     >
       <Text style={styles.themeButtonText}>
-        {theme === "light" ? "☾" : "☀"}
+        {preference === "system" ? "◐" : theme === "light" ? "☾" : "☀"}
       </Text>
     </Pressable>
   );
@@ -342,8 +360,26 @@ function Mark() {
   return (
     <View style={styles.wordmark}>
       <View style={styles.mark}>
-        <View style={styles.markArc} />
-        <View style={styles.markDot} />
+        <Svg height="30" viewBox="0 0 64 48" width="40">
+          <Line
+            opacity={0.38}
+            stroke={colors.warning}
+            strokeLinecap="round"
+            strokeWidth="1.5"
+            x1="5"
+            x2="59"
+            y1="34"
+            y2="34"
+          />
+          <Path
+            d="M6 36.5C17.5 36.5 22.4 31.7 29.2 26.3C36.3 20.7 45 18.4 58 11.5"
+            fill="none"
+            stroke={colors.warning}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="4.5"
+          />
+        </Svg>
       </View>
       <Text style={styles.wordmarkText}>DUNA</Text>
       <Text style={styles.proPill}>PRO</Text>
@@ -3693,11 +3729,15 @@ function TabBar({
 
 function ProApp() {
   const { refresh } = useProRuntime();
+  const deviceTheme: ThemeName = useColorScheme() === "dark" ? "dark" : "light";
+  const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("today");
   const [surface, setSurface] = useState<"create" | "get-paid" | "score">();
   const [sessionNotesId, setSessionNotesId] = useState<string>();
   const [calendarEntryId, setCalendarEntryId] = useState<string>();
-  const [theme, setTheme] = useState<ThemeName>("light");
+  const [themePreference, setThemePreference] =
+    useState<ThemePreference>("system");
+  const theme = themePreference === "system" ? deviceTheme : themePreference;
   const screenTransition = useRef(new Animated.Value(1)).current;
 
   const openCalendar = (entryId?: string) => {
@@ -3716,7 +3756,9 @@ function ProApp() {
 
   useEffect(() => {
     void AsyncStorage.getItem("duna-theme").then((stored) => {
-      if (stored === "dark") setTheme("dark");
+      if (stored === "dark" || stored === "light" || stored === "system") {
+        setThemePreference(stored);
+      }
     });
   }, []);
 
@@ -3736,6 +3778,10 @@ function ProApp() {
   }, []);
 
   useEffect(() => {
+    if (reduceMotion) {
+      screenTransition.setValue(1);
+      return;
+    }
     screenTransition.setValue(0);
     Animated.timing(screenTransition, {
       toValue: 1,
@@ -3743,7 +3789,7 @@ function ProApp() {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [screenTransition, tab]);
+  }, [reduceMotion, screenTransition, tab]);
 
   activePalette = theme === "dark" ? darkColors : lightColors;
   activeStyles = theme === "dark" ? darkStyles : lightStyles;
@@ -3752,9 +3798,15 @@ function ProApp() {
     <ThemeContext.Provider
       value={{
         theme,
+        preference: themePreference,
         toggle: () => {
-          const next = theme === "light" ? "dark" : "light";
-          setTheme(next);
+          const next: ThemePreference =
+            themePreference === "system"
+              ? "light"
+              : themePreference === "light"
+                ? "dark"
+                : "system";
+          setThemePreference(next);
           void AsyncStorage.setItem("duna-theme", next);
         },
       }}
@@ -4334,6 +4386,7 @@ function createStyles(palette: Palette) {
     },
     calendarDayNumber: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 22,
       fontWeight: "900",
       lineHeight: 27,
@@ -4733,6 +4786,7 @@ function createStyles(palette: Palette) {
     },
     calendarSheetSummaryValue: {
       color: colors.bone,
+      fontFamily: "Archivo-Bold",
       fontSize: 12,
       fontWeight: "800",
       lineHeight: 17,
@@ -4990,34 +5044,13 @@ function createStyles(palette: Palette) {
     wordmark: { alignItems: "center", flexDirection: "row", gap: 7 },
     mark: {
       alignItems: "center",
-      borderColor: colors.warning,
-      borderRadius: 15,
-      borderWidth: 2,
       height: 30,
       justifyContent: "center",
-      position: "relative",
-      width: 30,
-    },
-    markArc: {
-      borderColor: colors.bone,
-      borderRadius: 15,
-      borderTopWidth: 2,
-      height: 13,
-      position: "absolute",
-      top: 8,
-      transform: [{ rotate: "180deg" }],
-      width: 18,
-    },
-    markDot: {
-      backgroundColor: colors.aqua,
-      borderRadius: 2,
-      bottom: 5,
-      height: 4,
-      position: "absolute",
-      width: 4,
+      width: 40,
     },
     wordmarkText: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 17,
       fontWeight: "900",
       letterSpacing: 3,
@@ -5226,6 +5259,7 @@ function createStyles(palette: Palette) {
     metricLabel: { color: colors.muted, fontSize: 10, letterSpacing: 0.8 },
     metricValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 20,
       fontWeight: "900",
       letterSpacing: -1,
@@ -5444,7 +5478,12 @@ function createStyles(palette: Palette) {
       marginTop: 5,
     },
     personRating: { alignItems: "flex-end", minWidth: 30 },
-    ratingNumber: { color: colors.bone, fontSize: 10, fontWeight: "800" },
+    ratingNumber: {
+      color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 10,
+      fontWeight: "800",
+    },
     peopleModalSafe: { backgroundColor: colors.canvas, flex: 1 },
     peopleModalHeader: {
       alignItems: "center",
@@ -5801,6 +5840,7 @@ function createStyles(palette: Palette) {
     teamNameExpanded: { fontSize: 22, marginLeft: 12 },
     bigScore: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 124,
       fontWeight: "900",
       letterSpacing: -10,
@@ -5875,6 +5915,7 @@ function createStyles(palette: Palette) {
     setLabel: { color: colors.muted, fontSize: 10, fontWeight: "700" },
     setScore: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 13,
       fontWeight: "800",
       marginTop: 2,
@@ -5908,6 +5949,7 @@ function createStyles(palette: Palette) {
     },
     balanceValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 39,
       fontWeight: "900",
       letterSpacing: -2.4,
@@ -5949,7 +5991,12 @@ function createStyles(palette: Palette) {
       justifyContent: "center",
       width: 34,
     },
-    transactionAmount: { color: colors.bone, fontSize: 10, fontWeight: "800" },
+    transactionAmount: {
+      color: colors.bone,
+      fontFamily: "Archivo-Bold",
+      fontSize: 10,
+      fontWeight: "800",
+    },
     boundaryNote: {
       alignItems: "center",
       backgroundColor: rgba(colors.accentRgb, 0.05),

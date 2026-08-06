@@ -288,6 +288,7 @@ export function RatingTrendChart({
           <div className="rating-trend-chart__plot">
             <svg
               aria-label="Sand Rating movement ordered by the date each match was played"
+              data-animated-chart
               role="img"
               viewBox={`0 0 ${width} ${height}`}
             >
@@ -332,7 +333,11 @@ export function RatingTrendChart({
                 d={areaPath}
                 style={{ fill: `url(#${gradientId})` }}
               />
-              <path className="rating-trend-chart__line" d={path} />
+              <path
+                className="rating-trend-chart__line"
+                d={path}
+                data-chart-series
+              />
               {activeChartPoint && (
                 <line
                   aria-hidden
@@ -386,6 +391,7 @@ export function RatingTrendChart({
                   cx={point.x}
                   cy={point.y}
                   data-active={activeIndex === index ? "true" : undefined}
+                  data-chart-endpoint
                   data-result={point.result ?? "unknown"}
                   key={point.id}
                   r={activeIndex === index ? 3.4 : 2.5}

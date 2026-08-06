@@ -109,7 +109,7 @@ const sourceNames: Readonly<Record<SandDataSource, string>> = {
   "avp-league": "AVP League",
   bvbinfo: "BVBInfo",
   "fivb-12ndr": "FIVB via fivb.12ndr",
-  sandrating: "SandRating",
+  sandrating: "Sand Rating",
   "volleyball-life": "VolleyballLife",
   "volleyball-world": "Volleyball World Rankings",
 };
@@ -2898,7 +2898,7 @@ export async function repairApprovedSandRatingMatchDates(input: {
   if (!source) {
     throw new SandDataServiceError(
       "SOURCE_UNAVAILABLE",
-      "Import a SandRating network snapshot before repairing match dates.",
+      "Import a Sand Rating network snapshot before repairing match dates.",
     );
   }
   const candidates = await database

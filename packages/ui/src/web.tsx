@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
+import type { DunaZone } from "./tokens";
 
 export function DunaMark({
   compact = false,
@@ -9,18 +10,42 @@ export function DunaMark({
 }) {
   return (
     <span className={["duna-mark", className].filter(Boolean).join(" ")}>
-      <svg aria-hidden="true" className="duna-mark__symbol" viewBox="0 0 48 48">
+      <svg aria-hidden="true" className="duna-mark__symbol" viewBox="0 0 64 48">
         <path
-          d="M5 31.5C12.8 18.2 22.4 12.1 34 13.1c3.4.3 6.4 1.2 9 2.7-8.3.2-15.4 3.1-21.2 8.7-3.1 3-5.8 6.7-8 11.1H5v-4.1Z"
-          fill="currentColor"
+          className="duna-mark__horizon"
+          d="M5 34H59"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="1.5"
         />
         <path
-          d="M13.8 35.6c4.1-6.8 9.4-11.6 15.8-14.3 4.1-1.7 8.6-2.5 13.4-2.3-3.9 1.8-7.3 4.2-10.2 7.2-2.7 2.8-5 5.9-6.9 9.4H13.8Z"
-          fill="var(--color-aqua)"
+          className="duna-mark__ridge"
+          d="M6 36.5C17.5 36.5 22.4 31.7 29.2 26.3C36.3 20.7 45 18.4 58 11.5"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="4.5"
         />
       </svg>
       {!compact && <span className="duna-mark__word">DUNA</span>}
     </span>
+  );
+}
+
+export function DunaLoader({
+  label = "Opening Duna",
+}: {
+  readonly label?: string;
+}) {
+  return (
+    <div aria-live="polite" className="duna-loader" role="status">
+      <span aria-hidden="true" className="duna-loader__mark">
+        <DunaMark compact />
+      </span>
+      <span className="duna-loader__label">{label}</span>
+    </div>
   );
 }
 
@@ -106,6 +131,135 @@ export function Numeric({
 }) {
   return (
     <span className={["duna-numeric", className].filter(Boolean).join(" ")}>
+      {children}
+    </span>
+  );
+}
+
+export function Zone({
+  children,
+  className,
+  zone,
+  ...props
+}: HTMLAttributes<HTMLDivElement> & {
+  readonly children: ReactNode;
+  readonly zone: DunaZone;
+}) {
+  return (
+    <div
+      className={["duna-zone", className].filter(Boolean).join(" ")}
+      data-zone={zone}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function Eyebrow({
+  children,
+  className,
+  live = false,
+}: {
+  readonly children: ReactNode;
+  readonly className?: string;
+  readonly live?: boolean;
+}) {
+  return (
+    <span
+      className={["duna-eyebrow", live && "duna-eyebrow--live", className]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {live && <span aria-hidden className="duna-live-dot" />}
+      {children}
+    </span>
+  );
+}
+
+export function StatusPill({
+  children,
+  className,
+  state = "upcoming",
+}: {
+  readonly children: ReactNode;
+  readonly className?: string;
+  readonly state?: "live" | "upcoming" | "final" | "cancelled" | "pending";
+}) {
+  return (
+    <span
+      className={[
+        "duna-chip",
+        "duna-status",
+        `duna-status--${state}`,
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {state === "live" && <span aria-hidden className="duna-live-dot" />}
+      {children}
+    </span>
+  );
+}
+
+export function TaxonomyChip({
+  children,
+  className,
+}: {
+  readonly children: ReactNode;
+  readonly className?: string;
+}) {
+  return (
+    <span
+      className={["duna-chip", "duna-taxonomy", className]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {children}
+    </span>
+  );
+}
+
+export function MetricChip({
+  children,
+  className,
+  urgent = false,
+}: {
+  readonly children: ReactNode;
+  readonly className?: string;
+  readonly urgent?: boolean;
+}) {
+  return (
+    <span
+      className={[
+        "duna-chip",
+        "duna-metric",
+        urgent && "duna-metric--urgent",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {children}
+    </span>
+  );
+}
+
+export function IdentityChip({
+  children,
+  className,
+  ...props
+}: HTMLAttributes<HTMLSpanElement> & {
+  readonly children: ReactNode;
+}) {
+  return (
+    <span
+      className={["duna-chip", "duna-identity", className]
+        .filter(Boolean)
+        .join(" ")}
+      {...props}
+    >
       {children}
     </span>
   );

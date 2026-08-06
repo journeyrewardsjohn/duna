@@ -26,7 +26,7 @@ import { ProfessionalMatchCard } from "@/components/professional-match-card";
 import { ProEventVenueCard } from "@/components/pro-event-venue-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
-import { countryFlag } from "@/lib/country-flag";
+import { CountryCode } from "@/components/country-code";
 import { professionalEventJsonLd, serializeJsonLd } from "@/lib/pro-seo";
 
 type ProMatch = PublicProEvent["matches"][number];
@@ -90,9 +90,7 @@ function TeamName({
       className={`pro-team-name ${compact ? "pro-team-name--compact" : ""}`}
     >
       {team.countryCode && (
-        <b aria-label={team.countryCode} className="pro-team-name__flag">
-          {countryFlag(team.countryCode)}
-        </b>
+        <CountryCode className="pro-team-name__flag" code={team.countryCode} />
       )}
       {team.players.map((player, index) => (
         <span key={`${player.personId ?? player.name}-${index}`}>
@@ -695,8 +693,7 @@ export function ProEventDetail({
                         aria-label={team.countryCode ?? "Country pending"}
                         className="pro-entry-team__country"
                       >
-                        <b aria-hidden>{countryFlag(team.countryCode)}</b>
-                        {team.countryCode ?? "—"}
+                        <CountryCode code={team.countryCode} fallback="—" />
                       </span>
                       <span>
                         {team.entryPoints?.toLocaleString("en-US") ?? "—"}

@@ -33,6 +33,7 @@ import {
   useState,
 } from "react";
 import {
+  AccessibilityInfo,
   Animated,
   Easing,
   Image,
@@ -43,17 +44,23 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  useColorScheme,
   useWindowDimensions,
   View,
   type ViewStyle,
 } from "react-native";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaProvider,
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import Svg, { Circle, Line, Path, SvgUri } from "react-native-svg";
 import {
   startDunaLiveActivity,
   type LiveActivityPushToken,
 } from "./live-activities";
 import { dunaWebUrl, type DunaApiClient } from "./mobile-api";
+import { presentNativeEventPayment } from "./native-payments";
 import {
   PlayerRuntimeProvider,
   usePlayerRuntime,
@@ -87,10 +94,6 @@ import {
   FellixTextInput as TextInput,
   useFellixFonts,
 } from "./fellix-text";
-
-// Metro requires a static module reference so the campaign image ships in the native bundle.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const dunaCampaignRally = require("./assets/duna-campaign-rally.jpg");
 
 type MobileCoach = NonNullable<PlayerRuntime["coaches"]>[number];
 type OrganizationWallet = NonNullable<
@@ -238,32 +241,32 @@ type MobilePlayerPerformance = Awaited<
 type MobilePerformanceMatch = MobilePlayerPerformance["history"][number];
 
 const lightColors = {
-  canvas: "#f8f7f3",
-  ink: "#101828",
+  canvas: "#f6f5f1",
+  ink: "#1b1b19",
   depth: "#ffffff",
-  navy: "#f1ece2",
-  navyLift: "#e8eef7",
-  bone: "#101828",
-  muted: "#667085",
-  aqua: "#235a96",
-  aquaDeep: "#173a67",
-  sand: "#d7bd91",
-  flare: "#de6842",
-  positive: "#2f7d57",
-  warning: "#a86f18",
-  danger: "#b84444",
+  navy: "#efe6d3",
+  navyLift: "#edece6",
+  bone: "#1b1b19",
+  muted: "#766f61",
+  aqua: "#22343b",
+  aquaDeep: "#3a3a36",
+  sand: "#c9a96a",
+  flare: "#e8683a",
+  positive: "#2f6b3a",
+  warning: "#8a6a2f",
+  danger: "#9a4a2e",
   onAccent: "#ffffff",
   white: "#ffffff",
-  overlayRgb: "23,58,103",
-  accentRgb: "35,90,150",
-  warningRgb: "168,111,24",
-  positiveRgb: "47,125,87",
-  dangerRgb: "184,68,68",
-  flareRgb: "222,104,66",
-  inkRgb: "16,24,40",
+  overlayRgb: "27,27,25",
+  accentRgb: "34,52,59",
+  warningRgb: "138,106,47",
+  positiveRgb: "47,107,58",
+  dangerRgb: "154,74,46",
+  flareRgb: "232,104,58",
+  inkRgb: "27,27,25",
   depthRgb: "255,255,255",
-  navyRgb: "241,236,226",
-  boneRgb: "16,24,40",
+  navyRgb: "239,230,211",
+  boneRgb: "27,27,25",
   whiteRgb: "255,255,255",
 } as const;
 
@@ -272,36 +275,38 @@ type Palette = {
 };
 
 const darkColors: Palette = {
-  canvas: "#070b0d",
-  ink: "#070b0d",
-  depth: "#0c1418",
-  navy: "#10242b",
-  navyLift: "#17343d",
-  bone: "#f3efe5",
-  muted: "#aaa79e",
-  aqua: "#63e3db",
-  aquaDeep: "#1b9f9a",
-  sand: "#c9a96c",
-  flare: "#ff6a3d",
-  positive: "#85d49b",
-  warning: "#f7c86b",
-  danger: "#f27878",
-  onAccent: "#070b0d",
+  canvas: "#141310",
+  ink: "#0d1114",
+  depth: "#1c1a16",
+  navy: "#16232a",
+  navyLift: "#24211c",
+  bone: "#f2f0ea",
+  muted: "#b8b4a8",
+  aqua: "#b5ccd3",
+  aquaDeep: "#8fb0bc",
+  sand: "#d4b77c",
+  flare: "#f4794c",
+  positive: "#6bae78",
+  warning: "#d4b77c",
+  danger: "#c4785c",
+  onAccent: "#0d1114",
   white: "#ffffff",
-  overlayRgb: "255,255,255",
-  accentRgb: "99,227,219",
-  warningRgb: "247,200,107",
-  positiveRgb: "133,212,155",
-  dangerRgb: "242,120,120",
-  flareRgb: "255,106,61",
-  inkRgb: "7,11,13",
-  depthRgb: "12,20,24",
-  navyRgb: "16,36,43",
-  boneRgb: "243,239,229",
+  overlayRgb: "242,240,234",
+  accentRgb: "181,204,211",
+  warningRgb: "212,183,124",
+  positiveRgb: "107,174,120",
+  dangerRgb: "196,120,92",
+  flareRgb: "244,121,76",
+  inkRgb: "13,17,20",
+  depthRgb: "28,26,22",
+  navyRgb: "22,35,42",
+  boneRgb: "242,240,234",
   whiteRgb: "255,255,255",
 };
 
 type ThemeName = "light" | "dark";
+type ThemePreference = ThemeName | "system";
+const AnimatedSvgPath = Animated.createAnimatedComponent(Path);
 
 let activePalette: Palette = lightColors;
 const colors = new Proxy(lightColors, {
@@ -314,16 +319,30 @@ function rgba(rgb: string, alpha: number) {
   return `rgba(${rgb},${alpha})`;
 }
 
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    void AccessibilityInfo.isReduceMotionEnabled().then(setReduced);
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      setReduced,
+    );
+    return () => subscription.remove();
+  }, []);
+  return reduced;
+}
+
 const ThemeContext = createContext<{
   readonly theme: ThemeName;
+  readonly preference: ThemePreference;
   readonly toggle: () => void;
-}>({ theme: "light", toggle: () => undefined });
+}>({ theme: "light", preference: "system", toggle: () => undefined });
 
 function ThemeButton() {
-  const { theme, toggle } = useContext(ThemeContext);
+  const { preference, theme, toggle } = useContext(ThemeContext);
   return (
     <Pressable
-      accessibilityLabel={`Use ${theme === "light" ? "dark" : "light"} mode`}
+      accessibilityLabel={`Theme: ${preference === "system" ? "match device" : preference}. Change theme`}
       onPress={() => {
         selectionHaptic();
         toggle();
@@ -331,7 +350,7 @@ function ThemeButton() {
       style={styles.themeButton}
     >
       <Text style={styles.themeButtonText}>
-        {theme === "light" ? "☾" : "☀"}
+        {preference === "system" ? "◐" : theme === "light" ? "☾" : "☀"}
       </Text>
     </Pressable>
   );
@@ -377,8 +396,6 @@ const tabs: readonly {
   { key: "home", label: "Home", icon: "⌂" },
   { key: "discover", label: "Discover", icon: "⌖" },
   { key: "play", label: "Play", icon: "◫" },
-  { key: "video", label: "Video", icon: "◉" },
-  { key: "wallet", label: "Wallet", icon: "$" },
   { key: "you", label: "You", icon: "◎" },
 ];
 
@@ -461,11 +478,27 @@ function PreviewBanner() {
 function DunaWordmark({ pro = false }: { readonly pro?: boolean }) {
   return (
     <View style={styles.wordmark}>
-      <View style={[styles.mark, pro && { borderColor: colors.warning }]}>
-        <View style={styles.markArc} />
-        <View
-          style={[styles.markDot, pro && { backgroundColor: colors.aqua }]}
-        />
+      <View style={styles.mark}>
+        <Svg height="30" viewBox="0 0 64 48" width="40">
+          <Line
+            opacity={0.38}
+            stroke={pro ? colors.warning : colors.bone}
+            strokeLinecap="round"
+            strokeWidth="1.5"
+            x1="5"
+            x2="59"
+            y1="34"
+            y2="34"
+          />
+          <Path
+            d="M6 36.5C17.5 36.5 22.4 31.7 29.2 26.3C36.3 20.7 45 18.4 58 11.5"
+            fill="none"
+            stroke={pro ? colors.warning : colors.bone}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="4.5"
+          />
+        </Svg>
       </View>
       <Text style={styles.wordmarkText}>DUNA</Text>
       {pro && <Text style={styles.proPill}>PRO</Text>}
@@ -510,35 +543,6 @@ function Pill({
       >
         {children.toUpperCase()}
       </Text>
-    </View>
-  );
-}
-
-function RatingOrbit({ compact = false }: { readonly compact?: boolean }) {
-  const { dashboard } = usePlayerRuntime();
-  const player = dashboard?.player ?? demoPlayer;
-  return (
-    <View style={[styles.ratingOrbit, compact && styles.ratingOrbitCompact]}>
-      <View
-        style={[
-          styles.ratingOrbitInner,
-          compact && styles.ratingOrbitInnerCompact,
-        ]}
-      >
-        <Text style={styles.ratingLabel}>SAND RATING</Text>
-        <Text
-          style={[styles.ratingValue, compact && styles.ratingValueCompact]}
-        >
-          {player.rating.display.toFixed(2)}
-        </Text>
-        <Text style={styles.ratingDelta}>
-          {player.rating.delta && player.rating.delta > 0 ? "↗ +" : ""}
-          {(player.rating.delta ?? 0).toFixed(2)}
-        </Text>
-      </View>
-      <View style={styles.lockedLabel}>
-        <Text style={styles.lockedText}>LOCKED</Text>
-      </View>
     </View>
   );
 }
@@ -853,26 +857,47 @@ function CoachingNoteCard({ note }: { readonly note: PlayerCoachingNote }) {
   );
 }
 
+type HomeQuickAction =
+  "find-match" | "book-court" | "join-event" | "record-video";
+
 function HomeScreen({
+  onAction,
   onBook,
 }: {
+  readonly onAction: (action: HomeQuickAction) => void;
   readonly onBook: (eventIndex: number) => void;
 }) {
-  const { width } = useWindowDimensions();
-  const compact = width < 480;
+  const reduceMotion = useReducedMotion();
+  const chartDraw = useRef(new Animated.Value(0)).current;
   const {
     client,
     coaches,
     coachingNotes,
     dashboard,
+    mode,
     organizationWallets,
-    people: livePeople,
   } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
   const bookings = dashboard?.bookings ?? demoBookings;
   const events = dashboard?.events ?? demoEvents;
   const matches = dashboard?.recentMatches ?? demoMatches;
-  const people = livePeople ?? demoPeople;
+  const [performance, setPerformance] = useState<MobilePlayerPerformance>();
+  const [selectedCoach, setSelectedCoach] = useState<MobileCoach>();
+
+  useEffect(() => {
+    if (!client || mode === "preview") return;
+    let active = true;
+    void client.public.playerPerformance
+      .query({ handle: player.handle })
+      .then((nextPerformance) => {
+        if (active) setPerformance(nextPerformance);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [client, mode, player.handle]);
+
   const homeOrganization =
     organizationWallets?.find(
       (organization) =>
@@ -898,14 +923,102 @@ function HomeScreen({
       (coach) => coach.organizationId === homeOrganization?.organizationId,
     ) ?? [];
   const nextBooking = bookings[0];
-  const [selectedCoach, setSelectedCoach] = useState<MobileCoach>();
-  const metrics = dashboard?.metrics.slice(0, 4) ?? [
-    { label: "Win rate", value: "61%" },
-    { label: "Last 10", value: "8–2" },
-    { label: "Rating change", value: "+0.14" },
-    { label: "This week", value: "3" },
-  ];
   const insight = dashboard?.feed[0];
+  const performanceHistory = performance?.history ?? [];
+  const verifiedWindow = [...performanceHistory].reverse().slice(-14);
+  const verifiedTrend = verifiedWindow.map((match) => ({
+    id: match.id,
+    rating: match.afterDisplay,
+    won: match.actualResult >= 0.5,
+  }));
+  const ratedFallbackMatches = [...matches]
+    .reverse()
+    .filter((match) => typeof match.ratingDelta === "number")
+    .slice(-14);
+  const fallbackStartRating =
+    player.rating.display -
+    ratedFallbackMatches.reduce(
+      (total, match) => total + (match.ratingDelta ?? 0),
+      0,
+    );
+  let fallbackRating = fallbackStartRating;
+  const fallbackTrend = ratedFallbackMatches.map((match) => {
+    fallbackRating += match.ratingDelta ?? 0;
+    return {
+      id: match.id,
+      rating: fallbackRating,
+      won: match.winner === "A",
+    };
+  });
+  const trend = verifiedTrend.length ? verifiedTrend : fallbackTrend;
+  const trendRatings = trend.map((point) => point.rating);
+  const minimumRating = trendRatings.length
+    ? Math.min(...trendRatings)
+    : player.rating.display - 0.1;
+  const maximumRating = trendRatings.length
+    ? Math.max(...trendRatings)
+    : player.rating.display + 0.1;
+  const chartRange = Math.max(0.08, maximumRating - minimumRating);
+  const chartPoints = trend.map((point, index) => ({
+    ...point,
+    x: 14 + (index / Math.max(1, trend.length - 1)) * 292,
+    y: 108 - ((point.rating - minimumRating) / chartRange) * 88,
+  }));
+  const chartPath = chartPoints
+    .map(
+      (point, index) =>
+        `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`,
+    )
+    .join(" ");
+  const chartPathLength = Math.max(
+    1,
+    chartPoints.slice(1).reduce((total, point, index) => {
+      const previous = chartPoints[index];
+      return previous
+        ? total + Math.hypot(point.x - previous.x, point.y - previous.y)
+        : total;
+    }, 0),
+  );
+  const chartArea = chartPoints.length
+    ? `${chartPath} L ${chartPoints.at(-1)!.x.toFixed(1)} 116 L ${chartPoints[0]!.x.toFixed(1)} 116 Z`
+    : "";
+  useEffect(() => {
+    chartDraw.stopAnimation();
+    if (reduceMotion || !chartPath) {
+      chartDraw.setValue(1);
+      return;
+    }
+    chartDraw.setValue(0);
+    Animated.timing(chartDraw, {
+      duration: 760,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: false,
+    }).start();
+  }, [chartDraw, chartPath, reduceMotion]);
+  const chartStrokeOffset = chartDraw.interpolate({
+    inputRange: [0, 1],
+    outputRange: [chartPathLength, 0],
+  });
+  const currentRating =
+    trend.at(-1)?.rating ??
+    performanceHistory[0]?.afterDisplay ??
+    player.rating.display;
+  const trendStartRating = verifiedTrend.length
+    ? verifiedWindow[0]!.beforeDisplay
+    : fallbackTrend.length
+      ? fallbackStartRating
+      : undefined;
+  const ratingMovement =
+    trendStartRating !== undefined
+      ? currentRating - trendStartRating
+      : (player.rating.delta ?? 0);
+  const recentPerformance = performanceHistory.slice(0, 10);
+  const recentWins = recentPerformance.length
+    ? recentPerformance.filter((match) => match.actualResult >= 0.5).length
+    : matches.slice(0, 10).filter((match) => match.winner === "A").length;
+  const recentCount = recentPerformance.length || Math.min(10, matches.length);
+  const firstName = player.displayName.split(" ")[0] ?? player.displayName;
   const today = new Intl.DateTimeFormat("en-US", {
     weekday: "long",
     month: "long",
@@ -913,69 +1026,278 @@ function HomeScreen({
   })
     .format(new Date())
     .toUpperCase();
+  const quickActions: readonly {
+    readonly key: HomeQuickAction;
+    readonly icon: string;
+    readonly label: string;
+    readonly meta: string;
+  }[] = [
+    {
+      key: "find-match",
+      icon: "⌖",
+      label: "Find a Match",
+      meta: "Open play nearby",
+    },
+    {
+      key: "book-court",
+      icon: "▦",
+      label: "Book a Court",
+      meta: "Live availability",
+    },
+    {
+      key: "join-event",
+      icon: "✦",
+      label: "Join an Event",
+      meta: "Tournaments + clinics",
+    },
+    {
+      key: "record-video",
+      icon: "●",
+      label: "Record Video",
+      meta: "Open Duna Vision",
+    },
+  ];
+
   return (
     <>
       <ScrollView
         contentContainerStyle={styles.screenContent}
         showsVerticalScrollIndicator={false}
       >
-        <AppHeader eyebrow={today.replace(", ", " · ")} />
-        <ImageBackground
-          imageStyle={styles.homeCampaignImage}
-          source={dunaCampaignRally}
-          style={[styles.homeCampaign, compact && styles.homeCampaignCompact]}
-        >
-          <View style={styles.homeCampaignWash} />
-          <View style={styles.homeCampaignContent}>
-            <Text style={styles.homeCampaignEyebrow}>YOUR GAME · TODAY</Text>
-            <Text
-              style={[
-                styles.homeCampaignTitle,
-                compact && styles.homeCampaignTitleCompact,
+        <AppHeader eyebrow="YOUR DAY" />
+        <View style={styles.homeWelcome}>
+          <View style={styles.flex}>
+            <Text style={styles.homeWelcomeDate}>
+              {today.replace(", ", " · ")}
+            </Text>
+            <Text style={styles.homeWelcomeTitle}>
+              Ready to play, {firstName}?
+            </Text>
+            <Text style={styles.homeWelcomeBody}>
+              Your next game, nearby courts, events, and performance in one
+              place.
+            </Text>
+          </View>
+          <View style={styles.homeRatingBadge}>
+            <Text style={styles.homeRatingBadgeValue}>
+              {currentRating.toFixed(2)}
+            </Text>
+            <Text style={styles.homeRatingBadgeLabel}>SAND</Text>
+          </View>
+        </View>
+
+        <View style={styles.homeQuickGrid}>
+          {quickActions.map((action, index) => (
+            <Pressable
+              accessibilityRole="button"
+              key={action.key}
+              onPress={() => {
+                selectionHaptic();
+                onAction(action.key);
+              }}
+              style={({ pressed }) => [
+                styles.homeQuickAction,
+                index === 0 && styles.homeQuickActionPrimary,
+                index === 3 && styles.homeQuickActionWarm,
+                pressed && styles.homeQuickActionPressed,
               ]}
             >
-              Good morning,{`\n`}
-              {player.displayName.split(" ")[0]}.
-            </Text>
-            <Text style={styles.homeCampaignSubtitle}>
-              Your next game, latest movement, and everything happening around
-              you.
-            </Text>
-            <Pressable
-              onPress={() =>
-                void WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/score`)
-              }
-              style={styles.homeCampaignAction}
-            >
-              <Text style={styles.homeCampaignActionText}>
-                ＋ Record a match
+              <View
+                style={[
+                  styles.homeQuickIcon,
+                  index === 0 && styles.homeQuickIconPrimary,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.homeQuickIconText,
+                    index === 0 && styles.homeQuickIconTextPrimary,
+                  ]}
+                >
+                  {action.icon}
+                </Text>
+              </View>
+              <Text
+                style={[
+                  styles.homeQuickLabel,
+                  index === 0 && styles.homeQuickLabelPrimary,
+                ]}
+              >
+                {action.label}
+              </Text>
+              <Text
+                style={[
+                  styles.homeQuickMeta,
+                  index === 0 && styles.homeQuickMetaPrimary,
+                ]}
+              >
+                {action.meta}
               </Text>
             </Pressable>
+          ))}
+        </View>
+
+        {nextBooking ? (
+          <View style={styles.homeNextSession}>
+            <View style={styles.homeNextDate}>
+              <Text style={styles.homeNextDateMonth}>
+                {new Date(nextBooking.startsAt)
+                  .toLocaleDateString("en-US", { month: "short" })
+                  .toUpperCase()}
+              </Text>
+              <Text style={styles.homeNextDateDay}>
+                {new Date(nextBooking.startsAt).getDate()}
+              </Text>
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.homeNextEyebrow}>NEXT UP · CONFIRMED</Text>
+              <Text style={styles.homeNextTitle}>{nextBooking.title}</Text>
+              <Text style={styles.homeNextMeta}>
+                {new Date(nextBooking.startsAt).toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}{" "}
+                · {nextBooking.venueName}
+              </Text>
+              {!["pickup", "court-rental"].includes(nextBooking.kind) && (
+                <SessionArrivalCard booking={nextBooking} client={client} />
+              )}
+            </View>
+            <Text style={styles.chevron}>›</Text>
           </View>
-        </ImageBackground>
+        ) : (
+          <Pressable
+            onPress={() => onAction("find-match")}
+            style={styles.homeNextSession}
+          >
+            <View style={styles.homeNextOpenMark}>
+              <Text style={styles.homeNextOpenMarkText}>＋</Text>
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.homeNextEyebrow}>YOUR CALENDAR IS OPEN</Text>
+              <Text style={styles.homeNextTitle}>
+                Find something worth playing.
+              </Text>
+              <Text style={styles.homeNextMeta}>
+                Matches, courts, and events are ready nearby.
+              </Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+        )}
+
+        <View style={styles.homePerformanceCard}>
+          <View style={styles.cardTitleRow}>
+            <View>
+              <Text style={styles.eyebrow}>YOUR PERFORMANCE</Text>
+              <Text style={styles.homePerformanceTitle}>Form over time.</Text>
+            </View>
+            <Pill tone={ratingMovement >= 0 ? "positive" : "warning"}>
+              {`${ratingMovement >= 0 ? "+" : ""}${ratingMovement.toFixed(2)}`}
+            </Pill>
+          </View>
+          <View style={styles.homePerformanceSummary}>
+            <View>
+              <Text style={styles.homePerformanceValue}>
+                {currentRating.toFixed(2)}
+              </Text>
+              <Text style={styles.homePerformanceLabel}>Sand Rating</Text>
+            </View>
+            <View>
+              <Text style={styles.homePerformanceValue}>
+                {recentCount
+                  ? `${recentWins}–${recentCount - recentWins}`
+                  : "—"}
+              </Text>
+              <Text style={styles.homePerformanceLabel}>Recent form</Text>
+            </View>
+            <View>
+              <Text style={styles.homePerformanceValue}>
+                {player.rating.percentile
+                  ? `${player.rating.percentile}%`
+                  : "—"}
+              </Text>
+              <Text style={styles.homePerformanceLabel}>Percentile</Text>
+            </View>
+          </View>
+          {chartPoints.length ? (
+            <View
+              accessibilityLabel={`Rating trend across ${chartPoints.length} verified matches`}
+              style={styles.homePerformanceChart}
+            >
+              <Svg height={132} viewBox="0 0 320 124" width="100%">
+                {[28, 68, 108].map((y) => (
+                  <Line
+                    key={y}
+                    stroke={rgba(colors.overlayRgb, 0.08)}
+                    strokeWidth="1"
+                    x1="12"
+                    x2="308"
+                    y1={y}
+                    y2={y}
+                  />
+                ))}
+                <AnimatedSvgPath
+                  d={chartArea}
+                  fill={rgba(colors.accentRgb, 0.09)}
+                  opacity={chartDraw}
+                />
+                <AnimatedSvgPath
+                  d={chartPath}
+                  fill="none"
+                  stroke={colors.aqua}
+                  strokeDasharray={`${chartPathLength} ${chartPathLength}`}
+                  strokeDashoffset={chartStrokeOffset}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="4"
+                />
+                {chartPoints.map((point) => (
+                  <Circle
+                    cx={point.x}
+                    cy={point.y}
+                    fill={point.won ? colors.aqua : colors.danger}
+                    key={point.id}
+                    r="4.5"
+                    stroke={colors.depth}
+                    strokeWidth="2"
+                  />
+                ))}
+              </Svg>
+            </View>
+          ) : (
+            <View style={styles.homePerformanceEmpty}>
+              <Text style={styles.homePerformanceEmptyMark}>↗</Text>
+              <View style={styles.flex}>
+                <Text style={styles.homePerformanceEmptyTitle}>
+                  Your chart starts with a verified result.
+                </Text>
+                <Text style={styles.homePerformanceEmptyBody}>
+                  Connect a match source or record a result to build your real
+                  rating history.
+                </Text>
+              </View>
+            </View>
+          )}
+          <View style={styles.homePerformanceLegend}>
+            <Text style={styles.homePerformanceLegendWin}>● Win</Text>
+            <Text style={styles.homePerformanceLegendLoss}>● Loss</Text>
+            <Text style={styles.homePerformanceLegendMeta}>
+              {chartPoints.length} rated results
+            </Text>
+          </View>
+        </View>
+
         {homeOrganization && (
           <MemberOrganizationCard organization={homeOrganization} />
-        )}
-        {coachingNotes?.[0] && (
-          <>
-            <SectionHeader
-              eyebrow="COACHING"
-              title="Carry the session forward."
-              action={
-                coachingNotes.length > 1
-                  ? `${coachingNotes.length} notes`
-                  : undefined
-              }
-            />
-            <CoachingNoteCard note={coachingNotes[0]} />
-          </>
         )}
         {homeEvents.length > 0 && (
           <>
             <SectionHeader
+              action="Browse events"
               eyebrow="FROM YOUR CLUB"
+              onAction={() => onAction("join-event")}
               title="Made for your membership."
-              action="See club"
             />
             <ScrollView
               horizontal
@@ -994,12 +1316,26 @@ function HomeScreen({
             </ScrollView>
           </>
         )}
+        {coachingNotes?.[0] && (
+          <>
+            <SectionHeader
+              action={
+                coachingNotes.length > 1
+                  ? `${coachingNotes.length} notes`
+                  : undefined
+              }
+              eyebrow="COACHING"
+              title="Carry the session forward."
+            />
+            <CoachingNoteCard note={coachingNotes[0]} />
+          </>
+        )}
         {homeCoaches.length > 0 && (
           <>
             <SectionHeader
+              action={`${homeCoaches.length} coaches`}
               eyebrow="YOUR COACHES"
               title="Train with people you know."
-              action={`${homeCoaches.length} coaches`}
             />
             <ScrollView
               horizontal
@@ -1019,96 +1355,11 @@ function HomeScreen({
             </ScrollView>
           </>
         )}
-        <View style={styles.heroGrid}>
-          <View style={styles.ratingCard}>
-            <View style={styles.cardTitleRow}>
-              <View>
-                <Text style={styles.eyebrow}>YOUR LEVEL</Text>
-                <Text style={styles.cardTitle}>Built by every rally.</Text>
-              </View>
-              <Pill tone="positive">{player.rating.confidence}</Pill>
-            </View>
-            <RatingOrbit />
-            <View style={styles.ratingStats}>
-              <View>
-                <Text style={styles.statValue}>
-                  {player.rating.percentile
-                    ? `${player.rating.percentile}%`
-                    : "—"}
-                </Text>
-                <Text style={styles.statLabel}>Percentile</Text>
-              </View>
-              <View>
-                <Text style={styles.statValue}>{player.homeMarket || "—"}</Text>
-                <Text style={styles.statLabel}>Home market</Text>
-              </View>
-              <View>
-                <Text style={styles.statValue}>{matches.length}</Text>
-                <Text style={styles.statLabel}>Matches</Text>
-              </View>
-            </View>
-          </View>
-          <View style={styles.nextCard}>
-            <View style={styles.cardTitleRow}>
-              <Text style={styles.eyebrow}>NEXT UP</Text>
-              <Pill>Confirmed</Pill>
-            </View>
-            <Text style={styles.nextDate}>
-              {nextBooking
-                ? new Date(nextBooking.startsAt)
-                    .toLocaleDateString("en-US", { weekday: "short" })
-                    .toUpperCase()
-                : "OPEN"}
-            </Text>
-            <Text style={styles.nextDay}>
-              {nextBooking ? new Date(nextBooking.startsAt).getDate() : "—"}
-            </Text>
-            <Text style={styles.nextTitle}>
-              {nextBooking?.title ?? "Nothing booked yet"}
-            </Text>
-            <Text style={styles.nextMeta}>
-              {nextBooking
-                ? `${new Date(nextBooking.startsAt).toLocaleTimeString(
-                    "en-US",
-                    {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    },
-                  )} · ${nextBooking.venueName}`
-                : "Discover a session built for your level"}
-            </Text>
-            <View style={styles.avatarStack}>
-              {people.slice(0, 4).map((person) => (
-                <View style={styles.miniAvatar} key={person.id}>
-                  <Text style={styles.miniAvatarText}>{person.initials}</Text>
-                </View>
-              ))}
-            </View>
-            <Pressable style={styles.cardLink}>
-              <Text style={styles.cardLinkText}>Open game thread →</Text>
-            </Pressable>
-            {nextBooking &&
-              !["pickup", "court-rental"].includes(nextBooking.kind) && (
-                <SessionArrivalCard booking={nextBooking} client={client} />
-              )}
-          </View>
-        </View>
-        <View style={styles.metricStrip}>
-          {metrics.map((metric) => (
-            <View key={metric.label}>
-              <Text style={styles.metricNumber}>{metric.value}</Text>
-              <Text style={styles.metricLabel}>{metric.label}</Text>
-            </View>
-          ))}
-        </View>
         <SectionHeader
-          eyebrow={
-            homeOrganization
-              ? "EXPLORE BEYOND YOUR CLUB"
-              : "MADE FOR YOUR LEVEL"
-          }
-          title={homeOrganization ? "Travel. Try something new." : "Play next."}
           action="See all"
+          eyebrow={homeOrganization ? "EXPLORE NEARBY" : "MADE FOR YOUR LEVEL"}
+          onAction={() => onAction("join-event")}
+          title={homeOrganization ? "More ways to play." : "Play next."}
         />
         <ScrollView
           horizontal
@@ -1127,49 +1378,58 @@ function HomeScreen({
               />
             ))}
         </ScrollView>
-        <SectionHeader
-          eyebrow="RECENT FORM"
-          title="Every result tells a story."
-          action="Matches"
-        />
-        <View style={styles.listCard}>
-          {matches.slice(0, 2).map((match) => (
-            <View style={styles.matchRow} key={match.id}>
-              <View
-                style={[
-                  styles.resultBadge,
-                  {
-                    backgroundColor:
-                      match.winner === "A" ? colors.aqua : colors.danger,
-                  },
-                ]}
-              >
-                <Text style={styles.resultText}>
-                  {match.winner === "A" ? "W" : "L"}
-                </Text>
-              </View>
-              <View style={styles.flex}>
-                <Text style={styles.rowTitle}>
-                  {match.teamA[0]?.displayName.split(" ")[0]} /{" "}
-                  {match.teamA[1]?.displayName.split(" ")[0]}
-                </Text>
-                <Text style={styles.rowMeta}>
-                  vs {match.teamB[0]?.displayName.split(" ")[0]} /{" "}
-                  {match.teamB[1]?.displayName.split(" ")[0]} ·{" "}
-                  {match.venueName}
-                </Text>
-              </View>
-              <View style={styles.matchScore}>
-                <Text style={styles.rowTitle}>
-                  {match.score.map((set) => `${set[0]}–${set[1]}`).join("  ")}
-                </Text>
-                <Text style={[styles.rowMeta, { color: colors.positive }]}>
-                  +{match.ratingDelta?.toFixed(2)}
-                </Text>
-              </View>
+        {matches.length > 0 && (
+          <>
+            <SectionHeader
+              action="Matches"
+              eyebrow="RECENT FORM"
+              title="Every result tells a story."
+            />
+            <View style={styles.listCard}>
+              {matches.slice(0, 2).map((match) => (
+                <View style={styles.matchRow} key={match.id}>
+                  <View
+                    style={[
+                      styles.resultBadge,
+                      {
+                        backgroundColor:
+                          match.winner === "A" ? colors.aqua : colors.danger,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.resultText}>
+                      {match.winner === "A" ? "W" : "L"}
+                    </Text>
+                  </View>
+                  <View style={styles.flex}>
+                    <Text style={styles.rowTitle}>
+                      {match.teamA[0]?.displayName.split(" ")[0]} /{" "}
+                      {match.teamA[1]?.displayName.split(" ")[0]}
+                    </Text>
+                    <Text style={styles.rowMeta}>
+                      vs {match.teamB[0]?.displayName.split(" ")[0]} /{" "}
+                      {match.teamB[1]?.displayName.split(" ")[0]} ·{" "}
+                      {match.venueName}
+                    </Text>
+                  </View>
+                  <View style={styles.matchScore}>
+                    <Text style={styles.rowTitle}>
+                      {match.score
+                        .map((set) => `${set[0]}–${set[1]}`)
+                        .join("  ")}
+                    </Text>
+                    {typeof match.ratingDelta === "number" && (
+                      <Text style={[styles.rowMeta, styles.positiveText]}>
+                        {match.ratingDelta >= 0 ? "+" : ""}
+                        {match.ratingDelta.toFixed(2)}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
+          </>
+        )}
         {(insight || !dashboard) && (
           <View style={styles.aiInsight}>
             <View style={styles.aiIcon}>
@@ -4738,8 +4998,13 @@ function FollowPlayerCard({ player }: { readonly player: PersonSummary }) {
 }
 
 function DiscoverScreen({
+  intent,
   onBook,
 }: {
+  readonly intent?: {
+    readonly key: number;
+    readonly kind: Exclude<HomeQuickAction, "record-video">;
+  };
   readonly onBook: (eventIndex: number) => void;
 }) {
   const [filter, setFilter] = useState("For you");
@@ -4767,6 +5032,26 @@ function DiscoverScreen({
     3,
   );
   const query = search.trim().toLowerCase();
+  useEffect(() => {
+    if (!intent) return;
+    setSearch("");
+    setShowDiscoverySearch(false);
+    if (intent.kind === "find-match") {
+      setFilter("Open play");
+      return;
+    }
+    if (intent.kind === "join-event") {
+      setFilter("Events");
+      return;
+    }
+    const firstVenue = venues?.[0];
+    if (firstVenue) {
+      setBookingVenueId(firstVenue.id);
+    } else {
+      setFilter("For you");
+      setShowDiscoveryMap(true);
+    }
+  }, [intent, venues]);
   useEffect(() => {
     let mounted = true;
     const loadLocation = async () => {
@@ -4848,6 +5133,7 @@ function DiscoverScreen({
           new Date(event.startsAt).toDateString() === new Date().toDateString()
         );
       }
+      if (filter === "Events") return true;
       if (filter === "Tournaments") return event.kind === "tournament";
       if (filter === "Training") {
         return ["clinic", "private-lesson"].includes(event.kind);
@@ -5011,6 +5297,7 @@ function DiscoverScreen({
         new Date(item.startsAt).toDateString() === new Date().toDateString(),
       );
     }
+    if (filter === "Events") return item.entityType === "event";
     if (filter === "Tournaments") {
       return item.kind === "tournament" || item.entityType === "pro-tour";
     }
@@ -5210,6 +5497,7 @@ function DiscoverScreen({
           <View style={styles.filterRow}>
             {[
               "For you",
+              "Events",
               "Today",
               "Tournaments",
               "Training",
@@ -5963,7 +6251,13 @@ function MobileResultCard({
   );
 }
 
-function ProfileScreen({ onHealth }: { readonly onHealth: () => void }) {
+function ProfileScreen({
+  onHealth,
+  onWallet,
+}: {
+  readonly onHealth: () => void;
+  readonly onWallet: () => void;
+}) {
   const { client, dashboard, mode, settings, signOut } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
   const fallbackMatches = dashboard?.recentMatches ?? demoMatches;
@@ -6055,7 +6349,8 @@ function ProfileScreen({ onHealth }: { readonly onHealth: () => void }) {
   ];
   const heroSource = profile?.heroImageUrl
     ? { uri: profile.heroImageUrl }
-    : dunaCampaignRally;
+    : undefined;
+  const hasPersonalHero = Boolean(heroSource || profile?.cutoutImageUrl);
 
   return (
     <ScrollView
@@ -6066,11 +6361,24 @@ function ProfileScreen({ onHealth }: { readonly onHealth: () => void }) {
       <ImageBackground
         imageStyle={styles.athleteHeroImage}
         source={heroSource}
-        style={styles.athleteHero}
+        style={[
+          styles.athleteHero,
+          !hasPersonalHero && styles.athleteHeroCompact,
+        ]}
       >
-        <View style={styles.athleteHeroWash} />
+        <View
+          style={[
+            styles.athleteHeroWash,
+            !hasPersonalHero && styles.athleteHeroWashCompact,
+          ]}
+        />
         <View style={styles.athleteHeroGeometry} />
-        <View style={styles.athleteHeroContent}>
+        <View
+          style={[
+            styles.athleteHeroContent,
+            !hasPersonalHero && styles.athleteHeroContentCompact,
+          ]}
+        >
           <View style={styles.athleteHeroPills}>
             <Pill
               tone={player.roles.includes("player") ? "positive" : "neutral"}
@@ -6512,6 +6820,10 @@ function ProfileScreen({ onHealth }: { readonly onHealth: () => void }) {
       </Pressable>
 
       <View style={styles.profileMenu}>
+        <Pressable onPress={onWallet} style={styles.profileMenuRow}>
+          <Text style={styles.rowTitle}>Wallet + payments</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
         {[
           ["Player details + identity", "#playing-profile"],
           ["Player artwork", "#player-artwork"],
@@ -6755,11 +7067,45 @@ function BookingModal({
         acceptedPolicyIds: [...acceptedPolicyIds],
         readPolicyIds: [...acceptedPolicyIds],
         isDunaPlus: Boolean(settings?.membership),
+        paymentSurface: Platform.OS === "web" ? "hosted" : "native",
         successUrl: `${dunaWebUrl}/app/checkout/${selectedEvent.slug}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${dunaWebUrl}/events/${selectedEvent.slug}?checkout=cancelled`,
         idempotencyKey: Crypto.randomUUID(),
       });
-      if (result.checkoutUrl) {
+      if (result.paymentSheet) {
+        const paymentIntentId = result.paymentSheet.paymentIntentId;
+        let status = await client.player.checkoutStatus.query({
+          paymentIntentId,
+        });
+        if (!status.complete) {
+          const paymentResult = await presentNativeEventPayment({
+            paymentSheet: result.paymentSheet,
+            customerName: player.displayName,
+          });
+          if (paymentResult === "cancelled") return;
+          for (let attempt = 0; attempt < 5 && !status.complete; attempt += 1) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, 450 + attempt * 250),
+            );
+            status = await client.player.checkoutStatus.query({
+              paymentIntentId,
+            });
+          }
+        }
+        setComplete(
+          status.complete
+            ? {
+                label: "Confirmed",
+                title: "You’re in.",
+                body: `${selectedEvent.title} is confirmed and now appears with your bookings.`,
+              }
+            : {
+                label: "Pending",
+                title: "Payment received.",
+                body: "Duna is finishing the registration and will add it to your bookings shortly.",
+              },
+        );
+      } else if (result.checkoutUrl) {
         await WebBrowser.openBrowserAsync(result.checkoutUrl);
         const status = result.checkoutSessionId
           ? await client.player.checkoutStatus.query({
@@ -7508,12 +7854,12 @@ function BookingModal({
                 <View style={styles.flex}>
                   <Text style={styles.rowTitle}>
                     {listedPrice.amountMinor
-                      ? "Secure checkout"
+                      ? "Pay securely in Duna"
                       : "Free registration"}
                   </Text>
                   <Text style={styles.rowMeta}>
                     {listedPrice.amountMinor
-                      ? "Card details go directly to the payment processor. Duna never stores them."
+                      ? "Use a saved card, Link, or add a card without leaving the app. Payment details go directly to Stripe."
                       : "No payment method is required."}
                   </Text>
                 </View>
@@ -7574,13 +7920,13 @@ function BookingModal({
                 {mode === "preview"
                   ? "Preview only · checkout disabled"
                   : busy
-                    ? "Opening secure checkout…"
+                    ? "Preparing in-app payment…"
                     : !rosterComplete
                       ? "Complete your team"
                       : !policiesComplete
                         ? "Accept required agreements"
                         : listedSubtotalMinor
-                          ? "Continue to secure payment"
+                          ? "Choose payment method"
                           : purchaseKind === "ticket"
                             ? "Confirm free tickets"
                             : "Confirm free registration"}
@@ -8052,9 +8398,11 @@ function TabBar({
   readonly active: Tab;
   readonly onChange: (tab: Tab) => void;
 }) {
-  const selectedTab = active === "health" ? "you" : active;
+  const insets = useSafeAreaInsets();
+  const selectedTab =
+    active === "health" || active === "wallet" ? "you" : active;
   return (
-    <View style={styles.tabBar}>
+    <View style={[styles.tabBar, { bottom: Math.max(12, insets.bottom) }]}>
       {tabs.map((tab) => (
         <Pressable
           accessibilityRole="tab"
@@ -8064,7 +8412,10 @@ function TabBar({
             selectionHaptic();
             onChange(tab.key);
           }}
-          style={styles.tabItem}
+          style={[
+            styles.tabItem,
+            selectedTab === tab.key && styles.tabItemActive,
+          ]}
         >
           <Text
             style={[
@@ -8082,7 +8433,6 @@ function TabBar({
           >
             {tab.label}
           </Text>
-          {selectedTab === tab.key && <View style={styles.tabIndicator} />}
         </Pressable>
       ))}
     </View>
@@ -8180,14 +8530,24 @@ function WatchScoreInbox() {
 
 function DunaApp() {
   const runtime = usePlayerRuntime();
+  const deviceTheme: ThemeName = useColorScheme() === "dark" ? "dark" : "light";
+  const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("home");
   const [eventIndex, setEventIndex] = useState<number | null>(null);
-  const [theme, setTheme] = useState<ThemeName>("light");
+  const [discoverIntent, setDiscoverIntent] = useState<{
+    readonly key: number;
+    readonly kind: Exclude<HomeQuickAction, "record-video">;
+  }>();
+  const [themePreference, setThemePreference] =
+    useState<ThemePreference>("system");
+  const theme = themePreference === "system" ? deviceTheme : themePreference;
   const screenTransition = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     void AsyncStorage.getItem("duna-theme").then((stored) => {
-      if (stored === "dark") setTheme("dark");
+      if (stored === "dark" || stored === "light" || stored === "system") {
+        setThemePreference(stored);
+      }
     });
   }, []);
 
@@ -8206,6 +8566,10 @@ function DunaApp() {
   }, []);
 
   useEffect(() => {
+    if (reduceMotion) {
+      screenTransition.setValue(1);
+      return;
+    }
     screenTransition.setValue(0);
     Animated.timing(screenTransition, {
       toValue: 1,
@@ -8213,18 +8577,33 @@ function DunaApp() {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [screenTransition, tab]);
+  }, [reduceMotion, screenTransition, tab]);
 
   activePalette = theme === "dark" ? darkColors : lightColors;
   activeStyles = theme === "dark" ? darkStyles : lightStyles;
+
+  const openHomeAction = (action: HomeQuickAction) => {
+    if (action === "record-video") {
+      setTab("video");
+      return;
+    }
+    setDiscoverIntent({ key: Date.now(), kind: action });
+    setTab("discover");
+  };
 
   return (
     <ThemeContext.Provider
       value={{
         theme,
+        preference: themePreference,
         toggle: () => {
-          const next = theme === "light" ? "dark" : "light";
-          setTheme(next);
+          const next: ThemePreference =
+            themePreference === "system"
+              ? "light"
+              : themePreference === "light"
+                ? "dark"
+                : "system";
+          setThemePreference(next);
           void AsyncStorage.setItem("duna-theme", next);
         },
       }}
@@ -8250,13 +8629,20 @@ function DunaApp() {
               },
             ]}
           >
-            {tab === "home" && <HomeScreen onBook={setEventIndex} />}
-            {tab === "discover" && <DiscoverScreen onBook={setEventIndex} />}
+            {tab === "home" && (
+              <HomeScreen onAction={openHomeAction} onBook={setEventIndex} />
+            )}
+            {tab === "discover" && (
+              <DiscoverScreen intent={discoverIntent} onBook={setEventIndex} />
+            )}
             {tab === "play" && <PlayScreen />}
             {tab === "video" && <VideoStudioScreen runtime={runtime} />}
             {tab === "wallet" && <WalletScreen />}
             {tab === "you" && (
-              <ProfileScreen onHealth={() => setTab("health")} />
+              <ProfileScreen
+                onHealth={() => setTab("health")}
+                onWallet={() => setTab("wallet")}
+              />
             )}
             {tab === "health" && (
               <HealthScreen onBack={() => setTab("you")} theme={theme} />
@@ -8934,34 +9320,13 @@ function createStyles(palette: Palette) {
     wordmark: { alignItems: "center", flexDirection: "row", gap: 8 },
     mark: {
       alignItems: "center",
-      borderColor: colors.aqua,
-      borderRadius: 15,
-      borderWidth: 2,
       height: 30,
       justifyContent: "center",
-      position: "relative",
-      width: 30,
-    },
-    markArc: {
-      borderColor: colors.bone,
-      borderRadius: 15,
-      borderTopWidth: 2,
-      height: 13,
-      position: "absolute",
-      top: 8,
-      transform: [{ rotate: "180deg" }],
-      width: 18,
-    },
-    markDot: {
-      backgroundColor: colors.flare,
-      borderRadius: 2,
-      bottom: 5,
-      height: 4,
-      position: "absolute",
-      width: 4,
+      width: 40,
     },
     wordmarkText: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 17,
       fontWeight: "900",
       letterSpacing: 3,
@@ -9015,73 +9380,247 @@ function createStyles(palette: Palette) {
       top: 0,
       width: 9,
     },
-    homeCampaign: {
-      backgroundColor: colors.aquaDeep,
-      borderRadius: 24,
-      justifyContent: "flex-end",
-      marginBottom: 14,
-      minHeight: 340,
-      overflow: "hidden",
-      position: "relative",
+    homeWelcome: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 14,
+      marginBottom: 18,
     },
-    homeCampaignCompact: {
-      minHeight: 390,
-    },
-    homeCampaignImage: {
-      borderRadius: 24,
-      resizeMode: "cover",
-    },
-    homeCampaignWash: {
-      backgroundColor: "rgba(4,20,38,0.52)",
-      bottom: 0,
-      left: 0,
-      position: "absolute",
-      right: 0,
-      top: 0,
-    },
-    homeCampaignContent: {
-      backgroundColor: "rgba(4,20,38,0.22)",
-      gap: 10,
-      padding: 20,
-    },
-    homeCampaignEyebrow: {
-      color: "#e7c68f",
+    homeWelcomeDate: {
+      color: colors.aqua,
       fontSize: 10,
       fontWeight: "800",
-      letterSpacing: 1.2,
+      letterSpacing: 1.1,
     },
-    homeCampaignTitle: {
-      color: "#ffffff",
-      fontSize: 42,
+    homeWelcomeTitle: {
+      color: colors.bone,
+      fontSize: 32,
       fontWeight: "900",
-      letterSpacing: -2.2,
-      lineHeight: 42,
+      letterSpacing: -1.5,
+      lineHeight: 35,
+      marginTop: 5,
     },
-    homeCampaignTitleCompact: {
-      fontSize: 39,
-      letterSpacing: -2,
-      lineHeight: 40,
-    },
-    homeCampaignSubtitle: {
-      color: "rgba(255,255,255,0.72)",
+    homeWelcomeBody: {
+      color: colors.muted,
       fontSize: 12,
       lineHeight: 18,
-      maxWidth: 310,
+      marginTop: 7,
+      maxWidth: 300,
     },
-    homeCampaignAction: {
+    homeRatingBadge: {
       alignItems: "center",
-      alignSelf: "flex-start",
-      backgroundColor: "#ffffff",
-      borderRadius: 999,
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.accentRgb, 0.18),
+      borderRadius: 22,
+      borderWidth: 1,
+      height: 64,
       justifyContent: "center",
-      marginTop: 4,
-      minHeight: 44,
-      paddingHorizontal: 16,
+      width: 64,
     },
-    homeCampaignActionText: {
-      color: "#0e1828",
-      fontSize: 11,
+    homeRatingBadgeValue: {
+      color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 17,
       fontWeight: "900",
+      letterSpacing: -0.7,
+    },
+    homeRatingBadgeLabel: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 1,
+      marginTop: 2,
+    },
+    homeQuickGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+      marginBottom: 14,
+    },
+    homeQuickAction: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 22,
+      borderWidth: 1,
+      minHeight: 132,
+      padding: 14,
+      width: "48%",
+    },
+    homeQuickActionPrimary: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.aqua,
+    },
+    homeQuickActionWarm: {
+      backgroundColor: rgba(colors.flareRgb, 0.08),
+      borderColor: rgba(colors.flareRgb, 0.16),
+    },
+    homeQuickActionPressed: { opacity: 0.82, transform: [{ scale: 0.985 }] },
+    homeQuickIcon: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderRadius: 14,
+      height: 38,
+      justifyContent: "center",
+      marginBottom: 13,
+      width: 38,
+    },
+    homeQuickIconPrimary: { backgroundColor: rgba(colors.whiteRgb, 0.18) },
+    homeQuickIconText: {
+      color: colors.aqua,
+      fontSize: 20,
+      fontWeight: "800",
+      lineHeight: 23,
+    },
+    homeQuickIconTextPrimary: { color: colors.onAccent },
+    homeQuickLabel: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+      letterSpacing: -0.4,
+    },
+    homeQuickLabelPrimary: { color: colors.onAccent },
+    homeQuickMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
+    homeQuickMetaPrimary: { color: rgba(colors.whiteRgb, 0.74) },
+    homeNextSession: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 20,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 13,
+      marginBottom: 14,
+      padding: 14,
+    },
+    homeNextDate: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderRadius: 15,
+      height: 58,
+      justifyContent: "center",
+      width: 54,
+    },
+    homeNextDateMonth: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.9,
+    },
+    homeNextDateDay: {
+      color: colors.bone,
+      fontSize: 22,
+      fontWeight: "900",
+      lineHeight: 24,
+    },
+    homeNextOpenMark: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderRadius: 18,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    homeNextOpenMarkText: { color: colors.aqua, fontSize: 22 },
+    homeNextEyebrow: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.9,
+    },
+    homeNextTitle: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "800",
+      marginTop: 3,
+    },
+    homeNextMeta: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    homePerformanceCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 24,
+      borderWidth: 1,
+      marginBottom: 14,
+      overflow: "hidden",
+      padding: 16,
+    },
+    homePerformanceTitle: {
+      color: colors.bone,
+      fontSize: 25,
+      fontWeight: "900",
+      letterSpacing: -1.1,
+      marginTop: 4,
+    },
+    homePerformanceSummary: {
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 18,
+      paddingBottom: 14,
+    },
+    homePerformanceValue: {
+      color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 18,
+      fontWeight: "900",
+      letterSpacing: -0.5,
+    },
+    homePerformanceLabel: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    homePerformanceChart: {
+      backgroundColor: rgba(colors.overlayRgb, 0.025),
+      borderRadius: 18,
+      marginTop: 14,
+      overflow: "hidden",
+      paddingHorizontal: 4,
+      paddingTop: 4,
+    },
+    homePerformanceEmpty: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.025),
+      borderRadius: 18,
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 14,
+      minHeight: 118,
+      padding: 16,
+    },
+    homePerformanceEmptyMark: {
+      color: colors.aqua,
+      fontSize: 29,
+      fontWeight: "800",
+    },
+    homePerformanceEmptyTitle: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "800",
+    },
+    homePerformanceEmptyBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 4,
+    },
+    homePerformanceLegend: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 10,
+    },
+    homePerformanceLegendWin: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    homePerformanceLegendLoss: {
+      color: colors.danger,
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    homePerformanceLegendMeta: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 10,
+      textAlign: "right",
     },
     memberOrganizationCard: {
       alignItems: "center",
@@ -9600,6 +10139,7 @@ function createStyles(palette: Palette) {
     },
     ratingValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 45,
       fontWeight: "900",
       letterSpacing: -3,
@@ -9634,7 +10174,12 @@ function createStyles(palette: Palette) {
       justifyContent: "space-between",
       paddingTop: 14,
     },
-    statValue: { color: colors.bone, fontSize: 15, fontWeight: "800" },
+    statValue: {
+      color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 15,
+      fontWeight: "800",
+    },
     statLabel: { color: colors.muted, fontSize: 10, marginTop: 3 },
     nextDate: {
       color: colors.aqua,
@@ -9708,6 +10253,7 @@ function createStyles(palette: Palette) {
     },
     metricNumber: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 14,
       fontWeight: "800",
       textAlign: "center",
@@ -9977,6 +10523,7 @@ function createStyles(palette: Palette) {
     proBracketWinner: { color: colors.bone, fontWeight: "900" },
     proBracketScore: {
       color: colors.aqua,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 10,
       fontWeight: "900",
     },
@@ -10527,6 +11074,7 @@ function createStyles(palette: Palette) {
     },
     proMobileStatValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 20,
       fontWeight: "900",
       letterSpacing: -0.7,
@@ -10748,6 +11296,7 @@ function createStyles(palette: Palette) {
     },
     mobilePredictionChartLegendValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 18,
       fontWeight: "900",
     },
@@ -11095,6 +11644,7 @@ function createStyles(palette: Palette) {
     proMobileMatchWinner: { color: colors.bone, fontWeight: "900" },
     proMobileMatchScore: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 13,
       fontWeight: "900",
       letterSpacing: 1.1,
@@ -11117,6 +11667,7 @@ function createStyles(palette: Palette) {
     },
     proMobileMatchPredictionValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 10,
       fontWeight: "900",
     },
@@ -11593,6 +12144,7 @@ function createStyles(palette: Palette) {
     weekDayLabel: { color: colors.muted, fontSize: 10 },
     weekDayNumber: {
       color: colors.bone,
+      fontFamily: "Archivo-Bold",
       fontSize: 11,
       fontWeight: "700",
       marginTop: 4,
@@ -11636,7 +12188,12 @@ function createStyles(palette: Palette) {
       width: 38,
     },
     pickupDay: { color: colors.aqua, fontSize: 10, fontWeight: "800" },
-    pickupNumber: { color: colors.bone, fontSize: 15, fontWeight: "900" },
+    pickupNumber: {
+      color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 15,
+      fontWeight: "900",
+    },
     pickupSpots: {
       color: colors.aqua,
       fontSize: 13,
@@ -11785,6 +12342,7 @@ function createStyles(palette: Palette) {
     },
     predictionWalletFactValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 16,
       fontWeight: "900",
     },
@@ -11838,7 +12396,12 @@ function createStyles(palette: Palette) {
       justifyContent: "center",
       width: 34,
     },
-    moneyAmount: { color: colors.bone, fontSize: 10, fontWeight: "800" },
+    moneyAmount: {
+      color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 10,
+      fontWeight: "800",
+    },
     trustNote: {
       alignItems: "flex-start",
       backgroundColor: rgba(colors.accentRgb, 0.05),
@@ -11861,6 +12424,7 @@ function createStyles(palette: Palette) {
       overflow: "hidden",
       position: "relative",
     },
+    athleteHeroCompact: { backgroundColor: colors.aquaDeep, minHeight: 330 },
     athleteHeroImage: { opacity: 0.74 },
     athleteHeroWash: {
       backgroundColor: rgba(colors.navyRgb, 0.48),
@@ -11869,6 +12433,9 @@ function createStyles(palette: Palette) {
       position: "absolute",
       right: 0,
       top: 0,
+    },
+    athleteHeroWashCompact: {
+      backgroundColor: rgba(colors.inkRgb, 0.18),
     },
     athleteHeroGeometry: {
       borderColor: rgba(colors.accentRgb, 0.24),
@@ -11887,6 +12454,7 @@ function createStyles(palette: Palette) {
       position: "absolute",
       zIndex: 4,
     },
+    athleteHeroContentCompact: { maxWidth: "86%" },
     athleteHeroPills: {
       alignItems: "center",
       flexDirection: "row",
@@ -11972,6 +12540,7 @@ function createStyles(palette: Palette) {
     },
     athleteHeroRatingValue: {
       color: colors.white,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 27,
       fontWeight: "900",
       letterSpacing: -1.4,
@@ -12007,6 +12576,7 @@ function createStyles(palette: Palette) {
     },
     athleteMetricValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 31,
       fontWeight: "900",
       letterSpacing: -1.4,
@@ -12089,6 +12659,7 @@ function createStyles(palette: Palette) {
     },
     athleteChartSummaryValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 20,
       fontWeight: "900",
       letterSpacing: -0.7,
@@ -12176,6 +12747,7 @@ function createStyles(palette: Palette) {
     },
     athleteMomentValue: {
       color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
       fontSize: 34,
       fontWeight: "900",
       letterSpacing: -1.4,
@@ -12273,7 +12845,11 @@ function createStyles(palette: Palette) {
     },
     athleteResultMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
     athleteResultDelta: { alignItems: "flex-end" },
-    athleteResultDeltaValue: { fontSize: 13, fontWeight: "900" },
+    athleteResultDeltaValue: {
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 13,
+      fontWeight: "900",
+    },
     athleteResultExpected: { color: colors.muted, fontSize: 10, marginTop: 3 },
     athleteFullHistoryButton: {
       alignItems: "center",
@@ -12327,6 +12903,7 @@ function createStyles(palette: Palette) {
     },
     athleteBioFactValue: {
       color: colors.bone,
+      fontFamily: "Archivo-Bold",
       fontSize: 12,
       fontWeight: "800",
       marginTop: 4,
@@ -12536,36 +13113,37 @@ function createStyles(palette: Palette) {
       padding: 14,
     },
     tabBar: {
-      backgroundColor: rgba(colors.depthRgb, 0.98),
-      borderTopColor: rgba(colors.overlayRgb, 0.08),
-      borderTopWidth: 1,
-      bottom: 0,
+      backgroundColor: rgba(colors.depthRgb, 0.96),
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 28,
+      borderWidth: 1,
       flexDirection: "row",
-      left: 0,
-      paddingBottom: Platform.OS === "ios" ? 22 : 9,
-      paddingHorizontal: 8,
-      paddingTop: 8,
+      left: 18,
+      paddingBottom: 7,
+      paddingHorizontal: 6,
+      paddingTop: 7,
       position: "absolute",
-      right: 0,
+      right: 18,
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.14,
+      shadowRadius: 18,
+      elevation: 12,
     },
     tabItem: {
       alignItems: "center",
+      borderRadius: 18,
       flex: 1,
       gap: 3,
-      paddingVertical: 4,
+      minHeight: 47,
+      justifyContent: "center",
+      paddingVertical: 5,
       position: "relative",
     },
-    tabIcon: { color: colors.muted, fontSize: 19 },
-    tabLabel: { color: colors.muted, fontSize: 10, fontWeight: "600" },
+    tabItemActive: { backgroundColor: rgba(colors.accentRgb, 0.1) },
+    tabIcon: { color: colors.muted, fontSize: 18 },
+    tabLabel: { color: colors.muted, fontSize: 10, fontWeight: "700" },
     tabActive: { color: colors.aqua },
-    tabIndicator: {
-      backgroundColor: colors.aqua,
-      borderRadius: 2,
-      height: 2,
-      position: "absolute",
-      top: -9,
-      width: 20,
-    },
     modalSafe: { backgroundColor: colors.canvas, flex: 1 },
     modalContent: { padding: 18, paddingBottom: 45 },
     watchDraftContent: {
@@ -12811,7 +13389,12 @@ function createStyles(palette: Palette) {
       width: 36,
     },
     mobileQuantityButtonText: { color: "#ffffff", fontSize: 19 },
-    mobileQuantityValue: { color: "#ffffff", fontSize: 15, fontWeight: "900" },
+    mobileQuantityValue: {
+      color: "#ffffff",
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 15,
+      fontWeight: "900",
+    },
     mobileParticipantRail: { marginHorizontal: -13, marginTop: 10 },
     mobileParticipantCard: {
       alignItems: "center",
@@ -13147,7 +13730,12 @@ function createStyles(palette: Palette) {
       marginTop: 8,
       paddingTop: 10,
     },
-    totalAmount: { color: colors.bone, fontSize: 15, fontWeight: "900" },
+    totalAmount: {
+      color: colors.bone,
+      fontFamily: "Archivo-ExtraBold",
+      fontSize: 15,
+      fontWeight: "900",
+    },
     payButton: {
       alignItems: "center",
       backgroundColor: colors.aqua,
