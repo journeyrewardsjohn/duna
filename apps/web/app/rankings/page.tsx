@@ -19,7 +19,7 @@ import { CountryCode } from "@/components/country-code";
 import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
 
 export const metadata: Metadata = {
-  title: "Beach volleyball world and Sand Rating rankings · Duna",
+  title: "Beach volleyball world and Sand Rating rankings",
   description:
     "Explore the top 200 men's and women's beach volleyball players by official world ranking and Duna Sand Rating, with verified player profiles and match evidence.",
   alternates: { canonical: "/rankings" },
@@ -245,7 +245,7 @@ export default async function RankingsPage({
               const card = (
                 <>
                   <div className="ranking-podium__art">
-                    <span>#{row.rank}</span>
+                    <Numeric tier="monument">#{row.rank}</Numeric>
                     {image ? (
                       <span
                         className="ranking-podium__image"
@@ -267,21 +267,21 @@ export default async function RankingsPage({
                         <small>
                           {view === "world" ? "Tour points" : "Sand Rating"}
                         </small>
-                        <strong>
+                        <Numeric tier="block">
                           {view === "world"
                             ? worldRow!.points.toFixed(0)
                             : dunaRow!.sandRating.toFixed(2)}
-                        </strong>
+                        </Numeric>
                       </span>
                       <span>
                         <small>
                           {view === "world" ? "Sand Rating" : "Rated matches"}
                         </small>
-                        <strong>
+                        <Numeric tier="block">
                           {view === "world"
                             ? (worldRow!.sandRating?.toFixed(2) ?? "—")
                             : dunaRow!.ratedMatches}
-                        </strong>
+                        </Numeric>
                       </span>
                     </div>
                     {row.publicPath && (
@@ -319,13 +319,20 @@ export default async function RankingsPage({
                 ? "Official tour points"
                 : "Match-based playing strength"}
             </span>
-            <h2>{gender === "men" ? "Men’s" : "Women’s"} top 200</h2>
+            <h2>
+              {gender === "men" ? "Men’s" : "Women’s"} top{" "}
+              <Numeric tier="block">200</Numeric>
+            </h2>
           </div>
-          <span>
-            {view === "world"
-              ? (rankings?.latestDates[gender] ?? "Snapshot pending")
-              : "Updated with approved matches"}
-          </span>
+          {view === "world" && rankings?.latestDates[gender] ? (
+            <Numeric tier="table">{rankings.latestDates[gender]}</Numeric>
+          ) : (
+            <span>
+              {view === "world"
+                ? "Snapshot pending"
+                : "Updated with approved matches"}
+            </span>
+          )}
         </header>
 
         <div className="rankings-list rankings-v2__list">
@@ -338,12 +345,17 @@ export default async function RankingsPage({
                         <strong>{row.displayName}</strong>
                         <small>
                           <CountryCode code={row.countryCode} /> ·{" "}
-                          {row.points.toFixed(0)} points
+                          <Numeric tier="table">
+                            {row.points.toFixed(0)}
+                          </Numeric>{" "}
+                          points
                         </small>
                       </span>
                       <span className="rankings-list__rating">
                         <small>Sand Rating</small>
-                        <strong>{row.sandRating?.toFixed(2) ?? "—"}</strong>
+                        <Numeric tier="table">
+                          {row.sandRating?.toFixed(2) ?? "—"}
+                        </Numeric>
                       </span>
                       <Movement value={movement(row)} />
                     </>
@@ -360,17 +372,27 @@ export default async function RankingsPage({
                         <strong>{row.displayName}</strong>
                         <small>
                           <CountryCode code={row.countryCode} />{" "}
-                          {row.ratedMatches} rated matches · {row.confidence}
+                          <Numeric tier="table">{row.ratedMatches}</Numeric>{" "}
+                          rated matches · {row.confidence}
                         </small>
                       </span>
                       <span className="rankings-list__rating">
                         <small>Sand Rating</small>
-                        <strong>{row.sandRating.toFixed(2)}</strong>
+                        <Numeric tier="table">
+                          {row.sandRating.toFixed(2)}
+                        </Numeric>
                       </span>
                       <span className="rankings-list__movement">
-                        {row.worldRanking
-                          ? `World #${row.worldRanking.rank}`
-                          : "—"}
+                        {row.worldRanking ? (
+                          <>
+                            World #
+                            <Numeric tier="table">
+                              {row.worldRanking.rank}
+                            </Numeric>
+                          </>
+                        ) : (
+                          "—"
+                        )}
                       </span>
                     </>
                   }
@@ -419,7 +441,8 @@ function Movement({ value }: { readonly value?: number }) {
   if (value === 0) {
     return (
       <span className="rankings-list__movement" data-direction="flat">
-        <CircleDot aria-hidden size={14} /> 0
+        <CircleDot aria-hidden size={14} />
+        <Numeric tier="chip">0</Numeric>
       </span>
     );
   }
@@ -433,8 +456,10 @@ function Movement({ value }: { readonly value?: number }) {
       ) : (
         <MoveDownRight aria-hidden size={15} />
       )}
-      {value > 0 ? "+" : ""}
-      {value}
+      <Numeric tier="chip">
+        {value > 0 ? "+" : ""}
+        {value}
+      </Numeric>
     </span>
   );
 }

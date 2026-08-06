@@ -96,6 +96,7 @@
   --flare-fill: rgb(232 104 58 / 13%);
   --flare-border: rgb(232 104 58 / 26%);
   --signal: #c9e265;
+  --signal-text: #52630f;
   --gold: #c9a96a;
   --gain: #2f6b3a;
   --loss: #9a4a2e;
@@ -179,6 +180,7 @@
   --flare-fill: rgb(244 121 76 / 16%);
   --flare-border: rgb(244 121 76 / 34%);
   --signal: #a8c44e;
+  --signal-text: #c9e265;
   --gold: #d4b77c;
   --gain: #6bae78;
   --loss: #c4785c;

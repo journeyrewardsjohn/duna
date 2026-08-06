@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ProMatchDetail } from "@/components/pro-match-detail";
 import { getServerCaller } from "@/lib/api";
+import { findProfessionalMatchReplacement } from "@/lib/pro-match-route";
 import {
   professionalEventImages,
   professionalMatchDescription,
@@ -79,7 +80,7 @@ export default async function ProfessionalMatchPage({
     matchId: string;
   }>;
 }) {
-  const { slug, matchId } = await params;
+  const { slug, matchId, matchSlug } = await params;
   const caller = await getServerCaller();
   const [detail, videos, predictionMarket, predictionWallet] =
     await Promise.all([
@@ -92,7 +93,14 @@ export default async function ProfessionalMatchPage({
         .catch(() => undefined),
       caller.player.predictionWallet().catch(() => undefined),
     ]);
-  if (!detail) notFound();
+  if (!detail) {
+    const event = await caller.public.proEvent({ slug }).catch(() => undefined);
+    const replacement = event
+      ? findProfessionalMatchReplacement(event.matches, { matchId, matchSlug })
+      : undefined;
+    if (replacement) redirect(replacement.canonicalPath);
+    notFound();
+  }
   return (
     <ProMatchDetail
       detail={detail}

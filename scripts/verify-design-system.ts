@@ -80,6 +80,13 @@ const sharedTypographyCss = readFileSync(
   join(root, "packages/ui/src/styles.css"),
   "utf8",
 );
+for (const contract of ["--signal-text: #52630f", "--signal-text: #c9e265"]) {
+  if (!sharedTypographyCss.includes(contract)) {
+    violations.push(
+      `packages/ui/src/styles.css must preserve the accessible signal ink ${contract}`,
+    );
+  }
+}
 const numericTierContracts = [
   [".duna-numeric--score", '"wdth" 64', '"wght" 900'],
   [".duna-numeric--monument", '"wdth" 122', '"wght" 900'],
@@ -124,10 +131,16 @@ for (const tier of ["score", "monument", "hero", "block", "table", "chip"]) {
 }
 
 const webV3Css = readFileSync(join(root, "apps/web/app/design-v3.css"), "utf8");
+const webGlobalCss = readFileSync(
+  join(root, "apps/web/app/globals.css"),
+  "utf8",
+);
 const requiredContrastContracts = [
   "--campaign-hero-ink",
   ':root[data-theme="dark"] .pro-tour-hero__veil',
   ".athlete-hero-card--result .duna-badge",
+  ".athlete-stage > .athlete-stat-deck article > small",
+  ".duna-numeric:not(.match-history-card__sets)",
   ".club-marketing-secondary",
   ".event-public__booking > a:not(.secondary)",
   ".not-found-v3",
@@ -135,6 +148,42 @@ const requiredContrastContracts = [
 for (const contract of requiredContrastContracts) {
   if (!webV3Css.includes(contract)) {
     violations.push(`apps/web/app/design-v3.css must preserve ${contract}`);
+  }
+}
+if (
+  !webV3Css.includes(
+    ".athlete-hero-card--result .duna-badge {\n  color: var(--text-2);",
+  )
+) {
+  violations.push(
+    "apps/web/app/design-v3.css must preserve readable result badges in light mode",
+  );
+}
+if (
+  !webGlobalCss.includes(
+    ".pro-live-scoreboard__team--winner .pro-live-scoreboard__match-points {\n  color: var(--signal-text);",
+  )
+) {
+  violations.push(
+    "apps/web/app/globals.css must preserve accessible winner-score ink in light mode",
+  );
+}
+for (const [contract, message] of [
+  [
+    "font-size: clamp(2rem, 3vw, 2.875rem);",
+    "homepage proof numerals must remain within the Block tier",
+  ],
+  [
+    ".campaign-operator__metric--hero strong .duna-numeric {",
+    "operator hero values must preserve an explicit Archivo tier",
+  ],
+  [
+    ".rating-orbit--compact .rating-orbit__content > .duna-numeric {",
+    "compact rating orbits must preserve an explicit Block tier",
+  ],
+] as const) {
+  if (!webGlobalCss.includes(contract)) {
+    violations.push(`apps/web/app/globals.css ${message}`);
   }
 }
 
@@ -155,9 +204,19 @@ const regressionContracts = [
     message: "must preserve monumental player ranks",
   },
   {
+    file: "apps/web/app/rankings/page.tsx",
+    includes: '<Numeric tier="monument">#{row.rank}</Numeric>',
+    message: "must preserve monumental podium ranks",
+  },
+  {
     file: "apps/web/app/players/[handle]/page.tsx",
     includes: 'className="athlete-hero__rank-mark"',
     message: "must preserve the rank-led player identity",
+  },
+  {
+    file: "apps/web/components/rating-orbit.tsx",
+    includes: 'tier={compact ? "block" : "hero"}',
+    message: "must preserve Block and Hero rating numerals by orbit size",
   },
 ] as const;
 for (const contract of regressionContracts) {

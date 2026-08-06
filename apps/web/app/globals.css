@@ -6648,8 +6648,11 @@ a.professional-match-card:hover {
 
 .ranking-podium__art > span:first-child {
   color: rgb(255 255 255 / 24%);
-  font-family: var(--font-display);
-  font-size: 7rem;
+  font-family: var(--font-data);
+  font-size: clamp(7.5rem, 12vw, 12.5rem);
+  font-variation-settings:
+    "wdth" 122,
+    "wght" 900;
   left: 1rem;
   letter-spacing: -0.03em;
   line-height: 1;
@@ -19475,7 +19478,7 @@ a.play-day__booking {
 
 .pro-live-scoreboard__connection.is-websocket {
   border-color: color-mix(in srgb, var(--signal) 40%, transparent);
-  color: var(--signal);
+  color: var(--signal-text);
 }
 
 .pro-live-scoreboard__connection.is-connecting svg,
@@ -19588,7 +19591,7 @@ a.play-day__booking {
 }
 
 .pro-live-scoreboard__player:hover strong {
-  color: var(--signal);
+  color: var(--signal-text);
 }
 
 .pro-live-scoreboard__player > img,
@@ -19669,7 +19672,7 @@ a.play-day__booking {
 }
 
 .pro-live-scoreboard__team--winner .pro-live-scoreboard__match-points {
-  color: var(--signal);
+  color: var(--signal-text);
 }
 
 .pro-live-stats {
@@ -24170,10 +24173,13 @@ html {
 
 .campaign-hero__proof .duna-numeric {
   color: #fff;
-  font-family: var(--font-display);
-  font-size: clamp(1.7rem, 3vw, 2.7rem);
-  font-weight: 820;
-  letter-spacing: -0.03em;
+  font-family: var(--font-data);
+  font-size: clamp(2rem, 3vw, 2.875rem);
+  font-variation-settings:
+    "wdth" 94,
+    "wght" 800;
+  font-weight: 800;
+  letter-spacing: -0.02em;
   line-height: 1;
 }
 
@@ -24774,9 +24780,14 @@ html {
 }
 
 .campaign-operator__metric--hero strong {
-  font-family: var(--font-display);
-  font-size: clamp(2rem, 4vw, 3.5rem);
-  letter-spacing: -0.03em;
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+  font-family: var(--font-body);
+  font-size: clamp(1.2rem, 2vw, 1.5rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
   line-height: 0.95;
   margin-top: auto;
 }
@@ -24788,7 +24799,14 @@ html {
 }
 
 .campaign-operator__metric--hero strong .duna-numeric {
-  font: inherit;
+  font-family: var(--font-data);
+  font-size: clamp(2.5rem, 4vw, 3.5rem);
+  font-variation-settings:
+    "wdth" 108,
+    "wght" 800;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 0.9;
 }
 
 .campaign-operator__metrics {
@@ -25088,7 +25106,7 @@ html {
   }
 
   .campaign-hero__proof .duna-numeric {
-    font-size: 1.7rem;
+    font-size: 2rem;
   }
 
   .campaign-hero__proof span:last-child {
@@ -26854,9 +26872,12 @@ a {
 }
 
 .rating-orbit__content > .duna-numeric {
-  font-size: 3.7rem;
-  font-weight: 600;
-  letter-spacing: -0.03em;
+  font-size: clamp(2.5rem, 4vw, 3.5rem);
+  font-variation-settings:
+    "wdth" 108,
+    "wght" 800;
+  font-weight: 800;
+  letter-spacing: -0.02em;
   line-height: 1.1;
 }
 
@@ -26867,7 +26888,7 @@ a {
 }
 
 .rating-orbit--compact {
-  width: 82px;
+  width: 96px;
 }
 
 .rating-orbit--compact circle {
@@ -26879,7 +26900,10 @@ a {
 }
 
 .rating-orbit--compact .rating-orbit__content > .duna-numeric {
-  font-size: 1.35rem;
+  font-size: 2rem;
+  font-variation-settings:
+    "wdth" 94,
+    "wght" 800;
 }
 
 .market-ribbon {

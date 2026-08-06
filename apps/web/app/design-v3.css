@@ -345,7 +345,7 @@ body {
 .campaign-hero__proof .duna-numeric {
   display: block;
   color: var(--campaign-hero-ink);
-  font-size: clamp(1.75rem, 3.2vw, 3.25rem);
+  font-size: clamp(2rem, 3.2vw, 2.875rem);
   line-height: 1;
 }
 
@@ -613,7 +613,7 @@ body {
 }
 
 .campaign-tour__stat .duna-numeric {
-  font-size: clamp(3.5rem, 7vw, 6rem);
+  font-size: clamp(2.5rem, 4vw, 3.5rem);
 }
 
 /* Professional browsing — dawn hero, left-aligned athletic hierarchy. */
@@ -1171,7 +1171,10 @@ body {
   font-weight: 800;
 }
 
-.athlete-hero-card--result .duna-badge,
+.athlete-hero-card--result .duna-badge {
+  color: var(--text-2);
+}
+
 .club-marketing-hero__product .duna-badge {
   color: #f2f0ea;
 }
@@ -2616,7 +2619,8 @@ body {
   color: color-mix(in srgb, var(--player-accent) 78%, var(--text-1));
 }
 
-.athlete-stage > .athlete-stat-deck :where(small, span) {
+.athlete-stage > .athlete-stat-deck article > small,
+.athlete-stage > .athlete-stat-deck article > span {
   color: var(--text-2);
 }
 
@@ -2658,6 +2662,13 @@ body {
   font-variation-settings:
     "wdth" 94,
     "wght" 800;
+}
+
+.match-history-card__score .duna-numeric:not(.match-history-card__sets) {
+  min-height: 3.5rem;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface-2);
 }
 
 .match-history-card__score > div {
@@ -2882,5 +2893,9 @@ body {
   .match-history-card__score strong,
   .match-history-card__score b {
     font-size: 2rem !important;
+  }
+
+  .match-history-card__score .duna-numeric:not(.match-history-card__sets) {
+    min-height: 3rem;
   }
 }
