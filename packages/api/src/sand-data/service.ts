@@ -7865,6 +7865,87 @@ function normalizedMatchClock(value?: string): string | undefined {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+interface ProfessionalMatchDisplayCandidate {
+  readonly id: string;
+  readonly playedAt?: Date | null;
+  readonly rawPayload: Readonly<Record<string, unknown>>;
+  readonly participants: readonly {
+    readonly side: string;
+    readonly name: string;
+  }[];
+  readonly sets: readonly unknown[];
+  readonly winnerSide?: string | null;
+}
+
+function professionalMatchDisplayFixtureKey(
+  match: ProfessionalMatchDisplayCandidate,
+): string | undefined {
+  const playedOn = match.playedAt?.toISOString().slice(0, 10);
+  const time = normalizedMatchClock(objectString(match.rawPayload, "time"));
+  if (!playedOn || !time) return undefined;
+  const teamKey = (side: "A" | "B") =>
+    match.participants
+      .filter((participant) => participant.side === side)
+      .map((participant) => normalizePersonName(participant.name))
+      .filter(Boolean)
+      .sort()
+      .join("/");
+  const teams = [teamKey("A"), teamKey("B")].sort();
+  return teams.every(Boolean)
+    ? [playedOn, time, ...teams].join("|")
+    : undefined;
+}
+
+function professionalMatchDisplayPriority(
+  match: ProfessionalMatchDisplayCandidate,
+): number {
+  const official = parseStoredVolleyballWorldMatch(match.rawPayload);
+  const officialStatus =
+    official?.status === "completed"
+      ? 60
+      : official?.status === "live"
+        ? 40
+        : official
+          ? 20
+          : 0;
+  return (
+    (official ? 1_000 : 0) +
+    officialStatus +
+    (official?.statistics ? 20 : 0) +
+    (match.winnerSide === "A" || match.winnerSide === "B" ? 10 : 0) +
+    match.sets.length
+  );
+}
+
+export function dedupeProfessionalMatchRowsForDisplay<
+  T extends ProfessionalMatchDisplayCandidate,
+>(rows: readonly T[]): readonly T[] {
+  const visible: T[] = [];
+  const indexByFixture = new Map<string, number>();
+  for (const row of rows) {
+    const fixture = professionalMatchDisplayFixtureKey(row);
+    if (!fixture) {
+      visible.push(row);
+      continue;
+    }
+    const existingIndex = indexByFixture.get(fixture);
+    if (existingIndex === undefined) {
+      indexByFixture.set(fixture, visible.length);
+      visible.push(row);
+      continue;
+    }
+    const existing = visible[existingIndex];
+    if (
+      existing &&
+      professionalMatchDisplayPriority(row) >
+        professionalMatchDisplayPriority(existing)
+    ) {
+      visible[existingIndex] = row;
+    }
+  }
+  return visible;
+}
+
 export function professionalMatchScheduledAt(input: {
   readonly playedAt?: Date;
   readonly time?: string;
@@ -8257,7 +8338,7 @@ export async function loadPublicProEvent(
     siblingEffective?.editorial,
   );
 
-  const matchRows = await database
+  const selectedMatchRows = await database
     .select()
     .from(importedMatches)
     .where(
@@ -8267,6 +8348,7 @@ export async function loadPublicProEvent(
       ),
     )
     .orderBy(asc(importedMatches.playedAt), asc(importedMatches.createdAt));
+  const matchRows = dedupeProfessionalMatchRowsForDisplay(selectedMatchRows);
   const rawTeamEntries = rawProfessionalTeamEntries(event.rawPayload);
   const avpLeaguePayload = parseAvpLeagueEventPayload(event.rawPayload);
   const entryExternalPersonIds = [
