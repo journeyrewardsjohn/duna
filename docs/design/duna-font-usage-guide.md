@@ -225,6 +225,7 @@ Support Dynamic Type to 200%. Test the scoreboard and the schedule at that size.
 | **Sand Rating value**           | **Archivo**                                     | Hero tier             | 40–56px                       | −0.02em     | —         |
 | **Stat block label**            | Fellix                                          | 700                   | 9.5px                         | +0.15em     | UPPER     |
 | **Stat block value**            | **Archivo**                                     | Block tier            | 32–46px                       | −0.02em     | —         |
+| **Dense match stat value**      | **Archivo**                                     | Table tier            | 19–30px                       | 0           | —         |
 | **Stat block sub**              | Fellix                                          | 400                   | 11.5px                        | 0           | Sentence  |
 | **Event card date**             | **Archivo**                                     | `wdth 74 / wght 800`  | 32px                          | −0.02em     | —         |
 | **Delta** (`▲ 0.14`)            | **Archivo**                                     | `wdth 78 / wght 700`  | 13px                          | 0           | —         |
