@@ -9,12 +9,16 @@ import {
   Radio,
   ShieldCheck,
   Sparkles,
+  Star,
   Trophy,
   Users,
+  Video,
+  Watch as WatchIcon,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { AmbientHeroVideo } from "@/components/ambient-hero-video";
+import { DunaWatchDevice } from "@/components/duna-watch-device";
 import { RatingOrbit } from "@/components/rating-orbit";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -139,6 +143,55 @@ export default async function HomePage() {
             <span>Coaches</span>
             <i />
             <span>Clubs</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="campaign-apps">
+        <div className="campaign-shell campaign-apps__inner">
+          <div className="campaign-apps__copy">
+            <span className="campaign-kicker campaign-kicker--sand">
+              <span />
+              Duna apps
+            </span>
+            <h2>The match is on your wrist.</h2>
+            <p>
+              Score every rally, keep Duna Vision in sync, save the highlight,
+              and check the live camera view without leaving the court.
+            </p>
+            <div className="campaign-apps__features">
+              <span>
+                <WatchIcon aria-hidden /> Gesture scorekeeping
+              </span>
+              <span>
+                <Video aria-hidden /> Live video sync
+              </span>
+              <span>
+                <Star aria-hidden /> One-tap highlights
+              </span>
+            </div>
+            <Link
+              className="campaign-button campaign-button--light"
+              href="/apps/apple-watch"
+            >
+              Meet Duna for Apple Watch <ArrowRight aria-hidden size={18} />
+            </Link>
+          </div>
+
+          <div className="campaign-apps__visual">
+            <div aria-hidden className="campaign-apps__orbit" />
+            <DunaWatchDevice
+              className="campaign-apps__watch"
+              label="Duna scorekeeping on Apple Watch"
+              motion
+            />
+            <div className="campaign-apps__status">
+              <i />
+              <span>
+                <small>Duna Vision</small>
+                Score synced · 17–14
+              </span>
+            </div>
           </div>
         </div>
       </section>
