@@ -2,6 +2,7 @@ import { Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import type { PredictionMarketView } from "@duna/api";
 import { TourBrandMark, type TourBrand } from "./tour-brand-mark";
+import { CountryCode } from "@/components/country-code";
 import {
   buildViewerPredictionSummary,
   formatPredictionAmount,
@@ -10,11 +11,14 @@ import {
 export interface ProfessionalMatchPlayer {
   readonly name: string;
   readonly rating?: number;
+  readonly avatarUrl?: string;
 }
 
 export interface ProfessionalMatchTeam {
   readonly label: string;
   readonly players: readonly ProfessionalMatchPlayer[];
+  readonly countryCode?: string;
+  readonly flagUrl?: string;
 }
 
 function statusLabel(status: "scheduled" | "live" | "completed") {
@@ -51,12 +55,14 @@ function TeamResultRow({
   sets,
   winner,
   status,
+  currentSetNo,
 }: {
   readonly team: ProfessionalMatchTeam;
   readonly side: "A" | "B";
   readonly sets: readonly { readonly a: number; readonly b: number }[];
   readonly winner: boolean;
   readonly status: "scheduled" | "live" | "completed";
+  readonly currentSetNo?: number;
 }) {
   const players =
     team.players.length > 0 ? team.players : [{ name: team.label }];
@@ -67,12 +73,27 @@ function TeamResultRow({
       <div className="professional-match-card__players">
         {players.map((player, index) => (
           <span key={`${player.name}-${index}`}>
-            <strong>{player.name}</strong>
-            <small>
-              {player.rating !== undefined
-                ? `Sand Rating ${player.rating.toFixed(2)}`
-                : "Sand Rating pending"}
-            </small>
+            {player.avatarUrl ? (
+              <img alt="" src={player.avatarUrl} />
+            ) : team.flagUrl ? (
+              <img
+                alt={`${team.countryCode ?? "Team"} flag`}
+                src={team.flagUrl}
+              />
+            ) : (
+              <CountryCode
+                code={team.countryCode}
+                fallback={player.name.slice(0, 2)}
+              />
+            )}
+            <span>
+              <strong>{player.name}</strong>
+              <small>
+                {player.rating !== undefined
+                  ? `Sand Rating ${player.rating.toFixed(2)}`
+                  : "Sand Rating pending"}
+              </small>
+            </span>
           </span>
         ))}
       </div>
@@ -82,7 +103,13 @@ function TeamResultRow({
             const score = side === "A" ? set.a : set.b;
             const won = side === "A" ? set.a > set.b : set.b > set.a;
             return (
-              <span className={won ? "won" : undefined} key={index}>
+              <span
+                className={
+                  `${won ? "won" : ""}${currentSetNo === index + 1 ? " is-current" : ""}`.trim() ||
+                  undefined
+                }
+                key={index}
+              >
                 <small>Set {index + 1}</small>
                 <strong>{score}</strong>
               </span>
@@ -117,6 +144,7 @@ export function ProfessionalMatchCard({
   outcomeLabel,
   ratingDelta,
   predictionMarket,
+  currentSetNo,
   className = "",
 }: {
   readonly href?: string;
@@ -133,6 +161,7 @@ export function ProfessionalMatchCard({
   readonly outcomeLabel?: string;
   readonly ratingDelta?: number;
   readonly predictionMarket?: PredictionMarketView;
+  readonly currentSetNo?: number;
   readonly className?: string;
 }) {
   const viewerPosition = predictionMarket
@@ -172,6 +201,7 @@ export function ProfessionalMatchCard({
           status={status}
           team={teamA}
           winner={winnerSide === "A"}
+          currentSetNo={currentSetNo}
         />
         <TeamResultRow
           sets={sets}
@@ -179,6 +209,7 @@ export function ProfessionalMatchCard({
           status={status}
           team={teamB}
           winner={winnerSide === "B"}
+          currentSetNo={currentSetNo}
         />
       </div>
       {predictionMarket && (

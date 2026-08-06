@@ -1096,12 +1096,13 @@ export function parseFivbPagePlayers(
   return [...players.values()];
 }
 
-function parseFivbMatchRows(
+export function parseFivbMatchRows(
   html: string,
   eventId: string,
   title: string,
   year: string,
   genderCategory: "men" | "women",
+  phase: "main-draw" | "qualification",
 ): {
   readonly players: readonly ExternalPlayerRecord[];
   readonly matches: readonly ExternalMatchRecord[];
@@ -1161,7 +1162,7 @@ function parseFivbMatchRows(
           ? "B"
           : undefined;
     matches.push({
-      externalMatchId: `${eventId}:${matchNumber}`,
+      externalMatchId: `${eventId}:${phase}:${matchNumber}`,
       externalEventId: eventId,
       sourceUrl: `${fivbBase}/scripts/tournament.php?tcode=${eventId}`,
       title,
@@ -1185,6 +1186,7 @@ function parseFivbMatchRows(
       winnerSide,
       raw: {
         matchNumber,
+        phase,
         time: stripHtml(cells[2] ?? ""),
         court: stripHtml(cells[3] ?? ""),
         score: scoreText,
@@ -1255,6 +1257,7 @@ export async function importFivbTournament(
     title,
     year,
     genderCategory,
+    "main-draw",
   );
   const qualification = parseFivbMatchRows(
     fivbSection(html, "results_qu"),
@@ -1262,6 +1265,7 @@ export async function importFivbTournament(
     title,
     year,
     genderCategory,
+    "qualification",
   );
   const players = new Map(
     [...main.players, ...qualification.players].map((player) => [

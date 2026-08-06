@@ -3,6 +3,7 @@ import {
   discoverBvbInfoHistoryPages,
   parseBvbInfoCareerSummary,
   parseFivbEventIndexHtml,
+  parseFivbMatchRows,
   parseFivbPagePlayers,
   parseFivbTeamEntries,
   parseVolleyballLifeMatchFeed,
@@ -146,6 +147,42 @@ describe("FIVB event index parsing", () => {
       label: "Cherif/Ahmed",
       countryCode: "QAT",
       entryTag: "Withdrawn",
+    });
+  });
+
+  it("scopes repeated match numbers to their tournament phase", () => {
+    const html = `
+      <tr><td>Pool B</td></tr>
+      <tr>
+        <td>4</td><td>6-Aug</td><td>13:00</td><td>Court 2</td>
+        <td><a href="/player?player_id=11">Evandro</a> / <a href="/player?player_id=12">Arthur Lanci</a> BRA</td>
+        <td><a href="/player?player_id=21">van de Velde</a> / <a href="/player?player_id=22">de Groot</a> NED</td>
+        <td>(21-23, 19-21)</td>
+      </tr>`;
+    const mainDraw = parseFivbMatchRows(
+      html,
+      "MHAM2026",
+      "BPT Elite16 Hamburg",
+      "2026",
+      "men",
+      "main-draw",
+    );
+    const qualification = parseFivbMatchRows(
+      html,
+      "MHAM2026",
+      "BPT Elite16 Hamburg",
+      "2026",
+      "men",
+      "qualification",
+    );
+
+    expect(mainDraw.matches[0]).toMatchObject({
+      externalMatchId: "MHAM2026:main-draw:4",
+      raw: { matchNumber: 4, phase: "main-draw" },
+    });
+    expect(qualification.matches[0]).toMatchObject({
+      externalMatchId: "MHAM2026:qualification:4",
+      raw: { matchNumber: 4, phase: "qualification" },
     });
   });
 });

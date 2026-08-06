@@ -4,7 +4,7 @@ import type {
   PublicProMatchDetail,
   VideoSummary,
 } from "@duna/api";
-import { Badge, Numeric } from "@duna/ui";
+import { Badge } from "@duna/ui";
 import {
   ArrowLeft,
   CalendarDays,
@@ -14,75 +14,15 @@ import {
   Radio,
   Sparkles,
   Tv,
-  Trophy,
   Video,
 } from "lucide-react";
 import Link from "next/link";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
-import { ProfessionalMatchCard } from "@/components/professional-match-card";
+import { ProLiveMatchScoreboard } from "@/components/pro-live-match-scoreboard";
 import { PredictionMarketDetail } from "@/components/prediction-market";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { professionalMatchJsonLd, serializeJsonLd } from "@/lib/pro-seo";
-
-type MatchTeam = PublicProMatchDetail["match"]["teamA"];
-
-function TeamCard({
-  team,
-  side,
-  winner,
-}: {
-  readonly team: MatchTeam;
-  readonly side: "A" | "B";
-  readonly winner: boolean;
-}) {
-  return (
-    <article
-      className={
-        winner ? "pro-match-team pro-match-team--winner" : "pro-match-team"
-      }
-    >
-      <header>
-        <span>Team {side}</span>
-        {winner && (
-          <Badge tone="positive">
-            <Trophy aria-hidden size={12} /> Winner
-          </Badge>
-        )}
-      </header>
-      <div>
-        {team.players.map((player) => (
-          <div key={player.personId ?? player.name}>
-            {player.avatarUrl ? (
-              <img alt="" src={player.avatarUrl} />
-            ) : (
-              <span>{player.name.slice(0, 1)}</span>
-            )}
-            <div>
-              {(player.publicPath ?? player.handle) ? (
-                <Link href={player.publicPath ?? `/players/${player.handle}`}>
-                  {player.name}
-                </Link>
-              ) : (
-                <strong>{player.name}</strong>
-              )}
-              <small>
-                {player.rating !== undefined
-                  ? `Sand Rating ${player.rating.toFixed(2)}`
-                  : "Profile mapping pending"}
-              </small>
-            </div>
-          </div>
-        ))}
-      </div>
-      {team.averageRating !== undefined && (
-        <footer>
-          Team rating <Numeric>{team.averageRating.toFixed(2)}</Numeric>
-        </footer>
-      )}
-    </article>
-  );
-}
 
 export function ProMatchDetail({
   detail,
@@ -96,17 +36,6 @@ export function ProMatchDetail({
   readonly videos?: readonly VideoSummary[];
 }) {
   const { event, match } = detail;
-  const hasScore = match.sets.length > 0;
-  const teamAWins = match.sets.filter((set) => set.a > set.b).length;
-  const teamBWins = match.sets.filter((set) => set.b > set.a).length;
-  const scoreStatus =
-    match.status === "completed"
-      ? "Final"
-      : match.status === "live"
-        ? "Live score"
-        : match.time
-          ? `Starts ${match.time}`
-          : "Scheduled";
   const structuredData = professionalMatchJsonLd(detail);
   return (
     <main className="pro-match-page">
@@ -115,7 +44,7 @@ export function ProMatchDetail({
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
         type="application/ld+json"
       />
-      <section className="pro-match-hero">
+      <section className="pro-match-hero" data-zone="performance">
         <div>
           <Link href={`/events/${event.slug}`}>
             <ArrowLeft aria-hidden size={15} />
@@ -137,8 +66,8 @@ export function ProMatchDetail({
             {match.teamA.label} <span>vs</span> {match.teamB.label}
           </h1>
           <p>
-            Set-by-set result, mapped player profiles, and Sand Rating win
-            prediction for {event.name}.
+            Official set-by-set scoring, player performance, and Sand Rating
+            context for {event.name}.
           </p>
           <div className="pro-match-hero__facts">
             <span>
@@ -159,59 +88,15 @@ export function ProMatchDetail({
             </span>
           </div>
         </div>
-        <div
-          aria-label={`${match.teamA.label} ${hasScore ? teamAWins : "not started"}, ${match.teamB.label} ${hasScore ? teamBWins : "not started"}. ${scoreStatus}.`}
-          aria-live={match.status === "live" ? "polite" : undefined}
-          className={`pro-match-hero__score${hasScore ? "" : " pro-match-hero__score--pending"}`}
-          role="group"
-        >
-          <span>{match.teamA.label}</span>
-          <strong>{hasScore ? teamAWins : "—"}</strong>
-          <i>:</i>
-          <strong>{hasScore ? teamBWins : "—"}</strong>
-          <span>{match.teamB.label}</span>
-          <small>{scoreStatus}</small>
-        </div>
+        <ProLiveMatchScoreboard
+          eventName={event.name}
+          genderCategory={event.genderCategory}
+          initialLive={match.liveScore}
+          match={match}
+        />
       </section>
 
       <div className="pro-match-content">
-        <section className="pro-match-teams">
-          <TeamCard
-            side="A"
-            team={match.teamA}
-            winner={match.winnerSide === "A"}
-          />
-          <TeamCard
-            side="B"
-            team={match.teamB}
-            winner={match.winnerSide === "B"}
-          />
-        </section>
-
-        <section className="pro-match-panel pro-match-sets" id="match-score">
-          <header>
-            <div>
-              <span className="page-eyebrow">Set by set</span>
-              <h2>
-                {match.status === "completed" ? "Final score" : "Match score"}
-              </h2>
-            </div>
-            <Trophy aria-hidden size={22} />
-          </header>
-          <ProfessionalMatchCard
-            context={match.court ?? event.location}
-            playedAt={match.playedAt}
-            roundLabel={match.roundLabel}
-            sets={match.sets}
-            source={event.source}
-            status={match.status}
-            teamA={match.teamA}
-            teamB={match.teamB}
-            timeLabel={match.time}
-            winnerSide={match.winnerSide}
-          />
-        </section>
-
         <section className="pro-match-panel pro-match-prediction">
           <header>
             <div>
