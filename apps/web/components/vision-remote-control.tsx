@@ -264,7 +264,7 @@ export function VisionRemoteControl({
   };
 
   return (
-    <main className="vision-remote">
+    <main className="vision-remote" data-zone="operator">
       <header className="vision-remote__header">
         <div className="vision-remote__brand">
           <span>D</span>

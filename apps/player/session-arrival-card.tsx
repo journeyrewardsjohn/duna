@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
   metricLabel: { color: "#b5ccd3", fontSize: 10, fontWeight: "900" },
   metricValue: {
     color: "#ffffff",
-    fontFamily: "Archivo-ExtraBold",
+    fontFamily: "Archivo-Table",
     fontSize: 16,
     fontWeight: "900",
     marginTop: 4,

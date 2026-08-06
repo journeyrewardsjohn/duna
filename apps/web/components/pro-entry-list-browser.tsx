@@ -70,7 +70,7 @@ export function ProEntryListBrowser({
             }
             key={`${selected}-${team.externalTeamId}`}
           >
-            <Numeric>{team.seed ?? "—"}</Numeric>
+            <Numeric tier="table">{team.seed ?? "—"}</Numeric>
             <div>
               <strong>{team.label}</strong>
               <span>
@@ -96,9 +96,13 @@ export function ProEntryListBrowser({
             >
               <CountryCode code={team.countryCode} fallback="—" />
             </span>
-            <span>{team.entryPoints?.toLocaleString("en-US") ?? "—"}</span>
+            <Numeric tier="table">
+              {team.entryPoints?.toLocaleString("en-US") ?? "—"}
+            </Numeric>
             <span>
-              {team.entryTechnicalPoints?.toLocaleString("en-US") ?? "—"}
+              <Numeric tier="table">
+                {team.entryTechnicalPoints?.toLocaleString("en-US") ?? "—"}
+              </Numeric>
             </span>
           </article>
         ))}

@@ -15,7 +15,7 @@ export function EditorialPage({
   readonly children: ReactNode;
 }) {
   return (
-    <main className="public-detail">
+    <main className="public-detail" data-zone="editorial">
       <SiteHeader />
       <section className="editorial-hero">
         <Badge>{eyebrow}</Badge>

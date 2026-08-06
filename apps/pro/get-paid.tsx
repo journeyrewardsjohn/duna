@@ -1295,7 +1295,7 @@ const styles = StyleSheet.create({
   },
   amountCurrency: {
     color: "#3d6672",
-    fontFamily: "Archivo-ExtraBold",
+    fontFamily: "Archivo-Hero",
     fontSize: 38,
     fontWeight: "900",
     marginRight: 6,
@@ -1303,7 +1303,7 @@ const styles = StyleSheet.create({
   amountInput: {
     color: "#1b1b19",
     flex: 1,
-    fontFamily: "Archivo-ExtraBold",
+    fontFamily: "Archivo-Hero",
     fontSize: 56,
     fontWeight: "900",
     letterSpacing: -2,
@@ -1341,7 +1341,7 @@ const styles = StyleSheet.create({
   },
   goalAmount: {
     color: "#fff",
-    fontFamily: "Archivo-ExtraBold",
+    fontFamily: "Archivo-Block",
     fontSize: 24,
     fontWeight: "900",
     marginTop: 4,
@@ -1452,7 +1452,7 @@ const styles = StyleSheet.create({
   },
   historyAmount: {
     color: "#1b1b19",
-    fontFamily: "Archivo-Bold",
+    fontFamily: "Archivo-Table",
     fontSize: 12,
     fontWeight: "900",
   },
@@ -1539,7 +1539,7 @@ const styles = StyleSheet.create({
   },
   referencePrice: {
     color: "#1b1b19",
-    fontFamily: "Archivo-Bold",
+    fontFamily: "Archivo-Table",
     fontSize: 12,
     fontWeight: "900",
   },
@@ -1551,7 +1551,7 @@ const styles = StyleSheet.create({
   },
   summaryAmount: {
     color: "#fff",
-    fontFamily: "Archivo-ExtraBold",
+    fontFamily: "Archivo-Block",
     fontSize: 34,
     fontWeight: "900",
     letterSpacing: -1,
@@ -1596,7 +1596,7 @@ const styles = StyleSheet.create({
   },
   netAmount: {
     color: "#245b46",
-    fontFamily: "Archivo-ExtraBold",
+    fontFamily: "Archivo-Block",
     fontSize: 22,
     fontWeight: "900",
     marginTop: 5,
@@ -1736,7 +1736,7 @@ const styles = StyleSheet.create({
   motionAmount: {
     bottom: 64,
     color: "#fff",
-    fontFamily: "Archivo-ExtraBold",
+    fontFamily: "Archivo-Block",
     fontSize: 34,
     fontWeight: "900",
     letterSpacing: -1,

@@ -2992,15 +2992,15 @@ function createHealthStyles(colors: HealthPalette) {
     },
     readinessNumber: {
       color: colors.ink,
-      fontFamily: "Archivo-ExtraBold",
-      fontSize: 88,
+      fontFamily: "Archivo-Hero",
+      fontSize: 48,
       fontWeight: "800",
       letterSpacing: -6,
-      lineHeight: 94,
+      lineHeight: 52,
     },
     readinessScale: {
       color: colors.muted,
-      fontFamily: "Archivo-Bold",
+      fontFamily: "Archivo-Chip",
       fontSize: 14,
       fontWeight: "700",
       marginBottom: 15,
@@ -3076,7 +3076,7 @@ function createHealthStyles(colors: HealthPalette) {
     factorLabel: { color: colors.ink, fontSize: 13, fontWeight: "800" },
     factorValue: {
       color: colors.ink,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Table",
       fontSize: 15,
       fontWeight: "900",
     },
@@ -3173,8 +3173,8 @@ function createHealthStyles(colors: HealthPalette) {
     trendLatest: { alignItems: "flex-end" },
     trendLatestValue: {
       color: colors.ink,
-      fontFamily: "Archivo-ExtraBold",
-      fontSize: 28,
+      fontFamily: "Archivo-Block",
+      fontSize: 32,
       fontWeight: "800",
       letterSpacing: -1,
     },
@@ -3196,7 +3196,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     trendBandValue: {
       color: colors.ink,
-      fontFamily: "Archivo-Bold",
+      fontFamily: "Archivo-Chip",
       fontSize: 10,
       fontWeight: "800",
     },

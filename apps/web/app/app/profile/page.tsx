@@ -49,7 +49,7 @@ export default async function ProfilePage() {
         <div className="profile-hero__summary">
           <article>
             <small>Sand Rating</small>
-            <Numeric>{player.rating.display.toFixed(2)}</Numeric>
+            <Numeric tier="hero">{player.rating.display.toFixed(2)}</Numeric>
             <span>{player.rating.discipline.replace("-", " ")}</span>
           </article>
           <article>
@@ -59,7 +59,7 @@ export default async function ProfilePage() {
           </article>
           <article>
             <small>Connected matches</small>
-            <Numeric>{matches.length}</Numeric>
+            <Numeric tier="block">{matches.length}</Numeric>
             <span>Available in this account</span>
           </article>
           <article>

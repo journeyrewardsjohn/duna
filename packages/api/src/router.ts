@@ -6904,21 +6904,8 @@ const operatorRouter = router({
           clubChroma: z.number().min(0.04).max(0.15).optional(),
         }),
         typography: z.object({
-          heading: z.enum([
-            "Fellix",
-            "Fraunces",
-            "Instrument Sans",
-            "DM Sans",
-            "Space Grotesk",
-            "Playfair Display",
-          ]),
-          body: z.enum([
-            "Fellix",
-            "Archivo",
-            "Inter",
-            "DM Sans",
-            "Source Sans 3",
-          ]),
+          heading: z.literal("Fellix"),
+          body: z.literal("Fellix"),
         }),
         fontLicenseConfirmed: z.boolean(),
         safeFallbackFont: z.string().trim().min(2).max(240),

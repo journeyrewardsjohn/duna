@@ -47,6 +47,7 @@ export function PlayerShell({
       className={
         focusedFlow ? "player-shell player-shell--focused-flow" : "player-shell"
       }
+      data-zone="athletic"
     >
       {!focusedFlow && (
         <aside className="player-sidebar">
@@ -95,7 +96,7 @@ export function PlayerShell({
               <strong>{player.displayName}</strong>
               <small>@{player.handle}</small>
             </span>
-            <Numeric>{player.rating.display.toFixed(2)}</Numeric>
+            <Numeric tier="chip">{player.rating.display.toFixed(2)}</Numeric>
           </Link>
         </aside>
       )}
@@ -134,7 +135,9 @@ export function PlayerShell({
                 trigger={
                   <>
                     <span className="avatar">{player.initials}</span>
-                    <Numeric>{player.rating.display.toFixed(2)}</Numeric>
+                    <Numeric tier="chip">
+                      {player.rating.display.toFixed(2)}
+                    </Numeric>
                   </>
                 }
               />

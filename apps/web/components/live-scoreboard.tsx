@@ -244,8 +244,11 @@ export function LiveScoreboard({
           </button>
         </div>
         <span>
-          Set <Numeric>{score.setIndex + 1}</Numeric> · best of 3 · to{" "}
-          <Numeric>{match.format.pointTargets[score.setIndex] ?? 21}</Numeric>
+          Set <Numeric tier="chip">{score.setIndex + 1}</Numeric> · best of 3 ·
+          to{" "}
+          <Numeric tier="chip">
+            {match.format.pointTargets[score.setIndex] ?? 21}
+          </Numeric>
         </span>
       </section>
 
@@ -308,7 +311,7 @@ export function LiveScoreboard({
             ))}
             <strong>{match.teamA.name}</strong>
           </div>
-          <Numeric>{current.a}</Numeric>
+          <Numeric tier="score">{current.a}</Numeric>
           <span className="score-team__hint">
             {scoringOpen ? "Tap anywhere for point" : "Scoring closed"}
           </span>
@@ -346,7 +349,7 @@ export function LiveScoreboard({
             ))}
             <strong>{match.teamB.name}</strong>
           </div>
-          <Numeric>{current.b}</Numeric>
+          <Numeric tier="score">{current.b}</Numeric>
           <span className="score-team__hint">
             {scoringOpen ? "Tap anywhere for point" : "Scoring closed"}
           </span>
@@ -391,7 +394,7 @@ export function LiveScoreboard({
               key={index}
             >
               <small>S{index + 1}</small>
-              <Numeric>
+              <Numeric tier="table">
                 {set.a}–{set.b}
               </Numeric>
             </span>

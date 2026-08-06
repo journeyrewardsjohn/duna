@@ -14,11 +14,13 @@ const ignoredDirectories = new Set([
 
 const requiredFiles = [
   "AGENTS.md",
+  "docs/design/duna-font-usage-guide.md",
   "docs/design/duna-design-system.md",
   "docs/design/duna-design-system-v3.md",
   "docs/design/duna-implementation-audit.md",
   "docs/design/duna-mobile-design-guide.md",
   "docs/design/duna-theming-light-dark.md",
+  "docs/licenses/Archivo-OFL-1.1.txt",
   "apps/web/app/design-v3.css",
   "apps/web/app/not-found.tsx",
   "apps/hq/app/design-v3.css",
@@ -43,8 +45,82 @@ const requiredFiles = [
   "packages/ui/src/brand.test.ts",
 ];
 
+const archivoInstanceFiles = [
+  "Archivo-Score.ttf",
+  "Archivo-Monument.ttf",
+  "Archivo-Hero.ttf",
+  "Archivo-Block.ttf",
+  "Archivo-Table.ttf",
+  "Archivo-Chip.ttf",
+  "Archivo-Wordmark.ttf",
+] as const;
+
+for (const app of ["player", "pro"] as const) {
+  for (const fontFile of archivoInstanceFiles) {
+    requiredFiles.push(`apps/${app}/assets/fonts/${fontFile}`);
+  }
+}
+
 for (const file of requiredFiles) {
   if (!existsSync(join(root, file))) violations.push(`${file} is missing`);
+}
+
+const agentsContract = readFileSync(join(root, "AGENTS.md"), "utf8");
+const designIndex = readFileSync(join(root, "docs/design/README.md"), "utf8");
+for (const [file, content] of [
+  ["AGENTS.md", agentsContract],
+  ["docs/design/README.md", designIndex],
+] as const) {
+  if (!content.includes("duna-font-usage-guide.md")) {
+    violations.push(`${file} must reference the authoritative font guide`);
+  }
+}
+
+const sharedTypographyCss = readFileSync(
+  join(root, "packages/ui/src/styles.css"),
+  "utf8",
+);
+const numericTierContracts = [
+  [".duna-numeric--score", '"wdth" 64', '"wght" 900'],
+  [".duna-numeric--monument", '"wdth" 122', '"wght" 900'],
+  [".duna-numeric--hero", '"wdth" 108', '"wght" 800'],
+  [".duna-numeric--block", '"wdth" 94', '"wght" 800'],
+  [".duna-numeric--table", '"wdth" 78', '"wght" 700'],
+  [".duna-numeric--chip", '"wdth" 78', '"wght" 700'],
+] as const;
+for (const [selector, width, weight] of numericTierContracts) {
+  const selectorStart = sharedTypographyCss.indexOf(selector);
+  const ruleEnd = sharedTypographyCss.indexOf("}", selectorStart);
+  const rule = sharedTypographyCss.slice(selectorStart, ruleEnd);
+  if (selectorStart < 0 || !rule.includes(width) || !rule.includes(weight)) {
+    violations.push(
+      `packages/ui/src/styles.css must preserve ${selector} at ${width} / ${weight}`,
+    );
+  }
+}
+const numericTierSizes = [
+  ["score", "clamp(4.5rem, 8vw, 8.75rem)"],
+  ["monument", "clamp(7.5rem, 12vw, 12.5rem)"],
+  ["hero", "clamp(2.5rem, 4vw, 3.5rem)"],
+  ["block", "clamp(2rem, 3vw, 2.875rem)"],
+  ["table", "clamp(0.8125rem, 1.25vw, 1.1875rem)"],
+  ["chip", "clamp(0.75rem, 1vw, 0.8125rem)"],
+] as const;
+for (const [tier, size] of numericTierSizes) {
+  if (!sharedTypographyCss.includes(size)) {
+    violations.push(
+      `packages/ui/src/styles.css must preserve the ${tier} tier size ${size}`,
+    );
+  }
+}
+
+const uiWebSource = readFileSync(join(root, "packages/ui/src/web.tsx"), "utf8");
+for (const tier of ["score", "monument", "hero", "block", "table", "chip"]) {
+  if (!uiWebSource.includes(`"${tier}"`)) {
+    violations.push(
+      `packages/ui/src/web.tsx must expose the ${tier} numeric tier`,
+    );
+  }
 }
 
 const webV3Css = readFileSync(join(root, "apps/web/app/design-v3.css"), "utf8");
@@ -60,6 +136,51 @@ for (const contract of requiredContrastContracts) {
   if (!webV3Css.includes(contract)) {
     violations.push(`apps/web/app/design-v3.css must preserve ${contract}`);
   }
+}
+
+const regressionContracts = [
+  {
+    file: "apps/web/components/pro-match-detail.tsx",
+    includes: "match.liveScore?.status ?? match.status",
+    message: "must derive its live state from the live score feed",
+  },
+  {
+    file: "apps/web/components/pro-live-match-scoreboard.tsx",
+    includes: 'tier="score"',
+    message: "must preserve the live Score numeral tier",
+  },
+  {
+    file: "apps/web/components/pro-player-discovery.tsx",
+    includes: 'tier="monument"',
+    message: "must preserve monumental player ranks",
+  },
+  {
+    file: "apps/web/app/players/[handle]/page.tsx",
+    includes: 'className="athlete-hero__rank-mark"',
+    message: "must preserve the rank-led player identity",
+  },
+] as const;
+for (const contract of regressionContracts) {
+  const source = readFileSync(join(root, contract.file), "utf8");
+  if (!source.includes(contract.includes)) {
+    violations.push(`${contract.file} ${contract.message}`);
+  }
+}
+
+const proEventSource = readFileSync(
+  join(root, "apps/web/components/pro-event-detail.tsx"),
+  "utf8",
+);
+if (proEventSource.includes("pro-event-venue-plate")) {
+  violations.push(
+    "apps/web/components/pro-event-detail.tsx must not restore the decorative full-page venue plate",
+  );
+}
+if (
+  existsSync(join(root, "apps/web/app/qa-font-system/page.tsx")) ||
+  existsSync(join(root, "apps/web/app/qa-font-system/directory/page.tsx"))
+) {
+  violations.push("Temporary font-system browser fixtures must not ship");
 }
 
 const heroMotionPath = join(
@@ -114,6 +235,44 @@ for (const app of ["player", "pro"] as const) {
       `apps/${app}/app.json must declare adaptive and monochrome Android icons`,
     );
   }
+
+  const fontLoaderPath = join(root, "apps", app, "fellix-text.tsx");
+  const fontLoader = readFileSync(fontLoaderPath, "utf8");
+  for (const fontFile of archivoInstanceFiles) {
+    if (!fontLoader.includes(`./assets/fonts/${fontFile}`)) {
+      violations.push(
+        `apps/${app}/fellix-text.tsx must load the local ${fontFile} instance`,
+      );
+    }
+    const instancePath = join(root, "apps", app, "assets/fonts", fontFile);
+    if (existsSync(instancePath) && statSync(instancePath).size < 30_000) {
+      violations.push(
+        `apps/${app}/assets/fonts/${fontFile} is not a full font`,
+      );
+    }
+  }
+  for (const forbiddenFont of [
+    "@expo-google-fonts/archivo",
+    "Fraunces",
+    "Instrument Serif",
+    "Figtree",
+  ]) {
+    if (fontLoader.includes(forbiddenFont)) {
+      violations.push(
+        `apps/${app}/fellix-text.tsx must not load ${forbiddenFont}`,
+      );
+    }
+  }
+
+  const packageManifest = readFileSync(
+    join(root, "apps", app, "package.json"),
+    "utf8",
+  );
+  if (packageManifest.includes("@expo-google-fonts/archivo")) {
+    violations.push(
+      `apps/${app}/package.json must use the six bundled Archivo instances`,
+    );
+  }
 }
 
 function sourceFiles(directory: string): string[] {
@@ -155,6 +314,21 @@ for (const file of designSources) {
     const fileLabel = relative(root, file);
     const lines = readFileSync(file, "utf8").split("\n");
     lines.forEach((line, index) => {
+      if (/font-stretch\s*:/.test(line)) {
+        violations.push(
+          `${fileLabel}:${index + 1} uses font-stretch; use font-variation-settings`,
+        );
+      }
+      if (/Instrument (?:Serif|Sans)/i.test(line)) {
+        violations.push(
+          `${fileLabel}:${index + 1} references a retired Instrument font`,
+        );
+      }
+      if (/data-zone=["']performance["']/.test(line)) {
+        violations.push(
+          `${fileLabel}:${index + 1} uses the retired performance zone`,
+        );
+      }
       const tracking = line.match(/letter-spacing:\s*(-?\d*\.?\d+)em/);
       if (tracking?.[1] && Number(tracking[1]) < -0.03) {
         violations.push(
@@ -173,11 +347,29 @@ for (const file of designSources) {
   }
   if (![".ts", ".tsx"].includes(extname(file))) continue;
   const fileLabel = relative(root, file);
+  const source = readFileSync(file, "utf8");
+  if (/<Numeric\b[^>]*>\s*[A-Za-z][^<{]*<\/Numeric>/s.test(source)) {
+    violations.push(
+      `${fileLabel} wraps a literal word in Numeric; Archivo is numerals only`,
+    );
+  }
   const lines = readFileSync(file, "utf8").split("\n");
   lines.forEach((line, index) => {
     if (/data-zone=["'{]*performance/.test(line)) {
       violations.push(
         `${fileLabel}:${index + 1} uses the retired performance zone; use athletic or live`,
+      );
+    }
+
+    if (/Instrument (?:Serif|Sans)|@fontsource\/instrument-/i.test(line)) {
+      violations.push(
+        `${fileLabel}:${index + 1} references a retired Instrument font`,
+      );
+    }
+
+    if (/fontStretch\s*:/.test(line)) {
+      violations.push(
+        `${fileLabel}:${index + 1} uses fontStretch; use a named Archivo tier`,
       );
     }
 
@@ -242,5 +434,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  "Design system verified: v3 references, zoning, typography limits, club/player identity, icon variants, generated imagery, theme contrast, recovery, naming, and country-code policy are intact.",
+  "Design system verified: authoritative font guidance, six precise Archivo tiers, local app instances, semantic zoning, contrast, identity, icons, imagery, recovery, naming, and country-code policy are intact.",
 );

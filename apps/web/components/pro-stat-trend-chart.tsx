@@ -1,5 +1,6 @@
 "use client";
 
+import { Numeric } from "@duna/ui";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import styles from "./pro-stat-trend-chart.module.css";
@@ -105,9 +106,11 @@ export function ProStatTrendChart({
             >
               <span>{candidate.label}</span>
               <strong>
-                {latest === undefined
-                  ? "—"
-                  : `${latest.toFixed(candidate.key === "hittingEfficiency" ? 1 : 2)}${candidate.suffix}`}
+                <Numeric tier="block">
+                  {latest === undefined
+                    ? "—"
+                    : `${latest.toFixed(candidate.key === "hittingEfficiency" ? 1 : 2)}${candidate.suffix}`}
+                </Numeric>
               </strong>
             </button>
           );
@@ -118,8 +121,12 @@ export function ProStatTrendChart({
           <aside>
             <span>{activeMetric.label}</span>
             <strong>
-              {selected?.value.toFixed(metric === "hittingEfficiency" ? 1 : 2)}
-              {activeMetric.suffix}
+              <Numeric tier="hero">
+                {selected?.value.toFixed(
+                  metric === "hittingEfficiency" ? 1 : 2,
+                )}
+                {activeMetric.suffix}
+              </Numeric>
             </strong>
             {selected && (
               <>
@@ -159,23 +166,23 @@ export function ProStatTrendChart({
                       y1={gridY}
                       y2={gridY}
                     />
-                    <text x={0} y={gridY + 5}>
+                    <text className={styles.axisValue} x={0} y={gridY + 5}>
                       {value.toFixed(metric === "hittingEfficiency" ? 0 : 1)}
                     </text>
                   </g>
                 );
               })}
-              <path className={styles.line} d={path} />
+              <path className={styles.line} d={path} pathLength={1} />
               {plotted.map(({ point, value }, index) => (
                 <g key={point.matchId}>
                   <circle
-                    className={
+                    className={`${styles.point} ${
                       point.result === "win"
                         ? styles.win
                         : point.result === "loss"
                           ? styles.loss
                           : styles.unknown
-                    }
+                    }`}
                     cx={x(index)}
                     cy={y(value)}
                     r={3.5}

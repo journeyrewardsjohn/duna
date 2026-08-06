@@ -490,26 +490,11 @@ export async function updateThemeAction(
     }
     const headingFont = field(formData, "headingFont");
     const bodyFont = field(formData, "bodyFont");
-    const validHeadingFonts = [
-      "Fellix",
-      "Fraunces",
-      "Instrument Sans",
-      "DM Sans",
-      "Space Grotesk",
-      "Playfair Display",
-    ];
-    const validBodyFonts = [
-      "Fellix",
-      "Archivo",
-      "Inter",
-      "DM Sans",
-      "Source Sans 3",
-    ];
-    if (!validHeadingFonts.includes(headingFont)) {
-      throw new Error("Choose a valid heading font.");
+    if (headingFont !== "Fellix") {
+      throw new Error("Duna club headings use Fellix.");
     }
-    if (!validBodyFonts.includes(bodyFont)) {
-      throw new Error("Choose a valid body font.");
+    if (bodyFont !== "Fellix") {
+      throw new Error("Duna club body text uses Fellix.");
     }
     const profileLayout = field(formData, "profileLayout");
     if (
@@ -550,15 +535,8 @@ export async function updateThemeAction(
         clubChroma: clubColor.chroma,
       },
       typography: {
-        heading: headingFont as
-          | "Fellix"
-          | "Fraunces"
-          | "Instrument Sans"
-          | "DM Sans"
-          | "Space Grotesk"
-          | "Playfair Display",
-        body: bodyFont as
-          "Fellix" | "Archivo" | "Inter" | "DM Sans" | "Source Sans 3",
+        heading: "Fellix",
+        body: "Fellix",
       },
       fontLicenseConfirmed: field(formData, "fontLicenseConfirmed") === "true",
       safeFallbackFont:

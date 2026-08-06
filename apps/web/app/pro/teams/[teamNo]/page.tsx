@@ -1,5 +1,5 @@
 import type { PublicProfessionalTeam } from "@duna/api";
-import { Badge } from "@duna/ui";
+import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowLeft,
   ArrowRight,
@@ -80,7 +80,7 @@ export default async function ProfessionalTeamPage({
     ),
   };
   return (
-    <main className={styles.page}>
+    <main className={styles.page} data-zone="athletic">
       <SiteHeader />
       <script
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
@@ -104,9 +104,14 @@ export default async function ProfessionalTeamPage({
         <aside>
           <span>Connected record</span>
           <strong>
-            {team.record.wins}–{team.record.losses}
+            <Numeric tier="hero">
+              {team.record.wins}–{team.record.losses}
+            </Numeric>
           </strong>
-          <small>{team.record.matches} official matches</small>
+          <small>
+            <Numeric tier="chip">{team.record.matches}</Numeric> official
+            matches
+          </small>
         </aside>
       </section>
 
@@ -115,25 +120,50 @@ export default async function ProfessionalTeamPage({
           <article>
             <span>Hitting efficiency</span>
             <strong>
-              {statistics?.hittingEfficiency?.toFixed(1) ?? "—"}
-              {statistics?.hittingEfficiency !== undefined ? "%" : ""}
+              <Numeric tier="block">
+                {statistics?.hittingEfficiency?.toFixed(1) ?? "—"}
+                {statistics?.hittingEfficiency !== undefined ? "%" : ""}
+              </Numeric>
             </strong>
-            <small>{statistics?.attackAttempts ?? 0} recorded attacks</small>
+            <small>
+              <Numeric tier="chip">{statistics?.attackAttempts ?? 0}</Numeric>{" "}
+              recorded attacks
+            </small>
           </article>
           <article>
             <span>Aces / set</span>
-            <strong>{statistics?.acesPerSet.toFixed(2) ?? "—"}</strong>
-            <small>{statistics?.aces ?? 0} total aces</small>
+            <strong>
+              <Numeric tier="block">
+                {statistics?.acesPerSet.toFixed(2) ?? "—"}
+              </Numeric>
+            </strong>
+            <small>
+              <Numeric tier="chip">{statistics?.aces ?? 0}</Numeric> total aces
+            </small>
           </article>
           <article>
             <span>Blocks / set</span>
-            <strong>{statistics?.blocksPerSet.toFixed(2) ?? "—"}</strong>
-            <small>{statistics?.blocks ?? 0} total blocks</small>
+            <strong>
+              <Numeric tier="block">
+                {statistics?.blocksPerSet.toFixed(2) ?? "—"}
+              </Numeric>
+            </strong>
+            <small>
+              <Numeric tier="chip">{statistics?.blocks ?? 0}</Numeric> total
+              blocks
+            </small>
           </article>
           <article>
             <span>Digs / set</span>
-            <strong>{statistics?.digsPerSet.toFixed(2) ?? "—"}</strong>
-            <small>{statistics?.digs ?? 0} successful digs</small>
+            <strong>
+              <Numeric tier="block">
+                {statistics?.digsPerSet.toFixed(2) ?? "—"}
+              </Numeric>
+            </strong>
+            <small>
+              <Numeric tier="chip">{statistics?.digs ?? 0}</Numeric> successful
+              digs
+            </small>
           </article>
         </div>
 
@@ -173,9 +203,16 @@ export default async function ProfessionalTeamPage({
                   <span>
                     <strong>{player.name}</strong>
                     <small>
-                      {player.sandRating !== undefined
-                        ? `Sand Rating ${player.sandRating.toFixed(2)}`
-                        : "Profile connected"}
+                      {player.sandRating !== undefined ? (
+                        <>
+                          Sand Rating{" "}
+                          <Numeric tier="chip">
+                            {player.sandRating.toFixed(2)}
+                          </Numeric>
+                        </>
+                      ) : (
+                        "Profile connected"
+                      )}
                     </small>
                   </span>
                   {player.publicPath && <ArrowRight aria-hidden size={17} />}
@@ -207,6 +244,12 @@ export default async function ProfessionalTeamPage({
           </header>
           <div className={styles.matches}>
             {team.matches.map((match) => {
+              const occurredAt = new Intl.DateTimeFormat("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+                timeZone: "UTC",
+              }).format(new Date(match.occurredAt));
               const content = (
                 <>
                   <span className={styles[match.result]}>
@@ -218,18 +261,15 @@ export default async function ProfessionalTeamPage({
                   </span>
                   <div>
                     <small>
-                      {new Intl.DateTimeFormat("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                        timeZone: "UTC",
-                      }).format(new Date(match.occurredAt))}{" "}
-                      · {match.eventName}
+                      <Numeric tier="table">{occurredAt}</Numeric> ·{" "}
+                      {match.eventName}
                     </small>
                     <strong>vs. {match.opponent}</strong>
                   </div>
                   <b>
-                    {match.sets.map((set) => `${set.a}–${set.b}`).join(" · ")}
+                    <Numeric tier="table">
+                      {match.sets.map((set) => `${set.a}–${set.b}`).join(" · ")}
+                    </Numeric>
                   </b>
                   {match.canonicalPath && <ArrowRight aria-hidden size={16} />}
                 </>

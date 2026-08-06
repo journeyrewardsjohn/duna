@@ -232,10 +232,13 @@
 }
 
 :root {
-  --font-display: "Fraunces Variable", "Fraunces", Georgia, serif;
-  --font-heading: "Fraunces Variable", "Fraunces", Georgia, serif;
-  --font-body: "Fellix", "Helvetica Neue", Arial, sans-serif;
-  --font-data: "Archivo Variable", "Archivo", "Arial Narrow", sans-serif;
+  --font-display:
+    "Fraunces Variable", "Fraunces", Georgia, "Times New Roman", serif;
+  --font-heading: var(--font-display);
+  --font-body: "Fellix", Figtree, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-ui: var(--font-body);
+  --font-data: "Archivo Variable", "Archivo", "Fellix", sans-serif;
+  --font-monument: var(--font-data);
   --font-mono: var(--font-data);
   --sand-100: #efe6d3;
   --sand-300: #e2cfa6;
@@ -301,7 +304,8 @@
 
 :where(*, *::before, *::after) {
   box-sizing: border-box;
-  font-synthesis: none;
+  font-synthesis-style: none;
+  font-synthesis-weight: none;
 }
 
 :where(button, input, select, textarea) {
@@ -370,7 +374,6 @@
 .duna-mark__word {
   font-family: var(--font-data);
   font-size: 1.08rem;
-  font-stretch: 90%;
   font-variation-settings:
     "wdth" 90,
     "wght" 800;
@@ -579,11 +582,11 @@
   color: var(--text-1);
   font-family: var(--font-data);
   font-size: 0.78125rem;
-  font-stretch: 78%;
   font-variation-settings:
     "wdth" 78,
     "wght" 700;
   font-weight: 700;
+  font-feature-settings: "tnum" 1;
   font-variant-numeric: tabular-nums;
   min-height: 25px;
   padding: 5px 9px;
@@ -670,22 +673,82 @@
   width: 1px;
 }
 
-.duna-numeric {
+.duna-numeric,
+[data-numeric-tier] {
   font-family: var(--font-data);
-  font-stretch: 78%;
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.duna-numeric,
+.duna-numeric--table {
   font-variation-settings:
     "wdth" 78,
     "wght" 700;
-  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.duna-numeric--score {
+  font-size: clamp(4.5rem, 8vw, 8.75rem);
+  font-variation-settings:
+    "wdth" 64,
+    "wght" 900;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.duna-numeric--monument {
+  font-size: clamp(7.5rem, 12vw, 12.5rem);
+  font-feature-settings: "pnum" 1;
+  font-variant-numeric: proportional-nums;
+  font-variation-settings:
+    "wdth" 122,
+    "wght" 900;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.duna-numeric--hero {
+  font-size: clamp(2.5rem, 4vw, 3.5rem);
+  font-variation-settings:
+    "wdth" 108,
+    "wght" 800;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.duna-numeric--block {
+  font-size: clamp(2rem, 3vw, 2.875rem);
+  font-variation-settings:
+    "wdth" 94,
+    "wght" 800;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.duna-numeric--chip {
+  font-size: clamp(0.75rem, 1vw, 0.8125rem);
+  font-variation-settings:
+    "wdth" 78,
+    "wght" 700;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.duna-numeric--table {
+  font-size: clamp(0.8125rem, 1.25vw, 1.1875rem);
 }
 
 .duna-data-expanded {
   font-family: var(--font-data);
-  font-stretch: 116%;
+  font-feature-settings: "pnum" 1;
   font-variation-settings:
-    "wdth" 116,
-    "wght" 800;
-  font-variant-numeric: tabular-nums;
+    "wdth" 122,
+    "wght" 900;
+  font-variant-numeric: proportional-nums;
 }
 
 .duna-glass {

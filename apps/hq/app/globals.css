@@ -10181,11 +10181,10 @@ body {
 
 .hq-sidebar__brand .duna-mark__word {
   font-family: var(--font-data);
-  font-stretch: 116%;
   font-variation-settings:
-    "wdth" 116,
+    "wdth" 90,
     "wght" 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.17em;
 }
 
 .hq-sidebar nav {
@@ -10200,12 +10199,9 @@ body {
 .hq-sidebar__section {
   color: var(--text-3);
   display: block;
-  font-family: var(--font-data);
+  font-family: var(--font-body);
   font-size: 0.625rem;
-  font-stretch: 78%;
-  font-variation-settings:
-    "wdth" 78,
-    "wght" 720;
+  font-weight: 500;
   letter-spacing: 0.13em;
   padding: 1rem 0.65rem 0.38rem;
   text-transform: uppercase;
@@ -10285,11 +10281,8 @@ body {
 .page-eyebrow,
 .section__eyebrow {
   color: #22343b;
-  font-family: var(--font-data);
-  font-stretch: 78%;
-  font-variation-settings:
-    "wdth" 78,
-    "wght" 720;
+  font-family: var(--font-body);
+  font-weight: 500;
 }
 
 :root[data-theme="dark"] .hq-eyebrow,
@@ -10336,9 +10329,8 @@ body {
 .rating-health article > .duna-numeric,
 .admin-org-metric-grid .duna-numeric {
   font-family: var(--font-data);
-  font-stretch: 116%;
   font-variation-settings:
-    "wdth" 116,
+    "wdth" 94,
     "wght" 800;
   font-weight: 800;
   letter-spacing: -0.03em;
@@ -10389,11 +10381,8 @@ body {
 
 .duna-badge,
 .hq-sidebar nav a i {
-  font-family: var(--font-data);
-  font-stretch: 78%;
-  font-variation-settings:
-    "wdth" 78,
-    "wght" 720;
+  font-family: var(--font-body);
+  font-weight: 600;
 }
 
 @media (max-width: 980px) {

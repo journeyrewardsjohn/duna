@@ -21,7 +21,7 @@ export default async function OrganizationInvitationPage({
     ? Boolean((await withAuth()).user)
     : true;
   return (
-    <main className="organization-invite-page">
+    <main className="organization-invite-page" data-zone="operator">
       <OrganizationInvitationPanel
         invitation={invitation}
         inviteToken={inviteToken}

@@ -7,21 +7,25 @@ and data truth always take precedence over visual novelty.
 
 Read the relevant reference before changing any user-facing surface:
 
-1. [`docs/design/duna-design-system-v3.md`](docs/design/duna-design-system-v3.md)
+1. [`docs/design/duna-font-usage-guide.md`](docs/design/duna-font-usage-guide.md)
+   is the authoritative typography contract for every surface. It supersedes
+   all font guidance in the design-system, mobile, theming, and audit files.
+2. [`docs/design/duna-design-system-v3.md`](docs/design/duna-design-system-v3.md)
    is the current source of truth for ground inversion, athletic composition,
    typography, club color, player identity, and page-level direction. It
-   supersedes only the zoning rule in v2.
-2. [`docs/design/duna-implementation-audit.md`](docs/design/duna-implementation-audit.md)
+   supersedes only the zoning rule in v2; its typography guidance applies only
+   where the font usage guide does not amend it.
+3. [`docs/design/duna-implementation-audit.md`](docs/design/duna-implementation-audit.md)
    is the verified correction ledger. Treat an item as closed only when source,
    computed styles, responsive layout, and live behavior agree.
-3. [`docs/design/duna-design-system.md`](docs/design/duna-design-system.md)
+4. [`docs/design/duna-design-system.md`](docs/design/duna-design-system.md)
    remains the source for brand, imagery, motion, voice, and co-branding where
    v3 does not amend it.
-4. [`docs/design/duna-mobile-design-guide.md`](docs/design/duna-mobile-design-guide.md)
+5. [`docs/design/duna-mobile-design-guide.md`](docs/design/duna-mobile-design-guide.md)
    extends the system for Duna Players and Duna Pro. It owns mobile navigation,
    adaptive contrast, sunlight behavior, touch targets, offline states, the
    Strand, and the Watch.
-5. [`docs/design/duna-theming-light-dark.md`](docs/design/duna-theming-light-dark.md)
+6. [`docs/design/duna-theming-light-dark.md`](docs/design/duna-theming-light-dark.md)
    owns theme architecture. Theme is a preference, zone is meaning, and
    contrast is an environmental condition.
 
@@ -48,14 +52,14 @@ When the documents appear to conflict, preserve these invariants:
 - Web surfaces declare `data-zone="editorial"`, `data-zone="athletic"`, or
   `data-zone="live"`. Native screens declare the equivalent zone through the
   shared token resolver. Never use the retired `performance` zone.
-  Native screens declare the equivalent zone through the shared token resolver.
 - Every theme supports Light, Dark, and Match device. Never hardcode a fog
   dissolve: it must resolve to the active zone ground.
-- Use Fellix for product text, controls, labels, and names; Fraunces 600–700 for
-  editorial display moments; and Archivo with tabular numerals for meaningful
-  data and ghost type. Athletic surfaces contain no serif. Awesome Serif is an
-  optional licensed display upgrade only when the applicable web/app embedding
-  rights are documented.
+- Use Fellix for all product text, controls, labels, names, and athletic or
+  operator display; Fraunces 600–700 only for editorial headlines at least
+  24px; and Archivo for every meaningful numeral. Athletic, operator, and app
+  surfaces contain no serif. Instrument Serif is retired. Awesome Serif must
+  not enter a product bundle without documented embedding rights and a future
+  amendment to the authoritative font guide.
 - Never synthesize a font weight. Tracking follows the v3 size curve and is
   never tighter than `-0.030em`; display word spacing compensates negative
   tracking.
@@ -65,8 +69,11 @@ When the documents appear to conflict, preserve these invariants:
 - Players control expressive identity but never verified data. Curated accents,
   photos, biographies, highlights, and sponsor marks obey verification and
   moderation gates.
-- Meaningful numbers use Archivo and tabular numerals. Serif never appears in
-  buttons, tables, small labels, or native UI below 24pt.
+- Meaningful numbers use the six Archivo tiers from the font guide. Score,
+  Hero, Block, Table, and Chip use tabular figures; Monument is deliberately
+  proportional. Use `font-variation-settings`, never `font-stretch`. Serif
+  never appears in buttons, tables, labels, athletic/operator surfaces, or
+  either native app.
 - Use the four chip classes from the design system. Do not render status,
   taxonomy, identity, and metrics as undifferentiated badges.
 - Do not render misleading empty data such as `0/0`, `0–0`, undifferentiated
@@ -80,7 +87,7 @@ When the documents appear to conflict, preserve these invariants:
   motion.
 - Touch targets are at least 48pt; primary mobile actions are at least 56pt.
 - Motion must encode hierarchy or state. Editorial surfaces get at most one
-  ambient motion per viewport; performance surfaces may move more, but only in
+  ambient motion per viewport; athletic surfaces may move more, but only in
   response to meaningful data.
 - Never make essential content depend on parallax, blur, hover, autoplay, or
   motion. Reduced-motion and data-saving fallbacks are part of the component.

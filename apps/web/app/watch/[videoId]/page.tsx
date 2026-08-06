@@ -43,7 +43,7 @@ export default async function WatchVideoPage({
   ];
 
   return (
-    <main className="video-watch-page">
+    <main className="video-watch-page" data-zone="athletic">
       <SiteHeader />
       <div className="video-watch-page__shell">
         <DunaVideoGallery

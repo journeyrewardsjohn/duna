@@ -1947,10 +1947,8 @@ export function ThemeKitEditor({
   const [submittedClubColor, setSubmittedClubColor] = useState(
     workspace.theme.palette.primary,
   );
-  const [headingFont, setHeadingFont] = useState(
-    workspace.theme.typography.heading,
-  );
-  const [bodyFont, setBodyFont] = useState(workspace.theme.typography.body);
+  const headingFont = "Fellix";
+  const bodyFont = "Fellix";
   const [cardStyle, setCardStyle] = useState(workspace.theme.cardStyle);
   const [profileLayout, setProfileLayout] = useState(
     workspace.theme.profileLayout === "immersive" ||
@@ -2448,43 +2446,19 @@ export function ThemeKitEditor({
                 </div>
               </header>
               <div className="operator-form-grid operator-form-grid--two">
-                <label>
-                  <span>Heading font</span>
-                  <select
-                    name="headingFont"
-                    onChange={(event) => setHeadingFont(event.target.value)}
-                    value={headingFont}
-                  >
-                    {[
-                      "Fellix",
-                      "Fraunces",
-                      "Instrument Sans",
-                      "DM Sans",
-                      "Space Grotesk",
-                      "Playfair Display",
-                    ].map((font) => (
-                      <option key={font}>{font}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Body font</span>
-                  <select
-                    name="bodyFont"
-                    onChange={(event) => setBodyFont(event.target.value)}
-                    value={bodyFont}
-                  >
-                    {[
-                      "Fellix",
-                      "Archivo",
-                      "Inter",
-                      "DM Sans",
-                      "Source Sans 3",
-                    ].map((font) => (
-                      <option key={font}>{font}</option>
-                    ))}
-                  </select>
-                </label>
+                <input name="headingFont" type="hidden" value="Fellix" />
+                <input name="bodyFont" type="hidden" value="Fellix" />
+                <div className="operator-field--wide theme-kit-type-lock">
+                  <span>Typography system</span>
+                  <strong>
+                    Fellix for words. Archivo for meaningful data.
+                  </strong>
+                  <p>
+                    Duna keeps type consistent and licensed across club pages.
+                    Your submitted color, imagery, mark, and voice carry the
+                    club identity.
+                  </p>
+                </div>
                 <label>
                   <span>Card style</span>
                   <select
@@ -2504,30 +2478,13 @@ export function ThemeKitEditor({
                     <option value="borderless">Borderless</option>
                   </select>
                 </label>
-                <label>
-                  <span>Safe fallback</span>
-                  <input
-                    defaultValue={workspace.theme.safeFallbackFont}
-                    name="safeFallbackFont"
-                    required
-                  />
-                </label>
-              </div>
-              <label className="operator-confirmation theme-font-license">
                 <input
-                  defaultChecked={workspace.theme.fontLicenseConfirmed}
-                  name="fontLicenseConfirmed"
-                  type="checkbox"
-                  value="true"
+                  name="safeFallbackFont"
+                  type="hidden"
+                  value="Fellix, Figtree, system-ui, sans-serif"
                 />
-                <span>
-                  <strong>
-                    I confirm these fonts have a valid web-use license.
-                  </strong>
-                  Duna never assumes a license and always keeps a system
-                  fallback available.
-                </span>
-              </label>
+              </div>
+              <input name="fontLicenseConfirmed" type="hidden" value="true" />
             </section>
           </div>
 

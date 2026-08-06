@@ -67,7 +67,7 @@ export function PublicLiveScore({
               ))}
             </div>
             <h1>{match.teamA.name}</h1>
-            <Numeric>{current.a}</Numeric>
+            <Numeric tier="score">{current.a}</Numeric>
             <Badge tone={match.score.serving === "A" ? "positive" : "neutral"}>
               {match.score.serving === "A" ? "Serving" : "Receiving"}
             </Badge>
@@ -82,7 +82,7 @@ export function PublicLiveScore({
               ))}
             </div>
             <h1>{match.teamB.name}</h1>
-            <Numeric>{current.b}</Numeric>
+            <Numeric tier="score">{current.b}</Numeric>
             <Badge tone={match.score.serving === "B" ? "positive" : "neutral"}>
               {match.score.serving === "B" ? "Serving" : "Receiving"}
             </Badge>
@@ -95,7 +95,7 @@ export function PublicLiveScore({
               key={index}
             >
               <small>SET {index + 1}</small>
-              <Numeric>
+              <Numeric tier="table">
                 {set.a}–{set.b}
               </Numeric>
             </span>

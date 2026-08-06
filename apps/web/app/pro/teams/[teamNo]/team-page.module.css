@@ -49,8 +49,9 @@
 }
 
 .hero h1 {
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: clamp(4rem, 10vw, 10rem);
+  font-weight: 800;
   letter-spacing: -0.03em;
   line-height: 0.82;
   margin: 1rem 0 1.5rem;
@@ -81,9 +82,7 @@
 }
 
 .hero aside strong {
-  font-family: var(--font-display);
-  font-size: clamp(3.5rem, 8vw, 7rem);
-  letter-spacing: -0.03em;
+  font-family: var(--font-data);
   line-height: 0.9;
 }
 
@@ -113,9 +112,7 @@
 }
 
 .metrics strong {
-  font-family: var(--font-display);
-  font-size: clamp(2rem, 4vw, 3.5rem);
-  letter-spacing: -0.03em;
+  font-family: var(--font-data);
 }
 
 .section {
@@ -138,8 +135,9 @@
 }
 
 .section h2 {
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: clamp(2.5rem, 6vw, 5.5rem);
+  font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 0.9;
   margin: 0.35rem 0 0;

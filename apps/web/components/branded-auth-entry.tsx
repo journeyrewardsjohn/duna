@@ -22,7 +22,7 @@ export function BrandedAuthEntry({
   }?returnTo=${encodeURIComponent(returnTo)}`;
 
   return (
-    <main className="auth-entry">
+    <main className="auth-entry" data-zone="editorial">
       <div className="auth-entry__media" aria-hidden>
         <video
           autoPlay

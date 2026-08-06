@@ -332,7 +332,13 @@ export default async function ProTourPage({
         <div>
           <Badge tone={liveEvents.length ? "danger" : "neutral"}>
             <Radio aria-hidden size={12} />
-            {liveEvents.length ? `${liveEvents.length} live now` : "Pro tour"}
+            {liveEvents.length ? (
+              <>
+                <Numeric tier="chip">{liveEvents.length}</Numeric> live now
+              </>
+            ) : (
+              "Pro tour"
+            )}
           </Badge>
           <h1>The world&apos;s game, in one live view.</h1>
           <p>
@@ -343,7 +349,7 @@ export default async function ProTourPage({
         </div>
         <div className="pro-tour-hero__stat">
           <Globe2 aria-hidden size={28} />
-          <Numeric>{coverage?.events.length ?? 0}</Numeric>
+          <Numeric tier="hero">{coverage?.events.length ?? 0}</Numeric>
           <span>tracked events</span>
         </div>
         <div className="pro-tour-hero__media" aria-hidden>
@@ -482,18 +488,28 @@ export default async function ProTourPage({
                   .slice(0, 10)
                   .map((ranking) => (
                     <article key={ranking.id}>
-                      <Numeric>{ranking.rank}</Numeric>
+                      <Numeric tier="table">{ranking.rank}</Numeric>
                       <div>
                         <strong>{ranking.displayName}</strong>
                         <small>
                           {ranking.countryCode ?? "—"} ·{" "}
-                          {ranking.points.toFixed(0)} pts
+                          <Numeric tier="table">
+                            {ranking.points.toFixed(0)}
+                          </Numeric>{" "}
+                          pts
                         </small>
                       </div>
                       <span>
-                        {ranking.previousRank
-                          ? `was ${ranking.previousRank}`
-                          : "new"}
+                        {ranking.previousRank ? (
+                          <>
+                            was{" "}
+                            <Numeric tier="chip">
+                              {ranking.previousRank}
+                            </Numeric>
+                          </>
+                        ) : (
+                          "new"
+                        )}
                       </span>
                     </article>
                   ))}

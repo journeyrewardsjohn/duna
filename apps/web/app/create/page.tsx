@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function PublicCreatePage() {
   return (
-    <main className="public-create-page">
+    <main className="public-create-page" data-zone="operator">
       <SiteHeader />
       <PublicCreateStarter hqUrl={DUNA_HQ_URL} />
       <SiteFooter />

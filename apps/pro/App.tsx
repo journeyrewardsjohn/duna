@@ -4389,7 +4389,7 @@ function createStyles(palette: Palette) {
     },
     calendarDayNumber: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Block",
       fontSize: 22,
       fontWeight: "900",
       lineHeight: 27,
@@ -4789,7 +4789,7 @@ function createStyles(palette: Palette) {
     },
     calendarSheetSummaryValue: {
       color: colors.bone,
-      fontFamily: "Archivo-Bold",
+      fontFamily: "Archivo-Chip",
       fontSize: 12,
       fontWeight: "800",
       lineHeight: 17,
@@ -5053,7 +5053,7 @@ function createStyles(palette: Palette) {
     },
     wordmarkText: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Wordmark",
       fontSize: 17,
       fontWeight: "900",
       letterSpacing: 3,
@@ -5262,7 +5262,7 @@ function createStyles(palette: Palette) {
     metricLabel: { color: colors.muted, fontSize: 10, letterSpacing: 0.8 },
     metricValue: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Block",
       fontSize: 20,
       fontWeight: "900",
       letterSpacing: -1,
@@ -5483,7 +5483,7 @@ function createStyles(palette: Palette) {
     personRating: { alignItems: "flex-end", minWidth: 30 },
     ratingNumber: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Chip",
       fontSize: 10,
       fontWeight: "800",
     },
@@ -5843,7 +5843,7 @@ function createStyles(palette: Palette) {
     teamNameExpanded: { fontSize: 22, marginLeft: 12 },
     bigScore: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Score",
       fontSize: 124,
       fontWeight: "900",
       letterSpacing: -10,
@@ -5918,7 +5918,7 @@ function createStyles(palette: Palette) {
     setLabel: { color: colors.muted, fontSize: 10, fontWeight: "700" },
     setScore: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Table",
       fontSize: 13,
       fontWeight: "800",
       marginTop: 2,
@@ -5952,7 +5952,7 @@ function createStyles(palette: Palette) {
     },
     balanceValue: {
       color: colors.bone,
-      fontFamily: "Archivo-ExtraBold",
+      fontFamily: "Archivo-Hero",
       fontSize: 39,
       fontWeight: "900",
       letterSpacing: -2.4,
@@ -5996,7 +5996,7 @@ function createStyles(palette: Palette) {
     },
     transactionAmount: {
       color: colors.bone,
-      fontFamily: "Archivo-Bold",
+      fontFamily: "Archivo-Chip",
       fontSize: 10,
       fontWeight: "800",
     },

@@ -23,7 +23,7 @@ export default async function GuardianInvitationPage({
     : true;
 
   return (
-    <main className="organization-invite-page">
+    <main className="organization-invite-page" data-zone="operator">
       <GuardianInvitationPanel
         consentDisclosure={GUARDIAN_CONSENT_DISCLOSURE}
         invitation={invitation}

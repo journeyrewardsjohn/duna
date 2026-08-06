@@ -1,5 +1,6 @@
 "use client";
 
+import { Numeric } from "@duna/ui";
 import { ArrowRight, Search, Trophy, X } from "lucide-react";
 import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
@@ -117,72 +118,75 @@ export function ProPlayerDiscovery({
             .filter((rating): rating is number => rating !== undefined);
           return (
             <article
-              className="pro-player-card pro-player-team-card"
+              className="pro-player-team-card"
               key={`${lead.gender}-${lead.worldRank}-${lead.points}`}
             >
-              <div className="pro-player-card__portrait pro-player-team-card__portraits">
-                <span className="pro-player-card__rank">
-                  World #{lead.worldRank}
-                </span>
-                {team.map((player) => (
-                  <Link
-                    aria-label={`View ${player.displayName}'s player profile`}
-                    href={player.publicPath}
-                    key={player.id}
-                    style={
-                      player.avatarUrl
-                        ? {
-                            backgroundImage: `url("${player.avatarUrl}")`,
-                          }
-                        : undefined
-                    }
-                  >
-                    {!player.avatarUrl && (
-                      <strong>{initials(player.displayName)}</strong>
-                    )}
-                  </Link>
-                ))}
+              <div className="pro-player-team-card__rank">
+                <span>World rank</span>
+                <Numeric tier="monument">#{lead.worldRank}</Numeric>
               </div>
-              <div className="pro-player-card__copy">
-                <span>
+              <div className="pro-player-team-card__identity">
+                <div className="pro-player-team-card__players">
                   {team.map((player) => (
-                    <CountryCode
-                      code={player.countryCode}
-                      key={`country-${player.id}`}
-                    />
+                    <Link
+                      aria-label={`View ${player.displayName}'s player profile`}
+                      className="pro-player-team-card__player"
+                      href={player.publicPath}
+                      key={player.id}
+                    >
+                      <span
+                        className="pro-player-team-card__avatar"
+                        style={
+                          player.avatarUrl
+                            ? { backgroundImage: `url("${player.avatarUrl}")` }
+                            : undefined
+                        }
+                      >
+                        {!player.avatarUrl
+                          ? initials(player.displayName)
+                          : null}
+                      </span>
+                      <span>
+                        <strong>{player.displayName}</strong>
+                        <small>
+                          <CountryCode code={player.countryCode} />
+                        </small>
+                      </span>
+                    </Link>
                   ))}
-                </span>
-                <h3>
-                  {team.map((player, index) => (
-                    <span key={player.id}>
-                      {index > 0 && <i aria-hidden> / </i>}
-                      <Link href={player.publicPath}>{player.displayName}</Link>
-                    </span>
-                  ))}
-                </h3>
+                </div>
                 <dl>
                   <div>
                     <dt>Tour points</dt>
-                    <dd>{lead.points.toLocaleString("en-US")}</dd>
+                    <dd>
+                      <Numeric tier="block">
+                        {lead.points.toLocaleString("en-US")}
+                      </Numeric>
+                    </dd>
                   </div>
                   <div>
                     <dt>Team rating</dt>
                     <dd>
-                      {teamRating.length
-                        ? (
-                            teamRating.reduce(
-                              (sum, rating) => sum + rating,
-                              0,
-                            ) / teamRating.length
-                          ).toFixed(2)
-                        : "—"}
+                      <Numeric tier="block">
+                        {teamRating.length
+                          ? (
+                              teamRating.reduce(
+                                (sum, rating) => sum + rating,
+                                0,
+                              ) / teamRating.length
+                            ).toFixed(2)
+                          : "—"}
+                      </Numeric>
                     </dd>
                   </div>
                 </dl>
-                <span className="pro-player-card__open">
+                <Link
+                  className="pro-player-team-card__open"
+                  href={lead.publicPath}
+                >
                   {team.length === 2 ? "Two player profiles" : "Player profile"}
                   <ArrowRight aria-hidden size={14} />
-                </span>
+                </Link>
               </div>
             </article>
           );
@@ -243,12 +247,15 @@ export function ProPlayerDiscovery({
                     <span>
                       <strong>{player.displayName}</strong>
                       <small>
-                        <CountryCode code={player.countryCode} /> · World #
-                        {player.worldRank} · {player.gender}
+                        <CountryCode code={player.countryCode} /> · World{" "}
+                        <Numeric tier="chip">#{player.worldRank}</Numeric> ·{" "}
+                        {player.gender}
                       </small>
                     </span>
                     <span>
-                      {player.sandRating?.toFixed(2) ?? "—"}
+                      <Numeric tier="block">
+                        {player.sandRating?.toFixed(2) ?? "—"}
+                      </Numeric>
                       <small>Sand Rating</small>
                     </span>
                     <ArrowRight aria-hidden size={17} />

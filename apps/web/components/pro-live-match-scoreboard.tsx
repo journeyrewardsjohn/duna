@@ -1,6 +1,7 @@
 "use client";
 
 import type { PublicProMatchDetail } from "@duna/api";
+import { Numeric } from "@duna/ui";
 import {
   Activity,
   CircleCheck,
@@ -151,9 +152,14 @@ function PlayerIdentity({
           </span>
         </strong>
         <small>
-          {player.rating !== undefined
-            ? `Sand Rating ${player.rating.toFixed(2)}`
-            : "Sand Rating pending"}
+          {player.rating !== undefined ? (
+            <>
+              Sand Rating{" "}
+              <Numeric tier="chip">{player.rating.toFixed(2)}</Numeric>
+            </>
+          ) : (
+            "Sand Rating pending"
+          )}
         </small>
       </span>
     </>
@@ -217,17 +223,18 @@ function TeamScoreRow({
           : false;
         const current = live?.status === "live" && live.currentSetNo === setNo;
         return (
-          <span
+          <Numeric
             className={`pro-live-scoreboard__set${won ? " is-won" : ""}${current ? " is-current" : ""}`}
             key={setNo}
+            tier="block"
           >
             {score ?? "—"}
-          </span>
+          </Numeric>
         );
       })}
-      <strong className="pro-live-scoreboard__match-points">
+      <Numeric className="pro-live-scoreboard__match-points" tier="block">
         {matchPoints(live, sets, side) ?? "—"}
-      </strong>
+      </Numeric>
     </div>
   );
 }
@@ -258,40 +265,57 @@ function PlayerStatCard({
         <span>
           <strong>{player?.name ?? stat.name}</strong>
           <small>
-            {player?.rating !== undefined
-              ? `Sand Rating ${player.rating.toFixed(2)}`
-              : team.label}
+            {player?.rating !== undefined ? (
+              <>
+                Sand Rating{" "}
+                <Numeric tier="chip">{player.rating.toFixed(2)}</Numeric>
+              </>
+            ) : (
+              team.label
+            )}
           </small>
         </span>
       </div>
       <dl>
         <div>
           <dt>Total</dt>
-          <dd>{stat.total}</dd>
+          <dd>
+            <Numeric tier="block">{stat.total}</Numeric>
+          </dd>
         </div>
         <div>
           <dt>Kills</dt>
-          <dd>{stat.attackPoints ?? stat.attack}</dd>
+          <dd>
+            <Numeric tier="block">{stat.attackPoints ?? stat.attack}</Numeric>
+          </dd>
         </div>
         <div>
           <dt>Hit eff.</dt>
           <dd>
-            {hittingEfficiency !== undefined
-              ? `${hittingEfficiency.toFixed(1)}%`
-              : "—"}
+            <Numeric tier="block">
+              {hittingEfficiency !== undefined
+                ? `${hittingEfficiency.toFixed(1)}%`
+                : "—"}
+            </Numeric>
           </dd>
         </div>
         <div>
           <dt>Aces</dt>
-          <dd>{stat.servePoints ?? stat.serve}</dd>
+          <dd>
+            <Numeric tier="block">{stat.servePoints ?? stat.serve}</Numeric>
+          </dd>
         </div>
         <div>
           <dt>Blocks</dt>
-          <dd>{stat.blockPoints ?? stat.block}</dd>
+          <dd>
+            <Numeric tier="block">{stat.blockPoints ?? stat.block}</Numeric>
+          </dd>
         </div>
         <div>
           <dt>Digs</dt>
-          <dd>{stat.digs ?? "—"}</dd>
+          <dd>
+            <Numeric tier="block">{stat.digs ?? "—"}</Numeric>
+          </dd>
         </div>
       </dl>
     </article>
@@ -592,12 +616,13 @@ export function ProLiveMatchScoreboard({
       {displayStatus === "live" && live?.currentSetPoints && (
         <div className="pro-live-scoreboard__now">
           <span>
-            <i aria-hidden /> Point by point
+            <i aria-hidden /> Point by point · Set{" "}
+            <Numeric tier="chip">{live.currentSetNo ?? sets.length}</Numeric>
           </span>
           <strong>
-            Set {live.currentSetNo ?? sets.length} · {live.currentSetPoints.a}
+            <Numeric tier="score">{live.currentSetPoints.a}</Numeric>
             <small>–</small>
-            {live.currentSetPoints.b}
+            <Numeric tier="score">{live.currentSetPoints.b}</Numeric>
           </strong>
         </div>
       )}
@@ -650,7 +675,7 @@ export function ProLiveMatchScoreboard({
                   const maximum = Math.max(stat.a, stat.b, 1);
                   return (
                     <div className="pro-live-stats__metric" key={stat.key}>
-                      <strong>{stat.a}</strong>
+                      <Numeric tier="block">{stat.a}</Numeric>
                       <div>
                         <span>{stat.label}</span>
                         <i>
@@ -658,7 +683,7 @@ export function ProLiveMatchScoreboard({
                           <b style={{ width: `${(stat.b / maximum) * 50}%` }} />
                         </i>
                       </div>
-                      <strong>{stat.b}</strong>
+                      <Numeric tier="block">{stat.b}</Numeric>
                     </div>
                   );
                 })}

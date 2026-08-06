@@ -67,7 +67,7 @@ export default async function CatalogProductPage({
       : undefined;
 
   return (
-    <main className="public-detail catalog-product-page">
+    <main className="public-detail catalog-product-page" data-zone="editorial">
       <SiteHeader />
       <div className="catalog-product-shell">
         <Link className="catalog-product-back" href={`/clubs/${slug}`}>
