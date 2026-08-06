@@ -351,9 +351,9 @@ function DivisionEditor({
             value={division.seeding}
           >
             <option value="first-come">First come</option>
-            <option value="sand-rating-score">SandRating Score</option>
-            <option value="sand-rating-best-8">SandRating Best 8</option>
-            <option value="sand-rating-ttm">SandRating TTM</option>
+            <option value="sand-rating-score">Sand Rating score</option>
+            <option value="sand-rating-best-8">Sand Rating best 8</option>
+            <option value="sand-rating-ttm">Sand Rating TTM</option>
             <option value="manual">Manual</option>
           </select>
         </label>
@@ -438,7 +438,7 @@ function DivisionEditor({
       <div className="division-eligibility">
         <Toggle
           checked={division.ratingEnabled}
-          detail="Optional minimum and maximum SandRating."
+          detail="Optional minimum and maximum Sand Rating."
           label="Rating range"
           onChange={(checked) => set("ratingEnabled", checked)}
         />

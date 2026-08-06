@@ -234,15 +234,16 @@ export function MetricChip({
 export function IdentityChip({
   children,
   className,
-}: {
+  ...props
+}: HTMLAttributes<HTMLSpanElement> & {
   readonly children: ReactNode;
-  readonly className?: string;
 }) {
   return (
     <span
       className={["duna-chip", "duna-identity", className]
         .filter(Boolean)
         .join(" ")}
+      {...props}
     >
       {children}
     </span>

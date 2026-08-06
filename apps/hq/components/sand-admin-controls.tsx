@@ -186,7 +186,7 @@ function SandRatingNetworkForm() {
         </select>
         <button disabled={refreshing}>
           <RefreshCw className={refreshing ? "spin" : undefined} size={15} />
-          Stage SandRating network
+          Stage Sand Rating network
         </button>
         <ActionFeedback state={refreshState} />
       </form>
@@ -1945,14 +1945,14 @@ export function RatingsLabPanel({ data }: { readonly data: SandDataOverview }) {
               ? "—"
               : data.truVolleyBenchmark.meanAbsoluteDifference.toFixed(2)}
           </Numeric>
-          <span>SandRating vs TruVolley</span>
+          <span>Sand Rating vs TruVolley</span>
         </article>
       </section>
       <section className="hq-card ratings-evaluation-card">
         <header className="hq-card-heading">
           <div>
             <span className="hq-eyebrow">Private benchmark</span>
-            <h2>Where SandRating differs</h2>
+            <h2>Where Sand Rating differs</h2>
           </div>
           <Badge>super-admin only</Badge>
         </header>

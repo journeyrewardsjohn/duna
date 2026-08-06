@@ -43,12 +43,14 @@ const iso3ToIso2: Readonly<Record<string, string>> = {
   USA: "US",
 };
 
-export function countryFlag(countryCode?: string): string {
-  if (!countryCode) return "🏳️";
-  const upper = countryCode.trim().toUpperCase();
+export function countryCode(value?: string): string | undefined {
+  if (!value) return undefined;
+  const upper = value.trim().toUpperCase();
   const iso2 = upper.length === 2 ? upper : iso3ToIso2[upper];
-  if (!iso2 || !/^[A-Z]{2}$/.test(iso2)) return "🏳️";
-  return [...iso2]
-    .map((letter) => String.fromCodePoint(127397 + letter.charCodeAt(0)))
-    .join("");
+  return iso2 && /^[A-Z]{2}$/.test(iso2) ? iso2 : undefined;
+}
+
+/** @deprecated Use the ISO-code chip. Emoji flags are intentionally retired. */
+export function countryFlag(value?: string): string {
+  return countryCode(value) ?? "INTL";
 }

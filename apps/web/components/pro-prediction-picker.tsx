@@ -9,7 +9,7 @@ import {
   predictProEventAction,
   predictProMatchAction,
 } from "@/app/events/[slug]/actions";
-import { countryFlag } from "@/lib/country-flag";
+import { CountryCode } from "@/components/country-code";
 
 type ProMatch = PublicProEvent["matches"][number];
 
@@ -118,9 +118,11 @@ export function ProEventWinnerPicker({
               className={selected ? "is-selected" : undefined}
               key={entry.externalTeamId}
             >
-              <span className="pro-winner-pick__flag" aria-hidden>
-                {countryFlag(entry.countryCode) || "◌"}
-              </span>
+              <CountryCode
+                className="pro-winner-pick__flag"
+                code={entry.countryCode}
+                fallback="—"
+              />
               <div>
                 <strong>{entry.label}</strong>
                 <small>

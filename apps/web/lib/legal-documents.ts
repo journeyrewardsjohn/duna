@@ -47,10 +47,10 @@ export const legalDocuments: readonly LegalDocument[] = [
         ],
       },
       {
-        title: "4. Profiles, imported records, and SandRating",
+        title: "4. Profiles, imported records, and Sand Rating",
         paragraphs: [
           "You may connect public profiles or ask Duna to import competition records from sources such as VolleyballLife, BVBInfo, and professional-tour data providers. You represent that any profile you claim belongs to you or your dependent. Imported records may contain source errors, duplicates, or identity ambiguities.",
-          "SandRating and related rankings are estimates based on available match data, opponent strength, score margins, recency, confidence, and other disclosed factors. They are not guarantees of ability, eligibility, safety, selection, or future performance. You may flag a result as inaccurate. Duna may temporarily exclude a disputed result from rating calculations while preserving provenance and audit history until review is complete.",
+          "Sand Rating and related rankings are estimates based on available match data, opponent strength, score margins, recency, confidence, and other disclosed factors. They are not guarantees of ability, eligibility, safety, selection, or future performance. You may flag a result as inaccurate. Duna may temporarily exclude a disputed result from rating calculations while preserving provenance and audit history until review is complete.",
         ],
       },
       {
@@ -152,7 +152,7 @@ export const legalDocuments: readonly LegalDocument[] = [
         title: "1. Scope and roles",
         paragraphs: [
           "This Privacy Policy explains how Beach Elite LLC, doing business as Duna, processes personal information through Duna consumer, mobile, public-profile, Duna HQ, event, communications, rating, and support services.",
-          "Duna is generally the controller of consumer accounts, platform security, SandRating, public profiles, and product analytics. An organization using Duna HQ may separately control member, employee, coach, event, waiver, marketing, and facility information. In those cases, contact the organization first for organization-directed requests; Duna supports the organization as its service provider or processor.",
+          "Duna is generally the controller of consumer accounts, platform security, Sand Rating, public profiles, and product analytics. An organization using Duna HQ may separately control member, employee, coach, event, waiver, marketing, and facility information. In those cases, contact the organization first for organization-directed requests; Duna supports the organization as its service provider or processor.",
         ],
       },
       {
@@ -389,7 +389,7 @@ export const legalDocuments: readonly LegalDocument[] = [
       {
         title: "4. Customer data and privacy roles",
         paragraphs: [
-          "The Organization owns or controls the customer, staff, schedule, event, form, waiver, inventory, marketing, and operational data it submits, subject to individual rights and Duna's independent rights in platform accounts, security records, transaction integrity, and SandRating.",
+          "The Organization owns or controls the customer, staff, schedule, event, form, waiver, inventory, marketing, and operational data it submits, subject to individual rights and Duna's independent rights in platform accounts, security records, transaction integrity, and Sand Rating.",
           "The Organization is responsible for lawful notices, consents, instructions, retention choices, and responses to rights requests for data it controls. Duna acts as service provider or processor for those instructions and may process data as an independent controller for authentication, fraud prevention, product security, billing, legal compliance, and platform-wide services.",
         ],
       },

@@ -4,7 +4,7 @@ import { ArrowUpRight, MapPin, Trophy } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import { countryFlag } from "@/lib/country-flag";
+import { CountryCode } from "@/components/country-code";
 
 export interface PartnershipMatchPoint {
   readonly id: string;
@@ -136,11 +136,7 @@ export function PartnershipHistoryCard({
         </Link>
         <div>
           <span className="partnership-card__context">
-            {partner.countryCode && (
-              <span aria-label={partner.countryCode} role="img">
-                {countryFlag(partner.countryCode)}
-              </span>
-            )}
+            {partner.countryCode && <CountryCode code={partner.countryCode} />}
             {partner.isProfessional ? "Professional partner" : "Partner"}
           </span>
           <h3>{partner.name}</h3>
@@ -314,7 +310,7 @@ export function PartnershipHistoryCard({
               <small>
                 {activePoint.score || "Score pending"} ·{" "}
                 {signed(activePoint.delta)}
-                {" SandRating"}
+                {" Sand Rating"}
               </small>
             </div>
           )}

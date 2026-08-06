@@ -73,8 +73,9 @@ When the documents appear to conflict, preserve these invariants:
   written permission.
 - Every web hero image dissolves into its semantic ground. Native apps use
   photography only in the five approved slots in the mobile guide.
-- Record provenance, model, prompt, seeds, license/permission, and output names
-  for every generated asset in `brand/imagery-log.json`.
+- Record provenance, model, prompt intent, source references, permissions, and
+  output names for every generated asset in
+  `apps/web/public/media/brand/imagery-log.json`.
 - Do not generate replacement partner logos, tour marks, or official event art.
 
 ## Surface ownership

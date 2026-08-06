@@ -133,10 +133,10 @@ export async function refreshSandRatingNetworkAction(
     refreshSandAdmin();
     return {
       status: "success",
-      message: `SandRating network staged: ${result.counters.players} profiles and ${result.counters.matches} matches across ${maxDepth} degrees.`,
+      message: `Sand Rating network staged: ${result.counters.players} profiles and ${result.counters.matches} matches across ${maxDepth} degrees.`,
     };
   } catch (error) {
-    return failure(error, "The SandRating network could not be refreshed.");
+    return failure(error, "The Sand Rating network could not be refreshed.");
   }
 }
 
@@ -161,10 +161,10 @@ export async function approveSandRatingBackfillAction(
     refreshSandAdmin();
     return {
       status: "success",
-      message: `${result.approved} partner matches approved; ${result.replay.players} Duna SandRatings rebuilt from ${result.replay.matches} matches.`,
+      message: `${result.approved} partner matches approved; ${result.replay.players} Duna Sand Ratings rebuilt from ${result.replay.matches} matches.`,
     };
   } catch (error) {
-    return failure(error, "The SandRating backfill could not be approved.");
+    return failure(error, "The Sand Rating backfill could not be approved.");
   }
 }
 

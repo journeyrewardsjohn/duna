@@ -42,7 +42,7 @@ import {
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
-import { countryFlag } from "@/lib/country-flag";
+import { CountryCode } from "@/components/country-code";
 import {
   absolutePublicUrl,
   professionalOgImageUrl,
@@ -568,8 +568,7 @@ export default async function PublicPlayerPage({
                 )}
               </div>
               <p className="athlete-hero__country">
-                <span aria-hidden>{countryFlag(countryCode)}</span>
-                {countryCode ?? "Beach volleyball"}
+                <CountryCode code={countryCode} fallback="Beach" />
                 {enrichment?.playingRole ? ` · ${enrichment.playingRole}` : ""}
               </p>
               <h1>
@@ -964,7 +963,7 @@ export default async function PublicPlayerPage({
                   <span>
                     <Flag aria-hidden size={17} />
                     <strong>
-                      {countryFlag(countryCode)} {countryCode}
+                      <CountryCode code={countryCode} />
                     </strong>
                     <small>Competes for</small>
                   </span>

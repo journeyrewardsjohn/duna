@@ -15,7 +15,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
-import { countryFlag } from "@/lib/country-flag";
+import { CountryCode } from "@/components/country-code";
 import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
 
 export const metadata: Metadata = {
@@ -259,8 +259,7 @@ export default async function RankingsPage({
                   </div>
                   <div className="ranking-podium__copy">
                     <small>
-                      <span aria-hidden>{countryFlag(country)}</span>{" "}
-                      {country ?? "International"}
+                      <CountryCode code={country} />
                     </small>
                     <h2>{row.displayName}</h2>
                     <div>
@@ -338,10 +337,7 @@ export default async function RankingsPage({
                       <span className="rankings-list__identity">
                         <strong>{row.displayName}</strong>
                         <small>
-                          <span aria-hidden>
-                            {countryFlag(row.countryCode)}
-                          </span>{" "}
-                          {row.countryCode ?? "International"} ·{" "}
+                          <CountryCode code={row.countryCode} /> ·{" "}
                           {row.points.toFixed(0)} points
                         </small>
                       </span>
@@ -363,9 +359,7 @@ export default async function RankingsPage({
                       <span className="rankings-list__identity">
                         <strong>{row.displayName}</strong>
                         <small>
-                          <span aria-hidden>
-                            {countryFlag(row.countryCode)}
-                          </span>{" "}
+                          <CountryCode code={row.countryCode} />{" "}
                           {row.ratedMatches} rated matches · {row.confidence}
                         </small>
                       </span>
