@@ -2,6 +2,7 @@ import {
   dispatchPlayerFollowNotifications,
   refreshAvpLeague,
   refreshActiveFivbEvents,
+  refreshActiveVolleyballWorldEvents,
   refreshFivbEventIndex,
   refreshRankedPlayerHistories,
   refreshSandRatingNetwork,
@@ -33,6 +34,11 @@ export async function GET(request: Request) {
     }
     if (mode === "live") {
       return NextResponse.json(await refreshActiveFivbEvents({ limit: 4 }));
+    }
+    if (mode === "vw-live") {
+      return NextResponse.json(
+        await refreshActiveVolleyballWorldEvents({ limit: 4 }),
+      );
     }
     if (mode === "avp") {
       return NextResponse.json(await refreshAvpLeague({}));

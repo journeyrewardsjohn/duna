@@ -104,6 +104,21 @@ import {
   type SandDataSource,
   type SourceImportResult,
 } from "./types";
+import {
+  discoverVolleyballWorldEvent,
+  fetchVolleyballWorldLiveMatch,
+  fetchVolleyballWorldLiveMatches,
+  fetchVolleyballWorldMatchStatistics,
+  fetchVolleyballWorldSchedule,
+  parseStoredVolleyballWorldMatch,
+  parseVolleyballWorldBinding,
+  storedVolleyballWorldMatch,
+  type VolleyballWorldBinding,
+  type VolleyballWorldSchedule,
+  type VolleyballWorldScheduledMatch,
+  type VolleyballWorldStoredMatch,
+  type VolleyballWorldTeam,
+} from "./volleyball-world-live";
 
 const sourceNames: Readonly<Record<SandDataSource, string>> = {
   "avp-league": "AVP League",
@@ -179,6 +194,9 @@ function preserveEditorialPayload(
       : {}),
     ...(previous.professionalResearch
       ? { professionalResearch: previous.professionalResearch }
+      : {}),
+    ...(previous.volleyballWorld
+      ? { volleyballWorld: previous.volleyballWorld }
       : {}),
   };
 }
@@ -949,7 +967,49 @@ async function persistImportedMatches(input: {
   let needsMapping = 0;
   let duplicates = 0;
   let approved = 0;
-  const storedMatches = await database.select().from(importedMatches);
+  let storedMatches = await database.select().from(importedMatches);
+  if (input.result.source === "fivb-12ndr") {
+    const claimedLegacyIds = new Set<string>();
+    for (const sourceMatch of input.result.matches) {
+      const raw = unknownRecord(sourceMatch.raw);
+      const phase = optionalSnapshotString(raw.phase);
+      const matchNumber = optionalNumber(raw.matchNumber);
+      if (!phase || !matchNumber || !Number.isInteger(matchNumber)) continue;
+      if (
+        storedMatches.some(
+          (candidate) =>
+            candidate.sourceId === input.sourceId &&
+            candidate.externalMatchId === sourceMatch.externalMatchId,
+        )
+      ) {
+        continue;
+      }
+      const fingerprint = crossSourceMatchFingerprint(sourceMatch);
+      const legacyId = `${sourceMatch.externalEventId}:${matchNumber}`;
+      const legacy = storedMatches.find(
+        (candidate) =>
+          candidate.sourceId === input.sourceId &&
+          candidate.externalEventId === sourceMatch.externalEventId &&
+          candidate.externalMatchId === legacyId &&
+          candidate.crossSourceFingerprint === fingerprint &&
+          !claimedLegacyIds.has(candidate.id),
+      );
+      if (!legacy) continue;
+      await database
+        .update(importedMatches)
+        .set({
+          externalMatchId: sourceMatch.externalMatchId,
+          updatedAt: input.now,
+        })
+        .where(eq(importedMatches.id, legacy.id));
+      claimedLegacyIds.add(legacy.id);
+      storedMatches = storedMatches.map((candidate) =>
+        candidate.id === legacy.id
+          ? { ...candidate, externalMatchId: sourceMatch.externalMatchId }
+          : candidate,
+      );
+    }
+  }
   const existingByExternalId = new Map(
     storedMatches
       .filter((match) => match.sourceId === input.sourceId)
@@ -1681,6 +1741,400 @@ export async function refreshFivbEventIndex(input: {
   return { events: events.length };
 }
 
+function officialRoundLabel(match: {
+  readonly phase?: string;
+  readonly roundName?: string;
+}): string | undefined {
+  const labels = [match.phase, match.roundName].filter(Boolean);
+  return labels.length > 0 ? [...new Set(labels)].join(" - ") : undefined;
+}
+
+function officialMatchWinner(
+  match: VolleyballWorldStoredMatch,
+): "A" | "B" | undefined {
+  if (match.status !== "completed") return undefined;
+  if (match.matchPoints.a > match.matchPoints.b) return "A";
+  if (match.matchPoints.b > match.matchPoints.a) return "B";
+  const a = match.sets.filter((set) => set.a > set.b).length;
+  const b = match.sets.filter((set) => set.b > set.a).length;
+  return a > b ? "A" : b > a ? "B" : undefined;
+}
+
+function officialMatchCandidateScore(input: {
+  readonly row: typeof importedMatches.$inferSelect;
+  readonly candidate: VolleyballWorldScheduledMatch;
+  readonly teamByNo: ReadonlyMap<number, VolleyballWorldTeam>;
+}): number {
+  const raw = unknownRecord(input.row.rawPayload);
+  const sourcePhase = optionalSnapshotString(raw.phase);
+  const officialPhase = normalizePersonName(input.candidate.phase ?? "");
+  if (
+    sourcePhase === "main-draw" &&
+    officialPhase !== normalizePersonName("Main Draw")
+  ) {
+    return -Infinity;
+  }
+  if (
+    sourcePhase === "qualification" &&
+    officialPhase !== normalizePersonName("Qualification")
+  ) {
+    return -Infinity;
+  }
+  let score = sourcePhase ? 20 : 0;
+  const sourceRound = normalizePersonName(input.row.roundLabel ?? "");
+  const officialRound = normalizePersonName(input.candidate.roundName ?? "");
+  if (
+    sourceRound &&
+    officialRound &&
+    (sourceRound.includes(officialRound) || officialRound.includes(sourceRound))
+  ) {
+    score += 8;
+  }
+  const sourceDate = input.row.playedAt?.toISOString().slice(0, 10);
+  const officialDate = input.candidate.scheduledAt?.slice(0, 10);
+  if (sourceDate && officialDate && sourceDate === officialDate) score += 8;
+  const sourceTime = optionalSnapshotString(raw.time)?.replaceAll(/\s+/g, "");
+  const officialTime = input.candidate.localStartsAt?.slice(11, 16);
+  if (sourceTime && officialTime && sourceTime.includes(officialTime))
+    score += 5;
+  const sourceCourt = optionalSnapshotString(raw.court)?.match(/\d+/)?.[0];
+  const officialCourt = input.candidate.court?.match(/\d+/)?.[0];
+  if (sourceCourt && officialCourt && sourceCourt === officialCourt) score += 3;
+  const participantText = (side: "A" | "B") =>
+    normalizePersonName(
+      input.row.participants
+        .filter((participant) => participant.side === side)
+        .map((participant) => participant.name)
+        .join(" "),
+    );
+  const teamMatches = (side: "A" | "B", teamNo?: number) => {
+    const official = teamNo ? input.teamByNo.get(teamNo) : undefined;
+    if (!official) return false;
+    const source = participantText(side);
+    return official.name
+      .split("/")
+      .map((name) => normalizePersonName(name).split(" ").at(-1) ?? "")
+      .filter(Boolean)
+      .every((name) => source.includes(name));
+  };
+  if (teamMatches("A", input.candidate.teamANo)) score += 6;
+  if (teamMatches("B", input.candidate.teamBNo)) score += 6;
+  return score;
+}
+
+function officialScheduledMatch(input: {
+  readonly row: typeof importedMatches.$inferSelect;
+  readonly matchNumber: number;
+  readonly tournamentNo: number;
+  readonly schedule: VolleyballWorldSchedule;
+  readonly teamByNo: ReadonlyMap<number, VolleyballWorldTeam>;
+}): VolleyballWorldScheduledMatch | undefined {
+  const ranked = input.schedule.matches
+    .filter(
+      (match) =>
+        match.tournamentNo === input.tournamentNo &&
+        match.matchNoInTournament === input.matchNumber,
+    )
+    .map((candidate) => ({
+      candidate,
+      score: officialMatchCandidateScore({
+        row: input.row,
+        candidate,
+        teamByNo: input.teamByNo,
+      }),
+    }))
+    .filter(({ score }) => Number.isFinite(score))
+    .sort((left, right) => right.score - left.score);
+  if (ranked.length === 0) return undefined;
+  if (
+    ranked.length > 1 &&
+    ranked[0]?.score === ranked[1]?.score &&
+    !optionalSnapshotString(unknownRecord(input.row.rawPayload).phase)
+  ) {
+    return undefined;
+  }
+  return ranked[0]?.candidate;
+}
+
+async function volleyballWorldEventSource(input: {
+  readonly event: typeof professionalEvents.$inferSelect;
+  readonly now: Date;
+}): Promise<{
+  readonly binding: VolleyballWorldBinding;
+  readonly schedule: VolleyballWorldSchedule;
+}> {
+  const existing = parseVolleyballWorldBinding(input.event.rawPayload);
+  if (existing) {
+    return {
+      binding: existing,
+      schedule: await fetchVolleyballWorldSchedule({
+        startsOn: existing.startsOn,
+        endsOn: existing.endsOn,
+        tournamentNumbers: existing.tournamentNumbers,
+      }),
+    };
+  }
+  const startsOn = input.event.startsOn;
+  const endsOn = input.event.endsOn ?? startsOn;
+  if (!startsOn || !endsOn) {
+    throw new Error(
+      `FIVB event ${input.event.externalEventId} has no usable date range.`,
+    );
+  }
+  return discoverVolleyballWorldEvent({
+    tcode: input.event.externalEventId,
+    name: input.event.name,
+    location: input.event.location ?? undefined,
+    category: input.event.category ?? undefined,
+    genderCategory:
+      input.event.genderCategory === "women"
+        ? "women"
+        : input.event.genderCategory === "coed"
+          ? "coed"
+          : "men",
+    startsOn,
+    endsOn,
+    now: input.now,
+  });
+}
+
+export async function refreshVolleyballWorldEvent(input: {
+  readonly externalEventId: string;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  const database = getDatabase();
+  const now = input.now ?? new Date();
+  const source = await ensureSource("fivb-12ndr");
+  const event = await database.query.professionalEvents.findFirst({
+    where: and(
+      eq(professionalEvents.sourceId, source.id),
+      eq(professionalEvents.externalEventId, input.externalEventId),
+    ),
+  });
+  if (!event) {
+    throw new SandDataServiceError(
+      "MATCH_NOT_FOUND",
+      "The FIVB event was not found.",
+    );
+  }
+  const { binding, schedule } = await volleyballWorldEventSource({
+    event,
+    now,
+  });
+  const liveMatches = await fetchVolleyballWorldLiveMatches(
+    binding.tournamentNumbers,
+  ).catch(() => undefined);
+  const liveByMatchNo = new Map(
+    (liveMatches ?? []).map((match) => [match.matchNo, match] as const),
+  );
+  const activeLiveMatchNos = new Set(
+    (liveMatches ?? [])
+      .filter((match) => match.status === "live")
+      .map((match) => match.matchNo),
+  );
+  let completedStatisticsBudget = activeLiveMatchNos.size === 0 ? 2 : 0;
+  const teamByNo = new Map(
+    schedule.teams.map((team) => [team.teamNo, team] as const),
+  );
+  const rows = await database
+    .select()
+    .from(importedMatches)
+    .where(
+      and(
+        eq(importedMatches.sourceId, source.id),
+        eq(importedMatches.externalEventId, event.externalEventId),
+      ),
+    );
+  let linked = 0;
+  let live = 0;
+  let completed = 0;
+  for (const row of rows) {
+    const matchNumber = optionalNumber(
+      unknownRecord(row.rawPayload).matchNumber,
+    );
+    if (!matchNumber || !Number.isInteger(matchNumber)) continue;
+    const scheduled = officialScheduledMatch({
+      row,
+      matchNumber,
+      tournamentNo: binding.tournamentNo,
+      schedule,
+      teamByNo,
+    });
+    if (!scheduled) continue;
+    const current = liveByMatchNo.get(scheduled.matchNo);
+    const existingOfficial = parseStoredVolleyballWorldMatch(row.rawPayload);
+    let statistics = existingOfficial?.statistics;
+    const shouldFetchCompletedStatistics =
+      current?.status === "completed" &&
+      !statistics &&
+      completedStatisticsBudget > 0;
+    if (
+      current?.hasLineup &&
+      (current.status === "live" || shouldFetchCompletedStatistics)
+    ) {
+      if (shouldFetchCompletedStatistics) completedStatisticsBudget -= 1;
+      statistics = await fetchVolleyballWorldMatchStatistics({
+        competitionUrl: binding.competitionUrl,
+        matchNo: scheduled.matchNo,
+      }).catch(() => statistics);
+    }
+    const nextStored = storedVolleyballWorldMatch({
+      scheduled,
+      live: current,
+      teamA: scheduled.teamANo ? teamByNo.get(scheduled.teamANo) : undefined,
+      teamB: scheduled.teamBNo ? teamByNo.get(scheduled.teamBNo) : undefined,
+      statistics,
+      syncedAt: now,
+    });
+    const stored =
+      !liveMatches &&
+      existingOfficial?.matchNo === scheduled.matchNo &&
+      !scheduled.winnerSide &&
+      scheduled.sets.length <= existingOfficial.sets.length
+        ? {
+            ...existingOfficial,
+            ...(scheduled.sourceUrl ? { sourceUrl: scheduled.sourceUrl } : {}),
+            ...(scheduled.teamANo && teamByNo.get(scheduled.teamANo)
+              ? { teamA: teamByNo.get(scheduled.teamANo) }
+              : {}),
+            ...(scheduled.teamBNo && teamByNo.get(scheduled.teamBNo)
+              ? { teamB: teamByNo.get(scheduled.teamBNo) }
+              : {}),
+            ...(statistics ? { statistics } : {}),
+          }
+        : nextStored;
+    const winnerSide = officialMatchWinner(stored);
+    const sets = stored.sets.map((set) => ({ a: set.a, b: set.b }));
+    const complete = hasDecisiveImportedScore(sets, winnerSide);
+    const allMapped = row.participants.every((participant) =>
+      Boolean(participant.personId),
+    );
+    const importState =
+      row.importState === "approved"
+        ? "approved"
+        : complete && allMapped
+          ? "ready"
+          : complete
+            ? "needs-mapping"
+            : "staged";
+    const existingWatchOptions = watchOptionsFromPayload(row.rawPayload);
+    const officialWatchOptions = [
+      ...(scheduled.volleyballTvUrl
+        ? [
+            {
+              id: "volleyball-world-vbtv",
+              kind: "vbtv" as const,
+              label: "VBTV",
+              url: scheduled.volleyballTvUrl,
+            },
+          ]
+        : []),
+      ...(scheduled.youtubeUrl
+        ? [
+            {
+              id: "volleyball-world-youtube",
+              kind: "youtube" as const,
+              label: "YouTube",
+              url: scheduled.youtubeUrl,
+            },
+          ]
+        : []),
+    ].filter(
+      (option) =>
+        !existingWatchOptions.some((existing) => existing.kind === option.kind),
+    );
+    const rawPayload = {
+      ...unknownRecord(row.rawPayload),
+      ...(scheduled.localStartsAt
+        ? { time: scheduled.localStartsAt.slice(11, 16) }
+        : {}),
+      ...(scheduled.court ? { court: scheduled.court } : {}),
+      ...(existingWatchOptions.length > 0 || officialWatchOptions.length > 0
+        ? {
+            watchOptions: [...existingWatchOptions, ...officialWatchOptions],
+          }
+        : {}),
+      volleyballWorld: stored,
+    };
+    const sourceUrl = scheduled.sourceUrl ?? row.sourceUrl ?? undefined;
+    const roundLabel =
+      officialRoundLabel(scheduled) ?? row.roundLabel ?? undefined;
+    const location =
+      [scheduled.city, scheduled.country].filter(Boolean).join(", ") ||
+      row.location ||
+      undefined;
+    const sourceRecord: ExternalMatchRecord = {
+      externalMatchId: row.externalMatchId,
+      externalEventId: row.externalEventId ?? undefined,
+      sourceUrl,
+      title: row.title,
+      roundLabel,
+      location,
+      genderCategory:
+        row.genderCategory === "women"
+          ? "women"
+          : row.genderCategory === "coed"
+            ? "coed"
+            : "men",
+      playedAt: scheduled.scheduledAt ?? row.playedAt?.toISOString(),
+      participants: row.participants,
+      sets,
+      winnerSide,
+      raw: rawPayload,
+    };
+    await database
+      .update(importedMatches)
+      .set({
+        sourceUrl,
+        sourceFingerprint: sourceMatchFingerprint("fivb-12ndr", sourceRecord),
+        crossSourceFingerprint: crossSourceMatchFingerprint(sourceRecord),
+        roundLabel,
+        location,
+        playedAt: scheduled.scheduledAt
+          ? new Date(scheduled.scheduledAt)
+          : row.playedAt,
+        sets,
+        winnerSide,
+        importState,
+        exclusionReason: undefined,
+        rawPayload,
+        updatedAt: now,
+      })
+      .where(eq(importedMatches.id, row.id));
+    linked += 1;
+    if (stored.status === "live") live += 1;
+    if (stored.status === "completed") completed += 1;
+  }
+  const rawPayload = unknownRecord(event.rawPayload);
+  await database
+    .update(professionalEvents)
+    .set({
+      rawPayload: {
+        ...rawPayload,
+        volleyballWorld: {
+          ...binding,
+          syncedAt: now.toISOString(),
+          linkedMatchCount: linked,
+          liveMatchCount: live,
+        },
+      },
+      matchCount: Math.max(event.matchCount, linked),
+      lastSyncedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(professionalEvents.id, event.id));
+  return {
+    externalEventId: event.externalEventId,
+    competitionName: binding.competitionName,
+    competitionUrl: binding.competitionUrl,
+    tournamentNo: binding.tournamentNo,
+    linked,
+    live,
+    completed,
+  };
+}
+
 export async function refreshActiveFivbEvents(input: {
   readonly limit?: number;
   readonly now?: Date;
@@ -1708,6 +2162,9 @@ export async function refreshActiveFivbEvents(input: {
     readonly externalEventId: string;
     readonly status: "succeeded" | "failed";
     readonly message?: string;
+    readonly officialLive?: Awaited<
+      ReturnType<typeof refreshVolleyballWorldEvent>
+    >;
   }[] = [];
   for (const row of candidates) {
     try {
@@ -1716,15 +2173,84 @@ export async function refreshActiveFivbEvents(input: {
         externalId: row.externalEventId,
         now,
       });
+      const officialLive = await refreshVolleyballWorldEvent({
+        externalEventId: row.externalEventId,
+        now,
+      }).catch(() => undefined);
       results.push({
         externalEventId: row.externalEventId,
         status: "succeeded",
+        ...(officialLive ? { officialLive } : {}),
+        ...(!officialLive
+          ? {
+              message:
+                "The tournament refreshed, but no official live feed was matched yet.",
+            }
+          : {}),
       });
     } catch (error) {
       results.push({
         externalEventId: row.externalEventId,
         status: "failed",
         message: error instanceof Error ? error.message : "Refresh failed",
+      });
+    }
+  }
+  return {
+    attempted: results.length,
+    succeeded: results.filter((result) => result.status === "succeeded").length,
+    results,
+  };
+}
+
+export async function refreshActiveVolleyballWorldEvents(input: {
+  readonly limit?: number;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  const now = input.now ?? new Date();
+  const source = await ensureSource("fivb-12ndr");
+  const rows = await getDatabase()
+    .select({
+      externalEventId: professionalEvents.externalEventId,
+      live: professionalEvents.live,
+      startsOn: professionalEvents.startsOn,
+      rawPayload: professionalEvents.rawPayload,
+    })
+    .from(professionalEvents)
+    .where(
+      and(
+        eq(professionalEvents.sourceId, source.id),
+        inArray(professionalEvents.status, ["live", "upcoming"]),
+      ),
+    )
+    .limit(250);
+  const candidates = [...rows]
+    .filter((row) => hasTournamentDetail(unknownRecord(row.rawPayload)))
+    .sort(
+      (left, right) =>
+        Number(right.live) - Number(left.live) ||
+        (left.startsOn ?? "9999-12-31").localeCompare(
+          right.startsOn ?? "9999-12-31",
+        ),
+    )
+    .slice(0, Math.min(8, Math.max(1, input.limit ?? 4)));
+  const results = [];
+  for (const candidate of candidates) {
+    try {
+      results.push({
+        status: "succeeded" as const,
+        ...(await refreshVolleyballWorldEvent({
+          externalEventId: candidate.externalEventId,
+          now,
+        })),
+      });
+    } catch (error) {
+      results.push({
+        status: "failed" as const,
+        externalEventId: candidate.externalEventId,
+        message:
+          error instanceof Error ? error.message : "Official live sync failed.",
       });
     }
   }
@@ -5023,6 +5549,7 @@ type ProTeam = {
   readonly averageRating?: number;
   readonly seed?: number;
   readonly countryCode?: string;
+  readonly flagUrl?: string;
 };
 
 type PublicProMatch = {
@@ -5040,6 +5567,7 @@ type PublicProMatch = {
   readonly teamA: ProTeam;
   readonly teamB: ProTeam;
   readonly sets: readonly { readonly a: number; readonly b: number }[];
+  readonly liveScore?: VolleyballWorldStoredMatch;
   readonly winnerSide?: "A" | "B";
   readonly status: "scheduled" | "live" | "completed";
   readonly slug: string;
@@ -6917,8 +7445,10 @@ export function professionalMatchStatus(input: {
   readonly eventLive: boolean;
   readonly hasScore?: boolean;
   readonly scheduledAt?: Date;
+  readonly providerStatus?: "scheduled" | "live" | "completed";
   readonly now?: Date;
 }): "scheduled" | "live" | "completed" {
+  if (input.providerStatus) return input.providerStatus;
   if (input.winnerSide === "A" || input.winnerSide === "B") {
     return "completed";
   }
@@ -7511,8 +8041,31 @@ export async function loadPublicProEvent(
   };
   const basePublicMatches: readonly PublicProMatch[] = matchRows.map(
     (match) => {
-      const teamA = toTeam(match.participants, "A");
-      const teamB = toTeam(match.participants, "B");
+      const liveScore = parseStoredVolleyballWorldMatch(match.rawPayload);
+      const baseTeamA = toTeam(match.participants, "A");
+      const baseTeamB = toTeam(match.participants, "B");
+      const teamA = {
+        ...baseTeamA,
+        ...(!baseTeamA.countryCode && liveScore?.teamA?.countryCode
+          ? { countryCode: liveScore.teamA.countryCode }
+          : {}),
+        ...((liveScore?.teamA?.squareFlagUrl ?? liveScore?.teamA?.flagUrl)
+          ? {
+              flagUrl: liveScore.teamA.squareFlagUrl ?? liveScore.teamA.flagUrl,
+            }
+          : {}),
+      };
+      const teamB = {
+        ...baseTeamB,
+        ...(!baseTeamB.countryCode && liveScore?.teamB?.countryCode
+          ? { countryCode: liveScore.teamB.countryCode }
+          : {}),
+        ...((liveScore?.teamB?.squareFlagUrl ?? liveScore?.teamB?.flagUrl)
+          ? {
+              flagUrl: liveScore.teamB.squareFlagUrl ?? liveScore.teamB.flagUrl,
+            }
+          : {}),
+      };
       const hasRatings =
         teamA.averageRating !== undefined && teamB.averageRating !== undefined;
       const teamAChance = hasRatings
@@ -7527,8 +8080,9 @@ export async function loadPublicProEvent(
         : 50;
       const matchSlug =
         slugSegment(`${teamA.label}-vs-${teamB.label}`) || "match";
-      const winnerSide =
-        match.winnerSide === "A" || match.winnerSide === "B"
+      const winnerSide = liveScore
+        ? officialMatchWinner(liveScore)
+        : match.winnerSide === "A" || match.winnerSide === "B"
           ? match.winnerSide
           : undefined;
       const time = objectString(match.rawPayload, "time");
@@ -7543,8 +8097,9 @@ export async function loadPublicProEvent(
       const status = professionalMatchStatus({
         winnerSide,
         eventLive: event.live,
-        hasScore: match.sets.length > 0,
+        hasScore: (liveScore?.sets.length ?? match.sets.length) > 0,
         scheduledAt,
+        providerStatus: liveScore?.status,
         now,
       });
       const predictionClosed = professionalMatchPredictionClosed({
@@ -7562,7 +8117,9 @@ export async function loadPublicProEvent(
         roundLabel: match.roundLabel ?? "Match",
         ...(match.playedAt ? { playedAt: match.playedAt.toISOString() } : {}),
         ...(scheduledAt ? { scheduledAt: scheduledAt.toISOString() } : {}),
-        ...(match.sourceUrl ? { sourceUrl: match.sourceUrl } : {}),
+        ...((liveScore?.sourceUrl ?? match.sourceUrl)
+          ? { sourceUrl: liveScore?.sourceUrl ?? match.sourceUrl ?? undefined }
+          : {}),
         ...(time ? { time } : {}),
         ...(objectString(match.rawPayload, "court")
           ? { court: objectString(match.rawPayload, "court") }
@@ -7576,7 +8133,11 @@ export async function loadPublicProEvent(
           : {}),
         teamA,
         teamB,
-        sets: match.sets,
+        sets:
+          liveScore && liveScore.sets.length > 0
+            ? liveScore.sets.map((set) => ({ a: set.a, b: set.b }))
+            : match.sets,
+        ...(liveScore ? { liveScore } : {}),
         ...(winnerSide ? { winnerSide } : {}),
         status,
         slug: matchSlug,
@@ -8329,6 +8890,55 @@ export async function loadPublicProMatch(
     match,
     headToHead: await loadProfessionalHeadToHead(match, event),
   };
+}
+
+export async function loadPublicProfessionalMatchLive(matchId: string) {
+  requireDatabase();
+  const database = getDatabase();
+  const row = await database.query.importedMatches.findFirst({
+    where: eq(importedMatches.id, matchId),
+  });
+  if (!row) return undefined;
+  const stored = parseStoredVolleyballWorldMatch(row.rawPayload);
+  if (!stored) return undefined;
+  const event = await database.query.professionalEvents.findFirst({
+    where: and(
+      eq(professionalEvents.sourceId, row.sourceId),
+      eq(
+        professionalEvents.externalEventId,
+        row.externalEventId ?? "__missing__",
+      ),
+    ),
+  });
+  const binding = event
+    ? parseVolleyballWorldBinding(event.rawPayload)
+    : undefined;
+  const current = await fetchVolleyballWorldLiveMatch(stored.matchNo).catch(
+    () => undefined,
+  );
+  if (!current) return stored;
+  const statistics =
+    binding && current.status !== "scheduled" && current.hasLineup
+      ? await fetchVolleyballWorldMatchStatistics({
+          competitionUrl: binding.competitionUrl,
+          matchNo: current.matchNo,
+        }).catch(() => stored.statistics)
+      : stored.statistics;
+  return {
+    ...stored,
+    status: current.status,
+    statusLabel: current.statusLabel,
+    ...(current.currentSetNo ? { currentSetNo: current.currentSetNo } : {}),
+    ...(current.currentSetPoints
+      ? { currentSetPoints: current.currentSetPoints }
+      : {}),
+    matchPoints: current.matchPoints,
+    sets: current.sets.length > 0 ? current.sets : stored.sets,
+    hasLineup: current.hasLineup,
+    ...(current.liveStreamUrl ? { liveStreamUrl: current.liveStreamUrl } : {}),
+    ...(statistics ? { statistics } : {}),
+    syncedAt: new Date().toISOString(),
+  } satisfies VolleyballWorldStoredMatch;
 }
 
 export async function loadPublicPlayerPerformance(personId: string) {

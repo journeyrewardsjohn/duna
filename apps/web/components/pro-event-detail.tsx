@@ -949,6 +949,7 @@ export function ProEventDetail({
                 <ProfessionalMatchCard
                   className="pro-top-matches__card"
                   context={match.court ?? event.name}
+                  currentSetNo={match.liveScore?.currentSetNo}
                   href={match.canonicalPath}
                   key={match.id}
                   playedAt={match.playedAt}
@@ -993,6 +994,7 @@ export function ProEventDetail({
                           ? `${match.leagueTeamAName} vs. ${match.leagueTeamBName}`
                           : (match.court ?? event.name)
                       }
+                      currentSetNo={match.liveScore?.currentSetNo}
                       href={match.canonicalPath}
                       key={match.id}
                       playedAt={match.playedAt}
