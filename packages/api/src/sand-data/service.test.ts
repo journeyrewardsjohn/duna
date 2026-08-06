@@ -15,6 +15,11 @@ import {
   shouldAutoLinkProfessionalSource,
   shouldCreateUnclaimedSourceProfile,
 } from "./service";
+import {
+  buildOfficialFivbMatchRecord,
+  officialFivbPhase,
+  officialFivbTeamRoster,
+} from "./volleyball-world-live";
 
 describe("FIVB event detail refresh", () => {
   it("preserves hydrated registration details during a lightweight index refresh", () => {
@@ -86,6 +91,165 @@ describe("FIVB event detail refresh", () => {
     expect(selected.map((event) => event.externalEventId)).toEqual([
       "LIVE",
       "MONTREAL",
+    ]);
+  });
+
+  it("reconstructs an official main-draw match with phase-safe identity and mapped roster IDs", () => {
+    const record = buildOfficialFivbMatchRecord({
+      eventExternalId: "MHAM2026",
+      eventName: "BPT Elite16 Hamburg",
+      eventGender: "men",
+      scheduled: {
+        matchNo: 544963,
+        matchNoInTournament: 4,
+        tournamentNo: 9229,
+        scheduledAt: "2026-08-06T13:00:00.000Z",
+        localStartsAt: "2026-08-06T15:00:00",
+        gender: "men",
+        phase: "Main Draw",
+        roundName: "Pool B",
+        court: "Court 2",
+        city: "Hamburg",
+        country: "Germany",
+        teamANo: 3172960,
+        teamBNo: 3167686,
+        sets: [
+          { number: 1, a: 21, b: 23 },
+          { number: 2, a: 19, b: 21 },
+        ],
+        matchPoints: { a: 0, b: 2 },
+        winnerSide: "B",
+        sourceUrl:
+          "https://en.volleyballworld.com/beachvolleyball/competitions/beach-pro-tour/2026/elite16/hamburg-ger/schedule/544963",
+        volleyballTvUrl: "https://tv.volleyballworld.com/",
+      },
+      teamA: {
+        teamNo: 3172960,
+        name: "Evandro/Arthur Lanci",
+        countryCode: "BRA",
+      },
+      teamB: {
+        teamNo: 3167686,
+        name: "van de Velde/de Groot",
+        countryCode: "NED",
+      },
+      rosterCandidates: [
+        {
+          countryCode: "BRA",
+          participants: [
+            {
+              externalPersonId: "133285",
+              name: "Evandro Gonçalves Oliveira Júnior",
+            },
+            {
+              externalPersonId: "152000",
+              name: "Arthur Diego Mariano Lanci",
+            },
+          ],
+        },
+        {
+          teamNo: 3167686,
+          countryCode: "NED",
+          participants: [
+            {
+              externalPersonId: "143679",
+              name: "Steven van de Velde",
+              personId: "person-van-de-velde",
+            },
+            {
+              externalPersonId: "188001",
+              name: "Alexander Brouwer de Groot",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(record).toMatchObject({
+      externalMatchId: "MHAM2026:main-draw:4",
+      externalEventId: "MHAM2026",
+      playedAt: "2026-08-06T13:00:00.000Z",
+      roundLabel: "Main Draw - Pool B",
+      location: "Hamburg, Germany",
+      winnerSide: "B",
+      participants: [
+        { externalPersonId: "133285", side: "A" },
+        { externalPersonId: "152000", side: "A" },
+        {
+          externalPersonId: "143679",
+          personId: "person-van-de-velde",
+          side: "B",
+        },
+        { externalPersonId: "188001", side: "B" },
+      ],
+      raw: {
+        matchNumber: 4,
+        phase: "main-draw",
+        volleyballWorldMatchNo: 544963,
+        time: "15:00",
+        court: "Court 2",
+      },
+    });
+  });
+
+  it("matches official abbreviated team names without crossing countries or ambiguous rosters", () => {
+    expect(officialFivbPhase("Qualification Tournament")).toBe("qualification");
+    expect(officialFivbPhase("Main Draw")).toBe("main-draw");
+    expect(officialFivbPhase("Reserve list")).toBeUndefined();
+    expect(
+      officialFivbTeamRoster({
+        team: {
+          teamNo: 3172960,
+          name: "Evandro/Arthur Lanci",
+          countryCode: "BRA",
+        },
+        candidates: [
+          {
+            teamNo: 3172960,
+            countryCode: "BRA",
+            provisional: true,
+            participants: [
+              {
+                externalPersonId: "volleyball-world-team-3172960-player-1",
+                name: "Evandro",
+              },
+              {
+                externalPersonId: "volleyball-world-team-3172960-player-2",
+                name: "Arthur Lanci",
+              },
+            ],
+          },
+          {
+            countryCode: "NED",
+            participants: [
+              { externalPersonId: "wrong-1", name: "Evandro Wrong" },
+              { externalPersonId: "wrong-2", name: "Arthur Lanci" },
+            ],
+          },
+          {
+            countryCode: "BRA",
+            participants: [
+              {
+                externalPersonId: "133285",
+                name: "Evandro Gonçalves Oliveira Júnior",
+              },
+              {
+                externalPersonId: "152000",
+                name: "Arthur Diego Mariano Lanci",
+              },
+            ],
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        externalPersonId: "133285",
+        name: "Evandro Gonçalves Oliveira Júnior",
+      },
+      {
+        externalPersonId: "152000",
+        name: "Arthur Diego Mariano Lanci",
+      },
     ]);
   });
 });
