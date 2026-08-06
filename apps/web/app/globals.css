@@ -24372,7 +24372,7 @@ html {
   font-family: var(--font-display);
   font-size: clamp(3.7rem, 6.4vw, 6.8rem);
   font-weight: 820;
-  letter-spacing: -0.075em;
+  letter-spacing: -0.03em;
   line-height: 0.86;
   margin: 1.5rem 0;
 }
@@ -24494,7 +24494,7 @@ html {
 
 .campaign-apps__status small {
   color: #667269;
-  font-size: 0.58rem;
+  font-size: 0.625rem;
   font-weight: 650;
   margin-bottom: 0.2rem;
 }

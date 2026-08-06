@@ -204,7 +204,7 @@
   font-variant-numeric: tabular-nums;
   font-weight: 800;
   gap: 1.5cqw;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
 }
 
 .matchClock i {
@@ -297,7 +297,7 @@
 .scoreRows small {
   font-size: 7.5cqw;
   font-weight: 550;
-  letter-spacing: -0.07em;
+  letter-spacing: -0.03em;
   text-align: right;
 }
 
@@ -313,7 +313,7 @@
   font-size: 16.5cqw;
   font-variant-numeric: tabular-nums;
   font-weight: 520;
-  letter-spacing: -0.11em;
+  letter-spacing: -0.03em;
   line-height: 1;
   padding-left: 6cqw;
 }

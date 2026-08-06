@@ -1,5 +1,6 @@
 "use client";
 
+import { Numeric } from "@duna/ui";
 import {
   ArrowLeftRight,
   ArrowRight,
@@ -111,7 +112,7 @@ export function WatchMarketingPage() {
   const pageRef = useWatchPageMotion();
 
   return (
-    <main className={styles.page} ref={pageRef}>
+    <main className={styles.page} data-zone="athletic" ref={pageRef}>
       <SiteHeader />
 
       <nav aria-label="Duna for Apple Watch" className={styles.productNav}>
@@ -130,7 +131,7 @@ export function WatchMarketingPage() {
         </Link>
       </nav>
 
-      <section className={styles.hero} data-hero id="top">
+      <section className={styles.hero} data-hero data-zone="live" id="top">
         <div className={styles.heroSticky}>
           <div aria-hidden className={styles.heroGlow} />
           <div aria-hidden className={styles.heroGrid} />
@@ -190,7 +191,7 @@ export function WatchMarketingPage() {
         </div>
       </section>
 
-      <section className={styles.opening} id="opening">
+      <section className={styles.opening} data-zone="editorial" id="opening">
         <div className={styles.openingInner} data-reveal>
           <span className={styles.eyebrow}>
             Made for the point in front of you
@@ -208,7 +209,12 @@ export function WatchMarketingPage() {
         </div>
       </section>
 
-      <section className={styles.scoreStory} data-score-story id="score">
+      <section
+        className={styles.scoreStory}
+        data-score-story
+        data-zone="athletic"
+        id="score"
+      >
         <div className={styles.sectionHeading} data-reveal>
           <span className={styles.eyebrow}>Score in motion</span>
           <h2>One gesture. Every rally.</h2>
@@ -219,7 +225,7 @@ export function WatchMarketingPage() {
         </div>
 
         <div className={`${styles.shell} ${styles.scoreLayout}`}>
-          <div className={styles.scoreDeviceCard} data-reveal>
+          <div className={styles.scoreDeviceCard} data-reveal data-zone="live">
             <div aria-hidden className={styles.gestureOrbit}>
               <span>↑ Side A</span>
               <span>Side B ↓</span>
@@ -242,7 +248,7 @@ export function WatchMarketingPage() {
 
           <div className={styles.scoreFeatures}>
             <article data-reveal>
-              <span>01</span>
+              <span>Gesture</span>
               <div>
                 <h3>Up for A. Down for B.</h3>
                 <p>
@@ -252,7 +258,7 @@ export function WatchMarketingPage() {
               </div>
             </article>
             <article data-reveal>
-              <span>02</span>
+              <span>Rules</span>
               <div>
                 <h3>The rules travel with the match.</h3>
                 <p>
@@ -262,7 +268,7 @@ export function WatchMarketingPage() {
               </div>
             </article>
             <article data-reveal>
-              <span>03</span>
+              <span>Undo</span>
               <div>
                 <h3>A mistake takes one swipe.</h3>
                 <p>
@@ -275,7 +281,12 @@ export function WatchMarketingPage() {
         </div>
       </section>
 
-      <section className={styles.syncStory} data-sync-story id="vision">
+      <section
+        className={styles.syncStory}
+        data-sync-story
+        data-zone="live"
+        id="vision"
+      >
         <div className={`${styles.shell} ${styles.syncHeading}`} data-reveal>
           <span className={styles.eyebrow}>Duna Vision</span>
           <h2>
@@ -309,12 +320,12 @@ export function WatchMarketingPage() {
           <div className={styles.liveScore}>
             <span>
               <small>Side A</small>
-              <strong>17</strong>
+              <Numeric tier="block">17</Numeric>
             </span>
             <i />
             <span>
               <small>Side B</small>
-              <strong>14</strong>
+              <Numeric tier="block">14</Numeric>
             </span>
           </div>
           <DunaWatchDevice
@@ -369,7 +380,11 @@ export function WatchMarketingPage() {
         </div>
       </section>
 
-      <section className={styles.highlights} id="highlights">
+      <section
+        className={styles.highlights}
+        data-zone="editorial"
+        id="highlights"
+      >
         <div className={styles.sectionHeading} data-reveal>
           <span className={styles.eyebrow}>Highlights</span>
           <h2>Save the point. Not the thought.</h2>
@@ -430,7 +445,12 @@ export function WatchMarketingPage() {
         </div>
       </section>
 
-      <section className={styles.checkin} data-checkin-story id="check-in">
+      <section
+        className={styles.checkin}
+        data-checkin-story
+        data-zone="athletic"
+        id="check-in"
+      >
         <div aria-hidden className={styles.checkinGlow} />
         <div className={`${styles.shell} ${styles.checkinLayout}`}>
           <div className={styles.checkinDevice} data-reveal>
@@ -480,7 +500,7 @@ export function WatchMarketingPage() {
         </div>
       </section>
 
-      <section className={styles.details}>
+      <section className={styles.details} data-zone="editorial">
         <div className={`${styles.shell} ${styles.detailsHeading}`} data-reveal>
           <span className={styles.eyebrow}>And the details that disappear</span>
           <h2>Quietly brilliant between points.</h2>
@@ -526,7 +546,7 @@ export function WatchMarketingPage() {
         </div>
       </section>
 
-      <section className={styles.closing}>
+      <section className={styles.closing} data-zone="live">
         <div aria-hidden className={styles.closingLight} />
         <DunaWatchDevice
           className={styles.closingWatch}
