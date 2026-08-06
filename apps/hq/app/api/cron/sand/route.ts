@@ -3,6 +3,7 @@ import {
   refreshAvpLeague,
   refreshActiveFivbEvents,
   refreshActiveVolleyballWorldEvents,
+  refreshEliteVolleyballWorldHistory,
   refreshFivbEventIndex,
   refreshRankedPlayerHistories,
   refreshSandRatingNetwork,
@@ -38,6 +39,14 @@ export async function GET(request: Request) {
     if (mode === "vw-live") {
       return NextResponse.json(
         await refreshActiveVolleyballWorldEvents({ limit: 4 }),
+      );
+    }
+    if (mode === "elite-stats") {
+      return NextResponse.json(
+        await refreshEliteVolleyballWorldHistory({
+          eventLimit: 2,
+          statisticsPerEvent: 8,
+        }),
       );
     }
     if (mode === "avp") {

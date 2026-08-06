@@ -1,0 +1,206 @@
+.chart {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 24px;
+  overflow: hidden;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metrics button {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--color-line);
+  border-right: 1px solid var(--color-line);
+  color: var(--color-bone-muted);
+  cursor: pointer;
+  display: grid;
+  gap: 0.25rem;
+  min-height: 88px;
+  padding: 0.9rem 1rem;
+  text-align: left;
+}
+
+.metrics button:last-child {
+  border-right: 0;
+}
+
+.metrics button::before {
+  background: transparent;
+  content: "";
+  height: 4px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.metrics button {
+  position: relative;
+}
+
+.metrics button.active {
+  background: color-mix(in srgb, var(--color-aqua) 6%, transparent);
+  color: var(--color-ink);
+}
+
+.metrics button.active::before {
+  background: var(--color-blue);
+}
+
+.metrics span {
+  font-size: 0.875rem;
+}
+
+.metrics strong {
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.28fr) minmax(0, 1fr);
+  min-height: 390px;
+}
+
+.body aside {
+  border-right: 1px solid var(--color-line);
+  display: flex;
+  flex-direction: column;
+  padding: 1.35rem;
+}
+
+.body aside > span,
+.body aside > small {
+  color: var(--color-bone-muted);
+  font-size: 0.875rem;
+}
+
+.body aside > strong {
+  font-family: var(--font-display);
+  font-size: clamp(2.7rem, 6vw, 5.2rem);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin: 0.6rem 0 1.2rem;
+}
+
+.body aside > b {
+  font-size: 1rem;
+  line-height: 1.4;
+  margin-top: 0.5rem;
+}
+
+.body aside > p {
+  color: var(--color-bone-muted);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin: 0.3rem 0 1rem;
+}
+
+.body aside > a {
+  color: var(--color-blue);
+  font-size: 0.875rem;
+  font-weight: 750;
+  margin-top: auto;
+  text-decoration: none;
+}
+
+.plot {
+  align-items: center;
+  display: flex;
+  min-width: 0;
+  padding: 1rem;
+}
+
+.plot svg {
+  display: block;
+  overflow: visible;
+  width: 100%;
+}
+
+.plot text {
+  fill: var(--color-bone-muted);
+  font-family: var(--font-body);
+  font-size: 15px;
+}
+
+.grid {
+  stroke: color-mix(in srgb, var(--color-line) 76%, transparent);
+  stroke-dasharray: 8 10;
+}
+
+.line {
+  fill: none;
+  stroke: var(--color-blue);
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+.win {
+  fill: #27835f;
+}
+
+.loss {
+  fill: #c64d49;
+}
+
+.unknown {
+  fill: var(--color-bone-muted);
+}
+
+.target {
+  cursor: pointer;
+  fill: transparent;
+  outline: none;
+}
+
+.target:focus {
+  stroke: var(--color-blue);
+  stroke-width: 2;
+}
+
+.date {
+  font-size: 14px;
+}
+
+.empty {
+  color: var(--color-bone-muted);
+  font-size: 0.9375rem;
+  margin: 0;
+  padding: 2rem;
+}
+
+@media (max-width: 760px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metrics button:nth-child(2) {
+    border-right: 0;
+  }
+
+  .body {
+    grid-template-columns: 1fr;
+  }
+
+  .body aside {
+    border-bottom: 1px solid var(--color-line);
+    border-right: 0;
+  }
+
+  .body aside > a {
+    margin-top: 0.5rem;
+  }
+
+  .plot {
+    min-height: 270px;
+    overflow-x: auto;
+  }
+
+  .plot svg {
+    min-width: 680px;
+  }
+}

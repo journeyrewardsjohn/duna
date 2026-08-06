@@ -6,6 +6,7 @@ import {
   parseVolleyballWorldPlayerStatsHtml,
   parseVolleyballWorldSchedule,
   parseVolleyballWorldTeamStatsHtml,
+  parseVolleyballWorldTournamentNumbersFromHtml,
 } from "./volleyball-world-live";
 
 describe("Volleyball World live data", () => {
@@ -76,6 +77,14 @@ describe("Volleyball World live data", () => {
         womenTournamentNumbers: [9230],
       }),
     ]);
+  });
+
+  it("discovers tournament IDs from an official competition page", () => {
+    expect(
+      parseVolleyballWorldTournamentNumbersFromHtml(`
+        <span data-api="https://en-live.volleyballworld.com/api/v1/live/beach/matches/bytournaments/9229;9230"></span>
+      `),
+    ).toEqual([9229, 9230]);
   });
 
   it("maps the official schedule match and team flags", () => {
@@ -168,6 +177,32 @@ describe("Volleyball World live data", () => {
             <td class="errors">3
             <td class="efficiency-percentage">22.50
         </tbody>
+      </table>
+      <table data-stattype=attack data-set=all data-team=teama>
+        <tbody>
+          <tr data-player-no=133285>
+            <td class=playername>Gonçalves Oliveira Júnior
+            <td class=point>14
+            <td class=errors>6
+            <td class=attempts>4
+        </tbody>
+      </table>
+      <table data-team=teama data-set=all data-stattype=serve>
+        <tbody>
+          <tr data-player-no=133285>
+            <td class=playername>Gonçalves Oliveira Júnior
+            <td class=point>3
+            <td class=errors>6
+            <td class=attempts>13
+        </tbody>
+      </table>
+      <table data-team=teama data-set=all data-stattype=dig>
+        <tbody>
+          <tr data-player-no=133285>
+            <td class=playername>Gonçalves Oliveira Júnior
+            <td class=digs>5
+            <td class=errors>1
+        </tbody>
       </table>`;
     expect(parseVolleyballWorldTeamStatsHtml(teamHtml)).toEqual([
       { key: "attack", label: "Attack", a: 22, b: 24 },
@@ -184,6 +219,15 @@ describe("Volleyball World live data", () => {
         serve: 2,
         errors: 15,
         efficiency: 0,
+        attackPoints: 14,
+        attackErrors: 6,
+        attackAttempts: 24,
+        hittingEfficiency: 33.33,
+        servePoints: 3,
+        serveErrors: 6,
+        serveAttempts: 22,
+        digs: 5,
+        digErrors: 1,
       },
       expect.objectContaining({
         externalPlayerId: "150000",

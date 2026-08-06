@@ -23,8 +23,7 @@ export async function GET(
   }
   return NextResponse.json(live, {
     headers: {
-      "Cache-Control":
-        "public, s-maxage=20, stale-while-revalidate=30, stale-if-error=300",
+      "Cache-Control": "no-store, max-age=0",
     },
   });
 }

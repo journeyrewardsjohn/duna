@@ -10,11 +10,15 @@ import {
   Wifi,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CountryCode } from "@/components/country-code";
 import {
   parseVolleyballWorldGamedayEvent,
   volleyballWorldAnonymousToken,
+  volleyballWorldBeachTopic,
+  volleyballWorldLiveFeedHealth,
+  volleyballWorldLiveFeedTiming,
+  volleyballWorldReconnectDelay,
 } from "@/lib/volleyball-world-gameday";
 import { compactPlayerName } from "@/lib/player-name";
 
@@ -116,6 +120,7 @@ function updateFromGameday(previous: LiveScore, message: unknown): LiveScore {
     ...(update.currentSetPoints
       ? { currentSetPoints: update.currentSetPoints }
       : {}),
+    ...(update.statistics ? { statistics: update.statistics } : {}),
     syncedAt: new Date().toISOString(),
   };
 }
@@ -235,6 +240,8 @@ function PlayerStatCard({
   readonly team: MatchTeam;
 }) {
   const player = matchingPlayer(stat.name, team);
+  const hittingEfficiency =
+    stat.hittingEfficiency ?? (stat.efficiency || undefined);
   return (
     <article className="pro-live-stats__player">
       <div>
@@ -263,16 +270,28 @@ function PlayerStatCard({
           <dd>{stat.total}</dd>
         </div>
         <div>
-          <dt>Attack</dt>
-          <dd>{stat.attack}</dd>
+          <dt>Kills</dt>
+          <dd>{stat.attackPoints ?? stat.attack}</dd>
         </div>
         <div>
-          <dt>Block</dt>
-          <dd>{stat.block}</dd>
+          <dt>Hit eff.</dt>
+          <dd>
+            {hittingEfficiency !== undefined
+              ? `${hittingEfficiency.toFixed(1)}%`
+              : "—"}
+          </dd>
         </div>
         <div>
-          <dt>Serve</dt>
-          <dd>{stat.serve}</dd>
+          <dt>Aces</dt>
+          <dd>{stat.servePoints ?? stat.serve}</dd>
+        </div>
+        <div>
+          <dt>Blocks</dt>
+          <dd>{stat.blockPoints ?? stat.block}</dd>
+        </div>
+        <div>
+          <dt>Digs</dt>
+          <dd>{stat.digs ?? "—"}</dd>
         </div>
       </dl>
     </article>
@@ -298,6 +317,7 @@ export function ProLiveMatchScoreboard({
         ? "polling"
         : "idle",
   );
+  const terminalReconciled = useRef(false);
   const displayStatus = live?.status ?? match.status;
   const sets = useMemo(() => mergedSets(live, match.sets), [live, match.sets]);
 
@@ -328,24 +348,88 @@ export function ProLiveMatchScoreboard({
     void refresh();
     const interval = window.setInterval(
       refresh,
-      initialLive.pollingMs ?? 30_000,
+      connection === "websocket"
+        ? (initialLive.pollingMs ??
+            volleyballWorldLiveFeedTiming.healthyPollingMs)
+        : volleyballWorldLiveFeedTiming.fallbackPollingMs,
     );
     return () => {
       active = false;
       window.clearInterval(interval);
     };
-  }, [initialLive?.matchNo, initialLive?.pollingMs, live?.status, match.id]);
+  }, [
+    connection,
+    initialLive?.matchNo,
+    initialLive?.pollingMs,
+    live?.status,
+    match.id,
+  ]);
+
+  useEffect(() => {
+    if (
+      live?.status !== "completed" ||
+      live.transport !== "websocket" ||
+      terminalReconciled.current
+    ) {
+      return;
+    }
+    terminalReconciled.current = true;
+    let active = true;
+    void fetch(`/api/pro-matches/${match.id}/live`, { cache: "no-store" })
+      .then(async (response) =>
+        response.ok ? ((await response.json()) as LiveScore) : undefined,
+      )
+      .then((official) => {
+        if (active && official) setLive(official);
+      })
+      .finally(() => {
+        if (active) setConnection("final");
+      });
+    return () => {
+      active = false;
+    };
+  }, [live?.status, live?.transport, match.id]);
 
   useEffect(() => {
     const matchNo = initialLive?.matchNo;
     if (!matchNo || live?.status !== "live") return;
+    const officialMatchNo = matchNo;
     let active = true;
     let socket: WebSocket | undefined;
     let heartbeat: number | undefined;
+    let watchdog: number | undefined;
+    let connectionTimeout: number | undefined;
     let reconnect: number | undefined;
     let attempts = 0;
+    let lastMessageAt = Date.now();
+    let lastMatchUpdateAt = 0;
 
-    const connect = async () => {
+    const clearSocketTimers = () => {
+      if (heartbeat !== undefined) window.clearInterval(heartbeat);
+      if (watchdog !== undefined) window.clearInterval(watchdog);
+      if (connectionTimeout !== undefined)
+        window.clearTimeout(connectionTimeout);
+      heartbeat = undefined;
+      watchdog = undefined;
+      connectionTimeout = undefined;
+    };
+
+    const scheduleReconnect = () => {
+      if (
+        !active ||
+        reconnect !== undefined ||
+        attempts >= volleyballWorldLiveFeedTiming.maxReconnectAttempts
+      ) {
+        return;
+      }
+      attempts += 1;
+      reconnect = window.setTimeout(() => {
+        reconnect = undefined;
+        void connect();
+      }, volleyballWorldReconnectDelay(attempts));
+    };
+
+    async function connect() {
       if (!active) return;
       setConnection("connecting");
       try {
@@ -359,51 +443,87 @@ export function ProLiveMatchScoreboard({
         socket = new WebSocket(
           `${gamedaySocketUrl}?token=${encodeURIComponent(token)}`,
         );
+        connectionTimeout = window.setTimeout(
+          () => socket?.close(),
+          volleyballWorldLiveFeedTiming.connectionTimeoutMs,
+        );
         socket.addEventListener("open", () => {
           if (!active || !socket) return;
-          attempts = 0;
+          if (connectionTimeout !== undefined)
+            window.clearTimeout(connectionTimeout);
+          connectionTimeout = undefined;
+          lastMessageAt = Date.now();
           socket.send(
             JSON.stringify({
               action: "subscribe",
-              topics: [`/gameday/beach_volleyball/event/${matchNo}`],
+              topics: [volleyballWorldBeachTopic],
             }),
           );
-          setConnection("websocket");
           heartbeat = window.setInterval(() => {
             if (socket?.readyState === WebSocket.OPEN) {
               socket.send(JSON.stringify({ action: "list" }));
             }
-          }, 20_000);
+          }, volleyballWorldLiveFeedTiming.heartbeatMs);
+          watchdog = window.setInterval(() => {
+            const now = Date.now();
+            const health = volleyballWorldLiveFeedHealth({
+              now,
+              lastMessageAt,
+              lastMatchUpdateAt,
+            });
+            if (health.responseStale) {
+              socket?.close();
+              return;
+            }
+            if (health.matchStale) {
+              setConnection((current) =>
+                current === "final" ? current : "polling",
+              );
+            }
+          }, 2_000);
         });
         socket.addEventListener("message", (event) => {
+          lastMessageAt = Date.now();
           try {
             const message = JSON.parse(String(event.data)) as unknown;
+            const update = parseVolleyballWorldGamedayEvent(
+              message,
+              officialMatchNo,
+            );
+            if (!update) return;
+            lastMatchUpdateAt = Date.now();
+            attempts = 0;
             setLive((previous) =>
               previous ? updateFromGameday(previous, message) : previous,
+            );
+            setConnection(
+              update.status === "completed" ? "final" : "websocket",
             );
           } catch {
             // Subscription acknowledgements and non-JSON heartbeats are safe to ignore.
           }
         });
         socket.addEventListener("close", () => {
-          if (heartbeat !== undefined) window.clearInterval(heartbeat);
+          clearSocketTimers();
           if (!active) return;
-          setConnection("polling");
-          if (attempts < 2) {
-            attempts += 1;
-            reconnect = window.setTimeout(connect, attempts * 2_000);
-          }
+          setConnection((current) =>
+            current === "final" ? current : "polling",
+          );
+          scheduleReconnect();
         });
         socket.addEventListener("error", () => socket?.close());
       } catch {
-        if (active) setConnection("polling");
+        if (active) {
+          setConnection("polling");
+          scheduleReconnect();
+        }
       }
-    };
+    }
 
     void connect();
     return () => {
       active = false;
-      if (heartbeat !== undefined) window.clearInterval(heartbeat);
+      clearSocketTimers();
       if (reconnect !== undefined) window.clearTimeout(reconnect);
       socket?.close();
     };
@@ -434,7 +554,7 @@ export function ProLiveMatchScoreboard({
         : connection === "final"
           ? "Official final"
           : live
-            ? "Official feed · 30 sec refresh"
+            ? "Official fallback · 15 sec refresh"
             : "Official feed pending";
   const stats = live?.statistics;
 
@@ -548,7 +668,7 @@ export function ProLiveMatchScoreboard({
             <div className="pro-live-stats__players">
               <header>
                 <strong>Best scorers</strong>
-                <span>Total · Attack · Block · Serve</span>
+                <span>Kills · Efficiency · Aces · Blocks · Digs</span>
               </header>
               <div>
                 {[...stats.players]

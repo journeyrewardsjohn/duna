@@ -992,3 +992,67 @@
     text-align: left;
   }
 }
+.athlete-pro-statistics {
+  margin-top: clamp(2rem, 5vw, 4.5rem);
+}
+
+.athlete-pro-statistics > header {
+  align-items: flex-end;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.athlete-pro-statistics > header h2 {
+  font-family: var(--font-display);
+  font-size: clamp(2.3rem, 5vw, 4.5rem);
+  letter-spacing: -0.03em;
+  line-height: 0.95;
+  margin: 0.35rem 0 0;
+}
+
+.athlete-pro-statistics__summary {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 0.75rem;
+}
+
+.athlete-pro-statistics__summary article {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 18px;
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+}
+
+.athlete-pro-statistics__summary span,
+.athlete-pro-statistics__summary small {
+  color: var(--color-bone-muted);
+  font-size: 0.875rem;
+}
+
+.athlete-pro-statistics__summary strong {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  letter-spacing: -0.03em;
+}
+
+@media (max-width: 800px) {
+  .athlete-pro-statistics__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .athlete-pro-statistics > header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .athlete-pro-statistics__summary {
+    grid-template-columns: 1fr;
+  }
+}

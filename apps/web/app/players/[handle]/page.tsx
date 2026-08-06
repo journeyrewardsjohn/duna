@@ -35,6 +35,7 @@ import {
   type PartnershipMatchPoint,
 } from "@/components/partnership-history-card";
 import { PlayerFollowButton } from "@/components/player-follow-button";
+import { ProStatTrendChart } from "@/components/pro-stat-trend-chart";
 import {
   RatingTrendChart,
   type RatingTrendPoint,
@@ -226,6 +227,7 @@ export default async function PublicPlayerPage({
     .playerFollowState({ playerPersonId: player.id })
     .catch(() => undefined);
   const history = performance?.history ?? [];
+  const professionalStatistics = performance?.professionalStatistics;
   const results = history.map((event) => ({
     event,
     result: matchResult(event, player.id),
@@ -1113,6 +1115,51 @@ export default async function PublicPlayerPage({
                 </a>
               ))}
             </div>
+          </section>
+        )}
+
+        {professionalStatistics && (
+          <section className="athlete-pro-statistics" id="pro-statistics">
+            <header>
+              <div>
+                <span className="page-eyebrow">Official Elite box scores</span>
+                <h2>How the game is changing.</h2>
+              </div>
+              <Badge>{professionalStatistics.matches} matches</Badge>
+            </header>
+            <div className="athlete-pro-statistics__summary">
+              <article>
+                <span>Hitting efficiency</span>
+                <strong>
+                  {professionalStatistics.hittingEfficiency?.toFixed(1) ?? "—"}
+                  {professionalStatistics.hittingEfficiency !== undefined
+                    ? "%"
+                    : ""}
+                </strong>
+                <small>
+                  {professionalStatistics.attackPoints} kills ·{" "}
+                  {professionalStatistics.attackAttempts} attacks
+                </small>
+              </article>
+              <article>
+                <span>Aces / set</span>
+                <strong>{professionalStatistics.acesPerSet.toFixed(2)}</strong>
+                <small>{professionalStatistics.aces} total aces</small>
+              </article>
+              <article>
+                <span>Blocks / set</span>
+                <strong>
+                  {professionalStatistics.blocksPerSet.toFixed(2)}
+                </strong>
+                <small>{professionalStatistics.blocks} total blocks</small>
+              </article>
+              <article>
+                <span>Digs / set</span>
+                <strong>{professionalStatistics.digsPerSet.toFixed(2)}</strong>
+                <small>{professionalStatistics.digs} successful digs</small>
+              </article>
+            </div>
+            <ProStatTrendChart points={professionalStatistics.trends} />
           </section>
         )}
 

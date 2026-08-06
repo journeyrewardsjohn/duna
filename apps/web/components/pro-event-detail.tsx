@@ -35,6 +35,7 @@ type ProTeam = ProMatch["teamA"];
 type AvpLeague = NonNullable<PublicProEvent["avpLeague"]>;
 type AvpDivisionTeam = AvpLeague["men"][number];
 type AvpOverallStanding = AvpLeague["overall"][number];
+type TournamentStatistics = NonNullable<PublicProEvent["tournamentStatistics"]>;
 
 function eventDates(start?: string, end?: string) {
   if (!start) return "Dates to be announced";
@@ -63,6 +64,204 @@ function eventRoundRank(label: string) {
   if (/pool|group/.test(normalized)) return 2;
   if (/qualif|lucky loser/.test(normalized)) return 1;
   return 0;
+}
+
+function statisticValue(value: number | undefined, metric?: string): string {
+  if (value === undefined) return "—";
+  return metric === "hittingEfficiency"
+    ? `${value.toFixed(1)}%`
+    : value.toFixed(2);
+}
+
+function TournamentIntelligence({
+  insights,
+  statistics,
+}: {
+  readonly insights?: PublicProEvent["tournamentInsights"];
+  readonly statistics: TournamentStatistics;
+}) {
+  const correlation =
+    statistics.correlations.digsPerSetVsOpponentHittingEfficiency;
+  const correlationCopy = correlation
+    ? correlation.direction === "negative"
+      ? "As opponent hitting efficiency rose, recorded digs per set generally fell in this field."
+      : correlation.direction === "positive"
+        ? "Teams recorded more digs per set against higher-efficiency opponents in this field."
+        : "Digs per set and opponent hitting efficiency have not shown a meaningful linear relationship yet."
+    : "More completed matches are needed before Duna reports a stable relationship between defense and opponent attack efficiency.";
+  return (
+    <section className="pro-event-section pro-tournament-intelligence">
+      <header>
+        <div>
+          <span className="page-eyebrow">Official match analytics</span>
+          <h2>Tournament pulse</h2>
+        </div>
+        <Badge>
+          {statistics.coverage.matchesWithStatistics}/
+          {statistics.coverage.totalMatches} matches
+        </Badge>
+      </header>
+      <div className="pro-tournament-intelligence__overview">
+        <div className="pro-tournament-intelligence__averages">
+          <article>
+            <span>Hitting efficiency</span>
+            <strong>
+              {statisticValue(
+                statistics.averages.hittingEfficiency,
+                "hittingEfficiency",
+              )}
+            </strong>
+            <small>Tournament average</small>
+          </article>
+          <article>
+            <span>Aces / set</span>
+            <strong>{statisticValue(statistics.averages.acesPerSet)}</strong>
+            <small>Across both sides</small>
+          </article>
+          <article>
+            <span>Blocks / set</span>
+            <strong>{statisticValue(statistics.averages.blocksPerSet)}</strong>
+            <small>Across both sides</small>
+          </article>
+          <article>
+            <span>Digs / set</span>
+            <strong>{statisticValue(statistics.averages.digsPerSet)}</strong>
+            <small>Successful digs</small>
+          </article>
+        </div>
+        <aside className="pro-tournament-intelligence__correlation">
+          <span>Defense context</span>
+          <strong>
+            {correlation
+              ? `${correlation.coefficient > 0 ? "+" : ""}${correlation.coefficient.toFixed(2)}`
+              : "Building"}
+          </strong>
+          <p>{correlationCopy}</p>
+          <small>
+            {correlation
+              ? `${correlation.sampleSize} team-match observations · descriptive correlation, not causation`
+              : "Updates as official Elite match statistics arrive"}
+          </small>
+        </aside>
+      </div>
+      {insights && (
+        <article className="pro-tournament-intelligence__ai">
+          <Sparkles aria-hidden size={21} />
+          <div>
+            <span>Duna tournament analyst</span>
+            <h3>{insights.headline}</h3>
+            <p>{insights.summary}</p>
+            <ul>
+              {insights.findings.map((finding) => (
+                <li key={`${finding.metric}-${finding.title}`}>
+                  <strong>{finding.title}</strong>
+                  <span>{finding.explanation}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </article>
+      )}
+      <div className="pro-tournament-intelligence__standouts">
+        {statistics.standouts.map((standout) => (
+          <article key={standout.metric}>
+            <span>{standout.label}</span>
+            <strong>{standout.teamName}</strong>
+            <div>
+              <b>{statisticValue(standout.value, standout.metric)}</b>
+              <small>
+                {standout.delta >= 0 ? "+" : ""}
+                {statisticValue(standout.delta, standout.metric)} vs. field ·{" "}
+                {standout.matches} match{standout.matches === 1 ? "" : "es"}
+              </small>
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="pro-tournament-intelligence__tables">
+        <section>
+          <header>
+            <h3>Team leaders</h3>
+            <span>Per-set rates</span>
+          </header>
+          <div className="pro-tournament-intelligence__table">
+            <div className="is-head">
+              <span>Team</span>
+              <span>Hit eff.</span>
+              <span>Aces</span>
+              <span>Blocks</span>
+              <span>Digs</span>
+            </div>
+            {statistics.teams.slice(0, 12).map((team) => {
+              const content = (
+                <>
+                  <strong>{team.name}</strong>
+                  <span>
+                    {statisticValue(
+                      team.hittingEfficiency,
+                      "hittingEfficiency",
+                    )}
+                  </span>
+                  <span>{statisticValue(team.acesPerSet)}</span>
+                  <span>{statisticValue(team.blocksPerSet)}</span>
+                  <span>{statisticValue(team.digsPerSet)}</span>
+                </>
+              );
+              return team.teamNo ? (
+                <Link href={`/pro/teams/${team.teamNo}`} key={team.key}>
+                  {content}
+                </Link>
+              ) : (
+                <div key={team.key}>{content}</div>
+              );
+            })}
+          </div>
+        </section>
+        <section>
+          <header>
+            <h3>Player leaders</h3>
+            <span>Official box scores</span>
+          </header>
+          <div className="pro-tournament-intelligence__table pro-tournament-intelligence__table--players">
+            <div className="is-head">
+              <span>Player</span>
+              <span>Points</span>
+              <span>Hit eff.</span>
+              <span>Aces</span>
+              <span>Digs</span>
+            </div>
+            {statistics.players.slice(0, 12).map((player) => {
+              const content = (
+                <>
+                  <strong>{player.name}</strong>
+                  <span>{player.points}</span>
+                  <span>
+                    {statisticValue(
+                      player.hittingEfficiency,
+                      "hittingEfficiency",
+                    )}
+                  </span>
+                  <span>{player.aces}</span>
+                  <span>{player.digs}</span>
+                </>
+              );
+              return player.publicPath ? (
+                <Link href={player.publicPath} key={player.externalPlayerId}>
+                  {content}
+                </Link>
+              ) : (
+                <div key={player.externalPlayerId}>{content}</div>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+      <footer>
+        Official Volleyball World box scores. Tournament averages and leaders
+        recalculate whenever a match is reconciled.
+      </footer>
+    </section>
+  );
 }
 
 function isConfirmedTeam(team: ProTeam) {
@@ -659,6 +858,13 @@ export function ProEventDetail({
             </header>
             <ProEntryListBrowser entries={browsableEntries} />
           </section>
+        )}
+
+        {event.tournamentStatistics && (
+          <TournamentIntelligence
+            insights={event.tournamentInsights}
+            statistics={event.tournamentStatistics}
+          />
         )}
 
         {event.status === "completed" &&

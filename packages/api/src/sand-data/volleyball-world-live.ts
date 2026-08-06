@@ -634,6 +634,21 @@ export interface VolleyballWorldPlayerStat {
   readonly serve: number;
   readonly errors: number;
   readonly efficiency: number;
+  readonly attackPoints?: number;
+  readonly attackErrors?: number;
+  readonly attackAttempts?: number;
+  readonly hittingEfficiency?: number;
+  readonly blockPoints?: number;
+  readonly blockErrors?: number;
+  readonly blockTouches?: number;
+  readonly servePoints?: number;
+  readonly serveErrors?: number;
+  readonly serveAttempts?: number;
+  readonly receptionSuccessful?: number;
+  readonly receptionErrors?: number;
+  readonly receptionAttempts?: number;
+  readonly digs?: number;
+  readonly digErrors?: number;
 }
 
 const teamStatLabels = {
@@ -678,49 +693,113 @@ function attribute(value: string, name: string): string | undefined {
 export function parseVolleyballWorldPlayerStatsHtml(
   html: string,
 ): readonly VolleyballWorldPlayerStat[] {
+  type MutablePlayerStat = {
+    externalPlayerId: string;
+    side: "A" | "B";
+    name: string;
+    total: number;
+    attack: number;
+    block: number;
+    serve: number;
+    errors: number;
+    efficiency: number;
+    attackPoints?: number;
+    attackErrors?: number;
+    attackAttempts?: number;
+    hittingEfficiency?: number;
+    blockPoints?: number;
+    blockErrors?: number;
+    blockTouches?: number;
+    servePoints?: number;
+    serveErrors?: number;
+    serveAttempts?: number;
+    receptionSuccessful?: number;
+    receptionErrors?: number;
+    receptionAttempts?: number;
+    digs?: number;
+    digErrors?: number;
+  };
+  const players = new Map<string, MutablePlayerStat>();
   const tables = [
-    ...html.matchAll(
-      /<table\b[^>]*data-team=(?:"?(teama|teamb)"?)[^>]*data-set=(?:"?all"?)[^>]*data-stattype=(?:"?scoring"?)[^>]*>[\s\S]*?<\/table>/gi,
-    ),
-  ];
-  return tables.flatMap((table) => {
-    const side = table[1]?.toLowerCase() === "teamb" ? "B" : "A";
-    return tableRows(table[0]).flatMap((row) => {
+    ...html.matchAll(/<table\b([^>]*)>[\s\S]*?<\/table>/gi),
+  ].flatMap((table) => {
+    const opening = table[1] ?? "";
+    const team = attribute(opening, "data-team")?.toLowerCase();
+    const set = attribute(opening, "data-set")?.toLowerCase();
+    const statType = attribute(opening, "data-stattype")?.toLowerCase();
+    return (team === "teama" || team === "teamb") && set === "all" && statType
+      ? [
+          {
+            html: table[0],
+            side: team === "teamb" ? ("B" as const) : ("A" as const),
+            statType,
+          },
+        ]
+      : [];
+  });
+  for (const table of tables) {
+    for (const row of tableRows(table.html)) {
       const externalPlayerId = attribute(row, "data-player-no");
       const name = classCell(row, "playername");
-      const total = numericCell(row, "total-abs");
-      const attack = numericCell(row, "attacks");
-      const block = numericCell(row, "blocks");
-      const serve = numericCell(row, "serves");
-      const errors = numericCell(row, "errors");
-      const efficiency = numericCell(row, "efficiency-percentage");
-      if (
-        !externalPlayerId ||
-        !name ||
-        total === undefined ||
-        attack === undefined ||
-        block === undefined ||
-        serve === undefined ||
-        errors === undefined ||
-        efficiency === undefined
-      ) {
-        return [];
+      if (!externalPlayerId || !name) continue;
+      const key = `${table.side}:${externalPlayerId}`;
+      const player = players.get(key) ?? {
+        externalPlayerId,
+        side: table.side,
+        name,
+        total: 0,
+        attack: 0,
+        block: 0,
+        serve: 0,
+        errors: 0,
+        efficiency: 0,
+      };
+      if (table.statType === "scoring") {
+        player.total = numericCell(row, "total-abs") ?? player.total;
+        player.attack = numericCell(row, "attacks") ?? player.attack;
+        player.block = numericCell(row, "blocks") ?? player.block;
+        player.serve = numericCell(row, "serves") ?? player.serve;
+        player.errors = numericCell(row, "errors") ?? player.errors;
+        player.efficiency =
+          numericCell(row, "efficiency-percentage") ?? player.efficiency;
+      } else if (table.statType === "attack") {
+        const points = numericCell(row, "point") ?? 0;
+        const errors = numericCell(row, "errors") ?? 0;
+        const continuations = numericCell(row, "attempts") ?? 0;
+        const attempts = points + errors + continuations;
+        player.attackPoints = points;
+        player.attackErrors = errors;
+        player.attackAttempts = attempts;
+        player.hittingEfficiency =
+          attempts > 0
+            ? Math.round(((points - errors) / attempts) * 10_000) / 100
+            : 0;
+      } else if (table.statType === "block") {
+        player.blockPoints = numericCell(row, "point") ?? 0;
+        player.blockErrors = numericCell(row, "errors") ?? 0;
+        player.blockTouches = numericCell(row, "touches") ?? 0;
+      } else if (table.statType === "serve") {
+        const points = numericCell(row, "point") ?? 0;
+        const errors = numericCell(row, "errors") ?? 0;
+        const continuations = numericCell(row, "attempts") ?? 0;
+        player.servePoints = points;
+        player.serveErrors = errors;
+        player.serveAttempts = points + errors + continuations;
+      } else if (table.statType === "reception") {
+        const successful = numericCell(row, "successful") ?? 0;
+        const errors = numericCell(row, "errors") ?? 0;
+        const continuations = numericCell(row, "attempts") ?? 0;
+        player.receptionSuccessful = successful;
+        player.receptionErrors = errors;
+        player.receptionAttempts = successful + errors + continuations;
+      } else if (table.statType === "dig") {
+        player.digs = numericCell(row, "digs") ?? 0;
+        player.digErrors = numericCell(row, "errors") ?? 0;
       }
-      return [
-        {
-          externalPlayerId,
-          side,
-          name,
-          total,
-          attack,
-          block,
-          serve,
-          errors,
-          efficiency,
-        } satisfies VolleyballWorldPlayerStat,
-      ];
-    });
-  });
+      players.set(key, player);
+    }
+  }
+  return [...players.values()];
 }
 
 export interface VolleyballWorldMatchStatistics {
@@ -794,7 +873,7 @@ export interface VolleyballWorldStoredMatch {
   readonly teamB?: VolleyballWorldTeam;
   readonly statistics?: VolleyballWorldMatchStatistics;
   readonly syncedAt: string;
-  readonly pollingMs: 30_000;
+  readonly pollingMs: 15_000 | 30_000;
 }
 
 export function parseStoredVolleyballWorldMatch(
@@ -883,6 +962,51 @@ export function parseStoredVolleyballWorldMatch(
             serve,
             errors,
             efficiency,
+            ...(number(candidate.attackPoints) !== undefined
+              ? { attackPoints: number(candidate.attackPoints) }
+              : {}),
+            ...(number(candidate.attackErrors) !== undefined
+              ? { attackErrors: number(candidate.attackErrors) }
+              : {}),
+            ...(number(candidate.attackAttempts) !== undefined
+              ? { attackAttempts: number(candidate.attackAttempts) }
+              : {}),
+            ...(number(candidate.hittingEfficiency) !== undefined
+              ? { hittingEfficiency: number(candidate.hittingEfficiency) }
+              : {}),
+            ...(number(candidate.blockPoints) !== undefined
+              ? { blockPoints: number(candidate.blockPoints) }
+              : {}),
+            ...(number(candidate.blockErrors) !== undefined
+              ? { blockErrors: number(candidate.blockErrors) }
+              : {}),
+            ...(number(candidate.blockTouches) !== undefined
+              ? { blockTouches: number(candidate.blockTouches) }
+              : {}),
+            ...(number(candidate.servePoints) !== undefined
+              ? { servePoints: number(candidate.servePoints) }
+              : {}),
+            ...(number(candidate.serveErrors) !== undefined
+              ? { serveErrors: number(candidate.serveErrors) }
+              : {}),
+            ...(number(candidate.serveAttempts) !== undefined
+              ? { serveAttempts: number(candidate.serveAttempts) }
+              : {}),
+            ...(number(candidate.receptionSuccessful) !== undefined
+              ? { receptionSuccessful: number(candidate.receptionSuccessful) }
+              : {}),
+            ...(number(candidate.receptionErrors) !== undefined
+              ? { receptionErrors: number(candidate.receptionErrors) }
+              : {}),
+            ...(number(candidate.receptionAttempts) !== undefined
+              ? { receptionAttempts: number(candidate.receptionAttempts) }
+              : {}),
+            ...(number(candidate.digs) !== undefined
+              ? { digs: number(candidate.digs) }
+              : {}),
+            ...(number(candidate.digErrors) !== undefined
+              ? { digErrors: number(candidate.digErrors) }
+              : {}),
           },
         ]
       : [];
@@ -930,7 +1054,7 @@ export function parseStoredVolleyballWorldMatch(
       ? { statistics: { team: teamStats, players: playerStats } }
       : {}),
     syncedAt,
-    pollingMs: 30_000,
+    pollingMs: status === "live" ? 15_000 : 30_000,
   };
 }
 
@@ -993,6 +1117,80 @@ export async function fetchVolleyballWorldLiveMatch(
   if (!parsed)
     throw new Error("Volleyball World returned an invalid live match.");
   return parsed;
+}
+
+export function parseVolleyballWorldTournamentNumbersFromHtml(
+  html: string,
+): readonly number[] {
+  const normalized = html.replaceAll("&amp;", "&");
+  return [
+    ...new Set(
+      [
+        ...normalized.matchAll(
+          /live\/beach\/matches\/bytournaments\/([0-9;]+)/gi,
+        ),
+      ]
+        .flatMap((match) => (match[1] ?? "").split(";"))
+        .flatMap((candidate) => {
+          const parsed = positiveInteger(candidate);
+          return parsed ? [parsed] : [];
+        }),
+    ),
+  ];
+}
+
+export async function discoverVolleyballWorldEventAtUrl(input: {
+  readonly competitionUrl: string;
+  readonly competitionName: string;
+  readonly startsOn: string;
+  readonly endsOn: string;
+  readonly genderCategory: "men" | "women" | "coed";
+  readonly now?: Date;
+}): Promise<{
+  readonly binding: VolleyballWorldBinding;
+  readonly schedule: VolleyballWorldSchedule;
+}> {
+  const competitionUrl = absoluteVolleyballWorldUrl(input.competitionUrl);
+  if (!competitionUrl) {
+    throw new Error(
+      "An official Volleyball World competition URL is required.",
+    );
+  }
+  const page = await scrapeHtml("volleyball-world", competitionUrl, {
+    timeoutMs: 30_000,
+  });
+  const tournamentNumbers = parseVolleyballWorldTournamentNumbersFromHtml(
+    page.html,
+  );
+  if (tournamentNumbers.length === 0) {
+    throw new Error("The Volleyball World page did not expose tournament IDs.");
+  }
+  const schedule = await fetchVolleyballWorldSchedule({
+    startsOn: input.startsOn,
+    endsOn: input.endsOn,
+    tournamentNumbers,
+  });
+  const tournamentNo = schedule.matches.find(
+    (match) =>
+      input.genderCategory === "coed" || match.gender === input.genderCategory,
+  )?.tournamentNo;
+  if (!tournamentNo) {
+    throw new Error(
+      `The official schedule did not include the ${input.genderCategory} division.`,
+    );
+  }
+  return {
+    binding: {
+      competitionName: input.competitionName,
+      competitionUrl,
+      tournamentNo,
+      tournamentNumbers,
+      startsOn: input.startsOn,
+      endsOn: input.endsOn,
+      discoveredAt: (input.now ?? new Date()).toISOString(),
+    },
+    schedule,
+  };
 }
 
 function competitionScheduleBase(competitionUrl: string): string {
@@ -1247,6 +1445,10 @@ export function storedVolleyballWorldMatch(input: {
     ...(input.teamB ? { teamB: input.teamB } : {}),
     ...(input.statistics ? { statistics: input.statistics } : {}),
     syncedAt: input.syncedAt.toISOString(),
-    pollingMs: 30_000,
+    pollingMs:
+      (current?.status ??
+        (input.scheduled.winnerSide ? "completed" : "scheduled")) === "live"
+        ? 15_000
+        : 30_000,
   };
 }
