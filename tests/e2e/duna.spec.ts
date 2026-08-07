@@ -30,6 +30,15 @@ test("marketing and player discovery stay usable", async ({ page }) => {
     "data-renderer",
     /^(webgl|fallback)$/,
   );
+  if ((await sandCanvas.getAttribute("data-renderer")) === "webgl") {
+    await expect(sandCanvas).toHaveAttribute(
+      "data-quality",
+      /^(hardware|software)$/,
+    );
+    if ((await sandCanvas.getAttribute("data-quality")) === "software") {
+      await expect(sandCanvas).toHaveAttribute("data-motion", "static");
+    }
+  }
   await expect(
     page.getByRole("link", { name: "Duna HQ" }).first(),
   ).toHaveAttribute("href", /.+/);

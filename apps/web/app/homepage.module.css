@@ -77,6 +77,7 @@
       var(--home-ground),
       color-mix(in srgb, var(--ground-cool) 24%, var(--home-ground))
     );
+  pointer-events: none;
 }
 
 .sandWorld canvas {

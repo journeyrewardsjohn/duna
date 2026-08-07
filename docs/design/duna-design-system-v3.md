@@ -82,7 +82,8 @@ live strand, and decorative marine block are retired.
 
 Canonical fallbacks: pause offscreen, cap rendering at 30fps, clamp internal
 resolution, freeze on `prefers-reduced-motion`, freeze when data saving is on,
-and preserve the composed CSS sand ground if WebGL cannot initialize.
+freeze low-resolution software WebGL, and preserve the composed CSS sand ground
+if WebGL cannot initialize. The atmosphere never captures pointer input.
 
 ## 2.2 /pro — went dark, and it cost the page
 

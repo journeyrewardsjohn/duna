@@ -207,6 +207,15 @@ export function HomeSandWorld({ className }: { readonly className?: string }) {
     }
     const renderCanvas = canvas;
     const renderContext = gl;
+    const rendererInfo = (() => {
+      const extension = gl.getExtension("WEBGL_debug_renderer_info");
+      if (!extension) return gl.getParameter(gl.RENDERER) as string;
+      return gl.getParameter(extension.UNMASKED_RENDERER_WEBGL) as string;
+    })();
+    const softwareRenderer = /swiftshader|software|llvmpipe/i.test(
+      rendererInfo,
+    );
+    canvas.dataset.quality = softwareRenderer ? "software" : "hardware";
 
     const vertex = createShader(gl, gl.VERTEX_SHADER, vertexShader);
     const fragment = createShader(gl, gl.FRAGMENT_SHADER, fragmentShader);
@@ -262,14 +271,17 @@ export function HomeSandWorld({ className }: { readonly className?: string }) {
     let visible = true;
     let disposed = false;
 
-    const shouldAnimate = () => !reducedMotion.matches && !connection?.saveData;
+    const shouldAnimate = () =>
+      !softwareRenderer && !reducedMotion.matches && !connection?.saveData;
 
     const resize = () => {
       const bounds = canvas.getBoundingClientRect();
+      const maxWidth = softwareRenderer ? 480 : 1440;
+      const maxHeight = softwareRenderer ? 300 : 900;
       const scale = Math.min(
         window.devicePixelRatio || 1,
-        1440 / Math.max(bounds.width, 1),
-        900 / Math.max(bounds.height, 1),
+        maxWidth / Math.max(bounds.width, 1),
+        maxHeight / Math.max(bounds.height, 1),
       );
       width = Math.max(1, Math.round(bounds.width * scale));
       height = Math.max(1, Math.round(bounds.height * scale));

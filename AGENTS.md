@@ -104,7 +104,9 @@ When the documents appear to conflict, preserve these invariants:
 - The sand canvas is progressive enhancement. All copy, links, proof, and
   chapter order remain complete when WebGL is unavailable, reduced motion is
   requested, or data saving is enabled. In those states, render a composed
-  static sand frame instead of removing the atmosphere.
+  static sand frame instead of removing the atmosphere. Software-rendered
+  WebGL must also use the low-resolution static path so motion never blocks
+  navigation or theme controls on constrained devices.
 - After the opening world, return to crisp `--surface-1` sections with measured
   editorial type and one purposeful plane break. Dark ground is reserved for
   the live Apple Watch / match-control chapter.
