@@ -5751,12 +5751,9 @@ export async function loadPublicProCoverage(now = new Date()) {
         event.effective.editorial,
         sibling?.effective.editorial,
       );
-      const featuredMedia =
-        editorial.media.find((media) => media.featured) ?? editorial.media[0];
+      const cardMedia = preferredProfessionalEventCardMedia(editorial.media);
       const posterUrl =
-        featuredMedia?.kind === "hero-video"
-          ? featuredMedia.posterUrl
-          : featuredMedia?.url;
+        cardMedia?.kind === "hero-video" ? cardMedia.posterUrl : cardMedia?.url;
       const eventMatches = matchRows
         .filter(
           (match) =>
@@ -5822,12 +5819,12 @@ export async function loadPublicProCoverage(now = new Date()) {
         liveMatchCount,
         currentRound: professionalEventCurrentRound(eventMatches, now),
         ...(nextMatchAt ? { nextMatchAt } : {}),
-        ...(posterUrl && featuredMedia
+        ...(posterUrl && cardMedia
           ? {
               poster: {
                 url: posterUrl,
-                alt: featuredMedia.alt,
-                kind: featuredMedia.kind,
+                alt: cardMedia.alt,
+                kind: cardMedia.kind,
               },
             }
           : {}),
@@ -6057,6 +6054,16 @@ type ProfessionalEventMedia = {
   readonly caption?: string;
   readonly featured: boolean;
 };
+
+export function preferredProfessionalEventCardMedia(
+  media: readonly ProfessionalEventMedia[],
+) {
+  return (
+    media.find((item) => item.kind === "poster") ??
+    media.find((item) => item.featured) ??
+    media[0]
+  );
+}
 
 type ProfessionalEventVenue = {
   readonly googlePlaceId?: string;

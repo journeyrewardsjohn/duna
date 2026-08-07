@@ -133,7 +133,11 @@ function proEventPoint(event: PublicProEvent): DiscoveryMapItem {
     ...coordinates,
     ...(startsAt ? { startsAt } : {}),
     ...(endsAt ? { endsAt } : {}),
-    imageUrl: defaultEventMedia("tournament", event.id).path,
+    imageUrl:
+      event.poster?.url ?? defaultEventMedia("tournament", event.id).path,
+    ...(event.poster?.kind === "poster"
+      ? { imageFit: "contain" as const }
+      : {}),
     live: event.live,
     tags: [
       "pro tour",

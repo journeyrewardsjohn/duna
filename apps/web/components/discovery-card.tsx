@@ -46,7 +46,10 @@ export function DiscoveryCard({
       className={`discover-v2-card discover-v2-card--${item.entityType}${compact ? " discover-v2-card--compact" : ""}`}
       href={item.href}
     >
-      <div className="discover-v2-card__visual">
+      <div
+        className="discover-v2-card__visual"
+        data-image-fit={item.imageFit ?? "cover"}
+      >
         {item.imageUrl ? <img alt="" src={item.imageUrl} /> : null}
         <div className="discover-v2-card__wash" />
         <span className="discover-v2-card__type">
