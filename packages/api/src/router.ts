@@ -84,6 +84,7 @@ import {
   playerInvitationSchema,
   playerCoachingNoteSchema,
   playerDashboardSchema,
+  playerOrganizationAccessSchema,
   playerSettingsSchema,
   playerWalletSchema,
   predictionMarketSchema,
@@ -336,6 +337,12 @@ import {
   updateEventDraft,
   updateVenueProfile,
 } from "./operator-service";
+import {
+  loadPlayerOrganizationAccess,
+  PlayerOrganizationError,
+  selfEnrollOrganizationStaff,
+  validatePlayerOrganizationSelection,
+} from "./player-organization";
 import {
   appendMatchEvents,
   appendOperatorMatchEvents,
@@ -1113,6 +1120,15 @@ function throwDomainError(error: unknown): never {
               : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
+  if (error instanceof PlayerOrganizationError) {
+    const code =
+      error.code === "MEMBERSHIP_REQUIRED" || error.code === "ADMIN_REQUIRED"
+        ? "FORBIDDEN"
+        : error.code === "DATABASE_REQUIRED"
+          ? "INTERNAL_SERVER_ERROR"
+          : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
   if (error instanceof MatchServiceError) {
     const code =
       error.code === "MATCH_NOT_FOUND" || error.code === "PARTICIPANT_NOT_FOUND"
@@ -1441,7 +1457,13 @@ const publicRouter = router({
         id: z.string().uuid(),
         organizationName: z.string(),
         invitedName: z.string(),
-        role: z.enum(["coach", "manager", "front-desk", "accountant"]),
+        role: z.enum([
+          "coach",
+          "director",
+          "manager",
+          "front-desk",
+          "accountant",
+        ]),
         workerClassification: z.enum(["1099-contractor", "w2-employee"]),
         status: z.enum(["pending", "claimed", "expired", "cancelled"]),
         expiresAt: z.iso.datetime(),
@@ -3243,6 +3265,58 @@ const playerRouter = router({
   dashboard: protectedProcedure
     .output(playerDashboardSchema)
     .query(({ ctx }) => getRepository().player.dashboard(ctx.actor!.personId)),
+  organizationAccess: protectedProcedure
+    .output(playerOrganizationAccessSchema)
+    .query(({ ctx }) => loadPlayerOrganizationAccess(ctx.actor!)),
+  validateOrganizationSelection: protectedProcedure
+    .input(z.object({ organizationId: z.string().uuid() }))
+    .output(z.object({ organizationId: z.string().uuid() }))
+    .query(async ({ input, ctx }) => {
+      try {
+        return await validatePlayerOrganizationSelection({
+          actor: ctx.actor!,
+          organizationId: input.organizationId,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  selfEnrollOrganizationStaff: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "organization-self-enrollment",
+        capacity: 6,
+        refillPerMinute: 2,
+      }),
+    )
+    .input(
+      z.object({
+        staffRole: z.enum(["coach", "director"]),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.selfEnrollOrganizationStaff",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await selfEnrollOrganizationStaff({
+              actor: ctx.actor!,
+              staffRole: input.staffRole,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   professionalEventFollowState: protectedProcedure
     .input(z.object({ eventId: z.string().uuid() }))
     .output(
@@ -7443,7 +7517,13 @@ const operatorRouter = router({
             .string()
             .regex(/^\+[1-9]\d{7,14}$/)
             .optional(),
-          role: z.enum(["coach", "manager", "front-desk", "accountant"]),
+          role: z.enum([
+            "coach",
+            "director",
+            "manager",
+            "front-desk",
+            "accountant",
+          ]),
           workerClassification: z.enum(["1099-contractor", "w2-employee"]),
           preferredChannel: z.enum(["email", "sms"]).optional(),
           deliveryMode: z.enum(["send", "link-only"]).default("send"),
@@ -7492,8 +7572,18 @@ const operatorRouter = router({
       z.object({
         personId: z.string().uuid(),
         displayName: z.string().trim().min(2).max(80),
-        role: z.enum(["coach", "manager", "front-desk", "accountant"]),
-        workerClassification: z.enum(["1099-contractor", "w2-employee"]),
+        role: z.enum([
+          "coach",
+          "director",
+          "manager",
+          "front-desk",
+          "accountant",
+        ]),
+        workerClassification: z.enum([
+          "not-set",
+          "1099-contractor",
+          "w2-employee",
+        ]),
         compensationModel: z.enum([
           "not-set",
           "hourly",

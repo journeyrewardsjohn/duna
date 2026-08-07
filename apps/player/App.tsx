@@ -96,9 +96,6 @@ import {
 } from "./fellix-text";
 
 type MobileCoach = NonNullable<PlayerRuntime["coaches"]>[number];
-type OrganizationWallet = NonNullable<
-  PlayerRuntime["organizationWallets"]
->[number];
 type PlayerCoachingNote = NonNullable<PlayerRuntime["coachingNotes"]>[number];
 type TeammateSearchResult = Awaited<
   ReturnType<DunaApiClient["player"]["teammateSearch"]["query"]>
@@ -800,32 +797,272 @@ function CoachProfileModal({
   );
 }
 
-function MemberOrganizationCard({
-  organization,
-}: {
-  readonly organization: OrganizationWallet;
-}) {
+function organizationRoleLabel(role: string): string {
+  if (role === "owner" || role === "admin") return "Admin";
+  if (role === "front-desk") return "Front desk";
+  return `${role[0]?.toUpperCase() ?? ""}${role.slice(1)}`;
+}
+
+function MemberOrganizationCard() {
+  const {
+    activeAuthOrganizationId,
+    authOrganizations = [],
+    isSwitchingOrganization,
+    organizationAccess,
+    organizationWallets,
+    selfEnrollOrganizationStaff,
+    switchOrganization,
+  } = usePlayerRuntime();
+  const [open, setOpen] = useState(false);
+  const [pendingRole, setPendingRole] = useState<"coach" | "director">();
+  const [error, setError] = useState<string>();
+  const fallback =
+    organizationWallets?.find(
+      (organization) =>
+        organization.membershipStatus === "active" &&
+        organization.status === "active",
+    ) ?? organizationWallets?.[0];
+  const active = organizationAccess?.organizations.find(
+    (organization) => organization.isActive,
+  );
+  const activeAuthOrganization = authOrganizations.find(
+    (organization) => organization.id === activeAuthOrganizationId,
+  );
+  const organizationName =
+    active?.name ??
+    activeAuthOrganization?.name ??
+    fallback?.organizationName ??
+    organizationAccess?.organizations[0]?.name ??
+    authOrganizations[0]?.name;
+  if (!organizationName) return null;
+
+  const identity = active?.staff?.active
+    ? `Player · ${organizationRoleLabel(active.staff.role)}`
+    : active?.roles.includes("owner") || active?.roles.includes("manager")
+      ? "Player · Admin"
+      : "Player";
+  const organizationCount = Math.max(
+    authOrganizations.length,
+    organizationAccess?.organizations.length ?? 0,
+  );
+  const runSwitch = async (organizationId: string) => {
+    if (!switchOrganization || organizationId === activeAuthOrganizationId)
+      return;
+    setError(undefined);
+    try {
+      await switchOrganization(organizationId);
+      setOpen(false);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Duna could not switch organizations.",
+      );
+    }
+  };
+  const selfEnroll = async (staffRole: "coach" | "director") => {
+    if (!selfEnrollOrganizationStaff) return;
+    setError(undefined);
+    setPendingRole(staffRole);
+    try {
+      await selfEnrollOrganizationStaff(staffRole);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Duna could not add your working role.",
+      );
+    } finally {
+      setPendingRole(undefined);
+    }
+  };
+
   return (
-    <View style={styles.memberOrganizationCard}>
-      <View style={styles.memberOrganizationMark}>
-        <Text style={styles.memberOrganizationMarkText}>
-          {organization.organizationName.slice(0, 1).toUpperCase()}
-        </Text>
-      </View>
-      <View style={styles.flex}>
-        <Text style={styles.memberOrganizationEyebrow}>YOUR CLUB</Text>
-        <Text style={styles.memberOrganizationName}>
-          {organization.organizationName}
-        </Text>
-        <Text style={styles.memberOrganizationMeta}>
-          {organization.membershipName
-            ? `${organization.membershipName} · `
-            : ""}
-          {organization.credits.toLocaleString()} credits
-        </Text>
-      </View>
-      <Text style={styles.memberOrganizationArrow}>›</Text>
-    </View>
+    <>
+      <Pressable
+        accessibilityHint="Review your role or switch organizations"
+        accessibilityLabel={`${organizationName}, ${identity}`}
+        accessibilityRole="button"
+        onPress={() => {
+          selectionHaptic();
+          setOpen(true);
+        }}
+        style={({ pressed }) => [
+          styles.memberOrganizationCard,
+          pressed && styles.homeQuickActionPressed,
+        ]}
+      >
+        <View style={styles.memberOrganizationMark}>
+          <Text style={styles.memberOrganizationMarkText}>
+            {organizationName.slice(0, 1).toUpperCase()}
+          </Text>
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.memberOrganizationEyebrow}>YOUR DUNA</Text>
+          <Text numberOfLines={1} style={styles.memberOrganizationName}>
+            {organizationName}
+          </Text>
+          <Text style={styles.memberOrganizationMeta}>
+            {identity}
+            {fallback ? ` · ${fallback.credits.toLocaleString()} credits` : ""}
+          </Text>
+        </View>
+        {organizationCount > 1 && (
+          <Text style={styles.memberOrganizationCount}>
+            {organizationCount}
+          </Text>
+        )}
+        <Text style={styles.memberOrganizationArrow}>›</Text>
+      </Pressable>
+
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setOpen(false)}
+        presentationStyle="pageSheet"
+        visible={open}
+      >
+        <SafeAreaView style={styles.modalSafe}>
+          <View style={styles.organizationModalHeader}>
+            <View style={styles.flex}>
+              <Text style={styles.eyebrow}>PLAYER + TEAM IDENTITY</Text>
+              <Text style={styles.organizationModalTitle}>Your Duna.</Text>
+            </View>
+            <Pressable
+              accessibilityLabel="Close organization switcher"
+              accessibilityRole="button"
+              onPress={() => setOpen(false)}
+              style={styles.coachModalClose}
+            >
+              <Text style={styles.closeText}>×</Text>
+            </Pressable>
+          </View>
+          <ScrollView
+            contentContainerStyle={styles.organizationModalContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.organizationModalIntro}>
+              Keep your player identity while choosing the club or coaching
+              business you are working with right now.
+            </Text>
+
+            {authOrganizations.length > 0 && (
+              <View style={styles.organizationList}>
+                {authOrganizations.map((organization) => {
+                  const current = organization.id === activeAuthOrganizationId;
+                  const dunaOrganization =
+                    organizationAccess?.organizations.find(
+                      (candidate) =>
+                        candidate.name.toLowerCase() ===
+                        organization.name.toLowerCase(),
+                    );
+                  const role = dunaOrganization?.staff?.active
+                    ? `Player · ${organizationRoleLabel(dunaOrganization.staff.role)}`
+                    : `Player · ${organizationRoleLabel(organization.role ?? "member")}`;
+                  return (
+                    <Pressable
+                      accessibilityLabel={`Switch to ${organization.name}`}
+                      accessibilityRole="button"
+                      disabled={
+                        !switchOrganization ||
+                        current ||
+                        isSwitchingOrganization
+                      }
+                      key={organization.id}
+                      onPress={() => void runSwitch(organization.id)}
+                      style={[
+                        styles.organizationListRow,
+                        current && styles.organizationListRowActive,
+                      ]}
+                    >
+                      <View style={styles.organizationListMark}>
+                        <Text style={styles.organizationListMarkText}>
+                          {organization.name.slice(0, 1).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={styles.flex}>
+                        <Text style={styles.organizationListName}>
+                          {organization.name}
+                        </Text>
+                        <Text style={styles.organizationListRole}>{role}</Text>
+                      </View>
+                      <Text style={styles.organizationListAction}>
+                        {current
+                          ? "CURRENT"
+                          : isSwitchingOrganization
+                            ? "WAIT"
+                            : "SWITCH"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            {active?.canSelfEnroll && (
+              <View style={styles.organizationEnrollCard}>
+                <Text style={styles.organizationEnrollEyebrow}>
+                  PUT YOURSELF ON THE SCHEDULE
+                </Text>
+                <Text style={styles.organizationEnrollTitle}>
+                  Add your working role.
+                </Text>
+                <Text style={styles.organizationEnrollBody}>
+                  You will keep your admin access and also become assignable to
+                  schedules, sessions, and coaching work.
+                </Text>
+                <View style={styles.organizationEnrollActions}>
+                  <Pressable
+                    disabled={Boolean(pendingRole)}
+                    onPress={() => void selfEnroll("coach")}
+                    style={styles.organizationEnrollPrimary}
+                  >
+                    <Text style={styles.organizationEnrollPrimaryText}>
+                      {pendingRole === "coach" ? "Adding…" : "Add as coach"}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    disabled={Boolean(pendingRole)}
+                    onPress={() => void selfEnroll("director")}
+                    style={styles.organizationEnrollSecondary}
+                  >
+                    <Text style={styles.organizationEnrollSecondaryText}>
+                      {pendingRole === "director"
+                        ? "Adding…"
+                        : "Add as director"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+
+            {active?.canManage && (
+              <Pressable
+                accessibilityHint="Opens organization management in Duna HQ"
+                accessibilityRole="link"
+                onPress={() =>
+                  void WebBrowser.openBrowserAsync("https://hq.duna.coach")
+                }
+                style={styles.organizationHqLink}
+              >
+                <View>
+                  <Text style={styles.organizationHqEyebrow}>DUNA HQ</Text>
+                  <Text style={styles.organizationHqTitle}>
+                    Manage {active.name}
+                  </Text>
+                </View>
+                <Text style={styles.organizationHqArrow}>↗</Text>
+              </Pressable>
+            )}
+
+            {error && (
+              <Text accessibilityRole="alert" style={styles.formError}>
+                {error}
+              </Text>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+    </>
   );
 }
 
@@ -1322,9 +1559,7 @@ function HomeScreen({
           </View>
         </View>
 
-        {homeOrganization && (
-          <MemberOrganizationCard organization={homeOrganization} />
-        )}
+        <MemberOrganizationCard />
         {homeEvents.length > 0 && (
           <>
             <SectionHeader
@@ -5419,9 +5654,7 @@ function DiscoverScreen({
           }
         />
         <Text style={styles.displayTitle}>Find your game.</Text>
-        {homeOrganization && (
-          <MemberOrganizationCard organization={homeOrganization} />
-        )}
+        <MemberOrganizationCard />
         <Pressable
           onPress={() => {
             selectionHaptic();
@@ -6478,6 +6711,8 @@ function ProfileScreen({
           </Text>
         </View>
       </ImageBackground>
+
+      <MemberOrganizationCard />
 
       <ScrollView
         horizontal
@@ -9695,10 +9930,184 @@ function createStyles(palette: Palette) {
       fontSize: 10,
       marginTop: 3,
     },
+    memberOrganizationCount: {
+      backgroundColor: rgba(colors.accentRgb, 0.14),
+      borderRadius: 12,
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      minWidth: 24,
+      overflow: "hidden",
+      paddingHorizontal: 7,
+      paddingVertical: 5,
+      textAlign: "center",
+    },
     memberOrganizationArrow: {
       color: colors.aqua,
       fontSize: 24,
       fontWeight: "500",
+    },
+    organizationModalHeader: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.08),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 16,
+      padding: 20,
+    },
+    organizationModalTitle: {
+      color: colors.bone,
+      fontSize: 30,
+      fontWeight: "900",
+      letterSpacing: -1,
+      marginTop: 4,
+    },
+    organizationModalContent: {
+      gap: 18,
+      padding: 20,
+      paddingBottom: 52,
+    },
+    organizationModalIntro: {
+      color: colors.muted,
+      fontSize: 14,
+      lineHeight: 21,
+      maxWidth: 440,
+    },
+    organizationList: { gap: 9 },
+    organizationListRow: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 72,
+      padding: 12,
+    },
+    organizationListRowActive: {
+      borderColor: rgba(colors.accentRgb, 0.44),
+      shadowColor: colors.aqua,
+      shadowOffset: { width: 0, height: 7 },
+      shadowOpacity: 0.09,
+      shadowRadius: 18,
+    },
+    organizationListMark: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.14),
+      borderRadius: 13,
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    organizationListMarkText: {
+      color: colors.aqua,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    organizationListName: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    organizationListRole: {
+      color: colors.muted,
+      fontSize: 11,
+      marginTop: 3,
+    },
+    organizationListAction: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+    organizationEnrollCard: {
+      backgroundColor: rgba(colors.accentRgb, 0.09),
+      borderColor: rgba(colors.accentRgb, 0.25),
+      borderRadius: 20,
+      borderWidth: 1,
+      padding: 18,
+    },
+    organizationEnrollEyebrow: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.9,
+    },
+    organizationEnrollTitle: {
+      color: colors.bone,
+      fontSize: 21,
+      fontWeight: "900",
+      letterSpacing: -0.4,
+      marginTop: 8,
+    },
+    organizationEnrollBody: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 7,
+    },
+    organizationEnrollActions: {
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 16,
+    },
+    organizationEnrollPrimary: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 12,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 46,
+      paddingHorizontal: 12,
+    },
+    organizationEnrollPrimaryText: {
+      color: colors.onAccent,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    organizationEnrollSecondary: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.12),
+      borderRadius: 12,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 46,
+      paddingHorizontal: 12,
+    },
+    organizationEnrollSecondaryText: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    organizationHqLink: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      padding: 16,
+    },
+    organizationHqEyebrow: {
+      color: colors.warning,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.9,
+    },
+    organizationHqTitle: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+      marginTop: 4,
+    },
+    organizationHqArrow: {
+      color: colors.warning,
+      fontSize: 20,
+      fontWeight: "800",
     },
     coachingNoteCard: {
       backgroundColor: colors.depth,

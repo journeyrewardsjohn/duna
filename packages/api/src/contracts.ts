@@ -576,6 +576,37 @@ export const playerDashboardSchema = z.object({
   walletBalanceMinor: z.number().int(),
   currency: z.literal("USD"),
 });
+export const playerOrganizationAccessSchema = z.object({
+  activeOrganizationId: z.string().uuid().optional(),
+  organizations: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        slug: z.string(),
+        name: z.string(),
+        roles: z.array(personRoleSchema).readonly(),
+        isActive: z.boolean(),
+        canManage: z.boolean(),
+        canSelfEnroll: z.boolean(),
+        staff: z
+          .object({
+            active: z.boolean(),
+            role: z.enum([
+              "coach",
+              "director",
+              "manager",
+              "front-desk",
+              "accountant",
+            ]),
+          })
+          .optional(),
+      }),
+    )
+    .readonly(),
+});
+export type PlayerOrganizationAccess = z.infer<
+  typeof playerOrganizationAccessSchema
+>;
 export const playerCoachingNoteSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
@@ -2711,8 +2742,8 @@ export const operatorStaffProfileSchema = z.object({
   homeMarket: z.string().optional(),
   bio: z.string().optional(),
   profileVisibility: z.enum(["public", "members", "private"]),
-  role: z.enum(["coach", "manager", "front-desk", "accountant"]),
-  workerClassification: z.enum(["1099-contractor", "w2-employee"]),
+  role: z.enum(["coach", "director", "manager", "front-desk", "accountant"]),
+  workerClassification: z.enum(["not-set", "1099-contractor", "w2-employee"]),
   compensationModel: z.enum([
     "not-set",
     "hourly",
@@ -2745,7 +2776,7 @@ export const operatorStaffInvitationSchema = z.object({
   invitedName: z.string(),
   invitedEmail: z.string().email().optional(),
   invitedPhoneE164: z.string().optional(),
-  role: z.enum(["coach", "manager", "front-desk", "accountant"]),
+  role: z.enum(["coach", "director", "manager", "front-desk", "accountant"]),
   workerClassification: z.enum(["1099-contractor", "w2-employee"]),
   status: z.enum(["pending", "claimed", "expired", "cancelled"]),
   deliveryChannel: z.enum(["email", "sms"]).optional(),

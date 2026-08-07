@@ -2044,13 +2044,13 @@ export async function loadOperatorWorkspace(
       createdAt: row.createdAt.toISOString(),
     })),
     staff: staffProfileRows.map((row) => {
-      const person = commerce.people.find(
-        (candidate) => candidate.personId === row.profile.personId,
-      );
       const role =
-        person?.roles.find((candidate) =>
-          ["coach", "manager", "front-desk", "accountant"].includes(candidate),
-        ) ?? "coach";
+        row.profile.staffRole === "director" ||
+        row.profile.staffRole === "manager" ||
+        row.profile.staffRole === "front-desk" ||
+        row.profile.staffRole === "accountant"
+          ? row.profile.staffRole
+          : "coach";
       return {
         id: row.profile.id,
         personId: row.profile.personId,
@@ -2068,9 +2068,10 @@ export async function loadOperatorWorkspace(
             : "private",
         role: role as OperatorWorkspace["staff"][number]["role"],
         workerClassification:
-          row.profile.workerClassification === "w2-employee"
-            ? "w2-employee"
-            : "1099-contractor",
+          row.profile.workerClassification === "w2-employee" ||
+          row.profile.workerClassification === "1099-contractor"
+            ? row.profile.workerClassification
+            : "not-set",
         compensationModel:
           row.profile.compensationModel === "hourly" ||
           row.profile.compensationModel === "profit-share" ||
@@ -2127,6 +2128,7 @@ export async function loadOperatorWorkspace(
       invitedEmail: row.invitedEmail ?? undefined,
       invitedPhoneE164: row.invitedPhoneE164 ?? undefined,
       role:
+        row.role === "director" ||
         row.role === "manager" ||
         row.role === "front-desk" ||
         row.role === "accountant"
@@ -2726,7 +2728,7 @@ export async function createStaffInvitation(input: {
   readonly invitedName: string;
   readonly invitedEmail?: string;
   readonly invitedPhoneE164?: string;
-  readonly role: "coach" | "manager" | "front-desk" | "accountant";
+  readonly role: "coach" | "director" | "manager" | "front-desk" | "accountant";
   readonly workerClassification: "1099-contractor" | "w2-employee";
   readonly preferredChannel?: "email" | "sms";
   readonly deliveryMode?: "send" | "link-only";
@@ -2900,7 +2902,7 @@ export async function loadStaffInvitation(
   readonly id: string;
   readonly organizationName: string;
   readonly invitedName: string;
-  readonly role: "coach" | "manager" | "front-desk" | "accountant";
+  readonly role: "coach" | "director" | "manager" | "front-desk" | "accountant";
   readonly workerClassification: "1099-contractor" | "w2-employee";
   readonly status: "pending" | "claimed" | "expired" | "cancelled";
   readonly expiresAt: string;
@@ -2939,6 +2941,7 @@ export async function loadStaffInvitation(
         ? "expired"
         : "pending";
   const role =
+    row.role === "director" ||
     row.role === "manager" ||
     row.role === "front-desk" ||
     row.role === "accountant"
@@ -3010,22 +3013,24 @@ export async function claimStaffInvitation(input: {
       );
     }
     invitationId = invitation.id;
-    const role =
+    const staffRole =
+      invitation.role === "director" ||
       invitation.role === "manager" ||
       invitation.role === "front-desk" ||
       invitation.role === "accountant"
         ? invitation.role
         : "coach";
+    const membershipRole = staffRole === "director" ? "manager" : staffRole;
     await transaction
       .insert(organizationMemberships)
       .values({
         organizationId: invitation.organizationId,
         personId: input.actor.personId,
-        role,
+        role: membershipRole,
         scopes:
-          role === "coach"
+          membershipRole === "coach"
             ? ["sessions:read", "sessions:write", "members:read"]
-            : role === "accountant"
+            : membershipRole === "accountant"
               ? ["reports:read", "payments:read"]
               : [
                   "sessions:read",
@@ -3049,6 +3054,7 @@ export async function claimStaffInvitation(input: {
       .values({
         organizationId: invitation.organizationId,
         personId: input.actor.personId,
+        staffRole,
         workerClassification:
           invitation.workerClassification === "w2-employee"
             ? "w2-employee"
@@ -3060,6 +3066,7 @@ export async function claimStaffInvitation(input: {
           organizationStaffProfiles.personId,
         ],
         set: {
+          staffRole,
           workerClassification:
             invitation.workerClassification === "w2-employee"
               ? "w2-employee"
@@ -3077,7 +3084,7 @@ export async function claimStaffInvitation(input: {
       entityId: invitation.id,
       afterHash: stableHash({
         personId: input.actor.personId,
-        role,
+        role: staffRole,
         workerClassification: invitation.workerClassification,
       }),
       reason:
@@ -3098,8 +3105,8 @@ export async function updateStaffProfile(input: {
   readonly actor: ApiActor;
   readonly personId: string;
   readonly displayName: string;
-  readonly role: "coach" | "manager" | "front-desk" | "accountant";
-  readonly workerClassification: "1099-contractor" | "w2-employee";
+  readonly role: "coach" | "director" | "manager" | "front-desk" | "accountant";
+  readonly workerClassification: "not-set" | "1099-contractor" | "w2-employee";
   readonly compensationModel:
     "not-set" | "hourly" | "profit-share" | "hourly-plus-profit-share";
   readonly hourlyRateMinor?: number;
@@ -3210,7 +3217,9 @@ export async function updateStaffProfile(input: {
             "members:write",
             "reports:read",
           ];
+  const membershipRole = input.role === "director" ? "manager" : input.role;
   const values = {
+    staffRole: input.role,
     workerClassification: input.workerClassification,
     compensationModel: input.compensationModel,
     hourlyRateMinor:
@@ -3263,7 +3272,7 @@ export async function updateStaffProfile(input: {
       .values({
         organizationId,
         personId: input.personId,
-        role: input.role,
+        role: membershipRole,
         scopes,
         active: input.active,
       })

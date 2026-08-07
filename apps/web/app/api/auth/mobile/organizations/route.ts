@@ -13,16 +13,15 @@ export async function GET(request: Request) {
     );
     const memberships =
       await getWorkOS().userManagement.listOrganizationMemberships({
+        limit: 100,
+        statuses: ["active"],
         userId: claims.sub!,
       });
-    const organizations = await Promise.all(
-      memberships.data.map(async (membership) => {
-        const organization = await getWorkOS().organizations.getOrganization(
-          membership.organizationId,
-        );
-        return { id: organization.id, name: organization.name };
-      }),
-    );
+    const organizations = memberships.data.map((membership) => ({
+      id: membership.organizationId,
+      name: membership.organizationName,
+      role: membership.role.slug,
+    }));
     return NextResponse.json(
       { organizations },
       { headers: { "cache-control": "no-store" } },

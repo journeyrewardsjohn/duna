@@ -1,0 +1,2 @@
+ALTER TABLE "organization_staff_invitations" DROP CONSTRAINT "organization_staff_invitation_role_valid";--> statement-breakpoint
+ALTER TABLE "organization_staff_invitations" ADD CONSTRAINT "organization_staff_invitation_role_valid" CHECK ("organization_staff_invitations"."role" IN ('coach', 'director', 'manager', 'front-desk', 'accountant'));

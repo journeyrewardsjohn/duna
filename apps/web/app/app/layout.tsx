@@ -7,10 +7,14 @@ export default async function PlayerLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   const caller = await getServerCaller();
-  const dashboard = await caller.player.dashboard();
+  const [dashboard, organizationAccess] = await Promise.all([
+    caller.player.dashboard(),
+    caller.player.organizationAccess(),
+  ]);
   return (
     <PlayerShell
       authConfigured={isWorkOSAuthKitConfigured()}
+      organizationAccess={organizationAccess}
       player={dashboard.player}
     >
       {children}

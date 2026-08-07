@@ -19,6 +19,7 @@ export * from "./identity-verification";
 export * from "./family-wallet";
 export * from "./profile-onboarding";
 export * from "./player-intelligence";
+export * from "./player-organization";
 export * from "./player-research";
 export * from "./prediction-market";
 export * from "./membership";

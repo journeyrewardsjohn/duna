@@ -1,4 +1,5 @@
 import {
+  activeOrganizationIdFromCookie,
   createApiContextFromRequest,
   createApiContextFromWorkOSSession,
   createCaller,
@@ -39,6 +40,9 @@ export const getServerCaller = cache(async () => {
           organizationId: workosSession?.organizationId,
           role: workosSession?.role,
           roles: workosSession?.roles,
+          dunaOrganizationId: activeOrganizationIdFromCookie(
+            requestHeaders.get("cookie"),
+          ),
         },
         contextInput,
       )
