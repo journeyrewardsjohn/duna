@@ -4,7 +4,7 @@ import {
 } from "@duna/api";
 import { buildTournamentWalletPassDefinition } from "@duna/core";
 import { PKPass } from "passkit-generator";
-import sharp from "sharp";
+import { tournamentPassArtwork } from "./wallet-pass-artwork";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,35 +41,6 @@ function walletConfiguration(): WalletConfiguration | undefined {
     signerKey: Buffer.from(signerKey, "base64"),
     signerKeyPassphrase:
       process.env.APPLE_WALLET_SIGNER_KEY_PASSPHRASE?.trim() || undefined,
-  };
-}
-
-function dunaMarkSvg(color: string): Buffer {
-  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 48" fill="none">
-    <path d="M5 34H59" stroke="${color}" stroke-linecap="round" stroke-width="1.5"/>
-    <path d="M6 36.5C17.5 36.5 22.4 31.7 29.2 26.3C36.3 20.7 45 18.4 58 11.5" stroke="${color}" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.5"/>
-  </svg>`);
-}
-
-async function passArtwork(kind: "player-registration" | "fan-ticket") {
-  const mark = dunaMarkSvg(
-    kind === "player-registration" ? "#84e2c9" : "#f6bf4d",
-  );
-  const raster = (width: number, height: number) =>
-    sharp(mark).resize({ width, height, fit: "contain" }).png().toBuffer();
-  const [icon, icon2x, icon3x, logo, logo2x] = await Promise.all([
-    raster(29, 29),
-    raster(58, 58),
-    raster(87, 87),
-    raster(160, 50),
-    raster(320, 100),
-  ]);
-  return {
-    "icon.png": icon,
-    "icon@2x.png": icon2x,
-    "icon@3x.png": icon3x,
-    "logo.png": logo,
-    "logo@2x.png": logo2x,
   };
 }
 
@@ -119,7 +90,7 @@ export async function GET(
       passTypeIdentifier: configuration.passTypeIdentifier,
       teamIdentifier: configuration.teamIdentifier,
     });
-    const artwork = await passArtwork(record.kind);
+    const artwork = tournamentPassArtwork();
     const pass = new PKPass(
       {
         ...artwork,

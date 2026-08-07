@@ -38,3 +38,4 @@ apps/*/credentials/
 
 # generated brand artifacts that have not been approved
 artifacts/
+.vercel/
