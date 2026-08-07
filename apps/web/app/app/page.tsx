@@ -18,6 +18,7 @@ import {
 import Link from "next/link";
 import { EventCard } from "@/components/event-card";
 import { MatchCard } from "@/components/match-card";
+import { PredictionDiscoverySection } from "@/components/prediction-discovery";
 import { RatingOrbit } from "@/components/rating-orbit";
 import { getServerCaller } from "@/lib/api";
 import styles from "./player-dashboard.module.css";
@@ -34,9 +35,10 @@ function mediaForEvent(event: EventSummary) {
 
 export default async function PlayerDashboard() {
   const caller = await getServerCaller();
-  const [dashboard, settings] = await Promise.all([
+  const [dashboard, settings, predictionDiscovery] = await Promise.all([
     caller.player.dashboard(),
     caller.player.settings(),
+    caller.public.predictionDiscovery({ limit: 6 }),
   ]);
   const { player } = dashboard;
   const now = Date.now();
@@ -299,6 +301,8 @@ export default async function PlayerDashboard() {
           </div>
         </article>
       </section>
+
+      <PredictionDiscoverySection discovery={predictionDiscovery} />
 
       <section className={styles.section}>
         <div className={styles.sectionHeading}>

@@ -27189,3 +27189,348 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Prediction market control room */
+
+.prediction-admin {
+  display: grid;
+  gap: 1rem;
+}
+
+.prediction-admin-metrics {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.prediction-admin-metrics > article {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 1rem;
+}
+
+.prediction-admin-metrics span {
+  color: var(--color-bone-muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.prediction-admin-metrics .duna-numeric {
+  color: var(--hq-ink);
+  font-family: var(--font-data);
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  letter-spacing: -0.03em;
+  margin-top: 0.45rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prediction-admin-list {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.prediction-admin-list > header {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1.25rem;
+}
+
+.prediction-admin-list > header h2 {
+  font-size: 1.5rem;
+  margin: 0.2rem 0 0;
+}
+
+.prediction-admin-list > header p {
+  color: var(--color-bone-muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 0.45rem 0 0;
+}
+
+.prediction-admin-market {
+  border-top: 1px solid var(--color-line);
+}
+
+.prediction-admin-market > summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: 110px minmax(240px, 1fr) minmax(110px, auto) auto;
+  list-style: none;
+  min-height: 82px;
+  padding: 0.85rem 1.2rem;
+}
+
+.prediction-admin-market > summary::-webkit-details-marker {
+  display: none;
+}
+
+.prediction-admin-market > summary:hover {
+  background: color-mix(in srgb, var(--hq-tint) 38%, transparent);
+}
+
+.prediction-admin-market > summary > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.prediction-admin-market > summary > span:nth-last-child(1) {
+  align-items: center;
+  color: var(--color-bone-muted);
+  flex-direction: row;
+  font-size: 0.75rem;
+  gap: 0.3rem;
+}
+
+.prediction-admin-market > summary strong,
+.prediction-admin-market > summary small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prediction-admin-market > summary strong {
+  font-size: 0.86rem;
+}
+
+.prediction-admin-market > summary small {
+  color: var(--color-bone-muted);
+  font-size: 0.72rem;
+}
+
+.prediction-admin-market__status {
+  align-items: center !important;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  color: var(--color-bone-muted);
+  flex-direction: row !important;
+  font-size: 0.7rem;
+  font-weight: 800;
+  gap: 0.35rem;
+  justify-content: center;
+  padding: 0.38rem 0.55rem;
+  text-transform: capitalize;
+}
+
+.prediction-admin-market__status[data-status="open"] {
+  border-color: color-mix(in srgb, var(--hq-core) 62%, var(--color-line));
+  color: var(--hq-ink);
+}
+
+.prediction-admin-market__status[data-status="settled"] {
+  background: color-mix(in srgb, var(--hq-tint) 70%, transparent);
+  color: var(--hq-deep);
+}
+
+.prediction-admin-market__body {
+  background: var(--color-canvas);
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.prediction-admin-market__context {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.8rem;
+}
+
+.prediction-admin-market__context > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem 1.5rem;
+}
+
+.prediction-admin-market__context span {
+  color: var(--color-bone-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: 0.72rem;
+}
+
+.prediction-admin-market__context strong {
+  color: var(--color-bone);
+}
+
+.prediction-admin-market__context > a {
+  align-items: center;
+  color: var(--hq-ink);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  font-weight: 800;
+  gap: 0.3rem;
+  text-decoration: none;
+}
+
+.prediction-admin-workspace {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+}
+
+.prediction-admin-rules,
+.prediction-admin-operations > section,
+.prediction-admin-public,
+.prediction-admin-history {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  padding: 1rem;
+}
+
+.prediction-admin-rules > header,
+.prediction-admin-public > header {
+  align-items: start;
+  display: flex;
+  justify-content: space-between;
+}
+
+.prediction-admin-rules h3,
+.prediction-admin-operations h3,
+.prediction-admin-public h3 {
+  font-size: 1rem;
+  margin: 0.18rem 0 0;
+}
+
+.prediction-admin-operations {
+  display: grid;
+  gap: 1rem;
+}
+
+.prediction-admin-operations > section > p {
+  color: var(--color-bone-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.prediction-admin-determine {
+  border-color: color-mix(
+    in srgb,
+    var(--color-danger) 36%,
+    var(--color-line)
+  ) !important;
+}
+
+.prediction-admin-public > div {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 0.8rem;
+}
+
+.prediction-admin-public > div > span {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  font-size: 0.72rem;
+  min-width: 0;
+  padding: 0.65rem;
+}
+
+.prediction-admin-public > div strong {
+  color: var(--hq-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prediction-admin-public > div small,
+.prediction-admin-public > p {
+  color: var(--color-bone-muted);
+  font-size: 0.68rem;
+  margin-top: 0.2rem;
+}
+
+.prediction-admin-history > summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.prediction-admin-history > div {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+}
+
+.prediction-admin-history article {
+  align-items: start;
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding-top: 0.7rem;
+}
+
+.prediction-admin-history article > span {
+  background: var(--hq-tint);
+  border-radius: 999px;
+  color: var(--hq-ink);
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 0.3rem 0.45rem;
+}
+
+.prediction-admin-history p,
+.prediction-admin-history small {
+  color: var(--color-bone-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  margin: 0.2rem 0 0;
+}
+
+@media (max-width: 1180px) {
+  .prediction-admin-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .prediction-admin-workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .prediction-admin-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .prediction-admin-market > summary {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .prediction-admin-market > summary > span:nth-child(3),
+  .prediction-admin-market > summary > span:nth-child(4) {
+    display: none;
+  }
+
+  .prediction-admin-market__context,
+  .prediction-admin-list > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .prediction-admin-public > div {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

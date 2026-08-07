@@ -37,6 +37,9 @@ type PlayerWallet = Awaited<
 type PredictionWallet = Awaited<
   ReturnType<DunaApiClient["player"]["predictionWallet"]["query"]>
 >;
+type PredictionDiscovery = Awaited<
+  ReturnType<DunaApiClient["public"]["predictionDiscovery"]["query"]>
+>;
 type PlayerSettings = Awaited<
   ReturnType<DunaApiClient["player"]["settings"]["query"]>
 >;
@@ -72,6 +75,7 @@ export interface PlayerRuntime {
   readonly dashboard?: PlayerDashboard;
   readonly wallet?: PlayerWallet;
   readonly predictionWallet?: PredictionWallet;
+  readonly predictionDiscovery?: PredictionDiscovery;
   readonly settings?: PlayerSettings;
   readonly coachingNotes?: PlayerCoachingNotes;
   readonly people?: PublicPeople;
@@ -289,6 +293,8 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   const [dashboard, setDashboard] = useState<PlayerDashboard>();
   const [wallet, setWallet] = useState<PlayerWallet>();
   const [predictionWallet, setPredictionWallet] = useState<PredictionWallet>();
+  const [predictionDiscovery, setPredictionDiscovery] =
+    useState<PredictionDiscovery>();
   const [settings, setSettings] = useState<PlayerSettings>();
   const [coachingNotes, setCoachingNotes] = useState<PlayerCoachingNotes>();
   const [people, setPeople] = useState<PublicPeople>();
@@ -311,6 +317,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         nextDashboard,
         nextWallet,
         nextPredictionWallet,
+        nextPredictionDiscovery,
         nextSettings,
         nextCoachingNotes,
         nextPeople,
@@ -324,6 +331,9 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         client.player.dashboard.query(),
         client.player.wallet.query(),
         client.player.predictionWallet.query(),
+        client.public.predictionDiscovery
+          .query({ limit: 8 })
+          .catch(() => undefined),
         client.player.settings.query(),
         client.player.coachingNotes.query().catch(() => []),
         client.public.players.query({ limit: 50 }).catch(() => []),
@@ -337,6 +347,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       setDashboard(nextDashboard);
       setWallet(nextWallet);
       setPredictionWallet(nextPredictionWallet);
+      setPredictionDiscovery(nextPredictionDiscovery);
       setSettings(nextSettings);
       setCoachingNotes(nextCoachingNotes);
       setPeople(nextPeople);
@@ -434,6 +445,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         dashboard,
         wallet,
         predictionWallet,
+        predictionDiscovery,
         settings,
         coachingNotes,
         people,
@@ -461,6 +473,8 @@ function PreviewRuntime({ children }: { readonly children: ReactNode }) {
   const publicClient = useMemo(() => createDunaApiClient(async () => null), []);
   const [proCoverage, setProCoverage] = useState<PublicProCoverage>();
   const [discoveryMap, setDiscoveryMap] = useState<PublicDiscoveryMap>();
+  const [predictionDiscovery, setPredictionDiscovery] =
+    useState<PredictionDiscovery>();
   useEffect(() => {
     let active = true;
     void publicClient.public.proCoverage
@@ -475,6 +489,12 @@ function PreviewRuntime({ children }: { readonly children: ReactNode }) {
         if (active) setDiscoveryMap(map);
       })
       .catch(() => undefined);
+    void publicClient.public.predictionDiscovery
+      .query({ limit: 8 })
+      .then((discovery) => {
+        if (active) setPredictionDiscovery(discovery);
+      })
+      .catch(() => undefined);
     return () => {
       active = false;
     };
@@ -485,6 +505,7 @@ function PreviewRuntime({ children }: { readonly children: ReactNode }) {
       publicClient,
       proCoverage,
       discoveryMap,
+      predictionDiscovery,
       activeAuthOrganizationId: "org_demo_south_bay",
       authOrganizations: [
         {
@@ -515,7 +536,7 @@ function PreviewRuntime({ children }: { readonly children: ReactNode }) {
       },
       refresh: async () => undefined,
     }),
-    [discoveryMap, proCoverage],
+    [discoveryMap, predictionDiscovery, proCoverage],
   );
   return (
     <RuntimeContext.Provider value={value}>{children}</RuntimeContext.Provider>

@@ -421,6 +421,13 @@
       "when": 1786095337195,
       "tag": "0059_petite_sally_floyd",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1786106894717,
+      "tag": "0060_rare_boomerang",
+      "breakpoints": true
     }
   ]
 }

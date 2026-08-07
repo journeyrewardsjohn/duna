@@ -6,6 +6,7 @@ import {
   CalendarDays,
   CircleGauge,
   ClipboardCheck,
+  Coins,
   CreditCard,
   DatabaseZap,
   Flag,
@@ -102,6 +103,12 @@ export const adminModules = [
     slug: "ratings-lab",
     label: "Ratings lab",
     icon: FlaskConical,
+    group: "Integrity",
+  },
+  {
+    slug: "predictions",
+    label: "Predictions",
+    icon: Coins,
     group: "Integrity",
   },
   {

@@ -21,6 +21,7 @@ import type { Metadata } from "next";
 import { DunaWatchDevice } from "@/components/duna-watch-device";
 import { HomeSandWorld } from "@/components/home-sand-world";
 import { ProfileAvatarStack } from "@/components/profile-avatar-stack";
+import { PredictionDiscoverySection } from "@/components/prediction-discovery";
 import { RatingOrbit } from "@/components/rating-orbit";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -46,10 +47,11 @@ export const metadata: Metadata = {
 
 export default async function HomePage() {
   const caller = await getServerCaller();
-  const [events, people, venues] = await Promise.all([
+  const [events, people, venues, predictionDiscovery] = await Promise.all([
     caller.public.events(),
     caller.public.players({ limit: 50 }),
     caller.public.venues(),
+    caller.public.predictionDiscovery({ limit: 3 }),
   ]);
 
   const courtCount = venues.reduce(
@@ -357,6 +359,16 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      <div className={styles.shell + " homepage-predictions"}>
+        <PredictionDiscoverySection
+          allHref="/pro"
+          description="Make your call on live and upcoming beach volleyball with free-play credits. Crowd prices move with every matched position."
+          discovery={predictionDiscovery}
+          publicMode
+          title="What happens next?"
+        />
+      </div>
 
       <section
         aria-labelledby="home-intelligence-heading"

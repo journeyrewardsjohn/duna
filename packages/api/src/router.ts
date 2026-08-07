@@ -87,6 +87,8 @@ import {
   playerOrganizationAccessSchema,
   playerSettingsSchema,
   playerWalletSchema,
+  adminPredictionOverviewSchema,
+  predictionDiscoverySchema,
   predictionMarketSchema,
   predictionWalletSchema,
   pricingSchema,
@@ -441,6 +443,8 @@ import {
 } from "./sand-data/service";
 import {
   ensurePredictionMarket,
+  loadAdminPredictionOverview,
+  loadPredictionDiscovery,
   loadPublicEventTeamPredictionDefinitions,
   loadPublicMatchPredictionDefinition,
   loadPredictionMarket,
@@ -448,7 +452,10 @@ import {
   placePredictionOrder,
   placePredictionSellOrder,
   PredictionMarketError,
+  setPredictionMarketTradingStatus,
+  settleDeterminedMatchPredictionMarket,
   settlePredictionMarket,
+  updatePredictionMarketRules,
 } from "./prediction-market";
 import {
   buildPersonDataExport,
@@ -1557,6 +1564,20 @@ const publicRouter = router({
   proCoverage: publicProcedure.query(({ ctx }) =>
     loadPublicProCoverage(ctx.now),
   ),
+  predictionDiscovery: publicProcedure
+    .input(
+      z
+        .object({ limit: z.number().int().min(1).max(20).default(8) })
+        .optional(),
+    )
+    .output(predictionDiscoverySchema)
+    .query(({ input, ctx }) =>
+      loadPredictionDiscovery({
+        viewerPersonId: ctx.actor?.personId,
+        limit: input?.limit,
+        now: ctx.now,
+      }),
+    ),
   proEvent: publicProcedure
     .input(z.object({ slug: z.string().trim().min(1).max(180) }))
     .query(async ({ input, ctx }) => {
@@ -4000,7 +4021,7 @@ const playerRouter = router({
         ctx,
         execute: async () => {
           try {
-            return await confirmMatchResult({
+            const result = await confirmMatchResult({
               actor: ctx.actor!,
               matchId: input.matchId,
               decision: input.decision,
@@ -4009,6 +4030,13 @@ const playerRouter = router({
               ipAddress: ctx.ipAddress,
               now: ctx.now,
             });
+            if (result.status === "verified") {
+              await settleDeterminedMatchPredictionMarket({
+                matchId: input.matchId,
+                now: ctx.now,
+              });
+            }
+            return result;
           } catch (error) {
             return throwDomainError(error);
           }
@@ -8827,11 +8855,109 @@ const adminRouter = router({
   overview: adminProcedure
     .output(adminOverviewSchema)
     .query(() => getRepository().admin.overview()),
+  predictionMarkets: adminProcedure
+    .output(adminPredictionOverviewSchema)
+    .query(({ ctx }) =>
+      loadAdminPredictionOverview({
+        canManage: ctx.actor!.roles.includes("super-admin"),
+        now: ctx.now,
+      }),
+    ),
+  updatePredictionMarketRules: superAdminProcedure
+    .input(
+      z.object({
+        marketId: z.string().uuid(),
+        resolutionCriteria: z.string().trim().min(12).max(4_000),
+        resolutionSource: z.string().trim().min(5).max(2_000),
+        closePolicy: z.string().trim().min(12).max(4_000),
+        publicNote: z.string().trim().max(2_000).optional(),
+        locksAt: z.iso.datetime().nullable().optional(),
+        reason: z.string().trim().min(5).max(1_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        marketId: z.string().uuid(),
+        version: z.number().int().positive(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.updatePredictionMarketRules",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updatePredictionMarketRules({
+              marketId: input.marketId,
+              actorPersonId: ctx.actor!.personId,
+              resolutionCriteria: input.resolutionCriteria,
+              resolutionSource: input.resolutionSource,
+              closePolicy: input.closePolicy,
+              publicNote: input.publicNote,
+              locksAt:
+                input.locksAt === undefined
+                  ? undefined
+                  : input.locksAt === null
+                    ? null
+                    : new Date(input.locksAt),
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  setPredictionMarketTradingStatus: superAdminProcedure
+    .input(
+      z.object({
+        marketId: z.string().uuid(),
+        action: z.enum(["lock", "reopen"]),
+        reason: z.string().trim().min(5).max(1_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        marketId: z.string().uuid(),
+        status: z.enum(["open", "locked"]),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.setPredictionMarketTradingStatus",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await setPredictionMarketTradingStatus({
+              marketId: input.marketId,
+              action: input.action,
+              actorPersonId: ctx.actor!.personId,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   settlePredictionMarket: superAdminProcedure
     .input(
       z.object({
         marketId: z.string().uuid(),
         resolvedSide: z.enum(["yes", "no"]),
+        reason: z.string().trim().min(5).max(1_000),
         idempotencyKey: z.string().uuid(),
       }),
     )
@@ -8847,6 +8973,10 @@ const adminRouter = router({
             return await settlePredictionMarket({
               marketId: input.marketId,
               resolvedSide: input.resolvedSide,
+              actorPersonId: ctx.actor!.personId,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
               now: ctx.now,
             });
           } catch (error) {

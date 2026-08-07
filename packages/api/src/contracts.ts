@@ -627,6 +627,16 @@ export const playerWalletSchema = z.object({
   taxFormStatus: z.enum(["not-required", "pending", "ready"]),
 });
 
+export const predictionMarketRulesSchema = z.object({
+  version: z.number().int().positive(),
+  resolutionCriteria: z.string().min(1),
+  resolutionSource: z.string().min(1),
+  closePolicy: z.string().min(1),
+  publicNote: z.string().min(1).optional(),
+  effectiveAt: z.iso.datetime(),
+});
+export type PredictionMarketRules = z.infer<typeof predictionMarketRulesSchema>;
+
 export const predictionMarketSchema = z.object({
   id: z.string().uuid(),
   subjectType: z.string(),
@@ -645,8 +655,22 @@ export const predictionMarketSchema = z.object({
   noAskBps: z.number().int().min(100).max(9_900).optional(),
   volumeCredits: z.number().nonnegative(),
   participantCount: z.number().int().nonnegative(),
+  opensAt: z.iso.datetime(),
   locksAt: z.iso.datetime().optional(),
+  determinedAt: z.iso.datetime().optional(),
   resolvedSide: z.enum(["yes", "no"]).optional(),
+  rules: predictionMarketRulesSchema,
+  predictors: z
+    .array(
+      z.object({
+        handle: z.string().min(1),
+        side: z.enum(["yes", "no"]),
+        shares: z.number().nonnegative(),
+        status: z.enum(["open", "won", "lost", "void"]),
+        updatedAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
   history: z
     .array(
       z.object({
@@ -699,6 +723,20 @@ export const predictionWalletSchema = z.object({
   lifetimeGrantedCredits: z.number().nonnegative(),
   nextMonthlyGrantCredits: z.number().int().positive(),
   membershipPlan: z.enum(["free", "premium", "premium-plus"]),
+  portfolio: z.object({
+    openPositions: z.number().int().nonnegative(),
+    openOrders: z.number().int().nonnegative(),
+    determinedPositions: z.number().int().nonnegative(),
+    wins: z.number().int().nonnegative(),
+    losses: z.number().int().nonnegative(),
+    voids: z.number().int().nonnegative(),
+    openCostCredits: z.number().nonnegative(),
+    currentValueCredits: z.number().nonnegative(),
+    unrealizedCredits: z.number(),
+    settledCostCredits: z.number().nonnegative(),
+    settledPayoutCredits: z.number().nonnegative(),
+    netSettledCredits: z.number(),
+  }),
   positions: z
     .array(
       z.object({
@@ -712,11 +750,15 @@ export const predictionWalletSchema = z.object({
         listedShares: z.number().nonnegative(),
         costCredits: z.number().nonnegative(),
         payoutCredits: z.number().nonnegative(),
+        currentValueCredits: z.number().nonnegative(),
+        netCredits: z.number(),
         currentPriceBps: z.number().int().min(0).max(10_000),
         status: z.enum(["open", "won", "lost", "void"]),
+        marketStatus: z.enum(["open", "locked", "settled", "void"]),
         subjectType: z.string(),
         subjectId: z.string(),
         marketPath: z.string(),
+        determinedAt: z.iso.datetime().optional(),
         updatedAt: z.iso.datetime(),
       }),
     )
@@ -749,6 +791,8 @@ export const predictionWalletSchema = z.object({
         deltaCredits: z.number(),
         kind: z.string(),
         note: z.string(),
+        marketId: z.string().uuid().optional(),
+        marketPath: z.string().optional(),
         occurredAt: z.iso.datetime(),
       }),
     )
@@ -775,6 +819,78 @@ export const predictionWalletSchema = z.object({
     contractPayoutCredits: z.literal(1),
   }),
 });
+
+export const predictionDiscoverySchema = z.object({
+  items: z
+    .array(
+      z.object({
+        market: predictionMarketSchema,
+        marketPath: z.string(),
+        competition: z.string(),
+        scheduledAt: z.iso.datetime().optional(),
+        relevance: z.enum([
+          "your-match",
+          "following-player",
+          "following-event",
+          "live-pro",
+          "upcoming-pro",
+        ]),
+        reason: z.string(),
+        source: z.enum(["duna", "avp", "fivb"]),
+      }),
+    )
+    .readonly(),
+  personalizationApplied: z.boolean(),
+  updatedAt: z.iso.datetime(),
+});
+export type PredictionDiscovery = z.infer<typeof predictionDiscoverySchema>;
+
+export const adminPredictionOverviewSchema = z.object({
+  metrics: z.object({
+    totalMarkets: z.number().int().nonnegative(),
+    openMarkets: z.number().int().nonnegative(),
+    lockedMarkets: z.number().int().nonnegative(),
+    determinedMarkets: z.number().int().nonnegative(),
+    predictorCount: z.number().int().nonnegative(),
+    volumeCredits: z.number().nonnegative(),
+  }),
+  markets: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        subjectType: z.string(),
+        subjectId: z.string(),
+        title: z.string(),
+        yesLabel: z.string(),
+        noLabel: z.string(),
+        status: z.enum(["open", "locked", "settled", "void"]),
+        resolvedSide: z.enum(["yes", "no"]).optional(),
+        opensAt: z.iso.datetime(),
+        locksAt: z.iso.datetime().optional(),
+        determinedAt: z.iso.datetime().optional(),
+        marketPath: z.string(),
+        participantCount: z.number().int().nonnegative(),
+        openOrderCount: z.number().int().nonnegative(),
+        volumeCredits: z.number().nonnegative(),
+        rules: predictionMarketRulesSchema,
+        ruleHistory: z
+          .array(
+            predictionMarketRulesSchema.extend({
+              changeReason: z.string(),
+              createdByHandle: z.string().optional(),
+            }),
+          )
+          .readonly(),
+        predictors: predictionMarketSchema.shape.predictors,
+      }),
+    )
+    .readonly(),
+  canManage: z.boolean(),
+  updatedAt: z.iso.datetime(),
+});
+export type AdminPredictionOverview = z.infer<
+  typeof adminPredictionOverviewSchema
+>;
 
 export const videoSourceSchema = z.enum(["live", "upload"]);
 export const videoCategorySchema = z.enum([
