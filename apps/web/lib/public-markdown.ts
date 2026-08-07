@@ -85,11 +85,14 @@ export const staticPublicPages = [
     path: "/run-your-club",
     title: "Duna for clubs and coaches",
     description:
-      "Operate beach volleyball programs, registrations, memberships, courts, coaching, communications, and payments in Duna HQ.",
+      "Run an independent coaching business or a growing beach volleyball club with scheduling, courts, staff, parents, memberships, payments, marketing, video, and reporting in Duna HQ.",
     sections: [
-      "Publish tournaments, leagues, clinics, open play, private lessons, and court rentals.",
-      "Manage eligibility, registration, schedules, waivers, scoring, results, and member records.",
-      "Give players one connected experience while retaining operational control in Duna HQ.",
+      "Solo coaches can manage a mobile calendar, check-in, private notes, public services, memberships, credit packs, player-network distribution, payments, video, and permissioned player context.",
+      "Club owners can coordinate venues, courts, equipment, multiple coaches, parents, guardians, memberships, programs, inventory, money, marketing, and reporting.",
+      "Duna HQ connects orders, credits, refunds, payouts, people, products, events, leagues, video, and operating reports without inferring unavailable financial data.",
+      "Players control health-data sharing and visibility. Verified guardians receive appropriately scoped communication for minors.",
+      "Duna AI suggestions remain reviewable. Publishing, sending, refunding, and access changes remain explicit operator actions.",
+      "Current plans include a free Coach and Organizer plan plus paid Club, Facility, and Network plans. Live prices and eligibility are confirmed in Duna HQ.",
     ],
   },
   {
