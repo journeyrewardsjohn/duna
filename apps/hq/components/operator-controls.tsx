@@ -557,6 +557,7 @@ function TeamMemberComposer({
               <span>Role</span>
               <select name="role" defaultValue="coach">
                 <option value="coach">Coach</option>
+                <option value="director">Director</option>
                 <option value="manager">Manager</option>
                 <option value="front-desk">Front desk</option>
                 <option value="accountant">Accountant</option>

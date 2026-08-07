@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  activeOrganizationIdFromCookie,
   createApiContext,
   createApiContextFromWorkOSSession,
   createDemoActor,
@@ -31,6 +32,21 @@ describe("API identity context", () => {
   it("keeps a missing WorkOS session anonymous even when demo mode is enabled", async () => {
     const context = await createApiContextFromWorkOSSession({ user: null });
     expect(context.actor).toBeUndefined();
+  });
+
+  it("accepts only a valid Duna organization context cookie", () => {
+    const organizationId = "10000000-0000-4000-8000-000000000001";
+    expect(
+      activeOrganizationIdFromCookie(
+        `theme=light; duna-organization-context=${organizationId}; session=sealed`,
+      ),
+    ).toBe(organizationId);
+    expect(
+      activeOrganizationIdFromCookie(
+        "duna-organization-context=../../another-organization",
+      ),
+    ).toBeUndefined();
+    expect(activeOrganizationIdFromCookie(undefined)).toBeUndefined();
   });
 
   it("reads WorkOS access-token expiration for native session refresh", () => {

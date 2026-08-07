@@ -1,5 +1,6 @@
 "use client";
 
+import type { PlayerOrganizationAccess } from "@duna/api";
 import type { PersonSummary } from "@duna/core";
 import { DunaMark, Numeric } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
@@ -19,6 +20,7 @@ import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { AskDuna } from "./ask-duna";
 import { PlayerAccountMenu } from "./player-account-menu";
+import { PlayerOrganizationSwitcher } from "./player-organization-switcher";
 
 const navigation = [
   { label: "Home", href: "/app", icon: House },
@@ -32,10 +34,12 @@ const navigation = [
 export function PlayerShell({
   authConfigured,
   children,
+  organizationAccess,
   player,
 }: {
   readonly authConfigured: boolean;
   readonly children: ReactNode;
+  readonly organizationAccess: PlayerOrganizationAccess;
   readonly player: PersonSummary;
 }) {
   const pathname = usePathname();
@@ -121,10 +125,10 @@ export function PlayerShell({
             >
               <DunaMark compact />
             </Link>
-            <div className="player-topbar__market">
-              <span>Playing in</span>
-              <strong>{player.homeMarket}</strong>
-            </div>
+            <PlayerOrganizationSwitcher
+              access={organizationAccess}
+              homeMarket={player.homeMarket}
+            />
             <div className="player-topbar__actions">
               <ThemeToggle />
               <button aria-label="Messages">

@@ -407,6 +407,20 @@
       "when": 1786031645647,
       "tag": "0057_design_v3_player_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1786094757592,
+      "tag": "0058_vengeful_lifeguard",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1786095337195,
+      "tag": "0059_petite_sally_floyd",
+      "breakpoints": true
     }
   ]
 }

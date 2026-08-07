@@ -1,6 +1,7 @@
 import {
   WorkOSMobileAuthProvider,
   useWorkOSMobileAuth,
+  type WorkOSMobileOrganization,
 } from "@duna/mobile-auth";
 import {
   createContext,
@@ -12,7 +13,9 @@ import {
   type ReactNode,
 } from "react";
 import * as Haptics from "expo-haptics";
+import * as Crypto from "expo-crypto";
 import { VideoView, useVideoPlayer } from "expo-video";
+import { demoOrganization } from "@duna/core/demo";
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -58,6 +61,9 @@ type PublicDiscoveryMap = Awaited<
 type OrganizationWallets = Awaited<
   ReturnType<DunaApiClient["player"]["organizationWallets"]["query"]>
 >;
+type PlayerOrganizationAccess = Awaited<
+  ReturnType<DunaApiClient["player"]["organizationAccess"]["query"]>
+>;
 
 export interface PlayerRuntime {
   readonly mode: "preview" | "live";
@@ -74,7 +80,15 @@ export interface PlayerRuntime {
   readonly coaches?: PublicCoaches;
   readonly discoveryMap?: PublicDiscoveryMap;
   readonly organizationWallets?: OrganizationWallets;
+  readonly organizationAccess?: PlayerOrganizationAccess;
+  readonly authOrganizations?: readonly WorkOSMobileOrganization[];
+  readonly activeAuthOrganizationId?: string;
+  readonly isSwitchingOrganization?: boolean;
   readonly refresh: () => Promise<void>;
+  readonly switchOrganization?: (organizationId: string) => Promise<void>;
+  readonly selfEnrollOrganizationStaff?: (
+    staffRole: "coach" | "director",
+  ) => Promise<void>;
   readonly signOut?: () => Promise<void>;
 }
 
@@ -264,6 +278,10 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     getToken,
     isLoaded,
     isSignedIn,
+    isSwitchingOrganization,
+    organizationId,
+    organizations,
+    selectOrganization,
     signIn,
     signOut,
   } = useWorkOSMobileAuth();
@@ -280,6 +298,8 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   const [discoveryMap, setDiscoveryMap] = useState<PublicDiscoveryMap>();
   const [organizationWallets, setOrganizationWallets] =
     useState<OrganizationWallets>();
+  const [organizationAccess, setOrganizationAccess] =
+    useState<PlayerOrganizationAccess>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
 
@@ -299,6 +319,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         nextCoaches,
         nextDiscoveryMap,
         nextOrganizationWallets,
+        nextOrganizationAccess,
       ] = await Promise.all([
         client.player.dashboard.query(),
         client.player.wallet.query(),
@@ -311,6 +332,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         client.public.coaches.query().catch(() => []),
         client.public.discoveryMap.query().catch(() => undefined),
         client.player.organizationWallets.query().catch(() => []),
+        client.player.organizationAccess.query().catch(() => undefined),
       ]);
       setDashboard(nextDashboard);
       setWallet(nextWallet);
@@ -323,6 +345,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       setCoaches(nextCoaches);
       setDiscoveryMap(nextDiscoveryMap);
       setOrganizationWallets(nextOrganizationWallets);
+      setOrganizationAccess(nextOrganizationAccess);
     } catch (reason) {
       setError(
         reason instanceof Error && /abort|timed? out/i.test(reason.message)
@@ -335,6 +358,25 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       setLoading(false);
     }
   }, [client]);
+
+  const switchOrganization = useCallback(
+    async (nextOrganizationId: string) => {
+      await selectOrganization(nextOrganizationId);
+      await refresh();
+    },
+    [refresh, selectOrganization],
+  );
+
+  const selfEnrollOrganizationStaff = useCallback(
+    async (staffRole: "coach" | "director") => {
+      await client.player.selfEnrollOrganizationStaff.mutate({
+        idempotencyKey: Crypto.randomUUID(),
+        staffRole,
+      });
+      await refresh();
+    },
+    [client, refresh],
+  );
 
   useEffect(() => {
     if (isLoaded && isSignedIn) void refresh();
@@ -400,7 +442,13 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         coaches,
         discoveryMap,
         organizationWallets,
+        organizationAccess,
+        authOrganizations: organizations,
+        activeAuthOrganizationId: organizationId,
+        isSwitchingOrganization,
         refresh,
+        switchOrganization,
+        selfEnrollOrganizationStaff,
         signOut,
       }}
     >
@@ -437,6 +485,34 @@ function PreviewRuntime({ children }: { readonly children: ReactNode }) {
       publicClient,
       proCoverage,
       discoveryMap,
+      activeAuthOrganizationId: "org_demo_south_bay",
+      authOrganizations: [
+        {
+          id: "org_demo_south_bay",
+          name: demoOrganization.name,
+          role: "admin",
+        },
+        {
+          id: "org_demo_beach_collective",
+          name: "Beach Collective",
+          role: "coach",
+        },
+      ],
+      organizationAccess: {
+        activeOrganizationId: demoOrganization.id,
+        organizations: [
+          {
+            id: demoOrganization.id,
+            slug: demoOrganization.slug,
+            name: demoOrganization.name,
+            roles: ["manager", "coach"],
+            isActive: true,
+            canManage: true,
+            canSelfEnroll: false,
+            staff: { active: true, role: "director" },
+          },
+        ],
+      },
       refresh: async () => undefined,
     }),
     [discoveryMap, proCoverage],

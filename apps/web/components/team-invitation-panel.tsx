@@ -8,7 +8,7 @@ import { claimTeamInvitationAction } from "@/app/join/team/[inviteToken]/actions
 interface TeamInvitation {
   readonly organizationName: string;
   readonly invitedName: string;
-  readonly role: "coach" | "manager" | "front-desk" | "accountant";
+  readonly role: "coach" | "director" | "manager" | "front-desk" | "accountant";
   readonly workerClassification: "1099-contractor" | "w2-employee";
   readonly status: "pending" | "claimed" | "expired" | "cancelled";
 }

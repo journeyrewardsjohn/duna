@@ -21,8 +21,18 @@ export function SiteHeader() {
         </nav>
         <div className="site-header__actions">
           <ThemeToggle />
-          <a className="site-header__operator" href={DUNA_HQ_URL}>
-            Duna HQ <ArrowUpRight aria-hidden size={15} />
+          <a
+            aria-label="Open Duna HQ"
+            className="site-header__operator"
+            href={DUNA_HQ_URL}
+          >
+            <span>
+              <small>For business</small>
+              <strong>Duna HQ</strong>
+            </span>
+            <i>
+              <ArrowUpRight aria-hidden size={14} />
+            </i>
           </a>
           <WebAuthButton configured={isWorkOSAuthKitConfigured()} />
           <details className="site-header__mobile">

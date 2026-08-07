@@ -168,6 +168,7 @@ export function TeamMemberEditor({
               <span>Role</span>
               <select defaultValue={person.role} name="role">
                 <option value="coach">Coach</option>
+                <option value="director">Director</option>
                 <option value="manager">Manager</option>
                 <option value="front-desk">Front desk</option>
                 <option value="accountant">Accountant</option>
@@ -179,6 +180,7 @@ export function TeamMemberEditor({
                 defaultValue={person.workerClassification}
                 name="workerClassification"
               >
+                <option value="not-set">Not set yet</option>
                 <option value="1099-contractor">1099 contractor</option>
                 <option value="w2-employee">W-2 employee</option>
               </select>

@@ -29,12 +29,21 @@ interface MobileSession {
   readonly organizationId?: string;
 }
 
+export interface WorkOSMobileOrganization {
+  readonly id: string;
+  readonly name: string;
+  readonly role?: string;
+}
+
 interface WorkOSMobileAuth {
   readonly error?: string;
   readonly getToken: () => Promise<string | null>;
   readonly isLoaded: boolean;
   readonly isSignedIn: boolean;
+  readonly isSwitchingOrganization: boolean;
   readonly organizationId?: string;
+  readonly organizations: readonly WorkOSMobileOrganization[];
+  readonly selectOrganization: (organizationId: string) => Promise<void>;
   readonly signIn: () => Promise<void>;
   readonly signOut: () => Promise<void>;
 }
@@ -152,6 +161,10 @@ export function WorkOSMobileAuthProvider({
   const refreshRef = useRef<Promise<MobileSession> | undefined>(undefined);
   const [session, setSession] = useState<MobileSession | undefined>(undefined);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isSwitchingOrganization, setIsSwitchingOrganization] = useState(false);
+  const [organizations, setOrganizations] = useState<
+    readonly WorkOSMobileOrganization[]
+  >([]);
   const [error, setError] = useState<string>();
 
   const commitSession = useCallback(async (next: MobileSession) => {
@@ -160,17 +173,25 @@ export function WorkOSMobileAuthProvider({
     setSession(next);
   }, []);
 
+  const loadOrganizations = useCallback(
+    async (accessToken: string) => {
+      const organizationResponse = await fetch(
+        `${baseUrl}/api/auth/mobile/organizations`,
+        { headers: { authorization: `Bearer ${accessToken}` } },
+      );
+      const organizationBody = await responseJson<{
+        readonly organizations: readonly WorkOSMobileOrganization[];
+      }>(organizationResponse);
+      setOrganizations(organizationBody.organizations);
+      return organizationBody.organizations;
+    },
+    [baseUrl],
+  );
+
   const addDefaultOrganization = useCallback(
     async (next: MobileSession): Promise<MobileSession> => {
       if (!requireOrganization || next.organizationId) return next;
-      const organizationResponse = await fetch(
-        `${baseUrl}/api/auth/mobile/organizations`,
-        { headers: { authorization: `Bearer ${next.accessToken}` } },
-      );
-      const organizationBody = await responseJson<{
-        readonly organizations: readonly { id: string; name: string }[];
-      }>(organizationResponse);
-      const firstOrganization = organizationBody.organizations[0];
+      const firstOrganization = (await loadOrganizations(next.accessToken))[0];
       if (!firstOrganization) return next;
       const refreshResponse = await fetch(
         `${baseUrl}/api/auth/mobile/refresh`,
@@ -185,7 +206,7 @@ export function WorkOSMobileAuthProvider({
       );
       return responseJson<MobileSession>(refreshResponse);
     },
-    [baseUrl, requireOrganization],
+    [baseUrl, loadOrganizations, requireOrganization],
   );
 
   const refreshSession = useCallback(
@@ -242,6 +263,24 @@ export function WorkOSMobileAuthProvider({
       active = false;
     };
   }, [addDefaultOrganization, commitSession, refreshSession]);
+
+  useEffect(() => {
+    if (!session) {
+      setOrganizations([]);
+      return;
+    }
+    let active = true;
+    void loadOrganizations(session.accessToken)
+      .then((nextOrganizations) => {
+        if (active) setOrganizations(nextOrganizations);
+      })
+      .catch(() => {
+        if (active) setOrganizations([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [loadOrganizations, session]);
 
   useEffect(() => {
     if (response?.type !== "success") {
@@ -301,6 +340,46 @@ export function WorkOSMobileAuthProvider({
     }
     await promptAsync();
   }, [clientId, promptAsync, request]);
+  const selectOrganization = useCallback(
+    async (organizationId: string) => {
+      const current = sessionRef.current;
+      if (!current) throw new Error("Sign in before choosing an organization.");
+      if (current.organizationId === organizationId) return;
+      if (
+        !organizations.some(
+          (organization) => organization.id === organizationId,
+        )
+      ) {
+        throw new Error("You no longer have access to this organization.");
+      }
+      setError(undefined);
+      setIsSwitchingOrganization(true);
+      try {
+        const refreshResponse = await fetch(
+          `${baseUrl}/api/auth/mobile/refresh`,
+          {
+            body: JSON.stringify({
+              organizationId,
+              refreshToken: current.refreshToken,
+            }),
+            headers: { "content-type": "application/json" },
+            method: "POST",
+          },
+        );
+        await commitSession(await responseJson<MobileSession>(refreshResponse));
+      } catch (reason) {
+        const message =
+          reason instanceof Error
+            ? reason.message
+            : "Duna could not switch organizations.";
+        setError(message);
+        throw new Error(message, { cause: reason });
+      } finally {
+        setIsSwitchingOrganization(false);
+      }
+    },
+    [baseUrl, commitSession, organizations],
+  );
   const signOut = useCallback(async () => {
     await clearSession();
     sessionRef.current = undefined;
@@ -313,11 +392,24 @@ export function WorkOSMobileAuthProvider({
       getToken,
       isLoaded,
       isSignedIn: Boolean(session),
+      isSwitchingOrganization,
       organizationId: session?.organizationId,
+      organizations,
+      selectOrganization,
       signIn,
       signOut,
     }),
-    [error, getToken, isLoaded, session, signIn, signOut],
+    [
+      error,
+      getToken,
+      isLoaded,
+      isSwitchingOrganization,
+      organizations,
+      selectOrganization,
+      session,
+      signIn,
+      signOut,
+    ],
   );
 
   return (

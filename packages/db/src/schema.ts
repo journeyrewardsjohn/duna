@@ -1269,9 +1269,12 @@ export const organizationStaffProfiles = pgTable(
     personId: uuid("person_id")
       .notNull()
       .references(() => people.id, { onDelete: "cascade" }),
+    staffRole: varchar("staff_role", { length: 24 }).notNull().default("coach"),
     workerClassification: varchar("worker_classification", {
       length: 24,
-    }).notNull(),
+    })
+      .notNull()
+      .default("not-set"),
     compensationModel: varchar("compensation_model", { length: 24 })
       .notNull()
       .default("not-set"),
@@ -1308,8 +1311,12 @@ export const organizationStaffProfiles = pgTable(
       table.active,
     ),
     check(
+      "organization_staff_role_valid",
+      sql`${table.staffRole} IN ('coach', 'director', 'manager', 'front-desk', 'accountant')`,
+    ),
+    check(
       "organization_staff_classification_valid",
-      sql`${table.workerClassification} IN ('1099-contractor', 'w2-employee')`,
+      sql`${table.workerClassification} IN ('not-set', '1099-contractor', 'w2-employee')`,
     ),
     check(
       "organization_staff_compensation_valid",
@@ -1378,7 +1385,7 @@ export const organizationStaffInvitations = pgTable(
     ),
     check(
       "organization_staff_invitation_role_valid",
-      sql`${table.role} IN ('coach', 'manager', 'front-desk', 'accountant')`,
+      sql`${table.role} IN ('coach', 'director', 'manager', 'front-desk', 'accountant')`,
     ),
     check(
       "organization_staff_invitation_classification_valid",

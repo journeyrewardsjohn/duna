@@ -1,7 +1,22 @@
 "use client";
 
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
+import { ArrowUpRight, LogOut, Settings, UserRound } from "lucide-react";
 import Link from "next/link";
+
+function OpenDunaLink({ href }: { readonly href: string }) {
+  return (
+    <Link className="site-header__enter" href={href}>
+      <span>
+        <small>Player app</small>
+        <strong>Open Duna</strong>
+      </span>
+      <i>
+        <ArrowUpRight aria-hidden size={16} />
+      </i>
+    </Link>
+  );
+}
 
 export function WebAuthButton({
   configured,
@@ -9,11 +24,7 @@ export function WebAuthButton({
   readonly configured: boolean;
 }) {
   if (!configured) {
-    return (
-      <Link className="site-header__enter" href="/app">
-        Enter Duna
-      </Link>
-    );
+    return <OpenDunaLink href="/app" />;
   }
   return <ConfiguredWebAuthButton />;
 }
@@ -29,23 +40,42 @@ function ConfiguredWebAuthButton() {
     <>
       {user ? (
         <>
-          <Link className="site-header__enter" href="/app">
-            Open Duna
-          </Link>
-          <button
-            aria-label={`Sign out ${user.email}`}
-            className="site-header__avatar"
-            onClick={() => void signOut({ returnTo: window.location.origin })}
-            title="Sign out"
-            type="button"
-          >
-            {initials}
-          </button>
+          <OpenDunaLink href="/app" />
+          <details className="site-header-account">
+            <summary aria-label="Open account menu">
+              <span className="site-header__avatar">{initials}</span>
+            </summary>
+            <div>
+              <header>
+                <span>{initials}</span>
+                <p>
+                  <strong>
+                    {[user.firstName, user.lastName]
+                      .filter(Boolean)
+                      .join(" ") || "Your Duna"}
+                  </strong>
+                  <small>{user.email}</small>
+                </p>
+              </header>
+              <Link href="/app/profile">
+                <UserRound aria-hidden size={16} /> Player profile
+              </Link>
+              <Link href="/app/settings">
+                <Settings aria-hidden size={16} /> Account settings
+              </Link>
+              <button
+                onClick={() =>
+                  void signOut({ returnTo: window.location.origin })
+                }
+                type="button"
+              >
+                <LogOut aria-hidden size={16} /> Sign out
+              </button>
+            </div>
+          </details>
         </>
       ) : (
-        <Link className="site-header__enter" href="/sign-in">
-          Sign in
-        </Link>
+        <OpenDunaLink href="/sign-in" />
       )}
     </>
   );

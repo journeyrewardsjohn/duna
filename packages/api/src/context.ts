@@ -43,6 +43,28 @@ export interface ApiContext {
   readonly now: Date;
 }
 
+export const DUNA_ORGANIZATION_CONTEXT_COOKIE = "duna-organization-context";
+
+export function activeOrganizationIdFromCookie(
+  cookieHeader: string | null | undefined,
+): string | undefined {
+  const encoded = cookieHeader
+    ?.split(";")
+    .map((part) => part.trim().split("="))
+    .find(([name]) => name === DUNA_ORGANIZATION_CONTEXT_COOKIE)?.[1];
+  if (!encoded) return undefined;
+  try {
+    const value = decodeURIComponent(encoded);
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    )
+      ? value
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 interface ApiContextInput {
   readonly requestId?: string;
   readonly ipAddress?: string;
@@ -361,6 +383,7 @@ async function resolveWorkOSActor(input: {
   readonly workosOrganizationId?: string | null;
   readonly workosOrganizationRole?: string | null;
   readonly workosOrganizationRoles?: readonly string[] | null;
+  readonly dunaOrganizationId?: string;
 }): Promise<ApiActor> {
   if (!isDatabaseConfigured()) {
     throw new Error("WorkOS authentication requires DATABASE_URL");
@@ -399,7 +422,7 @@ async function resolveWorkOSActor(input: {
       })
       .onConflictDoNothing();
   }
-  const organization = input.workosOrganizationId
+  const workosOrganization = input.workosOrganizationId
     ? await resolveWorkOSOrganization(input.client, input.workosOrganizationId)
     : undefined;
 
@@ -432,17 +455,38 @@ async function resolveWorkOSActor(input: {
   const organizationRole = workosRoleCandidates
     .map((role) => organizationRoleByWorkOSRole[role])
     .find(Boolean);
-  if (organization && organizationRole) {
+  if (workosOrganization && organizationRole) {
     await database
       .insert(organizationMemberships)
       .values({
-        organizationId: organization.id,
+        organizationId: workosOrganization.id,
         personId: person.id,
         role: organizationRole,
         scopes: [],
       })
       .onConflictDoNothing();
   }
+
+  const selectedOrganization = input.dunaOrganizationId
+    ? (
+        await database
+          .select({ organization: organizations })
+          .from(organizations)
+          .innerJoin(
+            organizationMemberships,
+            eq(organizationMemberships.organizationId, organizations.id),
+          )
+          .where(
+            and(
+              eq(organizations.id, input.dunaOrganizationId),
+              eq(organizationMemberships.personId, person.id),
+              eq(organizationMemberships.active, true),
+            ),
+          )
+          .limit(1)
+      )[0]?.organization
+    : undefined;
+  const organization = selectedOrganization ?? workosOrganization;
 
   const [membershipRows, platformRoleRows, guardianshipRows] =
     await Promise.all([
@@ -524,6 +568,9 @@ export async function createApiContextFromRequest(
       workosOrganizationId: claims.org_id,
       workosOrganizationRole: claims.role,
       workosOrganizationRoles: claims.roles,
+      dunaOrganizationId: activeOrganizationIdFromCookie(
+        request.headers.get("cookie"),
+      ),
     });
     return createApiContext({ ...base, actor, useDemoActor: false });
   } catch (error) {
@@ -541,6 +588,7 @@ export async function createApiContextFromWorkOSSession(
     readonly organizationId?: string | null;
     readonly role?: string | null;
     readonly roles?: readonly string[] | null;
+    readonly dunaOrganizationId?: string;
   },
   input?: ApiContextInput,
 ): Promise<ApiContext> {
@@ -559,6 +607,7 @@ export async function createApiContextFromWorkOSSession(
     workosOrganizationId: session.organizationId,
     workosOrganizationRole: session.role,
     workosOrganizationRoles: session.roles,
+    dunaOrganizationId: session.dunaOrganizationId,
   });
   return createApiContext({ ...base, actor, useDemoActor: false });
 }

@@ -1045,6 +1045,7 @@ export async function createStaffInvitationAction(
     const role = field(formData, "role");
     if (
       role !== "coach" &&
+      role !== "director" &&
       role !== "manager" &&
       role !== "front-desk" &&
       role !== "accountant"
@@ -1109,6 +1110,7 @@ export async function updateStaffProfileAction(
     const role = field(formData, "role");
     if (
       role !== "coach" &&
+      role !== "director" &&
       role !== "manager" &&
       role !== "front-desk" &&
       role !== "accountant"
@@ -1117,10 +1119,11 @@ export async function updateStaffProfileAction(
     }
     const workerClassification = field(formData, "workerClassification");
     if (
+      workerClassification !== "not-set" &&
       workerClassification !== "1099-contractor" &&
       workerClassification !== "w2-employee"
     ) {
-      throw new Error("Choose 1099 contractor or W-2 employee.");
+      throw new Error("Choose a worker classification or leave it not set.");
     }
     const compensationModel = field(formData, "compensationModel");
     if (
