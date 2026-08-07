@@ -15,6 +15,8 @@ import {
   pickupSessions,
   ratings,
   sessions,
+  tickets,
+  ticketTypes,
   venues,
 } from "@duna/db";
 import {
@@ -876,6 +878,9 @@ export interface TicketScanResult {
   readonly reason?: "not-issued" | "already-scanned" | "void" | "refunded";
   readonly ticketStatus:
     "held" | "issued" | "transferred" | "scanned" | "void" | "refunded";
+  readonly ownerName?: string;
+  readonly ticketName?: string;
+  readonly eventTitle?: string;
 }
 
 export async function scanTicketConnected(input: {
@@ -927,6 +932,19 @@ export async function scanTicketConnected(input: {
     ) {
       throw new Error("Ticket scan transaction returned an invalid result");
     }
+    const detail = await getDatabase()
+      .select({
+        ownerName: people.displayName,
+        ticketName: ticketTypes.name,
+        eventTitle: sessions.title,
+      })
+      .from(tickets)
+      .innerJoin(people, eq(tickets.ownerPersonId, people.id))
+      .innerJoin(ticketTypes, eq(tickets.ticketTypeId, ticketTypes.id))
+      .innerJoin(sessions, eq(ticketTypes.sessionId, sessions.id))
+      .where(eq(tickets.id, row.result_ticket_id))
+      .limit(1)
+      .then((rows) => rows[0]);
     return {
       scanEventId: row.scan_event_id,
       ticketId: row.result_ticket_id,
@@ -934,6 +952,9 @@ export async function scanTicketConnected(input: {
       duplicate: row.duplicate,
       reason: row.reason ?? undefined,
       ticketStatus: row.result_ticket_status,
+      ownerName: detail?.ownerName,
+      ticketName: detail?.ticketName,
+      eventTitle: detail?.eventTitle,
     };
   } catch (error) {
     return mapDatabaseOperationError(error);

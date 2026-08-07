@@ -5,6 +5,8 @@ import {
   loadWeatherForecast,
   resolveWeatherCoordinates,
   weatherAt,
+  weatherForecastAvailableAt,
+  weatherForecastIsAvailable,
   weatherPresentation,
 } from "./weather";
 
@@ -15,6 +17,20 @@ afterEach(() => {
 });
 
 describe("weather and daylight planning", () => {
+  it("opens the provider forecast window exactly fourteen days before play", () => {
+    const startsAt = new Date("2026-08-29T13:00:00.000Z");
+    const availableAt = weatherForecastAvailableAt(startsAt);
+
+    expect(availableAt.toISOString()).toBe("2026-08-15T13:00:00.000Z");
+    expect(
+      weatherForecastIsAvailable(
+        startsAt,
+        new Date("2026-08-15T12:59:59.999Z"),
+      ),
+    ).toBe(false);
+    expect(weatherForecastIsAvailable(startsAt, availableAt)).toBe(true);
+  });
+
   it("keeps daylight constraints available when Tomorrow.io is unavailable", async () => {
     vi.stubEnv("TOMORROW_IO_API_KEY", "");
     const forecast = await loadWeatherForecast({

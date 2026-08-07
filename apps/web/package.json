@@ -34,8 +34,10 @@
     "lucide-react": "^1.28.0",
     "mapbox-gl": "3.28.0",
     "next": "^16.2.12",
+    "passkit-generator": "3.5.7",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "sharp": "0.34.5",
     "stripe": "^22.4.0"
   },
   "devDependencies": {

@@ -60,6 +60,13 @@
       "@rnmapbox/maps",
       "expo-contacts",
       [
+        "expo-calendar",
+        {
+          "calendarPermission": "Duna reads your selected device calendars only to show potential booking conflicts and add sessions you approve.",
+          "remindersPermission": "Duna adds reminders only to sessions you choose to place on your calendar."
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "Duna uses location to show nearby courts and events when you open Discover. If you choose Share trip ETA, Duna shares only a short-lived distance and ETA with your coach during the session arrival window.",

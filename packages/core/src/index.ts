@@ -13,5 +13,7 @@ export * from "./map-links";
 export * from "./player-url";
 export * from "./prediction-market";
 export * from "./ticketing";
+export * from "./admission";
 export * from "./trust";
 export * from "./wallet";
+export * from "./wallet-pass";

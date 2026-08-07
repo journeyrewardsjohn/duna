@@ -44,9 +44,15 @@ import {
   loadDemoOperatorWorkspace,
   loadOperatorWorkspace,
 } from "./operator-service";
-import { loadWeatherForecast, resolveWeatherCoordinates } from "./weather";
+import {
+  loadWeatherForecast,
+  resolveWeatherCoordinates,
+  weatherForecastAvailableAt,
+  weatherForecastIsAvailable,
+} from "./weather";
 
 type CurrencyCode = OperatorWorkspace["organization"]["currency"];
+type SessionWeatherOperations = OperatorSessionDetail["operations"];
 
 function requireDatabase(): void {
   if (!process.env.DATABASE_URL) {
@@ -229,6 +235,109 @@ async function captureSessionWeatherIfAvailable(input: {
         updatedAt: input.now,
       },
     });
+}
+
+async function loadSessionWeatherOperations(input: {
+  readonly session: {
+    readonly startsAt: Date;
+    readonly endsAt: Date;
+    readonly timezone: string;
+  };
+  readonly venue?: {
+    readonly name: string;
+    readonly latitude: number | null;
+    readonly longitude: number | null;
+    readonly googlePlaceId: string | null;
+    readonly addressLine1: string | null;
+    readonly locality: string | null;
+    readonly administrativeArea: string | null;
+    readonly postalCode: string | null;
+    readonly countryCode: string;
+  };
+  readonly snapshot?: SessionWeatherOperations["weather"];
+  readonly now: Date;
+}): Promise<
+  Pick<
+    SessionWeatherOperations,
+    "weather" | "weatherKind" | "weatherStatus" | "forecastAvailableAt"
+  >
+> {
+  if (input.snapshot) {
+    return {
+      weather: input.snapshot,
+      weatherKind: "captured",
+      weatherStatus: "captured",
+    };
+  }
+  if (input.session.startsAt.getTime() <= input.now.getTime()) {
+    return { weatherStatus: "not-captured" };
+  }
+  if (!weatherForecastIsAvailable(input.session.startsAt, input.now)) {
+    return {
+      weatherStatus: "forecast-pending",
+      forecastAvailableAt: weatherForecastAvailableAt(
+        input.session.startsAt,
+      ).toISOString(),
+    };
+  }
+  const hasStoredCoordinates =
+    Number.isFinite(input.venue?.latitude) &&
+    Number.isFinite(input.venue?.longitude);
+  if (!hasStoredCoordinates && !process.env.GOOGLE_PLACES_API_KEY?.trim()) {
+    return { weatherStatus: "location-required" };
+  }
+  if (!process.env.TOMORROW_IO_API_KEY?.trim()) {
+    return { weatherStatus: "provider-required" };
+  }
+  if (!input.venue) return { weatherStatus: "location-required" };
+  const coordinates = await resolveWeatherCoordinates({
+    latitude: input.venue.latitude ?? undefined,
+    longitude: input.venue.longitude ?? undefined,
+    googlePlaceId: input.venue.googlePlaceId ?? undefined,
+    query: [
+      input.venue.name,
+      input.venue.addressLine1,
+      input.venue.locality,
+      input.venue.administrativeArea,
+      input.venue.postalCode,
+      input.venue.countryCode,
+    ]
+      .filter(Boolean)
+      .join(", "),
+    now: input.now,
+  });
+  if (!coordinates) return { weatherStatus: "location-required" };
+  const forecast = await loadWeatherForecast({
+    latitude: coordinates.latitude,
+    longitude: coordinates.longitude,
+    timezone: input.session.timezone,
+    startsAt: input.session.startsAt,
+    endsAt: input.session.endsAt,
+    now: input.now,
+  });
+  const point = forecast.hourly
+    .slice()
+    .sort(
+      (left, right) =>
+        Math.abs(Date.parse(left.startsAt) - input.session.startsAt.getTime()) -
+        Math.abs(Date.parse(right.startsAt) - input.session.startsAt.getTime()),
+    )[0];
+  if (!point || forecast.source !== "tomorrow.io") {
+    return { weatherStatus: "temporarily-unavailable" };
+  }
+  return {
+    weatherStatus: "forecast-ready",
+    weatherKind: "forecast",
+    weather: {
+      condition: point.condition,
+      temperatureC: point.temperatureC,
+      apparentTemperatureC: point.apparentTemperatureC,
+      precipitationProbability: point.precipitationProbability,
+      windSpeedKph: point.windSpeedKph,
+      source: forecast.provider,
+      observedAt: point.startsAt,
+    },
+  };
 }
 
 async function assertRelationship(
@@ -955,6 +1064,14 @@ export async function loadOperatorSessionDetail(
     where: eq(sessions.id, sessionId),
   });
   if (!sessionRow) throw new Error("Session was not found.");
+  const venueRow = sessionRow.venueId
+    ? await database.query.venues.findFirst({
+        where: and(
+          eq(venues.id, sessionRow.venueId),
+          eq(venues.organizationId, organizationId),
+        ),
+      })
+    : undefined;
   const registrationRows = workspace.eventRegistrations.filter(
     (registration) => registration.sessionId === sessionId,
   );
@@ -1101,6 +1218,14 @@ export async function loadOperatorSessionDetail(
   const coach = sessionRow.coachPersonId
     ? personById.get(sessionRow.coachPersonId)
     : undefined;
+  const weatherOperations = await loadSessionWeatherOperations({
+    session: sessionRow,
+    venue: venueRow,
+    snapshot: operation?.weatherSnapshot as SessionWeatherOperations["weather"],
+    now,
+  }).catch(() => ({
+    weatherStatus: "temporarily-unavailable" as const,
+  }));
   return {
     session,
     arrivalBoard,
@@ -1209,7 +1334,7 @@ export async function loadOperatorSessionDetail(
         ? personById.get(operation.cancelledByPersonId)?.displayName
         : undefined,
       cancelledAt: operation?.cancelledAt?.toISOString(),
-      weather: operation?.weatherSnapshot ?? undefined,
+      ...weatherOperations,
     },
     notes,
     videos: videoRows.map((video) => ({
@@ -1392,6 +1517,8 @@ export async function loadDemoOperatorSessionDetail(
             source: "Tomorrow.io",
             observedAt: session.startsAt,
           },
+          weatherKind: "captured",
+          weatherStatus: "captured",
         }
       : isCompleted
         ? {
@@ -1404,8 +1531,19 @@ export async function loadDemoOperatorSessionDetail(
               source: "Tomorrow.io",
               observedAt: session.startsAt,
             },
+            weatherKind: "captured",
+            weatherStatus: "captured",
           }
-        : {},
+        : !weatherForecastIsAvailable(new Date(session.startsAt), now)
+          ? {
+              weatherStatus: "forecast-pending",
+              forecastAvailableAt: weatherForecastAvailableAt(
+                new Date(session.startsAt),
+              ).toISOString(),
+            }
+          : {
+              weatherStatus: "provider-required",
+            },
     notes,
     videos: isCompleted
       ? [
@@ -1813,6 +1951,209 @@ export async function recordSessionAttendance(input: {
     entity: "session-attendance",
     status: input.status,
   };
+}
+
+export type PlayerRegistrationScanResult = {
+  readonly scanEventId: string;
+  readonly registrationId: string;
+  readonly accepted: boolean;
+  readonly duplicate: boolean;
+  readonly reason?: "not-confirmed" | "already-checked-in";
+  readonly registrationStatus:
+    | "pending"
+    | "confirmed"
+    | "waitlisted"
+    | "cancelled"
+    | "refunded"
+    | "checked-in";
+  readonly playerName: string;
+  readonly eventTitle: string;
+};
+
+export async function scanPlayerRegistration(input: {
+  readonly actor: ApiActor;
+  readonly registrationId: string;
+  readonly deviceId: string;
+  readonly scannedAt: Date;
+  readonly offline: boolean;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<PlayerRegistrationScanResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const registration = await database
+    .select({
+      id: registrations.id,
+      sessionId: registrations.sessionId,
+      personId: registrations.personId,
+      playerName: people.displayName,
+      eventTitle: sessions.title,
+      registrationStatus: registrations.status,
+      organizationId: sql<string>`coalesce(${programs.organizationId}, ${eventTypes.organizationId}, ${venues.organizationId})`,
+    })
+    .from(registrations)
+    .innerJoin(sessions, eq(registrations.sessionId, sessions.id))
+    .innerJoin(people, eq(registrations.personId, people.id))
+    .leftJoin(programs, eq(sessions.programId, programs.id))
+    .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
+    .leftJoin(venues, eq(sessions.venueId, venues.id))
+    .where(eq(registrations.id, input.registrationId))
+    .limit(1)
+    .then((rows) => rows[0]);
+  if (!registration || registration.organizationId !== organizationId) {
+    throw new Error("Registration was not found in this organization.");
+  }
+
+  const scanEventId = crypto.randomUUID();
+  const audit = (inputValue: {
+    readonly accepted: boolean;
+    readonly duplicate: boolean;
+    readonly reason: string;
+    readonly beforeStatus: string;
+  }) =>
+    database.insert(auditLog).values({
+      id: scanEventId,
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: inputValue.accepted
+        ? "tournament.player_scan_accepted"
+        : inputValue.duplicate
+          ? "tournament.player_scan_duplicate"
+          : "tournament.player_scan_rejected",
+      entityType: "registration",
+      entityId: registration.id,
+      beforeHash: stableHash({ status: inputValue.beforeStatus }),
+      afterHash: stableHash({
+        status: inputValue.accepted ? "checked-in" : inputValue.beforeStatus,
+        accepted: inputValue.accepted,
+        duplicate: inputValue.duplicate,
+      }),
+      reason: `${inputValue.reason} Device ${input.deviceId}; scanned ${input.scannedAt.toISOString()}${input.offline ? "; reconciled after offline capture" : ""}.`,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+
+  const result = (inputValue: {
+    readonly accepted: boolean;
+    readonly duplicate: boolean;
+    readonly reason?: PlayerRegistrationScanResult["reason"];
+    readonly registrationStatus: PlayerRegistrationScanResult["registrationStatus"];
+  }): PlayerRegistrationScanResult => ({
+    scanEventId,
+    registrationId: registration.id,
+    playerName: registration.playerName,
+    eventTitle: registration.eventTitle,
+    ...inputValue,
+  });
+
+  if (registration.registrationStatus === "checked-in") {
+    await audit({
+      accepted: false,
+      duplicate: true,
+      beforeStatus: "checked-in",
+      reason: "Duplicate player registration scan rejected.",
+    });
+    return result({
+      accepted: false,
+      duplicate: true,
+      reason: "already-checked-in",
+      registrationStatus: "checked-in",
+    });
+  }
+  if (registration.registrationStatus !== "confirmed") {
+    await audit({
+      accepted: false,
+      duplicate: false,
+      beforeStatus: registration.registrationStatus,
+      reason: "Player registration was not confirmed.",
+    });
+    return result({
+      accepted: false,
+      duplicate: false,
+      reason: "not-confirmed",
+      registrationStatus: registration.registrationStatus,
+    });
+  }
+
+  const claimed = await database
+    .update(registrations)
+    .set({
+      status: "checked-in",
+      checkedInAt: input.scannedAt,
+      updatedAt: input.now,
+    })
+    .where(
+      and(
+        eq(registrations.id, registration.id),
+        eq(registrations.status, "confirmed"),
+      ),
+    )
+    .returning({ id: registrations.id });
+  if (!claimed[0]) {
+    await audit({
+      accepted: false,
+      duplicate: true,
+      beforeStatus: "checked-in",
+      reason: "Concurrent duplicate player registration scan rejected.",
+    });
+    return result({
+      accepted: false,
+      duplicate: true,
+      reason: "already-checked-in",
+      registrationStatus: "checked-in",
+    });
+  }
+
+  await database.batch([
+    database
+      .insert(sessionAttendance)
+      .values({
+        id: crypto.randomUUID(),
+        organizationId,
+        sessionId: registration.sessionId,
+        registrationId: registration.id,
+        personId: registration.personId,
+        status: "attended",
+        note: `Player registration QR · device ${input.deviceId}`,
+        recordedByPersonId: input.actor.personId,
+        recordedAt: input.scannedAt,
+      })
+      .onConflictDoUpdate({
+        target: [sessionAttendance.sessionId, sessionAttendance.personId],
+        set: {
+          registrationId: registration.id,
+          status: "attended",
+          note: `Player registration QR · device ${input.deviceId}`,
+          recordedByPersonId: input.actor.personId,
+          recordedAt: input.scannedAt,
+          updatedAt: input.now,
+        },
+      }),
+    audit({
+      accepted: true,
+      duplicate: false,
+      beforeStatus: "confirmed",
+      reason: "Player registration QR accepted and checked in.",
+    }),
+  ]);
+  try {
+    await captureSessionWeatherIfAvailable({
+      organizationId,
+      sessionId: registration.sessionId,
+      now: input.now,
+    });
+  } catch {
+    // Admission remains authoritative when the weather provider is unavailable.
+  }
+  return result({
+    accepted: true,
+    duplicate: false,
+    registrationStatus: "checked-in",
+  });
 }
 
 export async function updateOperatorMemberProfile(input: {

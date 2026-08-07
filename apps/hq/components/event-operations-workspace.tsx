@@ -164,6 +164,23 @@ export function EventOperationsWorkspace({
     (attendee) => attendee.attendanceStatus === "cancelled",
   ).length;
   const partialTeams = detail.teams.filter((team) => team.needsAttention);
+  const divisionGroups = [
+    ...new Set(detail.teams.map((team) => team.divisionName)),
+  ]
+    .sort((left, right) => left.localeCompare(right))
+    .map((divisionName) => {
+      const teams = detail.teams.filter(
+        (team) => team.divisionName === divisionName,
+      );
+      return {
+        divisionName,
+        teams,
+        readyTeams: teams.filter((team) => !team.needsAttention).length,
+        paidTeams: teams.filter(
+          (team) => team.paidPlayers >= team.expectedTeamSize,
+        ).length,
+      };
+    });
   const arrivalSignals = detail.arrivalBoard.signals.filter(
     (signal) => signal.role === "player",
   );
@@ -196,6 +213,34 @@ export function EventOperationsWorkspace({
       ? `mailto:${recipientEmails.join(",")}?subject=${encodeURIComponent(session.title)}`
       : undefined;
   const weather = detail.operations.weather;
+  const isTeamSession = detail.teams.length > 0;
+  const weatherHeading = weather
+    ? weather.condition
+    : detail.operations.weatherStatus === "forecast-pending"
+      ? "Forecast opens soon"
+      : detail.operations.weatherStatus === "location-required"
+        ? "Location needs coordinates"
+        : detail.operations.weatherStatus === "provider-required"
+          ? "Weather setup needed"
+          : detail.operations.weatherStatus === "temporarily-unavailable"
+            ? "Forecast unavailable"
+            : "Not captured";
+  const weatherEmptyCopy =
+    detail.operations.weatherStatus === "forecast-pending" &&
+    detail.operations.forecastAvailableAt
+      ? `Tomorrow.io releases this forecast window on ${formatVenueTime(
+          detail.operations.forecastAvailableAt,
+          session.timezone,
+          "en-US",
+          { month: "long", day: "numeric", year: "numeric" },
+        )}. Duna will load it automatically.`
+      : detail.operations.weatherStatus === "location-required"
+        ? "This venue has no saved coordinates and could not be geocoded. Add a Google Place or latitude and longitude to enable weather."
+        : detail.operations.weatherStatus === "provider-required"
+          ? "The venue is located, but Tomorrow.io is not connected in this environment."
+          : detail.operations.weatherStatus === "temporarily-unavailable"
+            ? "The venue and provider are configured, but no hourly forecast was returned. Duna will retry without substituting today’s conditions."
+            : "No historical conditions were captured while this session was active. Duna never substitutes today’s forecast for a past session.";
 
   return (
     <main className="hq-page event-operations-page">
@@ -266,9 +311,15 @@ export function EventOperationsWorkspace({
         aria-label="Session results"
       >
         <article>
-          <small>Registered</small>
-          <Numeric>{detail.attendees.length}</Numeric>
-          <span>{session.capacity - detail.attendees.length} open spots</span>
+          <small>{isTeamSession ? "Teams" : "Registered"}</small>
+          <Numeric>
+            {isTeamSession ? detail.teams.length : detail.attendees.length}
+          </Numeric>
+          <span>
+            {isTeamSession
+              ? `${divisionGroups.length} division${divisionGroups.length === 1 ? "" : "s"} · ${detail.attendees.length} players`
+              : `${session.capacity - detail.attendees.length} open spots`}
+          </span>
         </article>
         <article>
           <small>Attended</small>
@@ -415,68 +466,115 @@ export function EventOperationsWorkspace({
                     : "All ready"}
                 </Badge>
               </header>
-              <div className="event-team-operations__list">
-                {detail.teams.map((team) => (
-                  <article
-                    className={
-                      team.needsAttention ? "needs-attention" : undefined
-                    }
-                    key={team.id}
-                  >
+              <div className="event-division-overview">
+                {divisionGroups.map((division) => (
+                  <article key={division.divisionName}>
+                    <span>
+                      <small>Division</small>
+                      <strong>{division.divisionName}</strong>
+                    </span>
+                    <dl>
+                      <div>
+                        <dt>Teams</dt>
+                        <dd>{division.teams.length}</dd>
+                      </div>
+                      <div>
+                        <dt>Ready</dt>
+                        <dd>{division.readyTeams}</dd>
+                      </div>
+                      <div>
+                        <dt>Paid</dt>
+                        <dd>{division.paidTeams}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                ))}
+              </div>
+              <div className="event-team-operations__divisions">
+                {divisionGroups.map((division) => (
+                  <section key={division.divisionName}>
                     <header>
                       <span>
-                        <strong>{team.captainName}&apos;s team</strong>
-                        <small>
-                          {team.divisionName} ·{" "}
-                          {team.paymentMode === "team"
-                            ? "captain pays"
-                            : "players pay separately"}
-                        </small>
+                        <small>Division</small>
+                        <h3>{division.divisionName}</h3>
                       </span>
-                      <Badge
-                        tone={team.needsAttention ? "warning" : "positive"}
-                      >
-                        {team.needsAttention ? "Partial" : team.status}
+                      <Badge>
+                        {division.teams.length} team
+                        {division.teams.length === 1 ? "" : "s"}
                       </Badge>
                     </header>
-                    <div className="event-team-operations__progress">
-                      <span>
-                        <small>Added</small>
-                        <strong>
-                          {team.playersAdded}/{team.expectedTeamSize}
-                        </strong>
-                      </span>
-                      <span>
-                        <small>Claimed</small>
-                        <strong>
-                          {team.claimedPlayers}/{team.expectedTeamSize}
-                        </strong>
-                      </span>
-                      <span>
-                        <small>Paid</small>
-                        <strong>
-                          {team.paidPlayers}/{team.expectedTeamSize}
-                        </strong>
-                      </span>
-                    </div>
-                    <div className="event-team-operations__roster">
-                      {team.roster.map((member, index) => (
-                        <span key={`${team.id}:${index}`}>
-                          <i>{initials(member.displayName)}</i>
-                          <span>
-                            <strong>{member.displayName}</strong>
-                            <small>
-                              {member.status}
-                              {member.deliveryStatus
-                                ? ` · invite ${member.deliveryStatus}`
-                                : ""}
-                              {member.paid ? " · paid" : " · unpaid"}
-                            </small>
-                          </span>
-                        </span>
+                    <div className="event-team-operations__list">
+                      {division.teams.map((team) => (
+                        <article
+                          className={
+                            team.needsAttention ? "needs-attention" : undefined
+                          }
+                          key={team.id}
+                        >
+                          <header>
+                            <span>
+                              <strong>{team.captainName}&apos;s team</strong>
+                              <small>
+                                {team.paymentMode === "team"
+                                  ? "captain pays"
+                                  : "players pay separately"}
+                              </small>
+                            </span>
+                            <Badge
+                              tone={
+                                team.paidPlayers >= team.expectedTeamSize
+                                  ? "positive"
+                                  : "warning"
+                              }
+                            >
+                              {team.paidPlayers >= team.expectedTeamSize
+                                ? "Paid"
+                                : team.paidPlayers === 0
+                                  ? "Unpaid"
+                                  : `${team.paidPlayers}/${team.expectedTeamSize} paid`}
+                            </Badge>
+                          </header>
+                          <div className="event-team-operations__progress">
+                            <span>
+                              <small>Added</small>
+                              <strong>
+                                {team.playersAdded}/{team.expectedTeamSize}
+                              </strong>
+                            </span>
+                            <span>
+                              <small>Claimed</small>
+                              <strong>
+                                {team.claimedPlayers}/{team.expectedTeamSize}
+                              </strong>
+                            </span>
+                            <span>
+                              <small>Paid</small>
+                              <strong>
+                                {team.paidPlayers}/{team.expectedTeamSize}
+                              </strong>
+                            </span>
+                          </div>
+                          <div className="event-team-operations__roster">
+                            {team.roster.map((member, index) => (
+                              <span key={`${team.id}:${index}`}>
+                                <i>{initials(member.displayName)}</i>
+                                <span>
+                                  <strong>{member.displayName}</strong>
+                                  <small>
+                                    {member.status}
+                                    {member.deliveryStatus
+                                      ? ` · invite ${member.deliveryStatus}`
+                                      : ""}
+                                    {member.paid ? " · paid" : " · unpaid"}
+                                  </small>
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                        </article>
                       ))}
                     </div>
-                  </article>
+                  </section>
                 ))}
               </div>
             </section>
@@ -741,7 +839,7 @@ export function EventOperationsWorkspace({
               <CloudSun aria-hidden size={20} />
               <span>
                 <small>Conditions at session time</small>
-                <h2>{weather?.condition ?? "Not captured"}</h2>
+                <h2>{weatherHeading}</h2>
               </span>
             </header>
             {weather ? (
@@ -772,10 +870,14 @@ export function EventOperationsWorkspace({
                 </div>
               </dl>
             ) : (
-              <p>
-                Historical weather snapshots begin once session operations
-                capture is enabled for this venue. Duna will not substitute
-                today&apos;s forecast.
+              <p>{weatherEmptyCopy}</p>
+            )}
+            {weather && (
+              <p className="event-weather-card__source">
+                {detail.operations.weatherKind === "forecast"
+                  ? "Live forecast"
+                  : "Captured conditions"}{" "}
+                · {weather.source}
               </p>
             )}
           </section>
