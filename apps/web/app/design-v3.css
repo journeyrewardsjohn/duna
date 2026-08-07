@@ -12,6 +12,320 @@
   font-synthesis-weight: none;
 }
 
+/* Home — latest Apple Watch release, athletic ground with a live plane break. */
+.campaign-apps {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  border-block: 1px solid var(--hairline);
+  background: linear-gradient(
+    118deg,
+    color-mix(in srgb, var(--ground-warm) 62%, var(--ground)),
+    var(--ground) 58%
+  );
+  color: var(--text-1);
+}
+
+.campaign-apps__ghost {
+  position: absolute;
+  top: 4%;
+  left: -0.035em;
+  z-index: -1;
+  color: color-mix(in srgb, var(--text-1) 6%, transparent);
+  font-family: var(--font-body);
+  font-size: clamp(7rem, 19vw, 18rem);
+  font-weight: 800;
+  line-height: 0.8;
+  letter-spacing: -0.03em;
+  pointer-events: none;
+  white-space: nowrap;
+  word-spacing: 0.05em;
+}
+
+.campaign-apps__inner {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(21rem, 0.82fr) minmax(33rem, 1.18fr);
+  align-items: center;
+  gap: clamp(3rem, 7vw, 7rem);
+  min-height: 48rem;
+  padding-block: clamp(6rem, 10vw, 9rem);
+}
+
+.campaign-apps__copy {
+  position: relative;
+  z-index: 3;
+  max-width: 38rem;
+}
+
+.campaign-apps__copy .campaign-kicker {
+  color: var(--text-3);
+}
+
+.campaign-apps__copy h2 {
+  max-width: 11ch;
+  margin-block: 0.875rem 1.25rem;
+  color: var(--text-1);
+  font-family: var(--font-body);
+  font-size: clamp(2.5rem, 4.4vw, 3.5rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.018em;
+  word-spacing: 0.03em;
+}
+
+.campaign-apps__copy > p {
+  max-width: 52ch;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.campaign-apps__features {
+  display: grid;
+  margin-block: 2.25rem;
+  border-block: 1px solid var(--hairline-strong);
+}
+
+.campaign-apps__features > div {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.875rem;
+  min-height: 4.5rem;
+  color: var(--text-1);
+}
+
+.campaign-apps__features > div + div {
+  border-top: 1px solid var(--hairline);
+}
+
+.campaign-apps__features svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--gold);
+}
+
+.campaign-apps__features span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.campaign-apps__features strong {
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.campaign-apps__features small {
+  color: var(--text-3);
+  font-size: 0.90625rem;
+  line-height: 1.4;
+}
+
+.campaign-apps .campaign-button--light {
+  border-color: var(--btn-primary-bg);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+  font-weight: 600;
+}
+
+.campaign-apps .campaign-button--light:hover {
+  border-color: var(--btn-primary-hover);
+  background: var(--btn-primary-hover);
+  color: var(--btn-primary-fg);
+  transform: none;
+}
+
+.campaign-apps__visual {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(100% + clamp(2rem, 7vw, 8rem));
+  min-height: 40rem;
+  margin-right: calc(clamp(2rem, 7vw, 8rem) * -1);
+  overflow: clip;
+  border: 1px solid var(--hairline);
+  border-right: 0;
+  background:
+    radial-gradient(circle at 52% 46%, var(--flare-fill), transparent 29%),
+    var(--ground);
+  color: var(--text-1);
+}
+
+.campaign-apps__visual::after {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--hairline) 1px, transparent 1px),
+    linear-gradient(90deg, var(--hairline) 1px, transparent 1px);
+  background-size: 5rem 5rem;
+  content: "";
+  mask-image: radial-gradient(circle, #000 10%, transparent 72%);
+  pointer-events: none;
+}
+
+.campaign-apps__visual-label {
+  position: absolute;
+  top: 1.5rem;
+  left: 1.5rem;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-2);
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.campaign-apps__visual-label svg {
+  color: var(--flare);
+}
+
+.campaign-apps__orbit,
+.campaign-apps__orbit::before,
+.campaign-apps__orbit::after {
+  border-color: var(--hairline-strong);
+}
+
+.campaign-apps__orbit {
+  width: min(39vw, 35rem);
+  height: min(39vw, 35rem);
+}
+
+.campaign-apps__watch {
+  z-index: 2;
+  width: min(30vw, 27rem);
+  transition: none;
+}
+
+.campaign-apps__visual:hover .campaign-apps__watch {
+  transform: none;
+}
+
+.campaign-apps__status {
+  position: absolute;
+  right: auto;
+  bottom: 3rem;
+  left: -2.5rem;
+  z-index: 4;
+  gap: 0.75rem;
+  min-width: 13rem;
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-1);
+  box-shadow: none;
+  color: var(--text-1);
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.campaign-apps__status i {
+  background: var(--signal);
+  box-shadow: none;
+}
+
+.campaign-apps__status small {
+  margin-bottom: 0.1rem;
+  color: var(--text-3);
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+
+@media (max-width: 1120px) {
+  .campaign-apps__inner {
+    grid-template-columns: minmax(19rem, 0.82fr) minmax(27rem, 1.18fr);
+    gap: 3rem;
+  }
+
+  .campaign-apps__visual {
+    min-height: 37rem;
+  }
+}
+
+@media (max-width: 900px) {
+  .campaign-apps__inner {
+    grid-template-columns: 1fr;
+    gap: 4rem;
+    min-height: auto;
+  }
+
+  .campaign-apps__copy {
+    max-width: 44rem;
+  }
+
+  .campaign-apps__visual {
+    width: 100vw;
+    min-height: 42rem;
+    margin-inline: calc(50% - 50vw);
+    border-inline: 0;
+  }
+
+  .campaign-apps__orbit {
+    width: min(72vw, 35rem);
+    height: min(72vw, 35rem);
+  }
+
+  .campaign-apps__watch {
+    width: min(51vw, 26rem);
+  }
+
+  .campaign-apps__status {
+    left: max(1.5rem, calc((100vw - var(--campaign-shell)) / 2));
+  }
+}
+
+@media (max-width: 640px) {
+  .campaign-apps__ghost {
+    top: 3rem;
+    font-size: 29vw;
+  }
+
+  .campaign-apps__inner {
+    gap: 3rem;
+    padding-block: 5.5rem 0;
+  }
+
+  .campaign-apps__copy h2 {
+    font-size: clamp(2.5rem, 12vw, 3.5rem);
+  }
+
+  .campaign-apps__features > div {
+    min-height: 4.75rem;
+  }
+
+  .campaign-apps__visual {
+    min-height: 35rem;
+  }
+
+  .campaign-apps__orbit {
+    width: 92vw;
+    height: 92vw;
+  }
+
+  .campaign-apps__watch {
+    width: min(74vw, 22rem);
+  }
+
+  .campaign-apps__status {
+    right: 1rem;
+    bottom: 1.5rem;
+    left: 1rem;
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .campaign-apps__status i {
+    animation: none;
+  }
+}
+
 html,
 body {
   background: var(--ground);

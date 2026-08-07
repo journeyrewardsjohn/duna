@@ -9,6 +9,7 @@ const publicPages = [
   "/pro",
   "/rankings",
   "/about",
+  "/apps/apple-watch",
   "/methodology",
   "/run-your-club",
   "/safety",

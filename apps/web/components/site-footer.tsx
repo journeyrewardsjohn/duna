@@ -32,6 +32,7 @@ export function SiteFooter() {
           <div>
             <strong>Duna</strong>
             <Link href="/about">About</Link>
+            <Link href="/apps/apple-watch">Duna for Apple Watch</Link>
             <Link href="/methodology">Rating methodology</Link>
             <Link href="/safety">Safety</Link>
             <Link href="/legal/privacy">Privacy</Link>

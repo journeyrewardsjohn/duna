@@ -9,12 +9,16 @@ import {
   Radio,
   ShieldCheck,
   Sparkles,
+  Star,
   Trophy,
   Users,
+  Video,
+  Watch as WatchIcon,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { AmbientHeroVideo } from "@/components/ambient-hero-video";
+import { DunaWatchDevice } from "@/components/duna-watch-device";
 import { RatingOrbit } from "@/components/rating-orbit";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -139,6 +143,78 @@ export default async function HomePage() {
             <span>Coaches</span>
             <i />
             <span>Clubs</span>
+          </div>
+        </div>
+      </section>
+
+      <section
+        aria-labelledby="watch-release-heading"
+        className="campaign-apps"
+        data-zone="athletic"
+      >
+        <span aria-hidden className="campaign-apps__ghost">
+          WATCH
+        </span>
+        <div className="campaign-shell campaign-apps__inner">
+          <div className="campaign-apps__copy">
+            <span className="campaign-kicker">
+              <span />
+              Latest release
+            </span>
+            <h2 id="watch-release-heading">The match is on your wrist.</h2>
+            <p>
+              Duna for Apple Watch turns every gesture into part of the match—
+              keeping score, video, and the moments worth saving in one
+              connected timeline.
+            </p>
+            <div className="campaign-apps__features">
+              <div>
+                <WatchIcon aria-hidden />
+                <span>
+                  <strong>Score in motion</strong>
+                  <small>One-handed gestures for every rally.</small>
+                </span>
+              </div>
+              <div>
+                <Video aria-hidden />
+                <span>
+                  <strong>Stay frame-accurate</strong>
+                  <small>Every point syncs to Duna Vision.</small>
+                </span>
+              </div>
+              <div>
+                <Star aria-hidden />
+                <span>
+                  <strong>Save the rally</strong>
+                  <small>Mark a highlight without leaving the court.</small>
+                </span>
+              </div>
+            </div>
+            <Link
+              className="campaign-button campaign-button--light"
+              href="/apps/apple-watch"
+            >
+              Explore Duna for Apple Watch <ArrowRight aria-hidden size={18} />
+            </Link>
+          </div>
+
+          <div className="campaign-apps__visual" data-zone="live">
+            <span className="campaign-apps__visual-label">
+              <Radio aria-hidden size={15} /> Live match control
+            </span>
+            <div aria-hidden className="campaign-apps__orbit" />
+            <DunaWatchDevice
+              className="campaign-apps__watch"
+              label="Duna scorekeeping on Apple Watch"
+              motion
+            />
+            <div className="campaign-apps__status">
+              <i />
+              <span>
+                <small>Duna Vision</small>
+                Score synced · 17–14
+              </span>
+            </div>
           </div>
         </div>
       </section>
