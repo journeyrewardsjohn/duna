@@ -69,6 +69,12 @@ test("player home puts useful actions and the personal calendar first", async ({
     quickActions.getByRole("link", { name: /Host pickup/ }),
   ).toBeVisible();
   await expect(page.getByText("Next up", { exact: true })).toBeVisible();
+  const nextUpDate = page
+    .getByRole("region", { name: "Your day" })
+    .locator("time")
+    .first();
+  await expect(nextUpDate).toBeVisible();
+  await expect(nextUpDate).not.toContainText(":");
   await expect(page.locator('img[src*="duna-campaign-rally"]')).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 });
@@ -81,6 +87,9 @@ test("public pickup pages keep their story and booking rail contained", async ({
     page.getByRole("heading", { level: 1, name: "Golden Hour 4s" }),
   ).toBeVisible();
   await expect(page.getByText("Ready to play?")).toBeVisible();
+  await expect(
+    page.getByText("6:00 PM–7:30 PM PDT", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("img", { name: "Golden Hour 4s event poster" }),
   ).toBeVisible();

@@ -191,10 +191,14 @@ export default async function EventPage({
     year: "numeric",
   });
   const startTime = formatVenueTime(event.startsAt, event.timezone, "en-US", {
+    month: undefined,
+    day: undefined,
     hour: "numeric",
     minute: "2-digit",
   });
   const endTime = formatVenueTime(event.endsAt, event.timezone, "en-US", {
+    month: undefined,
+    day: undefined,
     hour: "numeric",
     minute: "2-digit",
     timeZoneName: "short",
