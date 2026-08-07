@@ -422,6 +422,7 @@ export const eventSummarySchema = z.object({
     })
     .optional(),
   approvalRequired: z.boolean().optional(),
+  visibility: z.enum(["public", "unlisted"]).optional(),
   lifecycleStatus: z.enum(["active", "cancelled", "completed"]).optional(),
   live: z.boolean().optional(),
   imageUrl: z.string().optional(),

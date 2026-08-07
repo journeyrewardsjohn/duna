@@ -328,6 +328,7 @@ export interface EventSummary {
   readonly attendees?: readonly EventAttendeeSummary[];
   readonly host?: EventHostSummary;
   readonly approvalRequired?: boolean;
+  readonly visibility?: "public" | "unlisted";
   readonly lifecycleStatus?: "active" | "cancelled" | "completed";
   readonly live?: boolean;
   readonly imageUrl?: string;

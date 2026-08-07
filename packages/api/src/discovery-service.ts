@@ -1,4 +1,8 @@
-import type { EventSummary, VenueSummary } from "@duna/core";
+import {
+  defaultEventMedia,
+  type EventSummary,
+  type VenueSummary,
+} from "@duna/core";
 import type { DiscoveryMap, DiscoveryMapItem, PublicCoach } from "./contracts";
 import { loadPublicCoaches } from "./catalog-service";
 import { getRepository } from "./repository";
@@ -34,6 +38,10 @@ function eventPoint(
   event: EventSummary,
   venues: readonly VenueSummary[],
 ): DiscoveryMapItem {
+  const imageUrl =
+    event.media?.find((item) => item.kind === "image")?.url ??
+    event.imageUrl ??
+    defaultEventMedia(event.kind, event.id).path;
   const directCoordinates =
     finiteCoordinate(event.location?.latitude) &&
     finiteCoordinate(event.location?.longitude)
@@ -53,7 +61,7 @@ function eventPoint(
     ...(event.organizationId ? { organizationId: event.organizationId } : {}),
     startsAt: event.startsAt,
     endsAt: event.endsAt,
-    ...(event.imageUrl ? { imageUrl: event.imageUrl } : {}),
+    imageUrl,
     ...(event.live !== undefined ? { live: event.live } : {}),
     price: event.price,
     tags: [event.kind, event.organizationName, event.venueName, ...event.tags],
@@ -125,6 +133,7 @@ function proEventPoint(event: PublicProEvent): DiscoveryMapItem {
     ...coordinates,
     ...(startsAt ? { startsAt } : {}),
     ...(endsAt ? { endsAt } : {}),
+    imageUrl: defaultEventMedia("tournament", event.id).path,
     live: event.live,
     tags: [
       "pro tour",

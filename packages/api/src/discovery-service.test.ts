@@ -63,6 +63,7 @@ describe("buildDiscoveryMap", () => {
     ).toMatchObject({
       latitude: venue.latitude,
       longitude: venue.longitude,
+      imageUrl: expect.stringContaining("/media/event-library/"),
     });
     expect(
       result.items.find((item) => item.entityType === "coach"),

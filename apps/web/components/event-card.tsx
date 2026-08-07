@@ -1,5 +1,5 @@
 import type { EventSummary } from "@duna/core";
-import { formatMoney, formatVenueTime } from "@duna/core";
+import { defaultEventMedia, formatMoney, formatVenueTime } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import { ArrowUpRight, MapPin } from "lucide-react";
 import Link from "next/link";
@@ -13,13 +13,17 @@ export function EventCard({
   readonly featured?: boolean;
 }) {
   const isFree = event.price.amountMinor === 0;
+  const image = event.media?.find((item) => item.kind === "image");
+  const fallback = defaultEventMedia(event.kind, event.id);
+  const imageUrl = image?.url ?? event.imageUrl ?? fallback.path;
+  const imageAlt = image?.alt ?? fallback.alt;
   return (
     <Link
       className={featured ? "event-card event-card--featured" : "event-card"}
       href={`/events/${event.slug}`}
     >
-      <div className="event-card__art" data-kind={event.kind}>
-        <div className="event-card__court-lines" />
+      <div className="event-card__art">
+        <img alt={imageAlt} loading="lazy" src={imageUrl} />
         <div className="event-card__badges">
           {event.live && <Badge tone="live">Live now</Badge>}
           <Badge>{event.kind.replace("-", " ")}</Badge>

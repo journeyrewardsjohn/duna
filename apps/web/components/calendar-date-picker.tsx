@@ -1,7 +1,14 @@
 "use client";
 
 import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 export type CalendarMarker = {
   readonly date: string;
@@ -209,24 +216,21 @@ export function CalendarDatePicker({
   const positionedRef = useRef(false);
   const titleId = useId();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (positionedRef.current) return;
-    const frame = window.requestAnimationFrame(() => {
-      const rail = railRef.current;
-      const selected = dateRefs.current.get(value);
-      if (!rail || !selected) return;
-      const railBounds = rail.getBoundingClientRect();
-      const selectedBounds = selected.getBoundingClientRect();
-      const selectedLeft =
-        selectedBounds.left - railBounds.left + rail.scrollLeft;
-      const left = selectedLeft - (rail.clientWidth - selected.clientWidth) / 2;
-      rail.scrollTo({
-        behavior: "instant" as ScrollBehavior,
-        left: Math.max(0, left),
-      });
-      positionedRef.current = true;
+    const rail = railRef.current;
+    const selected = dateRefs.current.get(value);
+    if (!rail || !selected) return;
+    const railBounds = rail.getBoundingClientRect();
+    const selectedBounds = selected.getBoundingClientRect();
+    const selectedLeft =
+      selectedBounds.left - railBounds.left + rail.scrollLeft;
+    const left = selectedLeft - (rail.clientWidth - selected.clientWidth) / 2;
+    rail.scrollTo({
+      behavior: "instant" as ScrollBehavior,
+      left: Math.max(0, left),
     });
-    return () => window.cancelAnimationFrame(frame);
+    positionedRef.current = true;
   }, [value]);
 
   useEffect(() => {

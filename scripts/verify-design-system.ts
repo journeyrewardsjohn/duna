@@ -23,8 +23,10 @@ const requiredFiles = [
   "docs/licenses/Archivo-OFL-1.1.txt",
   "apps/web/app/design-v3.css",
   "apps/web/app/homepage.module.css",
+  "apps/web/app/app/player-dashboard.module.css",
   "apps/web/app/not-found.tsx",
   "apps/web/components/home-sand-world.tsx",
+  "apps/web/components/pickup-edit-form.module.css",
   "apps/hq/app/design-v3.css",
   "apps/web/public/brand/duna-mark.svg",
   "apps/web/public/media/brand/imagery-log.json",
@@ -96,6 +98,95 @@ for (const contract of [
       `apps/web/components/home-sand-world.tsx must preserve ${contract}`,
     );
   }
+}
+
+const playerDashboardSource = readFileSync(
+  join(root, "apps/web/app/app/page.tsx"),
+  "utf8",
+);
+for (const contract of [
+  "futureBookings",
+  "nextPersonalEvent",
+  "defaultEventMedia",
+  'aria-label="Player quick actions"',
+] as const) {
+  if (!playerDashboardSource.includes(contract)) {
+    violations.push(`apps/web/app/app/page.tsx must preserve ${contract}`);
+  }
+}
+if (playerDashboardSource.includes("duna-campaign-rally")) {
+  violations.push(
+    "apps/web/app/app/page.tsx must not restore the decorative campaign hero",
+  );
+}
+
+const playerEventCardSource = readFileSync(
+  join(root, "apps/web/components/event-card.tsx"),
+  "utf8",
+);
+for (const contract of ["defaultEventMedia", "event.media?.find"] as const) {
+  if (!playerEventCardSource.includes(contract)) {
+    violations.push(
+      `apps/web/components/event-card.tsx must preserve ${contract}`,
+    );
+  }
+}
+if (playerEventCardSource.includes("event-card__court-lines")) {
+  violations.push(
+    "apps/web/components/event-card.tsx must not restore synthetic court artwork",
+  );
+}
+
+const pickupEditorRouteSource = readFileSync(
+  join(root, "apps/web/app/app/pickup/[slug]/edit/page.tsx"),
+  "utf8",
+);
+if (pickupEditorRouteSource.includes("SiteHeader")) {
+  violations.push(
+    "The pickup editor must not nest the public SiteHeader inside PlayerShell",
+  );
+}
+const pickupEditorSource = readFileSync(
+  join(root, "apps/web/components/pickup-edit-form.tsx"),
+  "utf8",
+);
+for (const contract of [
+  "Player preview",
+  "locationConfidence",
+  "Core details lock",
+  "Choose a future start time",
+] as const) {
+  if (!pickupEditorSource.includes(contract)) {
+    violations.push(
+      `apps/web/components/pickup-edit-form.tsx must preserve ${contract}`,
+    );
+  }
+}
+
+const playerNativeSource = readFileSync(
+  join(root, "apps/player/App.tsx"),
+  "utf8",
+);
+if (
+  !playerNativeSource.includes("nextBookingEventIndex") ||
+  !playerNativeSource.includes("booking.endsAt")
+) {
+  violations.push(
+    "apps/player/App.tsx must derive Next Up from a future personal booking",
+  );
+}
+const nativeNextUpIndex = playerNativeSource.indexOf("NEXT UP ·");
+const nativeQuickActionsIndex = playerNativeSource.indexOf(
+  "styles.homeQuickGrid",
+);
+if (
+  nativeNextUpIndex < 0 ||
+  nativeQuickActionsIndex < 0 ||
+  nativeNextUpIndex > nativeQuickActionsIndex
+) {
+  violations.push(
+    "apps/player/App.tsx must render personal Next Up before discovery actions",
+  );
 }
 
 const agentsContract = readFileSync(join(root, "AGENTS.md"), "utf8");

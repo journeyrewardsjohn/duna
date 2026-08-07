@@ -52,6 +52,41 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 });
 
+test("player home puts useful actions and the personal calendar first", async ({
+  page,
+}) => {
+  await page.goto("/app");
+  await expect(
+    page.getByRole("heading", { name: /Ready to play/ }),
+  ).toBeVisible();
+  const quickActions = page.getByRole("navigation", {
+    name: "Player quick actions",
+  });
+  await expect(
+    quickActions.getByRole("link", { name: /Find play/ }),
+  ).toBeVisible();
+  await expect(
+    quickActions.getByRole("link", { name: /Host pickup/ }),
+  ).toBeVisible();
+  await expect(page.getByText("Next up", { exact: true })).toBeVisible();
+  await expect(page.locator('img[src*="duna-campaign-rally"]')).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+});
+
+test("public pickup pages keep their story and booking rail contained", async ({
+  page,
+}) => {
+  await page.goto("/events/golden-hour-fours");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Golden Hour 4s" }),
+  ).toBeVisible();
+  await expect(page.getByText("Ready to play?")).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: "Golden Hour 4s event poster" }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
 test("homepage sand motion respects the reduced-motion preference", async ({
   page,
 }) => {

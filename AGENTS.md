@@ -127,6 +127,30 @@ When the documents appear to conflict, preserve these invariants:
   `apps/web/public/media/brand/imagery-log.json`.
 - Do not generate replacement partner logos, tour marks, or official event art.
 
+## Player experience contract
+
+- Center Player web content within a consistent 96rem outer cap and a 90rem
+  content rhythm. At larger resolutions, add breathing room rather than
+  stretching cards, forms, or copy across the viewport.
+- The Player home is a utility surface, not a campaign page. It opens with a
+  concise personal greeting and four direct actions; never restore a decorative
+  photo hero above those actions.
+- “Next Up” means the signed-in player’s next future booking or hosted session.
+  Filter expired records in the client-facing layer even when the repository is
+  expected to do so, and place this personal commitment ahead of discovery on
+  both web and native.
+- Consumer event cards use approved event photography from the event media
+  library or explicit organizer media. Do not restore synthetic court-art
+  placeholders when a real poster is available.
+- Public event pages keep one centered editorial stage and one readable sticky
+  registration rail. All supporting copy is at least 13px; body copy is at
+  least 15px. Ultra-wide screens preserve the cap instead of creating empty
+  full-width planes.
+- Pickup creation and editing are guided host workflows: group name, time,
+  place, access, and review into explicit steps; show a live player preview,
+  future-time validation, location confidence, and the participant lock rule.
+  Never place a public site header inside the authenticated Player shell.
+
 ## Surface ownership
 
 - `apps/web`: public editorial pages, player web experience, Pro tour, events,
