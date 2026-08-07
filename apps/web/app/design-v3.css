@@ -2718,6 +2718,41 @@ body {
   max-width: 78rem;
 }
 
+.pro-match-hero__status-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.pro-match-hero__back {
+  align-items: center;
+  border-radius: 50%;
+  color: var(--text-2);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 2rem;
+  justify-content: center;
+  margin-right: 0.05rem;
+  text-decoration: none;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+  width: 2rem;
+}
+
+.pro-match-hero__back:hover {
+  background: var(--surface-2);
+  color: var(--text-1);
+  transform: translateX(-1px);
+}
+
+.pro-match-hero__back:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .pro-match-hero[data-zone="athletic"] h1,
 .pro-match-hero[data-zone="live"] h1 {
   max-width: 18ch;
