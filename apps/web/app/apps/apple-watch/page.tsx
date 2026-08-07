@@ -7,6 +7,7 @@ export const metadata: Metadata = {
     "Keep score, sync every rally with Duna Vision, save highlights, and check the live camera view with Duna for Apple Watch.",
   alternates: {
     canonical: "/apps/apple-watch",
+    types: { "text/markdown": "/apps/apple-watch.md" },
   },
   openGraph: {
     title: "Your match. On your wrist.",

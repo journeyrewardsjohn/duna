@@ -12,6 +12,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
 import { CoachCard } from "@/components/coach-card";
@@ -19,6 +20,36 @@ import { EventCard } from "@/components/event-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
+import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
+
+export async function generateMetadata({
+  params,
+}: {
+  readonly params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const caller = await getServerCaller();
+  const organization = await caller.public
+    .organizationBySlug({ slug })
+    .catch(() => undefined);
+  if (!organization) return { title: "Club not found" };
+  const canonical = `/clubs/${slug}`;
+  return {
+    title: `${organization.name} beach volleyball programs`,
+    description: `Events, clinics, coaching, memberships, and public booking options from ${organization.name} on Duna.`,
+    alternates: {
+      canonical,
+      types: { "text/markdown": `${canonical}.md` },
+    },
+    openGraph: {
+      title: `${organization.name} · Duna`,
+      description: `Explore public beach volleyball programs and booking options from ${organization.name}.`,
+      type: "website",
+      url: canonical,
+    },
+    robots: { index: true, follow: true },
+  };
+}
 
 function priceLabel(item: PublicCatalogItem): string {
   const prices = item.variants[0]?.prices ?? [];
@@ -195,6 +226,51 @@ export default async function ClubPage({
   const services = catalog.filter((item) => item.type === "service");
   const plans = catalog.filter((item) => item.type === "plan");
   const goods = catalog.filter((item) => item.type === "good");
+  const clubUrl = absolutePublicUrl(`/clubs/${slug}`);
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": `${clubUrl}#page`,
+        url: clubUrl,
+        name: organization.name,
+        mainEntity: { "@id": `${clubUrl}#organization` },
+        encoding: {
+          "@type": "MediaObject",
+          encodingFormat: "text/markdown",
+          contentUrl: absolutePublicUrl(`/clubs/${slug}.md`),
+        },
+      },
+      {
+        "@type": "SportsOrganization",
+        "@id": `${clubUrl}#organization`,
+        identifier: organization.id,
+        name: organization.name,
+        url: clubUrl,
+        sport: "Beach volleyball",
+        employee: coaches.map((coach) => ({
+          "@type": "Person",
+          "@id": absolutePublicUrl(`/coaches/${coach.handle}`),
+          name: coach.displayName,
+          url: absolutePublicUrl(`/coaches/${coach.handle}`),
+        })),
+        event: events.map((event) => ({
+          "@type": "SportsEvent",
+          "@id": `${absolutePublicUrl(`/events/${event.slug}`)}#event`,
+          name: event.title,
+          url: absolutePublicUrl(`/events/${event.slug}`),
+          startDate: event.startsAt,
+          endDate: event.endsAt,
+        })),
+        makesOffer: catalog.map((item) => ({
+          "@type": "Offer",
+          name: item.title,
+          url: absolutePublicUrl(`/clubs/${slug}/products/${item.slug}`),
+        })),
+      },
+    ],
+  };
 
   return (
     <main
@@ -203,6 +279,10 @@ export default async function ClubPage({
       style={themeStyle}
     >
       <SiteHeader />
+      <script
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
+        type="application/ld+json"
+      />
       <section className="club-hero">
         <div
           className="club-hero__art"

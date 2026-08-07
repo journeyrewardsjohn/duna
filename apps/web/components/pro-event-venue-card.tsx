@@ -25,12 +25,14 @@ async function copyText(value: string) {
 
 export function ProEventVenueCard({
   address,
+  id,
   mapHref,
   mapImageSrc,
   timezone,
   title,
 }: {
   readonly address: string;
+  readonly id?: string;
   readonly mapHref: string;
   readonly mapImageSrc: string;
   readonly timezone?: string;
@@ -77,7 +79,7 @@ export function ProEventVenueCard({
 
   return (
     <>
-      <section className="pro-event-section pro-event-venue">
+      <section className="pro-event-section pro-event-venue" id={id}>
         <button
           aria-haspopup="dialog"
           className="pro-event-venue__map"

@@ -45,6 +45,7 @@ export const personSummarySchema = z.object({
     .optional(),
   isProfessional: z.boolean().optional(),
 });
+export type PersonSummary = z.infer<typeof personSummarySchema>;
 export const organizationSummarySchema = z.object({
   id: z.string(),
   slug: z.string(),
@@ -65,6 +66,7 @@ export const organizationSummarySchema = z.object({
     .enum(["not-connected", "pending", "synced", "failed"])
     .optional(),
 });
+export type OrganizationSummary = z.infer<typeof organizationSummarySchema>;
 export const organizationCommissionPolicySchema = z.object({
   organizationId: z.string().uuid(),
   configuredPlan: z.enum(["coach", "small-club", "club", "multi-venue"]),
@@ -92,6 +94,7 @@ export const venueSummarySchema = z.object({
   imageUrl: z.string().optional(),
   tags: z.array(z.string()).readonly(),
 });
+export type VenueSummary = z.infer<typeof venueSummarySchema>;
 export const weatherIconSchema = z.enum([
   "clear",
   "mostly-clear",
@@ -429,6 +432,7 @@ export const eventSummarySchema = z.object({
   weather: weatherForecastSchema.optional(),
   tags: z.array(z.string()).readonly(),
 });
+export type EventSummary = z.infer<typeof eventSummarySchema>;
 export const matchSummarySchema = z.object({
   id: z.string(),
   status: z
@@ -503,6 +507,7 @@ export const matchSummarySchema = z.object({
     "group-confirmed",
   ]),
 });
+export type MatchSummary = z.infer<typeof matchSummarySchema>;
 export const bookingSummarySchema = z.object({
   id: z.string(),
   title: z.string(),

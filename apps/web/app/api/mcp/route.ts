@@ -3,11 +3,26 @@ import {
   createCaller,
   type ApiContext,
 } from "@duna/api";
+import {
+  renderAgentsGuide,
+  renderCoachMarkdown,
+  renderConsumerEventMarkdown,
+  renderMatchMarkdown,
+  renderOrganizationMarkdown,
+  renderPlayerMarkdown,
+  renderProfessionalEventMarkdown,
+  renderProfessionalMatchMarkdown,
+  renderProfessionalTeamMarkdown,
+  renderSitemapMarkdown,
+  renderStorefrontMarkdown,
+} from "../../../lib/public-markdown";
+import { publicSiteOrigin } from "../../../lib/pro-seo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const protocolVersion = "2025-06-18";
+const protocolVersion = "2025-11-25";
+const supportedProtocolVersions = new Set([protocolVersion, "2025-06-18"]);
 const maximumBodyBytes = 256 * 1024;
 
 type JsonRpcId = string | number | null;
@@ -27,6 +42,35 @@ interface ToolDefinition {
   readonly annotations?: Readonly<Record<string, boolean>>;
 }
 
+interface ResourceDefinition {
+  readonly uri: string;
+  readonly name: string;
+  readonly title: string;
+  readonly description: string;
+  readonly mimeType: "text/markdown";
+  readonly annotations?: Readonly<Record<string, unknown>>;
+}
+
+interface ResourceTemplateDefinition {
+  readonly uriTemplate: string;
+  readonly name: string;
+  readonly title: string;
+  readonly description: string;
+  readonly mimeType: "text/markdown";
+  readonly annotations?: Readonly<Record<string, unknown>>;
+}
+
+interface PromptDefinition {
+  readonly name: string;
+  readonly title: string;
+  readonly description: string;
+  readonly arguments?: readonly {
+    readonly name: string;
+    readonly description: string;
+    readonly required?: boolean;
+  }[];
+}
+
 const objectSchema = (
   properties: Readonly<Record<string, unknown>>,
   required: readonly string[] = [],
@@ -38,6 +82,20 @@ const objectSchema = (
 });
 
 const publicTools: readonly ToolDefinition[] = [
+  {
+    name: "search_duna",
+    title: "Search Duna public knowledge",
+    description:
+      "Search events, professional tournaments, players, teams, coaches, clinics, and bookable public content in one call. Returns canonical and Markdown URLs.",
+    inputSchema: objectSchema(
+      {
+        query: { type: "string", minLength: 2, maxLength: 120 },
+        limit: { type: "integer", minimum: 1, maximum: 25, default: 10 },
+      },
+      ["query"],
+    ),
+    annotations: { readOnlyHint: true, destructiveHint: false },
+  },
   {
     name: "search_events",
     title: "Search Duna events",
@@ -71,6 +129,41 @@ const publicTools: readonly ToolDefinition[] = [
       { slug: { type: "string", minLength: 1, maxLength: 160 } },
       ["slug"],
     ),
+    annotations: { readOnlyHint: true, destructiveHint: false },
+  },
+  {
+    name: "get_match",
+    title: "Get a Duna match",
+    description:
+      "Load one public match with tournament context, players or teams, set scores, status, broadcast options, and canonical links.",
+    inputSchema: objectSchema(
+      {
+        matchId: { type: "string", format: "uuid" },
+        eventSlug: { type: "string", minLength: 1, maxLength: 180 },
+      },
+      ["matchId"],
+    ),
+    annotations: { readOnlyHint: true, destructiveHint: false },
+  },
+  {
+    name: "get_team",
+    title: "Get a professional team",
+    description:
+      "Load a professional beach volleyball partnership by Duna team number, including roster, record, official statistics, and match history.",
+    inputSchema: objectSchema({ teamNo: { type: "integer", minimum: 1 } }, [
+      "teamNo",
+    ]),
+    annotations: { readOnlyHint: true, destructiveHint: false },
+  },
+  {
+    name: "find_where_to_watch",
+    title: "Find where to watch",
+    description:
+      "Return only verified event or match broadcast destinations. Missing broadcast data is reported as pending and never inferred.",
+    inputSchema: objectSchema({
+      eventSlug: { type: "string", minLength: 1, maxLength: 180 },
+      matchId: { type: "string", format: "uuid" },
+    }),
     annotations: { readOnlyHint: true, destructiveHint: false },
   },
   {
@@ -155,6 +248,134 @@ const publicTools: readonly ToolDefinition[] = [
       limit: { type: "integer", minimum: 1, maximum: 30, default: 12 },
     }),
     annotations: { readOnlyHint: true, destructiveHint: false },
+  },
+];
+
+const publicResources: readonly ResourceDefinition[] = [
+  {
+    uri: "duna://guide/agents",
+    name: "duna-agent-guide",
+    title: "Duna public data and navigation guide",
+    description:
+      "Authoritative routing, interpretation, provenance, and action-link guidance for public Duna knowledge.",
+    mimeType: "text/markdown",
+    annotations: { audience: ["assistant"], priority: 1 },
+  },
+  {
+    uri: "duna://site/index",
+    name: "duna-public-index",
+    title: "Duna public content index",
+    description:
+      "Canonical public pages and their deterministic Markdown companions.",
+    mimeType: "text/markdown",
+    annotations: { audience: ["assistant"], priority: 0.95 },
+  },
+];
+
+const publicResourceTemplates: readonly ResourceTemplateDefinition[] = [
+  {
+    uriTemplate: "duna://events/{slug}",
+    name: "duna-event",
+    title: "Duna event or tournament",
+    description:
+      "Dates, timezone, venue, geography, teams, standings, matches, watch links, and registration context.",
+    mimeType: "text/markdown",
+    annotations: { audience: ["assistant"], priority: 1 },
+  },
+  {
+    uriTemplate: "duna://events/{eventSlug}/matches/{matchId}",
+    name: "duna-professional-match",
+    title: "Duna professional match",
+    description:
+      "Tournament match status, teams, players, set scores, prediction context, and broadcasts.",
+    mimeType: "text/markdown",
+    annotations: { audience: ["assistant"], priority: 1 },
+  },
+  {
+    uriTemplate: "duna://matches/{matchId}",
+    name: "duna-match",
+    title: "Duna verified match",
+    description: "Verified players, result, scores, venue, and rating context.",
+    mimeType: "text/markdown",
+    annotations: { audience: ["assistant"], priority: 0.9 },
+  },
+  {
+    uriTemplate: "duna://players/{identifier}",
+    name: "duna-player",
+    title: "Duna player profile",
+    description:
+      "Canonical identity, biography, ranking, Sand Rating, upcoming events, and verified match history.",
+    mimeType: "text/markdown",
+    annotations: { audience: ["assistant"], priority: 1 },
+  },
+  {
+    uriTemplate: "duna://teams/{teamNo}",
+    name: "duna-professional-team",
+    title: "Duna professional team",
+    description: "Roster, record, official statistics, and match history.",
+    mimeType: "text/markdown",
+    annotations: { audience: ["assistant"], priority: 0.9 },
+  },
+  {
+    uriTemplate: "duna://coaches/{handle}",
+    name: "duna-coach",
+    title: "Duna coach",
+    description:
+      "Public coach identity, services, club, and upcoming sessions.",
+    mimeType: "text/markdown",
+    annotations: { audience: ["assistant"], priority: 0.85 },
+  },
+  {
+    uriTemplate: "duna://clubs/{slug}",
+    name: "duna-club",
+    title: "Duna club storefront",
+    description:
+      "Public programs, services, plans, products, and booking links.",
+    mimeType: "text/markdown",
+    annotations: { audience: ["assistant"], priority: 0.85 },
+  },
+];
+
+const publicPrompts: readonly PromptDefinition[] = [
+  {
+    name: "answer_where_to_watch",
+    title: "Answer where to watch a beach volleyball event",
+    description:
+      "Use verified event and match broadcasts and return a canonical Duna link.",
+    arguments: [
+      {
+        name: "event_or_match",
+        description: "Tournament, event, player matchup, or match identifier.",
+        required: true,
+      },
+    ],
+  },
+  {
+    name: "research_player",
+    title: "Research a beach volleyball player",
+    description:
+      "Resolve canonical identity, ranking, Sand Rating, form, partners, results, and upcoming events without conflating signals.",
+    arguments: [
+      {
+        name: "player",
+        description: "Player name, handle, or Duna identifier.",
+        required: true,
+      },
+    ],
+  },
+  {
+    name: "find_play_or_coaching",
+    title: "Find play, clinics, or coaching",
+    description:
+      "Find public options, explain verified details, and route registration or booking back to Duna.",
+    arguments: [
+      {
+        name: "request",
+        description:
+          "Location, dates, level, event kind, coach, or program need.",
+        required: true,
+      },
+    ],
   },
 ];
 
@@ -305,12 +526,22 @@ function toolsFor(context: ApiContext): readonly ToolDefinition[] {
   ];
 }
 
-function publicOrigin(request: Request): string {
-  return (
-    process.env.NEXT_PUBLIC_WEB_URL?.replace(/\/$/, "") ??
-    process.env.NEXT_PUBLIC_DUNA_WEB_URL?.replace(/\/$/, "") ??
-    new URL(request.url).origin
-  );
+function publicOrigin(): string {
+  return publicSiteOrigin();
+}
+
+function publicLinks(origin: string, canonicalPath: string) {
+  const normalized = canonicalPath.startsWith("/")
+    ? canonicalPath
+    : `/${canonicalPath}`;
+  return {
+    canonicalUrl: `${origin}${normalized}`,
+    markdownUrl: `${origin}${normalized === "/" ? "/index" : normalized}.md`,
+  };
+}
+
+function eventSlugFromMatchPath(path: string | undefined) {
+  return path?.match(/^\/events\/([^/]+)\/match\//)?.[1];
 }
 
 function originAllowed(request: Request): boolean {
@@ -330,12 +561,13 @@ function originAllowed(request: Request): boolean {
 function jsonRpcResponse(
   body: Readonly<Record<string, unknown>>,
   status = 200,
+  responseProtocol = protocolVersion,
 ): Response {
   return Response.json(body, {
     status,
     headers: {
       "Cache-Control": "no-store",
-      "MCP-Protocol-Version": protocolVersion,
+      "MCP-Protocol-Version": responseProtocol,
     },
   });
 }
@@ -370,9 +602,71 @@ async function callTool(input: {
   readonly request: Request;
 }) {
   const caller = createCaller(input.context);
-  const origin = publicOrigin(input.request);
+  const origin = publicOrigin();
   const limit = Math.floor(numberArgument(input.args, "limit", 20));
   switch (input.name) {
+    case "search_duna": {
+      const query = stringArgument(input.args, "query")!;
+      const normalizedQuery = query.toLowerCase();
+      const bounded = Math.min(25, Math.max(1, limit || 10));
+      const [events, coverage, players, coaches, teams] = await Promise.all([
+        caller.public.events(),
+        caller.public.proCoverage(),
+        caller.public.searchPlayers({ query, limit: bounded }),
+        caller.public.coaches(),
+        caller.public.proTeams(),
+      ]);
+      const matches = (value: unknown) =>
+        JSON.stringify(value).toLowerCase().includes(normalizedQuery);
+      return {
+        query,
+        events: [
+          ...events.filter(matches).map((event) => ({
+            entityType: "event" as const,
+            id: event.id,
+            slug: event.slug,
+            name: event.title,
+            startsAt: event.startsAt,
+            endsAt: event.endsAt,
+            timezone: event.timezone,
+            location: event.location ?? { venueName: event.venueName },
+            ...publicLinks(origin, `/events/${event.slug}`),
+          })),
+          ...coverage.events.filter(matches).map((event) => ({
+            entityType: "professional_event" as const,
+            id: event.id,
+            slug: event.slug,
+            name: event.name,
+            startsOn: event.startsOn,
+            endsOn: event.endsOn,
+            location: event.venue ?? event.location,
+            live: event.live,
+            ...publicLinks(origin, `/events/${event.slug}`),
+          })),
+        ].slice(0, bounded),
+        players: players.slice(0, bounded).map((player) => ({
+          ...player,
+          ...publicLinks(
+            origin,
+            player.publicPath ?? `/players/${player.handle}`,
+          ),
+        })),
+        coaches: coaches
+          .filter(matches)
+          .slice(0, bounded)
+          .map((coach) => ({
+            ...coach,
+            ...publicLinks(origin, `/coaches/${coach.handle}`),
+          })),
+        teams: teams
+          .filter(matches)
+          .slice(0, bounded)
+          .map((team) => ({
+            ...team,
+            ...publicLinks(origin, `/pro/teams/${team.teamNo}`),
+          })),
+      };
+    }
     case "search_events": {
       const kind = stringArgument(input.args, "kind", false) as
         | "tournament"
@@ -384,25 +678,157 @@ async function callTool(input: {
         | "pickup"
         | undefined;
       const ratingValue = input.args.rating;
-      const events = await caller.public.events({
-        ...(kind ? { kind } : {}),
-        ...(typeof ratingValue === "number" ? { rating: ratingValue } : {}),
-      });
+      const [events, coverage] = await Promise.all([
+        caller.public.events({
+          ...(kind ? { kind } : {}),
+          ...(typeof ratingValue === "number" ? { rating: ratingValue } : {}),
+        }),
+        caller.public.proCoverage(),
+      ]);
       const query = stringArgument(input.args, "query", false)?.toLowerCase();
-      return events
-        .filter((event) =>
-          query ? JSON.stringify(event).toLowerCase().includes(query) : true,
-        )
-        .slice(0, Math.min(50, Math.max(1, limit)))
-        .map((event) => ({
+      const matchesQuery = (value: unknown) =>
+        query ? JSON.stringify(value).toLowerCase().includes(query) : true;
+      const bounded = Math.min(50, Math.max(1, limit));
+      return [
+        ...events.filter(matchesQuery).map((event) => ({
+          entityType: "event" as const,
           ...event,
+          ...publicLinks(origin, `/events/${event.slug}`),
           actionUrl: `${origin}/events/${event.slug}`,
-        }));
+        })),
+        ...(kind && kind !== "tournament"
+          ? []
+          : coverage.events.filter(matchesQuery).map((event) => ({
+              entityType: "professional_event" as const,
+              ...event,
+              ...publicLinks(origin, `/events/${event.slug}`),
+              actionUrl: `${origin}/events/${event.slug}`,
+            }))),
+      ].slice(0, bounded);
     }
     case "get_event": {
       const slug = stringArgument(input.args, "slug")!;
-      const event = await caller.public.eventBySlug({ slug });
-      return { ...event, actionUrl: `${origin}/events/${event.slug}` };
+      const [event, professionalEvent] = await Promise.all([
+        caller.public.eventBySlug({ slug }).catch(() => undefined),
+        caller.public.proEvent({ slug }).catch(() => undefined),
+      ]);
+      const result = event ?? professionalEvent;
+      if (!result) throw new Error("Public event not found");
+      return {
+        entityType: event ? "event" : "professional_event",
+        ...result,
+        ...publicLinks(origin, `/events/${slug}`),
+        actionUrl: `${origin}/events/${slug}`,
+      };
+    }
+    case "get_match": {
+      const matchId = stringArgument(input.args, "matchId")!;
+      const eventSlug = stringArgument(input.args, "eventSlug", false);
+      if (eventSlug) {
+        const detail = await caller.public.proMatch({ eventSlug, matchId });
+        return {
+          entityType: "professional_match",
+          ...detail,
+          ...publicLinks(origin, detail.match.canonicalPath),
+        };
+      }
+      const match = await caller.public
+        .matchDetails({ matchId })
+        .catch(() => undefined);
+      if (match) {
+        return {
+          entityType: "match",
+          ...match,
+          ...publicLinks(origin, `/matches/${match.id}`),
+        };
+      }
+      const coverage = await caller.public.proCoverage();
+      const coverageMatch = coverage.matches.find(
+        (candidate) => candidate.id === matchId,
+      );
+      const resolvedSlug = eventSlugFromMatchPath(coverageMatch?.canonicalPath);
+      if (!resolvedSlug) throw new Error("Public match not found");
+      const detail = await caller.public.proMatch({
+        eventSlug: resolvedSlug,
+        matchId,
+      });
+      return {
+        entityType: "professional_match",
+        ...detail,
+        ...publicLinks(origin, detail.match.canonicalPath),
+      };
+    }
+    case "get_team": {
+      const teamNo = Math.floor(numberArgument(input.args, "teamNo", 0));
+      if (teamNo < 1) throw new Error("teamNo is required");
+      const team = await caller.public.proTeam({ teamNo });
+      return {
+        entityType: "professional_team",
+        ...team,
+        ...publicLinks(origin, `/pro/teams/${team.teamNo}`),
+      };
+    }
+    case "find_where_to_watch": {
+      const eventSlug = stringArgument(input.args, "eventSlug", false);
+      const matchId = stringArgument(input.args, "matchId", false);
+      if (!eventSlug && !matchId) {
+        throw new Error("eventSlug or matchId is required");
+      }
+      if (matchId) {
+        let resolvedSlug = eventSlug;
+        if (!resolvedSlug) {
+          const coverage = await caller.public.proCoverage();
+          resolvedSlug = eventSlugFromMatchPath(
+            coverage.matches.find((candidate) => candidate.id === matchId)
+              ?.canonicalPath,
+          );
+        }
+        if (!resolvedSlug) {
+          const match = await caller.public
+            .matchDetails({ matchId })
+            .catch(() => undefined);
+          if (!match) throw new Error("Public match not found");
+          return {
+            subject: `${match.teamA.map((player) => player.displayName).join(" / ")} vs ${match.teamB.map((player) => player.displayName).join(" / ")}`,
+            status: "pending",
+            watchOptions: [],
+            note: "Duna has no verified broadcast destination for this match.",
+            ...publicLinks(origin, `/matches/${match.id}`),
+          };
+        }
+        const detail = await caller.public.proMatch({
+          eventSlug: resolvedSlug,
+          matchId,
+        });
+        return {
+          subject: `${detail.match.teamA.label} vs ${detail.match.teamB.label}`,
+          status: detail.match.watchOptions.length ? "confirmed" : "pending",
+          watchOptions: detail.match.watchOptions,
+          ...publicLinks(origin, detail.match.canonicalPath),
+        };
+      }
+      if (eventSlug) {
+        const event = await caller.public.proEvent({ slug: eventSlug });
+        const matchOptions = event.matches.flatMap((match) =>
+          match.watchOptions.map((option) => ({
+            matchId: match.id,
+            match: `${match.teamA.label} vs ${match.teamB.label}`,
+            canonicalUrl: `${origin}${match.canonicalPath}`,
+            ...option,
+          })),
+        );
+        return {
+          subject: event.name,
+          status:
+            event.watchOptions.length || matchOptions.length
+              ? "confirmed"
+              : "pending",
+          eventWatchOptions: event.watchOptions,
+          matchWatchOptions: matchOptions,
+          ...publicLinks(origin, `/events/${event.slug}`),
+        };
+      }
+      throw new Error("Public event or match not found");
     }
     case "search_players": {
       const query = stringArgument(input.args, "query")!;
@@ -412,6 +838,10 @@ async function callTool(input: {
       });
       return players.map((player) => ({
         ...player,
+        ...publicLinks(
+          origin,
+          player.publicPath ?? `/players/${player.handle}`,
+        ),
         profileUrl: `${origin}${player.publicPath ?? `/players/${player.handle}`}`,
       }));
     }
@@ -429,6 +859,7 @@ async function callTool(input: {
         performance,
         intelligence,
         videos,
+        ...publicLinks(origin, route.canonicalPath),
         profileUrl: `${origin}${route.canonicalPath}`,
         claimUrl: `${origin}/app/onboarding?claimProfile=${encodeURIComponent(player.handle)}`,
       };
@@ -452,12 +883,17 @@ async function callTool(input: {
         gender,
         snapshotDate: rankings.latestDates[gender],
         rows,
+        markdownUrl: `${origin}/rankings.md`,
         rankingsUrl: `${origin}/rankings?view=${system}&gender=${gender}`,
       };
     }
     case "get_rating_methodology": {
       const lab = await caller.public.ratingLab();
-      return { lab, methodologyUrl: `${origin}/methodology` };
+      return {
+        lab,
+        methodologyUrl: `${origin}/methodology`,
+        markdownUrl: `${origin}/methodology.md`,
+      };
     }
     case "find_coaches": {
       const organizationSlug = stringArgument(
@@ -476,6 +912,7 @@ async function callTool(input: {
         .slice(0, Math.min(50, Math.max(1, limit)))
         .map((coach) => ({
           ...coach,
+          ...publicLinks(origin, `/coaches/${coach.handle}`),
           profileUrl: `${origin}/coaches/${coach.handle}`,
         }));
     }
@@ -490,7 +927,11 @@ async function callTool(input: {
         handle,
         ...(organizationSlug ? { organizationSlug } : {}),
       });
-      return { ...coach, profileUrl: `${origin}/coaches/${coach.handle}` };
+      return {
+        ...coach,
+        ...publicLinks(origin, `/coaches/${coach.handle}`),
+        profileUrl: `${origin}/coaches/${coach.handle}`,
+      };
     }
     case "find_booking_options": {
       const query = stringArgument(input.args, "query", false)?.toLowerCase();
@@ -515,6 +956,7 @@ async function callTool(input: {
           .slice(0, bounded)
           .map((event) => ({
             ...event,
+            ...publicLinks(origin, `/events/${event.slug}`),
             actionUrl: `${origin}/events/${event.slug}`,
           })),
         coaches: coaches
@@ -522,6 +964,7 @@ async function callTool(input: {
           .slice(0, bounded)
           .map((coach) => ({
             ...coach,
+            ...publicLinks(origin, `/coaches/${coach.handle}`),
             actionUrl: `${origin}/coaches/${coach.handle}`,
           })),
         venues: venues.filter(matchesQuery).slice(0, bounded),
@@ -611,6 +1054,139 @@ async function callTool(input: {
   }
 }
 
+async function readResource(input: {
+  readonly uri: string;
+  readonly context: ApiContext;
+}): Promise<{
+  readonly uri: string;
+  readonly mimeType: "text/markdown";
+  readonly text: string;
+}> {
+  const caller = createCaller(input.context);
+  const url = new URL(input.uri);
+  if (url.protocol !== "duna:") throw new Error("Unsupported resource URI");
+  const parts = [url.hostname, ...url.pathname.split("/").filter(Boolean)];
+  let text: string | undefined;
+
+  if (parts[0] === "guide" && parts[1] === "agents") {
+    text = renderAgentsGuide();
+  } else if (parts[0] === "site" && parts[1] === "index") {
+    const { default: buildSitemap } = await import("../../sitemap");
+    text = renderSitemapMarkdown(await buildSitemap());
+  } else if (
+    parts[0] === "events" &&
+    parts[1] &&
+    parts[2] === "matches" &&
+    parts[3]
+  ) {
+    const detail = await caller.public
+      .proMatch({ eventSlug: parts[1], matchId: parts[3] })
+      .catch(() => undefined);
+    if (detail) text = renderProfessionalMatchMarkdown(detail);
+  } else if (parts[0] === "events" && parts[1]) {
+    const [professional, event] = await Promise.all([
+      caller.public.proEvent({ slug: parts[1] }).catch(() => undefined),
+      caller.public.eventBySlug({ slug: parts[1] }).catch(() => undefined),
+    ]);
+    if (professional) text = renderProfessionalEventMarkdown(professional);
+    else if (event) text = renderConsumerEventMarkdown(event);
+  } else if (parts[0] === "matches" && parts[1]) {
+    const match = await caller.public
+      .matchDetails({ matchId: parts[1] })
+      .catch(() => undefined);
+    if (match) text = renderMatchMarkdown(match);
+  } else if (parts[0] === "players" && parts[1]) {
+    const route = await caller.public
+      .playerRoute({ identifier: parts[1] })
+      .catch(() => undefined);
+    if (route) {
+      const [performance, intelligence] = await Promise.all([
+        caller.public
+          .playerPerformance({ handle: route.player.handle })
+          .catch(() => undefined),
+        caller.public
+          .playerIntelligence({ handle: route.player.handle })
+          .catch(() => undefined),
+      ]);
+      text = renderPlayerMarkdown({
+        player: route.player,
+        canonicalPath: route.canonicalPath,
+        performance,
+        intelligence,
+      });
+    }
+  } else if (parts[0] === "teams" && parts[1]) {
+    const teamNo = Number.parseInt(parts[1], 10);
+    const team = Number.isInteger(teamNo)
+      ? await caller.public.proTeam({ teamNo }).catch(() => undefined)
+      : undefined;
+    if (team) text = renderProfessionalTeamMarkdown(team);
+  } else if (parts[0] === "coaches" && parts[1]) {
+    const coach = await caller.public
+      .coach({ handle: parts[1] })
+      .catch(() => undefined);
+    if (coach) text = renderCoachMarkdown(coach);
+  } else if (parts[0] === "clubs" && parts[1]) {
+    const slug = parts[1];
+    const [storefront, organization, events, coaches, venues] =
+      await Promise.all([
+        caller.public.organizationStorefront({ slug }).catch(() => undefined),
+        caller.public.organizationBySlug({ slug }).catch(() => undefined),
+        caller.public.events().catch(() => []),
+        caller.public.coaches({ organizationSlug: slug }).catch(() => []),
+        caller.public.venues().catch(() => []),
+      ]);
+    if (storefront) text = renderStorefrontMarkdown(storefront);
+    else if (organization) {
+      text = renderOrganizationMarkdown({
+        organization,
+        events: events.filter(
+          (event) =>
+            event.organizationId === organization.id ||
+            event.organizationSlug === slug,
+        ),
+        coaches,
+        venues: venues.filter(
+          (venue) => venue.organizationId === organization.id,
+        ),
+      });
+    }
+  }
+
+  if (!text) throw new Error("Public Duna resource not found");
+  return { uri: input.uri, mimeType: "text/markdown", text };
+}
+
+function getPrompt(input: {
+  readonly name: string;
+  readonly args: Record<string, unknown>;
+  readonly request: Request;
+}) {
+  const origin = publicOrigin();
+  const agentGuide = `${origin}/agents`;
+  const promptArgument = (name: string) =>
+    stringArgument(input.args, name, false) ?? "not specified";
+  const instructions =
+    input.name === "answer_where_to_watch"
+      ? `Answer where to watch ${promptArgument("event_or_match")}. Read ${agentGuide}, use search_events and find_where_to_watch, state whether coverage is confirmed or pending, preserve the event timezone, and link the canonical Duna event or match page. Never infer a stream.`
+      : input.name === "research_player"
+        ? `Research ${promptArgument("player")} as a beach volleyball player. Read ${agentGuide}, resolve the canonical Duna identity, then distinguish official world rank, Duna Sand Rating, verified results, partners, form, upcoming events, and published biography. Cite and link the canonical Duna player and relevant event or match pages.`
+        : input.name === "find_play_or_coaching"
+          ? `Help with this request: ${promptArgument("request")}. Read ${agentGuide}, search public events and coaches, verify place, timezone, dates, level, price, and current availability, then return the canonical Duna registration or booking links. Do not claim registration, a hold, or payment before the user completes Duna checkout.`
+          : undefined;
+  if (!instructions) throw new Error("Unknown prompt");
+  return {
+    description: publicPrompts.find((prompt) => prompt.name === input.name)
+      ?.description,
+    messages: [
+      {
+        role: "user",
+        content: { type: "text", text: instructions },
+      },
+    ],
+  };
+}
+
 export async function POST(request: Request): Promise<Response> {
   if (!originAllowed(request)) {
     return jsonRpcError(null, -32000, "Origin is not allowed", 403);
@@ -620,9 +1196,10 @@ export async function POST(request: Request): Promise<Response> {
     return jsonRpcError(null, -32600, "Request body is too large", 413);
   }
   const requestedProtocol = request.headers.get("mcp-protocol-version");
-  if (requestedProtocol && requestedProtocol !== protocolVersion) {
+  if (requestedProtocol && !supportedProtocolVersions.has(requestedProtocol)) {
     return jsonRpcError(null, -32600, "Unsupported MCP protocol version", 400);
   }
+  const responseProtocol = requestedProtocol ?? protocolVersion;
   let message: JsonRpcRequest;
   try {
     const body = await request.text();
@@ -648,27 +1225,133 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
   if (message.method === "initialize") {
-    return jsonRpcResponse({
-      jsonrpc: "2.0",
-      id: message.id,
-      result: {
-        protocolVersion,
-        capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "duna", title: "Duna", version: "1.0.0" },
-        instructions:
-          "Use public tools for discovery, rankings, players, lessons, events, and booking entry points. Authenticated repair tools are audited; do not infer identity links without cited source evidence.",
+    const initializedVersion = stringArgument(
+      asObject(message.params),
+      "protocolVersion",
+      false,
+    );
+    const negotiatedVersion =
+      initializedVersion && supportedProtocolVersions.has(initializedVersion)
+        ? initializedVersion
+        : protocolVersion;
+    return jsonRpcResponse(
+      {
+        jsonrpc: "2.0",
+        id: message.id,
+        result: {
+          protocolVersion: negotiatedVersion,
+          capabilities: {
+            tools: { listChanged: false },
+            resources: { subscribe: false, listChanged: false },
+            prompts: { listChanged: false },
+          },
+          serverInfo: { name: "duna", title: "Duna", version: "2.0.0" },
+          instructions:
+            "Read duna://guide/agents first. Use public tools and Markdown resources for events, matches, teams, players, rankings, coaches, clinics, geography, broadcasts, and booking entry points. Return canonical Duna links for people and transactions. Missing facts are unverified, not invitations to infer. Authenticated repair tools are role-gated and audited.",
+        },
       },
-    });
+      200,
+      negotiatedVersion,
+    );
   }
   if (message.method === "ping") {
-    return jsonRpcResponse({ jsonrpc: "2.0", id: message.id, result: {} });
+    return jsonRpcResponse(
+      { jsonrpc: "2.0", id: message.id, result: {} },
+      200,
+      responseProtocol,
+    );
   }
   if (message.method === "tools/list") {
-    return jsonRpcResponse({
-      jsonrpc: "2.0",
-      id: message.id,
-      result: { tools: toolsFor(context) },
-    });
+    return jsonRpcResponse(
+      {
+        jsonrpc: "2.0",
+        id: message.id,
+        result: { tools: toolsFor(context) },
+      },
+      200,
+      responseProtocol,
+    );
+  }
+  if (message.method === "resources/list") {
+    return jsonRpcResponse(
+      {
+        jsonrpc: "2.0",
+        id: message.id,
+        result: { resources: publicResources },
+      },
+      200,
+      responseProtocol,
+    );
+  }
+  if (message.method === "resources/templates/list") {
+    return jsonRpcResponse(
+      {
+        jsonrpc: "2.0",
+        id: message.id,
+        result: { resourceTemplates: publicResourceTemplates },
+      },
+      200,
+      responseProtocol,
+    );
+  }
+  if (message.method === "resources/read") {
+    const params = asObject(message.params);
+    const uri = typeof params.uri === "string" ? params.uri : "";
+    if (!uri) return jsonRpcError(message.id, -32602, "uri is required");
+    try {
+      const content = await readResource({ uri, context });
+      return jsonRpcResponse(
+        {
+          jsonrpc: "2.0",
+          id: message.id,
+          result: { contents: [content] },
+        },
+        200,
+        responseProtocol,
+      );
+    } catch (error) {
+      return jsonRpcError(
+        message.id,
+        -32002,
+        error instanceof Error ? error.message : "Resource read failed",
+      );
+    }
+  }
+  if (message.method === "prompts/list") {
+    return jsonRpcResponse(
+      {
+        jsonrpc: "2.0",
+        id: message.id,
+        result: { prompts: publicPrompts },
+      },
+      200,
+      responseProtocol,
+    );
+  }
+  if (message.method === "prompts/get") {
+    const params = asObject(message.params);
+    const name = typeof params.name === "string" ? params.name : "";
+    try {
+      return jsonRpcResponse(
+        {
+          jsonrpc: "2.0",
+          id: message.id,
+          result: getPrompt({
+            name,
+            args: asObject(params.arguments),
+            request,
+          }),
+        },
+        200,
+        responseProtocol,
+      );
+    } catch (error) {
+      return jsonRpcError(
+        message.id,
+        -32602,
+        error instanceof Error ? error.message : "Prompt could not be built",
+      );
+    }
   }
   if (message.method === "tools/call") {
     const params = asObject(message.params);
@@ -684,22 +1367,31 @@ export async function POST(request: Request): Promise<Response> {
         context,
         request,
       });
-      return jsonRpcResponse({
-        jsonrpc: "2.0",
-        id: message.id,
-        result: toolResult(data),
-      });
+      return jsonRpcResponse(
+        {
+          jsonrpc: "2.0",
+          id: message.id,
+          result: toolResult(data),
+        },
+        200,
+        responseProtocol,
+      );
     } catch (error) {
-      return jsonRpcResponse({
-        jsonrpc: "2.0",
-        id: message.id,
-        result: toolResult(
-          {
-            error: error instanceof Error ? error.message : "Tool call failed",
-          },
-          true,
-        ),
-      });
+      return jsonRpcResponse(
+        {
+          jsonrpc: "2.0",
+          id: message.id,
+          result: toolResult(
+            {
+              error:
+                error instanceof Error ? error.message : "Tool call failed",
+            },
+            true,
+          ),
+        },
+        200,
+        responseProtocol,
+      );
     }
   }
   return jsonRpcError(message.id, -32601, "Method not found");

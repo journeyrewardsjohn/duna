@@ -397,6 +397,7 @@ import {
   linkExternalPlayer,
   loadPublicPlayerPerformanceByHandle,
   loadPublicProfessionalTeam,
+  loadPublicProfessionalTeamIndex,
   loadPublicRatingLab,
   loadPublicProEvent,
   loadPublicProMatch,
@@ -1544,6 +1545,7 @@ const publicRouter = router({
       if (!team) throw new TRPCError({ code: "NOT_FOUND" });
       return team;
     }),
+  proTeams: publicProcedure.query(() => loadPublicProfessionalTeamIndex()),
   proMatch: publicProcedure
     .input(
       z.object({

@@ -22,7 +22,10 @@ export const metadata: Metadata = {
   title: "Beach volleyball world and Sand Rating rankings",
   description:
     "Explore the top 200 men's and women's beach volleyball players by official world ranking and Duna Sand Rating, with verified player profiles and match evidence.",
-  alternates: { canonical: "/rankings" },
+  alternates: {
+    canonical: "/rankings",
+    types: { "text/markdown": "/rankings.md" },
+  },
   openGraph: {
     title: "Beach volleyball player rankings · Duna",
     description:

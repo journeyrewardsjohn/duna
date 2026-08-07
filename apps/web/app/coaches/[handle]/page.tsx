@@ -9,10 +9,13 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
+import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
 
 const WEEKDAYS = [
   "Sunday",
@@ -37,6 +40,45 @@ function serviceHref(slug: string, item: PublicCatalogItem): string {
   return `/clubs/${slug}/products/${item.slug}`;
 }
 
+const loadCoach = cache(async (handle: string, organizationSlug?: string) => {
+  const caller = await getServerCaller();
+  return caller.public
+    .coach({ handle, ...(organizationSlug ? { organizationSlug } : {}) })
+    .catch(() => undefined);
+});
+
+export async function generateMetadata({
+  params,
+}: {
+  readonly params: Promise<{ handle: string }>;
+}): Promise<Metadata> {
+  const { handle } = await params;
+  const coach = await loadCoach(handle);
+  if (!coach) return { title: "Coach not found" };
+  const canonical = `/coaches/${coach.handle}`;
+  const description =
+    coach.bio ??
+    `Book beach volleyball training and upcoming sessions with ${coach.displayName} on Duna.`;
+  return {
+    title: `${coach.displayName} beach volleyball coach`,
+    description,
+    alternates: {
+      canonical,
+      types: { "text/markdown": `${canonical}.md` },
+    },
+    openGraph: {
+      title: `${coach.displayName} · Duna coach`,
+      description,
+      type: "profile",
+      url: canonical,
+      images: coach.avatarUrl
+        ? [{ url: coach.avatarUrl, alt: coach.displayName }]
+        : undefined,
+    },
+    robots: { index: true, follow: true },
+  };
+}
+
 export default async function CoachProfilePage({
   params,
   searchParams,
@@ -45,11 +87,50 @@ export default async function CoachProfilePage({
   readonly searchParams: Promise<{ organization?: string }>;
 }) {
   const [{ handle }, query] = await Promise.all([params, searchParams]);
-  const caller = await getServerCaller();
-  const coach = await caller.public
-    .coach({ handle, organizationSlug: query.organization })
-    .catch(() => undefined);
+  const coach = await loadCoach(handle, query.organization);
   if (!coach) notFound();
+  const profileUrl = absolutePublicUrl(`/coaches/${coach.handle}`);
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "ProfilePage",
+        "@id": `${profileUrl}#page`,
+        url: profileUrl,
+        name: `${coach.displayName} beach volleyball coach`,
+        mainEntity: { "@id": `${profileUrl}#person` },
+        encoding: {
+          "@type": "MediaObject",
+          encodingFormat: "text/markdown",
+          contentUrl: absolutePublicUrl(`/coaches/${coach.handle}.md`),
+        },
+      },
+      {
+        "@type": "Person",
+        "@id": `${profileUrl}#person`,
+        name: coach.displayName,
+        alternateName: `@${coach.handle}`,
+        url: profileUrl,
+        image: coach.avatarUrl,
+        description: coach.bio,
+        jobTitle: "Beach volleyball coach",
+        homeLocation: coach.homeMarket
+          ? { "@type": "Place", name: coach.homeMarket }
+          : undefined,
+        worksFor: {
+          "@type": "SportsOrganization",
+          "@id": `${absolutePublicUrl(`/clubs/${coach.organizationSlug}`)}#organization`,
+          name: coach.organizationName,
+          url: absolutePublicUrl(`/clubs/${coach.organizationSlug}`),
+        },
+        makesOffer: coach.services.map((service) => ({
+          "@type": "Offer",
+          name: service.title,
+          url: absolutePublicUrl(serviceHref(coach.organizationSlug, service)),
+        })),
+      },
+    ],
+  };
 
   const availability = coach.availability
     .map((window) => ({
@@ -74,6 +155,10 @@ export default async function CoachProfilePage({
   return (
     <main className="public-detail coach-profile-page" data-zone="athletic">
       <SiteHeader />
+      <script
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
+        type="application/ld+json"
+      />
       <section className="coach-profile-hero">
         <div className="coach-profile-hero__portrait">
           {coach.avatarUrl ? (

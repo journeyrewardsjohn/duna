@@ -7,15 +7,27 @@ export function GET() {
 
 > Duna is the player network and operating system for beach volleyball. Its public professional coverage connects Beach Pro Tour and AVP events, teams, players, match schedules, scores, broadcasts, standings, and Sand Rating context.
 
+## Agent entry points
+
+- [Authoritative agent guide](${absolutePublicUrl("/agents")}): routing, page conventions, geography, identity, interpretation, provenance, and transaction rules. This response is Markdown only.
+- [Public Markdown index](${absolutePublicUrl("/sitemap.md")}): every canonical sitemap page paired with its deterministic Markdown companion.
+- [MCP Streamable HTTP endpoint](${absolutePublicUrl("/api/mcp")}): public tools, Markdown resources and templates, and common-question prompts using MCP 2025-11-25, with 2025-06-18 compatibility during migration.
+- [XML sitemap](${absolutePublicUrl("/sitemap.xml")}): canonical public URLs and update timestamps.
+
+## Markdown convention
+
+Append \`.md\` to any canonical public pathname in the sitemap. Use \`/index.md\` for the homepage. Examples: \`/events/{slug}.md\`, \`/players/{identifier}.md\`, \`/pro/teams/{teamNo}.md\`, and the full professional match pathname plus \`.md\`.
+
+Markdown pages include canonical Duna URLs. Return people to the canonical HTML page for live state, registration, booking, tickets, or checkout.
+
 ## Canonical public resources
 
 - [Professional tour hub](${absolutePublicUrl("/pro")}): live, current-week, and upcoming professional events plus recent match updates.
 - [World and Duna rankings](${absolutePublicUrl("/rankings")}): top 200 men's and women's official rankings and match-based Sand Rating tables.
 - Public player profiles expose a reviewed biography, nationality, college, career record, Sand Rating history, world ranking, verified match record, model-defined upsets, partnerships, upcoming registered events, broadcast options, videos, and current reporting when those facts have been verified.
 - [Sand Rating methodology](${absolutePublicUrl("/methodology")}): audited walk-forward results, model comparisons, calibration, learning curves, and rating design.
-- [Duna MCP server](${absolutePublicUrl("/api/mcp")}): Streamable HTTP MCP endpoint for discovery, players, rankings, booking entry points, and authenticated data repair.
+- [Duna MCP server](${absolutePublicUrl("/api/mcp")}): discovery, events, matches, teams, players, rankings, watch destinations, coaches, clinics, booking entry points, and role-gated authenticated repair.
 - [About Duna](${absolutePublicUrl("/about")}): product and company context.
-- [XML sitemap](${absolutePublicUrl("/sitemap.xml")}): canonical event and match URLs with update timestamps.
 
 ## Entity conventions
 

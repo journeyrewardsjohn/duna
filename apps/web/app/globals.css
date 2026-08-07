@@ -4638,54 +4638,6 @@ a.professional-match-card:hover {
   margin-top: 0;
 }
 
-.pro-event-content > .pro-podium {
-  order: 5;
-}
-
-.pro-event-content > .pro-top-matches {
-  order: 10;
-}
-
-.pro-event-content > .pro-pools {
-  order: 20;
-}
-
-.pro-event-content > .pro-bracket {
-  order: 30;
-}
-
-.pro-event-content > .pro-avp-league {
-  order: 35;
-}
-
-.pro-event-content > .pro-live-table {
-  order: 40;
-}
-
-.pro-event-content > .pro-winner-pick {
-  order: 50;
-}
-
-.pro-event-content > .tournament-markets {
-  order: 50;
-}
-
-.pro-event-content > .pro-event-matches {
-  order: 60;
-}
-
-.pro-event-content > .pro-watch {
-  order: 70;
-}
-
-.pro-event-content > .pro-entry-lists {
-  order: 80;
-}
-
-.pro-event-content > .pro-event-venue {
-  order: 90;
-}
-
 .pro-top-matches {
   border-color: color-mix(in srgb, var(--color-aqua) 35%, var(--color-line));
 }
@@ -20841,6 +20793,111 @@ html {
 
   .professional-match-card__market {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Shared event wayfinding */
+
+.event-section-nav {
+  backdrop-filter: blur(20px) saturate(145%);
+  background: rgb(255 255 255 / 92%);
+  border-bottom: 1px solid var(--color-line);
+  border-top: 1px solid var(--color-line);
+  color: #101828;
+  position: sticky;
+  top: 0;
+  z-index: 45;
+}
+
+:root[data-theme="dark"] .event-section-nav {
+  background: rgb(11 24 37 / 92%);
+  color: var(--color-bone);
+}
+
+.event-section-nav__inner {
+  align-items: center;
+  display: flex;
+  gap: 1.2rem;
+  margin: 0 auto;
+  max-width: 1280px;
+  min-width: 0;
+  padding: 0 1.25rem;
+}
+
+.event-section-nav__label {
+  align-items: center;
+  border-right: 1px solid var(--color-line);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  gap: 0.4rem;
+  min-height: 58px;
+  padding-right: 1.2rem;
+}
+
+.event-section-nav__links {
+  display: flex;
+  gap: 0.3rem;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding: 0.55rem 0;
+  scrollbar-width: none;
+}
+
+.event-section-nav__links::-webkit-scrollbar {
+  display: none;
+}
+
+.event-section-nav__links a {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: inherit;
+  flex: 0 0 auto;
+  font-size: 0.8125rem;
+  font-weight: 750;
+  line-height: 1;
+  padding: 0.72rem 0.9rem;
+  text-decoration: none;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.event-section-nav__links a:hover {
+  background: rgb(var(--overlay-rgb) / 5%);
+  border-color: var(--color-line);
+}
+
+.event-section-nav__links a[aria-current="location"] {
+  background: #102c43;
+  border-color: #102c43;
+  color: #fff;
+}
+
+.pro-event-page [id],
+.event-public [id] {
+  scroll-margin-top: 84px;
+}
+
+@media (max-width: 720px) {
+  .event-section-nav__inner {
+    padding-inline: 0.8rem;
+  }
+
+  .event-section-nav__label {
+    display: none;
+  }
+
+  .event-section-nav__links {
+    padding-block: 0.48rem;
+  }
+
+  .event-section-nav__links a {
+    min-height: 40px;
+    padding: 0.78rem 0.9rem;
   }
 }
 

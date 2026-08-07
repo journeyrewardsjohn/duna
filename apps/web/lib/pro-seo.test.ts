@@ -137,6 +137,14 @@ describe("professional public discovery metadata", () => {
       offers: { url: "https://tickets.example.com/avp-dallas" },
       eventStatus: "https://schema.org/EventInProgress",
     });
+    const page = data["@graph"].find((node) => node["@type"] === "WebPage");
+    expect(page).toMatchObject({
+      encoding: {
+        encodingFormat: "text/markdown",
+        contentUrl:
+          "https://duna.coach/events/avp-league-dallas-mens-2026-08-07.md",
+      },
+    });
   });
 
   it("gives match pages their own canonical SportsEvent and set-score context", () => {

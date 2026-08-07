@@ -32,7 +32,10 @@ export const metadata: Metadata = {
   title: "Pro beach volleyball",
   description:
     "Live FIVB and AVP events, recent results, seasonal rosters, and Volleyball World rankings on Duna.",
-  alternates: { canonical: "/pro" },
+  alternates: {
+    canonical: "/pro",
+    types: { "text/markdown": "/pro.md" },
+  },
   openGraph: {
     title: "Pro beach volleyball live events and results",
     description:

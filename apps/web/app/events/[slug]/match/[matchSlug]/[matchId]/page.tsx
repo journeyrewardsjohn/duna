@@ -48,6 +48,9 @@ export async function generateMetadata({
     description,
     alternates: {
       canonical: detail?.match.canonicalPath,
+      types: detail
+        ? { "text/markdown": `${detail.match.canonicalPath}.md` }
+        : undefined,
     },
     openGraph: detail
       ? {
