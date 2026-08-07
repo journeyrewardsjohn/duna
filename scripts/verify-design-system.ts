@@ -22,7 +22,9 @@ const requiredFiles = [
   "docs/design/duna-theming-light-dark.md",
   "docs/licenses/Archivo-OFL-1.1.txt",
   "apps/web/app/design-v3.css",
+  "apps/web/app/homepage.module.css",
   "apps/web/app/not-found.tsx",
+  "apps/web/components/home-sand-world.tsx",
   "apps/hq/app/design-v3.css",
   "apps/web/public/brand/duna-mark.svg",
   "apps/web/public/media/brand/imagery-log.json",
@@ -63,6 +65,36 @@ for (const app of ["player", "pro"] as const) {
 
 for (const file of requiredFiles) {
   if (!existsSync(join(root, file))) violations.push(`${file} is missing`);
+}
+
+const homepageSource = readFileSync(
+  join(root, "apps/web/app/page.tsx"),
+  "utf8",
+);
+const homepageSandSource = readFileSync(
+  join(root, "apps/web/components/home-sand-world.tsx"),
+  "utf8",
+);
+for (const contract of [
+  "HomeSandWorld",
+  "data-sand-world",
+  'data-zone="live"',
+] as const) {
+  if (!homepageSource.includes(contract)) {
+    violations.push(`apps/web/app/page.tsx must preserve ${contract}`);
+  }
+}
+for (const contract of [
+  "prefers-reduced-motion: reduce",
+  "connection?.saveData",
+  'canvas.dataset.renderer = "fallback"',
+  "IntersectionObserver",
+] as const) {
+  if (!homepageSandSource.includes(contract)) {
+    violations.push(
+      `apps/web/components/home-sand-world.tsx must preserve ${contract}`,
+    );
+  }
 }
 
 const agentsContract = readFileSync(join(root, "AGENTS.md"), "utf8");

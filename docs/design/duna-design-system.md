@@ -341,7 +341,12 @@ of field
 
 ### 9.6 Video
 
-Higgsfield does video up to 15s (Veo 3.1, Kling 3.0). Duna uses it for exactly one thing: the homepage hero ambient loop (the site already ships `duna-hero.mp4`). Rules: 8–12s, seamless loop, **no cuts**, near-static camera with only atmospheric movement (haze drifting, grass moving, one bird crossing), same grade string, muted, `poster` frame always set, and it never autoplays on reduced-motion or on cellular. Everywhere else, use a still.
+The homepage no longer depends on a baked ambient video. Its canonical motion
+surface is the procedural Sand World in §11: lighter to download, continuous
+through scroll, and native to Duna's subject. Owned video may still appear as
+editorial evidence inside a later section. It must have a poster, remain muted,
+avoid autoplay on reduced motion or data saving, and never become the only way
+to understand a value proposition.
 
 ---
 
@@ -374,15 +379,30 @@ Venue plates scale per event: one per **venue**, not per event, reused across me
 
 ## 11. Homepage — refactored (built)
 
-Implemented in `duna-homepage-redesign.html`. Summary of the decisions:
+Implemented in `apps/web/app/page.tsx`, `homepage.module.css`, and
+`components/home-sand-world.tsx`.
 
-- **Five-layer parallax hero** with fog dissolve; every layer marked `[PLATE]` for Higgsfield replacement.
-- **Signature element: the live strand.** A glass ticker sitting exactly on the fog line, scrolling real activity — Golden Hour 4s with 3 spots, Summer Series, a just-verified result with its rating delta. Flare dots on live items. The only kinetic thing in a still hero. Hover pauses.
-- **Killed the `01 / 02 / 03` markers.** Those three items are three audiences, not a sequence. Now `For players / For competitors / For operators`. Numbering implied an order that doesn't exist.
-- **Small numbers stay small.** 50 / 29 / 4 sit as a quiet inline strip. Oversized Archivo Expanded is spent on the Sand Rating value and the live score, where it's earned.
-- **Backers row** — monochrome at rest, color and 2px lift on hover. Same pattern will carry sponsor logos.
-- **Marine block** for pro tour with a dark live card inside it and a contained presented-by lockup.
-- **Ink block** for Duna HQ. **Dusk-pink panel** for the mobile section, showing the temperature rule: pink for planning, dark for competition.
+- **Signature element: Sand World.** One full-viewport WebGL heightfield stays
+  pinned while the camera moves through four scroll chapters. Wind-shaped dunes,
+  haze, contour structure, and faint court lines make the scene Duna-specific.
+  It is not a literal or asset-level copy of a reference site.
+- **Four chapters, one argument.** Promise → Play → Compete → Operate. Each
+  chapter pairs one oversized Fellix statement with one live product signal.
+  The sequence explains the network before the page asks the visitor to inspect
+  individual products.
+- **White is the light-mode ground.** Sand appears as light and depth, not as a
+  beige page fill. After the opening world, content returns to clean white with
+  rules and whitespace carrying hierarchy.
+- **Numerals carry energy.** Network proof, Sand Rating, dates, inventory, and
+  operator metrics use the documented Archivo tiers. Words remain Fellix.
+- **Dark means live.** Only the Apple Watch / live match-control chapter inverts.
+  Sand Rating, professional browsing, and HQ remain readable editorial zones.
+- **Progressive enhancement is mandatory.** The renderer pauses offscreen,
+  targets 30fps, clamps resolution, and freezes for reduced motion and data
+  saving. CSS supplies the complete static composition if WebGL fails.
+- **The lower page proves the promise.** Current play, portable performance
+  history, the world tour, Watch scoring, and HQ each receive one distinct
+  editorial composition instead of a repeated stack of feature cards.
 
 ---
 
@@ -544,7 +564,8 @@ This is the most important performance surface in the product and currently the 
 **Do**
 
 - Fog-dissolve every image into the page.
-- Build heroes in separate parallax plates.
+- Build photographic heroes in separate parallax plates; the homepage Sand
+  World is the procedural exception.
 - Pair a Fellix headline with a contrasting Archivo numeral at least once on every data-led page.
 - Use Archivo for every number that means something, with `tnum` on.
 - Give every empty state a designed treatment and an honest sentence.
