@@ -23,6 +23,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
 import { EventDivisionExplorer } from "@/components/event-division-explorer";
+import {
+  EventSectionNav,
+  type EventSectionNavItem,
+} from "@/components/event-section-nav";
 import { EventTicketSelector } from "@/components/event-ticket-selector";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -33,9 +37,11 @@ import { TournamentPredictionMarkets } from "@/components/prediction-market";
 import { WeatherForecastCard } from "@/components/weather-forecast";
 import { getServerCaller } from "@/lib/api";
 import {
+  consumerEventJsonLd,
   professionalEventDescription,
   professionalEventImages,
   professionalOgImageUrl,
+  serializeJsonLd,
 } from "@/lib/pro-seo";
 
 function words(value: string | undefined, fallback = "Configured") {
@@ -86,6 +92,9 @@ export async function generateMetadata({
     description,
     alternates: {
       canonical: `/events/${slug}`,
+      types: {
+        "text/markdown": `/events/${slug}.md`,
+      },
     },
     openGraph: {
       title,
@@ -216,12 +225,38 @@ export default async function EventPage({
   const startingPlayerPrice = event.divisions
     ?.map((division) => division.playerPrice)
     .sort((left, right) => left.amountMinor - right.amountMinor)[0];
+  const sectionNav: EventSectionNavItem[] = [
+    { id: "event-overview", label: "Overview" },
+    ...(eventPredictionData?.markets.length
+      ? [{ id: "prediction-markets", label: "Predictions" }]
+      : []),
+    ...(videos.length ? [{ id: "event-media", label: "Watch" }] : []),
+    { id: "event-experience", label: "Experience" },
+    ...(event.features?.length
+      ? [{ id: "event-features", label: "Highlights" }]
+      : []),
+    ...(event.divisions?.length
+      ? [{ id: "divisions", label: "Divisions" }]
+      : []),
+    ...(event.recurrence ? [{ id: "event-schedule", label: "Schedule" }] : []),
+    { id: "event-players", label: "Players" },
+    ...(event.tickets?.length ? [{ id: "tickets", label: "Tickets" }] : []),
+    { id: "event-location", label: "Location" },
+    ...(event.policies?.length
+      ? [{ id: "event-policies", label: "Policies" }]
+      : []),
+  ];
+  const structuredData = consumerEventJsonLd(event);
 
   return (
     <main className="event-public" data-zone="athletic">
       <SiteHeader />
+      <script
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
+        type="application/ld+json"
+      />
 
-      <section className="event-public__hero">
+      <section className="event-public__hero" id="event-overview">
         <div className="event-public__hero-copy">
           <div className="event-public__badges">
             <Badge tone={event.live ? "live" : "neutral"}>
@@ -307,6 +342,8 @@ export default async function EventPage({
         </div>
       </section>
 
+      <EventSectionNav items={sectionNav} />
+
       <section className="event-public__weather">
         <WeatherForecastCard
           forecast={event.weather}
@@ -329,7 +366,7 @@ export default async function EventPage({
       )}
 
       {videos.length > 0 && (
-        <div className="event-public__video">
+        <div className="event-public__video" id="event-media">
           <DunaVideoGallery
             description="Player-streamed views and published replays from this event."
             title={
@@ -344,7 +381,7 @@ export default async function EventPage({
 
       <section className="event-public__layout">
         <div className="event-public__content">
-          <article className="event-public__intro">
+          <article className="event-public__intro" id="event-experience">
             <span className="section__eyebrow">The experience</span>
             <h2>
               {event.kind === "league"
@@ -367,7 +404,7 @@ export default async function EventPage({
           </article>
 
           {event.features && event.features.length > 0 && (
-            <section className="event-public__section">
+            <section className="event-public__section" id="event-features">
               <header>
                 <div>
                   <span className="section__eyebrow">Only here</span>
@@ -482,7 +519,7 @@ export default async function EventPage({
           )}
 
           {event.recurrence && (
-            <section className="event-public__section">
+            <section className="event-public__section" id="event-schedule">
               <header>
                 <div>
                   <span className="section__eyebrow">Season rhythm</span>
@@ -525,7 +562,7 @@ export default async function EventPage({
             </section>
           )}
 
-          <section className="event-public__section">
+          <section className="event-public__section" id="event-players">
             <header>
               <div>
                 <span className="section__eyebrow">Who&apos;s playing</span>
@@ -605,7 +642,10 @@ export default async function EventPage({
             </section>
           )}
 
-          <section className="event-public__section event-public__location">
+          <section
+            className="event-public__section event-public__location"
+            id="event-location"
+          >
             <header>
               <div>
                 <span className="section__eyebrow">Place</span>
@@ -685,7 +725,7 @@ export default async function EventPage({
           </section>
 
           {event.policies && event.policies.length > 0 && (
-            <section className="event-public__section">
+            <section className="event-public__section" id="event-policies">
               <header>
                 <div>
                   <span className="section__eyebrow">Before you join</span>

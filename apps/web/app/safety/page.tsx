@@ -1,6 +1,12 @@
 import { EditorialPage } from "@/components/editorial-page";
 
-export const metadata = { title: "Safety" };
+export const metadata = {
+  title: "Safety",
+  alternates: {
+    canonical: "/safety",
+    types: { "text/markdown": "/safety.md" },
+  },
+};
 
 export default function SafetyPage() {
   return (

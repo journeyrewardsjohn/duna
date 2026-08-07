@@ -15,7 +15,7 @@ import { ProStatTrendChart } from "@/components/pro-stat-trend-chart";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
-import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
+import { professionalTeamJsonLd, serializeJsonLd } from "@/lib/pro-seo";
 import styles from "./team-page.module.css";
 
 async function loadTeam(
@@ -40,7 +40,10 @@ export async function generateMetadata({
   return {
     title: `${team.name} beach volleyball team`,
     description,
-    alternates: { canonical },
+    alternates: {
+      canonical,
+      types: { "text/markdown": `${canonical}.md` },
+    },
     openGraph: {
       title: `${team.name} · Duna Pro Tour`,
       description,
@@ -61,24 +64,7 @@ export default async function ProfessionalTeamPage({
   const team = await loadTeam(teamNo);
   if (!team) notFound();
   const statistics = team.statistics;
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "SportsTeam",
-    name: team.name,
-    sport: "Beach volleyball",
-    url: absolutePublicUrl(`/pro/teams/${team.teamNo}`),
-    athlete: team.players.flatMap((player) =>
-      player.publicPath
-        ? [
-            {
-              "@type": "Person",
-              name: player.name,
-              url: absolutePublicUrl(player.publicPath),
-            },
-          ]
-        : [],
-    ),
-  };
+  const jsonLd = professionalTeamJsonLd(team);
   return (
     <main className={styles.page} data-zone="athletic">
       <SiteHeader />

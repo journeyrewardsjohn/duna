@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { DunaWatchDevice } from "@/components/duna-watch-device";
 import { HomeSandWorld } from "@/components/home-sand-world";
 import { RatingOrbit } from "@/components/rating-orbit";
@@ -29,6 +30,13 @@ const homeMedia = {
   rally: "/media/brand/duna-home-rally-v3.webp",
   operator: "/media/brand/duna-club-hero-v1.webp",
 } as const;
+
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "/",
+    types: { "text/markdown": "/index.md" },
+  },
+};
 
 export default async function HomePage() {
   const caller = await getServerCaller();

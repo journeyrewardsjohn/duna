@@ -18,7 +18,7 @@ import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
 import { compactPlayerName } from "@/lib/player-name";
 import {
-  absolutePublicUrl,
+  matchJsonLd,
   professionalOgImageUrl,
   serializeJsonLd,
 } from "@/lib/pro-seo";
@@ -90,7 +90,10 @@ export async function generateMetadata({
   return {
     title,
     description,
-    alternates: { canonical: `/matches/${matchId}` },
+    alternates: {
+      canonical: `/matches/${matchId}`,
+      types: { "text/markdown": `/matches/${matchId}.md` },
+    },
     openGraph: {
       title,
       description,
@@ -125,29 +128,7 @@ export default async function PublicMatchPage({
   const teamA = teamLabel(match.teamA, true);
   const teamB = teamLabel(match.teamB, true);
   const sourceUrl = publicSourceUrl(match.sourceUrl);
-  const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "SportsEvent",
-    "@id": `${absolutePublicUrl(`/matches/${matchId}`)}#match`,
-    url: absolutePublicUrl(`/matches/${matchId}`),
-    name: `${teamA} vs ${teamB}`,
-    description: `${match.eventName ?? "Beach volleyball match"}: ${match.score
-      .map(([scoreA, scoreB]) => `${scoreA}–${scoreB}`)
-      .join(", ")}`,
-    startDate: match.playedAt,
-    eventStatus: "https://schema.org/EventCompleted",
-    location: {
-      "@type": "Place",
-      name: match.location?.name ?? match.venueName,
-      address: match.location?.address ?? match.location?.label,
-    },
-    competitor: [...match.teamA, ...match.teamB].map((player) => ({
-      "@type": "Person",
-      name: player.displayName,
-      url: player.publicPath ? absolutePublicUrl(player.publicPath) : undefined,
-    })),
-    sameAs: sourceUrl ? [sourceUrl] : undefined,
-  };
+  const structuredData = matchJsonLd(match, sourceUrl);
 
   return (
     <main className="public-match-page" data-zone="athletic">

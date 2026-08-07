@@ -1,6 +1,12 @@
 import { EditorialPage } from "@/components/editorial-page";
 
-export const metadata = { title: "About" };
+export const metadata = {
+  title: "About",
+  alternates: {
+    canonical: "/about",
+    types: { "text/markdown": "/about.md" },
+  },
+};
 
 export default function AboutPage() {
   return (

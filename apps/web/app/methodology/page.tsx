@@ -19,7 +19,10 @@ export const metadata: Metadata = {
   title: "Sand Rating methodology and backtesting",
   description:
     "See how Duna makes pre-match beach volleyball predictions, measures calibration, and compares rating models without looking ahead.",
-  alternates: { canonical: "/methodology" },
+  alternates: {
+    canonical: "/methodology",
+    types: { "text/markdown": "/methodology.md" },
+  },
 };
 
 function percentage(value: number) {

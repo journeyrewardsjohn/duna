@@ -18,11 +18,22 @@ import {
 import type { LucideIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { DUNA_HQ_URL } from "@/lib/site-urls";
 
 const hqHref = DUNA_HQ_URL;
+
+export const metadata: Metadata = {
+  title: "Duna for clubs and coaches",
+  description:
+    "Run beach volleyball programs, registrations, memberships, courts, coaching, communications, and payments in Duna HQ.",
+  alternates: {
+    canonical: "/run-your-club",
+    types: { "text/markdown": "/run-your-club.md" },
+  },
+};
 
 function SmartRulesPreview() {
   return (

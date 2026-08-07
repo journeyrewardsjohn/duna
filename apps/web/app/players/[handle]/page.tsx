@@ -177,7 +177,10 @@ export async function generateMetadata({
   return {
     title: `${player.displayName} beach volleyball profile`,
     description,
-    alternates: { canonical: route.canonicalPath },
+    alternates: {
+      canonical: route.canonicalPath,
+      types: { "text/markdown": `${route.canonicalPath}.md` },
+    },
     openGraph: {
       title: `${player.displayName} · Sand Rating ${player.rating.display.toFixed(2)}`,
       description,
@@ -456,16 +459,32 @@ export default async function PublicPlayerPage({
         description: enrichment?.shortBio ?? editorial ?? fallbackSummary,
         mainEntity: { "@id": `${profileUrl}#person` },
         breadcrumb: { "@id": `${profileUrl}#breadcrumb` },
+        encoding: {
+          "@type": "MediaObject",
+          encodingFormat: "text/markdown",
+          contentUrl: absolutePublicUrl(`${route.canonicalPath}.md`),
+        },
+        publisher: {
+          "@type": "Organization",
+          "@id": `${absolutePublicUrl("/")}#organization`,
+          name: "Duna",
+          url: absolutePublicUrl("/"),
+        },
         dateModified:
           enrichment?.publishedAt ?? latest?.occurredAt ?? undefined,
       },
       {
         "@type": "Person",
         "@id": `${profileUrl}#person`,
+        identifier: player.id,
         name: player.displayName,
+        alternateName: `@${player.handle}`,
         url: profileUrl,
         image: profileImage,
         description: enrichment?.biography ?? editorial ?? fallbackSummary,
+        jobTitle: player.isProfessional
+          ? "Professional beach volleyball player"
+          : "Beach volleyball player",
         nationality: countryCode
           ? { "@type": "Country", name: countryCode }
           : undefined,
@@ -481,13 +500,18 @@ export default async function PublicPlayerPage({
           : undefined,
         sameAs,
         knowsAbout: ["Beach volleyball", "Sand Rating"],
+        subjectOf: { "@id": `${profileUrl}#performance` },
       },
       {
         "@type": "Dataset",
         "@id": `${profileUrl}#performance`,
+        url: profileUrl,
         name: `${player.displayName} verified beach volleyball performance`,
         description: fallbackSummary,
+        about: { "@id": `${profileUrl}#person` },
         creator: { "@type": "Organization", name: "Duna" },
+        dateModified:
+          enrichment?.publishedAt ?? latest?.occurredAt ?? undefined,
         measurementTechnique: "Duna Sand Rating methodology",
         temporalCoverage:
           earliest && latest

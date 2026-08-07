@@ -7,6 +7,17 @@ function isProtectedRoute(pathname: string): boolean {
 }
 
 export default async function proxy(request: NextRequest) {
+  if (request.nextUrl.pathname.endsWith(".md")) {
+    const markdown = request.nextUrl.clone();
+    const canonicalPath = request.nextUrl.pathname.slice(0, -".md".length);
+    markdown.pathname = "/api/public-markdown";
+    markdown.searchParams.set("path", canonicalPath);
+
+    const headers = new Headers(request.headers);
+    headers.set("x-duna-markdown-path", canonicalPath);
+    return NextResponse.rewrite(markdown, { request: { headers } });
+  }
+
   if (!isWorkOSAuthKitConfigured()) {
     if (
       isProtectedRoute(request.nextUrl.pathname) &&

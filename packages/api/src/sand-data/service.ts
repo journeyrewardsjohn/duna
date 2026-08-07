@@ -10391,6 +10391,39 @@ export async function loadPublicProfessionalTeam(teamNo: number) {
   };
 }
 
+export async function loadPublicProfessionalTeamIndex() {
+  requireDatabase();
+  const rows = await getDatabase()
+    .select({ rawPayload: importedMatches.rawPayload })
+    .from(importedMatches)
+    .innerJoin(importSources, eq(importedMatches.sourceId, importSources.id))
+    .where(eq(importSources.slug, "fivb-12ndr"))
+    .limit(10_000);
+  const teams = new Map<
+    number,
+    {
+      readonly teamNo: number;
+      readonly name: string;
+      readonly countryCode?: string;
+    }
+  >();
+  for (const row of rows) {
+    const stored = parseStoredVolleyballWorldMatch(row.rawPayload);
+    for (const team of [stored?.teamA, stored?.teamB]) {
+      if (!team?.teamNo || teams.has(team.teamNo)) continue;
+      teams.set(team.teamNo, {
+        teamNo: team.teamNo,
+        name: team.name,
+        ...(team.countryCode ? { countryCode: team.countryCode } : {}),
+      });
+    }
+  }
+  return [...teams.values()].sort(
+    (left, right) =>
+      left.name.localeCompare(right.name) || left.teamNo - right.teamNo,
+  );
+}
+
 export type PlayerSourceConnectionSource = "volleyball-life" | "bvbinfo";
 
 export function parsePlayerSourceProfile(

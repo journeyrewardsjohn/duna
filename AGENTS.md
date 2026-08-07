@@ -151,6 +151,33 @@ When the documents appear to conflict, preserve these invariants:
   future-time validation, location confidence, and the participant lock rule.
   Never place a public site header inside the authenticated Player shell.
 
+## Public knowledge, SEO, AEO, and agent access
+
+- Every indexable public route in the sitemap must have one canonical HTML URL
+  and a deterministic Markdown companion. Append `.md` to the pathname; use
+  `/index.md` for the homepage. The Markdown response is a representation, not
+  a competing canonical page, and must link back to Duna for live state,
+  registration, booking, tickets, purchases, and checkout.
+- `/agents` is Markdown-only and is the authoritative machine navigation and
+  interpretation guide. `/sitemap.md` pairs the XML sitemap with all Markdown
+  representations. `llms.txt` stays compact and points to both.
+- Event, player, match, and professional-team templates must emit one coherent
+  JSON-LD graph with stable entity IDs, canonical URLs, breadcrumbs, verified
+  identity links, dates, timezone-aware location data, and Markdown encoding.
+  Do not create structured data for facts that are absent from the visible
+  public page, and never promise a search feature or ranking.
+- Public event pages use a sticky, horizontally scrollable section index with
+  active-section state. Every target uses a stable fragment ID and at least
+  80px scroll clearance. The index reflects only sections actually rendered.
+- The public MCP Streamable HTTP endpoint supports the current stable protocol
+  plus an explicit migration window for the previous stable version. Public
+  tools and resources return structured data, canonical URLs, Markdown URLs,
+  provenance, and explicit pending states. Mutations remain authenticated,
+  role-gated, and audited.
+- Missing public data is unverified, not zero and not permission to infer.
+  Broadcasts, venues, player mappings, results, rankings, prices, spots, and
+  availability must preserve this distinction.
+
 ## Surface ownership
 
 - `apps/web`: public editorial pages, player web experience, Pro tour, events,

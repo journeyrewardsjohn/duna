@@ -8,6 +8,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CatalogCheckoutPanel } from "@/components/catalog-checkout-panel";
 import { CatalogMediaGallery } from "@/components/catalog-media-gallery";
@@ -15,6 +16,47 @@ import { MarkdownContent } from "@/components/markdown-content";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
+import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
+
+export async function generateMetadata({
+  params,
+}: {
+  readonly params: Promise<{ slug: string; productSlug: string }>;
+}): Promise<Metadata> {
+  const { slug, productSlug } = await params;
+  const caller = await getServerCaller();
+  const storefront = await caller.public
+    .organizationStorefront({ slug })
+    .catch(() => undefined);
+  const item = storefront?.catalog.find(
+    (candidate) => candidate.slug === productSlug,
+  );
+  if (!storefront || !item) return { title: "Offer not found" };
+  const canonical = `/clubs/${slug}/products/${productSlug}`;
+  const description =
+    item.shortSummary ??
+    item.description ??
+    `Review ${item.title} from ${storefront.name} and book through Duna.`;
+  return {
+    title: `${item.title} · ${storefront.name}`,
+    description,
+    alternates: {
+      canonical,
+      types: { "text/markdown": `${canonical}.md` },
+    },
+    openGraph: {
+      title: item.title,
+      description,
+      type: "website",
+      url: canonical,
+      images: item.media
+        .filter((media) => media.kind === "image")
+        .slice(0, 1)
+        .map((media) => ({ url: media.url, alt: media.alt ?? item.title })),
+    },
+    robots: { index: item.visibility === "public", follow: true },
+  };
+}
 
 export default async function CatalogProductPage({
   params,
@@ -65,10 +107,70 @@ export default async function CatalogProductPage({
     !Array.isArray(item.configuration.membership)
       ? (item.configuration.membership as Readonly<Record<string, unknown>>)
       : undefined;
+  const canonicalPath = `/clubs/${slug}/products/${productSlug}`;
+  const pageUrl = absolutePublicUrl(canonicalPath);
+  const offers = item.variants.flatMap((variant) =>
+    variant.prices.flatMap((price) =>
+      price.amountMinor !== undefined && price.currency
+        ? [
+            {
+              "@type": "Offer",
+              name: variant.title,
+              price: price.amountMinor / 100,
+              priceCurrency: price.currency,
+              availability:
+                variant.availableQuantity === 0
+                  ? "https://schema.org/SoldOut"
+                  : "https://schema.org/InStock",
+              url: pageUrl,
+            },
+          ]
+        : [],
+    ),
+  );
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": `${pageUrl}#page`,
+        url: pageUrl,
+        name: item.title,
+        mainEntity: { "@id": `${pageUrl}#offer` },
+        encoding: {
+          "@type": "MediaObject",
+          encodingFormat: "text/markdown",
+          contentUrl: absolutePublicUrl(`${canonicalPath}.md`),
+        },
+      },
+      {
+        "@type": item.type === "good" ? "Product" : "Service",
+        "@id": `${pageUrl}#offer`,
+        identifier: item.id,
+        name: item.title,
+        description: item.description ?? item.shortSummary,
+        image: item.media
+          .filter((media) => media.kind === "image")
+          .map((media) => media.url),
+        url: pageUrl,
+        provider: {
+          "@type": "SportsOrganization",
+          "@id": `${absolutePublicUrl(`/clubs/${slug}`)}#organization`,
+          name: storefront.name,
+          url: absolutePublicUrl(`/clubs/${slug}`),
+        },
+        offers: offers.length ? offers : undefined,
+      },
+    ],
+  };
 
   return (
     <main className="public-detail catalog-product-page" data-zone="editorial">
       <SiteHeader />
+      <script
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
+        type="application/ld+json"
+      />
       <div className="catalog-product-shell">
         <Link className="catalog-product-back" href={`/clubs/${slug}`}>
           <ArrowLeft size={16} /> Back to {storefront.name}

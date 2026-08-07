@@ -28,6 +28,10 @@ import { ProEventVenueCard } from "@/components/pro-event-venue-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { CountryCode } from "@/components/country-code";
+import {
+  EventSectionNav,
+  type EventSectionNavItem,
+} from "@/components/event-section-nav";
 import { professionalEventJsonLd, serializeJsonLd } from "@/lib/pro-seo";
 
 type ProMatch = PublicProEvent["matches"][number];
@@ -74,9 +78,11 @@ function statisticValue(value: number | undefined, metric?: string): string {
 }
 
 function TournamentIntelligence({
+  id,
   insights,
   statistics,
 }: {
+  readonly id?: string;
   readonly insights?: PublicProEvent["tournamentInsights"];
   readonly statistics: TournamentStatistics;
 }) {
@@ -90,7 +96,7 @@ function TournamentIntelligence({
         : "Digs per set and opponent hitting efficiency have not shown a meaningful linear relationship yet."
     : "More completed matches are needed before Duna reports a stable relationship between defense and opponent attack efficiency.";
   return (
-    <section className="pro-event-section pro-tournament-intelligence">
+    <section className="pro-event-section pro-tournament-intelligence" id={id}>
       <header>
         <div>
           <span className="page-eyebrow">Official match analytics</span>
@@ -609,6 +615,39 @@ export function ProEventDetail({
         ),
     }));
   const structuredData = professionalEventJsonLd(event);
+  const sectionNav: EventSectionNavItem[] = [
+    { id: "event-overview", label: "Overview" },
+    ...(venueAddress && venueMapHref
+      ? [{ id: "event-location", label: "Location" }]
+      : []),
+    { id: "where-to-watch", label: "Watch" },
+    ...(event.avpLeague
+      ? [{ id: "league-standings", label: "League standings" }]
+      : []),
+    ...(browsableEntries.length ? [{ id: "event-teams", label: "Teams" }] : []),
+    ...(event.tournamentStatistics
+      ? [{ id: "tournament-statistics", label: "Statistics" }]
+      : []),
+    ...(event.status === "completed" &&
+    !event.live &&
+    (event.podium.champion || event.podium.runnerUp || event.podium.thirdPlace)
+      ? [{ id: "event-podium", label: "Podium" }]
+      : []),
+    ...(confirmedBracket.length
+      ? [{ id: "event-bracket", label: "Bracket" }]
+      : []),
+    ...(event.pools.length ? [{ id: "pool-standings", label: "Pools" }] : []),
+    ...(!event.avpLeague && event.liveStandings.length
+      ? [{ id: "event-standings", label: "Standings" }]
+      : []),
+    ...(eventMarkets.length
+      ? [{ id: "prediction-markets", label: "Predictions" }]
+      : []),
+    ...(topMatches.length
+      ? [{ id: "top-matches", label: event.live ? "Live and next" : "Next" }]
+      : []),
+    { id: "match-results", label: "All matches" },
+  ];
 
   return (
     <main className="pro-event-page" data-zone="athletic">
@@ -618,7 +657,7 @@ export function ProEventDetail({
         type="application/ld+json"
       />
 
-      <section className="pro-event-hero">
+      <section className="pro-event-hero" id="event-overview">
         <div className="pro-event-hero__inner">
           <Link className="pro-back-link" href="/pro">
             <ArrowLeft aria-hidden size={15} />
@@ -746,19 +785,22 @@ export function ProEventDetail({
         </aside>
       </section>
 
+      <EventSectionNav items={sectionNav} />
+
       <div
         className={`pro-event-content${event.live ? " pro-event-content--live" : ""}`}
       >
         {venueAddress && venueMapHref && (
           <ProEventVenueCard
             address={venueAddress}
+            id="event-location"
             mapHref={venueMapHref}
             mapImageSrc={`/api/places/map?${venueMapParameters.toString()}`}
             timezone={event.editorial.timezone}
             title={event.editorial.venueName ?? event.location ?? venueAddress}
           />
         )}
-        <section className="pro-event-section pro-watch">
+        <section className="pro-event-section pro-watch" id="where-to-watch">
           <header>
             <div>
               <span className="page-eyebrow">Broadcast guide</span>
@@ -860,7 +902,10 @@ export function ProEventDetail({
         </section>
 
         {event.avpLeague && (
-          <section className="pro-event-section pro-avp-league">
+          <section
+            className="pro-event-section pro-avp-league"
+            id="league-standings"
+          >
             <header>
               <div>
                 <span className="page-eyebrow">
@@ -882,7 +927,10 @@ export function ProEventDetail({
         )}
 
         {browsableEntries.length > 0 && (
-          <section className="pro-event-section pro-entry-lists">
+          <section
+            className="pro-event-section pro-entry-lists"
+            id="event-teams"
+          >
             <header>
               <div>
                 <span className="page-eyebrow">Official entry lists</span>
@@ -896,6 +944,7 @@ export function ProEventDetail({
 
         {event.tournamentStatistics && (
           <TournamentIntelligence
+            id="tournament-statistics"
             insights={event.tournamentInsights}
             statistics={event.tournamentStatistics}
           />
@@ -906,7 +955,7 @@ export function ProEventDetail({
           (event.podium.champion ||
             event.podium.runnerUp ||
             event.podium.thirdPlace) && (
-            <section className="pro-event-section pro-podium">
+            <section className="pro-event-section pro-podium" id="event-podium">
               <header>
                 <div>
                   <span className="page-eyebrow">Final results</span>
@@ -941,7 +990,7 @@ export function ProEventDetail({
           )}
 
         {confirmedBracket.length > 0 && (
-          <section className="pro-event-section pro-bracket">
+          <section className="pro-event-section pro-bracket" id="event-bracket">
             <header>
               <div>
                 <span className="page-eyebrow">Knockout rounds</span>
@@ -1011,7 +1060,7 @@ export function ProEventDetail({
         )}
 
         {event.pools.length > 0 && (
-          <section className="pro-event-section pro-pools">
+          <section className="pro-event-section pro-pools" id="pool-standings">
             <header>
               <div>
                 <span className="page-eyebrow">Opening stage</span>
@@ -1060,6 +1109,7 @@ export function ProEventDetail({
           <section
             className="pro-event-section pro-live-table"
             data-zone={event.live ? "live" : "athletic"}
+            id="event-standings"
           >
             <header>
               <div>
@@ -1118,7 +1168,10 @@ export function ProEventDetail({
         )}
 
         {topMatches.length > 0 && (
-          <section className="pro-event-section pro-top-matches">
+          <section
+            className="pro-event-section pro-top-matches"
+            id="top-matches"
+          >
             <header>
               <div>
                 <span className="page-eyebrow">
