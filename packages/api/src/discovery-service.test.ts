@@ -2,6 +2,7 @@ import type { EventSummary, VenueSummary } from "@duna/core";
 import { describe, expect, it } from "vitest";
 import type { PublicCoach } from "./contracts";
 import { buildDiscoveryMap } from "./discovery-service";
+import type { PublicProEvent } from "./sand-data/service";
 
 const venue: VenueSummary = {
   id: "venue-1",
@@ -105,5 +106,38 @@ describe("buildDiscoveryMap", () => {
       "venue:venue-1",
       "event:event-1",
     ]);
+  });
+
+  it("uses professional event posters before the default media library", () => {
+    const proEvent = {
+      id: "pro-event-1",
+      slug: "bpt-elite16-hamburg-womens-2026-08-05",
+      name: "BPT Elite16 Hamburg",
+      tour: "bpt",
+      source: "fivb",
+      genderCategory: "women",
+      startsOn: "2026-08-05",
+      endsOn: "2026-08-09",
+      status: "live",
+      live: true,
+      poster: {
+        url: "https://example.com/hamburg-official-poster.jpg",
+        alt: "Official Hamburg event poster",
+        kind: "poster",
+      },
+    } as unknown as PublicProEvent;
+    const result = buildDiscoveryMap({
+      events: [],
+      venues: [],
+      coaches: [],
+      proEvents: [proEvent],
+      now: new Date("2026-08-07T12:00:00.000Z"),
+    });
+
+    expect(result.items[0]).toMatchObject({
+      entityType: "pro-tour",
+      imageUrl: "https://example.com/hamburg-official-poster.jpg",
+      imageFit: "contain",
+    });
   });
 });

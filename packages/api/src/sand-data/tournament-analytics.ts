@@ -132,9 +132,11 @@ function hittingEfficiency(
   errors: number,
   attempts: number,
 ): number | undefined {
-  return attempts > 0
-    ? rounded(((points - errors) / attempts) * 100)
-    : undefined;
+  if (attempts <= 0) return undefined;
+  const value = ((points - errors) / attempts) * 100;
+  // Partial box scores can report kills without every continuation attempt.
+  // Suppress impossible values rather than presenting 200%+ efficiency.
+  return value >= -100 && value <= 100 ? rounded(value) : undefined;
 }
 
 function pearson(

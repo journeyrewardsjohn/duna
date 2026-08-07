@@ -7,6 +7,7 @@ import {
   mergeProfessionalEventPayload,
   parseAvpLeagueEventPayload,
   parsePlayerSourceProfile,
+  preferredProfessionalEventCardMedia,
   professionalEventCurrentRound,
   professionalEventSlug,
   professionalMatchCanonicalPath,
@@ -598,6 +599,27 @@ describe("professional live match timing", () => {
 });
 
 describe("professional event division details", () => {
+  it("prefers an official poster over a featured fallback for event cards", () => {
+    expect(
+      preferredProfessionalEventCardMedia([
+        {
+          id: "generated-hero",
+          kind: "hero-image",
+          url: "https://example.com/generated.jpg",
+          alt: "Generated venue atmosphere",
+          featured: true,
+        },
+        {
+          id: "official-poster",
+          kind: "poster",
+          url: "https://example.com/official-poster.jpg",
+          alt: "Official Hamburg event poster",
+          featured: false,
+        },
+      ]),
+    ).toMatchObject({ id: "official-poster", kind: "poster" });
+  });
+
   it("uses event-wide sibling details only when this division is missing them", () => {
     expect(
       inheritProfessionalEventEditorial(

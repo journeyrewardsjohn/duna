@@ -2,6 +2,7 @@
 
 import type { PublicProEvent } from "@duna/api";
 import { Numeric } from "@duna/ui";
+import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { CountryCode } from "@/components/country-code";
@@ -17,6 +18,8 @@ const labels: Readonly<Record<EntryList, string>> = {
   league: "League",
 };
 
+const entryPreviewLimit = 8;
+
 export function ProEntryListBrowser({
   entries,
 }: {
@@ -30,7 +33,12 @@ export function ProEntryListBrowser({
     [entries],
   );
   const [selected, setSelected] = useState<EntryList>(lists[0] ?? "main-draw");
+  const [expanded, setExpanded] = useState(false);
   const visibleEntries = entries.filter((entry) => entry.list === selected);
+  const displayedEntries = visibleEntries.slice(
+    0,
+    expanded ? visibleEntries.length : entryPreviewLimit,
+  );
 
   return (
     <div className="pro-entry-browser">
@@ -44,7 +52,10 @@ export function ProEntryListBrowser({
             aria-controls="pro-entry-table"
             aria-selected={selected === list}
             key={list}
-            onClick={() => setSelected(list)}
+            onClick={() => {
+              setSelected(list);
+              setExpanded(false);
+            }}
             role="tab"
             type="button"
           >
@@ -61,7 +72,7 @@ export function ProEntryListBrowser({
           <span>Entry pts</span>
           <span>Technical</span>
         </div>
-        {visibleEntries.map((team) => (
+        {displayedEntries.map((team) => (
           <article
             className={
               selected === "withdrawn"
@@ -106,6 +117,19 @@ export function ProEntryListBrowser({
             </span>
           </article>
         ))}
+        {visibleEntries.length > entryPreviewLimit && (
+          <button
+            aria-expanded={expanded}
+            className="pro-entry-list__disclosure"
+            onClick={() => setExpanded((value) => !value)}
+            type="button"
+          >
+            {expanded
+              ? "Show fewer teams"
+              : `See all ${visibleEntries.length} ${labels[selected].toLowerCase()} teams`}
+            <ChevronDown aria-hidden size={17} />
+          </button>
+        )}
       </div>
     </div>
   );

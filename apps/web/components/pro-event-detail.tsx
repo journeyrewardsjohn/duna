@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   ArrowRight,
   CalendarDays,
+  ChevronDown,
   ExternalLink,
   MapPin,
   Radio,
@@ -77,6 +78,120 @@ function statisticValue(value: number | undefined, metric?: string): string {
     : value.toFixed(2);
 }
 
+const tournamentLeaderPreview = 5;
+const broadcastPreview = 6;
+const poolPreview = 2;
+const standingPreview = 8;
+const matchGroupPreview = 2;
+const matchPreviewPerGroup = 4;
+
+function DisclosureSummary({
+  collapsed,
+  expanded = "Show fewer",
+}: {
+  readonly collapsed: string;
+  readonly expanded?: string;
+}) {
+  return (
+    <summary className="pro-disclosure__summary">
+      <span className="pro-disclosure__when-closed">{collapsed}</span>
+      <span className="pro-disclosure__when-open">{expanded}</span>
+      <ChevronDown aria-hidden size={17} />
+    </summary>
+  );
+}
+
+function tournamentNarrative(
+  statistics: TournamentStatistics,
+  insights?: PublicProEvent["tournamentInsights"],
+) {
+  if (insights) {
+    return {
+      headline: insights.headline,
+      summary: insights.summary,
+      findings: insights.findings,
+      generatedByModel: true,
+    };
+  }
+  const coverage = statistics.coverage;
+  const lead = statistics.standouts[0];
+  const findings = statistics.standouts.slice(0, 3).map((standout) => ({
+    metric: standout.metric,
+    title: `${standout.label}: ${standout.teamName}`,
+    explanation: `${statisticValue(standout.value, standout.metric)} across ${standout.matches} ${standout.matches === 1 ? "match" : "matches"}, ${statisticValue(standout.delta, standout.metric)} above this field's current average.`,
+  }));
+  return {
+    headline: lead
+      ? `${lead.teamName} is setting the current statistical pace.`
+      : "The tournament picture is still taking shape.",
+    summary: `Official box scores are available for ${coverage.matchesWithStatistics} of ${coverage.totalMatches} matches. Duna is comparing every available team on the same per-set basis so early leaders are easier to read without mistaking a partial sample for a final verdict.`,
+    findings,
+    generatedByModel: false,
+  };
+}
+
+function TournamentTeamLeaderRow({
+  team,
+}: {
+  readonly team: TournamentStatistics["teams"][number];
+}) {
+  const content = (
+    <>
+      <strong>{team.name}</strong>
+      <span>
+        <Numeric tier="table">
+          {statisticValue(team.hittingEfficiency, "hittingEfficiency")}
+        </Numeric>
+      </span>
+      <span>
+        <Numeric tier="table">{statisticValue(team.acesPerSet)}</Numeric>
+      </span>
+      <span>
+        <Numeric tier="table">{statisticValue(team.blocksPerSet)}</Numeric>
+      </span>
+      <span>
+        <Numeric tier="table">{statisticValue(team.digsPerSet)}</Numeric>
+      </span>
+    </>
+  );
+  return team.teamNo ? (
+    <Link href={`/pro/teams/${team.teamNo}`}>{content}</Link>
+  ) : (
+    <div>{content}</div>
+  );
+}
+
+function TournamentPlayerLeaderRow({
+  player,
+}: {
+  readonly player: TournamentStatistics["players"][number];
+}) {
+  const content = (
+    <>
+      <strong>{player.name}</strong>
+      <span>
+        <Numeric tier="table">{player.points}</Numeric>
+      </span>
+      <span>
+        <Numeric tier="table">
+          {statisticValue(player.hittingEfficiency, "hittingEfficiency")}
+        </Numeric>
+      </span>
+      <span>
+        <Numeric tier="table">{player.aces}</Numeric>
+      </span>
+      <span>
+        <Numeric tier="table">{player.digs}</Numeric>
+      </span>
+    </>
+  );
+  return player.publicPath ? (
+    <Link href={player.publicPath}>{content}</Link>
+  ) : (
+    <div>{content}</div>
+  );
+}
+
 function TournamentIntelligence({
   id,
   insights,
@@ -88,6 +203,7 @@ function TournamentIntelligence({
 }) {
   const correlation =
     statistics.correlations.digsPerSetVsOpponentHittingEfficiency;
+  const narrative = tournamentNarrative(statistics, insights);
   const correlationCopy = correlation
     ? correlation.direction === "negative"
       ? "As opponent hitting efficiency rose, recorded digs per set generally fell in this field."
@@ -110,6 +226,33 @@ function TournamentIntelligence({
           matches
         </Badge>
       </header>
+      <article className="pro-tournament-intelligence__ai">
+        <Sparkles aria-hidden size={21} />
+        <div>
+          <span>
+            {narrative.generatedByModel
+              ? "Duna AI tournament read"
+              : "Duna tournament read"}
+          </span>
+          <h3>{narrative.headline}</h3>
+          <p>{narrative.summary}</p>
+          {narrative.findings.length > 0 && (
+            <ul>
+              {narrative.findings.map((finding) => (
+                <li key={`${finding.metric}-${finding.title}`}>
+                  <strong>{finding.title}</strong>
+                  <span>{finding.explanation}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <small className="pro-tournament-intelligence__ai-source">
+            {narrative.generatedByModel
+              ? "AI-generated from official aggregate match statistics; no tactical cause is inferred."
+              : "Evidence summary from official aggregate match statistics. A verified AI analysis appears here when one is available."}
+          </small>
+        </div>
+      </article>
       <div className="pro-tournament-intelligence__overview">
         <div className="pro-tournament-intelligence__averages">
           <article>
@@ -172,24 +315,6 @@ function TournamentIntelligence({
           </small>
         </aside>
       </div>
-      {insights && (
-        <article className="pro-tournament-intelligence__ai">
-          <Sparkles aria-hidden size={21} />
-          <div>
-            <span>Duna tournament analyst</span>
-            <h3>{insights.headline}</h3>
-            <p>{insights.summary}</p>
-            <ul>
-              {insights.findings.map((finding) => (
-                <li key={`${finding.metric}-${finding.title}`}>
-                  <strong>{finding.title}</strong>
-                  <span>{finding.explanation}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </article>
-      )}
       <div className="pro-tournament-intelligence__standouts">
         {statistics.standouts.map((standout) => (
           <article key={standout.metric}>
@@ -227,43 +352,24 @@ function TournamentIntelligence({
               <span>Blocks</span>
               <span>Digs</span>
             </div>
-            {statistics.teams.slice(0, 12).map((team) => {
-              const content = (
-                <>
-                  <strong>{team.name}</strong>
-                  <span>
-                    <Numeric tier="table">
-                      {statisticValue(
-                        team.hittingEfficiency,
-                        "hittingEfficiency",
-                      )}
-                    </Numeric>
-                  </span>
-                  <span>
-                    <Numeric tier="table">
-                      {statisticValue(team.acesPerSet)}
-                    </Numeric>
-                  </span>
-                  <span>
-                    <Numeric tier="table">
-                      {statisticValue(team.blocksPerSet)}
-                    </Numeric>
-                  </span>
-                  <span>
-                    <Numeric tier="table">
-                      {statisticValue(team.digsPerSet)}
-                    </Numeric>
-                  </span>
-                </>
-              );
-              return team.teamNo ? (
-                <Link href={`/pro/teams/${team.teamNo}`} key={team.key}>
-                  {content}
-                </Link>
-              ) : (
-                <div key={team.key}>{content}</div>
-              );
-            })}
+            {statistics.teams.slice(0, tournamentLeaderPreview).map((team) => (
+              <TournamentTeamLeaderRow key={team.key} team={team} />
+            ))}
+            {statistics.teams.length > tournamentLeaderPreview && (
+              <details className="pro-disclosure pro-tournament-intelligence__table-more">
+                <DisclosureSummary
+                  collapsed={`See all ${statistics.teams.length} teams`}
+                  expanded="Show top teams"
+                />
+                <div>
+                  {statistics.teams
+                    .slice(tournamentLeaderPreview)
+                    .map((team) => (
+                      <TournamentTeamLeaderRow key={team.key} team={team} />
+                    ))}
+                </div>
+              </details>
+            )}
           </div>
         </section>
         <section>
@@ -279,37 +385,32 @@ function TournamentIntelligence({
               <span>Aces</span>
               <span>Digs</span>
             </div>
-            {statistics.players.slice(0, 12).map((player) => {
-              const content = (
-                <>
-                  <strong>{player.name}</strong>
-                  <span>
-                    <Numeric tier="table">{player.points}</Numeric>
-                  </span>
-                  <span>
-                    <Numeric tier="table">
-                      {statisticValue(
-                        player.hittingEfficiency,
-                        "hittingEfficiency",
-                      )}
-                    </Numeric>
-                  </span>
-                  <span>
-                    <Numeric tier="table">{player.aces}</Numeric>
-                  </span>
-                  <span>
-                    <Numeric tier="table">{player.digs}</Numeric>
-                  </span>
-                </>
-              );
-              return player.publicPath ? (
-                <Link href={player.publicPath} key={player.externalPlayerId}>
-                  {content}
-                </Link>
-              ) : (
-                <div key={player.externalPlayerId}>{content}</div>
-              );
-            })}
+            {statistics.players
+              .slice(0, tournamentLeaderPreview)
+              .map((player) => (
+                <TournamentPlayerLeaderRow
+                  key={player.externalPlayerId}
+                  player={player}
+                />
+              ))}
+            {statistics.players.length > tournamentLeaderPreview && (
+              <details className="pro-disclosure pro-tournament-intelligence__table-more">
+                <DisclosureSummary
+                  collapsed={`See all ${statistics.players.length} players`}
+                  expanded="Show top players"
+                />
+                <div>
+                  {statistics.players
+                    .slice(tournamentLeaderPreview)
+                    .map((player) => (
+                      <TournamentPlayerLeaderRow
+                        key={player.externalPlayerId}
+                        player={player}
+                      />
+                    ))}
+                </div>
+              </details>
+            )}
           </div>
         </section>
       </div>
@@ -558,6 +659,9 @@ export function ProEventDetail({
   const matchBroadcasts = event.matches.filter(
     (match) => match.watchOptions.length > 0,
   );
+  const matchBroadcastOptions = matchBroadcasts.flatMap((match) =>
+    match.watchOptions.map((option) => ({ match, option })),
+  );
   const browsableEntries = event.teamEntries.filter(
     (entry) => entry.list !== "league" || !event.avpLeague,
   );
@@ -648,6 +752,169 @@ export function ProEventDetail({
       : []),
     { id: "match-results", label: "All matches" },
   ];
+  const renderBroadcastOption = ({
+    match,
+    option,
+  }: (typeof matchBroadcastOptions)[number]) => {
+    const content = (
+      <>
+        {option.kind === "youtube" ? (
+          <Video aria-hidden size={19} />
+        ) : (
+          <Tv aria-hidden size={19} />
+        )}
+        <span>
+          <small>
+            {match.time ?? "Time pending"} · {option.label}
+          </small>
+          <strong>
+            {match.leagueTeamAName ?? match.teamA.label} vs.{" "}
+            {match.leagueTeamBName ?? match.teamB.label}
+          </strong>
+        </span>
+        <ArrowRight aria-hidden size={14} />
+      </>
+    );
+    return option.url ? (
+      <a
+        href={option.url}
+        key={`${match.id}-${option.id}`}
+        rel="noreferrer"
+        target="_blank"
+      >
+        {content}
+      </a>
+    ) : (
+      <Link href={match.canonicalPath} key={`${match.id}-${option.id}`}>
+        {content}
+      </Link>
+    );
+  };
+  const renderPool = (pool: PublicProEvent["pools"][number]) => (
+    <article key={pool.name}>
+      <header>
+        <h3>{pool.name}</h3>
+        <span>
+          <Numeric tier="chip">{pool.completedMatches}</Numeric>/
+          <Numeric tier="chip">{pool.matchCount}</Numeric>
+        </span>
+      </header>
+      <div className="pro-standing-head">
+        <span>#</span>
+        <span>Team</span>
+        <span>W</span>
+        <span>L</span>
+        <span>Sets</span>
+        <span aria-label="Points for" title="Points for">
+          PF
+        </span>
+        <span aria-label="Points against" title="Points against">
+          PA
+        </span>
+      </div>
+      {pool.standings.map((standing, index) => (
+        <div className="pro-standing-row" key={standing.team.key}>
+          <b>
+            <Numeric tier="table">{index + 1}</Numeric>
+          </b>
+          <TeamName compact team={standing.team} />
+          <strong>
+            <Numeric tier="table">{standing.wins}</Numeric>
+          </strong>
+          <span>
+            <Numeric tier="table">{standing.losses}</Numeric>
+          </span>
+          <small>
+            <Numeric tier="table">
+              {standing.setsFor}–{standing.setsAgainst}
+            </Numeric>
+          </small>
+          <small>
+            <Numeric tier="table">{standing.pointsFor}</Numeric>
+          </small>
+          <small>
+            <Numeric tier="table">{standing.pointsAgainst}</Numeric>
+          </small>
+        </div>
+      ))}
+    </article>
+  );
+  const renderLiveStanding = (
+    standing: PublicProEvent["liveStandings"][number],
+    index: number,
+  ) => (
+    <div className="pro-live-table__row" key={standing.team.key}>
+      <span aria-label={`Place ${index + 1}`} className="pro-live-table__place">
+        <Numeric tier="table">{standing.medal ?? index + 1}</Numeric>
+      </span>
+      <div className="pro-live-table__team">
+        <TeamName compact team={standing.team} />
+        <small>
+          {standing.stageLabel} · {standing.state}
+        </small>
+      </div>
+      <strong>
+        <Numeric tier="table">{standing.wins}</Numeric>
+      </strong>
+      <span>
+        <Numeric tier="table">{standing.losses}</Numeric>
+      </span>
+      <span>
+        <Numeric tier="table">
+          {standing.setsFor}–{standing.setsAgainst}
+        </Numeric>
+      </span>
+      <span>
+        <Numeric tier="table">
+          {standing.pointsFor}–{standing.pointsAgainst}
+        </Numeric>
+      </span>
+    </div>
+  );
+  const renderResultCard = (match: ProMatch) => (
+    <ProfessionalMatchCard
+      context={
+        match.leagueTeamAName && match.leagueTeamBName
+          ? `${match.leagueTeamAName} vs. ${match.leagueTeamBName}`
+          : (match.court ?? event.name)
+      }
+      currentSetNo={match.liveScore?.currentSetNo}
+      href={match.canonicalPath}
+      key={match.id}
+      playedAt={match.playedAt}
+      predictionMarket={matchMarkets[match.id]}
+      roundLabel={match.roundLabel}
+      sets={match.sets}
+      source={event.source}
+      status={match.status}
+      teamA={match.teamA}
+      teamB={match.teamB}
+      timeLabel={match.time}
+      winnerSide={match.winnerSide}
+    />
+  );
+  const renderMatchGroup = (group: (typeof matchGroups)[number]) => (
+    <section key={group.roundLabel}>
+      <header>
+        <h3>{group.roundLabel}</h3>
+        <span>{group.matches.length} matches</span>
+      </header>
+      <div>
+        {group.matches.slice(0, matchPreviewPerGroup).map(renderResultCard)}
+      </div>
+      {group.matches.length > matchPreviewPerGroup && (
+        <details className="pro-disclosure pro-match-result-group__disclosure">
+          <DisclosureSummary
+            collapsed={`See all ${group.matches.length} ${group.roundLabel} matches`}
+            expanded={`Show fewer ${group.roundLabel} matches`}
+          />
+          <div className="pro-match-result-group__more">
+            {group.matches.slice(matchPreviewPerGroup).map(renderResultCard)}
+          </div>
+        </details>
+      )}
+    </section>
+  );
 
   return (
     <main className="pro-event-page" data-zone="athletic">
@@ -808,7 +1075,7 @@ export function ProEventDetail({
             </div>
             <Tv aria-hidden size={23} />
           </header>
-          {event.watchOptions.length > 0 || matchBroadcasts.length > 0 ? (
+          {event.watchOptions.length > 0 || matchBroadcastOptions.length > 0 ? (
             <>
               {event.watchOptions.length > 0 && (
                 <div>
@@ -847,49 +1114,27 @@ export function ProEventDetail({
                   })}
                 </div>
               )}
-              {matchBroadcasts.length > 0 && (
-                <div className="pro-watch__match-guide">
-                  {matchBroadcasts.flatMap((match) =>
-                    match.watchOptions.map((option) => {
-                      const content = (
-                        <>
-                          {option.kind === "youtube" ? (
-                            <Video aria-hidden size={19} />
-                          ) : (
-                            <Tv aria-hidden size={19} />
-                          )}
-                          <span>
-                            <small>
-                              {match.time ?? "Time pending"} · {option.label}
-                            </small>
-                            <strong>
-                              {match.leagueTeamAName ?? match.teamA.label} vs.{" "}
-                              {match.leagueTeamBName ?? match.teamB.label}
-                            </strong>
-                          </span>
-                          <ArrowRight aria-hidden size={14} />
-                        </>
-                      );
-                      return option.url ? (
-                        <a
-                          href={option.url}
-                          key={`${match.id}-${option.id}`}
-                          rel="noreferrer"
-                          target="_blank"
-                        >
-                          {content}
-                        </a>
-                      ) : (
-                        <Link
-                          href={match.canonicalPath}
-                          key={`${match.id}-${option.id}`}
-                        >
-                          {content}
-                        </Link>
-                      );
-                    }),
+              {matchBroadcastOptions.length > 0 && (
+                <>
+                  <div className="pro-watch__match-guide">
+                    {matchBroadcastOptions
+                      .slice(0, broadcastPreview)
+                      .map(renderBroadcastOption)}
+                  </div>
+                  {matchBroadcastOptions.length > broadcastPreview && (
+                    <details className="pro-disclosure pro-watch__disclosure">
+                      <DisclosureSummary
+                        collapsed={`See all ${matchBroadcastOptions.length} broadcasts`}
+                        expanded="Show fewer broadcasts"
+                      />
+                      <div className="pro-watch__match-guide pro-watch__match-guide--more">
+                        {matchBroadcastOptions
+                          .slice(broadcastPreview)
+                          .map(renderBroadcastOption)}
+                      </div>
+                    </details>
                   )}
-                </div>
+                </>
               )}
             </>
           ) : (
@@ -1069,39 +1314,19 @@ export function ProEventDetail({
               <Badge>{event.pools.length} pools</Badge>
             </header>
             <div className="pro-pool-grid">
-              {event.pools.map((pool) => (
-                <article key={pool.name}>
-                  <header>
-                    <h3>{pool.name}</h3>
-                    <span>
-                      {pool.completedMatches}/{pool.matchCount}
-                    </span>
-                  </header>
-                  <div className="pro-standing-head">
-                    <span>#</span>
-                    <span>Team</span>
-                    <span>W</span>
-                    <span>L</span>
-                    <span>Sets</span>
-                    <span>Pts</span>
-                  </div>
-                  {pool.standings.map((standing, index) => (
-                    <div className="pro-standing-row" key={standing.team.key}>
-                      <b>{index + 1}</b>
-                      <TeamName compact team={standing.team} />
-                      <strong>{standing.wins}</strong>
-                      <span>{standing.losses}</span>
-                      <small>
-                        {standing.setsFor}–{standing.setsAgainst}
-                      </small>
-                      <small>
-                        {standing.pointsFor}–{standing.pointsAgainst}
-                      </small>
-                    </div>
-                  ))}
-                </article>
-              ))}
+              {event.pools.slice(0, poolPreview).map(renderPool)}
             </div>
+            {event.pools.length > poolPreview && (
+              <details className="pro-disclosure pro-pool-disclosure">
+                <DisclosureSummary
+                  collapsed={`See all ${event.pools.length} pools`}
+                  expanded="Show fewer pools"
+                />
+                <div className="pro-pool-grid pro-pool-grid--more">
+                  {event.pools.slice(poolPreview).map(renderPool)}
+                </div>
+              </details>
+            )}
           </section>
         )}
 
@@ -1130,30 +1355,24 @@ export function ProEventDetail({
               <span>Sets</span>
               <span>Points</span>
             </div>
-            {event.liveStandings.slice(0, 25).map((standing, index) => (
-              <div className="pro-live-table__row" key={standing.team.key}>
-                <span
-                  aria-label={`Place ${index + 1}`}
-                  className="pro-live-table__place"
-                >
-                  <Numeric tier="table">{standing.medal ?? index + 1}</Numeric>
-                </span>
-                <div className="pro-live-table__team">
-                  <TeamName compact team={standing.team} />
-                  <small>
-                    {standing.stageLabel} · {standing.state}
-                  </small>
+            {event.liveStandings
+              .slice(0, standingPreview)
+              .map(renderLiveStanding)}
+            {event.liveStandings.length > standingPreview && (
+              <details className="pro-disclosure pro-live-table__disclosure">
+                <DisclosureSummary
+                  collapsed={`See all ${event.liveStandings.length} standings`}
+                  expanded="Show fewer standings"
+                />
+                <div>
+                  {event.liveStandings
+                    .slice(standingPreview)
+                    .map((standing, index) =>
+                      renderLiveStanding(standing, index + standingPreview),
+                    )}
                 </div>
-                <strong>{standing.wins}</strong>
-                <span>{standing.losses}</span>
-                <span>
-                  {standing.setsFor}–{standing.setsAgainst}
-                </span>
-                <span>
-                  {standing.pointsFor}–{standing.pointsAgainst}
-                </span>
-              </div>
-            ))}
+              </details>
+            )}
           </section>
         )}
 
@@ -1217,39 +1436,19 @@ export function ProEventDetail({
             <Badge>{event.matches.length}</Badge>
           </header>
           <div className="pro-match-result-groups">
-            {matchGroups.map((group) => (
-              <section key={group.roundLabel}>
-                <header>
-                  <h3>{group.roundLabel}</h3>
-                  <span>{group.matches.length} matches</span>
-                </header>
-                <div>
-                  {group.matches.map((match) => (
-                    <ProfessionalMatchCard
-                      context={
-                        match.leagueTeamAName && match.leagueTeamBName
-                          ? `${match.leagueTeamAName} vs. ${match.leagueTeamBName}`
-                          : (match.court ?? event.name)
-                      }
-                      currentSetNo={match.liveScore?.currentSetNo}
-                      href={match.canonicalPath}
-                      key={match.id}
-                      playedAt={match.playedAt}
-                      predictionMarket={matchMarkets[match.id]}
-                      roundLabel={match.roundLabel}
-                      sets={match.sets}
-                      source={event.source}
-                      status={match.status}
-                      teamA={match.teamA}
-                      teamB={match.teamB}
-                      timeLabel={match.time}
-                      winnerSide={match.winnerSide}
-                    />
-                  ))}
-                </div>
-              </section>
-            ))}
+            {matchGroups.slice(0, matchGroupPreview).map(renderMatchGroup)}
           </div>
+          {matchGroups.length > matchGroupPreview && (
+            <details className="pro-disclosure pro-match-groups__disclosure">
+              <DisclosureSummary
+                collapsed={`See every round · ${event.matches.length} matches`}
+                expanded="Show fewer rounds"
+              />
+              <div className="pro-match-result-groups pro-match-result-groups--more">
+                {matchGroups.slice(matchGroupPreview).map(renderMatchGroup)}
+              </div>
+            </details>
+          )}
         </section>
       </div>
       <SiteFooter />

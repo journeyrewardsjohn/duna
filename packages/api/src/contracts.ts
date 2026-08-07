@@ -3100,6 +3100,7 @@ export const discoveryMapItemSchema = z.object({
   startsAt: z.iso.datetime().optional(),
   endsAt: z.iso.datetime().optional(),
   imageUrl: z.string().optional(),
+  imageFit: z.enum(["cover", "contain"]).optional(),
   live: z.boolean().optional(),
   openNow: z.boolean().optional(),
   courtCount: z.number().int().nonnegative().optional(),

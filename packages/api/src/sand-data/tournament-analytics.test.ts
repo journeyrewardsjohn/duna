@@ -79,4 +79,54 @@ describe("Elite tournament statistics", () => {
       ]),
     });
   });
+
+  it("suppresses impossible efficiency from incomplete attack attempts", () => {
+    const statistics = aggregateTournamentStatistics([
+      {
+        id: "partial-match",
+        winnerSide: "A",
+        setCount: 2,
+        teamA: { key: "a", name: "Alpha" },
+        teamB: { key: "b", name: "Bravo" },
+        statistics: {
+          team: [],
+          players: [
+            {
+              externalPlayerId: "1",
+              side: "A",
+              name: "Player A",
+              total: 20,
+              attack: 14,
+              block: 2,
+              serve: 4,
+              errors: 0,
+              efficiency: 0,
+              attackPoints: 14,
+              attackErrors: 0,
+              attackAttempts: 4,
+            },
+            {
+              externalPlayerId: "2",
+              side: "B",
+              name: "Player B",
+              total: 10,
+              attack: 8,
+              block: 1,
+              serve: 1,
+              errors: 0,
+              efficiency: 0,
+              attackPoints: 8,
+              attackErrors: 1,
+              attackAttempts: 14,
+            },
+          ],
+        },
+      },
+    ]);
+
+    expect(
+      statistics?.teams.find((team) => team.key === "a"),
+    ).not.toHaveProperty("hittingEfficiency");
+    expect(statistics?.averages.hittingEfficiency).toBeUndefined();
+  });
 });
