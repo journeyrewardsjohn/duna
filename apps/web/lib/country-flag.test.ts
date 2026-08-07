@@ -18,6 +18,14 @@ describe("countryFlag", () => {
     expect(countryCode("ZAF")).toBe("ZA");
   });
 
+  it("covers IOC federation aliases used in the world ranking feed", () => {
+    expect(countryCode("BOT")).toBe("BW");
+    expect(countryCode("BUL")).toBe("BG");
+    expect(countryCode("ESA")).toBe("SV");
+    expect(countryCode("INA")).toBe("ID");
+    expect(countryCode("PAR")).toBe("PY");
+  });
+
   it("uses a neutral flag when the federation is unknown", () => {
     expect(countryCode("XYZ")).toBeUndefined();
     expect(countryFlag("XYZ")).toBe("INTL");

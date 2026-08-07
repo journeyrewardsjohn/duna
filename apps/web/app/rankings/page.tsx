@@ -12,10 +12,15 @@ import {
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import {
+  RankingsCountryFilter,
+  type RankingsCountryOption,
+} from "@/components/rankings-country-filter";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
 import { CountryCode } from "@/components/country-code";
+import { countryName } from "@/lib/country-flag";
 import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
 
 export const metadata: Metadata = {
@@ -47,8 +52,16 @@ type RankingView = "world" | "duna";
 type WorldRow = PublicWorldRankings["world"][Gender][number];
 type DunaRow = PublicWorldRankings["duna"][Gender][number];
 
-function rankingHref(view: RankingView, gender: Gender) {
-  return `/rankings?view=${view}&gender=${gender}`;
+function rankingHref(
+  view: RankingView,
+  gender: Gender,
+  country?: string,
+  showAll = false,
+) {
+  const params = new URLSearchParams({ view, gender });
+  if (country) params.set("country", country);
+  if (showAll) params.set("show", "all");
+  return `/rankings?${params.toString()}`;
 }
 
 function movement(row: WorldRow) {
@@ -72,19 +85,72 @@ export default async function RankingsPage({
   readonly searchParams: Promise<{
     readonly view?: string;
     readonly gender?: string;
+    readonly country?: string;
+    readonly show?: string;
   }>;
 }) {
-  const [{ view: rawView, gender: rawGender }, caller] = await Promise.all([
-    searchParams,
-    getServerCaller(),
-  ]);
+  const [
+    { view: rawView, gender: rawGender, country: rawCountry, show: rawShow },
+    caller,
+  ] = await Promise.all([searchParams, getServerCaller()]);
   const view: RankingView = rawView === "duna" ? "duna" : "world";
   const gender: Gender = rawGender === "women" ? "women" : "men";
   const rankings = await caller.public.worldRankings().catch(() => undefined);
   const worldRows = rankings?.world[gender] ?? [];
   const dunaRows = rankings?.duna[gender] ?? [];
-  const mappedProfiles = worldRows.filter((row) => row.handle).length;
-  const topRows = (view === "world" ? worldRows : dunaRows).slice(0, 3);
+  const allActiveRows = view === "world" ? worldRows : dunaRows;
+  const availableCountries = new Set(
+    allActiveRows.flatMap((row) =>
+      row.countryCode ? [row.countryCode.toUpperCase()] : [],
+    ),
+  );
+  const requestedCountry = rawCountry?.trim().toUpperCase();
+  const country =
+    requestedCountry && availableCountries.has(requestedCountry)
+      ? requestedCountry
+      : undefined;
+  const filteredWorldRows = country
+    ? worldRows.filter((row) => row.countryCode?.toUpperCase() === country)
+    : worldRows;
+  const filteredDunaRows = country
+    ? dunaRows.filter((row) => row.countryCode?.toUpperCase() === country)
+    : dunaRows;
+  const activeRows = view === "world" ? filteredWorldRows : filteredDunaRows;
+  const showAll = rawShow === "all";
+  const visibleWorldRows = showAll
+    ? filteredWorldRows
+    : filteredWorldRows.slice(0, 25);
+  const visibleDunaRows = showAll
+    ? filteredDunaRows
+    : filteredDunaRows.slice(0, 25);
+  const profilePages = activeRows.filter((row) => row.publicPath).length;
+  const sandRated = activeRows.filter(
+    (row) => typeof row.sandRating === "number",
+  ).length;
+  const selectedCountryName = country
+    ? (countryName(country) ?? country)
+    : undefined;
+  const countryCounts = new Map<string, number>();
+  for (const row of allActiveRows) {
+    const code = row.countryCode?.toUpperCase();
+    if (code) countryCounts.set(code, (countryCounts.get(code) ?? 0) + 1);
+  }
+  const countryOptions: RankingsCountryOption[] = [...countryCounts]
+    .map(([code, count]) => ({
+      code,
+      count,
+      name: countryName(code) ?? code,
+      href: rankingHref(view, gender, code),
+    }))
+    .sort((left, right) => {
+      const priority = (code: string) =>
+        code === "USA" ? 0 : code === "BRA" ? 1 : 2;
+      return (
+        priority(left.code) - priority(right.code) ||
+        left.name.localeCompare(right.name)
+      );
+    });
+  const topRows = activeRows.slice(0, 3);
   const enrichedTop = await Promise.all(
     topRows.map(async (row) => {
       const intelligence = row.handle
@@ -95,7 +161,6 @@ export default async function RankingsPage({
       return { row, intelligence };
     }),
   );
-  const activeRows = view === "world" ? worldRows : dunaRows;
   const pulseValues = activeRows
     .slice(0, 28)
     .map((row) =>
@@ -109,7 +174,7 @@ export default async function RankingsPage({
       {
         "@type": "CollectionPage",
         "@id": `${absolutePublicUrl("/rankings")}#page`,
-        url: absolutePublicUrl(rankingHref(view, gender)),
+        url: absolutePublicUrl(rankingHref(view, gender, country)),
         name: `${gender === "men" ? "Men's" : "Women's"} beach volleyball ${view === "world" ? "world rankings" : "Sand Rating rankings"}`,
         description: metadata.description,
         mainEntity: { "@id": `${absolutePublicUrl("/rankings")}#list` },
@@ -168,20 +233,25 @@ export default async function RankingsPage({
             both lenses, then open the match evidence behind each athlete.
           </p>
           <div className="rankings-v2__hero-links">
-            <Link href={rankingHref("world", gender)}>
+            <Link href={rankingHref("world", gender, country)}>
               World ranking <Trophy aria-hidden size={16} />
             </Link>
-            <Link href={rankingHref("duna", gender)}>
+            <Link href={rankingHref("duna", gender, country)}>
               Sand Rating <ChartNoAxesCombined aria-hidden size={16} />
             </Link>
           </div>
         </div>
         <div className="rankings-v2__signal">
           <span className="page-eyebrow">
-            Top {gender === "men" ? "men" : "women"}
+            {selectedCountryName
+              ? `${selectedCountryName} · ${gender}`
+              : `Top ${gender}`}
           </span>
           <Numeric tier="monument">{activeRows.length}</Numeric>
-          <p>ranked players in this connected snapshot</p>
+          <p>
+            ranked players{" "}
+            {country ? "matching this country" : "in this connected snapshot"}
+          </p>
           <div aria-label="Ranking distribution" className="rankings-pulse">
             {pulseValues.map((value, index) => (
               <i
@@ -194,11 +264,11 @@ export default async function RankingsPage({
           </div>
           <div>
             <span>
-              <Numeric tier="block">{mappedProfiles}</Numeric>
-              <small>public profiles</small>
+              <Numeric tier="block">{profilePages}</Numeric>
+              <small>player pages</small>
             </span>
             <span>
-              <Numeric tier="block">{dunaRows.length}</Numeric>
+              <Numeric tier="block">{sandRated}</Numeric>
               <small>Sand Rated</small>
             </span>
           </div>
@@ -210,13 +280,13 @@ export default async function RankingsPage({
           <nav aria-label="Ranking system">
             <Link
               aria-current={view === "world" ? "page" : undefined}
-              href={rankingHref("world", gender)}
+              href={rankingHref("world", gender, country)}
             >
               <Trophy aria-hidden size={17} /> World ranking
             </Link>
             <Link
               aria-current={view === "duna" ? "page" : undefined}
-              href={rankingHref("duna", gender)}
+              href={rankingHref("duna", gender, country)}
             >
               <ChartNoAxesCombined aria-hidden size={17} /> Duna Sand Rating
             </Link>
@@ -224,13 +294,13 @@ export default async function RankingsPage({
           <nav aria-label="Gender category">
             <Link
               aria-current={gender === "men" ? "page" : undefined}
-              href={rankingHref(view, "men")}
+              href={rankingHref(view, "men", country)}
             >
               Men
             </Link>
             <Link
               aria-current={gender === "women" ? "page" : undefined}
-              href={rankingHref(view, "women")}
+              href={rankingHref(view, "women", country)}
             >
               Women
             </Link>
@@ -315,32 +385,46 @@ export default async function RankingsPage({
           </section>
         )}
 
-        <header className="rankings-list-header rankings-v2__list-header">
-          <div>
-            <span className="page-eyebrow">
-              {view === "world"
-                ? "Official tour points"
-                : "Match-based playing strength"}
-            </span>
-            <h2>
-              {gender === "men" ? "Men’s" : "Women’s"} top{" "}
-              <Numeric tier="block">200</Numeric>
-            </h2>
-          </div>
-          {view === "world" && rankings?.latestDates[gender] ? (
-            <Numeric tier="table">{rankings.latestDates[gender]}</Numeric>
-          ) : (
-            <span>
-              {view === "world"
-                ? "Snapshot pending"
-                : "Updated with approved matches"}
-            </span>
-          )}
-        </header>
+        <div className="rankings-list-toolbar" id="ranking-list">
+          <header className="rankings-list-header rankings-v2__list-header">
+            <div>
+              <span className="page-eyebrow">
+                {view === "world"
+                  ? "Official tour points"
+                  : "Match-based playing strength"}
+              </span>
+              <h2>
+                {gender === "men" ? "Men’s" : "Women’s"}
+                {selectedCountryName
+                  ? ` · ${selectedCountryName}`
+                  : ""} top <Numeric tier="block">{activeRows.length}</Numeric>
+              </h2>
+              <p>
+                Showing{" "}
+                {Math.min(showAll ? activeRows.length : 25, activeRows.length)}{" "}
+                of {activeRows.length} players
+              </p>
+            </div>
+            {view === "world" && rankings?.latestDates[gender] ? (
+              <Numeric tier="table">{rankings.latestDates[gender]}</Numeric>
+            ) : (
+              <span>
+                {view === "world"
+                  ? "Snapshot pending"
+                  : "Updated with approved matches"}
+              </span>
+            )}
+          </header>
+          <RankingsCountryFilter
+            allHref={rankingHref(view, gender)}
+            options={countryOptions}
+            selectedCode={country}
+          />
+        </div>
 
         <div className="rankings-list rankings-v2__list">
           {view === "world"
-            ? worldRows.map((row, index) => (
+            ? visibleWorldRows.map((row, index) => (
                 <RankingRow
                   content={
                     <>
@@ -367,7 +451,7 @@ export default async function RankingsPage({
                   row={row}
                 />
               ))
-            : dunaRows.map((row) => (
+            : visibleDunaRows.map((row) => (
                 <RankingRow
                   content={
                     <>
@@ -404,6 +488,31 @@ export default async function RankingsPage({
                 />
               ))}
         </div>
+        {activeRows.length > 25 ? (
+          <div className="rankings-list-expander">
+            <span>
+              <strong>
+                {showAll
+                  ? `All ${activeRows.length} players are visible`
+                  : `Top 25 of ${activeRows.length}`}
+              </strong>
+              <small>
+                {showAll
+                  ? "Return to the focused leaderboard."
+                  : "Open the complete ranking only when you need the full field."}
+              </small>
+            </span>
+            <Link
+              href={`${rankingHref(view, gender, country, !showAll)}#ranking-list`}
+              scroll={false}
+            >
+              {showAll
+                ? "Show top 25"
+                : `See all ${activeRows.length}${selectedCountryName ? ` ${selectedCountryName}` : ""}`}
+              <ArrowRight aria-hidden size={17} />
+            </Link>
+          </div>
+        ) : null}
         {activeRows.length === 0 && (
           <p className="profile-empty">
             This ranking snapshot has not been published yet.

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { dedupeWorldRankingRows } from "./rankings";
+import {
+  connectRankingIdentities,
+  dedupeWorldRankingRows,
+  type RankingIdentityRow,
+} from "./rankings";
 
 describe("world-ranking identity deduplication", () => {
   const base = {
@@ -156,5 +160,76 @@ describe("world-ranking identity deduplication", () => {
     ]);
 
     expect(rows).toHaveLength(3);
+  });
+});
+
+describe("world-ranking identity connection", () => {
+  it("uses the exact source alias to connect a fresh official ranking", () => {
+    const [connected] = connectRankingIdentities(
+      [
+        {
+          rankingDate: "2026-08-07",
+          genderCategory: "men",
+          rank: 1,
+          points: 8_360,
+          externalPersonId: "andersson-e:swe",
+          displayName: "Andersson, E",
+          countryCode: "SWE",
+        },
+      ],
+      [
+        {
+          rankingDate: "2026-08-05",
+          genderCategory: "men",
+          rank: 1,
+          points: 8_360,
+          externalPersonId: "588",
+          displayName: "Elmer Andersson",
+          countryCode: "SWE",
+          personId: "a517b22e-25ff-4f70-b91e-f68a4e3eb176",
+          handle: "sandrating-588",
+          sandRating: 6.6,
+          ratedMatches: 58,
+          rawPayload: { sourcePlayerName: "Andersson, E" },
+        },
+      ],
+    );
+
+    expect(connected).toMatchObject({
+      displayName: "Andersson, E",
+      personId: "a517b22e-25ff-4f70-b91e-f68a4e3eb176",
+      handle: "sandrating-588",
+      sandRating: 6.6,
+      ratedMatches: 58,
+    });
+  });
+
+  it("does not connect an alias shared by multiple people", () => {
+    const row: RankingIdentityRow = {
+      rankingDate: "2026-08-07",
+      genderCategory: "men",
+      rank: 116,
+      points: 1_520,
+      externalPersonId: "krafft:nam",
+      displayName: "Krafft",
+      countryCode: "NAM",
+    };
+    const [connected] = connectRankingIdentities(
+      [row],
+      [
+        {
+          ...row,
+          externalPersonId: "krafft-one",
+          personId: "a517b22e-25ff-4f70-b91e-f68a4e3eb176",
+        },
+        {
+          ...row,
+          externalPersonId: "krafft-two",
+          personId: "11225366-b0d5-4778-850a-83424e1a73f0",
+        },
+      ],
+    );
+
+    expect(connected?.personId).toBeUndefined();
   });
 });
