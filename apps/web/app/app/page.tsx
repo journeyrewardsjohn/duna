@@ -44,14 +44,14 @@ export default async function PlayerDashboard() {
     .filter(
       (event) =>
         event.lifecycleStatus !== "cancelled" &&
-        new Date(event.endsAt).getTime() > now,
+        new Date(event.startsAt).getTime() >= now,
     )
     .sort(
       (left, right) =>
         new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
     );
   const futureBookings = dashboard.bookings
-    .filter((booking) => new Date(booking.endsAt).getTime() > now)
+    .filter((booking) => new Date(booking.startsAt).getTime() >= now)
     .sort(
       (left, right) =>
         new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),

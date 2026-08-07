@@ -922,8 +922,9 @@ function HomeScreen({
     coaches?.filter(
       (coach) => coach.organizationId === homeOrganization?.organizationId,
     ) ?? [];
+  const homeNow = Date.now();
   const nextBooking = [...bookings]
-    .filter((booking) => new Date(booking.endsAt).getTime() > Date.now())
+    .filter((booking) => new Date(booking.startsAt).getTime() >= homeNow)
     .sort(
       (left, right) =>
         new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),

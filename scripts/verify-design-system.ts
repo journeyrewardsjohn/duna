@@ -108,6 +108,8 @@ for (const contract of [
   "futureBookings",
   "nextPersonalEvent",
   "defaultEventMedia",
+  "new Date(event.startsAt).getTime() >= now",
+  "new Date(booking.startsAt).getTime() >= now",
   'aria-label="Player quick actions"',
 ] as const) {
   if (!playerDashboardSource.includes(contract)) {
@@ -169,7 +171,7 @@ const playerNativeSource = readFileSync(
 );
 if (
   !playerNativeSource.includes("nextBookingEventIndex") ||
-  !playerNativeSource.includes("booking.endsAt")
+  !playerNativeSource.includes("booking.startsAt")
 ) {
   violations.push(
     "apps/player/App.tsx must derive Next Up from a future personal booking",
