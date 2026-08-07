@@ -204,24 +204,30 @@ export default async function PlayerDashboard() {
           <div className={styles.nextUpBody}>
             <span className={styles.eyebrow}>Next up</span>
             <div className={styles.nextUpHeading}>
-              <div className={styles.nextUpDate}>
+              <time className={styles.nextUpDate} dateTime={nextStartsAt}>
                 {nextStartsAt ? (
                   <>
                     <span>
                       {formatVenueTime(nextStartsAt, nextTimezone, "en-US", {
                         month: "short",
+                        day: undefined,
+                        hour: undefined,
+                        minute: undefined,
                       })}
                     </span>
                     <Numeric tier="block">
                       {formatVenueTime(nextStartsAt, nextTimezone, "en-US", {
+                        month: undefined,
                         day: "numeric",
+                        hour: undefined,
+                        minute: undefined,
                       })}
                     </Numeric>
                   </>
                 ) : (
                   <Plus aria-hidden size={24} />
                 )}
-              </div>
+              </time>
               <div>
                 <h2>{nextPersonal?.title ?? "Your calendar is open."}</h2>
                 <p>
@@ -356,13 +362,21 @@ export default async function PlayerDashboard() {
           <div className={styles.bookingList}>
             {futureBookings.slice(0, 4).map((booking) => (
               <Link href="/app/play" key={booking.id}>
-                <span className={styles.bookingDate}>
+                <time
+                  className={styles.bookingDate}
+                  dateTime={booking.startsAt}
+                >
                   <small>
                     {formatVenueTime(
                       booking.startsAt,
                       "America/Los_Angeles",
                       "en-US",
-                      { month: "short" },
+                      {
+                        month: "short",
+                        day: undefined,
+                        hour: undefined,
+                        minute: undefined,
+                      },
                     )}
                   </small>
                   <Numeric tier="block">
@@ -370,10 +384,15 @@ export default async function PlayerDashboard() {
                       booking.startsAt,
                       "America/Los_Angeles",
                       "en-US",
-                      { day: "numeric" },
+                      {
+                        month: undefined,
+                        day: "numeric",
+                        hour: undefined,
+                        minute: undefined,
+                      },
                     )}
                   </Numeric>
-                </span>
+                </time>
                 <span className={styles.bookingCopy}>
                   <strong>{booking.title}</strong>
                   <small>
@@ -381,7 +400,12 @@ export default async function PlayerDashboard() {
                       booking.startsAt,
                       "America/Los_Angeles",
                       "en-US",
-                      { hour: "numeric", minute: "2-digit" },
+                      {
+                        month: undefined,
+                        day: undefined,
+                        hour: "numeric",
+                        minute: "2-digit",
+                      },
                     )}{" "}
                     · {booking.venueName}
                   </small>
