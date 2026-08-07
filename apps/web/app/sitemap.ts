@@ -1,12 +1,12 @@
 import type { MetadataRoute } from "next";
-import { getServerCaller } from "@/lib/api";
+import { createPublicCaller } from "@/lib/public-api";
 import { staticPublicPages } from "@/lib/public-markdown";
 import { absolutePublicUrl } from "@/lib/pro-seo";
 
 export const revalidate = 3_600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const caller = await getServerCaller();
+  const caller = createPublicCaller();
   const [coverage, rankings, events, coaches, professionalTeams] =
     await Promise.all([
       caller.public.proCoverage().catch(() => undefined),

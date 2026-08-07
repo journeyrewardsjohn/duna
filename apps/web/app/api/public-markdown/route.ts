@@ -1,4 +1,4 @@
-import { getServerCaller } from "@/lib/api";
+import { createPublicCallerFromRequest } from "@/lib/public-api";
 import {
   canonicalPathFromMarkdownRequest,
   markdownPathForCanonical,
@@ -78,7 +78,10 @@ export async function GET(request: Request): Promise<Response> {
     });
   }
 
-  const caller = await getServerCaller();
+  // Markdown companions are public machine-readable representations. Build an
+  // explicitly anonymous caller so rewritten `.md` requests never depend on
+  // AuthKit middleware state or accidentally inherit a signed-in identity.
+  const caller = createPublicCallerFromRequest(request);
 
   if (path === "/pro") {
     const coverage = await caller.public.proCoverage().catch(() => undefined);
