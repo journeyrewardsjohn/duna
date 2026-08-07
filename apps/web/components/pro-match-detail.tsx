@@ -53,17 +53,16 @@ export function ProMatchDetail({
         className="pro-match-hero"
         data-zone={isLive ? "live" : "athletic"}
       >
-        <nav
-          aria-label="Return to professional event"
-          className="pro-match-hero__breadcrumb"
-        >
-          <Link href={`/events/${event.slug}`}>
-            <ArrowLeft aria-hidden size={15} />
-            Back to {eventReturnLabel}
-          </Link>
-        </nav>
         <div className="pro-match-hero__intro">
-          <div>
+          <div className="pro-match-hero__status-row">
+            <Link
+              aria-label={`Back to ${eventReturnLabel}`}
+              className="pro-match-hero__back"
+              href={`/events/${event.slug}`}
+              title={`Back to ${eventReturnLabel}`}
+            >
+              <ArrowLeft aria-hidden size={18} strokeWidth={2} />
+            </Link>
             <Badge tone={isLive ? "danger" : "neutral"}>
               {isLive && <Radio aria-hidden size={11} />}
               {matchStatus}
