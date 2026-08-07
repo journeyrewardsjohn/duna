@@ -270,7 +270,7 @@ function createStyles(palette: TournamentPassPalette) {
     },
     eyebrow: {
       color: palette.muted,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "900",
       letterSpacing: 1.1,
     },
@@ -311,7 +311,7 @@ function createStyles(palette: TournamentPassPalette) {
       width: 38,
     },
     kindMarkText: { color: palette.onButton, fontSize: 15, fontWeight: "900" },
-    kind: { fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
+    kind: { fontSize: 10, fontWeight: "900", letterSpacing: 0.8 },
     eventTitle: {
       color: palette.text,
       fontSize: 14,

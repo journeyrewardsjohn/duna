@@ -339,8 +339,8 @@ const base = {
   flex: { flex: 1 },
   eyebrow: { fontSize: 10, fontWeight: "900", letterSpacing: 1.1 },
   title: { fontSize: 20, fontWeight: "900", letterSpacing: -0.4, marginTop: 3 },
-  connected: { fontSize: 9, fontWeight: "900", letterSpacing: 0.7 },
-  disconnected: { fontSize: 9, fontWeight: "900", letterSpacing: 0.7 },
+  connected: { fontSize: 10, fontWeight: "900", letterSpacing: 0.7 },
+  disconnected: { fontSize: 10, fontWeight: "900", letterSpacing: 0.7 },
   body: { fontSize: 14, lineHeight: 21 },
   calendarName: { fontSize: 12, fontWeight: "800" },
   conflict: {
