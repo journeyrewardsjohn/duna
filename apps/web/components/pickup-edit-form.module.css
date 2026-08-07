@@ -1,0 +1,679 @@
+.editor {
+  display: grid;
+  gap: clamp(2rem, 4vw, 4rem);
+  margin-inline: auto;
+  max-width: 90rem;
+  width: 100%;
+}
+
+.header {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: minmax(0, 1fr) minmax(19rem, 0.42fr);
+}
+
+.header > a {
+  align-items: center;
+  color: var(--text-2);
+  display: inline-flex;
+  font-size: 0.875rem;
+  font-weight: 750;
+  gap: 0.45rem;
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.headerCopy > span,
+.reviewEyebrow {
+  color: var(--signal-text);
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.headerCopy h1 {
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 6vw, 6rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 0.9;
+  margin: 0.65rem 0 0;
+  max-width: 11ch;
+}
+
+.headerCopy p {
+  color: var(--text-2);
+  font-size: 1rem;
+  line-height: 1.6;
+  margin: 1rem 0 0;
+  max-width: 38rem;
+}
+
+.editWindow {
+  align-items: flex-start;
+  align-self: end;
+  background: color-mix(in srgb, var(--signal) 8%, var(--surface-1));
+  border: 1px solid color-mix(in srgb, var(--signal) 25%, var(--hairline));
+  border-radius: 1.25rem;
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.editWindow > svg {
+  color: var(--signal-text);
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+}
+
+.editWindow > span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.editWindow strong {
+  font-size: 0.9rem;
+}
+
+.editWindow span {
+  color: var(--text-2);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.layout {
+  align-items: start;
+  display: grid;
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 25rem);
+}
+
+.fields {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.formCard,
+.reviewCard {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 1.5rem;
+  box-shadow: var(--shadow-small);
+}
+
+.formCard {
+  display: grid;
+  gap: 1.25rem;
+  padding: clamp(1.2rem, 2.5vw, 2rem);
+}
+
+.cardHeader {
+  align-items: start;
+  border-bottom: 1px solid var(--hairline);
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding-bottom: 1.2rem;
+}
+
+.step {
+  align-items: center;
+  background: var(--text-1);
+  border-radius: 999px;
+  color: var(--ground);
+  display: inline-flex;
+  font-family: var(--font-data);
+  font-size: 0.72rem;
+  font-variation-settings:
+    "wdth" 78,
+    "wght" 700;
+  height: 2rem;
+  justify-content: center;
+  width: 2rem;
+}
+
+.cardHeader h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 2vw, 1.7rem);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+
+.cardHeader p {
+  color: var(--text-2);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin: 0.25rem 0 0;
+}
+
+.cardHeader > svg {
+  color: var(--signal-text);
+  margin-top: 0.25rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.field > span:first-child,
+.durationField legend,
+.choiceGrid legend {
+  color: var(--text-1);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.field input,
+.field textarea {
+  background: var(--ground);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 0.875rem;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 1rem;
+  outline: none;
+  padding: 0.85rem 0.95rem;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+  width: 100%;
+}
+
+.field input {
+  min-height: 3.25rem;
+}
+
+.field textarea {
+  line-height: 1.55;
+  min-height: 8rem;
+  resize: vertical;
+}
+
+.field input:focus,
+.field textarea:focus,
+.editor :global(.consumer-place-search__input:focus-within) {
+  border-color: var(--signal-text);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 18%, transparent);
+}
+
+.field input[aria-invalid="true"] {
+  border-color: var(--loss);
+}
+
+.field > small,
+.durationField > small {
+  color: var(--text-2);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.field > small {
+  justify-self: end;
+}
+
+.twoColumnFields {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.capacityControl {
+  align-items: center;
+  background: var(--ground);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 0.875rem;
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) 3rem;
+  min-height: 3.25rem;
+  overflow: hidden;
+}
+
+.capacityControl button {
+  background: transparent;
+  border: 0;
+  color: var(--text-1);
+  cursor: pointer;
+  font-size: 1.25rem;
+  height: 100%;
+}
+
+.capacityControl button:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+
+.capacityControl input {
+  appearance: textfield;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--hairline);
+  border-radius: 0;
+  border-right: 1px solid var(--hairline);
+  font-family: var(--font-data);
+  font-size: 1.4rem;
+  font-variation-settings:
+    "wdth" 94,
+    "wght" 800;
+  min-height: 3.25rem;
+  padding: 0;
+  text-align: center;
+}
+
+.durationField,
+.choiceGrid {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.durationField {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.durationField > div {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.durationField button,
+.choiceGrid button {
+  background: var(--ground);
+  border: 1px solid var(--hairline-strong);
+  color: var(--text-1);
+  cursor: pointer;
+  font: inherit;
+}
+
+.durationField button {
+  border-radius: 0.8rem;
+  min-height: 3.2rem;
+}
+
+.durationField button.selected,
+.choiceGrid button.selected {
+  background: color-mix(in srgb, var(--signal) 10%, var(--surface-1));
+  border-color: var(--signal-text);
+}
+
+.durationField > small {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.editor :global(.consumer-place-search__input) {
+  background: var(--ground);
+  border-color: var(--hairline-strong);
+  min-height: 3.25rem;
+}
+
+.editor :global(.consumer-place-search__input input) {
+  color: var(--text-1);
+  font-size: 1rem;
+}
+
+.editor :global(.consumer-place-search__results) {
+  background: var(--surface-1);
+  border-color: var(--hairline);
+  box-shadow: var(--shadow-large);
+  z-index: 40;
+}
+
+.editor :global(.consumer-place-search__results > button) {
+  border-color: var(--hairline);
+  color: var(--text-1);
+  font-size: 0.875rem;
+}
+
+.editor :global(.consumer-place-search__results small) {
+  color: var(--text-2);
+  font-size: 0.75rem;
+}
+
+.locationConfirmed,
+.locationApproximate {
+  align-items: flex-start;
+  border-radius: 1rem;
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.85rem;
+}
+
+.locationConfirmed {
+  background: color-mix(in srgb, var(--gain) 10%, var(--ground));
+  color: var(--gain);
+}
+
+.locationApproximate {
+  background: color-mix(in srgb, var(--warning) 10%, var(--ground));
+  color: var(--warning);
+}
+
+.locationConfirmed > span,
+.locationApproximate > span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.locationConfirmed strong,
+.locationApproximate strong {
+  color: var(--text-1);
+  font-size: 0.82rem;
+}
+
+.locationConfirmed small,
+.locationApproximate small {
+  color: var(--text-2);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.choiceGrid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.choiceGrid legend {
+  grid-column: 1 / -1;
+  margin-bottom: 0.1rem;
+}
+
+.choiceGrid button {
+  align-items: flex-start;
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 7rem;
+  padding: 1rem;
+  text-align: left;
+}
+
+.choiceGrid button > svg:first-child {
+  color: var(--signal-text);
+}
+
+.choiceGrid button > span {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.choiceGrid strong {
+  font-size: 0.9rem;
+}
+
+.choiceGrid small {
+  color: var(--text-2);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.choiceCheck {
+  opacity: 0;
+}
+
+.selected .choiceCheck {
+  opacity: 1;
+}
+
+.approvalToggle {
+  align-items: center;
+  background: var(--ground);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 1rem;
+  cursor: pointer;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1rem;
+}
+
+.toggleCopy {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.7rem;
+}
+
+.toggleCopy > svg {
+  color: var(--signal-text);
+  flex: 0 0 auto;
+}
+
+.toggleCopy > span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.toggleCopy strong {
+  font-size: 0.88rem;
+}
+
+.toggleCopy small {
+  color: var(--text-2);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.approvalToggle > input {
+  accent-color: var(--signal-text);
+  cursor: pointer;
+  height: 1.4rem;
+  width: 2.5rem;
+}
+
+.review {
+  min-width: 0;
+  position: sticky;
+  top: 5.5rem;
+}
+
+.reviewCard {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.reviewStatus {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.reviewStatus span {
+  color: var(--text-2);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.reviewStatus i {
+  background: var(--signal);
+  border-radius: 999px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 18%, transparent);
+  height: 0.55rem;
+  width: 0.55rem;
+}
+
+.reviewCard h2 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 0.98;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.reviewTime,
+.reviewDetail {
+  align-items: flex-start;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  gap: 0.7rem;
+  padding-top: 1rem;
+}
+
+.reviewTime > svg,
+.reviewDetail > svg {
+  color: var(--signal-text);
+  flex: 0 0 auto;
+}
+
+.reviewTime > span,
+.reviewDetail > span {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.reviewTime strong,
+.reviewDetail strong {
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.reviewTime small,
+.reviewDetail small {
+  color: var(--text-2);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.reviewVisibility {
+  align-items: center;
+  background: var(--ground-cool);
+  border-radius: 0.8rem;
+  display: flex;
+  font-size: 0.78rem;
+  font-weight: 750;
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.guard {
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--signal) 7%, var(--ground));
+  border-radius: 0.8rem;
+  color: var(--text-2);
+  display: flex;
+  font-size: 0.74rem;
+  gap: 0.55rem;
+  line-height: 1.45;
+  padding: 0.75rem;
+}
+
+.guard svg {
+  color: var(--signal-text);
+  flex: 0 0 auto;
+}
+
+.message {
+  background: color-mix(in srgb, var(--warning) 9%, var(--ground));
+  border-radius: 0.75rem;
+  color: var(--text-1);
+  font-size: 0.8rem;
+  margin: 0;
+  padding: 0.75rem;
+}
+
+.saveButton {
+  align-items: center;
+  background: var(--btn-primary-bg);
+  border: 1px solid var(--btn-primary-bg);
+  border-radius: 999px;
+  color: var(--btn-primary-fg);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 800;
+  gap: 0.5rem;
+  justify-content: center;
+  min-height: 3.2rem;
+  width: 100%;
+}
+
+.saveButton:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.cancelLink {
+  color: var(--text-2);
+  font-size: 0.8rem;
+  font-weight: 750;
+  justify-self: center;
+}
+
+@media (max-width: 1080px) {
+  .header {
+    grid-template-columns: 1fr;
+  }
+
+  .editWindow {
+    max-width: 38rem;
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .review {
+    position: static;
+  }
+
+  .reviewCard {
+    margin-inline: auto;
+    max-width: 42rem;
+  }
+}
+
+@media (max-width: 620px) {
+  .headerCopy h1 {
+    font-size: clamp(2.75rem, 14vw, 4.25rem);
+  }
+
+  .twoColumnFields,
+  .choiceGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .durationField > div {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .cardHeader {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .cardHeader > svg {
+    display: none;
+  }
+
+  .formCard,
+  .reviewCard {
+    border-radius: 1.2rem;
+    padding: 1rem;
+  }
+
+  .approvalToggle {
+    align-items: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .field input,
+  .field textarea {
+    transition: none;
+  }
+}

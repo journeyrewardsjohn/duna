@@ -1494,6 +1494,7 @@ async function loadEvents(input?: {
           avatarUrl: row.hostAvatarUrl ?? undefined,
         },
         approvalRequired: row.approvalRequired,
+        visibility: row.visibility === "unlisted" ? "unlisted" : "public",
         lifecycleStatus:
           row.lifecycleStatus === "cancelled"
             ? "cancelled"

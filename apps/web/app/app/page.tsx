@@ -1,21 +1,36 @@
-import { formatVenueTime } from "@duna/core";
+import {
+  defaultEventMedia,
+  formatVenueTime,
+  type EventSummary,
+} from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowRight,
   CalendarDays,
+  CalendarPlus,
   ChevronRight,
   MapPin,
   Plus,
-  Share2,
+  Search,
   Sparkles,
   Trophy,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { EventCard } from "@/components/event-card";
 import { MatchCard } from "@/components/match-card";
 import { RatingOrbit } from "@/components/rating-orbit";
 import { getServerCaller } from "@/lib/api";
+import styles from "./player-dashboard.module.css";
+
+const bookingEventMatchWindow = 15 * 60 * 1000;
+
+function mediaForEvent(event: EventSummary) {
+  return (
+    event.media?.find((item) => item.kind === "image")?.url ??
+    event.imageUrl ??
+    defaultEventMedia(event.kind, event.id).path
+  );
+}
 
 export default async function PlayerDashboard() {
   const caller = await getServerCaller();
@@ -24,229 +39,298 @@ export default async function PlayerDashboard() {
     caller.player.settings(),
   ]);
   const { player } = dashboard;
-  const nextEvent = dashboard.events[0];
+  const now = Date.now();
+  const futureEvents = dashboard.events
+    .filter(
+      (event) =>
+        event.lifecycleStatus !== "cancelled" &&
+        new Date(event.endsAt).getTime() > now,
+    )
+    .sort(
+      (left, right) =>
+        new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+    );
+  const futureBookings = dashboard.bookings
+    .filter((booking) => new Date(booking.endsAt).getTime() > now)
+    .sort(
+      (left, right) =>
+        new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+    );
+  const nextBooking = futureBookings[0];
+  const bookedEvent = nextBooking
+    ? futureEvents.find(
+        (event) =>
+          event.kind === nextBooking.kind &&
+          event.venueName === nextBooking.venueName &&
+          Math.abs(
+            new Date(event.startsAt).getTime() -
+              new Date(nextBooking.startsAt).getTime(),
+          ) < bookingEventMatchWindow,
+      )
+    : undefined;
+  const hostedEvent = futureEvents.find(
+    (event) => event.host?.id === player.id,
+  );
+  const nextPersonalEvent =
+    bookedEvent ?? (!nextBooking ? hostedEvent : undefined);
+  const nextPersonal = nextBooking ?? nextPersonalEvent;
+  const nextStartsAt = nextBooking?.startsAt ?? nextPersonalEvent?.startsAt;
+  const nextTimezone = nextPersonalEvent?.timezone ?? "America/Los_Angeles";
+  const nextKind = nextBooking?.kind ?? nextPersonalEvent?.kind ?? "pickup";
+  const nextImage = nextPersonalEvent
+    ? mediaForEvent(nextPersonalEvent)
+    : defaultEventMedia(nextKind, nextBooking?.id ?? player.id).path;
+  const nextHref = nextPersonalEvent
+    ? `/events/${nextPersonalEvent.slug}`
+    : nextBooking
+      ? "/app/play"
+      : "/app/discover";
   const latestMatch = dashboard.recentMatches[0];
+  const firstName = player.displayName.split(" ")[0] ?? player.displayName;
   const dateLabel = new Intl.DateTimeFormat("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
   }).format(new Date());
+
+  const quickActions = [
+    {
+      href: "/app/discover",
+      icon: Search,
+      label: "Find play",
+      detail: "Matches and events nearby",
+    },
+    {
+      href: "/app/play",
+      icon: CalendarDays,
+      label: "Book a court",
+      detail: "See live availability",
+    },
+    {
+      href: "/app/pickup/new",
+      icon: CalendarPlus,
+      label: "Host pickup",
+      detail: "Set the time and invite players",
+    },
+    {
+      href: "/app/score",
+      icon: Plus,
+      label: "Record a match",
+      detail: "Add a result or score live",
+    },
+  ] as const;
+
   return (
-    <main className="player-dashboard">
-      <section className="player-welcome player-welcome--campaign">
-        <Image
-          alt=""
-          aria-hidden
-          fill
-          priority
-          sizes="(max-width: 900px) 100vw, 1200px"
-          src="/media/duna-campaign-rally.webp"
-        />
-        <div className="player-welcome__campaign-wash" />
-        <div className="player-welcome__campaign-copy">
-          <span className="page-eyebrow">{dateLabel}</span>
-          <h1>Welcome back, {player.displayName.split(" ")[0]}.</h1>
-          <p>
-            Your next game, latest movement, and everything happening around
-            you—ready when you are.
-          </p>
+    <main className={styles.home}>
+      <header className={styles.intro}>
+        <div>
+          <span className={styles.eyebrow}>{dateLabel}</span>
+          <h1>Ready to play, {firstName}?</h1>
+          <p>Your next game, nearby play, and recent form—without the noise.</p>
         </div>
-        <div className="player-welcome__actions">
-          <Link className="secondary-action" href="/app/pickup/new">
-            <CalendarDays aria-hidden size={17} /> Host pickup
+        <Link className={styles.historyLink} href="/app/matches">
+          <Trophy aria-hidden size={18} /> Match history
+        </Link>
+      </header>
+
+      <nav aria-label="Player quick actions" className={styles.quickActions}>
+        {quickActions.map(({ detail, href, icon: Icon, label }, index) => (
+          <Link
+            className={
+              index === 0 ? styles.quickActionPrimary : styles.quickAction
+            }
+            href={href}
+            key={href}
+          >
+            <span className={styles.quickActionIcon}>
+              <Icon aria-hidden size={21} />
+            </span>
+            <span>
+              <strong>{label}</strong>
+              <small>{detail}</small>
+            </span>
+            <ArrowRight
+              aria-hidden
+              className={styles.quickActionArrow}
+              size={17}
+            />
           </Link>
-          <Link className="primary-action" href="/app/score">
-            <Plus aria-hidden size={18} /> Record a match
-          </Link>
-        </div>
-      </section>
+        ))}
+      </nav>
 
       {settings.profile.onboardingStatus !== "complete" && (
-        <Link className="dashboard-profile-prompt" href="/app/onboarding">
-          <span className="dashboard-profile-prompt__icon">
-            <Sparkles aria-hidden />
+        <Link className={styles.profilePrompt} href="/app/onboarding">
+          <span className={styles.profilePromptIcon}>
+            <Sparkles aria-hidden size={20} />
           </span>
           <span>
-            <small>Complete your player profile</small>
-            <strong>
-              Tell Duna how you play. We’ll make every field editable before it
-              is saved.
-            </strong>
+            <small>Finish your player profile</small>
+            <strong>Personalize discovery, ratings, and match context.</strong>
           </span>
           <span>
-            Start guided setup <ArrowRight aria-hidden />
+            Continue setup <ArrowRight aria-hidden size={16} />
           </span>
         </Link>
       )}
 
-      <section className="player-hero-grid">
-        <article className="rating-panel">
-          <div className="rating-panel__header">
-            <div>
-              <Badge tone="positive">
-                {player.rating.confidence} confidence
+      <section className={styles.todayGrid} aria-label="Your day">
+        <Link className={styles.nextUp} href={nextHref}>
+          <div className={styles.nextUpMedia}>
+            <img
+              alt={
+                nextPersonal
+                  ? `${nextPersonal.title} event poster`
+                  : "Beach volleyball at golden hour"
+              }
+              src={nextImage}
+            />
+            <div className={styles.nextUpMediaTopline}>
+              <Badge
+                tone={
+                  nextBooking?.status === "needs-action"
+                    ? "warning"
+                    : "positive"
+                }
+              >
+                {nextBooking?.status === "needs-action"
+                  ? "Action needed"
+                  : nextPersonal
+                    ? "Confirmed"
+                    : "Calendar open"}
               </Badge>
-              <h2>Your portable Sand Rating.</h2>
+              <span>{nextKind.replace("-", " ")}</span>
             </div>
-            <button aria-label="Share rating card">
-              <Share2 aria-hidden size={18} />
-            </button>
           </div>
-          <div className="rating-panel__body">
+          <div className={styles.nextUpBody}>
+            <span className={styles.eyebrow}>Next up</span>
+            <div className={styles.nextUpHeading}>
+              <div className={styles.nextUpDate}>
+                {nextStartsAt ? (
+                  <>
+                    <span>
+                      {formatVenueTime(nextStartsAt, nextTimezone, "en-US", {
+                        month: "short",
+                      })}
+                    </span>
+                    <Numeric tier="block">
+                      {formatVenueTime(nextStartsAt, nextTimezone, "en-US", {
+                        day: "numeric",
+                      })}
+                    </Numeric>
+                  </>
+                ) : (
+                  <Plus aria-hidden size={24} />
+                )}
+              </div>
+              <div>
+                <h2>{nextPersonal?.title ?? "Your calendar is open."}</h2>
+                <p>
+                  {nextStartsAt
+                    ? formatVenueTime(nextStartsAt, nextTimezone, "en-US", {
+                        weekday: "long",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })
+                    : "Find a match, court, or event worth playing."}
+                </p>
+              </div>
+            </div>
+            <div className={styles.nextUpFooter}>
+              <span>
+                <MapPin aria-hidden size={17} />
+                {nextPersonal?.venueName ?? "Explore play near you"}
+              </span>
+              <strong>
+                {nextPersonal ? "Open details" : "Find play"}
+                <ChevronRight aria-hidden size={17} />
+              </strong>
+            </div>
+          </div>
+        </Link>
+
+        <article className={styles.ratingCard}>
+          <div className={styles.cardHeading}>
+            <div>
+              <span className={styles.eyebrow}>Your performance</span>
+              <h2>Sand Rating</h2>
+            </div>
+            <Badge tone="positive">{player.rating.confidence}</Badge>
+          </div>
+          <div className={styles.ratingBody}>
             <RatingOrbit
+              compact
               confidence={player.rating.confidence}
               delta={player.rating.delta}
               value={player.rating.display}
             />
-            <div className="rating-panel__insight">
-              <span>{latestMatch ? "Last movement" : "Rating state"}</span>
+            <div className={styles.ratingInsight}>
+              <small>{latestMatch ? "Latest movement" : "Rating state"}</small>
               <strong>
                 {latestMatch
-                  ? `${latestMatch.ratingDelta > 0 ? "+" : ""}${latestMatch.ratingDelta.toFixed(2)} after a ${latestMatch.verification.replace("-", " ")} result.`
-                  : "No connected rating movement is available yet."}
+                  ? `${latestMatch.ratingDelta > 0 ? "+" : ""}${latestMatch.ratingDelta.toFixed(2)} after your latest verified result.`
+                  : "Your connected results will shape this rating."}
               </strong>
-              <p>
-                Current rating{" "}
-                <Numeric tier="chip">
-                  {player.rating.display.toFixed(2)}
-                </Numeric>{" "}
-                · discipline {player.rating.discipline.replace("-", " ")}
-              </p>
               <Link href="/app/matches">
-                Open match history <ArrowRight aria-hidden size={15} />
+                See the results <ArrowRight aria-hidden size={15} />
               </Link>
             </div>
           </div>
-          <div className="rating-panel__stats">
-            <div>
-              <small>Confidence</small>
-              <strong>{player.rating.confidence}</strong>
-            </div>
-            <div>
+          <div className={styles.ratingStats}>
+            <span>
               <small>Home market</small>
               <strong>{player.homeMarket.split(",")[0]}</strong>
-            </div>
-            <div>
-              <small>Connected matches</small>
-              <Numeric tier="block">{dashboard.recentMatches.length}</Numeric>
-            </div>
-            <div>
+            </span>
+            <span>
+              <small>Recent matches</small>
+              <Numeric tier="table">{dashboard.recentMatches.length}</Numeric>
+            </span>
+            <span>
               <small>Wallet</small>
-              <Numeric tier="block">
+              <Numeric tier="table">
                 ${(dashboard.walletBalanceMinor / 100).toFixed(2)}
               </Numeric>
-            </div>
-          </div>
-        </article>
-
-        <article className="next-up-panel">
-          <div className="panel-heading">
-            <div>
-              <span className="page-eyebrow">Next up</span>
-              <h2>{nextEvent?.title ?? "Nothing booked yet"}</h2>
-            </div>
-            <Badge tone={nextEvent?.live ? "live" : "neutral"}>
-              {nextEvent?.live ? "Live" : nextEvent ? "Published" : "Open"}
-            </Badge>
-          </div>
-          <div className="next-up-panel__time">
-            <Numeric tier="table">
-              {nextEvent
-                ? formatVenueTime(
-                    nextEvent.startsAt,
-                    nextEvent.timezone,
-                    "en-US",
-                    { minute: "2-digit" },
-                  )
-                : "—"}
-            </Numeric>
-            <small>
-              {nextEvent ? nextEvent.tags[0] : "Explore available play"}
-            </small>
-          </div>
-          <div className="next-up-panel__place">
-            <MapPin aria-hidden size={17} />
-            <span>
-              <strong>{nextEvent?.venueName ?? "No venue selected"}</strong>
-              <small>
-                {nextEvent
-                  ? `${nextEvent.spotsRemaining} spots remaining`
-                  : "Published venues appear in Discover"}
-              </small>
             </span>
           </div>
-          <div className="next-up-panel__players">
-            <div className="avatar-stack">
-              <span className="avatar">{player.initials}</span>
-            </div>
-            <span>
-              <Numeric tier="chip">
-                {nextEvent
-                  ? `${nextEvent.capacity - nextEvent.spotsRemaining}/${nextEvent.capacity}`
-                  : "0"}
-              </Numeric>{" "}
-              registered
-            </span>
-          </div>
-          <Link
-            className="next-up-panel__action"
-            href={nextEvent ? `/events/${nextEvent.slug}` : "/app/discover"}
-          >
-            {nextEvent ? "Open event" : "Explore play"}{" "}
-            <ChevronRight aria-hidden size={17} />
-          </Link>
         </article>
       </section>
 
-      <section className="metric-strip" aria-label="Player overview">
-        {dashboard.metrics.map((metric) => (
-          <article key={metric.label}>
-            <small>{metric.label}</small>
-            <Numeric tier="block">{metric.value}</Numeric>
-            {metric.change && (
-              <span className={metric.trend === "up" ? "positive" : undefined}>
-                {metric.change}
-              </span>
-            )}
-          </article>
-        ))}
-      </section>
-
-      <section className="dashboard-section">
-        <div className="dashboard-section__heading">
+      <section className={styles.section}>
+        <div className={styles.sectionHeading}>
           <div>
-            <span className="page-eyebrow">Made for you</span>
+            <span className={styles.eyebrow}>Made for you</span>
             <h2>Play next</h2>
           </div>
           <Link href="/app/discover">
             See all <ArrowRight aria-hidden size={15} />
           </Link>
         </div>
-        <div className="player-event-row">
-          {dashboard.events.slice(0, 3).map((event) => (
+        <div className={styles.eventGrid}>
+          {futureEvents.slice(0, 3).map((event) => (
             <EventCard event={event} key={event.id} />
           ))}
-          {dashboard.events.length === 0 && (
-            <article className="empty-state">
-              <p>No published events are available yet.</p>
+          {futureEvents.length === 0 && (
+            <article className={styles.emptyState}>
+              <h3>Nothing published nearby yet.</h3>
+              <p>Host a pickup and give your community somewhere to play.</p>
+              <Link href="/app/pickup/new">Host a pickup</Link>
             </article>
           )}
         </div>
       </section>
 
-      <section className="dashboard-two-column">
-        <div className="dashboard-section">
-          <div className="dashboard-section__heading">
+      <section className={styles.lowerGrid}>
+        <div className={styles.section}>
+          <div className={styles.sectionHeading}>
             <div>
-              <span className="page-eyebrow">Recent results</span>
+              <span className={styles.eyebrow}>Recent results</span>
               <h2>Match history</h2>
             </div>
             <Link href="/app/matches">
               All matches <ArrowRight aria-hidden size={15} />
             </Link>
           </div>
-          <div className="match-list">
-            {dashboard.recentMatches.map((match) => (
+          <div className={styles.matchList}>
+            {dashboard.recentMatches.slice(0, 2).map((match) => (
               <MatchCard
                 key={match.id}
                 match={match}
@@ -254,25 +338,34 @@ export default async function PlayerDashboard() {
               />
             ))}
             {dashboard.recentMatches.length === 0 && (
-              <article className="empty-state">
+              <article className={styles.emptyState}>
                 <p>No connected matches yet.</p>
               </article>
             )}
           </div>
         </div>
 
-        <div className="dashboard-section">
-          <div className="dashboard-section__heading">
+        <div className={styles.section}>
+          <div className={styles.sectionHeading}>
             <div>
-              <span className="page-eyebrow">On your calendar</span>
+              <span className={styles.eyebrow}>On your calendar</span>
               <h2>Coming up</h2>
             </div>
+            <Link href="/app/play">Full calendar</Link>
           </div>
-          <div className="booking-list">
-            {dashboard.bookings.map((booking) => (
+          <div className={styles.bookingList}>
+            {futureBookings.slice(0, 4).map((booking) => (
               <Link href="/app/play" key={booking.id}>
-                <span className="booking-list__date">
-                  <Numeric>
+                <span className={styles.bookingDate}>
+                  <small>
+                    {formatVenueTime(
+                      booking.startsAt,
+                      "America/Los_Angeles",
+                      "en-US",
+                      { month: "short" },
+                    )}
+                  </small>
+                  <Numeric tier="block">
                     {formatVenueTime(
                       booking.startsAt,
                       "America/Los_Angeles",
@@ -281,60 +374,32 @@ export default async function PlayerDashboard() {
                     )}
                   </Numeric>
                 </span>
-                <span>
+                <span className={styles.bookingCopy}>
                   <strong>{booking.title}</strong>
-                  <small>{booking.venueName}</small>
+                  <small>
+                    {formatVenueTime(
+                      booking.startsAt,
+                      "America/Los_Angeles",
+                      "en-US",
+                      { hour: "numeric", minute: "2-digit" },
+                    )}{" "}
+                    · {booking.venueName}
+                  </small>
                 </span>
                 <Badge
                   tone={booking.status === "confirmed" ? "positive" : "warning"}
                 >
-                  {booking.status}
+                  {booking.status.replace("-", " ")}
                 </Badge>
               </Link>
             ))}
-            {dashboard.bookings.length === 0 && (
-              <article className="empty-state">
-                <p>No confirmed bookings yet.</p>
+            {futureBookings.length === 0 && (
+              <article className={styles.emptyState}>
+                <p>Your calendar is open.</p>
+                <Link href="/app/discover">Find something to play</Link>
               </article>
             )}
           </div>
-        </div>
-      </section>
-
-      <section className="dashboard-section feed-section">
-        <div className="dashboard-section__heading">
-          <div>
-            <span className="page-eyebrow">Your world on sand</span>
-            <h2>Happening now</h2>
-          </div>
-        </div>
-        <div className="feed-grid">
-          {dashboard.feed.map((item) => (
-            <article data-accent={item.accent} key={item.id}>
-              <div className="feed-grid__icon">
-                {item.accent === "flare" ? (
-                  <Trophy aria-hidden size={20} />
-                ) : (
-                  <Sparkles aria-hidden size={20} />
-                )}
-              </div>
-              <span>{item.eyebrow}</span>
-              <h3>{item.title}</h3>
-              <p>{item.body}</p>
-              <small>{item.meta}</small>
-            </article>
-          ))}
-          {dashboard.feed.length === 0 && (
-            <article data-accent="aqua">
-              <span>Connected feed</span>
-              <h3>No new activity</h3>
-              <p>
-                Confirmed matches, registrations, and community updates will
-                appear here.
-              </p>
-              <small>Up to date</small>
-            </article>
-          )}
         </div>
       </section>
     </main>

@@ -1,12 +1,29 @@
 "use client";
 
 import type { EventSummary } from "@duna/core";
-import { ArrowLeft, Check, MapPin, ShieldCheck } from "lucide-react";
+import { Numeric } from "@duna/ui";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CalendarClock,
+  Check,
+  Clock3,
+  Eye,
+  Globe2,
+  Link2,
+  MapPin,
+  ShieldCheck,
+  Sparkles,
+  UsersRound,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { type FormEvent, useMemo, useState, useTransition } from "react";
 import { updatePickupAction } from "@/app/events/[slug]/actions";
 import { PlaceSearch, type PlaceDetails } from "./place-search";
+import styles from "./pickup-edit-form.module.css";
+
+const durationOptions = [60, 90, 120, 150, 180] as const;
 
 function localDateTime(iso: string) {
   const date = new Date(iso);
@@ -14,7 +31,24 @@ function localDateTime(iso: string) {
   return local.toISOString().slice(0, 16);
 }
 
-export function PickupEditForm({ event }: { readonly event: EventSummary }) {
+function timeLabel(iso: string | undefined) {
+  if (!iso) return "Choose a valid time";
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
+export function PickupEditForm({
+  event,
+  confirmedParticipantCount,
+}: {
+  readonly event: EventSummary;
+  readonly confirmedParticipantCount: number;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [title, setTitle] = useState(event.title);
@@ -44,14 +78,41 @@ export function PickupEditForm({ event }: { readonly event: EventSummary }) {
   const [approvalRequired, setApprovalRequired] = useState(
     event.approvalRequired ?? false,
   );
-  const [visibility, setVisibility] = useState<"public" | "unlisted">("public");
+  const [visibility, setVisibility] = useState<"public" | "unlisted">(
+    event.visibility ?? "public",
+  );
   const [message, setMessage] = useState("");
-  const endIso = useMemo(() => {
-    const start = new Date(startsAt);
-    return Number.isNaN(start.getTime())
-      ? undefined
-      : new Date(start.getTime() + durationMinutes * 60_000).toISOString();
-  }, [durationMinutes, startsAt]);
+  const startDate = useMemo(() => new Date(startsAt), [startsAt]);
+  const endIso = useMemo(
+    () =>
+      Number.isNaN(startDate.getTime())
+        ? undefined
+        : new Date(
+            startDate.getTime() + durationMinutes * 60_000,
+          ).toISOString(),
+    [durationMinutes, startDate],
+  );
+  const startIso = Number.isNaN(startDate.getTime())
+    ? undefined
+    : startDate.toISOString();
+  const isFuture = Boolean(startIso && startDate.getTime() > Date.now());
+  const canSave =
+    title.trim().length >= 3 &&
+    venueName.trim().length > 0 &&
+    capacity >= 2 &&
+    capacity <= 100 &&
+    Boolean(endIso) &&
+    isFuture;
+  const isDirty =
+    title !== event.title ||
+    startsAt !== localDateTime(event.startsAt) ||
+    durationMinutes !== initialDuration ||
+    venueName !== event.venueName ||
+    address !== event.location?.address ||
+    capacity !== event.capacity ||
+    note !== (event.description ?? event.shortSummary ?? "") ||
+    approvalRequired !== (event.approvalRequired ?? false) ||
+    visibility !== (event.visibility ?? "public");
 
   function choosePlace(place: PlaceDetails) {
     setVenueName(place.name ?? place.address ?? venueName);
@@ -62,21 +123,21 @@ export function PickupEditForm({ event }: { readonly event: EventSummary }) {
     setLocationConfidence("confirmed");
   }
 
-  function save() {
+  function save(formEvent: FormEvent<HTMLFormElement>) {
+    formEvent.preventDefault();
     setMessage("");
+    if (!canSave || !startIso || !endIso) {
+      setMessage("Finish the highlighted details before saving.");
+      return;
+    }
     startTransition(async () => {
-      const start = new Date(startsAt);
-      if (Number.isNaN(start.getTime()) || !endIso) {
-        setMessage("Choose a valid future start and duration.");
-        return;
-      }
       const response = await updatePickupAction({
         pickupSessionId: event.id,
         slug: event.slug,
-        title,
-        startsAt: start.toISOString(),
+        title: title.trim(),
+        startsAt: startIso,
         endsAt: endIso,
-        venueName,
+        venueName: venueName.trim(),
         address,
         googlePlaceId,
         latitude,
@@ -99,124 +160,347 @@ export function PickupEditForm({ event }: { readonly event: EventSummary }) {
   }
 
   return (
-    <div className="pickup-edit">
-      <header>
+    <main className={styles.editor}>
+      <header className={styles.header}>
         <Link href={`/events/${event.slug}`}>
-          <ArrowLeft aria-hidden size={16} /> Back to pickup
+          <ArrowLeft aria-hidden size={17} /> Back to pickup
         </Link>
-        <span className="page-eyebrow">Host controls</span>
-        <h1>Edit before anyone joins.</h1>
-        <p>
-          Once another player confirms a spot, core details lock so no one is
-          surprised by a silent change.
-        </p>
+        <div className={styles.headerCopy}>
+          <span>Host controls</span>
+          <h1>Make the next game clear.</h1>
+          <p>
+            Adjust the essentials, review what players will see, then publish
+            the update with confidence.
+          </p>
+        </div>
+        <div className={styles.editWindow}>
+          <ShieldCheck aria-hidden size={21} />
+          <span>
+            <strong>Safe editing window</strong>
+            {confirmedParticipantCount <= 1
+              ? "Core details remain editable until another player joins."
+              : "Players are already confirmed; review changes carefully."}
+          </span>
+        </div>
       </header>
-      <section>
-        <div className="pickup-edit__grid">
-          <label>
-            <span>Pickup name</span>
-            <input
-              maxLength={140}
-              onChange={(e) => setTitle(e.target.value)}
-              value={title}
-            />
-          </label>
-          <label>
-            <span>Starts</span>
-            <input
-              onChange={(e) => setStartsAt(e.target.value)}
-              type="datetime-local"
-              value={startsAt}
-            />
-          </label>
-          <label>
-            <span>Length</span>
-            <select
-              onChange={(e) => setDurationMinutes(Number(e.target.value))}
-              value={durationMinutes}
-            >
-              {[60, 90, 120, 150, 180].map((minutes) => (
-                <option key={minutes} value={minutes}>
-                  {minutes} minutes
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Spots</span>
-            <input
-              max={100}
-              min={2}
-              onChange={(e) => setCapacity(Number(e.target.value))}
-              type="number"
-              value={capacity}
-            />
-          </label>
-          <label className="pickup-edit__wide">
-            <span>
-              <MapPin aria-hidden size={15} /> Venue or address
-            </span>
-            <PlaceSearch
-              onPlace={choosePlace}
-              onValue={(value) => {
-                setAddress(value);
-                setVenueName(value);
-                setLocationConfidence("approximate");
-              }}
-              value={address ?? venueName}
-            />
-            <small>
-              {locationConfidence === "confirmed"
-                ? "Confirmed Google place"
-                : "Approximate location"}
-            </small>
-          </label>
-          <label className="pickup-edit__wide">
-            <span>Notes · Markdown supported</span>
-            <textarea
-              maxLength={2_000}
-              onChange={(e) => setNote(e.target.value)}
-              rows={6}
-              value={note}
-            />
-          </label>
-        </div>
-        <div className="pickup-edit__rules">
-          <label>
-            <input
-              checked={approvalRequired}
-              onChange={(e) => setApprovalRequired(e.target.checked)}
-              type="checkbox"
-            />
-            <span>
-              <strong>Require approval</strong>
-              Requests reach you first. Approval happens before checkout.
-            </span>
-          </label>
-          <label>
-            <input
-              checked={visibility === "unlisted"}
-              onChange={(e) =>
-                setVisibility(e.target.checked ? "unlisted" : "public")
+
+      <form className={styles.layout} onSubmit={save}>
+        <div className={styles.fields}>
+          <section className={styles.formCard}>
+            <header className={styles.cardHeader}>
+              <span className={styles.step}>01</span>
+              <div>
+                <h2>Name the session</h2>
+                <p>Keep it short enough to scan in a player’s calendar.</p>
+              </div>
+              <Sparkles aria-hidden size={20} />
+            </header>
+            <label className={styles.field} htmlFor="pickup-title">
+              <span>Pickup name</span>
+              <input
+                aria-invalid={title.trim().length < 3}
+                id="pickup-title"
+                maxLength={140}
+                onChange={(inputEvent) => setTitle(inputEvent.target.value)}
+                placeholder="Golden Hour 4s"
+                value={title}
+              />
+              <small>{title.length} / 140 characters</small>
+            </label>
+            <label className={styles.field} htmlFor="pickup-note">
+              <span>Player note</span>
+              <textarea
+                id="pickup-note"
+                maxLength={2_000}
+                onChange={(inputEvent) => setNote(inputEvent.target.value)}
+                placeholder="What should players know before they arrive?"
+                rows={5}
+                value={note}
+              />
+              <small>Share the level, vibe, parking, or what to bring.</small>
+            </label>
+          </section>
+
+          <section className={styles.formCard}>
+            <header className={styles.cardHeader}>
+              <span className={styles.step}>02</span>
+              <div>
+                <h2>Set the rhythm</h2>
+                <p>Players see the start, finish, and capacity together.</p>
+              </div>
+              <CalendarClock aria-hidden size={20} />
+            </header>
+            <div className={styles.twoColumnFields}>
+              <label className={styles.field} htmlFor="pickup-start">
+                <span>Starts</span>
+                <input
+                  aria-invalid={!isFuture}
+                  id="pickup-start"
+                  min={localDateTime(new Date().toISOString())}
+                  onChange={(inputEvent) =>
+                    setStartsAt(inputEvent.target.value)
+                  }
+                  type="datetime-local"
+                  value={startsAt}
+                />
+                <small>
+                  {isFuture
+                    ? event.timezone.replaceAll("_", " ")
+                    : "Choose a future start time."}
+                </small>
+              </label>
+              <label className={styles.field} htmlFor="pickup-capacity">
+                <span>Total player spots</span>
+                <span className={styles.capacityControl}>
+                  <button
+                    aria-label="Remove one spot"
+                    disabled={capacity <= 2}
+                    onClick={() =>
+                      setCapacity((value) => Math.max(2, value - 1))
+                    }
+                    type="button"
+                  >
+                    −
+                  </button>
+                  <input
+                    id="pickup-capacity"
+                    max={100}
+                    min={2}
+                    onChange={(inputEvent) =>
+                      setCapacity(Number(inputEvent.target.value))
+                    }
+                    type="number"
+                    value={capacity}
+                  />
+                  <button
+                    aria-label="Add one spot"
+                    disabled={capacity >= 100}
+                    onClick={() =>
+                      setCapacity((value) => Math.min(100, value + 1))
+                    }
+                    type="button"
+                  >
+                    +
+                  </button>
+                </span>
+                <small>Includes your host spot.</small>
+              </label>
+            </div>
+            <fieldset className={styles.durationField}>
+              <legend>How long are you playing?</legend>
+              <div>
+                {durationOptions.map((minutes) => (
+                  <button
+                    aria-pressed={durationMinutes === minutes}
+                    className={
+                      durationMinutes === minutes ? styles.selected : undefined
+                    }
+                    key={minutes}
+                    onClick={() => setDurationMinutes(minutes)}
+                    type="button"
+                  >
+                    <Numeric tier="table">
+                      {minutes < 120 ? `${minutes}m` : `${minutes / 60}h`}
+                    </Numeric>
+                  </button>
+                ))}
+              </div>
+              <small>
+                <Clock3 aria-hidden size={15} /> Ends {timeLabel(endIso)}
+              </small>
+            </fieldset>
+          </section>
+
+          <section className={styles.formCard}>
+            <header className={styles.cardHeader}>
+              <span className={styles.step}>03</span>
+              <div>
+                <h2>Confirm the place</h2>
+                <p>A verified pin gives players reliable directions.</p>
+              </div>
+              <MapPin aria-hidden size={20} />
+            </header>
+            <label className={styles.field} htmlFor="pickup-place">
+              <span>Venue or address</span>
+              <PlaceSearch
+                id="pickup-place"
+                onPlace={choosePlace}
+                onValue={(value) => {
+                  setAddress(value);
+                  setVenueName(value);
+                  setLocationConfidence("approximate");
+                }}
+                value={address ?? venueName}
+              />
+            </label>
+            <div
+              className={
+                locationConfidence === "confirmed"
+                  ? styles.locationConfirmed
+                  : styles.locationApproximate
               }
-              type="checkbox"
-            />
-            <span>
-              <strong>Unlisted</strong>
-              Anyone with the link can open it; it is hidden from discovery.
-            </span>
-          </label>
+            >
+              {locationConfidence === "confirmed" ? (
+                <Check aria-hidden size={18} />
+              ) : (
+                <MapPin aria-hidden size={18} />
+              )}
+              <span>
+                <strong>
+                  {locationConfidence === "confirmed"
+                    ? "Directions confirmed"
+                    : "Pin needs confirmation"}
+                </strong>
+                <small>
+                  {locationConfidence === "confirmed"
+                    ? address
+                    : "Choose a suggested place for the most reliable map pin."}
+                </small>
+              </span>
+            </div>
+          </section>
+
+          <section className={styles.formCard}>
+            <header className={styles.cardHeader}>
+              <span className={styles.step}>04</span>
+              <div>
+                <h2>Choose who can join</h2>
+                <p>These controls change discovery and confirmation.</p>
+              </div>
+              <Eye aria-hidden size={20} />
+            </header>
+            <fieldset className={styles.choiceGrid}>
+              <legend>Discovery</legend>
+              <button
+                aria-pressed={visibility === "public"}
+                className={
+                  visibility === "public" ? styles.selected : undefined
+                }
+                onClick={() => setVisibility("public")}
+                type="button"
+              >
+                <Globe2 aria-hidden size={20} />
+                <span>
+                  <strong>Public</strong>
+                  <small>Visible in Discover and open by link.</small>
+                </span>
+                <Check aria-hidden className={styles.choiceCheck} size={17} />
+              </button>
+              <button
+                aria-pressed={visibility === "unlisted"}
+                className={
+                  visibility === "unlisted" ? styles.selected : undefined
+                }
+                onClick={() => setVisibility("unlisted")}
+                type="button"
+              >
+                <Link2 aria-hidden size={20} />
+                <span>
+                  <strong>Unlisted</strong>
+                  <small>
+                    Hidden from Discover; anyone with the link can open.
+                  </small>
+                </span>
+                <Check aria-hidden className={styles.choiceCheck} size={17} />
+              </button>
+            </fieldset>
+            <label className={styles.approvalToggle}>
+              <span className={styles.toggleCopy}>
+                <ShieldCheck aria-hidden size={20} />
+                <span>
+                  <strong>Approve players before they join</strong>
+                  <small>
+                    Requests wait for you before checkout or confirmation.
+                  </small>
+                </span>
+              </span>
+              <input
+                checked={approvalRequired}
+                onChange={(inputEvent) =>
+                  setApprovalRequired(inputEvent.target.checked)
+                }
+                type="checkbox"
+              />
+            </label>
+          </section>
         </div>
-        <div className="pickup-edit__guard">
-          <ShieldCheck aria-hidden size={18} />
-          Core details lock after the first other player confirms.
-        </div>
-        {message && <p role="status">{message}</p>}
-        <button disabled={pending} onClick={save} type="button">
-          <Check aria-hidden size={16} />
-          {pending ? "Saving…" : "Save pickup"}
-        </button>
-      </section>
-    </div>
+
+        <aside className={styles.review}>
+          <div className={styles.reviewCard}>
+            <div className={styles.reviewStatus}>
+              <span>{isDirty ? "Unpublished changes" : "Pickup is live"}</span>
+              <i />
+            </div>
+            <span className={styles.reviewEyebrow}>Player preview</span>
+            <h2>{title.trim() || "Untitled pickup"}</h2>
+            <div className={styles.reviewTime}>
+              <CalendarClock aria-hidden size={19} />
+              <span>
+                <strong>{timeLabel(startIso)}</strong>
+                <small>
+                  {durationMinutes} minutes · ends {timeLabel(endIso)}
+                </small>
+              </span>
+            </div>
+            <div className={styles.reviewDetail}>
+              <MapPin aria-hidden size={19} />
+              <span>
+                <strong>{venueName || "Choose a venue"}</strong>
+                <small>
+                  {locationConfidence === "confirmed"
+                    ? "Confirmed location"
+                    : "Approximate location"}
+                </small>
+              </span>
+            </div>
+            <div className={styles.reviewDetail}>
+              <UsersRound aria-hidden size={19} />
+              <span>
+                <strong>
+                  <Numeric tier="table">{capacity}</Numeric> player spots
+                </strong>
+                <small>
+                  {approvalRequired
+                    ? "Host approval required"
+                    : "Instant confirmation"}
+                </small>
+              </span>
+            </div>
+            <div className={styles.reviewVisibility}>
+              {visibility === "public" ? (
+                <Globe2 aria-hidden size={17} />
+              ) : (
+                <Link2 aria-hidden size={17} />
+              )}
+              {visibility === "public" ? "Public in Discover" : "Unlisted link"}
+            </div>
+            <div className={styles.guard}>
+              <ShieldCheck aria-hidden size={18} />
+              Core details lock after another player confirms.
+            </div>
+            {message && (
+              <p className={styles.message} role="status">
+                {message}
+              </p>
+            )}
+            <button
+              className={styles.saveButton}
+              disabled={pending || !canSave || !isDirty}
+              type="submit"
+            >
+              {pending ? "Saving…" : "Save and publish"}
+              {pending ? (
+                <Clock3 aria-hidden size={17} />
+              ) : (
+                <ArrowRight aria-hidden size={17} />
+              )}
+            </button>
+            <Link className={styles.cancelLink} href={`/events/${event.slug}`}>
+              Keep current details
+            </Link>
+          </div>
+        </aside>
+      </form>
+    </main>
   );
 }

@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { PickupEditForm } from "@/components/pickup-edit-form";
-import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Edit pickup" };
@@ -21,9 +20,9 @@ export default async function EditPickupPage({
     .catch(() => undefined);
   if (!management?.canEdit) notFound();
   return (
-    <main className="standard-page">
-      <SiteHeader />
-      <PickupEditForm event={event} />
-    </main>
+    <PickupEditForm
+      confirmedParticipantCount={management.confirmedParticipantCount}
+      event={event}
+    />
   );
 }

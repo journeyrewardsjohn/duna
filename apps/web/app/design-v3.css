@@ -3212,3 +3212,171 @@ body {
     min-height: 3rem;
   }
 }
+
+/* Player web rhythm — centered at desktop scale, fluid only until the cap. */
+.player-content {
+  box-sizing: border-box;
+  max-width: 96rem;
+  width: 100%;
+}
+
+/* Consumer event pages keep the useful sticky registration rail without
+   stretching the editorial stage across ultra-wide screens. */
+.event-public__hero {
+  gap: clamp(2rem, 4vw, 5rem);
+  grid-template-columns: minmax(24rem, 0.9fr) minmax(32rem, 1.1fr);
+  margin-inline: auto;
+  max-width: 100rem;
+  min-height: 46rem;
+  padding: clamp(8rem, 10vw, 10rem) 0 clamp(3rem, 6vw, 5rem);
+  width: min(calc(100% - clamp(2rem, 6vw, 6rem)), 100rem);
+}
+
+.event-public__hero-copy {
+  max-width: 42rem;
+  padding: 1rem 0;
+}
+
+.event-public__hero h1 {
+  font-size: clamp(3.5rem, 5.2vw, 6.5rem);
+  line-height: 0.9;
+  max-width: 11ch;
+  overflow-wrap: anywhere;
+}
+
+.event-public__host {
+  color: var(--text-2);
+  font-size: 0.875rem;
+}
+
+.event-public__hero-copy > p {
+  color: var(--text-2);
+  font-size: clamp(1rem, 1.25vw, 1.125rem);
+}
+
+.event-public__visual {
+  border: 1px solid var(--hairline);
+  border-radius: 1.5rem;
+  height: min(38rem, 48vw);
+  min-height: 32rem;
+}
+
+.event-public__facts small {
+  color: var(--text-2);
+  font-size: 0.75rem;
+}
+
+.event-public__facts strong {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.event-public__availability > span,
+.event-public__availability > small {
+  font-size: 0.8125rem;
+}
+
+.event-public__layout {
+  gap: clamp(2.5rem, 5vw, 5rem);
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 23rem);
+  max-width: 90rem;
+  padding: clamp(2.5rem, 5vw, 5rem) clamp(1rem, 3vw, 2rem) 7rem;
+}
+
+.event-public__intro p,
+.event-public__section > header p,
+.event-public .markdown-content {
+  color: var(--text-2);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+.event-public__booking {
+  padding: 1.35rem;
+  top: 5.5rem;
+}
+
+.event-public__booking-label small,
+.event-public__booking-capacity small,
+.event-public__booking-policy,
+.event-public__booking-trust strong,
+.event-public__booking-trust small,
+.pickup-actions__guard,
+.pickup-actions small {
+  font-size: 0.75rem;
+}
+
+.event-public__booking > p,
+.event-public__booking li {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.event-public__booking > a {
+  font-size: 0.875rem;
+  min-height: 3rem;
+}
+
+.event-public__booking-capacity strong {
+  font-size: 0.875rem;
+}
+
+@media (max-width: 1080px) {
+  .event-public__hero {
+    gap: 2rem;
+    grid-template-columns: 1fr;
+    max-width: 54rem;
+    min-height: 0;
+    padding-top: 8rem;
+  }
+
+  .event-public__hero-copy {
+    max-width: 48rem;
+  }
+
+  .event-public__visual {
+    height: min(36rem, 70vw);
+    min-height: 28rem;
+    width: 100%;
+  }
+
+  .event-public__layout {
+    grid-template-columns: 1fr;
+    max-width: 54rem;
+  }
+
+  .event-public__booking {
+    position: static;
+  }
+}
+
+@media (max-width: 620px) {
+  .player-content {
+    padding-inline: 1rem;
+  }
+
+  .event-public__hero {
+    gap: 1.5rem;
+    padding-top: 7rem;
+    width: calc(100% - 2rem);
+  }
+
+  .event-public__hero h1 {
+    font-size: clamp(3rem, 15vw, 4.5rem);
+  }
+
+  .event-public__facts {
+    grid-template-columns: 1fr;
+  }
+
+  .event-public__visual {
+    aspect-ratio: 4 / 5;
+    border-radius: 1.25rem;
+    height: auto;
+    min-height: 26rem;
+  }
+
+  .event-public__layout {
+    padding-inline: 1rem;
+  }
+}

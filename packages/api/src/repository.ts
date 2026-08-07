@@ -136,6 +136,9 @@ export const demoRepository = {
           input.ratingMinimum !== undefined && input.ratingMaximum !== undefined
             ? [input.ratingMinimum, input.ratingMaximum]
             : undefined,
+        approvalRequired: input.approvalRequired,
+        visibility: input.visibility,
+        lifecycleStatus: "active",
         tags: [
           "Pickup",
           input.matchType === "competitive" ? "Competitive" : "Casual",

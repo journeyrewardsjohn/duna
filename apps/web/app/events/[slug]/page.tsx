@@ -174,6 +174,7 @@ export default async function EventPage({
 
   const cover = event.media?.[0];
   const fallbackMedia = defaultEventMedia(event.kind, event.id);
+  const hostName = event.organizationName.replace(/^Hosted by\s+/i, "");
   const visualImageUrl =
     cover?.kind === "image"
       ? cover.url
@@ -227,7 +228,7 @@ export default async function EventPage({
             ))}
           </div>
           <span className="event-public__host">
-            Hosted by <strong>{event.organizationName}</strong>
+            Hosted by <strong>{hostName}</strong>
           </span>
           <h1>{event.title}</h1>
           <p>
@@ -257,9 +258,15 @@ export default async function EventPage({
         </div>
 
         <div
+          aria-label={
+            cover?.kind !== "video"
+              ? (cover?.alt ?? `${event.title} event poster`)
+              : undefined
+          }
           className={`event-public__visual ${
             cover?.kind === "video" ? "event-public__visual--video" : ""
           }`}
+          role={cover?.kind !== "video" ? "img" : undefined}
           style={
             cover?.kind !== "video"
               ? {

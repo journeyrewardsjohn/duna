@@ -922,7 +922,24 @@ function HomeScreen({
     coaches?.filter(
       (coach) => coach.organizationId === homeOrganization?.organizationId,
     ) ?? [];
-  const nextBooking = bookings[0];
+  const nextBooking = [...bookings]
+    .filter((booking) => new Date(booking.endsAt).getTime() > Date.now())
+    .sort(
+      (left, right) =>
+        new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+    )[0];
+  const nextBookingEventIndex = nextBooking
+    ? events.findIndex(
+        (event) =>
+          event.kind === nextBooking.kind &&
+          event.venueName === nextBooking.venueName &&
+          Math.abs(
+            new Date(event.startsAt).getTime() -
+              new Date(nextBooking.startsAt).getTime(),
+          ) <
+            15 * 60 * 1000,
+      )
+    : -1;
   const insight = dashboard?.feed[0];
   const performanceHistory = performance?.history ?? [];
   const verifiedWindow = [...performanceHistory].reverse().slice(-14);
@@ -1086,6 +1103,71 @@ function HomeScreen({
           </View>
         </View>
 
+        {nextBooking ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              selectionHaptic();
+              if (nextBookingEventIndex >= 0) {
+                onBook(nextBookingEventIndex);
+              } else {
+                onAction("join-event");
+              }
+            }}
+            style={({ pressed }) => [
+              styles.homeNextSession,
+              pressed && styles.homeQuickActionPressed,
+            ]}
+          >
+            <View style={styles.homeNextDate}>
+              <Text style={styles.homeNextDateMonth}>
+                {new Date(nextBooking.startsAt)
+                  .toLocaleDateString("en-US", { month: "short" })
+                  .toUpperCase()}
+              </Text>
+              <Text style={styles.homeNextDateDay}>
+                {new Date(nextBooking.startsAt).getDate()}
+              </Text>
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.homeNextEyebrow}>
+                NEXT UP · {nextBooking.status.replace("-", " ").toUpperCase()}
+              </Text>
+              <Text style={styles.homeNextTitle}>{nextBooking.title}</Text>
+              <Text style={styles.homeNextMeta}>
+                {new Date(nextBooking.startsAt).toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}{" "}
+                · {nextBooking.venueName}
+              </Text>
+              {!["pickup", "court-rental"].includes(nextBooking.kind) && (
+                <SessionArrivalCard booking={nextBooking} client={client} />
+              )}
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => onAction("find-match")}
+            style={styles.homeNextSession}
+          >
+            <View style={styles.homeNextOpenMark}>
+              <Text style={styles.homeNextOpenMarkText}>＋</Text>
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.homeNextEyebrow}>YOUR CALENDAR IS OPEN</Text>
+              <Text style={styles.homeNextTitle}>
+                Find something worth playing.
+              </Text>
+              <Text style={styles.homeNextMeta}>
+                Matches, courts, and events are ready nearby.
+              </Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+        )}
+
         <View style={styles.homeQuickGrid}>
           {quickActions.map((action, index) => (
             <Pressable
@@ -1136,55 +1218,6 @@ function HomeScreen({
             </Pressable>
           ))}
         </View>
-
-        {nextBooking ? (
-          <View style={styles.homeNextSession}>
-            <View style={styles.homeNextDate}>
-              <Text style={styles.homeNextDateMonth}>
-                {new Date(nextBooking.startsAt)
-                  .toLocaleDateString("en-US", { month: "short" })
-                  .toUpperCase()}
-              </Text>
-              <Text style={styles.homeNextDateDay}>
-                {new Date(nextBooking.startsAt).getDate()}
-              </Text>
-            </View>
-            <View style={styles.flex}>
-              <Text style={styles.homeNextEyebrow}>NEXT UP · CONFIRMED</Text>
-              <Text style={styles.homeNextTitle}>{nextBooking.title}</Text>
-              <Text style={styles.homeNextMeta}>
-                {new Date(nextBooking.startsAt).toLocaleTimeString("en-US", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}{" "}
-                · {nextBooking.venueName}
-              </Text>
-              {!["pickup", "court-rental"].includes(nextBooking.kind) && (
-                <SessionArrivalCard booking={nextBooking} client={client} />
-              )}
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </View>
-        ) : (
-          <Pressable
-            onPress={() => onAction("find-match")}
-            style={styles.homeNextSession}
-          >
-            <View style={styles.homeNextOpenMark}>
-              <Text style={styles.homeNextOpenMarkText}>＋</Text>
-            </View>
-            <View style={styles.flex}>
-              <Text style={styles.homeNextEyebrow}>YOUR CALENDAR IS OPEN</Text>
-              <Text style={styles.homeNextTitle}>
-                Find something worth playing.
-              </Text>
-              <Text style={styles.homeNextMeta}>
-                Matches, courts, and events are ready nearby.
-              </Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-        )}
 
         <View style={styles.homePerformanceCard}>
           <View style={styles.cardTitleRow}>
@@ -9395,7 +9428,7 @@ function createStyles(palette: Palette) {
     homeWelcomeTitle: {
       color: colors.bone,
       fontSize: 32,
-      fontWeight: "900",
+      fontWeight: "800",
       letterSpacing: -1.5,
       lineHeight: 35,
       marginTop: 5,
@@ -9421,7 +9454,6 @@ function createStyles(palette: Palette) {
       color: colors.bone,
       fontFamily: "Archivo-Table",
       fontSize: 17,
-      fontWeight: "900",
       letterSpacing: -0.7,
     },
     homeRatingBadgeLabel: {
@@ -9475,7 +9507,7 @@ function createStyles(palette: Palette) {
     homeQuickLabel: {
       color: colors.bone,
       fontSize: 15,
-      fontWeight: "900",
+      fontWeight: "800",
       letterSpacing: -0.4,
     },
     homeQuickLabelPrimary: { color: colors.onAccent },
@@ -9503,13 +9535,13 @@ function createStyles(palette: Palette) {
     homeNextDateMonth: {
       color: colors.aqua,
       fontSize: 10,
-      fontWeight: "900",
+      fontWeight: "800",
       letterSpacing: 0.9,
     },
     homeNextDateDay: {
       color: colors.bone,
+      fontFamily: "Archivo-Block",
       fontSize: 22,
-      fontWeight: "900",
       lineHeight: 24,
     },
     homeNextOpenMark: {
@@ -9546,7 +9578,7 @@ function createStyles(palette: Palette) {
     homePerformanceTitle: {
       color: colors.bone,
       fontSize: 25,
-      fontWeight: "900",
+      fontWeight: "800",
       letterSpacing: -1.1,
       marginTop: 4,
     },
@@ -9562,7 +9594,6 @@ function createStyles(palette: Palette) {
       color: colors.bone,
       fontFamily: "Archivo-Block",
       fontSize: 18,
-      fontWeight: "900",
       letterSpacing: -0.5,
     },
     homePerformanceLabel: { color: colors.muted, fontSize: 10, marginTop: 3 },
