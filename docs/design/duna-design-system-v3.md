@@ -68,7 +68,21 @@ And universally: `letter-spacing: -0.018em` max, `word-spacing: 0.04em`, `font-s
 
 ## 2.1 Homepage
 
-Covered in `duna-implementation-audit.md`. Open blockers unchanged: `01/02/03` markers, no live strand, no marine block, Sand Rating duplicate node. Add: hero plate is a dusk silhouette on navy — **regenerate as high-key backlit** per §1.3.
+The homepage now uses a high-key, scroll-driven **Sand World** instead of the
+old dusk plate and numbered audience cards. A single persistent procedural
+terrain moves through four full-viewport chapters: the connected-game promise,
+Play, Compete, and Operate. Copy and calls to action remain ordinary semantic
+content above the canvas; WebGL is atmosphere, never the information layer.
+
+The ground is near-white in light mode. Once the Sand World ends, the page
+returns to crisp `--surface-1` editorial sections for current play, Sand Rating,
+the professional tour, and HQ. The Apple Watch chapter is the sole dark live
+zone. The old `01/02/03` markers, duplicated Sand Rating node, beige card hero,
+live strand, and decorative marine block are retired.
+
+Canonical fallbacks: pause offscreen, cap rendering at 30fps, clamp internal
+resolution, freeze on `prefers-reduced-motion`, freeze when data saving is on,
+and preserve the composed CSS sand ground if WebGL cannot initialize.
 
 ## 2.2 /pro — went dark, and it cost the page
 
@@ -357,7 +371,7 @@ Large rounded rectangles read as software. Large square surfaces read as print a
 
 | Page               | Must bleed                                                                         | Stays contained                                                           |
 | ------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Homepage           | Hero plate, section grounds, "Happening" imagery (right edge), live strand         | Event cards, three-faces cards                                            |
+| Homepage           | Procedural Sand World, section grounds, "Happening" imagery (right edge)           | Event rows, rating principles, operator metrics                           |
 | Player profile     | Identity band, ghost surname (clipped both edges), athlete cutout (bottom + right) | Trajectory chart, match history, KPI tiles                                |
 | /pro               | Hero plate, **date rail** (edge to edge with snap scroll)                          | Event cards, rankings table, directory cards                              |
 | Event page         | Venue plate, section grounds                                                       | Official artwork (**a frame is respect**), teams table, standings, market |

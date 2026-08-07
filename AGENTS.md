@@ -95,6 +95,23 @@ When the documents appear to conflict, preserve these invariants:
 - Charts must explain change, expose an accessible summary, respect reduced
   motion, and remain legible without color.
 
+## Homepage creative direction
+
+- The homepage opens on a nearly white editorial ground. Its signature is one
+  persistent, scroll-driven procedural sand world that moves through the Play,
+  Compete, and Operate value chapters; do not replace it with a card hero,
+  generic stock loop, or a collection of competing ambient effects.
+- The sand canvas is progressive enhancement. All copy, links, proof, and
+  chapter order remain complete when WebGL is unavailable, reduced motion is
+  requested, or data saving is enabled. In those states, render a composed
+  static sand frame instead of removing the atmosphere.
+- After the opening world, return to crisp `--surface-1` sections with measured
+  editorial type and one purposeful plane break. Dark ground is reserved for
+  the live Apple Watch / match-control chapter.
+- Reference sites may inform pacing and spatial behavior, never assets,
+  geometry, shaders, copy, or brand motifs. Duna's motion subject is wind-shaped
+  sand, court lines, and the connected game.
+
 ## Imagery and generated media
 
 - Follow the image manifest and seed/licensing rules in the design system.

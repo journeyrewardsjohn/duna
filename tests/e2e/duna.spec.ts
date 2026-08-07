@@ -19,18 +19,17 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(
-    page.getByRole("heading", { name: /Play more.*Know your game/ }),
+    page.getByRole("heading", {
+      name: /Everything that happens on sand.*One living game/,
+    }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: /Find your next game/ }),
-  ).toBeVisible();
-  await expect(page.locator(".campaign-hero video")).toHaveAttribute(
-    "poster",
-    "/media/brand/duna-home-hero-v1.webp",
+  await expect(page.getByRole("link", { name: /Find a game/ })).toBeVisible();
+  const sandCanvas = page.getByTestId("homepage-sand-world").locator("canvas");
+  await expect(sandCanvas).toBeVisible();
+  await expect(sandCanvas).toHaveAttribute(
+    "data-renderer",
+    /^(webgl|fallback)$/,
   );
-  await expect(
-    page.locator('.campaign-hero video source[type="video/mp4"]'),
-  ).toHaveAttribute("src", "/media/brand/duna-home-hero-motion-v1.mp4");
   await expect(
     page.getByRole("link", { name: "Duna HQ" }).first(),
   ).toHaveAttribute("href", /.+/);
@@ -41,6 +40,25 @@ test("marketing and player discovery stay usable", async ({ page }) => {
     page.getByRole("heading", { name: "The whole world of sand." }),
   ).toBeVisible();
   await expect(page.getByLabel("Search Duna")).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test("homepage sand motion respects the reduced-motion preference", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+
+  const sandCanvas = page.getByTestId("homepage-sand-world").locator("canvas");
+  await expect(sandCanvas).toHaveAttribute(
+    "data-renderer",
+    /^(webgl|fallback)$/,
+  );
+
+  if ((await sandCanvas.getAttribute("data-renderer")) === "webgl") {
+    await expect(sandCanvas).toHaveAttribute("data-motion", "static");
+  }
+
   await expectNoHorizontalOverflow(page);
 });
 
