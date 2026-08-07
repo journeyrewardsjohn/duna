@@ -4,6 +4,7 @@
   "createdAt": "2026-08-05",
   "generators": [
     "Higgsfield Nano Banana Pro",
+    "Higgsfield Nano Banana 2",
     "Higgsfield Seedance 2.0",
     "Higgsfield Soul Location",
     "Higgsfield GPT Image 2"
@@ -67,6 +68,126 @@
       "jobId": "231c7ae1-5e53-4c44-a42b-d5a4d8bff750",
       "intent": "Anonymous backlit elite rally with obscured identity, suspended sand, no crowd, marks, or sponsor boards.",
       "reference": "Higgsfield GPT Image 2 · text-only generation, no real athlete likeness"
+    },
+    {
+      "name": "people/duna-avatar-jordan-cruz-v1",
+      "jobId": "01a44a94-6541-42fa-aa48-6e9160b8b7be",
+      "model": "Higgsfield Nano Banana 2",
+      "intent": "Fictional South Bay beach-volleyball coach portrait for illustrative product mocks.",
+      "promptIntent": "Natural square editorial headshot of a warm, athletic Latino male coach in soft late-afternoon beach light, with quiet sand tones and no marks.",
+      "sourceReferences": ["/media/brand/duna-home-rally-v3.webp"],
+      "permissions": "Fictional non-identifiable person; Duna-generated brand image used only as a visual-grade reference.",
+      "outputNames": [
+        "/media/brand/people/duna-avatar-jordan-cruz-v1.avif",
+        "/media/brand/people/duna-avatar-jordan-cruz-v1.webp"
+      ]
+    },
+    {
+      "name": "people/duna-avatar-maya-rivera-v1",
+      "jobId": "45c85cce-2acf-48fa-b0c2-790d3e671bc1",
+      "model": "Higgsfield Nano Banana 2",
+      "intent": "Fictional youth beach-volleyball player portrait for illustrative coaching and context mocks.",
+      "promptIntent": "Natural square editorial headshot of a confident Latina player in warm beach light, age-appropriate athletic styling, quiet sand background, and no marks.",
+      "sourceReferences": ["/media/brand/duna-home-rally-v3.webp"],
+      "permissions": "Fictional non-identifiable person; Duna-generated brand image used only as a visual-grade reference.",
+      "outputNames": [
+        "/media/brand/people/duna-avatar-maya-rivera-v1.avif",
+        "/media/brand/people/duna-avatar-maya-rivera-v1.webp"
+      ]
+    },
+    {
+      "name": "people/duna-avatar-drew-park-v1",
+      "jobId": "a988735e-d165-4f89-990f-17689c18a027",
+      "model": "Higgsfield Nano Banana 2",
+      "intent": "Fictional beach director portrait for illustrative people-management mocks.",
+      "promptIntent": "Natural square editorial headshot of a Korean American male beach director in warm coastal light, relaxed professional expression, and no marks.",
+      "sourceReferences": ["/media/brand/duna-home-rally-v3.webp"],
+      "permissions": "Fictional non-identifiable person; Duna-generated brand image used only as a visual-grade reference.",
+      "outputNames": [
+        "/media/brand/people/duna-avatar-drew-park-v1.avif",
+        "/media/brand/people/duna-avatar-drew-park-v1.webp"
+      ]
+    },
+    {
+      "name": "people/duna-avatar-jamie-stone-v1",
+      "jobId": "1df72a3c-7869-470e-9e85-31465f8a7f81",
+      "model": "Higgsfield Nano Banana 2",
+      "intent": "Fictional adult club member portrait for illustrative people-management mocks.",
+      "promptIntent": "Natural square editorial headshot of a friendly Black female beach-volleyball member in warm coastal light with a simple athletic top and no marks.",
+      "sourceReferences": ["/media/brand/duna-home-rally-v3.webp"],
+      "permissions": "Fictional non-identifiable person; Duna-generated brand image used only as a visual-grade reference.",
+      "outputNames": [
+        "/media/brand/people/duna-avatar-jamie-stone-v1.avif",
+        "/media/brand/people/duna-avatar-jamie-stone-v1.webp"
+      ]
+    },
+    {
+      "name": "people/duna-avatar-alex-chen-v1",
+      "jobId": "ac577c4d-1bbc-4197-abf9-d6c614489e85",
+      "model": "Higgsfield Nano Banana 2",
+      "intent": "Fictional parent and guardian portrait for illustrative people-management mocks.",
+      "promptIntent": "Natural square editorial headshot of a thoughtful Chinese American male parent in soft coastal light, relaxed casual styling, and no marks.",
+      "sourceReferences": ["/media/brand/duna-home-rally-v3.webp"],
+      "permissions": "Fictional non-identifiable person; Duna-generated brand image used only as a visual-grade reference.",
+      "outputNames": [
+        "/media/brand/people/duna-avatar-alex-chen-v1.avif",
+        "/media/brand/people/duna-avatar-alex-chen-v1.webp"
+      ]
+    },
+    {
+      "name": "people/duna-avatar-mara-lewis-v1",
+      "jobId": "7c386ffd-383e-4b96-aadc-2861a7b9796c",
+      "model": "Higgsfield Nano Banana 2",
+      "intent": "Fictional adult player portrait for illustrative event attendance and social proof.",
+      "promptIntent": "Natural square editorial headshot of an athletic Black female beach-volleyball player in warm golden-hour light with no marks.",
+      "sourceReferences": ["/media/brand/duna-home-rally-v3.webp"],
+      "permissions": "Fictional non-identifiable person; Duna-generated brand image used only as a visual-grade reference.",
+      "outputNames": [
+        "/media/brand/people/duna-avatar-mara-lewis-v1.avif",
+        "/media/brand/people/duna-avatar-mara-lewis-v1.webp"
+      ]
+    },
+    {
+      "name": "people/duna-avatar-theo-park-v1",
+      "jobId": "c4402a22-ba28-4694-9803-c1260cc6c1e1",
+      "model": "Higgsfield Nano Banana 2",
+      "intent": "Fictional player-coach portrait for illustrative event attendance and social proof.",
+      "promptIntent": "Natural square editorial headshot of a Korean American male beach-volleyball player-coach in warm golden-hour light with no marks.",
+      "sourceReferences": ["/media/brand/duna-home-rally-v3.webp"],
+      "permissions": "Fictional non-identifiable person; Duna-generated brand image used only as a visual-grade reference.",
+      "outputNames": [
+        "/media/brand/people/duna-avatar-theo-park-v1.avif",
+        "/media/brand/people/duna-avatar-theo-park-v1.webp"
+      ]
+    },
+    {
+      "name": "people/duna-avatar-noa-williams-v1",
+      "jobId": "47130e6c-9d44-4953-b646-6ca344dde709",
+      "model": "Higgsfield Nano Banana 2",
+      "intent": "Fictional adult player portrait for illustrative event attendance and social proof.",
+      "promptIntent": "Natural square editorial headshot of a mixed-race female beach-volleyball player in warm golden-hour light with no marks.",
+      "sourceReferences": ["/media/brand/duna-home-rally-v3.webp"],
+      "permissions": "Fictional non-identifiable person; Duna-generated brand image used only as a visual-grade reference.",
+      "outputNames": [
+        "/media/brand/people/duna-avatar-noa-williams-v1.avif",
+        "/media/brand/people/duna-avatar-noa-williams-v1.webp"
+      ]
+    },
+    {
+      "name": "people/duna-video-maya-practice-v1",
+      "jobId": "a2fc11d7-2cf2-4fac-963a-4d2b398b336b",
+      "model": "Higgsfield Nano Banana 2",
+      "intent": "Illustrative video thumbnail of fictional player Maya practicing serve receive.",
+      "promptIntent": "Wide cinematic practice-frame still preserving Maya's fictional identity, low athletic receive posture, warm backlight, visible ball and net, suspended sand, and no marks.",
+      "sourceReferences": [
+        "/media/brand/people/duna-avatar-maya-rivera-v1.webp",
+        "/media/brand/duna-home-rally-v3.webp"
+      ],
+      "permissions": "Fictional non-identifiable person and Duna-generated brand media only; illustrative marketing use, never evidence of a real practice or participant.",
+      "outputNames": [
+        "/media/brand/people/duna-video-maya-practice-v1.avif",
+        "/media/brand/people/duna-video-maya-practice-v1.webp"
+      ]
     }
   ],
   "motionAssets": [

@@ -449,6 +449,18 @@
   color: var(--text-3);
 }
 
+.chapterAttendance {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.4rem;
+}
+
+.chapterAttendance small {
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
 .chapterSignal > svg {
   position: absolute;
   right: 1.25rem;
@@ -527,6 +539,28 @@
   height: 0.48rem;
   border-radius: 50%;
   background: var(--signal);
+}
+
+.operatorPeople {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 0.7rem;
+  padding-top: 0.25rem;
+}
+
+.operatorPeople > span:last-child {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.operatorPeople strong {
+  font-size: 0.72rem;
+}
+
+.operatorPeople small {
+  color: var(--text-3);
+  font-size: 0.625rem;
 }
 
 .nowSection,
@@ -627,6 +661,19 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
+}
+
+.eventAttendance {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.45rem;
+}
+
+.eventAttendance small {
+  color: var(--text-3);
+  font-size: 0.625rem;
+  font-weight: 600;
 }
 
 .eventMeta {
@@ -1092,6 +1139,29 @@
 
 .hqMetrics :global(.duna-numeric) {
   font-size: clamp(2rem, 4vw, 3rem);
+}
+
+.hqPeople {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin: 0 1rem 1rem;
+  padding: 0 0.25rem;
+}
+
+.hqPeople p {
+  display: grid;
+  gap: 0.12rem;
+  margin: 0;
+}
+
+.hqPeople strong {
+  font-size: 0.76rem;
+}
+
+.hqPeople small {
+  color: var(--text-3);
+  font-size: 0.625rem;
 }
 
 .hqInsight {

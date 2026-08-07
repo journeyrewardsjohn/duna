@@ -27732,6 +27732,33 @@ a {
   margin: 0;
 }
 
+.event-card__attendance {
+  align-items: center;
+  display: flex;
+  gap: 0.7rem;
+  min-height: 2rem;
+}
+
+.event-card__attendance > span:last-child {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.event-card__attendance strong,
+.event-card__attendance small {
+  line-height: 1.15;
+}
+
+.event-card__attendance strong {
+  color: var(--text-1);
+  font-size: 0.78rem;
+}
+
+.event-card__attendance small {
+  color: var(--text-2);
+  font-size: 0.68rem;
+}
+
 .event-card__meta {
   border-top: 1px solid var(--hairline);
   display: flex;

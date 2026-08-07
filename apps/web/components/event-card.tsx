@@ -3,6 +3,8 @@ import { defaultEventMedia, formatMoney, formatVenueTime } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import { ArrowUpRight, MapPin } from "lucide-react";
 import Link from "next/link";
+import { ProfileAvatarStack } from "@/components/profile-avatar-stack";
+import { withDemoProfileAvatars } from "@/lib/marketing-people";
 import { WeatherInline } from "@/components/weather-forecast";
 
 export function EventCard({
@@ -46,6 +48,19 @@ export function EventCard({
           {event.venueName}
         </p>
         <WeatherInline forecast={event.weather} instant={event.startsAt} />
+        {event.attendees && event.attendees.length > 0 && (
+          <div className="event-card__attendance">
+            <ProfileAvatarStack
+              label={`${event.attendees.length} people attending ${event.title}`}
+              people={withDemoProfileAvatars(event.attendees)}
+              size="sm"
+            />
+            <span>
+              <strong>{event.attendees.length} going</strong>
+              <small>Profiles connected</small>
+            </span>
+          </div>
+        )}
         <div className="event-card__meta">
           <span>
             {isFree ? (

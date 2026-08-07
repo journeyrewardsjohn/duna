@@ -20,10 +20,16 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { DunaWatchDevice } from "@/components/duna-watch-device";
 import { HomeSandWorld } from "@/components/home-sand-world";
+import { ProfileAvatarStack } from "@/components/profile-avatar-stack";
 import { RatingOrbit } from "@/components/rating-orbit";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
+import {
+  marketingPeople,
+  marketingPlayerGroup,
+  withDemoProfileAvatars,
+} from "@/lib/marketing-people";
 import styles from "./homepage.module.css";
 
 const homeMedia = {
@@ -161,6 +167,17 @@ export default async function HomePage() {
                   {featuredEvent?.venueName ??
                     "Courts, people, and competition"}
                 </small>
+                {featuredEvent?.attendees &&
+                  featuredEvent.attendees.length > 0 && (
+                    <div className={styles.chapterAttendance}>
+                      <ProfileAvatarStack
+                        label={`${featuredEvent.attendees.length} people attending ${featuredEvent.title}`}
+                        people={withDemoProfileAvatars(featuredEvent.attendees)}
+                        size="sm"
+                      />
+                      <small>{featuredEvent.attendees.length} going</small>
+                    </div>
+                  )}
                 <ArrowRight aria-hidden size={17} />
               </Link>
             </div>
@@ -229,6 +246,17 @@ export default async function HomePage() {
                   <i /> Connected ·{" "}
                   {marketNames || "ready for your first market"}
                 </p>
+                <section className={styles.operatorPeople}>
+                  <ProfileAvatarStack
+                    label="Players connected to today's sessions"
+                    people={marketingPlayerGroup}
+                    size="sm"
+                  />
+                  <span>
+                    <strong>Players connected</strong>
+                    <small>Profiles follow every booking</small>
+                  </span>
+                </section>
               </div>
             </div>
           </section>
@@ -276,6 +304,16 @@ export default async function HomePage() {
                   <small>
                     <MapPin aria-hidden size={13} /> {event.venueName}
                   </small>
+                  {event.attendees && event.attendees.length > 0 && (
+                    <div className={styles.eventAttendance}>
+                      <ProfileAvatarStack
+                        label={`${event.attendees.length} people attending ${event.title}`}
+                        people={withDemoProfileAvatars(event.attendees)}
+                        size="sm"
+                      />
+                      <small>{event.attendees.length} going</small>
+                    </div>
+                  )}
                 </span>
                 <span className={styles.eventMeta}>
                   {event.price.amountMinor === 0 ? (
@@ -501,6 +539,23 @@ export default async function HomePage() {
                   <small>Public profiles</small>
                   <Numeric tier="block">{people.length}</Numeric>
                 </div>
+              </div>
+              <div className={styles.hqPeople}>
+                <ProfileAvatarStack
+                  label="Players scheduled across today's Duna HQ sessions"
+                  people={[
+                    marketingPeople.maya,
+                    marketingPeople.jamie,
+                    marketingPeople.mara,
+                    marketingPeople.noa,
+                    marketingPeople.theo,
+                  ]}
+                  size="sm"
+                />
+                <p>
+                  <strong>Seven arrivals confirmed</strong>
+                  <small>Private lessons + group training</small>
+                </p>
               </div>
               <div className={styles.hqInsight}>
                 <Sparkles aria-hidden size={17} />
