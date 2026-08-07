@@ -52,6 +52,35 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 });
 
+test("club and coach marketing keeps both operating paths clear", async ({
+  page,
+}) => {
+  await page.goto("/run-your-club");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "Run the business. Keep the game human.",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "Run every court like one connected club.",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "Your coaching business. In your hand.",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "Assistance proposes. Operators decide.",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("Player-controlled summaries")).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
 test("player home puts useful actions and the personal calendar first", async ({
   page,
 }) => {

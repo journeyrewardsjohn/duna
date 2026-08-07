@@ -6,6 +6,7 @@ import {
   renderAgentsGuide,
   renderConsumerEventMarkdown,
   renderSitemapMarkdown,
+  renderStaticPageMarkdown,
 } from "./public-markdown";
 
 const event = {
@@ -76,5 +77,13 @@ describe("public Markdown representations", () => {
       { url: "https://duna.coach/events/golden-hour-4s" },
     ]);
     expect(index).toContain("https://duna.coach/events/golden-hour-4s.md");
+  });
+
+  it("documents the distinct club-owner and solo-coach operating paths", () => {
+    const markdown = renderStaticPageMarkdown("/run-your-club");
+    expect(markdown).toContain("Solo coaches can manage a mobile calendar");
+    expect(markdown).toContain("Club owners can coordinate venues");
+    expect(markdown).toContain("Players control health-data sharing");
+    expect(markdown).toContain("Duna AI suggestions remain reviewable");
   });
 });
