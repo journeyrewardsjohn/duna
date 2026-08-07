@@ -87,6 +87,7 @@ for (const contract of [
 for (const contract of [
   "prefers-reduced-motion: reduce",
   "connection?.saveData",
+  "softwareRenderer",
   'canvas.dataset.renderer = "fallback"',
   "IntersectionObserver",
 ] as const) {
