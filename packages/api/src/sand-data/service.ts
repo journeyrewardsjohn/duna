@@ -41,7 +41,7 @@ import {
   worldRankingSignal,
   type RatingBacktestMatch,
 } from "@duna/rating";
-import { publicPlayerPath } from "@duna/core";
+import { playerIdFromPublicIdentifier, publicPlayerPath } from "@duna/core";
 import {
   and,
   asc,
@@ -83,7 +83,11 @@ import {
   type PlayerMergeFieldValue,
   type PlayerMergePlan,
 } from "./profile-merge";
-import { dedupeWorldRankingRows } from "./rankings";
+import {
+  connectRankingIdentities,
+  dedupeWorldRankingRows,
+  type RankingIdentityRow,
+} from "./rankings";
 import {
   createProfessionalEventResearchProposal,
   parseProfessionalEventResearchProposal,
@@ -5423,26 +5427,44 @@ export async function loadPublicWorldRankings() {
   const genders = ["men", "women"] as const;
   const limitPerGender = 200;
   const fetchBufferPerGender = 500;
+  const [worldRankingSource, sandRatingSource] = await Promise.all([
+    database.query.importSources.findFirst({
+      where: eq(importSources.slug, "volleyball-world"),
+      columns: { id: true },
+    }),
+    database.query.importSources.findFirst({
+      where: eq(importSources.slug, "sandrating"),
+      columns: { id: true },
+    }),
+  ]);
   const latestDates = Object.fromEntries(
     await Promise.all(
       genders.map(async (genderCategory) => {
         const [latest] = await database
           .select({ rankingDate: worldRankings.rankingDate })
           .from(worldRankings)
-          .where(eq(worldRankings.genderCategory, genderCategory))
+          .where(
+            and(
+              eq(worldRankings.genderCategory, genderCategory),
+              worldRankingSource
+                ? eq(worldRankings.sourceId, worldRankingSource.id)
+                : undefined,
+            ),
+          )
           .orderBy(desc(worldRankings.rankingDate))
           .limit(1);
         return [genderCategory, latest?.rankingDate] as const;
       }),
     ),
   ) as Record<(typeof genders)[number], string | undefined>;
-  const worldRows = dedupeWorldRankingRows(
+  const sourceRows = dedupeWorldRankingRows(
     await Promise.all(
       genders.map(async (genderCategory) => {
         const rankingDate = latestDates[genderCategory];
         if (!rankingDate) return [];
         return database
           .select({
+            rankingId: worldRankings.id,
             genderCategory: worldRankings.genderCategory,
             rankingDate: worldRankings.rankingDate,
             rank: worldRankings.rank,
@@ -5476,6 +5498,9 @@ export async function loadPublicWorldRankings() {
             and(
               eq(worldRankings.genderCategory, genderCategory),
               eq(worldRankings.rankingDate, rankingDate),
+              worldRankingSource
+                ? eq(worldRankings.sourceId, worldRankingSource.id)
+                : undefined,
             ),
           )
           .orderBy(asc(worldRankings.rank))
@@ -5483,6 +5508,68 @@ export async function loadPublicWorldRankings() {
       }),
     ).then((rows) => rows.flat()),
   );
+  const identityBridgeRows = sandRatingSource
+    ? dedupeWorldRankingRows(
+        await Promise.all(
+          genders.map(async (genderCategory) => {
+            const [latest] = await database
+              .select({ rankingDate: worldRankings.rankingDate })
+              .from(worldRankings)
+              .where(
+                and(
+                  eq(worldRankings.sourceId, sandRatingSource.id),
+                  eq(worldRankings.genderCategory, genderCategory),
+                ),
+              )
+              .orderBy(desc(worldRankings.rankingDate))
+              .limit(1);
+            if (!latest?.rankingDate) return [];
+            return database
+              .select({
+                rankingId: worldRankings.id,
+                genderCategory: worldRankings.genderCategory,
+                rankingDate: worldRankings.rankingDate,
+                rank: worldRankings.rank,
+                previousRank: worldRankings.previousRank,
+                points: worldRankings.points,
+                externalPersonId: worldRankings.externalPersonId,
+                displayName: worldRankings.displayName,
+                countryCode: worldRankings.countryCode,
+                personId: worldRankings.personId,
+                handle: people.handle,
+                homeMarket: people.homeMarket,
+                profileClaimStatus: people.profileClaimStatus,
+                avatarUrl: people.avatarUrl,
+                profileVisibility: people.profileVisibility,
+                personStatus: people.status,
+                isMinor: people.isMinor,
+                sandRating: ratings.display,
+                ratedMatches: ratings.ratedMatches,
+                rawPayload: worldRankings.rawPayload,
+              })
+              .from(worldRankings)
+              .leftJoin(people, eq(worldRankings.personId, people.id))
+              .leftJoin(
+                ratings,
+                and(
+                  eq(ratings.personId, worldRankings.personId),
+                  eq(ratings.discipline, "beach-2s"),
+                ),
+              )
+              .where(
+                and(
+                  eq(worldRankings.sourceId, sandRatingSource.id),
+                  eq(worldRankings.genderCategory, genderCategory),
+                  eq(worldRankings.rankingDate, latest.rankingDate),
+                ),
+              )
+              .orderBy(asc(worldRankings.rank))
+              .limit(fetchBufferPerGender);
+          }),
+        ).then((rows) => rows.flat()),
+      )
+    : [];
+  const worldRows = connectRankingIdentities(sourceRows, identityBridgeRows);
   const worldRankByPerson = new Map(
     worldRows.flatMap((row) =>
       row.personId
@@ -5534,6 +5621,7 @@ export async function loadPublicWorldRankings() {
         );
         return {
           rank: index + 1,
+          profileKind: "canonical" as const,
           personId: row.personId,
           displayName: row.displayName,
           handle: row.handle,
@@ -5563,7 +5651,29 @@ export async function loadPublicWorldRankings() {
           row.personStatus === "active" &&
           row.profileVisibility === "public" &&
           row.isMinor === false;
+        const canonicalPath =
+          publicProfile && row.personId && row.handle
+            ? publicPlayerPath({
+                id: row.personId,
+                displayName: row.displayName,
+                handle: row.handle,
+                homeMarket: row.homeMarket,
+                countryCode: row.countryCode,
+                profileClaimStatus: row.profileClaimStatus as
+                  "claimed" | "unclaimed" | "claim-pending" | "merged",
+              })
+            : undefined;
+        const publicPath =
+          canonicalPath ??
+          publicPlayerPath({
+            id: row.rankingId,
+            displayName: row.displayName,
+            handle: "world-ranked-player",
+            countryCode: row.countryCode,
+            profileClaimStatus: "unclaimed",
+          });
         return {
+          rankingId: row.rankingId,
           rank: row.rank,
           previousRank: row.previousRank ?? undefined,
           points: row.points,
@@ -5571,18 +5681,10 @@ export async function loadPublicWorldRankings() {
           countryCode: row.countryCode ?? undefined,
           personId: row.personId ?? undefined,
           handle: publicProfile ? (row.handle ?? undefined) : undefined,
-          publicPath:
-            publicProfile && row.personId && row.handle
-              ? publicPlayerPath({
-                  id: row.personId,
-                  displayName: row.displayName,
-                  handle: row.handle,
-                  homeMarket: row.homeMarket,
-                  countryCode: row.countryCode,
-                  profileClaimStatus: row.profileClaimStatus as
-                    "claimed" | "unclaimed" | "claim-pending" | "merged",
-                })
-              : undefined,
+          profileKind: canonicalPath
+            ? ("canonical" as const)
+            : ("ranking" as const),
+          publicPath,
           avatarUrl: publicProfile ? (row.avatarUrl ?? undefined) : undefined,
           sandRating: row.sandRating ?? undefined,
           ratedMatches: row.ratedMatches ?? undefined,
@@ -5595,6 +5697,186 @@ export async function loadPublicWorldRankings() {
     limitPerGender,
     world,
     duna,
+  };
+}
+
+export async function loadPublicWorldRankingPlayer(identifier: string) {
+  requireDatabase();
+  const rankingId = playerIdFromPublicIdentifier(identifier);
+  if (!rankingId) return undefined;
+  const database = getDatabase();
+  const [row] = await database
+    .select({
+      id: worldRankings.id,
+      rankingDate: worldRankings.rankingDate,
+      genderCategory: worldRankings.genderCategory,
+      rank: worldRankings.rank,
+      previousRank: worldRankings.previousRank,
+      points: worldRankings.points,
+      externalPersonId: worldRankings.externalPersonId,
+      displayName: worldRankings.displayName,
+      countryCode: worldRankings.countryCode,
+      personId: worldRankings.personId,
+      handle: people.handle,
+      homeMarket: people.homeMarket,
+      profileClaimStatus: people.profileClaimStatus,
+      avatarUrl: people.avatarUrl,
+      profileVisibility: people.profileVisibility,
+      personStatus: people.status,
+      isMinor: people.isMinor,
+      sandRating: ratings.display,
+      ratedMatches: ratings.ratedMatches,
+      rawPayload: worldRankings.rawPayload,
+    })
+    .from(worldRankings)
+    .leftJoin(people, eq(worldRankings.personId, people.id))
+    .leftJoin(
+      ratings,
+      and(
+        eq(ratings.personId, worldRankings.personId),
+        eq(ratings.discipline, "beach-2s"),
+      ),
+    )
+    .where(eq(worldRankings.id, rankingId))
+    .limit(1);
+  if (!row) return undefined;
+
+  const sandRatingSource = await database.query.importSources.findFirst({
+    where: eq(importSources.slug, "sandrating"),
+    columns: { id: true },
+  });
+  let identityBridgeRows: RankingIdentityRow[] = [];
+  if (sandRatingSource) {
+    const [latest] = await database
+      .select({ rankingDate: worldRankings.rankingDate })
+      .from(worldRankings)
+      .where(
+        and(
+          eq(worldRankings.sourceId, sandRatingSource.id),
+          eq(worldRankings.genderCategory, row.genderCategory),
+        ),
+      )
+      .orderBy(desc(worldRankings.rankingDate))
+      .limit(1);
+    if (latest?.rankingDate) {
+      identityBridgeRows = await database
+        .select({
+          rankingDate: worldRankings.rankingDate,
+          genderCategory: worldRankings.genderCategory,
+          rank: worldRankings.rank,
+          points: worldRankings.points,
+          externalPersonId: worldRankings.externalPersonId,
+          displayName: worldRankings.displayName,
+          countryCode: worldRankings.countryCode,
+          personId: worldRankings.personId,
+          handle: people.handle,
+          homeMarket: people.homeMarket,
+          profileClaimStatus: people.profileClaimStatus,
+          avatarUrl: people.avatarUrl,
+          profileVisibility: people.profileVisibility,
+          personStatus: people.status,
+          isMinor: people.isMinor,
+          sandRating: ratings.display,
+          ratedMatches: ratings.ratedMatches,
+          rawPayload: worldRankings.rawPayload,
+        })
+        .from(worldRankings)
+        .leftJoin(people, eq(worldRankings.personId, people.id))
+        .leftJoin(
+          ratings,
+          and(
+            eq(ratings.personId, worldRankings.personId),
+            eq(ratings.discipline, "beach-2s"),
+          ),
+        )
+        .where(
+          and(
+            eq(worldRankings.sourceId, sandRatingSource.id),
+            eq(worldRankings.genderCategory, row.genderCategory),
+            eq(worldRankings.rankingDate, latest.rankingDate),
+          ),
+        )
+        .orderBy(asc(worldRankings.rank))
+        .limit(500);
+    }
+  }
+  const connected =
+    connectRankingIdentities([row], identityBridgeRows)[0] ?? row;
+  const raw = unknownRecord(row.rawPayload);
+  const sourcePlayerOne = optionalSnapshotString(raw.player1Name);
+  const sourcePlayerTwo = optionalSnapshotString(raw.player2Name);
+  const normalizedPlayer = normalizePersonName(row.displayName);
+  const partnerName =
+    sourcePlayerOne && normalizePersonName(sourcePlayerOne) === normalizedPlayer
+      ? sourcePlayerTwo
+      : sourcePlayerTwo &&
+          normalizePersonName(sourcePlayerTwo) === normalizedPlayer
+        ? sourcePlayerOne
+        : undefined;
+  const competitions = Array.isArray(raw.teamCompetitions)
+    ? raw.teamCompetitions.flatMap((entry) => {
+        const competition = unknownRecord(entry);
+        const name = optionalSnapshotString(competition.name);
+        if (!name) return [];
+        return [
+          {
+            name,
+            rank: optionalNumber(competition.rank),
+            startsAt: optionalSnapshotString(competition.startDate),
+            points: optionalNumber(competition.earnedPointsTeam),
+            faded: competition.isFaded === true,
+          },
+        ];
+      })
+    : [];
+  const connectedPublicPath =
+    connected.personStatus === "active" &&
+    connected.profileVisibility === "public" &&
+    connected.isMinor === false &&
+    connected.personId &&
+    connected.handle
+      ? publicPlayerPath({
+          id: connected.personId,
+          displayName: connected.displayName,
+          handle: connected.handle,
+          homeMarket: connected.homeMarket,
+          countryCode: connected.countryCode,
+          profileClaimStatus: connected.profileClaimStatus as
+            "claimed" | "unclaimed" | "claim-pending" | "merged",
+        })
+      : undefined;
+  const canonicalPath =
+    connectedPublicPath ??
+    publicPlayerPath({
+      id: row.id,
+      displayName: row.displayName,
+      handle: "world-ranked-player",
+      countryCode: row.countryCode,
+      profileClaimStatus: "unclaimed",
+    });
+
+  return {
+    canonicalPath,
+    connectedPublicPath,
+    ranking: {
+      id: row.id,
+      rank: row.rank,
+      previousRank: row.previousRank ?? undefined,
+      points: row.points,
+      rankingDate: row.rankingDate,
+      genderCategory: row.genderCategory,
+      displayName: row.displayName,
+      countryCode: row.countryCode ?? undefined,
+      sandRating: connected.sandRating ?? undefined,
+      ratedMatches: connected.ratedMatches ?? undefined,
+    },
+    team: {
+      name: optionalSnapshotString(raw.name),
+      partnerName,
+      federationName: optionalSnapshotString(raw.federationName),
+      tournamentsPlayed: optionalNumber(raw.tournamentsPlayed),
+    },
+    competitions,
   };
 }
 
@@ -11576,4 +11858,7 @@ export type PublicPlayerPerformance = Awaited<
 export type PublicRatingLab = Awaited<ReturnType<typeof loadPublicRatingLab>>;
 export type PublicWorldRankings = Awaited<
   ReturnType<typeof loadPublicWorldRankings>
+>;
+export type PublicWorldRankingPlayer = NonNullable<
+  Awaited<ReturnType<typeof loadPublicWorldRankingPlayer>>
 >;

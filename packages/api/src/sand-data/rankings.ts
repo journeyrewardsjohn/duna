@@ -10,6 +10,11 @@ export interface RankingIdentityRow {
   readonly countryCode?: string | null;
   readonly personId?: string | null;
   readonly handle?: string | null;
+  readonly homeMarket?: string | null;
+  readonly profileClaimStatus?: string | null;
+  readonly profileVisibility?: string | null;
+  readonly personStatus?: string | null;
+  readonly isMinor?: boolean | null;
   readonly avatarUrl?: string | null;
   readonly sandRating?: number | null;
   readonly ratedMatches?: number | null;
@@ -73,6 +78,16 @@ function canonicalNameVariants(row: RankingIdentityRow): readonly string[] {
   return [...new Set(variants.map((value) => value.trim()).filter(Boolean))];
 }
 
+function rankingAliasKey(
+  row: RankingIdentityRow,
+  alias: string,
+): string | undefined {
+  const countryCode = row.countryCode?.trim().toUpperCase();
+  const normalizedAlias = normalizePersonName(alias);
+  if (!countryCode || !normalizedAlias) return undefined;
+  return `${row.genderCategory}:${countryCode}:${normalizedAlias}`;
+}
+
 function quality(row: RankingIdentityRow): number {
   const normalized = normalizePersonName(row.displayName);
   return (
@@ -94,6 +109,67 @@ function preferred<T extends RankingIdentityRow>(left: T, right: T): T {
   return right.externalPersonId.localeCompare(left.externalPersonId) < 0
     ? right
     : left;
+}
+
+/**
+ * Connects a fresh official-ranking row to an already reviewed identity from a
+ * mapped ranking snapshot. Volleyball World commonly publishes abbreviated
+ * display names, while the mapped Sand Rating snapshot retains that exact
+ * source alias alongside the canonical player. We only bridge a unique
+ * gender/country/alias match; ambiguous names stay unresolved.
+ */
+export function connectRankingIdentities<T extends RankingIdentityRow>(
+  rows: readonly T[],
+  references: readonly RankingIdentityRow[],
+): T[] {
+  const referencesByAlias = new Map<string, Map<string, RankingIdentityRow>>();
+  for (const reference of references) {
+    if (!reference.personId) continue;
+    for (const alias of canonicalNameVariants(reference)) {
+      const key = rankingAliasKey(reference, alias);
+      if (!key) continue;
+      const people =
+        referencesByAlias.get(key) ?? new Map<string, RankingIdentityRow>();
+      const existing = people.get(reference.personId);
+      people.set(
+        reference.personId,
+        existing ? preferred(existing, reference) : reference,
+      );
+      referencesByAlias.set(key, people);
+    }
+  }
+
+  return rows.map((row) => {
+    if (row.personId) return row;
+    const matches = new Map<string, RankingIdentityRow>();
+    for (const alias of canonicalNameVariants(row)) {
+      const key = rankingAliasKey(row, alias);
+      if (!key) continue;
+      for (const [personId, reference] of referencesByAlias.get(key) ?? []) {
+        const existing = matches.get(personId);
+        matches.set(
+          personId,
+          existing ? preferred(existing, reference) : reference,
+        );
+      }
+    }
+    if (matches.size !== 1) return row;
+    const reference = matches.values().next().value;
+    if (!reference) return row;
+    return {
+      ...row,
+      personId: reference.personId,
+      handle: reference.handle,
+      homeMarket: reference.homeMarket,
+      profileClaimStatus: reference.profileClaimStatus,
+      profileVisibility: reference.profileVisibility,
+      personStatus: reference.personStatus,
+      isMinor: reference.isMinor,
+      avatarUrl: reference.avatarUrl,
+      sandRating: reference.sandRating,
+      ratedMatches: reference.ratedMatches,
+    } as T;
+  });
 }
 
 function dedupeBy<T extends RankingIdentityRow>(

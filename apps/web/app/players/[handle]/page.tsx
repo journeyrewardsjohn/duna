@@ -1,6 +1,7 @@
 import type {
   PublicPlayerIntelligence,
   PublicPlayerPerformance,
+  PublicWorldRankingPlayer,
 } from "@duna/api";
 import { Badge, Numeric, playerAccents } from "@duna/ui";
 import {
@@ -157,7 +158,42 @@ export async function generateMetadata({
   const route = await caller.public
     .playerRoute({ identifier: handle })
     .catch(() => undefined);
-  if (!route) return { title: "Player not found" };
+  if (!route) {
+    const rankedPlayer = await caller.public
+      .worldRankingPlayer({ identifier: handle })
+      .catch(() => undefined);
+    if (!rankedPlayer) return { title: "Player not found" };
+    const { ranking } = rankedPlayer;
+    const description = `${ranking.displayName} is currently world ranked #${ranking.rank} with ${ranking.points.toFixed(0)} tour points. Explore the official ranking snapshot, team context, and Duna profile connection status.`;
+    const image = professionalOgImageUrl({
+      title: ranking.displayName,
+      eyebrow: `${ranking.genderCategory === "men" ? "Men's" : "Women's"} world ranking #${ranking.rank}`,
+      detail: `${ranking.points.toFixed(0)} tour points · ${ranking.countryCode ?? "International"}`,
+    });
+    return {
+      title: `${ranking.displayName} beach volleyball profile`,
+      description,
+      alternates: {
+        canonical: rankedPlayer.canonicalPath,
+        types: { "text/markdown": "/rankings.md" },
+      },
+      openGraph: {
+        title: `${ranking.displayName} · World #${ranking.rank}`,
+        description,
+        type: "profile",
+        url: rankedPlayer.canonicalPath,
+        siteName: "Duna",
+        images: [{ url: image, alt: `${ranking.displayName} player profile` }],
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: `${ranking.displayName} · World #${ranking.rank}`,
+        description,
+        images: [image],
+      },
+      robots: { index: true, follow: true },
+    };
+  }
   const { player } = route;
   const intelligence = await caller.public
     .playerIntelligence({ handle: player.handle })
@@ -201,6 +237,316 @@ export async function generateMetadata({
   };
 }
 
+function WorldRankingPlayerProfile({
+  profile,
+}: {
+  readonly profile: PublicWorldRankingPlayer;
+}) {
+  const { competitions, ranking, team } = profile;
+  const movement =
+    ranking.previousRank === undefined
+      ? undefined
+      : ranking.previousRank - ranking.rank;
+  const nameParts = ranking.displayName.trim().split(/\s+/);
+  const lastName = nameParts.at(-1) ?? ranking.displayName;
+  const firstName = nameParts.slice(0, -1).join(" ");
+  const monogram = nameParts
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  const genderLabel = ranking.genderCategory === "men" ? "Men’s" : "Women’s";
+  const countingCompetitions = competitions.filter((entry) => !entry.faded);
+  const visibleCompetitions = [
+    ...countingCompetitions,
+    ...competitions.filter((entry) => entry.faded),
+  ].slice(0, 12);
+  const profileUrl = absolutePublicUrl(profile.canonicalPath);
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "ProfilePage",
+        "@id": `${profileUrl}#page`,
+        url: profileUrl,
+        name: `${ranking.displayName} beach volleyball profile`,
+        mainEntity: { "@id": `${profileUrl}#person` },
+        dateModified: ranking.rankingDate,
+      },
+      {
+        "@type": "Person",
+        "@id": `${profileUrl}#person`,
+        name: ranking.displayName,
+        url: profileUrl,
+        jobTitle: "Professional beach volleyball player",
+        nationality: ranking.countryCode
+          ? { "@type": "Country", name: ranking.countryCode }
+          : undefined,
+        description: `${genderLabel} world-ranked beach volleyball player at #${ranking.rank} with ${ranking.points.toFixed(0)} tour points.`,
+      },
+      {
+        "@type": "Dataset",
+        "@id": `${profileUrl}#ranking`,
+        name: `${ranking.displayName} official world ranking snapshot`,
+        about: { "@id": `${profileUrl}#person` },
+        dateModified: ranking.rankingDate,
+        variableMeasured: ["World ranking", "Tour points"],
+        creator: { "@type": "Organization", name: "Duna" },
+      },
+    ],
+  };
+
+  return (
+    <main
+      className="public-detail player-profile-v2 world-ranked-player-profile"
+      data-zone="athletic"
+      style={{ "--player-accent": "#37aba6" } as React.CSSProperties}
+    >
+      <SiteHeader />
+      <script
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
+        type="application/ld+json"
+      />
+
+      <section className="athlete-stage">
+        <section className="athlete-hero">
+          <div className="athlete-hero__wash" />
+          <span aria-hidden className="athlete-hero__surname">
+            {lastName}
+          </span>
+          <div className="athlete-hero__content">
+            <div className="athlete-hero__copy">
+              <div className="profile-badge-row">
+                <Badge tone="positive">
+                  <Trophy aria-hidden size={14} /> World ranked
+                </Badge>
+                <Badge>Official identity connecting</Badge>
+              </div>
+              <p className="athlete-hero__country">
+                <CountryCode code={ranking.countryCode} fallback="World" />
+                {ranking.countryCode ?? "International"} · {genderLabel}
+              </p>
+              <h1>
+                {firstName ? <span>{firstName}</span> : null}
+                <strong>{lastName}</strong>
+              </h1>
+              <p className="athlete-hero__lede">
+                Currently world ranked #{ranking.rank} with{" "}
+                {ranking.points.toFixed(0)} official tour points. This live
+                dossier preserves the ranking evidence while Duna connects the
+                athlete’s verified match record and Sand Rating identity.
+              </p>
+              <div className="athlete-hero__meta">
+                {team.name ? (
+                  <span>
+                    <UsersRound aria-hidden size={16} /> {team.name}
+                  </span>
+                ) : null}
+                {team.federationName ? (
+                  <span>
+                    <Flag aria-hidden size={16} /> {team.federationName}
+                  </span>
+                ) : null}
+                <span>
+                  <CalendarDays aria-hidden size={16} /> Snapshot{" "}
+                  {formatMatchDate(ranking.rankingDate, true)}
+                </span>
+              </div>
+              <div className="athlete-hero__actions">
+                <Link
+                  href={`/rankings?view=world&gender=${ranking.genderCategory}${ranking.countryCode ? `&country=${ranking.countryCode}` : ""}`}
+                >
+                  Back to rankings <ArrowRight aria-hidden size={17} />
+                </Link>
+                <Link href="/methodology">How Sand Rating works</Link>
+              </div>
+            </div>
+
+            <div className="athlete-hero__visual">
+              <Numeric
+                aria-hidden
+                className="athlete-hero__rank-mark"
+                tier="monument"
+              >
+                #{ranking.rank}
+              </Numeric>
+              <div className="athlete-hero__monogram" aria-hidden>
+                {monogram}
+              </div>
+              <div className="athlete-hero__rating">
+                <small>Official tour points</small>
+                <Numeric tier="hero">{ranking.points.toFixed(0)}</Numeric>
+                <span data-direction={(movement ?? 0) >= 0 ? "up" : "down"}>
+                  {movement === undefined
+                    ? "New ranking snapshot"
+                    : movement === 0
+                      ? "Holding position"
+                      : `${movement > 0 ? "+" : ""}${movement} ranking movement`}
+                </span>
+              </div>
+            </div>
+
+            <aside className="athlete-hero__rail">
+              <article className="athlete-hero-card athlete-hero-card--result world-ranking-team-card">
+                <header>
+                  <span>Official team</span>
+                  <Badge>#{ranking.rank}</Badge>
+                </header>
+                <small>Current partner</small>
+                <strong>
+                  {team.partnerName ?? "Partner identity pending"}
+                </strong>
+                <p>{team.name ?? `${genderLabel} world ranking team`}</p>
+                <footer>
+                  <span>{team.federationName ?? ranking.countryCode}</span>
+                  <b>{ranking.points.toFixed(0)} points</b>
+                </footer>
+              </article>
+              <article className="athlete-hero-card world-ranking-connection-card">
+                <Globe2 aria-hidden size={21} />
+                <small>Duna identity graph</small>
+                <strong>Profile evidence is connecting.</strong>
+                <p>
+                  This page stays public now, then resolves to the athlete’s
+                  full canonical profile as verified sources converge.
+                </p>
+              </article>
+            </aside>
+          </div>
+        </section>
+
+        <div className="athlete-stat-deck">
+          {[
+            {
+              label: "World position",
+              value: `#${ranking.rank}`,
+              detail: `${genderLabel} official ranking`,
+            },
+            {
+              label: "Tour points",
+              value: ranking.points.toFixed(0),
+              detail: `Snapshot ${formatMatchDate(ranking.rankingDate, true)}`,
+            },
+            {
+              label: "Ranking movement",
+              value:
+                movement === undefined
+                  ? "New"
+                  : movement === 0
+                    ? "—"
+                    : `${movement > 0 ? "+" : ""}${movement}`,
+              detail:
+                ranking.previousRank === undefined
+                  ? "Previous position unavailable"
+                  : `Previously #${ranking.previousRank}`,
+            },
+            {
+              label: "Counting finishes",
+              value: String(countingCompetitions.length),
+              detail: `${team.tournamentsPlayed ?? competitions.length} events in source record`,
+            },
+          ].map((metric) => (
+            <article key={metric.label}>
+              <small>{metric.label}</small>
+              <strong>
+                <Numeric tier="block">{metric.value}</Numeric>
+              </strong>
+              <span>{metric.detail}</span>
+            </article>
+          ))}
+        </div>
+
+        <aside className="world-ranking-connection-note">
+          <UserRoundCheck aria-hidden size={23} />
+          <span>
+            <small>Identity status</small>
+            <strong>Official ranking page live. Canonical profile next.</strong>
+            <p>
+              Duna will add the athlete’s Sand Rating, verified results,
+              partnership history, media, and claim controls only after the
+              underlying identity evidence is safely linked.
+            </p>
+          </span>
+        </aside>
+      </section>
+
+      <section className="public-profile-body athlete-profile-body">
+        <section className="world-ranking-dossier">
+          <header>
+            <div>
+              <span className="page-eyebrow">Official ranking dossier</span>
+              <h2>The points behind the position.</h2>
+              <p>
+                Recent counting and expired finishes from the connected world
+                ranking snapshot. Tournament points belong to the team.
+              </p>
+            </div>
+            <Medal aria-hidden size={30} />
+          </header>
+          {visibleCompetitions.length > 0 ? (
+            <div>
+              {visibleCompetitions.map((competition, index) => (
+                <article
+                  data-faded={competition.faded || undefined}
+                  key={`${competition.name}-${competition.startsAt ?? index}`}
+                >
+                  <span>
+                    {competition.faded ? "Outside window" : "Counting result"}
+                  </span>
+                  <strong>{competition.name}</strong>
+                  <p>
+                    {competition.startsAt
+                      ? formatMatchDate(competition.startsAt, true)
+                      : "Date pending"}
+                  </p>
+                  <footer>
+                    <span>
+                      Finish {competition.rank ? `#${competition.rank}` : "—"}
+                    </span>
+                    <Numeric tier="table">
+                      {competition.points?.toFixed(0) ?? "—"} pts
+                    </Numeric>
+                  </footer>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="profile-empty">
+              Tournament-level ranking evidence is still connecting.
+            </p>
+          )}
+        </section>
+
+        <section className="world-ranking-signal-guide">
+          <article>
+            <Trophy aria-hidden size={24} />
+            <small>Official world ranking</small>
+            <h2>Earned tour position.</h2>
+            <p>
+              Governing-tour points reflect eligible finishes, ranking windows,
+              and team results. This page preserves that source signal exactly.
+            </p>
+          </article>
+          <article>
+            <Activity aria-hidden size={24} />
+            <small>Duna Sand Rating</small>
+            <h2>Match-based strength, once verified.</h2>
+            <p>
+              Duna does not invent a rating from ranking points. A Sand Rating
+              appears here only after approved match evidence resolves to this
+              athlete.
+            </p>
+            <Link href="/methodology">
+              Explore the methodology <ArrowRight aria-hidden size={16} />
+            </Link>
+          </article>
+        </section>
+      </section>
+      <SiteFooter />
+    </main>
+  );
+}
+
 export default async function PublicPlayerPage({
   params,
 }: {
@@ -211,7 +557,19 @@ export default async function PublicPlayerPage({
   const route = await caller.public
     .playerRoute({ identifier: handle })
     .catch(() => undefined);
-  if (!route) notFound();
+  if (!route) {
+    const rankedPlayer = await caller.public
+      .worldRankingPlayer({ identifier: handle })
+      .catch(() => undefined);
+    if (!rankedPlayer) notFound();
+    if (rankedPlayer.connectedPublicPath) {
+      redirect(rankedPlayer.connectedPublicPath);
+    }
+    if (rankedPlayer.canonicalPath !== `/players/${handle}`) {
+      redirect(rankedPlayer.canonicalPath);
+    }
+    return <WorldRankingPlayerProfile profile={rankedPlayer} />;
+  }
   if (route.canonicalPath !== `/players/${handle}`) {
     redirect(route.canonicalPath);
   }

@@ -3626,6 +3626,10 @@ body {
   color: var(--text-2);
 }
 
+.athlete-stage > .athlete-stat-deck strong .duna-numeric {
+  color: inherit;
+}
+
 .rating-trend-chart__summary strong,
 .rating-trend-chart__selected-value,
 .partnership-card__metrics strong,

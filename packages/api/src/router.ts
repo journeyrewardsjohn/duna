@@ -409,6 +409,7 @@ import {
   loadPublicProEvent,
   loadPublicProMatch,
   loadPublicProCoverage,
+  loadPublicWorldRankingPlayer,
   loadPublicWorldRankings,
   loadProfessionalEventMediaUploadContext,
   loadPlayerMergePreview,
@@ -1546,6 +1547,13 @@ const publicRouter = router({
     }),
   ratingLab: publicProcedure.query(() => loadPublicRatingLab()),
   worldRankings: publicProcedure.query(() => loadPublicWorldRankings()),
+  worldRankingPlayer: publicProcedure
+    .input(z.object({ identifier: z.string().trim().min(1).max(240) }))
+    .query(async ({ input }) => {
+      const player = await loadPublicWorldRankingPlayer(input.identifier);
+      if (!player) throw new TRPCError({ code: "NOT_FOUND" });
+      return player;
+    }),
   proCoverage: publicProcedure.query(({ ctx }) =>
     loadPublicProCoverage(ctx.now),
   ),
