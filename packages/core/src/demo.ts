@@ -105,6 +105,15 @@ export const demoPeople: readonly PersonSummary[] = [
   },
 ];
 
+const demoAttendees = demoPeople.slice(0, 4).map((person) => ({
+  id: person.id,
+  displayName: person.displayName,
+  handle: person.handle,
+  initials: person.initials,
+  homeMarket: person.homeMarket,
+  ratingDisplay: person.rating.display,
+}));
+
 export const demoOrganization: OrganizationSummary = {
   id: "10000000-0000-4000-8000-000000000001",
   slug: "south-bay-volleyball",
@@ -317,6 +326,7 @@ export const demoEvents: readonly EventSummary[] = [
         requireFullScroll: true,
       },
     ],
+    attendees: demoAttendees,
     live: true,
     tags: ["Open", "Doubles", "$1,500 purse"],
   },
@@ -394,6 +404,7 @@ export const demoEvents: readonly EventSummary[] = [
         requireFullScroll: false,
       },
     ],
+    attendees: demoAttendees.slice(0, 3),
     tags: ["8 weeks", "Co-ed 4s", "Monday nights"],
   },
   {
@@ -410,6 +421,7 @@ export const demoEvents: readonly EventSummary[] = [
     spotsRemaining: 3,
     capacity: 8,
     ratingRange: [3.5, 5],
+    attendees: demoAttendees.slice(0, 3),
     tags: ["Small group", "Video review"],
   },
   {
@@ -426,6 +438,7 @@ export const demoEvents: readonly EventSummary[] = [
     spotsRemaining: 14,
     capacity: 48,
     ratingRange: [2.5, 5.5],
+    attendees: demoAttendees,
     tags: ["Indoor", "King/Queen", "DJ"],
   },
   {
@@ -442,6 +455,7 @@ export const demoEvents: readonly EventSummary[] = [
     spotsRemaining: 2,
     capacity: 8,
     ratingRange: [4, 5],
+    attendees: demoAttendees.slice(0, 3),
     tags: ["Free", "4s", "Sunset"],
   },
 ];

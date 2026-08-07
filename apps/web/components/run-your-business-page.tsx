@@ -32,8 +32,10 @@ import Image from "next/image";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { useEffect, useRef } from "react";
+import { ProfileAvatar, ProfileAvatarStack } from "./profile-avatar-stack";
 import { SiteFooter } from "./site-footer";
 import { SiteHeader } from "./site-header";
+import { marketingPeople, marketingPlayerGroup } from "@/lib/marketing-people";
 import styles from "./run-your-business-page.module.css";
 
 export interface OrganizationMarketingPlan {
@@ -179,6 +181,197 @@ const sharedCapabilities: readonly [LucideIcon, string, string][] = [
   ],
 ];
 
+const heroSchedule = [
+  {
+    time: "9:00",
+    title: "Private lessons",
+    place: "Court 1 · Jordan",
+    attendance: "2 confirmed",
+    people: [marketingPeople.maya, marketingPeople.mara],
+  },
+  {
+    time: "11:30",
+    title: "Youth clinic",
+    place: "Courts 2–3 · Drew",
+    attendance: "8 of 10",
+    people: marketingPlayerGroup,
+  },
+  {
+    time: "3:00",
+    title: "Open play",
+    place: "Four courts",
+    attendance: "18 going",
+    people: [
+      marketingPeople.theo,
+      marketingPeople.jamie,
+      marketingPeople.noa,
+      marketingPeople.maya,
+      marketingPeople.mara,
+    ],
+  },
+  {
+    time: "6:30",
+    title: "League night",
+    place: "Center courts",
+    attendance: "24 checked in",
+    people: [
+      marketingPeople.mara,
+      marketingPeople.theo,
+      marketingPeople.noa,
+      marketingPeople.jamie,
+      marketingPeople.maya,
+      marketingPeople.drew,
+    ],
+  },
+] as const;
+
+const clubCalendarColumns = [
+  {
+    court: "Court 1",
+    items: [
+      {
+        time: "9:00",
+        title: "Private lesson",
+        detail: "Jordan · 1 player",
+        people: [marketingPeople.maya],
+      },
+      { time: "2:00", title: "Open play", detail: "Available", people: [] },
+      {
+        time: "6:00",
+        title: "League",
+        detail: "6 checked in",
+        people: marketingPlayerGroup,
+      },
+    ],
+  },
+  {
+    court: "Court 2",
+    items: [
+      {
+        time: "9:00",
+        title: "Youth clinic",
+        detail: "Drew · 7 of 8",
+        people: marketingPlayerGroup,
+      },
+      {
+        time: "2:00",
+        title: "Court rental",
+        detail: "No players yet",
+        people: [],
+      },
+      {
+        time: "6:00",
+        title: "League",
+        detail: "8 going",
+        people: [
+          marketingPeople.theo,
+          marketingPeople.noa,
+          marketingPeople.jamie,
+          marketingPeople.mara,
+          marketingPeople.maya,
+        ],
+      },
+    ],
+  },
+  {
+    court: "Court 3",
+    items: [
+      {
+        time: "9:00",
+        title: "Training",
+        detail: "Maya + 3 players",
+        people: marketingPlayerGroup,
+      },
+      { time: "2:00", title: "Open", detail: "Available", people: [] },
+      {
+        time: "6:00",
+        title: "Tournament prep",
+        detail: "Drew · 4 players",
+        people: [
+          marketingPeople.maya,
+          marketingPeople.jamie,
+          marketingPeople.noa,
+          marketingPeople.theo,
+        ],
+      },
+    ],
+  },
+  {
+    court: "Court 4",
+    items: [
+      {
+        time: "9:00",
+        title: "Group lesson",
+        detail: "Jordan · 6 of 8",
+        people: [
+          marketingPeople.mara,
+          marketingPeople.noa,
+          marketingPeople.jamie,
+          marketingPeople.maya,
+        ],
+      },
+      { time: "2:00", title: "Open", detail: "Available", people: [] },
+      {
+        time: "6:00",
+        title: "League",
+        detail: "Waitlist · 2",
+        people: [
+          marketingPeople.theo,
+          marketingPeople.mara,
+          marketingPeople.noa,
+          marketingPeople.jamie,
+          marketingPeople.maya,
+          marketingPeople.drew,
+        ],
+      },
+    ],
+  },
+] as const;
+
+const coachAgenda = [
+  {
+    time: "8:30",
+    title: "Private lesson",
+    detail: "Maya · Pier courts",
+    people: [marketingPeople.maya],
+  },
+  {
+    time: "11:00",
+    title: "Group training",
+    detail: "6 players · Main courts",
+    people: marketingPlayerGroup,
+  },
+  {
+    time: "4:30",
+    title: "Video review",
+    detail: "Drew · Remote",
+    people: [marketingPeople.drew],
+  },
+] as const;
+
+const contextPeople = [
+  {
+    person: marketingPeople.maya,
+    role: "Member · Youth performance",
+    state: "Guardian connected",
+  },
+  {
+    person: marketingPeople.drew,
+    role: "Coach · Beach director",
+    state: "Available today",
+  },
+  {
+    person: marketingPeople.jamie,
+    role: "Member · Credit pack",
+    state: "2 credits left",
+  },
+  {
+    person: marketingPeople.alex,
+    role: "Parent + guardian",
+    state: "Verified permissions",
+  },
+] as const;
+
 function clamp(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
@@ -317,16 +510,22 @@ function HeroConsole() {
             </article>
           </div>
           <div className={styles.heroSchedule}>
-            {[
-              ["9:00", "Private lessons", "Court 1"],
-              ["11:30", "Youth clinic", "Courts 2–3"],
-              ["3:00", "Open play", "Four courts"],
-              ["6:30", "League night", "Center courts"],
-            ].map(([time, title, place], index) => (
-              <article key={time} style={{ "--item": index } as CSSProperties}>
-                <Numeric tier="table">{time}</Numeric>
-                <strong>{title}</strong>
-                <small>{place}</small>
+            {heroSchedule.map((session, index) => (
+              <article
+                key={session.time}
+                style={{ "--item": index } as CSSProperties}
+              >
+                <Numeric tier="table">{session.time}</Numeric>
+                <strong>{session.title}</strong>
+                <small>{session.place}</small>
+                <div className={styles.schedulePeople}>
+                  <ProfileAvatarStack
+                    label={`${session.attendance} for ${session.title}`}
+                    people={session.people}
+                    size="xs"
+                  />
+                  <em>{session.attendance}</em>
+                </div>
               </article>
             ))}
           </div>
@@ -355,23 +554,31 @@ function ClubDeviceStage() {
               <strong>Every resource. One plan.</strong>
             </div>
             <div className={styles.calendarBoard}>
-              {[
-                ["Court 1", "Private lesson", "Open play", "League"],
-                ["Court 2", "Youth clinic", "Court rental", "League"],
-                ["Court 3", "Training", "Open", "Tournament prep"],
-                ["Court 4", "Group lesson", "Open", "League"],
-              ].map(([court, ...items]) => (
-                <div key={court}>
-                  <strong>{court}</strong>
-                  {items.map((item, index) => (
+              {clubCalendarColumns.map((column) => (
+                <div key={column.court}>
+                  <strong>{column.court}</strong>
+                  {column.items.map((item, index) => (
                     <span
-                      className={index === 1 ? styles.openSlot : ""}
-                      key={item}
+                      className={
+                        index === 1 && item.people.length === 0
+                          ? styles.openSlot
+                          : ""
+                      }
+                      key={`${item.time}-${item.title}`}
                     >
-                      <small>
-                        {index === 0 ? "9:00" : index === 1 ? "2:00" : "6:00"}
-                      </small>
-                      {item}
+                      <small>{item.time}</small>
+                      <strong>{item.title}</strong>
+                      <span className={styles.calendarItemMeta}>
+                        {item.people.length > 0 && (
+                          <ProfileAvatarStack
+                            label={`${item.detail} in ${column.court}`}
+                            max={3}
+                            people={item.people}
+                            size="xs"
+                          />
+                        )}
+                        <em>{item.detail}</em>
+                      </span>
                     </span>
                   ))}
                 </div>
@@ -385,31 +592,15 @@ function ClubDeviceStage() {
               <strong>Context follows the person.</strong>
             </div>
             <div className={styles.peopleBoard}>
-              {[
-                [
-                  "MR",
-                  "Maya Rivera",
-                  "Member · Youth performance",
-                  "Guardian connected",
-                ],
-                [
-                  "DP",
-                  "Drew Park",
-                  "Coach · Beach director",
-                  "Available today",
-                ],
-                ["JS", "Jamie Stone", "Member · Credit pack", "2 credits left"],
-                [
-                  "AC",
-                  "Alex Chen",
-                  "Parent + guardian",
-                  "Verified permissions",
-                ],
-              ].map(([initials, name, role, state]) => (
-                <article key={name}>
-                  <b>{initials}</b>
+              {contextPeople.map(({ person, role, state }) => (
+                <article key={person.displayName}>
+                  <ProfileAvatar
+                    className={styles.peopleAvatar}
+                    person={person}
+                    size="md"
+                  />
                   <span>
-                    <strong>{name}</strong>
+                    <strong>{person.displayName}</strong>
                     <small>{role}</small>
                   </span>
                   <em>{state}</em>
@@ -520,16 +711,19 @@ function CoachDeviceStage() {
               <small>Three sessions · two locations</small>
             </div>
             <div className={styles.mobileAgenda}>
-              {[
-                ["8:30", "Private lesson", "Maya · Pier courts"],
-                ["11:00", "Group training", "6 players · Main courts"],
-                ["4:30", "Video review", "Drew · Remote"],
-              ].map(([time, title, detail], index) => (
-                <article key={time}>
-                  <Numeric tier="table">{time}</Numeric>
-                  <span>
-                    <strong>{title}</strong>
-                    <small>{detail}</small>
+              {coachAgenda.map((session, index) => (
+                <article key={session.time}>
+                  <Numeric tier="table">{session.time}</Numeric>
+                  <ProfileAvatarStack
+                    className={styles.agendaPeople}
+                    label={`${session.detail} attending ${session.title}`}
+                    max={4}
+                    people={session.people}
+                    size="xs"
+                  />
+                  <span className={styles.agendaCopy}>
+                    <strong>{session.title}</strong>
+                    <small>{session.detail}</small>
                   </span>
                   <i className={index === 0 ? styles.nowDot : ""} />
                 </article>
@@ -581,7 +775,7 @@ function CoachDeviceStage() {
           <div className={styles.coachScreen} data-screen="coach-discovery">
             <div className={styles.coachProfileMock}>
               <div className={styles.profilePhoto}>
-                <span>JC</span>
+                <ProfileAvatar person={marketingPeople.jordan} size="lg" />
               </div>
               <span>COACH PROFILE</span>
               <strong>Jordan Cruz</strong>
@@ -605,10 +799,13 @@ function CoachDeviceStage() {
           </div>
 
           <div className={styles.coachScreen} data-screen="coach-performance">
-            <div className={styles.mobileHeading}>
-              <span>PLAYER CONTEXT</span>
-              <strong>Maya Rivera</strong>
-              <small>Shared with your coaching organization</small>
+            <div className={styles.playerContextHeader}>
+              <ProfileAvatar person={marketingPeople.maya} size="md" />
+              <div className={styles.mobileHeading}>
+                <span>PLAYER CONTEXT</span>
+                <strong>Maya Rivera</strong>
+                <small>Shared with your coaching organization</small>
+              </div>
             </div>
             <div className={styles.playerContextGrid}>
               <article>
@@ -641,12 +838,24 @@ function CoachDeviceStage() {
               </article>
             </div>
             <div className={styles.videoTimeline}>
-              <i />
-              <i />
-              <i />
-              <i />
-              <span>
-                <Video /> Serve receive · 00:42
+              <div className={styles.videoThumbnail}>
+                <Image
+                  alt="Maya practicing serve receive on a beach volleyball court"
+                  fill
+                  sizes="(max-width: 700px) 70vw, 360px"
+                  src="/media/brand/people/duna-video-maya-practice-v1.webp"
+                />
+                <b aria-hidden>
+                  <Play />
+                </b>
+                <Numeric tier="chip">00:42</Numeric>
+              </div>
+              <span className={styles.videoDetail}>
+                <Video />
+                <span>
+                  <strong>Serve receive</strong>
+                  <small>Today · private with Jordan</small>
+                </span>
               </span>
             </div>
           </div>

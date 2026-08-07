@@ -518,6 +518,23 @@
   line-height: 1.25;
 }
 
+.schedulePeople {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.schedulePeople em {
+  color: var(--hq-ink);
+  font-size: 0.625rem;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: right;
+}
+
 .scrollCue {
   align-items: center;
   bottom: 1.4rem;
@@ -891,7 +908,7 @@
   padding-bottom: 0.2rem;
 }
 
-.calendarBoard span {
+.calendarBoard > div > span {
   background: var(--hq-tint);
   border-left: 3px solid var(--hq-core);
   border-radius: 7px;
@@ -902,7 +919,7 @@
   padding: 0.55rem;
 }
 
-.calendarBoard span small {
+.calendarBoard > div > span > small {
   color: var(--hq-ink);
   font-family: var(--font-data);
   font-size: 0.625rem;
@@ -910,6 +927,31 @@
     "wdth" 78,
     "wght" 700;
   font-weight: 700;
+}
+
+.calendarBoard > div > span > strong {
+  font-size: 0.67rem;
+  font-weight: 600;
+}
+
+.calendarItemMeta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem;
+  margin-top: auto;
+}
+
+.calendarItemMeta em {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--hq-ink) 78%, transparent);
+  font-size: 0.625rem;
+  font-style: normal;
+  line-height: 1.2;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .calendarBoard .openSlot {
@@ -934,17 +976,8 @@
   padding: 0.8rem;
 }
 
-.peopleBoard article > b {
-  align-items: center;
-  background: var(--hq-tint);
-  border-radius: 50%;
-  color: var(--hq-ink);
-  display: flex;
-  font-family: var(--font-body);
-  font-size: 0.625rem;
-  height: 38px;
-  justify-content: center;
-  width: 38px;
+.peopleAvatar {
+  border-color: color-mix(in srgb, var(--fog-50) 92%, transparent);
 }
 
 .peopleBoard article > span {
@@ -1204,14 +1237,15 @@
   border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
   border-radius: 11px;
   display: grid;
-  gap: 0.8rem;
-  grid-template-columns: auto 1fr auto;
+  gap: 0.55rem;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   padding: 0.85rem;
 }
 
-.mobileAgenda article > span {
+.agendaCopy {
   display: grid;
   gap: 0.2rem;
+  min-width: 0;
 }
 
 .mobileAgenda strong {
@@ -1233,6 +1267,10 @@
 .mobileAgenda .nowDot {
   background: var(--hq-core);
   box-shadow: 0 0 0 5px color-mix(in srgb, var(--hq-core) 18%, transparent);
+}
+
+.agendaPeople {
+  justify-self: start;
 }
 
 .quickActionRow {
@@ -1325,10 +1363,8 @@
   width: 74px;
 }
 
-.profilePhoto span {
-  font-family: var(--font-body);
-  font-size: 1rem;
-  font-weight: 700;
+.profilePhoto > span {
+  border-color: color-mix(in srgb, var(--fog-50) 86%, transparent);
 }
 
 .coachProfileMock > strong {
@@ -1396,34 +1432,113 @@
   gap: 0.25rem;
 }
 
+.playerContextHeader {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.playerContextHeader .mobileHeading {
+  margin-bottom: 1rem;
+}
+
 .videoTimeline {
   align-items: center;
   background: color-mix(in srgb, var(--fog-50) 84%, var(--marine-200));
   border-radius: 10px;
   display: grid;
-  gap: 0.4rem;
-  grid-template-columns: repeat(4, 1fr) 2.2fr;
+  gap: 0.7rem;
+  grid-template-columns: minmax(0, 1.5fr) minmax(8rem, 0.75fr);
   margin-top: 0.75rem;
-  min-height: 5rem;
+  min-height: 6.5rem;
   padding: 0.7rem;
 }
 
-.videoTimeline > i {
-  background: linear-gradient(135deg, var(--marine-200), var(--sand-300));
-  border-radius: 5px;
-  min-height: 3.5rem;
+.videoThumbnail {
+  position: relative;
+  min-height: 5.15rem;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--marine-200);
 }
 
-.videoTimeline > span {
+.videoThumbnail img {
+  object-fit: cover;
+  object-position: 28% center;
+}
+
+.videoThumbnail::after {
+  position: absolute;
+  inset: 45% 0 0;
+  background: linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--ink) 66%, transparent),
+    transparent
+  );
+  content: "";
+}
+
+.videoThumbnail > b {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--fog-50) 60%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 52%, transparent);
+  color: var(--fog-50);
+  transform: translate(-50%, -50%);
+  backdrop-filter: blur(8px);
+}
+
+.videoThumbnail > b svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  margin-left: 0.1rem;
+}
+
+.videoThumbnail :global(.duna-numeric) {
+  position: absolute;
+  z-index: 2;
+  right: 0.4rem;
+  bottom: 0.35rem;
+  color: var(--fog-50);
+  font-size: 0.625rem;
+}
+
+.videoDetail {
   align-items: center;
   display: flex;
-  font-size: 0.625rem;
-  gap: 0.4rem;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
-.videoTimeline svg {
+.videoDetail > svg {
+  flex: 0 0 auto;
   height: 16px;
   width: 16px;
+  color: var(--hq-ink);
+}
+
+.videoDetail > span {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.videoDetail strong {
+  font-size: 0.68rem;
+}
+
+.videoDetail small {
+  color: var(--pending);
+  font-size: 0.625rem;
+  line-height: 1.3;
 }
 
 .coachPhone {
