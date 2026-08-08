@@ -6,10 +6,14 @@ import Link from "next/link";
 
 function OpenDunaLink({ href }: { readonly href: string }) {
   return (
-    <Link className="site-header__enter" href={href}>
+    <Link
+      aria-label="Open Duna Player"
+      className="site-header__enter"
+      href={href}
+    >
       <span>
         <small>Player app</small>
-        <strong>Open Duna</strong>
+        <strong>Duna Player</strong>
       </span>
       <i>
         <ArrowUpRight aria-hidden size={16} />
@@ -43,7 +47,13 @@ function ConfiguredWebAuthButton() {
           <OpenDunaLink href="/app" />
           <details className="site-header-account">
             <summary aria-label="Open account menu">
-              <span className="site-header__avatar">{initials}</span>
+              <span className="site-header__avatar">
+                {user.profilePictureUrl ? (
+                  <img alt="" src={user.profilePictureUrl} />
+                ) : (
+                  initials
+                )}
+              </span>
             </summary>
             <div>
               <header>

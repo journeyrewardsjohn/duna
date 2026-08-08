@@ -52,6 +52,44 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 });
 
+test("mobile public navigation opens as a full-screen product sheet", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 1024, height: 768 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open navigation menu" }).click();
+
+    const sheet = page.getByRole("dialog", {
+      name: "Where do you want to go?",
+    });
+    await expect(sheet).toBeVisible();
+    await expect(
+      sheet.getByRole("link", { name: /Duna Player/ }),
+    ).toBeVisible();
+    await expect(sheet.getByRole("link", { name: /Duna HQ/ })).toBeVisible();
+    await expect(
+      sheet.getByRole("navigation", { name: "Mobile navigation" }),
+    ).toBeVisible();
+    await expect(
+      sheet.getByRole("button", { name: /Color theme/ }),
+    ).toBeVisible();
+
+    const bounds = await sheet.boundingBox();
+    expect(bounds?.x).toBeLessThanOrEqual(1);
+    expect(bounds?.y).toBeLessThanOrEqual(1);
+    expect(bounds?.width).toBeGreaterThanOrEqual(viewport.width - 2);
+    expect(bounds?.height).toBeGreaterThanOrEqual(viewport.height - 2);
+    await expectNoHorizontalOverflow(page);
+
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+  }
+});
+
 test("club and coach marketing keeps both operating paths clear", async ({
   page,
 }) => {
@@ -224,14 +262,24 @@ test("light mode starts cleanly and the dark choice persists", async ({
   page,
 }) => {
   await page.goto("/");
-  const themeToggle = page
-    .getByRole("button", { name: /Color theme:/ })
-    .first();
+  const mobileMenu = page.getByRole("button", {
+    name: "Open navigation menu",
+  });
+  const usesMobileNavigation = (page.viewportSize()?.width ?? 1_281) <= 1_180;
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-preference",
     "system",
   );
+  if (usesMobileNavigation) {
+    await expect(mobileMenu).toBeVisible();
+    await mobileMenu.click();
+  }
+  const themeToggle = usesMobileNavigation
+    ? page
+        .getByRole("dialog", { name: "Where do you want to go?" })
+        .getByRole("button", { name: /Color theme:/ })
+    : page.getByRole("button", { name: /Color theme:/ }).first();
   await themeToggle.click();
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-preference",

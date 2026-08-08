@@ -16,12 +16,11 @@
   width: min(100%, 92rem);
   max-width: none;
   min-height: 4.25rem;
-  padding: 0.45rem 0.3rem 0.45rem 0.2rem;
-  border: 0;
-  border-bottom: 1px solid var(--hairline-strong);
-  border-radius: 0;
+  padding: 0.42rem 0.42rem 0.42rem 1.15rem;
+  border: 1px solid var(--home-line);
+  border-radius: 999px;
   background: color-mix(in srgb, var(--home-ground) 76%, transparent);
-  box-shadow: none;
+  box-shadow: 0 14px 48px color-mix(in srgb, var(--text-1) 8%, transparent);
   backdrop-filter: blur(22px) saturate(1.1);
 }
 
@@ -1257,12 +1256,12 @@
 
 @media (max-width: 760px) {
   .home :global(.site-header) {
-    padding: 0 0.75rem;
+    padding: 0.75rem;
   }
 
   .home :global(.site-header__inner) {
-    min-height: 4.35rem;
-    padding-left: 0.35rem;
+    min-height: 3.625rem;
+    padding: 0.28rem 0.28rem 0.28rem 0.85rem;
   }
 
   .shell {
