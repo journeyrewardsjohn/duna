@@ -36,6 +36,7 @@ import {
   teams,
   tickets,
   ticketTypes,
+  teamEntries,
   venues,
   walletAccounts,
   walletLedger,
@@ -2343,6 +2344,8 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
     database
       .select({
         id: registrations.id,
+        sessionId: sessions.id,
+        sessionSlug: sessions.slug,
         title: sessions.title,
         startsAt: sessions.startsAt,
         endsAt: sessions.endsAt,
@@ -2352,6 +2355,13 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
         venueName: venues.name,
         orderTotalMinor: orders.totalMinor,
         orderCurrency: orders.currency,
+        orderStatus: orders.status,
+        cancellationPolicy: eventTypes.cancellationPolicy,
+        teamClaimToken: teamEntries.claimToken,
+        teamExpectedSize: teamEntries.expectedTeamSize,
+        teamPaymentMode: teamEntries.paymentMode,
+        teamStatus: teamEntries.status,
+        teamRoster: teamEntries.roster,
       })
       .from(registrations)
       .innerJoin(sessions, eq(registrations.sessionId, sessions.id))
@@ -2359,6 +2369,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
       .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
       .leftJoin(venues, eq(sessions.venueId, venues.id))
       .leftJoin(orders, eq(registrations.orderId, orders.id))
+      .leftJoin(teamEntries, eq(teamEntries.registrationId, registrations.id))
       .where(
         and(
           eq(registrations.personId, personId),
@@ -2374,6 +2385,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
     database
       .select({
         id: pickupParticipants.id,
+        pickupSessionId: pickupSessions.id,
         title: pickupSessions.title,
         startsAt: pickupSessions.startsAt,
         endsAt: pickupSessions.endsAt,
@@ -2382,6 +2394,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
         connectedVenueName: venues.name,
         orderTotalMinor: orders.totalMinor,
         orderCurrency: orders.currency,
+        orderStatus: orders.status,
       })
       .from(pickupParticipants)
       .innerJoin(
@@ -2411,6 +2424,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
         venueName: venues.name,
         orderTotalMinor: orders.totalMinor,
         orderCurrency: orders.currency,
+        orderStatus: orders.status,
       })
       .from(courtBookings)
       .innerJoin(courts, eq(courtBookings.courtId, courts.id))
@@ -2424,6 +2438,59 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
         ),
       ),
   ]);
+  const registrationSessionIds = [
+    ...new Set(registrationRows.map((row) => row.sessionId)),
+  ];
+  const pickupSessionIds = [
+    ...new Set(pickupRows.map((row) => row.pickupSessionId)),
+  ];
+  const [registrationParticipantRows, pickupParticipantRows] =
+    await Promise.all([
+      registrationSessionIds.length
+        ? database
+            .select({
+              sessionId: registrations.sessionId,
+              displayName: people.displayName,
+            })
+            .from(registrations)
+            .innerJoin(people, eq(registrations.personId, people.id))
+            .where(
+              and(
+                inArray(registrations.sessionId, registrationSessionIds),
+                inArray(registrations.status, ["confirmed", "checked-in"]),
+              ),
+            )
+        : Promise.resolve([]),
+      pickupSessionIds.length
+        ? database
+            .select({
+              pickupSessionId: pickupParticipants.pickupSessionId,
+              displayName: people.displayName,
+            })
+            .from(pickupParticipants)
+            .innerJoin(people, eq(pickupParticipants.personId, people.id))
+            .where(
+              and(
+                inArray(pickupParticipants.pickupSessionId, pickupSessionIds),
+                inArray(pickupParticipants.status, ["confirmed", "checked-in"]),
+              ),
+            )
+        : Promise.resolve([]),
+    ]);
+  const registrationNamesBySession = new Map<string, string[]>();
+  for (const row of registrationParticipantRows) {
+    registrationNamesBySession.set(row.sessionId, [
+      ...(registrationNamesBySession.get(row.sessionId) ?? []),
+      row.displayName,
+    ]);
+  }
+  const pickupNamesBySession = new Map<string, string[]>();
+  for (const row of pickupParticipantRows) {
+    pickupNamesBySession.set(row.pickupSessionId, [
+      ...(pickupNamesBySession.get(row.pickupSessionId) ?? []),
+      row.displayName,
+    ]);
+  }
   const bookings: BookingSummary[] = [
     ...registrationRows.flatMap((row): BookingSummary[] => {
       const status = connectedBookingStatus(row.status);
@@ -2431,6 +2498,9 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
       return [
         {
           id: row.id,
+          source: "registration",
+          sessionId: row.sessionId,
+          sessionSlug: row.sessionSlug,
           title: row.title,
           kind: row.programKind ?? row.eventTypeKind ?? "open-play",
           startsAt: row.startsAt.toISOString(),
@@ -2441,7 +2511,65 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
             amountMinor: row.orderTotalMinor ?? 0,
             currency: currency(row.orderCurrency ?? "USD"),
           },
-          participantNames: [person.displayName],
+          participantNames: registrationNamesBySession.get(row.sessionId) ?? [
+            person.displayName,
+          ],
+          paymentStatus:
+            (row.orderTotalMinor ?? 0) === 0
+              ? "free"
+              : row.orderStatus === "paid" ||
+                  row.orderStatus === "partially-refunded"
+                ? "paid"
+                : row.orderStatus === "refunded"
+                  ? "refunded"
+                  : "payment-required",
+          canEdit: row.startsAt.getTime() > now.getTime(),
+          canCancel: row.startsAt.getTime() > now.getTime(),
+          cancellationDeadline: row.startsAt.toISOString(),
+          ...(row.teamClaimToken &&
+          row.teamExpectedSize &&
+          (row.teamPaymentMode === "self" || row.teamPaymentMode === "team") &&
+          (row.teamStatus === "assembling" ||
+            row.teamStatus === "ready" ||
+            row.teamStatus === "confirmed" ||
+            row.teamStatus === "cancelled" ||
+            row.teamStatus === "expired")
+            ? {
+                team: {
+                  claimToken: row.teamClaimToken,
+                  expectedTeamSize: row.teamExpectedSize,
+                  paymentMode: row.teamPaymentMode,
+                  status: row.teamStatus,
+                  roster: [
+                    {
+                      personId: person.id,
+                      displayName: person.displayName,
+                      status: "captain" as const,
+                      paid:
+                        row.orderStatus === "paid" ||
+                        row.orderStatus === "partially-refunded",
+                      editable: false,
+                    },
+                    ...(row.teamRoster ?? []).map((member) => ({
+                      ...(member.personId ? { personId: member.personId } : {}),
+                      ...(member.inviteTarget
+                        ? { inviteTarget: member.inviteTarget }
+                        : {}),
+                      displayName:
+                        member.displayName ??
+                        member.inviteTarget ??
+                        "Invited teammate",
+                      status: member.status,
+                      paid:
+                        row.teamPaymentMode === "team" ||
+                        Boolean(member.paidAt),
+                      editable:
+                        row.teamPaymentMode === "team" || !member.paidAt,
+                    })),
+                  ],
+                },
+              }
+            : {}),
         },
       ];
     }),
@@ -2451,6 +2579,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
       return [
         {
           id: row.id,
+          source: "pickup",
           title: row.title,
           kind: "pickup",
           startsAt: row.startsAt.toISOString(),
@@ -2462,7 +2591,21 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
             amountMinor: row.orderTotalMinor ?? 0,
             currency: currency(row.orderCurrency ?? "USD"),
           },
-          participantNames: [person.displayName],
+          participantNames: pickupNamesBySession.get(row.pickupSessionId) ?? [
+            person.displayName,
+          ],
+          paymentStatus:
+            (row.orderTotalMinor ?? 0) === 0
+              ? "free"
+              : row.orderStatus === "paid" ||
+                  row.orderStatus === "partially-refunded"
+                ? "paid"
+                : row.orderStatus === "refunded"
+                  ? "refunded"
+                  : "payment-required",
+          canEdit: row.startsAt.getTime() > now.getTime(),
+          canCancel: row.startsAt.getTime() > now.getTime(),
+          cancellationDeadline: row.startsAt.toISOString(),
         },
       ];
     }),
@@ -2472,6 +2615,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
       return [
         {
           id: row.id,
+          source: "court",
           title: `Court rental · ${row.courtName}`,
           kind: "court-rental",
           startsAt: row.startsAt.toISOString(),
@@ -2483,6 +2627,18 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
             currency: currency(row.orderCurrency ?? "USD"),
           },
           participantNames: [person.displayName],
+          paymentStatus:
+            (row.orderTotalMinor ?? 0) === 0
+              ? "free"
+              : row.orderStatus === "paid" ||
+                  row.orderStatus === "partially-refunded"
+                ? "paid"
+                : row.orderStatus === "refunded"
+                  ? "refunded"
+                  : "payment-required",
+          canEdit: row.startsAt.getTime() > now.getTime(),
+          canCancel: row.startsAt.getTime() > now.getTime(),
+          cancellationDeadline: row.startsAt.toISOString(),
         },
       ];
     }),

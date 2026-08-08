@@ -155,11 +155,13 @@ export function SessionArrivalBoard({
         venueName,
         rosterSummary: `${arrived} arrived · ${players.length}/${next.expectedPlayers} sharing${late ? ` · ${late} late` : ""}`,
         playerOneName: first?.displayName,
+        playerOneAvatarUrl: first?.avatarUrl,
         playerOneEtaMinutes: first
           ? Math.ceil(first.travelDurationSeconds / 60)
           : undefined,
         playerOneStatus: first?.status,
         playerTwoName: second?.displayName,
+        playerTwoAvatarUrl: second?.avatarUrl,
         playerTwoEtaMinutes: second
           ? Math.ceil(second.travelDurationSeconds / 60)
           : undefined,

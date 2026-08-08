@@ -58,7 +58,15 @@ describe("buildDiscoveryMap", () => {
     });
 
     expect(result.generatedAt).toBe("2026-08-05T12:00:00.000Z");
-    expect(result.items).toHaveLength(3);
+    expect(result.items).toHaveLength(4);
+    expect(
+      result.items.find((item) => item.entityType === "organization"),
+    ).toMatchObject({
+      title: "South Bay Volleyball",
+      href: "/clubs/south-bay-volleyball",
+      latitude: venue.latitude,
+      longitude: venue.longitude,
+    });
     expect(
       result.items.find((item) => item.entityType === "event"),
     ).toMatchObject({

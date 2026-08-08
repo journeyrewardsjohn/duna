@@ -1648,6 +1648,7 @@ function HealthTrendCard({
   readonly trend: HealthDashboard["intelligence"]["trends"][number];
 }) {
   const reduceMotion = useHealthReducedMotion();
+  const [selectedIndex, setSelectedIndex] = useState<number>();
   const drawProgress = useRef(new Animated.Value(0)).current;
   const width = 330;
   const height = 138;
@@ -1696,6 +1697,8 @@ function HealthTrendCard({
     trend.typicalHigh === undefined ? undefined : y(trend.typicalHigh);
   const bandBottom =
     trend.typicalLow === undefined ? undefined : y(trend.typicalLow);
+  const selectedPoint =
+    selectedIndex === undefined ? undefined : trend.points[selectedIndex];
 
   useEffect(() => {
     drawProgress.stopAnimation();
@@ -1725,9 +1728,18 @@ function HealthTrendCard({
         </View>
         <View style={styles.trendLatest}>
           <Text style={styles.trendLatestValue}>
-            {trend.latest?.toFixed(trend.unit === "score" ? 1 : 0) ?? "—"}
+            {(selectedPoint?.value ?? trend.latest)?.toFixed(
+              trend.unit === "score" ? 1 : 0,
+            ) ?? "—"}
           </Text>
-          <Text style={styles.trendUnit}>{trend.unit}</Text>
+          <Text style={styles.trendUnit}>
+            {selectedPoint
+              ? new Date(`${selectedPoint.date}T12:00:00`).toLocaleDateString(
+                  "en-US",
+                  { month: "short", day: "numeric" },
+                )
+              : trend.unit}
+          </Text>
         </View>
       </View>
       {trend.points.length > 1 ? (
@@ -1776,16 +1788,51 @@ function HealthTrendCard({
               cy={y(point.value)}
               fill={point.anomaly ? palette.coral : palette.surface}
               key={`${point.date}-${index}`}
-              r={point.anomaly ? 4.2 : 2.8}
+              onPress={() => setSelectedIndex(index)}
+              r={selectedIndex === index ? 6.2 : point.anomaly ? 4.2 : 2.8}
               stroke={palette.ink}
-              strokeWidth={1.5}
+              strokeWidth={selectedIndex === index ? 2.4 : 1.5}
             />
           ))}
+          {trend.points.map((point, index) => {
+            const segment = (width - inset * 2) / trend.points.length;
+            return (
+              <Rect
+                fill="transparent"
+                height={height}
+                key={`target-${point.date}-${index}`}
+                onPress={() => setSelectedIndex(index)}
+                width={segment}
+                x={Math.max(0, x(index) - segment / 2)}
+                y={0}
+              />
+            );
+          })}
         </Svg>
       ) : (
         <Text style={styles.trendEmpty}>
           More days will reveal your personal band.
         </Text>
+      )}
+      {selectedPoint && (
+        <Pressable
+          accessibilityLabel="Clear selected health data point"
+          onPress={() => setSelectedIndex(undefined)}
+          style={styles.trendSelected}
+        >
+          <Text style={styles.trendSelectedDate}>
+            {new Date(`${selectedPoint.date}T12:00:00`).toLocaleDateString(
+              "en-US",
+              { weekday: "short", month: "short", day: "numeric" },
+            )}
+          </Text>
+          <Text style={styles.trendSelectedValue}>
+            {selectedPoint.value.toFixed(trend.unit === "score" ? 1 : 0)}{" "}
+            {trend.unit}
+            {selectedPoint.anomaly ? " · outside your usual band" : ""}
+          </Text>
+          <Text style={styles.trendSelectedClose}>×</Text>
+        </Pressable>
       )}
       <View style={styles.trendFooter}>
         <Text style={styles.trendBandLabel}>TYPICAL BAND</Text>
@@ -3180,6 +3227,30 @@ function createHealthStyles(colors: HealthPalette) {
     },
     trendUnit: { color: colors.muted, fontSize: 10, fontWeight: "700" },
     trendEmpty: { color: colors.muted, fontSize: 11, marginVertical: 36 },
+    trendSelected: {
+      alignItems: "center",
+      backgroundColor: colors.surfaceSoft,
+      borderRadius: 13,
+      flexDirection: "row",
+      gap: 8,
+      marginBottom: 10,
+      paddingHorizontal: 11,
+      paddingVertical: 9,
+    },
+    trendSelectedDate: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+      textTransform: "uppercase",
+    },
+    trendSelectedValue: {
+      color: colors.ink,
+      flex: 1,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    trendSelectedClose: { color: colors.muted, fontSize: 16 },
     trendFooter: {
       alignItems: "center",
       borderTopColor: colors.line,

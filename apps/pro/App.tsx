@@ -3728,7 +3728,12 @@ function TabBar({
 }
 
 function ProApp() {
-  const { refresh } = useProRuntime();
+  const {
+    activeAuthOrganizationId,
+    authOrganizations,
+    refresh,
+    switchOrganization,
+  } = useProRuntime();
   const deviceTheme: ThemeName = useColorScheme() === "dark" ? "dark" : "light";
   const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("today");
@@ -3766,19 +3771,51 @@ function ProApp() {
   }, []);
 
   useEffect(() => {
-    const openSessionActivity = (url: string | null) => {
-      const match = url?.match(/^duna-pro:\/\/session\/([^/?#]+)/);
-      if (!match?.[1]) return;
+    const openActivity = (url: string | null) => {
+      const sessionMatch = url?.match(/^duna-pro:\/\/session\/([^/?#]+)/);
+      if (sessionMatch?.[1]) {
+        setSurface(undefined);
+        setCalendarEntryId(decodeURIComponent(sessionMatch[1]));
+        setTab("calendar");
+        return;
+      }
+      const organizationMatch = url?.match(
+        /^duna-pro:\/\/organization\/([^/?#]+)/,
+      );
+      if (!organizationMatch?.[1]) return;
+      const slug = decodeURIComponent(organizationMatch[1]);
+      const normalized = (value: string) =>
+        value
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+      const target = authOrganizations?.find(
+        (organization) => normalized(organization.name) === slug,
+      );
       setSurface(undefined);
-      setCalendarEntryId(decodeURIComponent(match[1]));
-      setTab("calendar");
+      setCalendarEntryId(undefined);
+      setTab("today");
+      if (
+        target &&
+        target.id !== activeAuthOrganizationId &&
+        switchOrganization
+      ) {
+        void switchOrganization(target.id);
+      } else {
+        void refresh();
+      }
     };
-    void Linking.getInitialURL().then(openSessionActivity);
+    void Linking.getInitialURL().then(openActivity);
     const subscription = Linking.addEventListener("url", ({ url }) =>
-      openSessionActivity(url),
+      openActivity(url),
     );
     return () => subscription.remove();
-  }, []);
+  }, [
+    activeAuthOrganizationId,
+    authOrganizations,
+    refresh,
+    switchOrganization,
+  ]);
 
   useEffect(() => {
     if (reduceMotion) {

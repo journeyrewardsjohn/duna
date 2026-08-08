@@ -401,6 +401,9 @@ export interface MatchSummary {
 
 export interface BookingSummary {
   readonly id: string;
+  readonly source?: "registration" | "pickup" | "court";
+  readonly sessionId?: string;
+  readonly sessionSlug?: string;
   readonly title: string;
   readonly kind: EventKind;
   readonly startsAt: string;
@@ -409,6 +412,25 @@ export interface BookingSummary {
   readonly status: "confirmed" | "waitlisted" | "needs-action";
   readonly amount: Money;
   readonly participantNames: readonly string[];
+  readonly paymentStatus?: "free" | "paid" | "payment-required" | "refunded";
+  readonly canEdit?: boolean;
+  readonly canCancel?: boolean;
+  readonly cancellationDeadline?: string;
+  readonly team?: {
+    readonly claimToken: string;
+    readonly expectedTeamSize: number;
+    readonly paymentMode: "self" | "team";
+    readonly status:
+      "assembling" | "ready" | "confirmed" | "cancelled" | "expired";
+    readonly roster: readonly {
+      readonly personId?: string;
+      readonly inviteTarget?: string;
+      readonly displayName: string;
+      readonly status: "captain" | "selected" | "invited" | "claimed";
+      readonly paid: boolean;
+      readonly editable: boolean;
+    }[];
+  };
 }
 
 export interface WalletEntry {

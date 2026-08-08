@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import type { DunaLiveActivityProps } from "./DunaLiveActivity";
+import { rememberLiveActivityOptIn } from "./live-activity-preference";
 
 export type LiveActivityPushToken = {
   readonly activityId: string;
@@ -32,6 +33,7 @@ export async function startDunaLiveActivity(
     { ...props, updatedAt: new Date().toISOString() },
     `duna://live/${props.kind}/${encodeURIComponent(props.subjectId)}`,
   );
+  await rememberLiveActivityOptIn();
 
   const reportToken = (activityId: string, pushToken: string) => {
     options.onPushToken?.({

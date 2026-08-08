@@ -1,6 +1,7 @@
 import { HStack, Image, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
   activityBackgroundTint,
+  clipShape,
   font,
   foregroundStyle,
   frame,
@@ -20,9 +21,11 @@ export type DunaProLiveActivityProps = {
   readonly venueName?: string;
   readonly rosterSummary?: string;
   readonly playerOneName?: string;
+  readonly playerOneAvatarUrl?: string;
   readonly playerOneEtaMinutes?: number;
   readonly playerOneStatus?: string;
   readonly playerTwoName?: string;
+  readonly playerTwoAvatarUrl?: string;
   readonly playerTwoEtaMinutes?: number;
   readonly playerTwoStatus?: string;
   readonly updatedAt: string;
@@ -54,10 +57,19 @@ function Activity(
   const mark = <Image color={sky} size={17} systemName="figure.run" />;
   const playerRow = (
     name?: string,
+    avatarUrl?: string,
     etaMinutes?: number,
     playerStatus?: string,
   ) => (
     <HStack alignment="center" spacing={8}>
+      {avatarUrl ? (
+        <Image
+          modifiers={[frame({ height: 26, width: 26 }), clipShape("circle")]}
+          uiImage={avatarUrl}
+        />
+      ) : (
+        <Image color={mist} size={24} systemName="person.crop.circle.fill" />
+      )}
       <Text
         modifiers={[
           font({ size: 13, weight: "bold", design: "rounded" }),
@@ -125,11 +137,13 @@ function Activity(
       <VStack alignment="leading" spacing={7}>
         {playerRow(
           props.playerOneName,
+          props.playerOneAvatarUrl,
           props.playerOneEtaMinutes,
           props.playerOneStatus,
         )}
         {playerRow(
           props.playerTwoName,
+          props.playerTwoAvatarUrl,
           props.playerTwoEtaMinutes,
           props.playerTwoStatus,
         )}

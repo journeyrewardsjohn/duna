@@ -3,6 +3,7 @@ import { demoOrganization } from "@duna/core/demo";
 import {
   auditLog,
   getDatabase,
+  getTransactionalDatabase,
   organizationMemberships,
   organizations,
   organizationStaffProfiles,
@@ -252,7 +253,8 @@ export async function selfEnrollOrganizationStaff(input: {
   });
   const staffProfileId = existing?.id ?? crypto.randomUUID();
 
-  await database.transaction(async (transaction) => {
+  const transactionalDatabase = getTransactionalDatabase();
+  await transactionalDatabase.transaction(async (transaction) => {
     await transaction
       .insert(organizationStaffProfiles)
       .values({

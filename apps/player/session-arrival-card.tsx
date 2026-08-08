@@ -57,9 +57,11 @@ function leaveLabel(value: string) {
 export function SessionArrivalCard({
   booking,
   client,
+  onActivated,
 }: {
   readonly booking: ArrivalBooking;
   readonly client?: DunaApiClient;
+  readonly onActivated?: () => void;
 }) {
   const [signal, setSignal] = useState<ArrivalSignal>();
   const [busy, setBusy] = useState(false);
@@ -252,6 +254,7 @@ export function SessionArrivalCard({
           (await startDunaLiveActivity(activityProps(initial), {
             onPushToken: (token) => void rememberToken(token),
           })) ?? undefined;
+        if (liveActivity.current) onActivated?.();
       }
       watcher.current = await Location.watchPositionAsync(
         {
