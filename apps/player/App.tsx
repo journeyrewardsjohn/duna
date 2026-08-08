@@ -97,6 +97,12 @@ import {
 
 type MobileCoach = NonNullable<PlayerRuntime["coaches"]>[number];
 type PlayerCoachingNote = NonNullable<PlayerRuntime["coachingNotes"]>[number];
+type MobilePredictionDiscoveryItem = NonNullable<
+  PlayerRuntime["predictionDiscovery"]
+>["items"][number];
+type MobilePredictionPosition = NonNullable<
+  PlayerRuntime["predictionWallet"]
+>["positions"][number];
 type TeammateSearchResult = Awaited<
   ReturnType<DunaApiClient["player"]["teammateSearch"]["query"]>
 >[number];
@@ -353,7 +359,15 @@ function ThemeButton() {
   );
 }
 
-type Tab = "home" | "discover" | "play" | "video" | "wallet" | "you" | "health";
+type Tab =
+  | "home"
+  | "discover"
+  | "play"
+  | "video"
+  | "wallet"
+  | "predictions"
+  | "you"
+  | "health";
 
 type CourtInventory = Awaited<
   ReturnType<DunaApiClient["public"]["courtBookingInventory"]["query"]>
@@ -1100,9 +1114,11 @@ type HomeQuickAction =
 function HomeScreen({
   onAction,
   onBook,
+  onPredictions,
 }: {
   readonly onAction: (action: HomeQuickAction) => void;
   readonly onBook: (eventIndex: number) => void;
+  readonly onPredictions: () => void;
 }) {
   const reduceMotion = useReducedMotion();
   const chartDraw = useRef(new Animated.Value(0)).current;
@@ -1113,6 +1129,7 @@ function HomeScreen({
     dashboard,
     mode,
     organizationWallets,
+    predictionDiscovery,
   } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
   const bookings = dashboard?.bookings ?? demoBookings;
@@ -1560,6 +1577,10 @@ function HomeScreen({
         </View>
 
         <MemberOrganizationCard />
+        <MobilePredictionDiscoveryRail
+          items={predictionDiscovery?.items ?? []}
+          onOpenPortfolio={onPredictions}
+        />
         {homeEvents.length > 0 && (
           <>
             <SectionHeader
@@ -6239,8 +6260,210 @@ function PlayScreen() {
   );
 }
 
-function WalletScreen() {
-  const { mode, predictionWallet, settings, wallet } = usePlayerRuntime();
+function formatPredictionCredits(value: number, signed = false) {
+  const prefix = signed && value > 0 ? "+" : "";
+  return `${prefix}${value.toLocaleString("en-US", {
+    maximumFractionDigits: 1,
+  })}`;
+}
+
+function openPredictionMarket(marketPath: string) {
+  selectionHaptic();
+  void WebBrowser.openBrowserAsync(`${dunaWebUrl}${marketPath}`);
+}
+
+function MobilePredictionDiscoveryRail({
+  items,
+  onOpenPortfolio,
+}: {
+  readonly items: readonly MobilePredictionDiscoveryItem[];
+  readonly onOpenPortfolio: () => void;
+}) {
+  if (!items.length) return null;
+  return (
+    <>
+      <SectionHeader
+        action="Your portfolio"
+        eyebrow="PREDICTIONS"
+        onAction={onOpenPortfolio}
+        title="What happens next?"
+      />
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.horizontalBleed}
+      >
+        <View style={styles.predictionDiscoveryRail}>
+          {items.slice(0, 6).map((item) => {
+            const market = item.market;
+            const determined = market.status === "settled";
+            return (
+              <Pressable
+                accessibilityHint="Opens the prediction market"
+                accessibilityLabel={`${item.competition}: ${market.title}`}
+                accessibilityRole="button"
+                key={`${market.subjectType}-${market.subjectId}`}
+                onPress={() => openPredictionMarket(item.marketPath)}
+                style={({ pressed }) => [
+                  styles.predictionDiscoveryCard,
+                  pressed && styles.predictionDiscoveryCardPressed,
+                ]}
+              >
+                <View style={styles.predictionDiscoveryTopline}>
+                  <Text
+                    numberOfLines={1}
+                    style={styles.predictionDiscoveryCompetition}
+                  >
+                    {item.competition.toUpperCase()}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.predictionDiscoveryState,
+                      determined && styles.predictionDiscoveryStateDetermined,
+                    ]}
+                  >
+                    {determined
+                      ? "DETERMINED"
+                      : item.relevance === "live-pro"
+                        ? "LIVE"
+                        : "OPEN"}
+                  </Text>
+                </View>
+                <Text numberOfLines={2} style={styles.predictionDiscoveryTitle}>
+                  {market.title}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={styles.predictionDiscoveryReason}
+                >
+                  {item.reason}
+                </Text>
+                <View style={styles.predictionDiscoveryOdds}>
+                  <View style={styles.predictionDiscoveryOutcome}>
+                    <Text
+                      numberOfLines={1}
+                      style={styles.predictionDiscoveryOutcomeLabel}
+                    >
+                      {market.yesLabel}
+                    </Text>
+                    <Text style={styles.predictionDiscoveryOutcomeValue}>
+                      {(market.yesPriceBps / 100).toFixed(0)}%
+                    </Text>
+                  </View>
+                  <View style={styles.predictionDiscoveryOutcome}>
+                    <Text
+                      numberOfLines={1}
+                      style={styles.predictionDiscoveryOutcomeLabel}
+                    >
+                      {market.noLabel}
+                    </Text>
+                    <Text style={styles.predictionDiscoveryOutcomeValueMuted}>
+                      {(market.noPriceBps / 100).toFixed(0)}%
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.predictionDiscoveryFooter}>
+                  <Text
+                    numberOfLines={1}
+                    style={styles.predictionDiscoveryHandles}
+                  >
+                    {market.predictors.length
+                      ? market.predictors
+                          .slice(0, 3)
+                          .map((predictor) => `@${predictor.handle}`)
+                          .join("  ")
+                      : "Be first to predict"}
+                  </Text>
+                  <Text style={styles.predictionDiscoveryArrow}>→</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      </ScrollView>
+    </>
+  );
+}
+
+function PredictionWalletSummaryCard({
+  onPress,
+}: {
+  readonly onPress: () => void;
+}) {
+  const { predictionWallet } = usePlayerRuntime();
+  const portfolio = predictionWallet?.portfolio;
+  return (
+    <Pressable
+      accessibilityHint="Opens your prediction portfolio and history"
+      accessibilityLabel="Open prediction credits"
+      accessibilityRole="button"
+      onPress={() => {
+        selectionHaptic();
+        onPress();
+      }}
+      style={({ pressed }) => [
+        styles.predictionWalletCard,
+        pressed && styles.predictionDiscoveryCardPressed,
+      ]}
+    >
+      <View style={styles.predictionWalletHeader}>
+        <View>
+          <Text style={styles.eyebrow}>WALLET · PREDICTIONS</Text>
+          <Text style={styles.predictionWalletBalance}>
+            {Math.floor(
+              predictionWallet?.availableCredits ?? 1_000,
+            ).toLocaleString("en-US")}
+          </Text>
+          <Text style={styles.predictionWalletCreditLabel}>
+            FREE CREDITS AVAILABLE
+          </Text>
+        </View>
+        <View style={styles.predictionWalletCoin}>
+          <Text style={styles.predictionWalletCoinText}>◇</Text>
+        </View>
+      </View>
+      <Text style={styles.predictionWalletBody}>
+        Build a portfolio around matches and teams you care about. Credits are
+        free, non-cash, and never redeemable.
+      </Text>
+      <View style={styles.predictionWalletFacts}>
+        <View>
+          <Text style={styles.predictionWalletFactValue}>
+            {portfolio?.openPositions ?? 0}
+          </Text>
+          <Text style={styles.predictionWalletFactLabel}>OPEN</Text>
+        </View>
+        <View>
+          <Text style={styles.predictionWalletFactValue}>
+            {portfolio?.wins ?? 0}–{portfolio?.losses ?? 0}
+          </Text>
+          <Text style={styles.predictionWalletFactLabel}>RECORD</Text>
+        </View>
+        <View>
+          <Text
+            style={[
+              styles.predictionWalletFactValue,
+              (portfolio?.netSettledCredits ?? 0) >= 0
+                ? styles.positiveText
+                : styles.negativeText,
+            ]}
+          >
+            {formatPredictionCredits(portfolio?.netSettledCredits ?? 0, true)}
+          </Text>
+          <Text style={styles.predictionWalletFactLabel}>SETTLED</Text>
+        </View>
+        <Text style={styles.predictionWalletOpen}>OPEN →</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function WalletScreen({
+  onPredictions,
+}: {
+  readonly onPredictions: () => void;
+}) {
+  const { mode, settings, wallet } = usePlayerRuntime();
   const entries = wallet?.entries ?? demoWalletEntries;
   const balance =
     wallet?.availableMinor ??
@@ -6306,79 +6529,7 @@ function WalletScreen() {
           <Text style={styles.bodyText}>Payment is still processing</Text>
         </View>
       </View>
-      <View style={styles.predictionWalletCard}>
-        <View style={styles.predictionWalletHeader}>
-          <View>
-            <Text style={styles.eyebrow}>PREDICTION CREDITS</Text>
-            <Text style={styles.predictionWalletBalance}>
-              {Math.floor(
-                predictionWallet?.availableCredits ?? 1_000,
-              ).toLocaleString("en-US")}
-            </Text>
-          </View>
-          <View style={styles.predictionWalletCoin}>
-            <Text style={styles.predictionWalletCoinText}>◇</Text>
-          </View>
-        </View>
-        <Text style={styles.predictionWalletBody}>
-          Free, non-cash credits for crowd predictions. They cannot be bought,
-          transferred, redeemed, or exchanged for prizes.
-        </Text>
-        <View style={styles.predictionWalletFacts}>
-          <View>
-            <Text style={styles.predictionWalletFactValue}>
-              +{predictionWallet?.nextMonthlyGrantCredits ?? 100}
-            </Text>
-            <Text style={styles.predictionWalletFactLabel}>NEXT MONTH</Text>
-          </View>
-          <View>
-            <Text style={styles.predictionWalletFactValue}>
-              {predictionWallet?.positions.length ?? 0}
-            </Text>
-            <Text style={styles.predictionWalletFactLabel}>POSITIONS</Text>
-          </View>
-          <View>
-            <Text style={styles.predictionWalletFactValue}>
-              {predictionWallet?.openOrders.length ?? 0}
-            </Text>
-            <Text style={styles.predictionWalletFactLabel}>OPEN ORDERS</Text>
-          </View>
-        </View>
-      </View>
-      {(predictionWallet?.positions.length ?? 0) > 0 && (
-        <>
-          <SectionHeader eyebrow="IMMUTABLE LEDGER" title="Predictions." />
-          <View style={styles.listCard}>
-            {predictionWallet?.positions.slice(0, 20).map((position) => (
-              <View style={styles.predictionWalletRow} key={position.id}>
-                <View style={styles.flex}>
-                  <Text numberOfLines={1} style={styles.rowTitle}>
-                    {position.title}
-                  </Text>
-                  <Text numberOfLines={1} style={styles.rowMeta}>
-                    {position.selectedLabel} ·{" "}
-                    {position.costCredits.toLocaleString("en-US", {
-                      maximumFractionDigits: 1,
-                    })}{" "}
-                    credits
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.predictionWalletStatus,
-                    position.status === "won" &&
-                      styles.predictionWalletStatusWon,
-                  ]}
-                >
-                  <Text style={styles.predictionWalletStatusText}>
-                    {position.status.toUpperCase()}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        </>
-      )}
+      <PredictionWalletSummaryCard onPress={onPredictions} />
       <SectionHeader
         eyebrow="YOUR MONEY ON SAND"
         title="Activity."
@@ -6438,6 +6589,335 @@ function WalletScreen() {
           ledger and gives you clear controls; funds never sit on Duna’s balance
           sheet.
         </Text>
+      </View>
+    </ScrollView>
+  );
+}
+
+function PredictionPositionRow({
+  position,
+}: {
+  readonly position: MobilePredictionPosition;
+}) {
+  const determined = position.status !== "open";
+  const statusLabel =
+    position.status === "open"
+      ? position.marketStatus === "locked"
+        ? "Locked"
+        : "Open"
+      : position.status === "won"
+        ? "Won"
+        : position.status === "lost"
+          ? "Lost"
+          : "Void";
+  return (
+    <Pressable
+      accessibilityHint="Opens the market detail"
+      accessibilityLabel={`${position.title}, ${statusLabel}`}
+      accessibilityRole="button"
+      onPress={() => openPredictionMarket(position.marketPath)}
+      style={({ pressed }) => [
+        styles.predictionPortfolioRow,
+        pressed && styles.predictionDiscoveryCardPressed,
+      ]}
+    >
+      <View style={styles.flex}>
+        <View style={styles.predictionPortfolioRowTopline}>
+          <Text numberOfLines={1} style={styles.predictionPortfolioRowTitle}>
+            {position.title}
+          </Text>
+          <Text
+            style={[
+              styles.predictionPortfolioStatus,
+              position.status === "won" && styles.predictionPortfolioStatusWon,
+              position.status === "lost" &&
+                styles.predictionPortfolioStatusLost,
+            ]}
+          >
+            {determined
+              ? `DETERMINED · ${statusLabel.toUpperCase()}`
+              : statusLabel.toUpperCase()}
+          </Text>
+        </View>
+        <Text numberOfLines={1} style={styles.predictionPortfolioSelection}>
+          {position.selectedLabel} · {formatPredictionCredits(position.shares)}{" "}
+          shares
+        </Text>
+        <View style={styles.predictionPortfolioNumbers}>
+          <View>
+            <Text style={styles.predictionPortfolioNumberLabel}>COMMITTED</Text>
+            <Text style={styles.predictionPortfolioNumberValue}>
+              {formatPredictionCredits(position.costCredits)}
+            </Text>
+          </View>
+          <View>
+            <Text style={styles.predictionPortfolioNumberLabel}>
+              {determined ? "PAYOUT" : "VALUE"}
+            </Text>
+            <Text style={styles.predictionPortfolioNumberValue}>
+              {formatPredictionCredits(
+                determined
+                  ? position.payoutCredits
+                  : position.currentValueCredits,
+              )}
+            </Text>
+          </View>
+          <View>
+            <Text style={styles.predictionPortfolioNumberLabel}>NET</Text>
+            <Text
+              style={[
+                styles.predictionPortfolioNumberValue,
+                position.netCredits >= 0
+                  ? styles.positiveText
+                  : styles.negativeText,
+              ]}
+            >
+              {formatPredictionCredits(position.netCredits, true)}
+            </Text>
+          </View>
+        </View>
+      </View>
+      <Text style={styles.chevron}>›</Text>
+    </Pressable>
+  );
+}
+
+function PredictionPortfolioScreen({
+  onBack,
+}: {
+  readonly onBack: () => void;
+}) {
+  const { predictionDiscovery, predictionWallet } = usePlayerRuntime();
+  const positions = predictionWallet?.positions ?? [];
+  const openPositions = positions.filter(
+    (position) => position.status === "open",
+  );
+  const determinedPositions = positions.filter(
+    (position) => position.status !== "open",
+  );
+  const portfolio = predictionWallet?.portfolio;
+  return (
+    <ScrollView
+      contentContainerStyle={styles.screenContent}
+      showsVerticalScrollIndicator={false}
+    >
+      <AppHeader eyebrow="WALLET · PREDICTIONS" />
+      <Pressable
+        accessibilityLabel="Back to wallet"
+        accessibilityRole="button"
+        onPress={() => {
+          selectionHaptic();
+          onBack();
+        }}
+        style={styles.predictionPortfolioBack}
+      >
+        <Text style={styles.predictionPortfolioBackText}>← Wallet</Text>
+      </Pressable>
+      <Text style={styles.displayTitle}>Your calls.</Text>
+      <Text style={styles.predictionPortfolioIntro}>
+        Follow every open position, closed order, win, and loss. Your handle is
+        visible in each market because prediction credits have no cash value.
+      </Text>
+
+      <View style={styles.predictionPortfolioHero}>
+        <View style={styles.predictionPortfolioHeroTop}>
+          <View>
+            <Text style={styles.predictionPortfolioHeroLabel}>AVAILABLE</Text>
+            <Text style={styles.predictionPortfolioHeroValue}>
+              {Math.floor(
+                predictionWallet?.availableCredits ?? 1_000,
+              ).toLocaleString("en-US")}
+            </Text>
+            <Text style={styles.predictionPortfolioHeroUnit}>
+              prediction credits
+            </Text>
+          </View>
+          <View style={styles.predictionWalletCoin}>
+            <Text style={styles.predictionWalletCoinText}>◇</Text>
+          </View>
+        </View>
+        <View style={styles.predictionPortfolioMetrics}>
+          <View style={styles.predictionPortfolioMetric}>
+            <Text style={styles.predictionPortfolioMetricValue}>
+              {formatPredictionCredits(portfolio?.currentValueCredits ?? 0)}
+            </Text>
+            <Text style={styles.predictionPortfolioMetricLabel}>
+              OPEN VALUE
+            </Text>
+          </View>
+          <View style={styles.predictionPortfolioMetric}>
+            <Text
+              style={[
+                styles.predictionPortfolioMetricValue,
+                (portfolio?.unrealizedCredits ?? 0) >= 0
+                  ? styles.positiveText
+                  : styles.negativeText,
+              ]}
+            >
+              {formatPredictionCredits(portfolio?.unrealizedCredits ?? 0, true)}
+            </Text>
+            <Text style={styles.predictionPortfolioMetricLabel}>OPEN NET</Text>
+          </View>
+          <View style={styles.predictionPortfolioMetric}>
+            <Text
+              style={[
+                styles.predictionPortfolioMetricValue,
+                (portfolio?.netSettledCredits ?? 0) >= 0
+                  ? styles.positiveText
+                  : styles.negativeText,
+              ]}
+            >
+              {formatPredictionCredits(portfolio?.netSettledCredits ?? 0, true)}
+            </Text>
+            <Text style={styles.predictionPortfolioMetricLabel}>
+              SETTLED NET
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.predictionPortfolioGrant}>
+          +{predictionWallet?.nextMonthlyGrantCredits ?? 100} monthly grant ·
+          free play only
+        </Text>
+      </View>
+
+      <MobilePredictionDiscoveryRail
+        items={predictionDiscovery?.items ?? []}
+        onOpenPortfolio={() => undefined}
+      />
+
+      <SectionHeader
+        action={`${openPositions.length} positions`}
+        eyebrow="PORTFOLIO"
+        title="Still in play."
+      />
+      <View style={styles.predictionPortfolioList}>
+        {openPositions.length ? (
+          openPositions.map((position) => (
+            <PredictionPositionRow key={position.id} position={position} />
+          ))
+        ) : (
+          <View style={styles.predictionPortfolioEmpty}>
+            <Text style={styles.predictionPortfolioEmptyMark}>◇</Text>
+            <Text style={styles.predictionPortfolioEmptyTitle}>
+              No open positions yet.
+            </Text>
+            <Text style={styles.predictionPortfolioEmptyBody}>
+              Choose an open market above and make a call with free credits.
+            </Text>
+          </View>
+        )}
+      </View>
+
+      <SectionHeader
+        action={`${portfolio?.wins ?? 0}W · ${portfolio?.losses ?? 0}L`}
+        eyebrow="DETERMINED"
+        title="Wins + losses."
+      />
+      <View style={styles.predictionPortfolioList}>
+        {determinedPositions.length ? (
+          determinedPositions.map((position) => (
+            <PredictionPositionRow key={position.id} position={position} />
+          ))
+        ) : (
+          <View style={styles.predictionPortfolioEmptyCompact}>
+            <Text style={styles.predictionPortfolioEmptyBody}>
+              Completed markets will land here with their final payout and net
+              credit result.
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {(predictionWallet?.openOrders.length ?? 0) > 0 && (
+        <>
+          <SectionHeader
+            eyebrow="ORDER BOOK"
+            title="Waiting to fill."
+            action={`${predictionWallet?.openOrders.length ?? 0} open`}
+          />
+          <View style={styles.predictionPortfolioList}>
+            {predictionWallet?.openOrders.map((order) => (
+              <Pressable
+                key={order.id}
+                onPress={() => openPredictionMarket(order.marketPath)}
+                style={styles.predictionPortfolioLedgerRow}
+              >
+                <View style={styles.flex}>
+                  <Text numberOfLines={1} style={styles.rowTitle}>
+                    {order.title}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.rowMeta}>
+                    {order.intent.toUpperCase()} {order.selectedLabel} ·{" "}
+                    {formatPredictionCredits(order.openShares)} shares open
+                  </Text>
+                </View>
+                <Text style={styles.predictionPortfolioLedgerValue}>
+                  {(order.limitPriceBps / 100).toFixed(0)}%
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      )}
+
+      <SectionHeader eyebrow="CREDIT LEDGER" title="Every movement." />
+      <View style={styles.predictionPortfolioList}>
+        {(predictionWallet?.activity.length ?? 0) ? (
+          predictionWallet?.activity.slice(0, 30).map((entry) => (
+            <Pressable
+              disabled={!entry.marketPath}
+              key={entry.id}
+              onPress={() =>
+                entry.marketPath && openPredictionMarket(entry.marketPath)
+              }
+              style={styles.predictionPortfolioLedgerRow}
+            >
+              <View style={styles.flex}>
+                <Text numberOfLines={2} style={styles.rowTitle}>
+                  {entry.note}
+                </Text>
+                <Text style={styles.rowMeta}>
+                  {new Date(entry.occurredAt).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}{" "}
+                  · {entry.kind.replaceAll("-", " ")}
+                </Text>
+              </View>
+              <Text
+                style={[
+                  styles.predictionPortfolioLedgerValue,
+                  entry.deltaCredits >= 0
+                    ? styles.positiveText
+                    : styles.negativeText,
+                ]}
+              >
+                {formatPredictionCredits(entry.deltaCredits, true)}
+              </Text>
+            </Pressable>
+          ))
+        ) : (
+          <View style={styles.predictionPortfolioEmptyCompact}>
+            <Text style={styles.predictionPortfolioEmptyBody}>
+              Your immutable credit ledger will appear here.
+            </Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.predictionPortfolioTrust}>
+        <Text style={styles.predictionPortfolioTrustMark}>✓</Text>
+        <View style={styles.flex}>
+          <Text style={styles.predictionPortfolioTrustTitle}>
+            Free play, transparent by design.
+          </Text>
+          <Text style={styles.predictionPortfolioTrustBody}>
+            Credits cannot be bought, transferred, redeemed, or exchanged for
+            cash or prizes. Determined markets close all remaining orders before
+            payouts are posted to the ledger.
+          </Text>
+        </View>
       </View>
     </ScrollView>
   );
@@ -6520,9 +7000,11 @@ function MobileResultCard({
 
 function ProfileScreen({
   onHealth,
+  onPredictions,
   onWallet,
 }: {
   readonly onHealth: () => void;
+  readonly onPredictions: () => void;
   readonly onWallet: () => void;
 }) {
   const { client, dashboard, mode, settings, signOut } = usePlayerRuntime();
@@ -6713,6 +7195,8 @@ function ProfileScreen({
       </ImageBackground>
 
       <MemberOrganizationCard />
+
+      <PredictionWalletSummaryCard onPress={onPredictions} />
 
       <ScrollView
         horizontal
@@ -7091,6 +7575,10 @@ function ProfileScreen({
       <View style={styles.profileMenu}>
         <Pressable onPress={onWallet} style={styles.profileMenuRow}>
           <Text style={styles.rowTitle}>Wallet + payments</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+        <Pressable onPress={onPredictions} style={styles.profileMenuRow}>
+          <Text style={styles.rowTitle}>Prediction portfolio</Text>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
         {[
@@ -8669,7 +9157,9 @@ function TabBar({
 }) {
   const insets = useSafeAreaInsets();
   const selectedTab =
-    active === "health" || active === "wallet" ? "you" : active;
+    active === "health" || active === "wallet" || active === "predictions"
+      ? "you"
+      : active;
   return (
     <View style={[styles.tabBar, { bottom: Math.max(12, insets.bottom) }]}>
       {tabs.map((tab) => (
@@ -8899,17 +9389,27 @@ function DunaApp() {
             ]}
           >
             {tab === "home" && (
-              <HomeScreen onAction={openHomeAction} onBook={setEventIndex} />
+              <HomeScreen
+                onAction={openHomeAction}
+                onBook={setEventIndex}
+                onPredictions={() => setTab("predictions")}
+              />
             )}
             {tab === "discover" && (
               <DiscoverScreen intent={discoverIntent} onBook={setEventIndex} />
             )}
             {tab === "play" && <PlayScreen />}
             {tab === "video" && <VideoStudioScreen runtime={runtime} />}
-            {tab === "wallet" && <WalletScreen />}
+            {tab === "wallet" && (
+              <WalletScreen onPredictions={() => setTab("predictions")} />
+            )}
+            {tab === "predictions" && (
+              <PredictionPortfolioScreen onBack={() => setTab("wallet")} />
+            )}
             {tab === "you" && (
               <ProfileScreen
                 onHealth={() => setTab("health")}
+                onPredictions={() => setTab("predictions")}
                 onWallet={() => setTab("wallet")}
               />
             )}
@@ -12732,6 +13232,116 @@ function createStyles(palette: Palette) {
       top: -120,
       width: 240,
     },
+    predictionDiscoveryRail: {
+      flexDirection: "row",
+      gap: 12,
+      paddingRight: 18,
+    },
+    predictionDiscoveryCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.accentRgb, 0.16),
+      borderRadius: 20,
+      borderWidth: 1,
+      minHeight: 244,
+      padding: 16,
+      width: 286,
+    },
+    predictionDiscoveryCardPressed: {
+      opacity: 0.78,
+      transform: [{ scale: 0.99 }],
+    },
+    predictionDiscoveryTopline: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "space-between",
+    },
+    predictionDiscoveryCompetition: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.8,
+    },
+    predictionDiscoveryState: {
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderRadius: 999,
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      overflow: "hidden",
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+    },
+    predictionDiscoveryStateDetermined: {
+      backgroundColor: rgba(colors.positiveRgb, 0.13),
+      color: colors.positive,
+    },
+    predictionDiscoveryTitle: {
+      color: colors.bone,
+      fontSize: 21,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+      lineHeight: 25,
+      marginTop: 13,
+      minHeight: 50,
+    },
+    predictionDiscoveryReason: {
+      color: colors.muted,
+      fontSize: 11,
+      marginTop: 6,
+    },
+    predictionDiscoveryOdds: {
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 16,
+    },
+    predictionDiscoveryOutcome: {
+      backgroundColor: rgba(colors.overlayRgb, 0.045),
+      borderRadius: 12,
+      flex: 1,
+      padding: 10,
+    },
+    predictionDiscoveryOutcomeLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    predictionDiscoveryOutcomeValue: {
+      color: colors.positive,
+      fontFamily: "Archivo-Chip",
+      fontSize: 18,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+    predictionDiscoveryOutcomeValueMuted: {
+      color: colors.danger,
+      fontFamily: "Archivo-Chip",
+      fontSize: 18,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+    predictionDiscoveryFooter: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.07),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "space-between",
+      marginTop: 14,
+      paddingTop: 12,
+    },
+    predictionDiscoveryHandles: {
+      color: colors.aqua,
+      flex: 1,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    predictionDiscoveryArrow: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+    },
     predictionWalletCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.accentRgb, 0.2),
@@ -12752,6 +13362,12 @@ function createStyles(palette: Palette) {
       fontWeight: "900",
       letterSpacing: -2.5,
       marginTop: 5,
+    },
+    predictionWalletCreditLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.8,
     },
     predictionWalletCoin: {
       alignItems: "center",
@@ -12794,6 +13410,12 @@ function createStyles(palette: Palette) {
       letterSpacing: 0.7,
       marginTop: 2,
     },
+    predictionWalletOpen: {
+      alignSelf: "flex-end",
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+    },
     predictionWalletRow: {
       alignItems: "center",
       borderBottomColor: rgba(colors.overlayRgb, 0.06),
@@ -12815,6 +13437,228 @@ function createStyles(palette: Palette) {
       color: colors.muted,
       fontSize: 10,
       fontWeight: "900",
+    },
+    predictionPortfolioBack: {
+      alignItems: "center",
+      alignSelf: "flex-start",
+      minHeight: 48,
+      justifyContent: "center",
+      marginBottom: 2,
+    },
+    predictionPortfolioBackText: {
+      color: colors.aqua,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    predictionPortfolioIntro: {
+      color: colors.muted,
+      fontSize: 15,
+      lineHeight: 22,
+      marginBottom: 16,
+      maxWidth: 560,
+    },
+    predictionPortfolioHero: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.accentRgb, 0.2),
+      borderRadius: 24,
+      borderWidth: 1,
+      overflow: "hidden",
+      padding: 20,
+    },
+    predictionPortfolioHeroTop: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    predictionPortfolioHeroLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1,
+    },
+    predictionPortfolioHeroValue: {
+      color: colors.bone,
+      fontFamily: "Archivo-Table",
+      fontSize: 54,
+      fontWeight: "900",
+      letterSpacing: -3,
+      marginTop: 3,
+    },
+    predictionPortfolioHeroUnit: {
+      color: colors.muted,
+      fontSize: 11,
+      marginTop: 1,
+    },
+    predictionPortfolioMetrics: {
+      borderTopColor: rgba(colors.overlayRgb, 0.1),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 18,
+      paddingTop: 15,
+    },
+    predictionPortfolioMetric: {
+      flex: 1,
+    },
+    predictionPortfolioMetricValue: {
+      color: colors.bone,
+      fontFamily: "Archivo-Table",
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    predictionPortfolioMetricLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.6,
+      marginTop: 3,
+    },
+    predictionPortfolioGrant: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "800",
+      marginTop: 16,
+    },
+    predictionPortfolioList: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    predictionPortfolioRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 116,
+      padding: 15,
+    },
+    predictionPortfolioRowTopline: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "space-between",
+    },
+    predictionPortfolioRowTitle: {
+      color: colors.bone,
+      flex: 1,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    predictionPortfolioStatus: {
+      backgroundColor: rgba(colors.warningRgb, 0.12),
+      borderRadius: 999,
+      color: colors.warning,
+      fontSize: 10,
+      fontWeight: "900",
+      overflow: "hidden",
+      paddingHorizontal: 7,
+      paddingVertical: 5,
+    },
+    predictionPortfolioStatusWon: {
+      backgroundColor: rgba(colors.positiveRgb, 0.13),
+      color: colors.positive,
+    },
+    predictionPortfolioStatusLost: {
+      backgroundColor: rgba(colors.dangerRgb, 0.12),
+      color: colors.danger,
+    },
+    predictionPortfolioSelection: {
+      color: colors.muted,
+      fontSize: 11,
+      marginTop: 5,
+    },
+    predictionPortfolioNumbers: {
+      flexDirection: "row",
+      gap: 26,
+      marginTop: 13,
+    },
+    predictionPortfolioNumberLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.5,
+    },
+    predictionPortfolioNumberValue: {
+      color: colors.bone,
+      fontFamily: "Archivo-Table",
+      fontSize: 13,
+      fontWeight: "900",
+      marginTop: 2,
+    },
+    predictionPortfolioEmpty: {
+      alignItems: "center",
+      minHeight: 190,
+      justifyContent: "center",
+      padding: 24,
+    },
+    predictionPortfolioEmptyCompact: {
+      minHeight: 84,
+      justifyContent: "center",
+      padding: 18,
+    },
+    predictionPortfolioEmptyMark: {
+      color: colors.aqua,
+      fontSize: 30,
+      fontWeight: "900",
+    },
+    predictionPortfolioEmptyTitle: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+      marginTop: 8,
+    },
+    predictionPortfolioEmptyBody: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 5,
+      textAlign: "center",
+    },
+    predictionPortfolioLedgerRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 64,
+      paddingHorizontal: 15,
+      paddingVertical: 12,
+    },
+    predictionPortfolioLedgerValue: {
+      color: colors.bone,
+      fontFamily: "Archivo-Table",
+      fontSize: 13,
+      fontWeight: "900",
+    },
+    predictionPortfolioTrust: {
+      alignItems: "flex-start",
+      backgroundColor: rgba(colors.accentRgb, 0.07),
+      borderColor: rgba(colors.accentRgb, 0.15),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 18,
+      padding: 16,
+    },
+    predictionPortfolioTrustMark: {
+      color: colors.positive,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    predictionPortfolioTrustTitle: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
+    },
+    predictionPortfolioTrustBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 17,
+      marginTop: 4,
     },
     walletInfoGrid: {
       flexDirection: "row",

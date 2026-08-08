@@ -2,6 +2,304 @@
   box-sizing: border-box;
 }
 
+/* Predictions: explicit lifecycle, public handles, and versioned rules */
+
+.prediction-market-experience {
+  display: grid;
+  gap: 1rem;
+}
+
+.prediction-market-experience__info {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.prediction-market-lifecycle {
+  align-items: start;
+  background: color-mix(in srgb, var(--color-aqua) 12%, var(--color-canvas));
+  border: 1px solid color-mix(in srgb, var(--color-aqua) 34%, var(--color-line));
+  border-radius: 16px;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.9rem;
+}
+
+.prediction-market-lifecycle[data-status="settled"] {
+  background: color-mix(
+    in srgb,
+    var(--color-aqua-deep) 9%,
+    var(--color-canvas)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--color-aqua-deep) 30%,
+    var(--color-line)
+  );
+}
+
+.prediction-market-lifecycle > svg {
+  color: var(--color-aqua);
+}
+
+.prediction-market-lifecycle[data-status="settled"] > svg {
+  color: var(--color-aqua-deep);
+}
+
+.prediction-market-lifecycle > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.prediction-market-lifecycle span {
+  color: var(--color-bone-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.prediction-market-lifecycle strong {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  line-height: 1.1;
+  margin-top: 0.16rem;
+}
+
+.prediction-market-lifecycle small,
+.prediction-market-lifecycle time {
+  color: var(--color-bone-muted);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  margin-top: 0.25rem;
+}
+
+.prediction-market-lifecycle time {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.prediction-market-lifecycle--compact {
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin-bottom: 0.9rem;
+  padding: 0.7rem 0.8rem;
+}
+
+.prediction-market-lifecycle--compact strong {
+  font-size: 1rem;
+}
+
+.prediction-ticket--closed {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.prediction-ticket--closed > p {
+  color: var(--color-bone-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.prediction-ticket--closed > a {
+  align-items: center;
+  color: var(--color-aqua-deep);
+  display: inline-flex;
+  font-size: 0.9rem;
+  font-weight: 800;
+  gap: 0.35rem;
+  text-decoration: none;
+}
+
+.prediction-market-rules,
+.prediction-market-community {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 20px;
+  min-width: 0;
+  overflow: hidden;
+  padding: clamp(1rem, 2vw, 1.3rem);
+}
+
+.prediction-market-rules > header,
+.prediction-market-community > header {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.prediction-market-rules h3,
+.prediction-market-community h3 {
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 2.5vw, 1.9rem);
+  letter-spacing: -0.025em;
+  margin: 0.2rem 0 0;
+}
+
+.prediction-market-rules > header > span,
+.prediction-market-community > header > span {
+  align-items: center;
+  color: var(--color-bone-muted);
+  display: inline-flex;
+  font-size: 0.8rem;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.prediction-market-rules dl {
+  display: grid;
+  gap: 0;
+  margin: 1rem 0 0;
+}
+
+.prediction-market-rules dl > div {
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(110px, 0.3fr) minmax(0, 1fr);
+  padding: 0.85rem 0;
+}
+
+.prediction-market-rules dt {
+  color: var(--color-bone-muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.prediction-market-rules dd {
+  font-size: 0.92rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.prediction-market-rules > p,
+.prediction-market-community > footer,
+.prediction-market-community > p {
+  background: var(--color-canvas);
+  border-radius: 12px;
+  color: var(--color-bone-muted);
+  font-size: 0.83rem;
+  line-height: 1.5;
+  margin: 0.3rem 0 0;
+  padding: 0.75rem;
+}
+
+.prediction-market-community > div {
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  margin-top: 1rem;
+  max-height: 310px;
+  overflow: auto;
+}
+
+.prediction-market-community article {
+  align-items: center;
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: minmax(95px, 0.6fr) minmax(0, 1fr) auto auto;
+  padding: 0.72rem 0.8rem;
+}
+
+.prediction-market-community article + article {
+  border-top: 1px solid var(--color-line);
+}
+
+.prediction-market-community article a {
+  color: var(--color-aqua-deep);
+  font-size: 0.86rem;
+  font-weight: 800;
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+}
+
+.prediction-market-community article > span {
+  font-size: 0.86rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prediction-market-community article strong,
+.prediction-market-community article small {
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.prediction-market-community article small {
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  color: var(--color-bone-muted);
+  font-weight: 800;
+  padding: 0.28rem 0.5rem;
+}
+
+.prediction-market-community article small[data-status="won"] {
+  border-color: color-mix(in srgb, var(--color-aqua) 45%, var(--color-line));
+  color: var(--color-aqua);
+}
+
+.prediction-market-status {
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  color: var(--color-bone-muted);
+  font-weight: 800;
+  padding: 0.22rem 0.45rem;
+}
+
+.prediction-market-status[data-status="open"] {
+  border-color: color-mix(in srgb, var(--color-aqua) 42%, var(--color-line));
+  color: var(--color-aqua);
+}
+
+.prediction-market-status[data-status="settled"] {
+  border-color: color-mix(
+    in srgb,
+    var(--color-aqua-deep) 42%,
+    var(--color-line)
+  );
+  color: var(--color-aqua-deep);
+}
+
+@media (max-width: 860px) {
+  .prediction-market-experience__info {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .prediction-market-lifecycle {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .prediction-market-lifecycle time {
+    grid-column: 2;
+  }
+
+  .prediction-market-rules > header,
+  .prediction-market-community > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .prediction-market-rules dl > div {
+    grid-template-columns: 1fr;
+  }
+
+  .prediction-market-community article {
+    grid-template-columns: minmax(90px, 0.6fr) minmax(0, 1fr) auto;
+  }
+
+  .prediction-market-community article strong {
+    display: none;
+  }
+}
+
 .pro-tournament-intelligence {
   background:
     radial-gradient(circle at 92% 0%, rgb(40 111 160 / 12%), transparent 34%),
@@ -147,7 +445,7 @@
 }
 
 .pro-tournament-intelligence__standouts b {
-  color: var(--color-blue);
+  color: var(--color-aqua-deep);
   font-family: var(--font-display);
   font-size: 1.45rem;
 }
@@ -36338,7 +36636,7 @@ button.selected > .choice-radio {
 
 .match-performance__line {
   fill: none;
-  stroke: var(--color-blue);
+  stroke: var(--color-aqua-deep);
   stroke-linecap: square;
   stroke-linejoin: round;
   stroke-width: 4;
@@ -37740,5 +38038,653 @@ button.selected > .choice-radio {
   .prediction-wallet-section .dashboard-section__heading > p {
     line-height: 1.45;
     margin: 0;
+  }
+}
+
+/* Prediction discovery rails */
+
+.homepage-predictions {
+  margin-block: clamp(3rem, 8vw, 7rem);
+}
+
+.prediction-discovery {
+  background:
+    radial-gradient(
+      circle at 92% 4%,
+      color-mix(in srgb, var(--color-aqua) 18%, transparent),
+      transparent 34%
+    ),
+    var(--color-surface);
+  border: 1px solid color-mix(in srgb, var(--color-aqua) 30%, var(--color-line));
+  border-radius: 26px;
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1rem, 3vw, 1.6rem);
+}
+
+.prediction-discovery > header {
+  align-items: end;
+  display: flex;
+  gap: 1.5rem;
+  justify-content: space-between;
+}
+
+.prediction-discovery > header h2 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 5vw, 3.6rem);
+  letter-spacing: -0.03em;
+  line-height: 0.95;
+  margin: 0.35rem 0 0;
+}
+
+.prediction-discovery > header p {
+  color: var(--color-bone-muted);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0.65rem 0 0;
+  max-width: 68ch;
+}
+
+.prediction-discovery > header > a {
+  align-items: center;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  color: inherit;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.88rem;
+  font-weight: 800;
+  gap: 0.4rem;
+  min-height: 48px;
+  padding: 0.7rem 1rem;
+  text-decoration: none;
+}
+
+.prediction-discovery__grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.prediction-discovery-card {
+  background: color-mix(in srgb, var(--color-canvas) 82%, transparent);
+  border: 1px solid var(--color-line);
+  border-radius: 18px;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  min-height: 305px;
+  padding: 1rem;
+  text-decoration: none;
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.prediction-discovery-card:hover {
+  border-color: color-mix(in srgb, var(--color-aqua) 55%, var(--color-line));
+  transform: translateY(-2px);
+}
+
+.prediction-discovery-card > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.prediction-discovery-card > header > span,
+.prediction-discovery-card > header small {
+  color: var(--color-bone-muted);
+  font-size: 0.73rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.prediction-discovery-card > header small {
+  align-items: center;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.3rem 0.5rem;
+}
+
+.prediction-discovery-card > header small[data-status="open"] {
+  border-color: color-mix(in srgb, var(--color-aqua) 42%, var(--color-line));
+  color: var(--color-aqua);
+}
+
+.prediction-discovery-card > p {
+  color: var(--color-aqua-deep);
+  font-size: 0.78rem;
+  font-weight: 800;
+  margin: 1rem 0 0.2rem;
+}
+
+.prediction-discovery-card h3 {
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 2.2vw, 1.8rem);
+  letter-spacing: -0.025em;
+  line-height: 1.08;
+  margin: 0;
+}
+
+.prediction-discovery-card__competition {
+  color: var(--color-bone-muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin-top: 0.45rem;
+}
+
+.prediction-discovery-card__sides {
+  display: grid;
+  gap: 0.45rem;
+  margin: auto 0 0.8rem;
+}
+
+.prediction-discovery-card__sides > span {
+  align-items: center;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+}
+
+.prediction-discovery-card__sides > span b {
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prediction-discovery-card__sides > span strong {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+
+.prediction-discovery-card__sides > i {
+  background: var(--color-line);
+  border-radius: 999px;
+  display: block;
+  height: 5px;
+  overflow: hidden;
+}
+
+.prediction-discovery-card__sides > i b {
+  background: var(--color-aqua);
+  display: block;
+  height: 100%;
+}
+
+.prediction-discovery-card__determined {
+  background: color-mix(
+    in srgb,
+    var(--color-aqua-deep) 9%,
+    var(--color-canvas)
+  );
+  border-radius: 12px;
+  display: grid;
+  gap: 0.2rem;
+  margin: auto 0 0.8rem;
+  padding: 0.75rem;
+}
+
+.prediction-discovery-card__determined span {
+  color: var(--color-aqua-deep);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.prediction-discovery-card__determined strong {
+  font-size: 0.9rem;
+}
+
+.prediction-discovery-card > footer {
+  align-items: center;
+  border-top: 1px solid var(--color-line);
+  color: var(--color-bone-muted);
+  display: flex;
+  font-size: 0.75rem;
+  gap: 0.5rem;
+  overflow: hidden;
+  padding-top: 0.7rem;
+}
+
+.prediction-discovery-card > footer > span {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prediction-discovery-card > footer > svg {
+  margin-left: auto;
+}
+
+.prediction-discovery__empty {
+  align-items: center;
+  background: var(--color-canvas);
+  border: 1px dashed var(--color-line);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 1rem;
+}
+
+.prediction-discovery__empty > svg {
+  color: var(--color-aqua);
+}
+
+.prediction-discovery__empty > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.prediction-discovery__empty span,
+.prediction-discovery > footer {
+  color: var(--color-bone-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.prediction-discovery > footer {
+  border-top: 1px solid var(--color-line);
+  padding-top: 0.8rem;
+}
+
+@media (max-width: 980px) {
+  .prediction-discovery__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .prediction-discovery > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .prediction-discovery__grid {
+    display: flex;
+    margin-inline: -1rem;
+    overflow-x: auto;
+    padding: 0 1rem 0.3rem;
+    scroll-snap-type: x mandatory;
+  }
+
+  .prediction-discovery-card {
+    flex: 0 0 min(84vw, 330px);
+    scroll-snap-align: start;
+  }
+}
+
+/* Wallet sections and prediction portfolio */
+
+.wallet-section-nav {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0.35rem;
+}
+
+.wallet-section-nav > a {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--color-bone-muted);
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 56px;
+  padding: 0.65rem 0.8rem;
+  text-decoration: none;
+}
+
+.wallet-section-nav > a[aria-current="page"] {
+  background: var(--color-surface);
+  border-color: var(--color-line);
+  color: var(--color-bone);
+}
+
+.wallet-section-nav > a[aria-current="page"] > svg {
+  color: var(--color-aqua);
+}
+
+.wallet-section-nav > a > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.wallet-section-nav strong {
+  font-size: 0.9rem;
+}
+
+.wallet-section-nav small {
+  color: var(--color-bone-muted);
+  font-size: 0.75rem;
+}
+
+.prediction-wallet-section .dashboard-section__heading > a {
+  align-items: center;
+  color: var(--color-aqua-deep);
+  display: inline-flex;
+  font-size: 0.88rem;
+  font-weight: 800;
+  gap: 0.35rem;
+  text-decoration: none;
+}
+
+.prediction-portfolio-page {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.prediction-portfolio-hero {
+  background:
+    radial-gradient(
+      circle at 12% 10%,
+      color-mix(in srgb, var(--color-aqua) 23%, transparent),
+      transparent 42%
+    ),
+    var(--color-surface);
+  border: 1px solid color-mix(in srgb, var(--color-aqua) 30%, var(--color-line));
+  border-radius: 24px;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(230px, 0.75fr) minmax(0, 1.25fr);
+  padding: clamp(1rem, 3vw, 1.6rem);
+}
+
+.prediction-portfolio-hero > article {
+  display: flex;
+  flex-direction: column;
+}
+
+.prediction-portfolio-hero > article > span,
+.prediction-portfolio-hero > div article > span,
+.prediction-portfolio-hero small,
+.prediction-portfolio-hero p {
+  color: var(--color-bone-muted);
+  font-size: 0.82rem;
+}
+
+.prediction-portfolio-hero > article > .duna-numeric {
+  font-family: var(--font-display);
+  font-size: clamp(3.4rem, 8vw, 6rem);
+  letter-spacing: -0.03em;
+  line-height: 0.9;
+  margin-top: 0.55rem;
+}
+
+.prediction-portfolio-hero > article > strong {
+  color: var(--color-aqua);
+  font-size: 0.9rem;
+  margin-top: 0.2rem;
+}
+
+.prediction-portfolio-hero p {
+  line-height: 1.45;
+  margin: auto 0 0;
+}
+
+.prediction-portfolio-hero > div {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.prediction-portfolio-hero > div article {
+  background: color-mix(in srgb, var(--color-canvas) 86%, transparent);
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: 1rem;
+}
+
+.prediction-portfolio-hero > div .duna-numeric {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin: 0.5rem 0 0.35rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prediction-portfolio-grid,
+.prediction-orders-activity {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.prediction-portfolio-list,
+.prediction-credit-activity {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 20px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.prediction-portfolio-list > header,
+.prediction-credit-activity > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 1rem;
+}
+
+.prediction-portfolio-list h2,
+.prediction-credit-activity h2 {
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  letter-spacing: -0.025em;
+  margin: 0.15rem 0 0;
+}
+
+.prediction-portfolio-list > a {
+  align-items: center;
+  border-top: 1px solid var(--color-line);
+  color: inherit;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  min-height: 104px;
+  padding: 0.85rem 1rem;
+  text-decoration: none;
+}
+
+.prediction-portfolio-list > a:hover {
+  background: color-mix(in srgb, var(--color-aqua) 7%, transparent);
+}
+
+.prediction-portfolio-list__state {
+  align-items: center;
+  color: var(--color-aqua);
+  display: inline-flex;
+  flex-direction: column;
+  font-size: 0.7rem;
+  font-weight: 800;
+  gap: 0.25rem;
+  text-transform: uppercase;
+}
+
+.prediction-portfolio-list > a > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.prediction-portfolio-list > a > div strong,
+.prediction-portfolio-list > a > div span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prediction-portfolio-list > a > div strong {
+  font-size: 0.9rem;
+}
+
+.prediction-portfolio-list > a > div span,
+.prediction-portfolio-list > a > div small,
+.prediction-portfolio-list > a > p small {
+  color: var(--color-bone-muted);
+  font-size: 0.78rem;
+}
+
+.prediction-portfolio-list > a > p {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.prediction-portfolio-list > a > p .duna-numeric {
+  font-size: 0.9rem;
+}
+
+.prediction-portfolio-list > a > p > span {
+  font-size: 0.77rem;
+  font-weight: 800;
+}
+
+.prediction-portfolio-list [data-tone="positive"] {
+  color: var(--color-aqua);
+}
+
+.prediction-portfolio-list [data-tone="negative"] {
+  color: var(--color-danger);
+}
+
+.prediction-portfolio-empty {
+  align-items: center;
+  border-top: 1px solid var(--color-line);
+  color: var(--color-bone-muted);
+  display: grid;
+  font-size: 0.83rem;
+  gap: 0.7rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  line-height: 1.45;
+  min-height: 96px;
+  padding: 1rem;
+}
+
+.prediction-portfolio-empty > svg {
+  color: var(--color-aqua);
+}
+
+.prediction-portfolio-empty > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.prediction-portfolio-empty strong {
+  color: var(--color-bone);
+}
+
+.prediction-credit-activity > div > a,
+.prediction-credit-activity > div > article {
+  align-items: center;
+  border-top: 1px solid var(--color-line);
+  color: inherit;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 66px;
+  padding: 0.7rem 1rem;
+  text-decoration: none;
+}
+
+.prediction-credit-activity > div span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.prediction-credit-activity > div strong {
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prediction-credit-activity > div small,
+.prediction-credit-activity > footer {
+  color: var(--color-bone-muted);
+  font-size: 0.75rem;
+}
+
+.prediction-credit-activity > footer {
+  align-items: center;
+  background: var(--color-canvas);
+  display: flex;
+  gap: 0.35rem;
+  line-height: 1.4;
+  padding: 0.8rem 1rem;
+}
+
+.prediction-credit-rules {
+  align-items: start;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 1rem;
+}
+
+.prediction-credit-rules > svg {
+  color: var(--color-aqua);
+}
+
+.prediction-credit-rules p {
+  color: var(--color-bone-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  margin: 0.2rem 0 0;
+}
+
+@media (max-width: 980px) {
+  .prediction-portfolio-hero,
+  .prediction-portfolio-grid,
+  .prediction-orders-activity {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .wallet-section-nav small {
+    display: none;
+  }
+
+  .prediction-portfolio-hero > div {
+    grid-template-columns: 1fr;
+  }
+
+  .prediction-portfolio-list > a {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .prediction-portfolio-list > a > p {
+    grid-column: 2;
+    align-items: flex-start;
+  }
+
+  .prediction-portfolio-list > a > svg {
+    grid-column: 3;
+    grid-row: 1 / 3;
   }
 }

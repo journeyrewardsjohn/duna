@@ -14,6 +14,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import Link from "next/link";
+import { WalletSectionNav } from "@/components/wallet-section-nav";
 import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Wallet" };
@@ -45,6 +46,8 @@ export default async function WalletPage() {
             : "Ledger connected"}
         </Badge>
       </section>
+
+      <WalletSectionNav active="wallet" />
 
       <section className="wallet-grid">
         <article className="wallet-balance-card">
@@ -104,10 +107,9 @@ export default async function WalletPage() {
             <span className="page-eyebrow">Wisdom of the crowd</span>
             <h2>Prediction credits</h2>
           </div>
-          <p>
-            Free play credits with no cash value, purchase, prizes, external
-            transfer, or redemption.
-          </p>
+          <Link href="/app/wallet/predictions">
+            Open markets + portfolio <ArrowUpRight aria-hidden size={15} />
+          </Link>
         </div>
         <div className="prediction-wallet-summary">
           <article>

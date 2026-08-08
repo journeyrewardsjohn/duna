@@ -3,9 +3,12 @@
 import type { PredictionMarketView, PredictionWallet } from "@duna/api";
 import {
   ArrowRight,
+  BadgeCheck,
+  CalendarClock,
   Check,
   ChevronDown,
   Coins,
+  FileText,
   LockKeyhole,
   Sparkles,
   TrendingUp,
@@ -444,6 +447,15 @@ export function CompactPredictionMarket({
       </div>
       <ViewerPredictionPosition market={market} variant="compact" />
       <footer>
+        <span className="prediction-market-status" data-status={market.status}>
+          {market.status === "settled"
+            ? "Determined"
+            : market.status === "locked"
+              ? "Closed"
+              : market.status === "void"
+                ? "Void"
+                : "Open"}
+        </span>
         <span>
           <Users aria-hidden size={12} /> {market.participantCount}
         </span>
@@ -451,6 +463,154 @@ export function CompactPredictionMarket({
         <ArrowRight aria-hidden size={13} />
       </footer>
     </Link>
+  );
+}
+
+export function PredictionMarketLifecycle({
+  market,
+  compact = false,
+}: {
+  readonly market: PredictionMarketView;
+  readonly compact?: boolean;
+}) {
+  const winner =
+    market.resolvedSide === "yes"
+      ? market.yesLabel
+      : market.resolvedSide === "no"
+        ? market.noLabel
+        : undefined;
+  const determined = market.status === "settled";
+  const title = determined
+    ? "Determined"
+    : market.status === "locked"
+      ? "Closed for predictions"
+      : market.status === "void"
+        ? "Market void"
+        : "Market open";
+  const detail = determined
+    ? `Winning outcome: ${winner ?? "verified result"}. Open orders are closed and prediction credits are settled.`
+    : market.status === "locked"
+      ? "Orders are closed while the final result is verified."
+      : market.status === "void"
+        ? "This market did not determine an outcome. Eligible credits were returned."
+        : "Orders remain open until the posted close time.";
+  const statusTime = market.determinedAt ?? market.locksAt;
+  return (
+    <div
+      className={[
+        "prediction-market-lifecycle",
+        compact ? "prediction-market-lifecycle--compact" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      data-status={market.status}
+    >
+      {determined ? (
+        <BadgeCheck aria-hidden size={compact ? 18 : 24} />
+      ) : (
+        <CalendarClock aria-hidden size={compact ? 18 : 24} />
+      )}
+      <div>
+        <span>{title}</span>
+        <strong>{winner ?? detail}</strong>
+        {!compact && <small>{detail}</small>}
+      </div>
+      {statusTime && !compact && (
+        <time dateTime={statusTime}>
+          {new Intl.DateTimeFormat("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          }).format(new Date(statusTime))}
+        </time>
+      )}
+    </div>
+  );
+}
+
+export function PredictionMarketCommunity({
+  market,
+}: {
+  readonly market: PredictionMarketView;
+}) {
+  return (
+    <section className="prediction-market-community">
+      <header>
+        <div>
+          <span className="page-eyebrow">Community positions</span>
+          <h3>Who predicted what</h3>
+        </div>
+        <span>
+          <Users aria-hidden size={15} /> {market.participantCount} predictors
+        </span>
+      </header>
+      {market.predictors.length ? (
+        <div>
+          {market.predictors.map((predictor, index) => (
+            <article key={[predictor.handle, predictor.side, index].join(":")}>
+              <Link href={"/players/" + predictor.handle}>
+                @{predictor.handle}
+              </Link>
+              <span>
+                {predictor.side === "yes" ? market.yesLabel : market.noLabel}
+              </span>
+              <strong>{formatPredictionAmount(predictor.shares)} shares</strong>
+              <small data-status={predictor.status}>
+                {predictor.status === "open"
+                  ? "Open"
+                  : predictor.status === "won"
+                    ? "Won"
+                    : predictor.status === "lost"
+                      ? "Lost"
+                      : "Void"}
+              </small>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p>No matched positions yet. Be the first handle on the board.</p>
+      )}
+      <footer>
+        Prediction activity is public by handle because credits have no cash
+        value and cannot be purchased or redeemed.
+      </footer>
+    </section>
+  );
+}
+
+export function PredictionMarketRulesPanel({
+  market,
+}: {
+  readonly market: PredictionMarketView;
+}) {
+  return (
+    <section className="prediction-market-rules" id="market-rules">
+      <header>
+        <div>
+          <span className="page-eyebrow">Market rules</span>
+          <h3>How this market resolves</h3>
+        </div>
+        <span>
+          <FileText aria-hidden size={15} /> Version {market.rules.version}
+        </span>
+      </header>
+      <dl>
+        <div>
+          <dt>Resolution</dt>
+          <dd>{market.rules.resolutionCriteria}</dd>
+        </div>
+        <div>
+          <dt>Verified from</dt>
+          <dd>{market.rules.resolutionSource}</dd>
+        </div>
+        <div>
+          <dt>Timeline + close</dt>
+          <dd>{market.rules.closePolicy}</dd>
+        </div>
+      </dl>
+      {market.rules.publicNote && <p>{market.rules.publicNote}</p>}
+    </section>
   );
 }
 
@@ -622,6 +782,31 @@ export function PredictionOrderTicket({
       router.refresh();
     });
   };
+
+  if (market.status !== "open") {
+    return (
+      <aside className="prediction-ticket prediction-ticket--closed">
+        <PredictionMarketLifecycle market={market} />
+        <p>
+          {market.viewer.authenticated
+            ? "Your final position and credit result are available in Predictions."
+            : "Sign in to review your prediction history."}
+        </p>
+        <Link
+          href={
+            market.viewer.authenticated
+              ? "/app/wallet/predictions"
+              : "/sign-in?returnTo=" + encodeURIComponent(returnTo)
+          }
+        >
+          {market.viewer.authenticated
+            ? "Open predictions portfolio"
+            : "Sign in to review"}{" "}
+          <ArrowRight aria-hidden size={14} />
+        </Link>
+      </aside>
+    );
+  }
 
   if (!market.viewer.authenticated) {
     return (
@@ -838,7 +1023,8 @@ export function PredictionOrderTicket({
       )}
       <small className="prediction-ticket__rule">
         <LockKeyhole aria-hidden size={12} /> Free play credits only · no
-        purchase, cash value, prizes, external transfer, or redemption.
+        purchase, cash value, prizes, external transfer, or redemption. Your
+        handle appears publicly after a position matches.
       </small>
       {message && (
         <p className="prediction-ticket__message" role="alert">
@@ -861,27 +1047,36 @@ export function PredictionMarketDetail({
   readonly wallet?: PredictionWallet;
 }) {
   return (
-    <section className="prediction-market-detail">
-      <div className="prediction-market-detail__chart">
-        <header>
-          <div>
-            <span className="page-eyebrow">Crowd signal over time</span>
-            <h2>Winner probability</h2>
-          </div>
-          <span>
-            <Sparkles aria-hidden size={15} /> Order-book price
-          </span>
-        </header>
-        <ViewerPredictionPosition market={market} variant="compact" />
-        <PredictionMarketChart market={market} />
+    <div className="prediction-market-experience">
+      <section className="prediction-market-detail">
+        <div className="prediction-market-detail__chart">
+          <header>
+            <div>
+              <span className="page-eyebrow">Crowd signal over time</span>
+              <h2>Winner probability</h2>
+            </div>
+            <span>
+              <Sparkles aria-hidden size={15} /> Order-book price
+            </span>
+          </header>
+          {market.status !== "open" && (
+            <PredictionMarketLifecycle compact market={market} />
+          )}
+          <ViewerPredictionPosition market={market} variant="compact" />
+          <PredictionMarketChart market={market} />
+        </div>
+        <PredictionOrderTicket
+          market={market}
+          returnTo={returnTo}
+          target={target}
+          wallet={wallet}
+        />
+      </section>
+      <div className="prediction-market-experience__info">
+        <PredictionMarketRulesPanel market={market} />
+        <PredictionMarketCommunity market={market} />
       </div>
-      <PredictionOrderTicket
-        market={market}
-        returnTo={returnTo}
-        target={target}
-        wallet={wallet}
-      />
-    </section>
+    </div>
   );
 }
 
@@ -1041,6 +1236,10 @@ export function TournamentPredictionMarkets({
           target={{ kind: targetKind, eventSlug, externalTeamId }}
           wallet={wallet}
         />
+      </div>
+      <div className="prediction-market-experience__info">
+        <PredictionMarketRulesPanel market={selected} />
+        <PredictionMarketCommunity market={selected} />
       </div>
     </section>
   );

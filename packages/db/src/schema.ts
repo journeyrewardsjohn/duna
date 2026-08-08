@@ -4646,6 +4646,7 @@ export const predictionMarkets = pgTable(
       .notNull()
       .$type<Record<string, unknown>>()
       .default({}),
+    currentRuleVersion: integer("current_rule_version").notNull().default(1),
     createdAt,
     updatedAt,
   },
@@ -4668,6 +4669,38 @@ export const predictionMarkets = pgTable(
       "prediction_market_resolution_valid",
       sql`${table.resolvedSide} IS NULL OR ${table.resolvedSide} IN ('yes', 'no')`,
     ),
+  ],
+);
+
+// Market rules are versioned rather than overwritten so players and operators
+// can inspect exactly which resolution language governed a position.
+export const predictionMarketRuleVersions = pgTable(
+  "prediction_market_rule_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    marketId: uuid("market_id")
+      .notNull()
+      .references(() => predictionMarkets.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    resolutionCriteria: text("resolution_criteria").notNull(),
+    resolutionSource: text("resolution_source").notNull(),
+    closePolicy: text("close_policy").notNull(),
+    publicNote: text("public_note"),
+    locksAt: timestamp("locks_at", { withTimezone: true, mode: "date" }),
+    changeReason: text("change_reason").notNull(),
+    createdByPersonId: uuid("created_by_person_id").references(() => people.id),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("prediction_market_rule_version_unique").on(
+      table.marketId,
+      table.version,
+    ),
+    index("prediction_market_rule_market_time_idx").on(
+      table.marketId,
+      table.createdAt,
+    ),
+    check("prediction_market_rule_version_positive", sql`${table.version} > 0`),
   ],
 );
 

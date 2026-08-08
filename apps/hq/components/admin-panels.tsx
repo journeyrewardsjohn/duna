@@ -1,6 +1,7 @@
 import type {
   AdminOrganizationDetail,
   AdminOverview as AdminOverviewData,
+  AdminPredictionOverview,
   AdminVideoOverview,
   FeatureFlagCollection,
   GuardianReviewItem,
@@ -18,6 +19,7 @@ import {
   Check,
   ChevronLeft,
   CircleAlert,
+  Coins,
   ExternalLink,
   Flag,
   HeartPulse,
@@ -49,6 +51,7 @@ import {
 } from "./pro-tour-admin-controls";
 import { VideoAdminControls } from "./video-admin-controls";
 import { PlayerIntelligenceAdminPanel } from "./player-intelligence-admin";
+import { PredictionAdminControls } from "./prediction-admin-controls";
 
 const adminMetricIcons = [
   WalletCards,
@@ -114,6 +117,12 @@ const copy: Record<
     title: "Ratings lab",
     description:
       "Measure prediction accuracy and calibration, then version rating parameters safely.",
+  },
+  predictions: {
+    eyebrow: "Free-play market integrity",
+    title: "Predictions",
+    description:
+      "Track credits-only markets, public handles, order state, versioned rules, and verified settlement.",
   },
   payments: {
     eyebrow: "Platform financial operations",
@@ -739,6 +748,7 @@ export function AdminPanel({
   playerIntelligenceDetail,
   playerIntelligenceGender,
   playerIntelligenceStatus,
+  predictions,
 }: {
   readonly module: AdminModule;
   readonly overview: AdminOverviewData;
@@ -756,6 +766,7 @@ export function AdminPanel({
   readonly playerIntelligenceGender?: "men" | "women";
   readonly playerIntelligenceStatus?:
     "all" | "not-started" | "review" | "published" | "failed";
+  readonly predictions?: AdminPredictionOverview;
 }) {
   if (module === "overview") return null;
   const content = copy[module];
@@ -774,15 +785,17 @@ export function AdminPanel({
                   module === "player-mapping" ||
                   module === "ratings-lab"
                 ? Activity
-                : module === "payments"
-                  ? WalletCards
-                  : module === "video"
-                    ? Radio
-                    : module === "audit"
-                      ? ScrollText
-                      : module === "flags"
-                        ? Flag
-                        : HeartPulse;
+                : module === "predictions"
+                  ? Coins
+                  : module === "payments"
+                    ? WalletCards
+                    : module === "video"
+                      ? Radio
+                      : module === "audit"
+                        ? ScrollText
+                        : module === "flags"
+                          ? Flag
+                          : HeartPulse;
   const ratedPlayers = overview.metrics.find(
     (metric) => metric.label === "Rated players",
   );
@@ -865,6 +878,8 @@ export function AdminPanel({
         />
       ) : module === "ratings-lab" && sandData ? (
         <RatingsLabPanel data={sandData} />
+      ) : module === "predictions" && predictions ? (
+        <PredictionAdminControls overview={predictions} />
       ) : module === "payments" ? (
         <div className="module-grid module-grid--two">
           <section className="hq-card module-feature-card">

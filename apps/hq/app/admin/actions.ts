@@ -11,6 +11,7 @@ export interface GuardianReviewActionState {
 export type FeatureFlagActionState = GuardianReviewActionState;
 export type VideoAdminActionState = GuardianReviewActionState;
 export type OrganizationCommissionActionState = GuardianReviewActionState;
+export type PredictionAdminActionState = GuardianReviewActionState;
 
 function parseConfiguration(
   value: FormDataEntryValue | null,
@@ -402,6 +403,154 @@ export async function updateOrganizationCommissionAction(
         error instanceof Error
           ? error.message
           : "The organization fee could not be updated.",
+    };
+  }
+}
+
+export async function updatePredictionMarketRulesAction(
+  _previous: PredictionAdminActionState,
+  formData: FormData,
+): Promise<PredictionAdminActionState> {
+  const marketId = String(formData.get("marketId") ?? "");
+  const resolutionCriteria = String(
+    formData.get("resolutionCriteria") ?? "",
+  ).trim();
+  const resolutionSource = String(
+    formData.get("resolutionSource") ?? "",
+  ).trim();
+  const closePolicy = String(formData.get("closePolicy") ?? "").trim();
+  const publicNote = String(formData.get("publicNote") ?? "").trim();
+  const locksAtSource = String(formData.get("locksAt") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  const locksAt = locksAtSource ? new Date(locksAtSource) : null;
+  if (
+    !marketId ||
+    resolutionCriteria.length < 12 ||
+    resolutionSource.length < 5 ||
+    closePolicy.length < 12 ||
+    reason.length < 5 ||
+    !confirmed ||
+    (locksAt && Number.isNaN(locksAt.getTime()))
+  ) {
+    return {
+      status: "error",
+      message:
+        "Complete the resolution, source, close policy, change reason, and confirmation.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.updatePredictionMarketRules({
+      marketId,
+      resolutionCriteria,
+      resolutionSource,
+      closePolicy,
+      publicNote: publicNote || undefined,
+      locksAt: locksAt?.toISOString() ?? null,
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/predictions");
+    return {
+      status: "success",
+      message: `Rule version ${result.version} is now active and audit-recorded.`,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error ? error.message : "Market rules were not saved.",
+    };
+  }
+}
+
+export async function setPredictionMarketTradingStatusAction(
+  _previous: PredictionAdminActionState,
+  formData: FormData,
+): Promise<PredictionAdminActionState> {
+  const marketId = String(formData.get("marketId") ?? "");
+  const action = String(formData.get("action") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  if (
+    !marketId ||
+    !["lock", "reopen"].includes(action) ||
+    reason.length < 5 ||
+    !confirmed
+  ) {
+    return {
+      status: "error",
+      message:
+        "Add an operator reason and confirm the exact trading-state change.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.setPredictionMarketTradingStatus({
+      marketId,
+      action: action as "lock" | "reopen",
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/predictions");
+    return {
+      status: "success",
+      message: `Market is now ${result.status}.`,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "The market status could not be changed.",
+    };
+  }
+}
+
+export async function determinePredictionMarketAction(
+  _previous: PredictionAdminActionState,
+  formData: FormData,
+): Promise<PredictionAdminActionState> {
+  const marketId = String(formData.get("marketId") ?? "");
+  const resolvedSide = String(formData.get("resolvedSide") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  if (
+    !marketId ||
+    !["yes", "no"].includes(resolvedSide) ||
+    reason.length < 5 ||
+    !confirmed
+  ) {
+    return {
+      status: "error",
+      message:
+        "Choose the verified outcome, document the source, and confirm settlement.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.settlePredictionMarket({
+      marketId,
+      resolvedSide: resolvedSide as "yes" | "no",
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/predictions");
+    return {
+      status: "success",
+      message: result.settled
+        ? "Market is Determined. Orders closed and positions settled."
+        : "Market was already determined to this outcome.",
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "The market could not be determined.",
     };
   }
 }

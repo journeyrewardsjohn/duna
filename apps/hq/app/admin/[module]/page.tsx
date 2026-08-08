@@ -113,6 +113,9 @@ export default async function AdminModulePage({
     module === "player-intelligence" && player
       ? caller.admin.playerIntelligenceDetail({ personId: player })
       : Promise.resolve(undefined),
+    module === "predictions"
+      ? caller.admin.predictionMarkets()
+      : Promise.resolve(undefined),
   ])
     .then(
       ([
@@ -125,6 +128,7 @@ export default async function AdminModulePage({
         video,
         playerIntelligence,
         playerIntelligenceDetail,
+        predictions,
       ]) => ({
         overview,
         organizations,
@@ -135,6 +139,7 @@ export default async function AdminModulePage({
         video,
         playerIntelligence,
         playerIntelligenceDetail,
+        predictions,
       }),
     )
     .catch((error: unknown) => {
@@ -165,6 +170,7 @@ export default async function AdminModulePage({
         playerIntelligenceDetail={result.playerIntelligenceDetail}
         playerIntelligenceGender={gender}
         playerIntelligenceStatus={status}
+        predictions={result.predictions}
       />
     </AdminShell>
   );
