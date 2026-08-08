@@ -1,4 +1,5 @@
 import { connect } from "node:http2";
+import { predictionMicrosToCredits } from "@duna/core";
 import {
   courtBookingParticipants,
   courtBookings,
@@ -10,6 +11,9 @@ import {
   matches,
   playerFollowPreferences,
   pickupParticipants,
+  predictionMarkets,
+  predictionPositions,
+  professionalMatchPredictions,
   professionalEvents,
   registrations,
   teamMembers,
@@ -45,12 +49,18 @@ export interface LiveActivityContentState {
   readonly venueName?: string;
   readonly rosterSummary?: string;
   readonly playerOneName?: string;
+  readonly playerOneAvatarUrl?: string;
   readonly playerOneEtaMinutes?: number;
   readonly playerOneStatus?: string;
   readonly playerTwoName?: string;
+  readonly playerTwoAvatarUrl?: string;
   readonly playerTwoEtaMinutes?: number;
   readonly playerTwoStatus?: string;
   readonly liveMatchCount?: number;
+  readonly predictionLabel?: string;
+  readonly predictionStatus?: "open" | "won" | "lost" | "void";
+  readonly predictionCredits?: number;
+  readonly winnerSide?: "A" | "B";
   readonly updatedAt: string;
 }
 
@@ -525,8 +535,110 @@ export async function publishLiveActivity(input: {
     kind: input.kind,
     updatedAt: now.toISOString(),
   };
+  const predictionRows =
+    input.kind === "match"
+      ? await getDatabase()
+          .select({
+            personId: professionalMatchPredictions.personId,
+            predictedSide: professionalMatchPredictions.predictedSide,
+          })
+          .from(professionalMatchPredictions)
+          .where(
+            and(
+              eq(professionalMatchPredictions.importedMatchId, input.subjectId),
+              inArray(
+                professionalMatchPredictions.personId,
+                subscriptions.map((subscription) => subscription.personId),
+              ),
+            ),
+          )
+      : [];
+  const marketPredictionRows =
+    input.kind === "match"
+      ? await getDatabase()
+          .select({
+            personId: predictionPositions.personId,
+            side: predictionPositions.side,
+            sharesMicros: predictionPositions.sharesMicros,
+            payoutMicros: predictionPositions.payoutMicros,
+            status: predictionPositions.status,
+            yesLabel: predictionMarkets.yesLabel,
+            noLabel: predictionMarkets.noLabel,
+          })
+          .from(predictionPositions)
+          .innerJoin(
+            predictionMarkets,
+            eq(predictionPositions.marketId, predictionMarkets.id),
+          )
+          .where(
+            and(
+              eq(predictionMarkets.subjectType, "pro-match"),
+              eq(predictionMarkets.subjectId, input.subjectId),
+              inArray(
+                predictionPositions.personId,
+                subscriptions.map((subscription) => subscription.personId),
+              ),
+            ),
+          )
+      : [];
+  const predictionByPerson = new Map(
+    predictionRows.map((prediction) => [
+      prediction.personId,
+      prediction.predictedSide,
+    ]),
+  );
+  const marketPredictionByPerson = new Map<
+    string,
+    (typeof marketPredictionRows)[number]
+  >();
+  for (const prediction of marketPredictionRows) {
+    const current = marketPredictionByPerson.get(prediction.personId);
+    if (!current || prediction.sharesMicros > current.sharesMicros) {
+      marketPredictionByPerson.set(prediction.personId, prediction);
+    }
+  }
   const outcomes = await Promise.all(
     subscriptions.map(async (subscription) => {
+      const predictedSide = predictionByPerson.get(subscription.personId);
+      const marketPrediction = marketPredictionByPerson.get(
+        subscription.personId,
+      );
+      const marketStatus =
+        marketPrediction?.status === "won" ||
+        marketPrediction?.status === "lost" ||
+        marketPrediction?.status === "void"
+          ? marketPrediction.status
+          : "open";
+      const personalizedState: LiveActivityContentState = marketPrediction
+        ? {
+            ...contentState,
+            predictionLabel:
+              marketPrediction.side === "yes"
+                ? marketPrediction.yesLabel
+                : marketPrediction.noLabel,
+            predictionStatus: marketStatus,
+            ...(marketStatus === "won" && marketPrediction.payoutMicros > 0
+              ? {
+                  predictionCredits: predictionMicrosToCredits(
+                    marketPrediction.payoutMicros,
+                  ),
+                }
+              : {}),
+          }
+        : predictedSide
+          ? {
+              ...contentState,
+              predictionLabel:
+                predictedSide === "A"
+                  ? (contentState.teamA ?? "Side A")
+                  : (contentState.teamB ?? "Side B"),
+              predictionStatus: contentState.winnerSide
+                ? contentState.winnerSide === predictedSide
+                  ? "won"
+                  : "lost"
+                : "open",
+            }
+          : contentState;
       let outcome = await sendApnsRequest({
         configuration,
         providerToken: token,
@@ -534,7 +646,7 @@ export async function publishLiveActivity(input: {
         environment:
           subscription.environment === "sandbox" ? "sandbox" : "production",
         app: subscription.app === "pro" ? "pro" : "player",
-        contentState,
+        contentState: personalizedState,
         now,
         end: input.end,
       });
@@ -547,7 +659,7 @@ export async function publishLiveActivity(input: {
           environment:
             subscription.environment === "sandbox" ? "sandbox" : "production",
           app: subscription.app === "pro" ? "pro" : "player",
-          contentState,
+          contentState: personalizedState,
           now,
           end: input.end,
         });
@@ -677,6 +789,7 @@ export async function publishCoachArrivalLiveActivity(input: {
   readonly startsAt: Date;
   readonly signals: readonly {
     readonly displayName: string;
+    readonly avatarUrl?: string;
     readonly role: "player" | "coach";
     readonly status: string;
     readonly travelDurationSeconds: number;
@@ -714,11 +827,13 @@ export async function publishCoachArrivalLiveActivity(input: {
       venueName: input.venueName,
       rosterSummary,
       playerOneName: first?.displayName,
+      playerOneAvatarUrl: first?.avatarUrl,
       playerOneEtaMinutes: first
         ? Math.ceil(first.travelDurationSeconds / 60)
         : undefined,
       playerOneStatus: first?.status,
       playerTwoName: second?.displayName,
+      playerTwoAvatarUrl: second?.avatarUrl,
       playerTwoEtaMinutes: second
         ? Math.ceil(second.travelDurationSeconds / 60)
         : undefined,
@@ -763,7 +878,9 @@ export async function publishImportedProfessionalActivities(input: {
   const eventByExternalId = new Map(
     events.map((event) => [event.externalEventId, event] as const),
   );
-  const matchState = (match: (typeof matches)[number]) => {
+  const matchState = (
+    match: (typeof matches)[number],
+  ): Omit<LiveActivityContentState, "subjectId" | "kind" | "updatedAt"> => {
     const event = match.externalEventId
       ? eventByExternalId.get(match.externalEventId)
       : undefined;
@@ -783,6 +900,10 @@ export async function publishImportedProfessionalActivities(input: {
       scoreB: latestSet?.b ?? 0,
       setLabel: `Set ${Math.max(match.sets.length, 1)}`,
       phase: match.winnerSide ? ("final" as const) : ("live" as const),
+      winnerSide:
+        match.winnerSide === "A" || match.winnerSide === "B"
+          ? match.winnerSide
+          : undefined,
     };
   };
   const matchResults = await Promise.all(

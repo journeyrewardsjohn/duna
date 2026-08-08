@@ -510,6 +510,9 @@ export const matchSummarySchema = z.object({
 export type MatchSummary = z.infer<typeof matchSummarySchema>;
 export const bookingSummarySchema = z.object({
   id: z.string(),
+  source: z.enum(["registration", "pickup", "court"]).optional(),
+  sessionId: z.string().uuid().optional(),
+  sessionSlug: z.string().optional(),
   title: z.string(),
   kind: eventKindSchema,
   startsAt: z.iso.datetime(),
@@ -518,6 +521,44 @@ export const bookingSummarySchema = z.object({
   status: z.enum(["confirmed", "waitlisted", "needs-action"]),
   amount: moneySchema,
   participantNames: z.array(z.string()).readonly(),
+  paymentStatus: z
+    .enum(["free", "paid", "payment-required", "refunded"])
+    .optional(),
+  canEdit: z.boolean().optional(),
+  canCancel: z.boolean().optional(),
+  cancellationDeadline: z.iso.datetime().optional(),
+  team: z
+    .object({
+      claimToken: z.string().uuid(),
+      expectedTeamSize: z.number().int().min(2).max(6),
+      paymentMode: z.enum(["self", "team"]),
+      status: z.enum([
+        "assembling",
+        "ready",
+        "confirmed",
+        "cancelled",
+        "expired",
+      ]),
+      roster: z
+        .array(
+          z.object({
+            personId: z.string().uuid().optional(),
+            inviteTarget: z.string().optional(),
+            displayName: z.string(),
+            status: z.enum(["captain", "selected", "invited", "claimed"]),
+            paid: z.boolean(),
+            editable: z.boolean(),
+          }),
+        )
+        .readonly(),
+    })
+    .optional(),
+});
+export const bookingCancellationResultSchema = z.object({
+  id: z.string(),
+  status: z.literal("cancelled"),
+  refundStatus: z.enum(["not-applicable", "review-required"]),
+  message: z.string(),
 });
 export const walletEntrySchema = z.object({
   id: z.string(),
@@ -3166,6 +3207,39 @@ export const publicOrganizationStorefrontSchema = z.object({
   paymentsReady: z.boolean(),
   theme: operatorThemeSchema,
   catalog: z.array(publicCatalogItemSchema).readonly(),
+  contact: z.object({
+    email: z.email().optional(),
+    phone: z.string().optional(),
+    addressLine1: z.string().optional(),
+    addressLine2: z.string().optional(),
+    locality: z.string().optional(),
+    administrativeArea: z.string().optional(),
+    postalCode: z.string().optional(),
+    countryCode: z.string().length(2),
+    latitude: z.number().optional(),
+    longitude: z.number().optional(),
+  }),
+  venues: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        slug: z.string(),
+        name: z.string(),
+        description: z.string().optional(),
+        imageUrl: z.string().optional(),
+        amenities: z.array(z.string()).readonly(),
+        addressLine1: z.string().optional(),
+        addressLine2: z.string().optional(),
+        locality: z.string().optional(),
+        administrativeArea: z.string().optional(),
+        postalCode: z.string().optional(),
+        countryCode: z.string().length(2),
+        latitude: z.number().optional(),
+        longitude: z.number().optional(),
+        courtCount: z.number().int().nonnegative(),
+      }),
+    )
+    .readonly(),
 });
 
 export const publicCoachSchema = z.object({
@@ -3200,6 +3274,8 @@ export const discoveryEntityTypeSchema = z.enum([
   "event",
   "venue",
   "coach",
+  "organization",
+  "match",
   "pro-tour",
 ]);
 

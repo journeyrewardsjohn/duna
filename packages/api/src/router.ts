@@ -37,6 +37,7 @@ import {
   auditEventSchema,
   availableSlotSchema,
   bracketSchema,
+  bookingCancellationResultSchema,
   catalogCheckoutResultSchema,
   catalogCheckoutStatusSchema,
   catalogOfferEligibilitySchema,
@@ -122,6 +123,7 @@ import {
   visionSessionSettingsSchema,
   visionTimelineEventSchema,
 } from "./contracts";
+import { cancelPlayerBooking } from "./player-bookings";
 import {
   loadSessionArrivalBoard,
   publishCoachArrivalSignal,
@@ -5684,6 +5686,42 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
+  cancelBooking: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "player-booking-cancel",
+        capacity: 6,
+        refillPerMinute: 3,
+      }),
+    )
+    .input(
+      z.object({
+        bookingId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(bookingCancellationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.cancelBooking",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await cancelPlayerBooking({
+              actor: ctx.actor!,
+              bookingId: input.bookingId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   teammateSearch: protectedProcedure
     .use(
       rateLimitMiddleware({

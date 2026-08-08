@@ -1,6 +1,7 @@
 import {
   WorkOSMobileAuthProvider,
   useWorkOSMobileAuth,
+  type WorkOSMobileOrganization,
 } from "@duna/mobile-auth";
 import {
   createContext,
@@ -50,7 +51,10 @@ export interface ProRuntime {
   readonly members?: OperatorMembers;
   readonly events?: OperatorEvents;
   readonly matches?: OperatorMatches;
+  readonly authOrganizations?: readonly WorkOSMobileOrganization[];
+  readonly activeAuthOrganizationId?: string;
   readonly refresh: () => Promise<void>;
+  readonly switchOrganization?: (organizationId: string) => Promise<void>;
   readonly uploadProductImage?: (input: {
     readonly uri: string;
     readonly name?: string;
@@ -133,6 +137,8 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     isLoaded,
     isSignedIn,
     organizationId,
+    organizations,
+    selectOrganization,
     signIn,
     signOut,
   } = useWorkOSMobileAuth();
@@ -177,6 +183,12 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       setLoading(false);
     }
   }, [client, organizationId]);
+  const switchOrganization = useCallback(
+    async (nextOrganizationId: string) => {
+      await selectOrganization(nextOrganizationId);
+    },
+    [selectOrganization],
+  );
 
   useEffect(() => {
     if (isLoaded && isSignedIn && organizationId) void refresh();
@@ -237,6 +249,8 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   return (
     <RuntimeContext.Provider
       value={{
+        activeAuthOrganizationId: organizationId,
+        authOrganizations: organizations,
         mode: "live",
         client,
         dashboard,
@@ -245,6 +259,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         events,
         matches,
         refresh,
+        switchOrganization,
         createSessionNoteRoom: (sessionId) =>
           createSessionNoteRoom(getToken, sessionId),
         uploadProductImage: (input) => uploadProductImage(getToken, input),

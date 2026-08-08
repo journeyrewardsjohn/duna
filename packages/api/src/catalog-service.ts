@@ -28,6 +28,7 @@ import {
   organizationCreditGrants,
   organizationBrandKnowledgeSources,
   organizationMemberships,
+  organizationCommunicationSettings,
   organizationParticipants,
   organizationStaffProfiles,
   organizationThemes,
@@ -1574,25 +1575,46 @@ export async function loadPublicOrganizationStorefront(
   });
   if (!organization) return undefined;
 
-  const [themeRow, itemRows] = await Promise.all([
-    database.query.organizationThemes.findFirst({
-      where: and(
-        eq(organizationThemes.organizationId, organization.id),
-        sql`${organizationThemes.publishedAt} IS NOT NULL`,
-      ),
-    }),
-    database
-      .select()
-      .from(catalogItems)
-      .where(
-        and(
-          eq(catalogItems.organizationId, organization.id),
-          eq(catalogItems.status, "active"),
-          inArray(catalogItems.visibility, ["public", "members"]),
+  const [themeRow, itemRows, venueRows, communicationRow, courtRows] =
+    await Promise.all([
+      database.query.organizationThemes.findFirst({
+        where: and(
+          eq(organizationThemes.organizationId, organization.id),
+          sql`${organizationThemes.publishedAt} IS NOT NULL`,
         ),
-      )
-      .orderBy(asc(catalogItems.type), asc(catalogItems.title)),
-  ]);
+      }),
+      database
+        .select()
+        .from(catalogItems)
+        .where(
+          and(
+            eq(catalogItems.organizationId, organization.id),
+            eq(catalogItems.status, "active"),
+            inArray(catalogItems.visibility, ["public", "members"]),
+          ),
+        )
+        .orderBy(asc(catalogItems.type), asc(catalogItems.title)),
+      database
+        .select()
+        .from(venues)
+        .where(
+          and(
+            eq(venues.organizationId, organization.id),
+            eq(venues.status, "active"),
+          ),
+        )
+        .orderBy(asc(venues.name)),
+      database.query.organizationCommunicationSettings.findFirst({
+        where: eq(
+          organizationCommunicationSettings.organizationId,
+          organization.id,
+        ),
+      }),
+      database
+        .select({ id: courts.id, venueId: courts.venueId })
+        .from(courts)
+        .where(eq(courts.status, "active")),
+    ]);
   const itemIds = itemRows.map((item) => item.id);
   const variantRows =
     itemIds.length === 0
@@ -1788,6 +1810,56 @@ export async function loadPublicOrganizationStorefront(
         posterUrl: media.posterUrl ?? undefined,
         alt: media.alt ?? undefined,
       })),
+    })),
+    contact: {
+      ...(communicationRow?.emailDomainStatus === "verified" &&
+      communicationRow.senderEmail
+        ? { email: communicationRow.senderEmail }
+        : {}),
+      ...(communicationRow?.messagingAddonStatus === "active" &&
+      communicationRow.messagingPhoneNumber
+        ? { phone: communicationRow.messagingPhoneNumber }
+        : {}),
+      ...(organization.addressLine1
+        ? { addressLine1: organization.addressLine1 }
+        : {}),
+      ...(organization.addressLine2
+        ? { addressLine2: organization.addressLine2 }
+        : {}),
+      ...(organization.locality ? { locality: organization.locality } : {}),
+      ...(organization.administrativeArea
+        ? { administrativeArea: organization.administrativeArea }
+        : {}),
+      ...(organization.postalCode
+        ? { postalCode: organization.postalCode }
+        : {}),
+      countryCode: organization.countryCode,
+      ...(organization.latitude !== null
+        ? { latitude: organization.latitude }
+        : {}),
+      ...(organization.longitude !== null
+        ? { longitude: organization.longitude }
+        : {}),
+    },
+    venues: venueRows.map((venue) => ({
+      id: venue.id,
+      slug: venue.slug,
+      name: venue.name,
+      ...(venue.description ? { description: venue.description } : {}),
+      ...(venue.heroImageUrl ? { imageUrl: venue.heroImageUrl } : {}),
+      amenities: venue.amenities,
+      ...(venue.addressLine1 ? { addressLine1: venue.addressLine1 } : {}),
+      ...(venue.addressLine2 ? { addressLine2: venue.addressLine2 } : {}),
+      ...(venue.locality ? { locality: venue.locality } : {}),
+      ...(venue.administrativeArea
+        ? { administrativeArea: venue.administrativeArea }
+        : {}),
+      ...(venue.postalCode ? { postalCode: venue.postalCode } : {}),
+      countryCode: venue.countryCode,
+      ...(venue.latitude !== null ? { latitude: venue.latitude } : {}),
+      ...(venue.longitude !== null ? { longitude: venue.longitude } : {}),
+      courtCount: courtRows.filter((court) => court.venueId === venue.id)
+        .length,
     })),
   };
 }

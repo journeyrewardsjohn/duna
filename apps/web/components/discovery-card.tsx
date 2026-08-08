@@ -11,6 +11,8 @@ const labels: Record<DiscoveryMapItem["entityType"], string> = {
   event: "Play",
   venue: "Court",
   coach: "Coach",
+  match: "Match",
+  organization: "Club",
   "pro-tour": "Pro tour",
 };
 

@@ -29,6 +29,9 @@ export type DunaLiveActivityProps = {
   readonly startsAtLabel?: string;
   readonly venueName?: string;
   readonly liveMatchCount?: number;
+  readonly predictionLabel?: string;
+  readonly predictionStatus?: "open" | "won" | "lost" | "void";
+  readonly predictionCredits?: number;
   readonly updatedAt: string;
 };
 
@@ -36,6 +39,8 @@ const navy = "#141a1e";
 const sky = "#d4b77c";
 const white = "#ffffff";
 const mist = "#a9b4b8";
+const success = "#8fd19e";
+const warning = "#f28a63";
 
 function shortLabel(label?: string) {
   if (!label) return "TBD";
@@ -70,6 +75,20 @@ function Activity(
   const score = `${props.scoreA ?? 0}–${props.scoreB ?? 0}`;
   const leading = isScore ? shortLabel(props.teamA) : props.status;
   const trailing = isScore ? shortLabel(props.teamB) : `${etaMinutes} MIN`;
+  const predictionResult =
+    props.predictionStatus === "won"
+      ? "WON"
+      : props.predictionStatus === "lost"
+        ? "LOST"
+        : props.predictionStatus === "void"
+          ? "VOID"
+          : "OPEN";
+  const predictionColor =
+    props.predictionStatus === "won"
+      ? success
+      : props.predictionStatus === "lost"
+        ? warning
+        : sky;
 
   const mark = (
     <Image
@@ -106,45 +125,102 @@ function Activity(
         </Text>
       </HStack>
       {isScore ? (
-        <HStack alignment="center" spacing={12}>
-          <VStack alignment="leading" spacing={2}>
-            <Text
-              modifiers={[
-                font({ size: 18, weight: "bold", design: "rounded" }),
-                foregroundStyle(white),
-              ]}
-            >
-              {shortLabel(props.teamA)}
-            </Text>
-            <Text
-              modifiers={[
-                font({ size: 18, weight: "bold", design: "rounded" }),
-                foregroundStyle(white),
-              ]}
-            >
-              {shortLabel(props.teamB)}
-            </Text>
-          </VStack>
-          <Spacer />
-          <VStack alignment="trailing" spacing={0}>
-            <Text
-              modifiers={[
-                font({ size: 34, weight: "black", design: "rounded" }),
-                foregroundStyle(white),
-              ]}
-            >
-              {score}
-            </Text>
-            <Text
-              modifiers={[
-                font({ size: 11, weight: "semibold", design: "rounded" }),
-                foregroundStyle(sky),
-              ]}
-            >
-              {props.setLabel ?? props.subtitle}
-            </Text>
-          </VStack>
-        </HStack>
+        <VStack alignment="leading" spacing={8}>
+          <Text
+            modifiers={[
+              font({ size: 11, weight: "semibold", design: "rounded" }),
+              foregroundStyle(mist),
+            ]}
+          >
+            {props.title}
+          </Text>
+          <HStack alignment="center" spacing={10}>
+            <VStack alignment="leading" spacing={1}>
+              <Text
+                modifiers={[
+                  font({ size: 15, weight: "bold", design: "rounded" }),
+                  foregroundStyle(white),
+                ]}
+              >
+                {shortLabel(props.teamA)}
+              </Text>
+              <Text
+                modifiers={[
+                  font({ size: 32, weight: "black", design: "rounded" }),
+                  foregroundStyle(white),
+                ]}
+              >
+                {`${props.scoreA ?? 0}`}
+              </Text>
+            </VStack>
+            <Spacer />
+            <VStack alignment="center" spacing={2}>
+              <Image color={sky} size={22} systemName="arrow.right" />
+              <Text
+                modifiers={[
+                  font({ size: 10, weight: "bold", design: "rounded" }),
+                  foregroundStyle(sky),
+                ]}
+              >
+                {props.setLabel ?? props.subtitle}
+              </Text>
+            </VStack>
+            <Spacer />
+            <VStack alignment="trailing" spacing={1}>
+              <Text
+                modifiers={[
+                  font({ size: 15, weight: "bold", design: "rounded" }),
+                  foregroundStyle(white),
+                ]}
+              >
+                {shortLabel(props.teamB)}
+              </Text>
+              <Text
+                modifiers={[
+                  font({ size: 32, weight: "black", design: "rounded" }),
+                  foregroundStyle(white),
+                ]}
+              >
+                {`${props.scoreB ?? 0}`}
+              </Text>
+            </VStack>
+          </HStack>
+          {props.predictionStatus ? (
+            <HStack alignment="center" spacing={6}>
+              <Image
+                color={predictionColor}
+                size={12}
+                systemName={
+                  props.predictionStatus === "won"
+                    ? "checkmark.circle.fill"
+                    : props.predictionStatus === "lost"
+                      ? "xmark.circle.fill"
+                      : "sparkles"
+                }
+              />
+              <Text
+                modifiers={[
+                  font({ size: 10, weight: "bold", design: "rounded" }),
+                  foregroundStyle(mist),
+                ]}
+              >
+                YOUR PICK · {shortLabel(props.predictionLabel)}
+              </Text>
+              <Spacer />
+              <Text
+                modifiers={[
+                  font({ size: 11, weight: "black", design: "rounded" }),
+                  foregroundStyle(predictionColor),
+                ]}
+              >
+                {predictionResult}
+                {props.predictionCredits
+                  ? ` · +${props.predictionCredits}`
+                  : ""}
+              </Text>
+            </HStack>
+          ) : null}
+        </VStack>
       ) : (
         <VStack alignment="leading" spacing={8}>
           <Text
@@ -257,7 +333,7 @@ function Activity(
           ]}
         >
           {isScore
-            ? `${score} · ${props.setLabel ?? props.status}`
+            ? `${score} · ${props.predictionStatus ? `Pick ${predictionResult}` : (props.setLabel ?? props.status)}`
             : `${props.status} · ${hasTravelEta ? (etaMinutes ? `${etaMinutes} min` : "at venue") : "ETA ready"}`}
         </Text>
       </VStack>

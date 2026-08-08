@@ -25,9 +25,11 @@ type MapBounds = MapState["properties"]["bounds"];
 
 const filterOptions: readonly { value: DiscoveryFilter; label: string }[] = [
   { value: "all", label: "Everything" },
+  { value: "organization", label: "Clubs" },
   { value: "venue", label: "Courts" },
   { value: "event", label: "Events" },
   { value: "coach", label: "Coaches" },
+  { value: "match", label: "Matches" },
   { value: "pro-tour", label: "Pro tour" },
 ];
 
@@ -35,6 +37,8 @@ const entityColors: Record<DiscoveryEntityType, string> = {
   event: "#3d6672",
   venue: "#d4b77c",
   coach: "#ec8064",
+  organization: "#4e765d",
+  match: "#35c8bd",
   "pro-tour": "#f2c46d",
 };
 
@@ -53,7 +57,7 @@ async function publicMapboxToken(): Promise<string | undefined> {
   return publicTokenRequest;
 }
 
-function useMapboxToken(active = true) {
+export function useMapboxToken(active = true) {
   const [token, setToken] = useState<string>();
   useEffect(() => {
     if (!active) return;
@@ -217,6 +221,10 @@ function MapLayers({
             entityColors.venue,
             "coach",
             entityColors.coach,
+            "organization",
+            entityColors.organization,
+            "match",
+            entityColors.match,
             "pro-tour",
             entityColors["pro-tour"],
             entityColors.event,
@@ -356,9 +364,11 @@ function NativeResultCard({
           <Text style={nativeStyles.resultImageText}>
             {item.entityType === "venue"
               ? "COURT"
-              : item.entityType === "pro-tour"
-                ? "PRO"
-                : item.entityType.toUpperCase()}
+              : item.entityType === "organization"
+                ? "CLUB"
+                : item.entityType === "pro-tour"
+                  ? "PRO"
+                  : item.entityType.toUpperCase()}
           </Text>
         </View>
       )}
@@ -691,15 +701,52 @@ export function DiscoverySearchModal({
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<DiscoveryFilter>("all");
+  const [nearMe, setNearMe] = useState(false);
+  const [origin, setOrigin] = useState<{
+    readonly latitude: number;
+    readonly longitude: number;
+  }>();
   const normalized = query.trim().toLowerCase();
-  const results = items.filter((item) => {
-    if (filter !== "all" && item.entityType !== filter) return false;
-    if (!normalized) return true;
-    return [item.title, item.subtitle, item.kind, ...item.tags]
-      .join(" ")
-      .toLowerCase()
-      .includes(normalized);
-  });
+  const results = items
+    .filter((item) => {
+      if (filter !== "all" && item.entityType !== filter) return false;
+      if (!normalized) return true;
+      return [item.title, item.subtitle, item.kind, ...item.tags]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalized);
+    })
+    .sort((left, right) => {
+      if (!nearMe || !origin) return 0;
+      const distance = (item: DiscoveryMapItem) => {
+        if (item.latitude === undefined || item.longitude === undefined) {
+          return Number.POSITIVE_INFINITY;
+        }
+        const radians = (value: number) => (value * Math.PI) / 180;
+        const latitudeDelta = radians(item.latitude - origin.latitude);
+        const longitudeDelta = radians(item.longitude - origin.longitude);
+        const a =
+          Math.sin(latitudeDelta / 2) ** 2 +
+          Math.cos(radians(origin.latitude)) *
+            Math.cos(radians(item.latitude)) *
+            Math.sin(longitudeDelta / 2) ** 2;
+        return 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      };
+      return distance(left) - distance(right);
+    });
+  const toggleNearMe = async () => {
+    if (nearMe) {
+      setNearMe(false);
+      return;
+    }
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (!permission.granted) return;
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+    setOrigin(location.coords);
+    setNearMe(true);
+  };
   return (
     <Modal animationType="slide" onRequestClose={onClose} visible={visible}>
       <SafeAreaView style={nativeStyles.searchModal}>
@@ -714,7 +761,7 @@ export function DiscoverySearchModal({
           <TextInput
             autoFocus
             onChangeText={setQuery}
-            placeholder="Event, venue, coach, or city"
+            placeholder="Club, coach, match, event, or city"
             placeholderTextColor="#738295"
             style={nativeStyles.searchInput}
             value={query}
@@ -730,6 +777,22 @@ export function DiscoverySearchModal({
           horizontal
           showsHorizontalScrollIndicator={false}
         >
+          <Pressable
+            onPress={() => void toggleNearMe()}
+            style={[
+              nativeStyles.searchFilter,
+              nearMe && nativeStyles.searchFilterActive,
+            ]}
+          >
+            <Text
+              style={[
+                nativeStyles.searchFilterText,
+                nearMe && nativeStyles.searchFilterTextActive,
+              ]}
+            >
+              ◎ Near me
+            </Text>
+          </Pressable>
           {filterOptions.map((option) => (
             <Pressable
               key={option.value}
@@ -753,7 +816,11 @@ export function DiscoverySearchModal({
         </ScrollView>
         <View style={nativeStyles.searchResultHeading}>
           <Text style={nativeStyles.searchResultEyebrow}>
-            {normalized ? "BEST MATCHES" : "SUGGESTED AROUND DUNA"}
+            {nearMe
+              ? "NEAREST TO YOU"
+              : normalized
+                ? "BEST MATCHES"
+                : "SUGGESTED AROUND DUNA"}
           </Text>
           <Text style={nativeStyles.searchResultCount}>{results.length}</Text>
         </View>

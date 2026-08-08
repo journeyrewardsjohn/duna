@@ -75,7 +75,14 @@ import {
 import { VideoStudioScreen } from "./video-studio";
 import { HealthScreen } from "./health-screen";
 import { HealthHistorySyncAgent } from "./health-history-sync-agent";
-import { SessionArrivalCard } from "./session-arrival-card";
+import { LiveActivitiesPrompt } from "./live-activities-prompt";
+import {
+  BookingManagementModal,
+  type ManagedBooking,
+} from "./booking-management";
+import { PlayerCalendarModal } from "./player-calendar";
+import { ProfileHubScreen } from "./profile-hub";
+import { OrganizationExperienceModal } from "./organization-experience";
 import {
   DiscoveryMapModal,
   DiscoveryMapPreview,
@@ -367,7 +374,8 @@ type Tab =
   | "wallet"
   | "predictions"
   | "you"
-  | "health";
+  | "health"
+  | "performance";
 
 type CourtInventory = Awaited<
   ReturnType<DunaApiClient["public"]["courtBookingInventory"]["query"]>
@@ -829,6 +837,7 @@ function MemberOrganizationCard() {
   } = usePlayerRuntime();
   const [open, setOpen] = useState(false);
   const [pendingRole, setPendingRole] = useState<"coach" | "director">();
+  const [enrolledRole, setEnrolledRole] = useState<"coach" | "director">();
   const [error, setError] = useState<string>();
   const fallback =
     organizationWallets?.find(
@@ -880,6 +889,7 @@ function MemberOrganizationCard() {
     setPendingRole(staffRole);
     try {
       await selfEnrollOrganizationStaff(staffRole);
+      setEnrolledRole(staffRole);
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -1012,7 +1022,7 @@ function MemberOrganizationCard() {
               </View>
             )}
 
-            {active?.canSelfEnroll && (
+            {active?.canSelfEnroll && !enrolledRole && (
               <View style={styles.organizationEnrollCard}>
                 <Text style={styles.organizationEnrollEyebrow}>
                   PUT YOURSELF ON THE SCHEDULE
@@ -1046,6 +1056,37 @@ function MemberOrganizationCard() {
                     </Text>
                   </Pressable>
                 </View>
+              </View>
+            )}
+
+            {enrolledRole && active && (
+              <View style={styles.organizationEnrollCard}>
+                <Text style={styles.organizationEnrollEyebrow}>
+                  WORKING ROLE ACTIVE
+                </Text>
+                <Text style={styles.organizationEnrollTitle}>
+                  You are on {active.name}&apos;s team.
+                </Text>
+                <Text style={styles.organizationEnrollBody}>
+                  Your {enrolledRole} profile is now visible in Duna HQ. Open
+                  Duna Pro to see schedules, sessions, and coaching work for
+                  this organization.
+                </Text>
+                <Pressable
+                  accessibilityHint="Opens this organization in Duna Pro"
+                  accessibilityRole="button"
+                  onPress={() => {
+                    const url = `duna-pro://organization/${encodeURIComponent(active.slug)}`;
+                    void Linking.openURL(url).catch(() =>
+                      WebBrowser.openBrowserAsync("https://hq.duna.coach"),
+                    );
+                  }}
+                  style={styles.organizationEnrollPrimary}
+                >
+                  <Text style={styles.organizationEnrollPrimaryText}>
+                    Open Duna Pro →
+                  </Text>
+                </Pressable>
               </View>
             )}
 
@@ -1114,10 +1155,12 @@ type HomeQuickAction =
 function HomeScreen({
   onAction,
   onBook,
+  onOpenBooking,
   onPredictions,
 }: {
   readonly onAction: (action: HomeQuickAction) => void;
   readonly onBook: (eventIndex: number) => void;
+  readonly onOpenBooking: (bookingId: string) => void;
   readonly onPredictions: () => void;
 }) {
   const reduceMotion = useReducedMotion();
@@ -1183,17 +1226,8 @@ function HomeScreen({
       (left, right) =>
         new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
     )[0];
-  const nextBookingEventIndex = nextBooking
-    ? events.findIndex(
-        (event) =>
-          event.kind === nextBooking.kind &&
-          event.venueName === nextBooking.venueName &&
-          Math.abs(
-            new Date(event.startsAt).getTime() -
-              new Date(nextBooking.startsAt).getTime(),
-          ) <
-            15 * 60 * 1000,
-      )
+  const nextBookingEventIndex = nextBooking?.sessionId
+    ? events.findIndex((event) => event.id === nextBooking.sessionId)
     : -1;
   const insight = dashboard?.feed[0];
   const performanceHistory = performance?.history ?? [];
@@ -1359,49 +1393,52 @@ function HomeScreen({
         </View>
 
         {nextBooking ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-              selectionHaptic();
-              if (nextBookingEventIndex >= 0) {
-                onBook(nextBookingEventIndex);
-              } else {
-                onAction("join-event");
+          <>
+            <Pressable
+              accessibilityHint={
+                nextBookingEventIndex >= 0
+                  ? "Opens your event registration"
+                  : "Opens your booking details"
               }
-            }}
-            style={({ pressed }) => [
-              styles.homeNextSession,
-              pressed && styles.homeQuickActionPressed,
-            ]}
-          >
-            <View style={styles.homeNextDate}>
-              <Text style={styles.homeNextDateMonth}>
-                {new Date(nextBooking.startsAt)
-                  .toLocaleDateString("en-US", { month: "short" })
-                  .toUpperCase()}
-              </Text>
-              <Text style={styles.homeNextDateDay}>
-                {new Date(nextBooking.startsAt).getDate()}
-              </Text>
-            </View>
-            <View style={styles.flex}>
-              <Text style={styles.homeNextEyebrow}>
-                NEXT UP · {nextBooking.status.replace("-", " ").toUpperCase()}
-              </Text>
-              <Text style={styles.homeNextTitle}>{nextBooking.title}</Text>
-              <Text style={styles.homeNextMeta}>
-                {new Date(nextBooking.startsAt).toLocaleTimeString("en-US", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}{" "}
-                · {nextBooking.venueName}
-              </Text>
-              {!["pickup", "court-rental"].includes(nextBooking.kind) && (
-                <SessionArrivalCard booking={nextBooking} client={client} />
-              )}
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
+              accessibilityRole="button"
+              onPress={() => {
+                selectionHaptic();
+                onOpenBooking(nextBooking.id);
+              }}
+              style={({ pressed }) => [
+                styles.homeNextSession,
+                pressed && styles.homeQuickActionPressed,
+              ]}
+            >
+              <View style={styles.homeNextDate}>
+                <Text style={styles.homeNextDateMonth}>
+                  {new Date(nextBooking.startsAt)
+                    .toLocaleDateString("en-US", { month: "short" })
+                    .toUpperCase()}
+                </Text>
+                <Text style={styles.homeNextDateDay}>
+                  {new Date(nextBooking.startsAt).getDate()}
+                </Text>
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.homeNextEyebrow}>
+                  NEXT UP · {nextBooking.status.replace("-", " ").toUpperCase()}
+                </Text>
+                <Text style={styles.homeNextTitle}>{nextBooking.title}</Text>
+                <Text style={styles.homeNextMeta}>
+                  {new Date(nextBooking.startsAt).toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}{" "}
+                  · {nextBooking.venueName}
+                </Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+            {!["pickup", "court-rental"].includes(nextBooking.kind) && (
+              <LiveActivitiesPrompt booking={nextBooking} client={client} />
+            )}
+          </>
         ) : (
           <Pressable
             onPress={() => onAction("find-match")}
@@ -5162,7 +5199,22 @@ function ProTourModal({
           client={client}
           market={selectedMarket.market}
           onClose={() => setSelectedMarket(undefined)}
-          onPlaced={refresh}
+          onPlaced={async () => {
+            await refresh();
+            const target = selectedMarket.target;
+            if (
+              target.kind === "pro-match" &&
+              Platform.OS === "ios" &&
+              followedMatchId !== target.matchId
+            ) {
+              const match = event?.matches.find(
+                (candidate) => candidate.id === target.matchId,
+              );
+              if (match && match.status !== "completed") {
+                await followMatch(match);
+              }
+            }
+          }}
           target={selectedMarket.target}
           wallet={predictionWallet}
         />
@@ -5290,12 +5342,14 @@ function FollowPlayerCard({ player }: { readonly player: PersonSummary }) {
 function DiscoverScreen({
   intent,
   onBook,
+  onOrganization,
 }: {
   readonly intent?: {
     readonly key: number;
     readonly kind: Exclude<HomeQuickAction, "record-video">;
   };
   readonly onBook: (eventIndex: number) => void;
+  readonly onOrganization: (slug: string) => void;
 }) {
   const [filter, setFilter] = useState("For you");
   const [search, setSearch] = useState("");
@@ -5532,6 +5586,37 @@ function DiscoverScreen({
         tags: ["coach", coach.handle, coach.organizationName],
       };
     });
+    const organizationItems = [
+      ...new Map(
+        (coaches ?? []).map((coach) => {
+          const venue = (venues ?? []).find(
+            (candidate) => candidate.organizationId === coach.organizationId,
+          );
+          return [
+            coach.organizationId,
+            {
+              id: `organization:${coach.organizationId}:${coach.organizationSlug}`,
+              entityType: "organization" as const,
+              kind: "club",
+              title: coach.organizationName,
+              subtitle: coach.homeMarket ?? "Club, coaching, and events",
+              href: `/clubs/${coach.organizationSlug}`,
+              latitude: venue?.latitude,
+              longitude: venue?.longitude,
+              organizationId: coach.organizationId,
+              imageUrl: coach.avatarUrl,
+              tags: [
+                "organization",
+                "club",
+                coach.organizationName,
+                coach.organizationSlug,
+                coach.homeMarket ?? "",
+              ],
+            } satisfies DiscoveryMapItem,
+          ] as const;
+        }),
+      ).values(),
+    ];
     const proItems = (proCoverage?.events ?? [])
       .map<DiscoveryMapItem>((event) => ({
         id: `pro-tour:${event.id}`,
@@ -5554,12 +5639,51 @@ function DiscoverScreen({
         const timestamp = Date.parse(event.endsAt);
         return Number.isNaN(timestamp) || timestamp >= Date.now();
       });
-    return [...venueItems, ...eventItems, ...coachItems, ...proItems];
+    const matchItems = (proCoverage?.matches ?? [])
+      .filter(
+        (match) => match.status === "live" || match.status === "scheduled",
+      )
+      .slice(0, 100)
+      .map<DiscoveryMapItem>((match) => {
+        const event = proCoverage?.events.find(
+          (candidate) => candidate.externalEventId === match.externalEventId,
+        );
+        return {
+          id: `match:${match.id}`,
+          entityType: "match",
+          kind: "match",
+          title: `${match.teamA.label} vs ${match.teamB.label}`,
+          subtitle: `${match.roundLabel ?? "Match"} · ${event?.name ?? match.tour ?? "Pro tour"}`,
+          href:
+            match.canonicalPath ??
+            (event ? `/events/${event.slug}` : "/discover"),
+          latitude: event?.venue?.latitude,
+          longitude: event?.venue?.longitude,
+          startsAt: match.scheduledAt ?? match.playedAt,
+          imageUrl: event?.poster?.url,
+          live: match.status === "live",
+          tags: [
+            "match",
+            match.teamA.label,
+            match.teamB.label,
+            event?.name ?? "",
+          ],
+        };
+      });
+    return [
+      ...organizationItems,
+      ...venueItems,
+      ...eventItems,
+      ...coachItems,
+      ...matchItems,
+      ...proItems,
+    ];
   }, [
     coaches,
     discoveryMap?.items,
     discoverableEvents,
     proCoverage?.events,
+    proCoverage?.matches,
     venues,
   ]);
   const locationSortedDiscoveryItems = useMemo(
@@ -5644,6 +5768,23 @@ function DiscoverScreen({
       );
       if (coach) {
         setSelectedCoach(coach);
+        return;
+      }
+    }
+    if (item.entityType === "organization") {
+      const slug =
+        item.href.match(/^\/clubs\/([^/?#]+)/)?.[1] ??
+        item.id.split(":").at(-1);
+      if (slug) {
+        onOrganization(decodeURIComponent(slug));
+        return;
+      }
+    }
+    if (item.entityType === "match") {
+      const slug = item.href.match(/^\/events\/([^/?#]+)/)?.[1];
+      if (slug) {
+        setSelectedProTourSlug(decodeURIComponent(slug));
+        setShowProTour(true);
         return;
       }
     }
@@ -5752,9 +5893,13 @@ function DiscoverScreen({
                           ? colors.aqua
                           : item.entityType === "coach"
                             ? colors.flare
-                            : item.entityType === "pro-tour"
-                              ? "#d5a13d"
-                              : colors.aqua,
+                            : item.entityType === "organization"
+                              ? "#4e765d"
+                              : item.entityType === "match"
+                                ? "#35c8bd"
+                                : item.entityType === "pro-tour"
+                                  ? "#d5a13d"
+                                  : colors.aqua,
                     },
                   ]}
                 />
@@ -6049,12 +6194,20 @@ function DiscoverScreen({
   );
 }
 
-function PlayScreen() {
+function PlayScreen({
+  onBook,
+  onOpenBooking,
+}: {
+  readonly onBook: (eventIndex: number) => void;
+  readonly onOpenBooking: (bookingId: string) => void;
+}) {
   const { dashboard } = usePlayerRuntime();
   const bookings = dashboard?.bookings ?? demoBookings;
   const events = dashboard?.events ?? demoEvents;
   const [showHost, setShowHost] = useState(false);
   const [hostedTitle, setHostedTitle] = useState<string>();
+  const [calendarDate, setCalendarDate] = useState<Date>();
+  const [showCalendar, setShowCalendar] = useState(false);
   const today = new Date();
   const monday = new Date(today);
   const mondayOffset = (today.getDay() + 6) % 7;
@@ -6107,7 +6260,16 @@ function PlayScreen() {
               <Text style={styles.eyebrow}>{weekLabel}</Text>
               <Text style={styles.cardTitle}>Your week</Text>
             </View>
-            <Text style={styles.sectionAction}>Calendar →</Text>
+            <Pressable
+              accessibilityLabel="Open full calendar"
+              onPress={() => {
+                setCalendarDate(today);
+                setShowCalendar(true);
+              }}
+              style={styles.calendarOpenAction}
+            >
+              <Text style={styles.sectionAction}>Calendar →</Text>
+            </Pressable>
           </View>
           <View style={styles.weekDays}>
             {weekDays.map((date) => {
@@ -6118,8 +6280,12 @@ function PlayScreen() {
                   date.toDateString(),
               );
               return (
-                <View
+                <Pressable
                   key={date.toISOString()}
+                  onPress={() => {
+                    setCalendarDate(date);
+                    setShowCalendar(true);
+                  }}
                   style={[styles.weekDay, isToday && styles.weekDayActive]}
                 >
                   <Text
@@ -6148,12 +6314,17 @@ function PlayScreen() {
                       ]}
                     />
                   )}
-                </View>
+                </Pressable>
               );
             })}
           </View>
           {bookings.map((booking, index) => (
-            <View style={styles.bookingRow} key={booking.id}>
+            <Pressable
+              accessibilityLabel={"Open " + booking.title}
+              key={booking.id}
+              onPress={() => onOpenBooking(booking.id)}
+              style={styles.bookingRow}
+            >
               <View style={styles.bookingTime}>
                 <Text style={styles.bookingTimeMain}>
                   {new Date(booking.startsAt)
@@ -6190,7 +6361,7 @@ function PlayScreen() {
               >
                 {booking.status}
               </Pill>
-            </View>
+            </Pressable>
           ))}
         </View>
         <SectionHeader
@@ -6204,7 +6375,11 @@ function PlayScreen() {
               (event) => event.kind === "pickup" || event.kind === "open-play",
             )
             .map((event) => (
-              <View key={event.id} style={styles.pickupRow}>
+              <Pressable
+                key={event.id}
+                onPress={() => onBook(events.indexOf(event))}
+                style={styles.pickupRow}
+              >
                 <View style={styles.pickupDate}>
                   <Text style={styles.pickupDay}>
                     {new Date(event.startsAt)
@@ -6228,7 +6403,7 @@ function PlayScreen() {
                   <Text style={styles.rowMeta}>spots</Text>
                 </View>
                 <Text style={styles.chevron}>›</Text>
-              </View>
+              </Pressable>
             ))}
         </View>
         <View style={styles.hostCard}>
@@ -6255,6 +6430,16 @@ function PlayScreen() {
           setShowHost(false);
         }}
         visible={showHost}
+      />
+      <PlayerCalendarModal
+        bookings={bookings}
+        initialDate={calendarDate}
+        onClose={() => setShowCalendar(false)}
+        onOpenBooking={(bookingId) => {
+          setShowCalendar(false);
+          onOpenBooking(bookingId);
+        }}
+        visible={showCalendar}
       />
     </>
   );
@@ -6458,12 +6643,8 @@ function PredictionWalletSummaryCard({
   );
 }
 
-function WalletScreen({
-  onPredictions,
-}: {
-  readonly onPredictions: () => void;
-}) {
-  const { mode, settings, wallet } = usePlayerRuntime();
+function WalletScreen() {
+  const { mode, organizationWallets, settings, wallet } = usePlayerRuntime();
   const entries = wallet?.entries ?? demoWalletEntries;
   const balance =
     wallet?.availableMinor ??
@@ -6529,14 +6710,49 @@ function WalletScreen({
           <Text style={styles.bodyText}>Payment is still processing</Text>
         </View>
       </View>
-      <PredictionWalletSummaryCard onPress={onPredictions} />
+      {organizationWallets && organizationWallets.length > 0 && (
+        <>
+          <SectionHeader
+            action={`${organizationWallets.length} relationships`}
+            eyebrow="CLUBS + COACHES"
+            title="Memberships + credits."
+          />
+          <View style={styles.listCard}>
+            {organizationWallets.map((organization) => (
+              <View key={organization.organizationId} style={styles.walletRow}>
+                <View style={styles.moneyDirection}>
+                  <Text style={{ color: colors.aqua }}>
+                    {organization.organizationName.slice(0, 1).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.rowTitle}>
+                    {organization.organizationName}
+                  </Text>
+                  <Text style={styles.rowMeta}>
+                    {organization.membershipName ??
+                      organization.membershipStatus ??
+                      "Player relationship"}
+                  </Text>
+                </View>
+                <Text style={styles.moneyAmount}>
+                  {organization.credits.toLocaleString("en-US")} credits
+                </Text>
+              </View>
+            ))}
+          </View>
+        </>
+      )}
       <SectionHeader
         eyebrow="YOUR MONEY ON SAND"
         title="Activity."
-        action="Statements"
+        action="View full"
+        onAction={() =>
+          void WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/wallet`)
+        }
       />
       <View style={styles.listCard}>
-        {entries.map((entry) => (
+        {entries.slice(0, 10).map((entry) => (
           <View style={styles.walletRow} key={entry.id}>
             <View
               style={[
@@ -6998,11 +7214,13 @@ function MobileResultCard({
   );
 }
 
-function ProfileScreen({
+function PerformanceScreen({
+  onBack,
   onHealth,
   onPredictions,
   onWallet,
 }: {
+  readonly onBack: () => void;
   readonly onHealth: () => void;
   readonly onPredictions: () => void;
   readonly onWallet: () => void;
@@ -7106,6 +7324,9 @@ function ProfileScreen({
       contentContainerStyle={styles.screenContent}
       showsVerticalScrollIndicator={false}
     >
+      <Pressable onPress={onBack} style={styles.profileBack}>
+        <Text style={styles.profileBackText}>‹ You</Text>
+      </Pressable>
       <AppHeader eyebrow="YOUR PLAYER STORY" />
       <ImageBackground
         imageStyle={styles.athleteHeroImage}
@@ -7907,6 +8128,26 @@ function BookingModal({
     } finally {
       setBusy(false);
     }
+  }
+
+  const existingBooking = (dashboard?.bookings ?? []).find(
+    (booking) =>
+      booking.sessionId === selectedEvent.id ||
+      (booking.title === selectedEvent.title &&
+        Math.abs(
+          Date.parse(booking.startsAt) - Date.parse(selectedEvent.startsAt),
+        ) <
+          15 * 60_000),
+  );
+  if (existingBooking) {
+    return (
+      <BookingManagementModal
+        booking={existingBooking as ManagedBooking}
+        client={client}
+        onClose={close}
+        onUpdated={refresh}
+      />
+    );
   }
 
   return (
@@ -9157,7 +9398,10 @@ function TabBar({
 }) {
   const insets = useSafeAreaInsets();
   const selectedTab =
-    active === "health" || active === "wallet" || active === "predictions"
+    active === "health" ||
+    active === "wallet" ||
+    active === "predictions" ||
+    active === "performance"
       ? "you"
       : active;
   return (
@@ -9293,6 +9537,10 @@ function DunaApp() {
   const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("home");
   const [eventIndex, setEventIndex] = useState<number | null>(null);
+  const [bookingId, setBookingId] = useState<string>();
+  const [organizationSlug, setOrganizationSlug] = useState<string>();
+  const [organizationVenueId, setOrganizationVenueId] = useState<string>();
+  const [organizationCoach, setOrganizationCoach] = useState<MobileCoach>();
   const [discoverIntent, setDiscoverIntent] = useState<{
     readonly key: number;
     readonly kind: Exclude<HomeQuickAction, "record-video">;
@@ -9312,6 +9560,13 @@ function DunaApp() {
 
   useEffect(() => {
     const openLiveActivity = (url: string | null) => {
+      const bookingMatch = url?.match(/^duna:\/\/booking\/([^/?#]+)/);
+      if (bookingMatch?.[1]) {
+        setEventIndex(null);
+        setBookingId(decodeURIComponent(bookingMatch[1]));
+        setTab("play");
+        return;
+      }
       const match = url?.match(/^duna:\/\/live\/([^/]+)\//);
       if (!match) return;
       setEventIndex(null);
@@ -9349,6 +9604,9 @@ function DunaApp() {
     setDiscoverIntent({ key: Date.now(), kind: action });
     setTab("discover");
   };
+  const selectedBooking = runtime.dashboard?.bookings.find(
+    (booking) => booking.id === bookingId,
+  );
 
   return (
     <ThemeContext.Provider
@@ -9392,35 +9650,82 @@ function DunaApp() {
               <HomeScreen
                 onAction={openHomeAction}
                 onBook={setEventIndex}
+                onOpenBooking={setBookingId}
                 onPredictions={() => setTab("predictions")}
               />
             )}
             {tab === "discover" && (
-              <DiscoverScreen intent={discoverIntent} onBook={setEventIndex} />
+              <DiscoverScreen
+                intent={discoverIntent}
+                onBook={setEventIndex}
+                onOrganization={setOrganizationSlug}
+              />
             )}
-            {tab === "play" && <PlayScreen />}
+            {tab === "play" && (
+              <PlayScreen onBook={setEventIndex} onOpenBooking={setBookingId} />
+            )}
             {tab === "video" && <VideoStudioScreen runtime={runtime} />}
-            {tab === "wallet" && (
-              <WalletScreen onPredictions={() => setTab("predictions")} />
-            )}
+            {tab === "wallet" && <WalletScreen />}
             {tab === "predictions" && (
               <PredictionPortfolioScreen onBack={() => setTab("wallet")} />
             )}
             {tab === "you" && (
-              <ProfileScreen
-                onHealth={() => setTab("health")}
-                onPredictions={() => setTab("predictions")}
-                onWallet={() => setTab("wallet")}
+              <ProfileHubScreen
+                onDestination={(destination) => setTab(destination)}
+                onOrganization={setOrganizationSlug}
               />
             )}
             {tab === "health" && (
               <HealthScreen onBack={() => setTab("you")} theme={theme} />
+            )}
+            {tab === "performance" && (
+              <PerformanceScreen
+                onBack={() => setTab("you")}
+                onHealth={() => setTab("health")}
+                onPredictions={() => setTab("predictions")}
+                onWallet={() => setTab("wallet")}
+              />
             )}
           </Animated.View>
           <TabBar active={tab} onChange={setTab} />
           <BookingModal
             eventIndex={eventIndex}
             onClose={() => setEventIndex(null)}
+          />
+          <BookingManagementModal
+            booking={selectedBooking as ManagedBooking | undefined}
+            client={runtime.client}
+            onClose={() => setBookingId(undefined)}
+            onUpdated={runtime.refresh}
+            visible={Boolean(selectedBooking)}
+          />
+          <OrganizationExperienceModal
+            onClose={() => setOrganizationSlug(undefined)}
+            onOpenCoach={(coach) => {
+              setOrganizationCoach(coach);
+              setOrganizationSlug(undefined);
+            }}
+            onOpenEvent={(eventId) => {
+              const index = (runtime.dashboard?.events ?? []).findIndex(
+                (event) => event.id === eventId,
+              );
+              setOrganizationSlug(undefined);
+              if (index >= 0) setEventIndex(index);
+            }}
+            onOpenVenue={(venueId) => {
+              setOrganizationSlug(undefined);
+              setOrganizationVenueId(venueId);
+            }}
+            slug={organizationSlug}
+          />
+          <VenueBookingModal
+            onClose={() => setOrganizationVenueId(undefined)}
+            venueId={organizationVenueId}
+            visible={Boolean(organizationVenueId)}
+          />
+          <CoachProfileModal
+            coach={organizationCoach}
+            onClose={() => setOrganizationCoach(undefined)}
           />
           <WatchScoreInbox />
         </View>
@@ -13068,6 +13373,12 @@ function createStyles(palette: Palette) {
       borderWidth: 1,
       padding: 15,
     },
+    calendarOpenAction: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 48,
+      paddingLeft: 12,
+    },
     weekDays: {
       flexDirection: "row",
       justifyContent: "space-between",
@@ -14216,6 +14527,18 @@ function createStyles(palette: Palette) {
       marginTop: 4,
       overflow: "hidden",
       padding: 16,
+    },
+    profileBack: {
+      alignItems: "center",
+      alignSelf: "flex-start",
+      justifyContent: "center",
+      minHeight: 48,
+      paddingRight: 16,
+    },
+    profileBackText: {
+      color: colors.aqua,
+      fontSize: 13,
+      fontWeight: "800",
     },
     profileIdentity: { alignItems: "center", flexDirection: "row", gap: 12 },
     profileAvatar: {
