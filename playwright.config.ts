@@ -12,8 +12,11 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  timeout: 60_000,
-  workers: Number.parseInt(process.env.PLAYWRIGHT_WORKERS ?? "4", 10),
+  timeout: process.env.CI ? 90_000 : 60_000,
+  workers: Number.parseInt(
+    process.env.PLAYWRIGHT_WORKERS ?? (process.env.CI ? "2" : "4"),
+    10,
+  ),
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: webBaseUrl,

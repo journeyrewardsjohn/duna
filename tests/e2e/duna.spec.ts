@@ -551,6 +551,11 @@ test("player planning keeps selection in place and extends its date rail", async
     ),
   );
   const nextPill = pills.nth(selectedIndex + 1);
+  // The selected day is centered after hydration. Wait for that initial
+  // positioning before asserting that changing days does not move the rail.
+  await expect
+    .poll(() => rail.evaluate((element) => Math.round(element.scrollLeft)))
+    .toBeGreaterThan(0);
   const scrollPosition = await rail.evaluate((element) =>
     Math.round(element.scrollLeft),
   );
