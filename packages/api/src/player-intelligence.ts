@@ -395,25 +395,39 @@ export async function loadPublicPlayerIntelligenceByHandle(
   const database = getDatabase();
   const person = await publicPersonByHandle(handle);
   if (!person) return undefined;
-  const [profile, followerRows, upcomingEvents] = await Promise.all([
-    database.query.playerPublicProfiles.findFirst({
-      where: and(
-        eq(playerPublicProfiles.personId, person.id),
-        eq(playerPublicProfiles.publicationStatus, "published"),
-      ),
-    }),
-    database
-      .select({ count: sql<number>`count(*)::int` })
-      .from(follows)
-      .where(
-        and(eq(follows.entityType, "person"), eq(follows.entityId, person.id)),
-      ),
-    upcomingEventsForPlayer(person.id, now),
-  ]);
+  const [profile, followerRows, followingRows, upcomingEvents] =
+    await Promise.all([
+      database.query.playerPublicProfiles.findFirst({
+        where: and(
+          eq(playerPublicProfiles.personId, person.id),
+          eq(playerPublicProfiles.publicationStatus, "published"),
+        ),
+      }),
+      database
+        .select({ count: sql<number>`count(*)::int` })
+        .from(follows)
+        .where(
+          and(
+            eq(follows.entityType, "person"),
+            eq(follows.entityId, person.id),
+          ),
+        ),
+      database
+        .select({ count: sql<number>`count(*)::int` })
+        .from(follows)
+        .where(
+          and(
+            eq(follows.entityType, "person"),
+            eq(follows.followerPersonId, person.id),
+          ),
+        ),
+      upcomingEventsForPlayer(person.id, now),
+    ]);
   const proposal = parsePlayerResearchProposal(profile?.researchProposal);
   return {
     personId: person.id,
     followerCount: followerRows[0]?.count ?? 0,
+    followingCount: followingRows[0]?.count ?? 0,
     profile: profile
       ? {
           shortBio: profile.shortBio ?? undefined,
@@ -607,7 +621,7 @@ function mediaPrompt(displayName: string, brief?: string) {
     cutout:
       `${guardrails} Create an ultra-high-resolution editorial beach-volleyball athlete cutout of ${displayName}, full body, authentic competition posture, crisp natural rim light, transparent background, realistic sand detail, no shadow plate. ${brief ?? ""}`.trim(),
     poster:
-      `${guardrails} Create a cinematic 16:9 beach-volleyball profile hero for ${displayName}, using the approved action photograph for pose and the portraits for face consistency. Deep Duna navy, Atlantic blue, aqua, warm sand and restrained coral color energy, abstract sand spray and court-line geometry, generous negative space for live HTML typography, no embedded words. ${brief ?? ""}`.trim(),
+      `${guardrails} Create a cinematic 16:9 beach-volleyball profile hero for ${displayName}, using the approved high-resolution playing photographs for pose, movement, and face consistency. Deep Duna navy, Atlantic blue, aqua, warm sand and restrained coral color energy, abstract sand spray and court-line geometry, generous negative space for live HTML typography, no embedded words. ${brief ?? ""}`.trim(),
   };
 }
 
@@ -641,14 +655,15 @@ export async function loadOwnPlayerMediaStudio(input: {
         }
       : undefined,
     requirements: {
-      minimumPortraits: 2,
-      maximumPortraits: 3,
-      actionImages: 1,
+      minimumActionImages: 2,
+      maximumActionImages: 5,
+      minimumShortEdge: 1080,
       accepted: ["image/jpeg", "image/png", "image/webp", "image/avif"],
       guidance: [
-        "One uncropped action photo with the full body, ball, and sand visible.",
-        "Two or three sharp portraits: front-facing, three-quarter, and optional side profile.",
-        "Natural light, no sunglasses on at least two portraits, and no beauty filters.",
+        "Upload two to five active playing or action photos.",
+        "Use original high-resolution files with at least 1080px on the short edge.",
+        "Include varied movement, angles, and at least one clear view of your face.",
+        "Natural light, authentic play, and no beauty filters work best.",
         "Upload only images you own or have permission to use for AI generation.",
       ],
     },
@@ -660,7 +675,9 @@ export async function createPlayerMediaWorkflow(input: {
   readonly subjectPersonId?: string;
   readonly referenceImages: readonly {
     readonly url: string;
-    readonly kind: "action" | "portrait";
+    readonly kind: "action";
+    readonly width: number;
+    readonly height: number;
   }[];
   readonly brief?: string;
   readonly rightsConfirmed: true;
@@ -676,18 +693,9 @@ export async function createPlayerMediaWorkflow(input: {
     );
   }
   const subject = await assertProfileSubjectAuthority(input);
-  const actionCount = input.referenceImages.filter(
-    (image) => image.kind === "action",
-  ).length;
-  const portraitCount = input.referenceImages.filter(
-    (image) => image.kind === "portrait",
-  ).length;
   if (
-    input.referenceImages.length < 3 ||
-    input.referenceImages.length > 4 ||
-    actionCount !== 1 ||
-    portraitCount < 2 ||
-    portraitCount > 3 ||
+    input.referenceImages.length < 2 ||
+    input.referenceImages.length > 5 ||
     input.referenceImages.some((image) => {
       try {
         const url = new URL(image.url);
@@ -700,6 +708,10 @@ export async function createPlayerMediaWorkflow(input: {
           "i",
         );
         return (
+          image.kind !== "action" ||
+          image.width < 1_080 ||
+          image.height < 1_080 ||
+          image.width * image.height < 2_000_000 ||
           url.protocol !== "https:" ||
           !url.hostname.endsWith(".public.blob.vercel-storage.com") ||
           !path.test(url.pathname)
@@ -711,7 +723,7 @@ export async function createPlayerMediaWorkflow(input: {
   ) {
     throw new PlayerIntelligenceError(
       "MEDIA_REFERENCES_INVALID",
-      "Add one action image and two or three portrait images uploaded through Duna.",
+      "Add two to five high-resolution action or playing photos uploaded through Duna.",
     );
   }
   const prompts = mediaPrompt(subject.displayName, input.brief);

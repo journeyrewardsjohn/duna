@@ -31,6 +31,7 @@ export interface CreatePickupActionInput {
   readonly recordMatches: boolean;
   readonly ratingMinimum?: number;
   readonly ratingMaximum?: number;
+  readonly participantPersonIds: string[];
   readonly idempotencyKey: string;
 }
 
@@ -47,5 +48,16 @@ export async function createPickupAction(input: CreatePickupActionInput) {
           ? error.message
           : "The pickup could not be published.",
     };
+  }
+}
+
+export async function searchPickupPlayersAction(query: string) {
+  const normalized = query.trim();
+  if (normalized.length < 2) return [];
+  try {
+    const caller = await getServerCaller();
+    return await caller.public.searchPlayers({ query: normalized, limit: 20 });
+  } catch {
+    return [];
   }
 }

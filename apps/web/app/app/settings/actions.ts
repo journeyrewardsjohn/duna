@@ -521,7 +521,9 @@ export async function recordMarketingConsentAction(
 export async function createPlayerMediaWorkflowAction(input: {
   readonly referenceImages: readonly {
     readonly url: string;
-    readonly kind: "action" | "portrait";
+    readonly kind: "action";
+    readonly width: number;
+    readonly height: number;
   }[];
   readonly brief?: string;
   readonly rightsConfirmed: true;

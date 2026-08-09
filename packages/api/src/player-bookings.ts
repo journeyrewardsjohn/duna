@@ -125,6 +125,7 @@ export async function cancelPlayerBooking(input: {
       startsAt: pickupSessions.startsAt,
       orderStatus: orders.status,
       orderTotalMinor: orders.totalMinor,
+      orderBuyerPersonId: orders.buyerPersonId,
     })
     .from(pickupParticipants)
     .innerJoin(
@@ -151,11 +152,42 @@ export async function cancelPlayerBooking(input: {
         "Cancellation closed when this pickup started.",
       );
     }
+    if (
+      pickup.participant.addedByPersonId &&
+      pickup.participant.addedByPersonId !== input.actor.personId
+    ) {
+      throw new CommerceError(
+        "PICKUP_NOT_JOINABLE",
+        pickup.participant.paidByPersonId
+          ? "The player who paid for both places manages this paired booking."
+          : "The player who added this place manages the hosted-match roster.",
+      );
+    }
+    const pairedParticipants =
+      pickup.participant.orderId &&
+      pickup.orderBuyerPersonId === input.actor.personId
+        ? await database
+            .select({ id: pickupParticipants.id })
+            .from(pickupParticipants)
+            .where(
+              and(
+                eq(pickupParticipants.orderId, pickup.participant.orderId),
+                inArray(pickupParticipants.status, [
+                  "pending",
+                  "confirmed",
+                  "waitlisted",
+                ]),
+              ),
+            )
+        : [{ id: pickup.participant.id }];
+    const participantIds = pairedParticipants.map(
+      (participant) => participant.id,
+    );
     await getTransactionalDatabase().transaction(async (transaction) => {
       await transaction
         .update(pickupParticipants)
-        .set({ status: "cancelled" })
-        .where(eq(pickupParticipants.id, pickup.participant.id));
+        .set({ status: "cancelled", updatedAt: input.now })
+        .where(inArray(pickupParticipants.id, participantIds));
       await transaction.insert(auditLog).values({
         actorPersonId: input.actor.personId,
         actorType: "person",
@@ -164,7 +196,10 @@ export async function cancelPlayerBooking(input: {
         entityId: pickup.participant.id,
         beforeHash: stableHash(pickup.participant),
         afterHash: stableHash({ ...pickup.participant, status: "cancelled" }),
-        reason: "Player left an upcoming pickup from Duna Player.",
+        reason:
+          participantIds.length > 1
+            ? "Payer cancelled both places in a paired hosted-match booking."
+            : "Player left an upcoming pickup from Duna Player.",
         traceId: input.requestId,
         ipAddress: input.ipAddress,
         createdAt: input.now,
@@ -181,8 +216,12 @@ export async function cancelPlayerBooking(input: {
         ? ("review-required" as const)
         : ("not-applicable" as const),
       message: paid
-        ? "Pickup cancelled. Any eligible refund or organization credit will follow the host’s policy."
-        : "Pickup cancelled.",
+        ? participantIds.length > 1
+          ? "Both hosted-match places were cancelled. Any eligible refund or organization credit will follow the host’s policy."
+          : "Pickup cancelled. Any eligible refund or organization credit will follow the host’s policy."
+        : participantIds.length > 1
+          ? "Both hosted-match places were cancelled."
+          : "Pickup cancelled.",
     };
   }
 

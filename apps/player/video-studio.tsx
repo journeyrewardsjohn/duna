@@ -73,7 +73,7 @@ import {
 type VideoStudioData = Awaited<
   ReturnType<DunaApiClient["player"]["videoStudio"]["query"]>
 >;
-type VideoSummary = VideoStudioData["videos"][number];
+export type VideoSummary = VideoStudioData["videos"][number];
 type VideoAssociation = Awaited<
   ReturnType<DunaApiClient["player"]["videoAssociations"]["query"]>
 >[number];
@@ -2476,7 +2476,7 @@ function CaptureExperience({
 type VideoComponentProps = ComponentProps<typeof Video>;
 const MuxVideo = muxReactNativeVideo<VideoComponentProps>(Video);
 
-function VideoPlayerModal({
+export function VideoPlayerModal({
   client,
   metric,
   onClose,

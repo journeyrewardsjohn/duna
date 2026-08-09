@@ -128,8 +128,13 @@ export interface OperatorScorableMatch {
   readonly id: string;
   readonly status: "scheduled" | "live";
   readonly scheduledAt?: string;
+  readonly venueId?: string;
   readonly venueName: string;
+  readonly courtId?: string;
   readonly courtName?: string;
+  readonly sessionId?: string;
+  readonly sessionTitle?: string;
+  readonly divisionName?: string;
   readonly authoritativeDeviceId?: string;
   readonly teamA: {
     readonly id: string;
@@ -390,11 +395,16 @@ export async function loadOperatorScorableMatches(
       id: matches.id,
       status: matches.status,
       scheduledAt: matches.scheduledAt,
+      venueId: matches.venueId,
+      courtId: matches.courtId,
       authoritativeDeviceId: matches.authoritativeDeviceId,
       teamAId: matches.teamAId,
       teamBId: matches.teamBId,
       venueName: venues.name,
       courtName: courts.name,
+      sessionId: sessions.id,
+      sessionTitle: sessions.title,
+      divisionName: divisions.name,
     })
     .from(matches)
     .leftJoin(venues, eq(matches.venueId, venues.id))
@@ -464,8 +474,13 @@ export async function loadOperatorScorableMatches(
             id: row.id,
             status,
             scheduledAt: row.scheduledAt?.toISOString(),
+            venueId: row.venueId ?? undefined,
             venueName: row.venueName ?? "Location not recorded",
+            courtId: row.courtId ?? undefined,
             courtName: row.courtName ?? undefined,
+            sessionId: row.sessionId ?? undefined,
+            sessionTitle: row.sessionTitle ?? undefined,
+            divisionName: row.divisionName ?? undefined,
             authoritativeDeviceId: row.authoritativeDeviceId ?? undefined,
             teamA: {
               id: teamA.id,

@@ -11,6 +11,7 @@ import {
   ChevronRight,
   MapPin,
   Plus,
+  Radio,
   Search,
   Sparkles,
   Trophy,
@@ -35,11 +36,13 @@ function mediaForEvent(event: EventSummary) {
 
 export default async function PlayerDashboard() {
   const caller = await getServerCaller();
-  const [dashboard, settings, predictionDiscovery] = await Promise.all([
-    caller.player.dashboard(),
-    caller.player.settings(),
-    caller.public.predictionDiscovery({ limit: 6 }),
-  ]);
+  const [dashboard, settings, predictionDiscovery, liveVideos] =
+    await Promise.all([
+      caller.player.dashboard(),
+      caller.player.settings(),
+      caller.public.predictionDiscovery({ limit: 6 }),
+      caller.public.videos({ liveOnly: true }).catch(() => []),
+    ]);
   const { player } = dashboard;
   const now = Date.now();
   const futureEvents = dashboard.events
@@ -87,6 +90,10 @@ export default async function PlayerDashboard() {
     : nextBooking
       ? "/app/play"
       : "/app/discover";
+  const nextOpenSpots = nextPersonalEvent?.spotsRemaining;
+  const livePlayers = [
+    ...new Map(liveVideos.map((video) => [video.owner.id, video])).values(),
+  ].slice(0, 10);
   const latestMatch = dashboard.recentMatches[0];
   const firstName = player.displayName.split(" ")[0] ?? player.displayName;
   const dateLabel = new Intl.DateTimeFormat("en-US", {
@@ -134,6 +141,44 @@ export default async function PlayerDashboard() {
           <Trophy aria-hidden size={18} /> Match history
         </Link>
       </header>
+
+      {livePlayers.length > 0 && (
+        <section aria-label="Players live now" className={styles.liveRail}>
+          <header>
+            <span>
+              <Radio aria-hidden size={15} /> Live now
+            </span>
+            <small>Tap a player to watch</small>
+          </header>
+          <div>
+            {livePlayers.map((video) => (
+              <article key={video.id}>
+                <Link
+                  aria-label={`Watch ${video.owner.displayName} live`}
+                  className={styles.liveAvatar}
+                  href={`/watch/${video.id}`}
+                >
+                  <span>
+                    {video.owner.avatarUrl ? (
+                      <img alt="" src={video.owner.avatarUrl} />
+                    ) : (
+                      video.owner.initials
+                    )}
+                  </span>
+                  <b>Live</b>
+                </Link>
+                <Link
+                  href={
+                    video.owner.publicPath ?? `/players/${video.owner.handle}`
+                  }
+                >
+                  {video.owner.displayName.split(" ")[0]}
+                </Link>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       <nav aria-label="Player quick actions" className={styles.quickActions}>
         {quickActions.map(({ detail, href, icon: Icon, label }, index) => (
@@ -196,9 +241,13 @@ export default async function PlayerDashboard() {
               >
                 {nextBooking?.status === "needs-action"
                   ? "Action needed"
-                  : nextPersonal
-                    ? "Confirmed"
-                    : "Calendar open"}
+                  : nextOpenSpots !== undefined && nextOpenSpots > 0
+                    ? `${nextOpenSpots} ${nextOpenSpots === 1 ? "spot" : "spots"} available`
+                    : nextPersonalEvent
+                      ? "Match full"
+                      : nextPersonal
+                        ? "Confirmed"
+                        : "Calendar open"}
               </Badge>
               <span>{nextKind.replace("-", " ")}</span>
             </div>
@@ -249,7 +298,11 @@ export default async function PlayerDashboard() {
                 {nextPersonal?.venueName ?? "Explore play near you"}
               </span>
               <strong>
-                {nextPersonal ? "Open details" : "Find play"}
+                {nextOpenSpots !== undefined && nextOpenSpots > 0
+                  ? "Invite a player"
+                  : nextPersonal
+                    ? "Open details"
+                    : "Find play"}
                 <ChevronRight aria-hidden size={17} />
               </strong>
             </div>

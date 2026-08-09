@@ -20,47 +20,65 @@ import {
   validatePlayerMediaInput,
 } from "@/lib/player-media-storage";
 
-type SlotKey = "action" | "portrait-one" | "portrait-two" | "portrait-three";
+type SlotKey =
+  "action-one" | "action-two" | "action-three" | "action-four" | "action-five";
 type SlotState = {
   readonly url?: string;
   readonly preview?: string;
   readonly progress?: number;
   readonly error?: string;
+  readonly width?: number;
+  readonly height?: number;
 };
 
 const slots: readonly {
   readonly key: SlotKey;
-  readonly kind: "action" | "portrait";
+  readonly kind: "action";
   readonly title: string;
   readonly detail: string;
   readonly optional?: boolean;
 }[] = [
   {
-    key: "action",
+    key: "action-one",
     kind: "action",
-    title: "Action photo",
-    detail: "Full body, ball, court, and sand visible.",
+    title: "Action photo 1",
+    detail: "Show active play, movement, and a clear view of you.",
   },
   {
-    key: "portrait-one",
-    kind: "portrait",
-    title: "Front portrait",
-    detail: "Natural light, face clear, no sunglasses.",
+    key: "action-two",
+    kind: "action",
+    title: "Action photo 2",
+    detail: "Use a different angle, play, or competition moment.",
   },
   {
-    key: "portrait-two",
-    kind: "portrait",
-    title: "Three-quarter portrait",
-    detail: "A second expression helps preserve identity.",
+    key: "action-three",
+    kind: "action",
+    title: "Action photo 3",
+    detail: "Optional. Variety improves pose and identity consistency.",
+    optional: true,
   },
   {
-    key: "portrait-three",
-    kind: "portrait",
-    title: "Side portrait",
-    detail: "Optional, useful for stronger facial dynamics.",
+    key: "action-four",
+    kind: "action",
+    title: "Action photo 4",
+    detail: "Optional. Add another authentic playing moment.",
+    optional: true,
+  },
+  {
+    key: "action-five",
+    kind: "action",
+    title: "Action photo 5",
+    detail: "Optional. Complete the strongest possible source set.",
     optional: true,
   },
 ];
+
+async function imageDimensions(file: File) {
+  const bitmap = await createImageBitmap(file);
+  const dimensions = { width: bitmap.width, height: bitmap.height };
+  bitmap.close();
+  return dimensions;
+}
 
 function statusCopy(status: string) {
   if (status === "ready") return "Ready for Duna AI production";
@@ -87,13 +105,22 @@ export function PlayerMediaStudio({
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
 
-  async function choose(key: SlotKey, kind: "action" | "portrait", file: File) {
+  async function choose(key: SlotKey, kind: "action", file: File) {
     setError(undefined);
     try {
       const media = validatePlayerMediaInput({
         contentType: file.type,
         size: file.size,
       });
+      const dimensions = await imageDimensions(file);
+      if (
+        Math.min(dimensions.width, dimensions.height) < 1_080 ||
+        dimensions.width * dimensions.height < 2_000_000
+      ) {
+        throw new Error(
+          "Choose an original high-resolution photo with at least 1080px on the short edge.",
+        );
+      }
       const previous = references[key];
       if (previous?.preview?.startsWith("blob:")) {
         URL.revokeObjectURL(previous.preview);
@@ -101,7 +128,7 @@ export function PlayerMediaStudio({
       const preview = URL.createObjectURL(file);
       setReferences((value) => ({
         ...value,
-        [key]: { preview, progress: 1 },
+        [key]: { preview, progress: 1, ...dimensions },
       }));
       const blob = await upload(
         playerMediaPath({
@@ -118,18 +145,29 @@ export function PlayerMediaStudio({
             kind,
             contentType: file.type,
             size: file.size,
+            ...dimensions,
           }),
           onUploadProgress: ({ percentage }) => {
             setReferences((value) => ({
               ...value,
-              [key]: { ...value[key], preview, progress: percentage },
+              [key]: {
+                ...value[key],
+                preview,
+                progress: percentage,
+                ...dimensions,
+              },
             }));
           },
         },
       );
       setReferences((value) => ({
         ...value,
-        [key]: { url: blob.url, preview, progress: 100 },
+        [key]: {
+          url: blob.url,
+          preview,
+          progress: 100,
+          ...dimensions,
+        },
       }));
     } catch (uploadError) {
       const message =
@@ -155,15 +193,20 @@ export function PlayerMediaStudio({
     setError(undefined);
     setNotice(undefined);
     const referenceImages = slots.flatMap((slot) => {
-      const url = references[slot.key]?.url;
-      return url ? [{ url, kind: slot.kind }] : [];
+      const reference = references[slot.key];
+      return reference?.url && reference.width && reference.height
+        ? [
+            {
+              url: reference.url,
+              kind: slot.kind,
+              width: reference.width,
+              height: reference.height,
+            },
+          ]
+        : [];
     });
-    if (
-      !references.action?.url ||
-      !references["portrait-one"]?.url ||
-      !references["portrait-two"]?.url
-    ) {
-      setError("Add one action photo and at least two portraits first.");
+    if (referenceImages.length < 2) {
+      setError("Add at least two high-resolution action photos first.");
       return;
     }
     if (!rightsConfirmed) {
@@ -194,8 +237,8 @@ export function PlayerMediaStudio({
           <span className="settings-kicker">AI athlete studio</span>
           <h2>Build your public profile artwork.</h2>
           <p>
-            Give Duna one action image and two or three clear portraits. We use
-            Higgsfield to create a reviewable transparent player cutout and a
+            Upload two to five high-resolution photos of you actively playing.
+            Duna uses them to create a reviewable transparent player cutout and
             cinematic beach-volleyball hero—never an automatic public overwrite.
           </p>
         </div>
@@ -299,8 +342,7 @@ export function PlayerMediaStudio({
               </div>
               <div>
                 <small>
-                  {slot.kind === "action" ? "Playing image" : "Face reference"}
-                  {slot.optional ? " · optional" : " · required"}
+                  Playing image{slot.optional ? " · optional" : " · required"}
                 </small>
                 <strong>{slot.title}</strong>
                 <p>{slot.detail}</p>

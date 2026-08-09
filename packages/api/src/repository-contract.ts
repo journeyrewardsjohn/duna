@@ -283,6 +283,7 @@ export interface PickupInput {
 
 export interface PickupMutationInput extends PickupInput {
   readonly hostPersonId: string;
+  readonly participantPersonIds: readonly string[];
   readonly organizationId?: string;
   readonly requestId: string;
   readonly ipAddress?: string;

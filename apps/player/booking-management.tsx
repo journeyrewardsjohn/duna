@@ -22,6 +22,15 @@ export type ManagedBooking = {
   readonly canEdit?: boolean;
   readonly canCancel?: boolean;
   readonly cancellationDeadline?: string;
+  readonly addedBy?: {
+    readonly personId: string;
+    readonly displayName: string;
+  };
+  readonly paidBy?: {
+    readonly personId: string;
+    readonly displayName: string;
+  };
+  readonly pairedSpotCount?: number;
   readonly team?: {
     readonly claimToken: string;
     readonly expectedTeamSize: number;
@@ -87,6 +96,7 @@ export function BookingManagementModal({
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [message, setMessage] = useState<string>();
   const [cancelled, setCancelled] = useState(false);
+  const [showAttribution, setShowAttribution] = useState(false);
 
   useEffect(() => {
     setRoster(
@@ -104,6 +114,7 @@ export function BookingManagementModal({
     setConfirmCancel(false);
     setCancelled(false);
     setMessage(undefined);
+    setShowAttribution(Boolean(booking?.addedBy));
   }, [booking]);
 
   if (!booking) return null;
@@ -188,350 +199,487 @@ export function BookingManagementModal({
       presentationStyle="pageSheet"
       visible={visible}
     >
-      <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
-        <View style={styles.header}>
-          <View style={styles.flex}>
-            <Text style={styles.eyebrow}>YOUR BOOKING</Text>
-            <Text style={styles.headerTitle}>
-              {cancelled ? "Booking cancelled" : statusLabel}
-            </Text>
-          </View>
-          <Pressable
-            accessibilityLabel="Close booking"
-            onPress={() => {
-              if (cancelled) void onUpdated();
-              onClose();
-            }}
-            style={styles.close}
-          >
-            <Text style={styles.closeText}>×</Text>
-          </Pressable>
-        </View>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.statusRow}>
-            <View
-              style={[
-                styles.statusPill,
-                cancelled && styles.statusPillCancelled,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.statusText,
-                  cancelled && styles.statusTextCancelled,
-                ]}
-              >
-                {cancelled ? "CANCELLED" : statusLabel.toUpperCase()}
+      <View style={styles.modalRoot}>
+        <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
+          <View style={styles.header}>
+            <View style={styles.flex}>
+              <Text style={styles.eyebrow}>YOUR BOOKING</Text>
+              <Text style={styles.headerTitle}>
+                {cancelled ? "Booking cancelled" : statusLabel}
               </Text>
             </View>
-            {!cancelled && (
-              <View style={styles.paymentPill}>
-                <Text style={styles.paymentText}>
-                  {booking.paymentStatus === "free"
-                    ? "FREE"
-                    : paid
-                      ? "PAID · " + money(booking)
-                      : booking.paymentStatus === "refunded"
-                        ? "REFUNDED"
-                        : "PAYMENT NEEDED · " + money(booking)}
+            <Pressable
+              accessibilityLabel="Close booking"
+              onPress={() => {
+                if (cancelled) void onUpdated();
+                onClose();
+              }}
+              style={styles.close}
+            >
+              <Text style={styles.closeText}>×</Text>
+            </Pressable>
+          </View>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.statusRow}>
+              <View
+                style={[
+                  styles.statusPill,
+                  cancelled && styles.statusPillCancelled,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusText,
+                    cancelled && styles.statusTextCancelled,
+                  ]}
+                >
+                  {cancelled ? "CANCELLED" : statusLabel.toUpperCase()}
                 </Text>
               </View>
-            )}
-          </View>
-
-          <Text style={styles.title}>{booking.title}</Text>
-          <Text style={styles.meta}>
-            {new Date(booking.startsAt).toLocaleString("en-US", {
-              weekday: "long",
-              month: "long",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })}
-          </Text>
-          <Text style={styles.meta}>{booking.venueName}</Text>
-
-          {message && (
-            <View style={styles.notice}>
-              <Text style={styles.noticeText}>{message}</Text>
-            </View>
-          )}
-
-          {!cancelled && booking.team && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.flex}>
-                  <Text style={styles.sectionEyebrow}>YOUR TEAM</Text>
-                  <Text style={styles.sectionTitle}>
-                    {booking.team.roster.length} of{" "}
-                    {booking.team.expectedTeamSize} players
+              {!cancelled && (
+                <View style={styles.paymentPill}>
+                  <Text style={styles.paymentText}>
+                    {booking.paymentStatus === "free"
+                      ? "FREE"
+                      : paid
+                        ? "PAID · " + money(booking)
+                        : booking.paymentStatus === "refunded"
+                          ? "REFUNDED"
+                          : "PAYMENT NEEDED · " + money(booking)}
                   </Text>
                 </View>
-                {booking.canEdit && (
-                  <Pressable
-                    onPress={() => setEditing((current) => !current)}
-                    style={styles.smallAction}
+              )}
+            </View>
+
+            <Text style={styles.title}>{booking.title}</Text>
+            <Text style={styles.meta}>
+              {new Date(booking.startsAt).toLocaleString("en-US", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </Text>
+            <Text style={styles.meta}>{booking.venueName}</Text>
+
+            {message && (
+              <View style={styles.notice}>
+                <Text style={styles.noticeText}>{message}</Text>
+              </View>
+            )}
+
+            {!cancelled && booking.team && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.flex}>
+                    <Text style={styles.sectionEyebrow}>YOUR TEAM</Text>
+                    <Text style={styles.sectionTitle}>
+                      {booking.team.roster.length} of{" "}
+                      {booking.team.expectedTeamSize} players
+                    </Text>
+                  </View>
+                  {booking.canEdit && (
+                    <Pressable
+                      onPress={() => setEditing((current) => !current)}
+                      style={styles.smallAction}
+                    >
+                      <Text style={styles.smallActionText}>
+                        {editing ? "Done" : "Edit"}
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+                {booking.team.roster.map((member, index) => (
+                  <View
+                    key={
+                      String(member.personId ?? member.inviteTarget) +
+                      ":" +
+                      index
+                    }
+                    style={styles.playerRow}
                   >
-                    <Text style={styles.smallActionText}>
-                      {editing ? "Done" : "Edit"}
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>
+                        {initials(member.displayName)}
+                      </Text>
+                    </View>
+                    <View style={styles.flex}>
+                      <Text style={styles.playerName}>
+                        {member.displayName}
+                      </Text>
+                      <Text style={styles.playerMeta}>
+                        {member.status === "captain"
+                          ? "Captain"
+                          : member.status.replaceAll("-", " ")}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.playerPayment,
+                        !member.paid && styles.playerPaymentPending,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.playerPaymentText,
+                          !member.paid && styles.playerPaymentTextPending,
+                        ]}
+                      >
+                        {member.paid ? "PAID" : "TO PAY"}
+                      </Text>
+                    </View>
+                    {editing &&
+                      member.status !== "captain" &&
+                      member.editable && (
+                        <Pressable
+                          onPress={() =>
+                            setRoster((current) =>
+                              current.filter(
+                                (candidate) =>
+                                  candidate.personId !== member.personId ||
+                                  candidate.inviteTarget !==
+                                    member.inviteTarget,
+                              ),
+                            )
+                          }
+                          style={styles.remove}
+                        >
+                          <Text style={styles.removeText}>Remove</Text>
+                        </Pressable>
+                      )}
+                  </View>
+                ))}
+                {editing && (
+                  <>
+                    <View style={styles.search}>
+                      <Text style={styles.searchIcon}>⌕</Text>
+                      <TextInput
+                        onChangeText={(value) => void search(value)}
+                        placeholder="Find a player"
+                        placeholderTextColor="#8a857b"
+                        style={styles.searchInput}
+                        value={query}
+                      />
+                    </View>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.resultRail}
+                    >
+                      {results
+                        .filter(
+                          (result) =>
+                            !roster.some(
+                              (member) => member.personId === result.person.id,
+                            ),
+                        )
+                        .map((result) => (
+                          <View key={result.person.id} style={styles.result}>
+                            <View style={styles.resultAvatar}>
+                              <Text style={styles.avatarText}>
+                                {result.person.initials}
+                              </Text>
+                            </View>
+                            <Text numberOfLines={1} style={styles.resultName}>
+                              {result.person.displayName}
+                            </Text>
+                            <Text numberOfLines={1} style={styles.resultMeta}>
+                              {result.person.homeMarket}
+                            </Text>
+                            <Pressable
+                              disabled={!result.eligible}
+                              onPress={() =>
+                                setRoster((current) => [
+                                  ...current,
+                                  {
+                                    personId: result.person.id,
+                                    displayName: result.person.displayName,
+                                    paid: false,
+                                    editable: true,
+                                  },
+                                ])
+                              }
+                              style={[
+                                styles.add,
+                                !result.eligible && styles.actionDisabled,
+                              ]}
+                            >
+                              <Text style={styles.addText}>Add</Text>
+                            </Pressable>
+                          </View>
+                        ))}
+                    </ScrollView>
+                    <View style={styles.invite}>
+                      <TextInput
+                        onChangeText={setInviteTarget}
+                        placeholder="Email or mobile number"
+                        placeholderTextColor="#8a857b"
+                        style={styles.inviteInput}
+                        value={inviteTarget}
+                      />
+                      <Pressable
+                        disabled={inviteTarget.trim().length < 3}
+                        onPress={() => {
+                          const value = inviteTarget.trim();
+                          if (!value) return;
+                          setRoster((current) => [
+                            ...current,
+                            {
+                              inviteTarget: value,
+                              displayName: value,
+                              paid: false,
+                              editable: true,
+                            },
+                          ]);
+                          setInviteTarget("");
+                        }}
+                        style={styles.inviteButton}
+                      >
+                        <Text style={styles.inviteButtonText}>Invite</Text>
+                      </Pressable>
+                    </View>
+                    <Pressable
+                      disabled={busy}
+                      onPress={() => void save()}
+                      style={[styles.primary, busy && styles.actionDisabled]}
+                    >
+                      <Text style={styles.primaryText}>
+                        {busy ? "Saving…" : "Save & Update"}
+                      </Text>
+                    </Pressable>
+                  </>
+                )}
+              </View>
+            )}
+
+            {!cancelled &&
+              !booking.team &&
+              booking.participantNames &&
+              booking.participantNames.length > 1 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionEyebrow}>WHO&apos;S JOINED</Text>
+                  <Text style={styles.sectionTitle}>
+                    {booking.participantNames.length} players
+                  </Text>
+                  {booking.participantNames.map((name, index) => (
+                    <View key={`${name}:${index}`} style={styles.playerRow}>
+                      <View style={styles.avatar}>
+                        <Text style={styles.avatarText}>{initials(name)}</Text>
+                      </View>
+                      <View style={styles.flex}>
+                        <Text style={styles.playerName}>{name}</Text>
+                        <Text style={styles.playerMeta}>Confirmed</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+            {!cancelled && (
+              <View style={styles.section}>
+                <Text style={styles.sectionEyebrow}>BOOKING OPTIONS</Text>
+                <Text style={styles.policy}>
+                  Changes close when the booking starts. Paid cancellations
+                  follow the organizer’s displayed refund or credit policy; Duna
+                  never promises a refund before that policy is evaluated.
+                </Text>
+                {confirmCancel ? (
+                  <View style={styles.confirm}>
+                    <Text style={styles.confirmTitle}>
+                      Cancel this booking?
+                    </Text>
+                    <Text style={styles.confirmBody}>
+                      Your spot will be released. This cannot be undone in the
+                      app.
+                    </Text>
+                    <View style={styles.confirmActions}>
+                      <Pressable
+                        onPress={() => setConfirmCancel(false)}
+                        style={styles.secondary}
+                      >
+                        <Text style={styles.secondaryText}>Keep booking</Text>
+                      </Pressable>
+                      <Pressable
+                        disabled={busy}
+                        onPress={() => void cancel()}
+                        style={styles.danger}
+                      >
+                        <Text style={styles.dangerText}>
+                          {busy ? "Cancelling…" : "Confirm cancellation"}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
+                  <Pressable
+                    disabled={!booking.canCancel || !client}
+                    onPress={() => setConfirmCancel(true)}
+                    style={[
+                      styles.cancel,
+                      (!booking.canCancel || !client) && styles.actionDisabled,
+                    ]}
+                  >
+                    <Text style={styles.cancelText}>
+                      {booking.canCancel
+                        ? "Cancellation"
+                        : "Cancellation window closed"}
                     </Text>
                   </Pressable>
                 )}
               </View>
-              {booking.team.roster.map((member, index) => (
-                <View
-                  key={
-                    String(member.personId ?? member.inviteTarget) + ":" + index
-                  }
-                  style={styles.playerRow}
-                >
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                      {initials(member.displayName)}
-                    </Text>
-                  </View>
-                  <View style={styles.flex}>
-                    <Text style={styles.playerName}>{member.displayName}</Text>
-                    <Text style={styles.playerMeta}>
-                      {member.status === "captain"
-                        ? "Captain"
-                        : member.status.replaceAll("-", " ")}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.playerPayment,
-                      !member.paid && styles.playerPaymentPending,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.playerPaymentText,
-                        !member.paid && styles.playerPaymentTextPending,
-                      ]}
-                    >
-                      {member.paid ? "PAID" : "TO PAY"}
-                    </Text>
-                  </View>
-                  {editing &&
-                    member.status !== "captain" &&
-                    member.editable && (
-                      <Pressable
-                        onPress={() =>
-                          setRoster((current) =>
-                            current.filter(
-                              (candidate) =>
-                                candidate.personId !== member.personId ||
-                                candidate.inviteTarget !== member.inviteTarget,
-                            ),
-                          )
-                        }
-                        style={styles.remove}
-                      >
-                        <Text style={styles.removeText}>Remove</Text>
-                      </Pressable>
-                    )}
-                </View>
-              ))}
-              {editing && (
-                <>
-                  <View style={styles.search}>
-                    <Text style={styles.searchIcon}>⌕</Text>
-                    <TextInput
-                      onChangeText={(value) => void search(value)}
-                      placeholder="Find a player"
-                      placeholderTextColor="#8a857b"
-                      style={styles.searchInput}
-                      value={query}
-                    />
-                  </View>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.resultRail}
-                  >
-                    {results
-                      .filter(
-                        (result) =>
-                          !roster.some(
-                            (member) => member.personId === result.person.id,
-                          ),
-                      )
-                      .map((result) => (
-                        <View key={result.person.id} style={styles.result}>
-                          <View style={styles.resultAvatar}>
-                            <Text style={styles.avatarText}>
-                              {result.person.initials}
-                            </Text>
-                          </View>
-                          <Text numberOfLines={1} style={styles.resultName}>
-                            {result.person.displayName}
-                          </Text>
-                          <Text numberOfLines={1} style={styles.resultMeta}>
-                            {result.person.homeMarket}
-                          </Text>
-                          <Pressable
-                            disabled={!result.eligible}
-                            onPress={() =>
-                              setRoster((current) => [
-                                ...current,
-                                {
-                                  personId: result.person.id,
-                                  displayName: result.person.displayName,
-                                  paid: false,
-                                  editable: true,
-                                },
-                              ])
-                            }
-                            style={[
-                              styles.add,
-                              !result.eligible && styles.actionDisabled,
-                            ]}
-                          >
-                            <Text style={styles.addText}>Add</Text>
-                          </Pressable>
-                        </View>
-                      ))}
-                  </ScrollView>
-                  <View style={styles.invite}>
-                    <TextInput
-                      onChangeText={setInviteTarget}
-                      placeholder="Email or mobile number"
-                      placeholderTextColor="#8a857b"
-                      style={styles.inviteInput}
-                      value={inviteTarget}
-                    />
-                    <Pressable
-                      disabled={inviteTarget.trim().length < 3}
-                      onPress={() => {
-                        const value = inviteTarget.trim();
-                        if (!value) return;
-                        setRoster((current) => [
-                          ...current,
-                          {
-                            inviteTarget: value,
-                            displayName: value,
-                            paid: false,
-                            editable: true,
-                          },
-                        ]);
-                        setInviteTarget("");
-                      }}
-                      style={styles.inviteButton}
-                    >
-                      <Text style={styles.inviteButtonText}>Invite</Text>
-                    </Pressable>
-                  </View>
-                  <Pressable
-                    disabled={busy}
-                    onPress={() => void save()}
-                    style={[styles.primary, busy && styles.actionDisabled]}
-                  >
-                    <Text style={styles.primaryText}>
-                      {busy ? "Saving…" : "Save & Update"}
-                    </Text>
-                  </Pressable>
-                </>
-              )}
-            </View>
-          )}
-
-          {!cancelled &&
-            !booking.team &&
-            booking.participantNames &&
-            booking.participantNames.length > 1 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionEyebrow}>WHO&apos;S JOINED</Text>
-                <Text style={styles.sectionTitle}>
-                  {booking.participantNames.length} players
-                </Text>
-                {booking.participantNames.map((name, index) => (
-                  <View key={`${name}:${index}`} style={styles.playerRow}>
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>{initials(name)}</Text>
-                    </View>
-                    <View style={styles.flex}>
-                      <Text style={styles.playerName}>{name}</Text>
-                      <Text style={styles.playerMeta}>Confirmed</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
             )}
 
-          {!cancelled && (
-            <View style={styles.section}>
-              <Text style={styles.sectionEyebrow}>BOOKING OPTIONS</Text>
-              <Text style={styles.policy}>
-                Changes close when the booking starts. Paid cancellations follow
-                the organizer’s displayed refund or credit policy; Duna never
-                promises a refund before that policy is evaluated.
-              </Text>
-              {confirmCancel ? (
-                <View style={styles.confirm}>
-                  <Text style={styles.confirmTitle}>Cancel this booking?</Text>
-                  <Text style={styles.confirmBody}>
-                    Your spot will be released. This cannot be undone in the
-                    app.
-                  </Text>
-                  <View style={styles.confirmActions}>
-                    <Pressable
-                      onPress={() => setConfirmCancel(false)}
-                      style={styles.secondary}
-                    >
-                      <Text style={styles.secondaryText}>Keep booking</Text>
-                    </Pressable>
-                    <Pressable
-                      disabled={busy}
-                      onPress={() => void cancel()}
-                      style={styles.danger}
-                    >
-                      <Text style={styles.dangerText}>
-                        {busy ? "Cancelling…" : "Confirm cancellation"}
-                      </Text>
-                    </Pressable>
-                  </View>
-                </View>
-              ) : (
-                <Pressable
-                  disabled={!booking.canCancel || !client}
-                  onPress={() => setConfirmCancel(true)}
-                  style={[
-                    styles.cancel,
-                    (!booking.canCancel || !client) && styles.actionDisabled,
-                  ]}
-                >
-                  <Text style={styles.cancelText}>
-                    {booking.canCancel
-                      ? "Cancellation"
-                      : "Cancellation window closed"}
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-          )}
-
-          {cancelled && (
+            {cancelled && (
+              <Pressable
+                onPress={() => {
+                  void onUpdated();
+                  onClose();
+                }}
+                style={styles.primary}
+              >
+                <Text style={styles.primaryText}>Done</Text>
+              </Pressable>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+        {showAttribution && booking.addedBy && (
+          <View style={styles.attributionOverlay}>
             <Pressable
-              onPress={() => {
-                void onUpdated();
-                onClose();
-              }}
-              style={styles.primary}
-            >
-              <Text style={styles.primaryText}>Done</Text>
-            </Pressable>
-          )}
-        </ScrollView>
-      </SafeAreaView>
+              accessibilityLabel="Close added-by details"
+              onPress={() => setShowAttribution(false)}
+              style={styles.attributionBackdrop}
+            />
+            <SafeAreaView edges={["bottom"]} style={styles.attributionSheet}>
+              <View style={styles.attributionGrabber} />
+              <Text style={styles.attributionTitle}>
+                You were added to this match by {booking.addedBy.displayName}
+              </Text>
+              <View style={styles.attributionCard}>
+                <View style={styles.attributionPayerRow}>
+                  <View style={styles.attributionAvatar}>
+                    <Text style={styles.attributionAvatarText}>
+                      {initials(
+                        booking.paidBy?.displayName ??
+                          booking.addedBy.displayName,
+                      )}
+                    </Text>
+                  </View>
+                  <Text style={styles.attributionPayer}>
+                    {booking.paidBy
+                      ? `Spot paid by ${booking.paidBy.displayName}`
+                      : `Spot added by ${booking.addedBy.displayName}`}
+                  </Text>
+                </View>
+                <Text style={styles.attributionBody}>
+                  {booking.paidBy
+                    ? `${booking.paidBy.displayName} manages this paired booking. Ask them to change or cancel both places.`
+                    : `${booking.addedBy.displayName} manages this place. Ask them if you need to cancel it.`}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setShowAttribution(false)}
+                style={styles.attributionDone}
+              >
+                <Text style={styles.attributionDoneText}>Got it</Text>
+              </Pressable>
+            </SafeAreaView>
+          </View>
+        )}
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  attributionAvatar: {
+    alignItems: "center",
+    backgroundColor: "#203740",
+    borderRadius: 20,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  attributionAvatarText: { color: "#ffffff", fontSize: 11, fontWeight: "900" },
+  attributionBackdrop: {
+    backgroundColor: "rgba(17,23,25,0.66)",
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
+  attributionBody: {
+    borderTopColor: "#e1dfda",
+    borderTopWidth: 1,
+    color: "#706a60",
+    fontSize: 15,
+    lineHeight: 23,
+    padding: 18,
+  },
+  attributionCard: {
+    borderColor: "#e1dfda",
+    borderRadius: 19,
+    borderWidth: 1,
+    marginTop: 22,
+    overflow: "hidden",
+  },
+  attributionDone: {
+    alignItems: "center",
+    backgroundColor: "#203740",
+    borderRadius: 17,
+    justifyContent: "center",
+    marginTop: 18,
+    minHeight: 54,
+  },
+  attributionDoneText: { color: "#ffffff", fontSize: 15, fontWeight: "800" },
+  attributionGrabber: {
+    alignSelf: "center",
+    backgroundColor: "#d7d3ca",
+    borderRadius: 3,
+    height: 5,
+    marginBottom: 18,
+    width: 44,
+  },
+  attributionOverlay: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
+  attributionPayer: {
+    color: "#111719",
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  attributionPayerRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    padding: 16,
+  },
+  attributionSheet: {
+    backgroundColor: "#f7f5ef",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    bottom: 0,
+    left: 0,
+    padding: 22,
+    position: "absolute",
+    right: 0,
+  },
+  attributionTitle: {
+    color: "#111719",
+    fontSize: 25,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+    lineHeight: 32,
+  },
   actionDisabled: { opacity: 0.42 },
   add: {
     alignItems: "center",
@@ -630,6 +778,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: 14,
   },
+  modalRoot: { flex: 1 },
   meta: { color: "#736d62", fontSize: 16, marginTop: 5 },
   notice: {
     backgroundColor: "#e9eeeb",

@@ -504,6 +504,8 @@ export const playerMediaWorkflows = pgTable(
         readonly {
           readonly url: string;
           readonly kind: "action" | "portrait";
+          readonly width?: number;
+          readonly height?: number;
           readonly uploadedAt: string;
         }[]
       >()
@@ -7534,6 +7536,12 @@ export const pickupParticipants = pgTable(
     personId: uuid("person_id")
       .notNull()
       .references(() => people.id, { onDelete: "cascade" }),
+    addedByPersonId: uuid("added_by_person_id").references(() => people.id, {
+      onDelete: "set null",
+    }),
+    paidByPersonId: uuid("paid_by_person_id").references(() => people.id, {
+      onDelete: "set null",
+    }),
     status: registrationStatusEnum("status").notNull().default("confirmed"),
     orderId: uuid("order_id").references(() => orders.id),
     holdExpiresAt: timestamp("hold_expires_at", {
@@ -7548,7 +7556,7 @@ export const pickupParticipants = pgTable(
       table.pickupSessionId,
       table.personId,
     ),
-    uniqueIndex("pickup_participant_order_unique")
+    index("pickup_participant_order_idx")
       .on(table.orderId)
       .where(sql`${table.orderId} IS NOT NULL`),
     index("pickup_participant_person_idx").on(table.personId, table.createdAt),

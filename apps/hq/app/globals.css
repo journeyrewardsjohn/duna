@@ -27534,3 +27534,191 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Venue-scoped match operations shared by HQ overview and calendar. */
+.venue-match-operations {
+  overflow: hidden;
+}
+
+.venue-match-operations > .hq-card-heading {
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.venue-match-operations > .hq-card-heading p {
+  color: var(--color-muted);
+  line-height: 1.5;
+  margin: 6px 0 0;
+  max-width: 640px;
+}
+
+.venue-match-operations__totals {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.venue-match-operations__totals > span {
+  background: rgb(var(--overlay-rgb) / 5%);
+  border: 1px solid rgb(var(--overlay-rgb) / 8%);
+  border-radius: 999px;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  padding: 8px 11px;
+  white-space: nowrap;
+}
+
+.venue-match-operations__totals .duna-numeric {
+  color: var(--color-bone);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.venue-match-operations__list {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
+.venue-match-operations__list > article {
+  background: var(--color-depth);
+  border: 1px solid rgb(var(--overlay-rgb) / 8%);
+  border-radius: 18px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 16px;
+}
+
+.venue-match-operations__list > article[data-state="live"] {
+  border-color: rgb(var(--flare-rgb) / 44%);
+  box-shadow: inset 4px 0 0 var(--color-flare);
+}
+
+.venue-match-operations__court {
+  align-items: center;
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: space-between;
+}
+
+.venue-match-operations__court > span:first-child {
+  align-items: center;
+  color: var(--color-bone);
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 800;
+  gap: 6px;
+}
+
+.venue-match-operations__identity {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.venue-match-operations__identity small,
+.venue-match-operations__identity span {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.venue-match-operations__identity strong {
+  color: var(--color-bone);
+  font-size: 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.venue-match-operations__identity strong i {
+  color: var(--color-warning);
+  font-size: 0.68rem;
+  font-style: normal;
+  margin: 0 4px;
+  text-transform: uppercase;
+}
+
+.venue-match-operations__people {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  padding-left: 14px;
+}
+
+.venue-match-operations__people > span {
+  align-items: center;
+  background: var(--color-navy-lift);
+  border: 2px solid var(--color-depth);
+  border-radius: 50%;
+  color: var(--color-bone);
+  display: inline-flex;
+  font-size: 0.625rem;
+  font-weight: 800;
+  height: 34px;
+  justify-content: center;
+  margin-left: -9px;
+  width: 34px;
+}
+
+.venue-match-operations__actions {
+  align-items: center;
+  border-top: 1px solid rgb(var(--overlay-rgb) / 7%);
+  display: flex;
+  gap: 8px;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  padding-top: 12px;
+}
+
+.venue-match-operations__actions a {
+  align-items: center;
+  border: 1px solid rgb(var(--overlay-rgb) / 10%);
+  border-radius: 12px;
+  color: var(--color-bone);
+  display: inline-flex;
+  font-size: 0.74rem;
+  font-weight: 800;
+  gap: 6px;
+  min-height: 42px;
+  padding: 0 12px;
+  text-decoration: none;
+}
+
+.venue-match-operations__actions a:last-child {
+  background: var(--color-aqua-deep);
+  border-color: transparent;
+  color: var(--color-on-accent);
+}
+
+@media (max-width: 880px) {
+  .venue-match-operations__list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .venue-match-operations > .hq-card-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .venue-match-operations__people {
+    display: none;
+  }
+
+  .venue-match-operations__list > article {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .venue-match-operations__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .venue-match-operations__actions a {
+    justify-content: center;
+  }
+}

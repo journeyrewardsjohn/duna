@@ -2,6 +2,181 @@
   box-sizing: border-box;
 }
 
+/* Hosted-match player search keeps profile discovery and roster building in one step. */
+.pickup-player-picker {
+  background: color-mix(in srgb, var(--signal) 5%, var(--surface-1));
+  border: 1px solid color-mix(in srgb, var(--signal) 22%, var(--hairline));
+  border-radius: 1.25rem;
+  display: grid;
+  gap: 0.9rem;
+  padding: clamp(1rem, 2vw, 1.35rem);
+}
+
+.pickup-player-picker > header {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.pickup-player-picker > header > span {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.55rem;
+}
+
+.pickup-player-picker > p {
+  color: var(--text-2);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.pickup-player-picker__search {
+  align-items: center;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 3.5rem;
+  padding-inline: 1rem;
+}
+
+.pickup-player-picker__search input {
+  background: transparent;
+  border: 0;
+  min-height: 3.25rem;
+  min-width: 0;
+  outline: 0;
+  width: 100%;
+}
+
+.pickup-player-picker__search small {
+  color: var(--text-2);
+}
+
+.pickup-player-picker__selected,
+.pickup-player-picker__results {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.pickup-player-picker__selected article,
+.pickup-player-picker__results article {
+  align-items: center;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 0.95rem;
+  display: grid;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.65rem;
+}
+
+.pickup-player-picker__selected article {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.pickup-player-picker__results article {
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+}
+
+.pickup-player-picker .avatar {
+  align-items: center;
+  background: var(--text-1);
+  border-radius: 999px;
+  color: var(--surface-1);
+  display: flex;
+  font-size: 0.72rem;
+  font-weight: 800;
+  height: 3rem;
+  justify-content: center;
+  overflow: hidden;
+  width: 3rem;
+}
+
+.pickup-player-picker .avatar img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.pickup-player-picker__selected article > span:nth-child(2),
+.pickup-player-picker__identity {
+  display: grid;
+  gap: 0.16rem;
+  min-width: 0;
+}
+
+.pickup-player-picker__identity > span {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+}
+
+.pickup-player-picker__identity strong,
+.pickup-player-picker__identity small,
+.pickup-player-picker__selected strong,
+.pickup-player-picker__selected small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pickup-player-picker__identity small,
+.pickup-player-picker__selected small {
+  color: var(--text-2);
+  font-size: 0.72rem;
+}
+
+.pickup-player-picker__results article > a,
+.pickup-player-picker__results article > button,
+.pickup-player-picker__selected article > button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  color: var(--text-1);
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 800;
+  gap: 0.35rem;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding-inline: 0.85rem;
+}
+
+.pickup-player-picker__results article > button.selected {
+  background: var(--text-1);
+  border-color: var(--text-1);
+  color: var(--surface-1);
+}
+
+.pickup-player-picker__results > p {
+  color: var(--text-2);
+  font-size: 0.82rem;
+  margin: 0;
+  padding: 1rem;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .pickup-player-picker__results article {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .pickup-player-picker__results article > a {
+    grid-column: 2;
+  }
+
+  .pickup-player-picker__results article > button {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+}
+
 /* Predictions: explicit lifecycle, public handles, and versioned rules */
 
 .prediction-market-experience {

@@ -1,5 +1,6 @@
 import type {
   OperatorDashboard,
+  OperatorScorableMatch,
   OperatorWorkspace,
   TicketApprovalSummary,
 } from "@duna/api";
@@ -32,6 +33,7 @@ import { EventHistoryWorkspace } from "./event-history-workspace";
 import { PeopleWorkspace } from "./people-workspace";
 import { SessionDraftManager } from "./session-draft-manager";
 import { TicketApprovalQueue } from "./ticket-approval-queue";
+import { VenueMatchOperations } from "./venue-match-operations";
 
 const moduleCopy: Record<
   Exclude<OperatorModule, "overview">,
@@ -1319,12 +1321,14 @@ export function ModulePanel({
   module,
   dashboard,
   focusedDraftId,
+  matches,
   workspace,
   ticketApprovals,
 }: {
   readonly module: OperatorModule;
   readonly dashboard: OperatorDashboard;
   readonly focusedDraftId?: string;
+  readonly matches: readonly OperatorScorableMatch[];
   readonly workspace: OperatorWorkspace;
   readonly ticketApprovals: readonly TicketApprovalSummary[];
 }) {
@@ -1408,7 +1412,13 @@ export function ModulePanel({
       )}
 
       {module === "calendar" ? (
-        <ScheduleCalendar workspace={workspace} />
+        <>
+          <VenueMatchOperations
+            matches={matches}
+            timezone={dashboard.organization.timezone}
+          />
+          <ScheduleCalendar workspace={workspace} />
+        </>
       ) : module === "locations" ? (
         <VenuePortfolioPanel workspace={workspace} />
       ) : module === "members" ? (

@@ -1,5 +1,6 @@
 "use client";
 
+import type { PersonSummary } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   Check,
@@ -11,20 +12,48 @@ import {
   MapPin,
   Minus,
   Plus,
+  Search,
   Sparkles,
   Trophy,
   UserCheck,
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
-import { createPickupAction } from "@/app/app/pickup/new/actions";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  createPickupAction,
+  searchPickupPlayersAction,
+} from "@/app/app/pickup/new/actions";
 import { CalendarDatePicker } from "./calendar-date-picker";
 import { PlaceSearch, type PlaceDetails } from "./place-search";
 
 type PickupFormat = "2s" | "3s" | "4s" | "6s" | "king-queen";
 type MatchType = "competitive" | "casual";
 type GenderPreference = "open" | "mens" | "womens" | "mixed";
+
+interface PickupPlayerOption {
+  readonly id: string;
+  readonly displayName: string;
+  readonly handle: string;
+  readonly publicPath?: string;
+  readonly avatarUrl?: string;
+  readonly homeMarket: string;
+  readonly ratingDisplay?: number;
+  readonly isProfessional?: boolean;
+}
+
+function playerOption(player: PersonSummary): PickupPlayerOption {
+  return {
+    id: player.id,
+    displayName: player.displayName,
+    handle: player.handle,
+    publicPath: player.publicPath,
+    avatarUrl: player.avatarUrl,
+    homeMarket: player.homeMarket,
+    ratingDisplay: player.rating.display,
+    isProfessional: player.isProfessional,
+  };
+}
 
 const FORMAT_OPTIONS: ReadonlyArray<{
   value: PickupFormat;
@@ -59,7 +88,13 @@ const GENDER_OPTIONS: ReadonlyArray<{
   { value: "mens", label: "Men", detail: "Men’s run" },
 ];
 
-export function PickupForm() {
+export function PickupForm({
+  hostPersonId,
+  initialPlayers,
+}: {
+  readonly hostPersonId: string;
+  readonly initialPlayers: readonly PersonSummary[];
+}) {
   const [step, setStep] = useState(1);
   const [createdSlug, setCreatedSlug] = useState<string>();
   const [title, setTitle] = useState("Golden Hour 4s");
@@ -93,6 +128,14 @@ export function PickupForm() {
   const [minimumNoticeMinutes, setMinimumNoticeMinutes] = useState(60);
   const [autoCancelLowAttendance, setAutoCancelLowAttendance] = useState(false);
   const [minimumAttendance, setMinimumAttendance] = useState(4);
+  const [playerSearch, setPlayerSearch] = useState("");
+  const [playerResults, setPlayerResults] = useState<
+    readonly PickupPlayerOption[]
+  >(() => initialPlayers.map(playerOption));
+  const [selectedPlayers, setSelectedPlayers] = useState<
+    readonly PickupPlayerOption[]
+  >([]);
+  const [searchingPlayers, setSearchingPlayers] = useState(false);
   const [error, setError] = useState<string>();
   const [isPending, startTransition] = useTransition();
   const minimumDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -106,6 +149,47 @@ export function PickupForm() {
       new Date(startsAt).getTime() + durationMinutes * 60_000,
     ).toISOString();
   }, [durationMinutes, startsAt]);
+
+  useEffect(() => {
+    const normalized = playerSearch.trim();
+    if (normalized.length < 2) {
+      setPlayerResults(initialPlayers.map(playerOption));
+      setSearchingPlayers(false);
+      return;
+    }
+    let active = true;
+    setSearchingPlayers(true);
+    const timeout = window.setTimeout(() => {
+      void searchPickupPlayersAction(normalized).then((results) => {
+        if (!active) return;
+        setPlayerResults(
+          results
+            .filter((player) => player.id !== hostPersonId)
+            .map((player) => ({
+              id: player.id,
+              displayName: player.displayName,
+              handle: player.handle,
+              publicPath: player.publicPath,
+              avatarUrl: player.avatarUrl ?? undefined,
+              homeMarket: player.homeMarket ?? "Duna player",
+              ratingDisplay: player.sandRating ?? undefined,
+              isProfessional: player.isProfessional,
+            })),
+        );
+        setSearchingPlayers(false);
+      });
+    }, 280);
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [hostPersonId, initialPlayers, playerSearch]);
+
+  useEffect(() => {
+    setSelectedPlayers((players) =>
+      players.slice(0, Math.max(0, capacity - 1)),
+    );
+  }, [capacity]);
 
   if (createdSlug) {
     return (
@@ -454,6 +538,141 @@ export function PickupForm() {
 
           {step === 3 && (
             <>
+              <section className="pickup-player-picker">
+                <header>
+                  <span>
+                    <UserCheck aria-hidden size={20} />
+                    <strong>Add players now</strong>
+                  </span>
+                  <Badge tone={selectedPlayers.length ? "positive" : "neutral"}>
+                    {selectedPlayers.length + 1} of {capacity}
+                  </Badge>
+                </header>
+                <p>
+                  Search Duna profiles, open a player card, and add confirmed
+                  players before publishing. You can leave every remaining spot
+                  available.
+                </p>
+                {selectedPlayers.length > 0 && (
+                  <div className="pickup-player-picker__selected">
+                    {selectedPlayers.map((player) => (
+                      <article key={player.id}>
+                        <span className="avatar">
+                          {player.avatarUrl ? (
+                            <img alt="" src={player.avatarUrl} />
+                          ) : (
+                            player.displayName
+                              .split(/\s+/)
+                              .map((part) => part[0])
+                              .join("")
+                              .slice(0, 2)
+                          )}
+                        </span>
+                        <span>
+                          <strong>{player.displayName}</strong>
+                          <small>Confirmed when this match is published</small>
+                        </span>
+                        <button
+                          aria-label={`Remove ${player.displayName}`}
+                          onClick={() =>
+                            setSelectedPlayers((players) =>
+                              players.filter((item) => item.id !== player.id),
+                            )
+                          }
+                          type="button"
+                        >
+                          <Minus aria-hidden size={16} />
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                )}
+                <label className="pickup-player-picker__search">
+                  <Search aria-hidden size={19} />
+                  <input
+                    aria-label="Search Duna player profiles"
+                    onChange={(event) => setPlayerSearch(event.target.value)}
+                    placeholder="Search player name or @handle"
+                    value={playerSearch}
+                  />
+                  {searchingPlayers && <small>Searching…</small>}
+                </label>
+                <div className="pickup-player-picker__results">
+                  {playerResults.slice(0, 8).map((player) => {
+                    const selected = selectedPlayers.some(
+                      (item) => item.id === player.id,
+                    );
+                    const canAdd = selectedPlayers.length < capacity - 1;
+                    return (
+                      <article key={player.id}>
+                        <span className="avatar">
+                          {player.avatarUrl ? (
+                            <img alt="" src={player.avatarUrl} />
+                          ) : (
+                            player.displayName
+                              .split(/\s+/)
+                              .map((part) => part[0])
+                              .join("")
+                              .slice(0, 2)
+                          )}
+                        </span>
+                        <span className="pickup-player-picker__identity">
+                          <span>
+                            <strong>{player.displayName}</strong>
+                            {player.isProfessional && (
+                              <Badge tone="positive">Pro</Badge>
+                            )}
+                          </span>
+                          <small>
+                            @{player.handle} · {player.homeMarket}
+                          </small>
+                        </span>
+                        {player.ratingDisplay !== undefined && (
+                          <Numeric tier="chip">
+                            {player.ratingDisplay.toFixed(2)}
+                          </Numeric>
+                        )}
+                        <Link
+                          aria-label={`View ${player.displayName}'s profile`}
+                          href={
+                            player.publicPath ?? `/players/${player.handle}`
+                          }
+                          target="_blank"
+                        >
+                          Profile
+                        </Link>
+                        <button
+                          className={selected ? "selected" : undefined}
+                          disabled={!selected && !canAdd}
+                          onClick={() =>
+                            setSelectedPlayers((players) =>
+                              selected
+                                ? players.filter(
+                                    (item) => item.id !== player.id,
+                                  )
+                                : [...players, player],
+                            )
+                          }
+                          type="button"
+                        >
+                          {selected ? (
+                            <>
+                              <Check aria-hidden size={15} /> Added
+                            </>
+                          ) : (
+                            <>
+                              <Plus aria-hidden size={15} /> Add
+                            </>
+                          )}
+                        </button>
+                      </article>
+                    );
+                  })}
+                  {!searchingPlayers && playerResults.length === 0 && (
+                    <p>No public Duna profile matches that search.</p>
+                  )}
+                </div>
+              </section>
               <div className="field-group">
                 <label>Who can see it</label>
                 <div className="choice-list">
@@ -709,6 +928,9 @@ export function PickupForm() {
                         matchType === "competitive" ? ratingMinimum : undefined,
                       ratingMaximum:
                         matchType === "competitive" ? ratingMaximum : undefined,
+                      participantPersonIds: selectedPlayers.map(
+                        (player) => player.id,
+                      ),
                       idempotencyKey: crypto.randomUUID(),
                     });
                     if (result.ok) {

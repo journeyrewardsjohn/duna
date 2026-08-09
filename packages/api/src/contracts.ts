@@ -527,6 +527,19 @@ export const bookingSummarySchema = z.object({
   canEdit: z.boolean().optional(),
   canCancel: z.boolean().optional(),
   cancellationDeadline: z.iso.datetime().optional(),
+  addedBy: z
+    .object({
+      personId: z.string().uuid(),
+      displayName: z.string(),
+    })
+    .optional(),
+  paidBy: z
+    .object({
+      personId: z.string().uuid(),
+      displayName: z.string(),
+    })
+    .optional(),
+  pairedSpotCount: z.number().int().min(2).optional(),
   team: z
     .object({
       claimToken: z.string().uuid(),
@@ -3439,8 +3452,13 @@ export const operatorScorableMatchSchema = z.object({
   id: z.string().uuid(),
   status: z.enum(["scheduled", "live"]),
   scheduledAt: z.iso.datetime().optional(),
+  venueId: z.string().uuid().optional(),
   venueName: z.string(),
+  courtId: z.string().uuid().optional(),
   courtName: z.string().optional(),
+  sessionId: z.string().uuid().optional(),
+  sessionTitle: z.string().optional(),
+  divisionName: z.string().optional(),
   authoritativeDeviceId: z.string().optional(),
   teamA: z.object({
     id: z.string().uuid(),

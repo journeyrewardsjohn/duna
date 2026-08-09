@@ -1,4 +1,4 @@
-import type { OperatorDashboard } from "@duna/api";
+import type { OperatorDashboard, OperatorScorableMatch } from "@duna/api";
 import { formatMoney, formatVenueTime, type PersonSummary } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { quickActions } from "./navigation";
+import { VenueMatchOperations } from "./venue-match-operations";
 
 const metricIcons = [TrendingUp, UsersRound, Check, CreditCard] as const;
 
@@ -31,9 +32,11 @@ function quickActionDestination(label: string): string {
 
 export function OperatorOverview({
   dashboard,
+  matches,
   members,
 }: {
   readonly dashboard: OperatorDashboard;
+  readonly matches: readonly OperatorScorableMatch[];
   readonly members: readonly PersonSummary[];
 }) {
   const today = new Intl.DateTimeFormat("en-US", {
@@ -186,6 +189,11 @@ export function OperatorOverview({
               )}
             </div>
           </section>
+
+          <VenueMatchOperations
+            matches={matches}
+            timezone={dashboard.organization.timezone}
+          />
 
           <section className="hq-card hq-events-board">
             <header className="hq-card-heading">

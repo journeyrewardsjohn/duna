@@ -416,6 +416,15 @@ export interface BookingSummary {
   readonly canEdit?: boolean;
   readonly canCancel?: boolean;
   readonly cancellationDeadline?: string;
+  readonly addedBy?: {
+    readonly personId: string;
+    readonly displayName: string;
+  };
+  readonly paidBy?: {
+    readonly personId: string;
+    readonly displayName: string;
+  };
+  readonly pairedSpotCount?: number;
   readonly team?: {
     readonly claimToken: string;
     readonly expectedTeamSize: number;

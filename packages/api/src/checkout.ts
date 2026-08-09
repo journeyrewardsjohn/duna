@@ -35,7 +35,7 @@ import { stableHash } from "./canonical";
 import {
   evaluatePickupParticipant,
   evaluateRegistrationForSession,
-  joinPickup,
+  joinPickupGroup,
   registerForSession,
 } from "./commerce";
 import type { ApiActor } from "./context";
@@ -846,8 +846,12 @@ async function loadCheckoutEvent(
     title: pickup.title,
     kind: "pickup",
     priceMinor: pickup.priceMinor,
+    playerPriceMinor: pickup.priceMinor,
+    teamPriceMinor: pickup.priceMinor * 2,
     currency: currency(pickup.currency),
     approvalRequired: pickup.approvalRequired,
+    teamSize: 2,
+    priceBasis: "per-person",
     organization,
   };
 }
@@ -1170,6 +1174,23 @@ export async function startEventCheckout(input: {
   });
   const expectedTeamSize = Math.max(1, event.teamSize ?? 1);
   const teamRoster = input.teamRoster ?? [];
+  const pickupPartnerPersonId =
+    event.source === "pickup" &&
+    input.teamPaymentMode === "team" &&
+    teamRoster.length === 1
+      ? teamRoster[0]?.personId
+      : undefined;
+  if (
+    event.source === "pickup" &&
+    ((input.teamPaymentMode === "team" &&
+      (!pickupPartnerPersonId || teamRoster[0]?.inviteTarget)) ||
+      (input.teamPaymentMode !== "team" && teamRoster.length > 0))
+  ) {
+    throw new CheckoutError(
+      "EVENT_NOT_CHECKOUT_ELIGIBLE",
+      "Choose one active Duna player to join and pay with a partner.",
+    );
+  }
   if (event.ticketTypeId && teamRoster.length > 0) {
     throw new CheckoutError(
       "EVENT_NOT_CHECKOUT_ELIGIBLE",
@@ -1340,14 +1361,19 @@ export async function startEventCheckout(input: {
     }
     const registration =
       event.source === "pickup"
-        ? await joinPickup({
-            actor: input.actor,
-            pickupSessionId: event.id,
-            subjectPersonId,
-            requestId: input.requestId,
-            ipAddress: input.ipAddress,
-            now: input.now,
-          })
+        ? (
+            await joinPickupGroup({
+              actor: input.actor,
+              pickupSessionId: event.id,
+              subjectPersonIds: [
+                subjectPersonId,
+                ...(pickupPartnerPersonId ? [pickupPartnerPersonId] : []),
+              ],
+              requestId: input.requestId,
+              ipAddress: input.ipAddress,
+              now: input.now,
+            })
+          )[0]!
         : await registerForSession({
             actor: input.actor,
             sessionId: event.id,
@@ -1528,16 +1554,20 @@ export async function startEventCheckout(input: {
         )
       `);
     } else if (event.source === "pickup") {
-      const participation = await joinPickup({
+      const participations = await joinPickupGroup({
         actor: input.actor,
         pickupSessionId: event.id,
-        subjectPersonId,
+        subjectPersonIds: [
+          subjectPersonId,
+          ...(pickupPartnerPersonId ? [pickupPartnerPersonId] : []),
+        ],
         orderId,
         holdExpiresAt,
         requestId: input.requestId,
         ipAddress: input.ipAddress,
         now: input.now,
       });
+      const participation = participations[0]!;
       hold = {
         registration_id: participation.participantId,
         result_status: participation.status,
