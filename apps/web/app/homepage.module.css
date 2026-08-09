@@ -1222,6 +1222,41 @@
   outline-offset: 4px;
 }
 
+@media (min-width: 1121px) and (max-height: 1000px) {
+  .heroLayout {
+    align-content: start;
+    padding-block: clamp(6rem, 13svh, 7rem) clamp(4.75rem, 10svh, 6rem);
+  }
+
+  .heroCopy {
+    width: min(100%, 74rem);
+  }
+
+  .heroCopy h1 {
+    max-width: 17ch;
+    margin-block: clamp(0.55rem, 1.5svh, 0.85rem) clamp(0.75rem, 1.8svh, 1.1rem);
+    font-size: clamp(4.2rem, min(7.2vw, 11.5svh), 7.4rem);
+  }
+
+  .heroCopy > p {
+    max-width: 60ch;
+    font-size: clamp(0.94rem, min(1.25vw, 2.1svh), 1.12rem);
+    line-height: 1.45;
+  }
+
+  .actions {
+    margin-top: clamp(0.9rem, 2.2svh, 1.35rem);
+  }
+
+  .heroProof {
+    bottom: clamp(3.75rem, 7svh, 4.75rem);
+  }
+
+  .scrollCue {
+    bottom: clamp(1rem, 2.2svh, 1.5rem);
+  }
+}
+
 @media (max-width: 1120px) {
   .home :global(.site-header__inner) {
     width: 100%;

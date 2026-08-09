@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const hqBaseUrl =
   process.env.PLAYWRIGHT_HQ_BASE_URL ??
@@ -13,6 +13,12 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(
     dimensions.clientWidth + 2,
   );
+}
+
+async function getBox(locator: Locator) {
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+  return box!;
 }
 
 test("marketing and player discovery stay usable", async ({ page }) => {
@@ -50,6 +56,45 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByLabel("Search Duna")).toBeVisible();
   await expectNoHorizontalOverflow(page);
+});
+
+test("wide, short homepages keep the hero clear of fixed navigation", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 1374, height: 741 },
+    { width: 1832, height: 988 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+
+    const header = page.locator(".site-header");
+    const eyebrow = page.getByText("Beach volleyball, connected", {
+      exact: true,
+    });
+    const primaryAction = page.getByRole("link", { name: /Find a game/ });
+    const scrollCue = page.getByText("Scroll through the sand", {
+      exact: true,
+    });
+
+    await expect(eyebrow).toBeVisible();
+    await expect(primaryAction).toBeVisible();
+    await expect(scrollCue).toBeVisible();
+
+    const [headerBox, eyebrowBox, actionBox, cueBox] = await Promise.all([
+      getBox(header),
+      getBox(eyebrow),
+      getBox(primaryAction),
+      getBox(scrollCue),
+    ]);
+
+    expect(eyebrowBox.y).toBeGreaterThanOrEqual(
+      headerBox.y + headerBox.height + 8,
+    );
+    expect(actionBox.y + actionBox.height + 8).toBeLessThanOrEqual(cueBox.y);
+    expect(cueBox.y + cueBox.height).toBeLessThanOrEqual(viewport.height);
+    await expectNoHorizontalOverflow(page);
+  }
 });
 
 test("mobile public navigation opens as a full-screen product sheet", async ({
