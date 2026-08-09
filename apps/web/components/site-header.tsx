@@ -1,12 +1,14 @@
 import { DunaMark } from "@duna/ui";
 import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
-import { ArrowUpRight, Menu } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { DUNA_HQ_URL } from "@/lib/site-urls";
+import { SiteMobileMenu } from "./site-mobile-menu";
 import { WebAuthButton } from "./web-auth-button";
 
 export function SiteHeader() {
+  const authConfigured = isWorkOSAuthKitConfigured();
   return (
     <header className="site-header">
       <div className="site-header__inner">
@@ -34,24 +36,8 @@ export function SiteHeader() {
               <ArrowUpRight aria-hidden size={14} />
             </i>
           </a>
-          <WebAuthButton configured={isWorkOSAuthKitConfigured()} />
-          <details className="site-header__mobile">
-            <summary
-              aria-label="Open navigation menu"
-              className="site-header__menu"
-              role="button"
-            >
-              <Menu aria-hidden size={21} />
-            </summary>
-            <nav aria-label="Mobile navigation">
-              <Link href="/app/discover">Play</Link>
-              <Link href="/pro">Watch</Link>
-              <Link href="/rankings">Sand Rating</Link>
-              <Link href="/run-your-club">For clubs + coaches</Link>
-              <Link href="/create">Create an event</Link>
-              <a href={DUNA_HQ_URL}>Open Duna HQ</a>
-            </nav>
-          </details>
+          <WebAuthButton configured={authConfigured} />
+          <SiteMobileMenu configured={authConfigured} hqUrl={DUNA_HQ_URL} />
         </div>
       </div>
     </header>
