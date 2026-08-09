@@ -3,6 +3,7 @@ import {
   formatMoney,
   formatVenueTime,
   type EventDivisionSummary,
+  type MatchSummary,
   type PersonSummary,
   googleMapsSearchUrl,
   nativeMapUrl,
@@ -82,7 +83,14 @@ import {
 } from "./booking-management";
 import { PlayerCalendarModal } from "./player-calendar";
 import { ProfileHubScreen } from "./profile-hub";
+import { PlayerArtworkModal, ProfileEditorModal } from "./profile-studio";
 import { OrganizationExperienceModal } from "./organization-experience";
+import {
+  LivePlayerRail,
+  PlayerPickerModal,
+  PlayerProfileProvider,
+  usePlayerProfileNavigation,
+} from "./player-social";
 import {
   DiscoveryMapModal,
   DiscoveryMapPreview,
@@ -249,6 +257,68 @@ type MobilePlayerPerformance = Awaited<
   ReturnType<DunaApiClient["public"]["playerPerformance"]["query"]>
 >;
 type MobilePerformanceMatch = MobilePlayerPerformance["history"][number];
+
+const demoPerformanceSnapshots = [
+  {
+    beforeDisplay: 4.54,
+    afterDisplay: 4.62,
+    expectedWinProbability: 0.43,
+    actualResult: 1,
+    pointShare: 0.519,
+    verificationWeightBps: 10_000,
+  },
+  {
+    beforeDisplay: 4.58,
+    afterDisplay: 4.54,
+    expectedWinProbability: 0.61,
+    actualResult: 0,
+    pointShare: 0.455,
+    verificationWeightBps: 9_600,
+  },
+  {
+    beforeDisplay: 4.53,
+    afterDisplay: 4.58,
+    expectedWinProbability: 0.55,
+    actualResult: 1,
+    pointShare: 0.592,
+    verificationWeightBps: 9_200,
+  },
+] as const;
+
+const demoPerformanceHistory = demoMatches.map((match, index) => {
+  const snapshot =
+    demoPerformanceSnapshots[index] ??
+    demoPerformanceSnapshots[demoPerformanceSnapshots.length - 1]!;
+  return {
+    id: `demo-rating-${match.id}`,
+    matchId: match.id,
+    beforeDisplay: snapshot.beforeDisplay,
+    afterDisplay: snapshot.afterDisplay,
+    delta: match.ratingDelta,
+    expectedWinProbability: snapshot.expectedWinProbability,
+    actualResult: snapshot.actualResult,
+    pointShare: snapshot.pointShare,
+    verificationWeightBps: snapshot.verificationWeightBps,
+    occurredAt: match.playedAt,
+    matchTitle: `${match.venueName} match`,
+    sourceUrl: undefined,
+    sets: match.score.map(([a, b]) => ({ a, b })),
+    participants: [
+      ...match.teamA.map((person) => ({
+        externalPersonId: `demo:${person.id}`,
+        personId: person.id,
+        name: person.displayName,
+        side: "A" as const,
+      })),
+      ...match.teamB.map((person) => ({
+        externalPersonId: `demo:${person.id}`,
+        personId: person.id,
+        name: person.displayName,
+        side: "B" as const,
+      })),
+    ],
+  };
+}) satisfies readonly MobilePerformanceMatch[];
 
 const lightColors = {
   canvas: "#f6f5f1",
@@ -1152,6 +1222,141 @@ function CoachingNoteCard({ note }: { readonly note: PlayerCoachingNote }) {
 type HomeQuickAction =
   "find-match" | "book-court" | "join-event" | "record-video";
 
+function HomeResultStoryCard({
+  match,
+  playerId,
+}: {
+  readonly match: MatchSummary;
+  readonly playerId: string;
+}) {
+  const { openPlayerProfile } = usePlayerProfileNavigation();
+  const playerSide = match.teamB.some((player) => player.id === playerId)
+    ? "B"
+    : "A";
+  const won = match.winner === playerSide;
+  const playerTeam = playerSide === "A" ? match.teamA : match.teamB;
+  const opponentTeam = playerSide === "A" ? match.teamB : match.teamA;
+  const score = match.score.map((set) =>
+    playerSide === "A" ? set : ([set[1], set[0]] as const),
+  );
+  const subtitle = won
+    ? score.length >= 3
+      ? "Three sets. You closed the match."
+      : "Straight sets. A clear result."
+    : score.length >= 3
+      ? "Pushed it to the deciding set."
+      : "A result to learn from.";
+  const renderTeam = (
+    team: readonly PersonSummary[],
+    side: "player" | "opponent",
+  ) => (
+    <View style={styles.resultStoryTeam}>
+      <View style={styles.resultStoryPlayers}>
+        {team.map((person) => (
+          <Pressable
+            accessibilityLabel={"Open " + person.displayName + "'s profile"}
+            key={person.id}
+            onPress={() => openPlayerProfile(person)}
+            style={styles.resultStoryPlayer}
+          >
+            {person.avatarUrl ? (
+              <Image
+                accessibilityIgnoresInvertColors
+                source={{ uri: person.avatarUrl }}
+                style={styles.resultStoryAvatar}
+              />
+            ) : (
+              <View style={styles.resultStoryAvatarFallback}>
+                <Text style={styles.resultStoryAvatarText}>
+                  {person.initials}
+                </Text>
+              </View>
+            )}
+            <View style={styles.flex}>
+              <Text numberOfLines={1} style={styles.resultStoryPlayerName}>
+                {person.displayName}
+              </Text>
+              <Text style={styles.resultStoryPlayerRating}>
+                {person.rating.display.toFixed(2)} Sand
+              </Text>
+            </View>
+          </Pressable>
+        ))}
+      </View>
+      <View style={styles.resultStoryScores}>
+        {score.map((set, index) => (
+          <Text
+            key={index}
+            style={[
+              styles.resultStoryScore,
+              set[side === "player" ? 0 : 1] > set[side === "player" ? 1 : 0] &&
+                styles.resultStoryScoreWon,
+            ]}
+          >
+            {set[side === "player" ? 0 : 1]}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+  return (
+    <View
+      style={[
+        styles.resultStoryCard,
+        won ? styles.resultStoryCardWon : styles.resultStoryCardLost,
+      ]}
+    >
+      <View style={styles.resultStoryHeader}>
+        <View style={styles.flex}>
+          <Text
+            style={[
+              styles.resultStoryEyebrow,
+              !won && styles.resultStoryEyebrowLost,
+            ]}
+          >
+            {won ? "MATCH WON" : "MATCH LOST"}
+          </Text>
+          <Text
+            style={[
+              styles.resultStorySubtitle,
+              !won && styles.resultStorySubtitleLost,
+            ]}
+          >
+            {subtitle}
+          </Text>
+        </View>
+        <Text
+          style={[styles.resultStoryDate, !won && styles.resultStoryDateLost]}
+        >
+          {new Date(match.playedAt).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          })}
+        </Text>
+      </View>
+      <View style={styles.resultStoryScorecard}>
+        {renderTeam(playerTeam, "player")}
+        <View style={styles.resultStoryDivider} />
+        {renderTeam(opponentTeam, "opponent")}
+      </View>
+      <View style={styles.resultStoryFooter}>
+        <Text style={styles.resultStoryVenue} numberOfLines={1}>
+          {match.eventName ?? match.venueName}
+        </Text>
+        <Text
+          style={[
+            styles.resultStoryDelta,
+            match.ratingDelta < 0 && styles.resultStoryDeltaNegative,
+          ]}
+        >
+          {match.ratingDelta >= 0 ? "+" : ""}
+          {match.ratingDelta.toFixed(2)}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function HomeScreen({
   onAction,
   onBook,
@@ -1164,6 +1369,7 @@ function HomeScreen({
   readonly onPredictions: () => void;
 }) {
   const reduceMotion = useReducedMotion();
+  const { openPlayerProfile } = usePlayerProfileNavigation();
   const chartDraw = useRef(new Animated.Value(0)).current;
   const {
     client,
@@ -1172,11 +1378,37 @@ function HomeScreen({
     dashboard,
     mode,
     organizationWallets,
+    people,
     predictionDiscovery,
   } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
-  const bookings = dashboard?.bookings ?? demoBookings;
-  const events = dashboard?.events ?? demoEvents;
+  const previewNextActivity = useMemo(() => {
+    const startsAt = new Date();
+    startsAt.setDate(startsAt.getDate() + 1);
+    startsAt.setHours(10, 0, 0, 0);
+    const endsAt = new Date(startsAt.getTime() + 90 * 60 * 1000);
+    return { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
+  }, []);
+  const bookings =
+    mode === "preview"
+      ? demoBookings.map((booking) =>
+          booking.id === "booking-pickup"
+            ? {
+                ...booking,
+                ...previewNextActivity,
+                sessionId: "event-pickup",
+              }
+            : booking,
+        )
+      : (dashboard?.bookings ?? demoBookings);
+  const events =
+    mode === "preview"
+      ? demoEvents.map((event) =>
+          event.id === "event-pickup"
+            ? { ...event, ...previewNextActivity }
+            : event,
+        )
+      : (dashboard?.events ?? demoEvents);
   const matches = dashboard?.recentMatches ?? demoMatches;
   const [performance, setPerformance] = useState<MobilePlayerPerformance>();
   const [selectedCoach, setSelectedCoach] = useState<MobileCoach>();
@@ -1229,6 +1461,10 @@ function HomeScreen({
   const nextBookingEventIndex = nextBooking?.sessionId
     ? events.findIndex((event) => event.id === nextBooking.sessionId)
     : -1;
+  const nextBookingEvent =
+    nextBookingEventIndex >= 0 ? events[nextBookingEventIndex] : undefined;
+  const nextBookingAttendees = nextBookingEvent?.attendees?.slice(0, 3) ?? [];
+  const nextBookingOpenSpots = nextBookingEvent?.spotsRemaining ?? 0;
   const insight = dashboard?.feed[0];
   const performanceHistory = performance?.history ?? [];
   const verifiedWindow = [...performanceHistory].reverse().slice(-14);
@@ -1371,6 +1607,7 @@ function HomeScreen({
         showsVerticalScrollIndicator={false}
       >
         <AppHeader eyebrow="YOUR DAY" />
+        <LivePlayerRail palette={colors} />
         <View style={styles.homeWelcome}>
           <View style={styles.flex}>
             <Text style={styles.homeWelcomeDate}>
@@ -1406,34 +1643,108 @@ function HomeScreen({
                 onOpenBooking(nextBooking.id);
               }}
               style={({ pressed }) => [
-                styles.homeNextSession,
+                styles.homeNextActivity,
                 pressed && styles.homeQuickActionPressed,
               ]}
             >
-              <View style={styles.homeNextDate}>
-                <Text style={styles.homeNextDateMonth}>
-                  {new Date(nextBooking.startsAt)
-                    .toLocaleDateString("en-US", { month: "short" })
-                    .toUpperCase()}
-                </Text>
-                <Text style={styles.homeNextDateDay}>
-                  {new Date(nextBooking.startsAt).getDate()}
-                </Text>
+              <View style={styles.homeNextRoster}>
+                {nextBookingAttendees.map((attendee) => {
+                  const fullPlayer = people?.find(
+                    (candidate) => candidate.id === attendee.id,
+                  );
+                  return (
+                    <Pressable
+                      accessibilityLabel={
+                        "Open " + attendee.displayName + "'s profile"
+                      }
+                      disabled={!fullPlayer}
+                      key={attendee.id}
+                      onPress={(event) => {
+                        event.stopPropagation();
+                        if (fullPlayer) openPlayerProfile(fullPlayer);
+                      }}
+                      style={styles.homeNextPlayer}
+                    >
+                      {attendee.avatarUrl ? (
+                        <Image
+                          accessibilityIgnoresInvertColors
+                          source={{ uri: attendee.avatarUrl }}
+                          style={styles.homeNextAvatar}
+                        />
+                      ) : (
+                        <View style={styles.homeNextAvatarFallback}>
+                          <Text style={styles.homeNextAvatarText}>
+                            {attendee.initials}
+                          </Text>
+                        </View>
+                      )}
+                      <Text numberOfLines={1} style={styles.homeNextPlayerName}>
+                        {attendee.displayName.split(" ")[0]}
+                      </Text>
+                      {attendee.ratingDisplay !== undefined && (
+                        <Text style={styles.homeNextRating}>
+                          {attendee.ratingDisplay.toFixed(1)}
+                        </Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
+                {nextBookingOpenSpots > 0 && (
+                  <View style={styles.homeNextPlayer}>
+                    <View style={styles.homeNextAvailableAvatar}>
+                      <Text style={styles.homeNextAvailablePlus}>＋</Text>
+                    </View>
+                    <Text style={styles.homeNextAvailableText}>Available</Text>
+                    <Text style={styles.homeNextAvailableCount}>
+                      {nextBookingOpenSpots}{" "}
+                      {nextBookingOpenSpots === 1 ? "spot" : "spots"}
+                    </Text>
+                  </View>
+                )}
+                {!nextBookingAttendees.length && !nextBookingOpenSpots && (
+                  <View style={styles.homeNextPlayer}>
+                    <View style={styles.homeNextAvatarFallback}>
+                      <Text style={styles.homeNextAvatarText}>
+                        {nextBooking.participantNames?.[0]
+                          ?.split(/\s+/)
+                          .slice(0, 2)
+                          .map((part) => part[0])
+                          .join("") ?? "YOU"}
+                      </Text>
+                    </View>
+                    <Text style={styles.homeNextPlayerName}>You</Text>
+                  </View>
+                )}
               </View>
-              <View style={styles.flex}>
+              <View style={styles.homeNextActivityInfo}>
                 <Text style={styles.homeNextEyebrow}>
-                  NEXT UP · {nextBooking.status.replace("-", " ").toUpperCase()}
+                  NEXT UP · YOUR ACTIVITY
                 </Text>
-                <Text style={styles.homeNextTitle}>{nextBooking.title}</Text>
-                <Text style={styles.homeNextMeta}>
+                <Text style={styles.homeNextActivityWhen}>
+                  {new Date(nextBooking.startsAt).toLocaleDateString("en-US", {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                  })}{" "}
+                  ·{" "}
                   {new Date(nextBooking.startsAt).toLocaleTimeString("en-US", {
                     hour: "numeric",
                     minute: "2-digit",
-                  })}{" "}
-                  · {nextBooking.venueName}
+                  })}
                 </Text>
+                <Text style={styles.homeNextTitle}>{nextBooking.title}</Text>
+                <Text style={styles.homeNextMeta}>{nextBooking.venueName}</Text>
+                <View style={styles.homeNextStatusRow}>
+                  <Pill
+                    tone={nextBookingOpenSpots > 0 ? "warning" : "positive"}
+                  >
+                    {nextBookingOpenSpots > 0
+                      ? nextBookingOpenSpots + " available"
+                      : nextBooking.status.replace("-", " ")}
+                  </Pill>
+                  <Text style={styles.homeNextDetails}>Details →</Text>
+                </View>
               </View>
-              <Text style={styles.chevron}>›</Text>
             </Pressable>
             {!["pickup", "court-rental"].includes(nextBooking.kind) && (
               <LiveActivitiesPrompt booking={nextBooking} client={client} />
@@ -1712,47 +2023,13 @@ function HomeScreen({
               eyebrow="RECENT FORM"
               title="Every result tells a story."
             />
-            <View style={styles.listCard}>
+            <View style={styles.resultStoryStack}>
               {matches.slice(0, 2).map((match) => (
-                <View style={styles.matchRow} key={match.id}>
-                  <View
-                    style={[
-                      styles.resultBadge,
-                      {
-                        backgroundColor:
-                          match.winner === "A" ? colors.aqua : colors.danger,
-                      },
-                    ]}
-                  >
-                    <Text style={styles.resultText}>
-                      {match.winner === "A" ? "W" : "L"}
-                    </Text>
-                  </View>
-                  <View style={styles.flex}>
-                    <Text style={styles.rowTitle}>
-                      {match.teamA[0]?.displayName.split(" ")[0]} /{" "}
-                      {match.teamA[1]?.displayName.split(" ")[0]}
-                    </Text>
-                    <Text style={styles.rowMeta}>
-                      vs {match.teamB[0]?.displayName.split(" ")[0]} /{" "}
-                      {match.teamB[1]?.displayName.split(" ")[0]} ·{" "}
-                      {match.venueName}
-                    </Text>
-                  </View>
-                  <View style={styles.matchScore}>
-                    <Text style={styles.rowTitle}>
-                      {match.score
-                        .map((set) => `${set[0]}–${set[1]}`)
-                        .join("  ")}
-                    </Text>
-                    {typeof match.ratingDelta === "number" && (
-                      <Text style={[styles.rowMeta, styles.positiveText]}>
-                        {match.ratingDelta >= 0 ? "+" : ""}
-                        {match.ratingDelta.toFixed(2)}
-                      </Text>
-                    )}
-                  </View>
-                </View>
+                <HomeResultStoryCard
+                  key={match.id}
+                  match={match}
+                  playerId={player.id}
+                />
               ))}
             </View>
           </>
@@ -5225,6 +5502,7 @@ function ProTourModal({
 
 function FollowPlayerCard({ player }: { readonly player: PersonSummary }) {
   const { client, mode } = usePlayerRuntime();
+  const { openPlayerProfile } = usePlayerProfileNavigation();
   const [following, setFollowing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -5243,8 +5521,8 @@ function FollowPlayerCard({ player }: { readonly player: PersonSummary }) {
     };
   }, [client, mode, player.id]);
 
-  const follow = async () => {
-    if (following || busy) return;
+  const toggleFollow = async () => {
+    if (busy) return;
     selectionHaptic();
     setBusy(true);
     setError(undefined);
@@ -5252,35 +5530,37 @@ function FollowPlayerCard({ player }: { readonly player: PersonSummary }) {
       if (client && mode === "live") {
         await client.player.setPlayerFollow.mutate({
           playerPersonId: player.id,
-          following: true,
-          notifyRegistrations: true,
-          notifyWatch: true,
-          notifyResults: true,
+          following: !following,
+          notifyRegistrations: !following,
+          notifyWatch: !following,
+          notifyResults: !following,
           idempotencyKey: Crypto.randomUUID(),
         });
       }
-      await startDunaLiveActivity(
-        {
-          subjectId: player.id,
-          kind: "player",
-          title: player.displayName,
-          subtitle: `${player.homeMarket} · ${player.rating.display.toFixed(2)}`,
-          status: "Following",
-          teamA: player.displayName,
-          teamB: "Next opponent",
-          scoreA: 0,
-          scoreB: 0,
-          setLabel: "Live match alerts ready",
-        },
-        {
-          onPushToken: (token) => {
-            void rememberLiveActivityToken(token, client).catch(
-              () => undefined,
-            );
+      if (!following) {
+        await startDunaLiveActivity(
+          {
+            subjectId: player.id,
+            kind: "player",
+            title: player.displayName,
+            subtitle: `${player.homeMarket} · ${player.rating.display.toFixed(2)}`,
+            status: "Following",
+            teamA: player.displayName,
+            teamB: "Next opponent",
+            scoreA: 0,
+            scoreB: 0,
+            setLabel: "Live match alerts ready",
           },
-        },
-      );
-      setFollowing(true);
+          {
+            onPushToken: (token) => {
+              void rememberLiveActivityToken(token, client).catch(
+                () => undefined,
+              );
+            },
+          },
+        );
+      }
+      setFollowing((current) => !current);
       successHaptic();
     } catch (reason) {
       setError(displayError(reason));
@@ -5291,31 +5571,38 @@ function FollowPlayerCard({ player }: { readonly player: PersonSummary }) {
 
   return (
     <View style={styles.playerFollowCard}>
-      {player.avatarUrl ? (
-        <Image
-          accessibilityIgnoresInvertColors
-          source={{ uri: player.avatarUrl }}
-          style={styles.playerFollowAvatar}
-        />
-      ) : (
-        <View style={styles.playerFollowAvatarFallback}>
-          <Text style={styles.playerFollowAvatarText}>{player.initials}</Text>
-        </View>
-      )}
-      <Text numberOfLines={1} style={styles.playerFollowName}>
-        {player.displayName}
-      </Text>
-      <Text numberOfLines={1} style={styles.playerFollowMeta}>
-        {player.homeMarket} · {player.rating.display.toFixed(2)}
-      </Text>
+      <Pressable
+        accessibilityLabel={`Open ${player.displayName}'s profile`}
+        onPress={() => openPlayerProfile(player)}
+      >
+        {player.avatarUrl ? (
+          <Image
+            accessibilityIgnoresInvertColors
+            source={{ uri: player.avatarUrl }}
+            style={styles.playerFollowAvatar}
+          />
+        ) : (
+          <View style={styles.playerFollowAvatarFallback}>
+            <Text style={styles.playerFollowAvatarText}>{player.initials}</Text>
+          </View>
+        )}
+        <Text numberOfLines={1} style={styles.playerFollowName}>
+          {player.displayName}
+        </Text>
+        <Text numberOfLines={1} style={styles.playerFollowMeta}>
+          {player.isProfessional ? "PRO · " : ""}
+          {player.homeMarket} · {player.rating.display.toFixed(2)}
+        </Text>
+        <Text style={styles.playerFollowProfileLink}>View profile</Text>
+      </Pressable>
       <Pressable
         accessibilityLabel={
           following
             ? `Following ${player.displayName}`
             : `Follow ${player.displayName}`
         }
-        disabled={following || busy}
-        onPress={() => void follow()}
+        disabled={busy}
+        onPress={() => void toggleFollow()}
         style={[
           styles.playerFollowButton,
           following && styles.playerFollowButtonActive,
@@ -5327,7 +5614,7 @@ function FollowPlayerCard({ player }: { readonly player: PersonSummary }) {
             following && styles.playerFollowButtonTextActive,
           ]}
         >
-          {busy ? "Following…" : following ? "✓ Following" : "+ Follow"}
+          {busy ? "Updating…" : following ? "Following" : "+ Follow"}
         </Text>
       </Pressable>
       {error && (
@@ -6237,7 +6524,7 @@ function PlayScreen({
             onPress={() => setShowHost(true)}
             style={styles.scoreAction}
           >
-            <Text style={styles.scoreActionText}>＋ Host pickup</Text>
+            <Text style={styles.scoreActionText}>＋ Host a match</Text>
           </Pressable>
         </View>
         {hostedTitle && (
@@ -6365,7 +6652,7 @@ function PlayScreen({
           ))}
         </View>
         <SectionHeader
-          eyebrow="PICKUP NEARBY"
+          eyebrow="HOSTED MATCHES NEARBY"
           title="Jump into something."
           action="See all"
         />
@@ -6412,14 +6699,14 @@ function PlayScreen({
           </View>
           <Text style={styles.sectionTitle}>Your court. Your people.</Text>
           <Text style={styles.bodyText}>
-            Publish a pickup with a clear time, format, level, and price.
-            Eligible nearby players can discover it immediately.
+            Host a match with a clear time, format, level, and price. Add your
+            partner now or leave spots open for nearby players.
           </Text>
           <Pressable
             onPress={() => setShowHost(true)}
             style={styles.primaryButton}
           >
-            <Text style={styles.primaryButtonText}>Host pickup</Text>
+            <Text style={styles.primaryButtonText}>Host a match</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -6643,7 +6930,7 @@ function PredictionWalletSummaryCard({
   );
 }
 
-function WalletScreen() {
+function WalletScreen({ onClose }: { readonly onClose: () => void }) {
   const { mode, organizationWallets, settings, wallet } = usePlayerRuntime();
   const entries = wallet?.entries ?? demoWalletEntries;
   const balance =
@@ -6654,6 +6941,15 @@ function WalletScreen() {
       contentContainerStyle={styles.screenContent}
       showsVerticalScrollIndicator={false}
     >
+      <View style={styles.walletCloseRow}>
+        <Pressable
+          accessibilityLabel="Close wallet and return to profile"
+          onPress={onClose}
+          style={styles.walletCloseButton}
+        >
+          <Text style={styles.walletCloseText}>×</Text>
+        </Pressable>
+      </View>
       <AppHeader eyebrow="STRIPE-MANAGED BALANCE" />
       <Text style={styles.displayTitle}>Wallet.</Text>
       <View style={styles.walletCard}>
@@ -7161,66 +7457,93 @@ function MobileResultCard({
   readonly match: MobilePerformanceMatch;
   readonly personId: string;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const result = match.actualResult >= 0.5 ? "W" : "L";
   const sides = matchSides(match, personId);
   const expected = Math.round(match.expectedWinProbability * 100);
   return (
     <Pressable
-      onPress={() =>
-        void WebBrowser.openBrowserAsync(
-          `${dunaWebUrl}/app/matches/${match.matchId}`,
-        )
-      }
+      accessibilityHint="Expands the native match breakdown"
+      accessibilityLabel={`${result === "W" ? "Win" : "Loss"} versus ${sides.opponent}`}
+      onPress={() => setExpanded((value) => !value)}
       style={styles.athleteResultCard}
     >
-      <View
-        style={[
-          styles.athleteResultMark,
-          result === "W"
-            ? styles.athleteResultMarkWin
-            : styles.athleteResultMarkLoss,
-        ]}
-      >
-        <Text style={styles.athleteResultMarkText}>{result}</Text>
-      </View>
-      <View style={styles.flex}>
-        <Text numberOfLines={1} style={styles.athleteResultOpponent}>
-          vs. {sides.opponent || "opponent pending"}
-        </Text>
-        <Text numberOfLines={1} style={styles.athleteResultMeta}>
-          {new Intl.DateTimeFormat("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          }).format(new Date(match.occurredAt))}
-          {match.sets.length
-            ? ` · ${match.sets.map((set) => `${set.a}–${set.b}`).join(", ")}`
-            : ""}
-        </Text>
-      </View>
-      <View style={styles.athleteResultDelta}>
-        <Text
+      <View style={styles.athleteResultTopline}>
+        <View
           style={[
-            styles.athleteResultDeltaValue,
-            match.delta >= 0 ? styles.positiveText : styles.negativeText,
+            styles.athleteResultMark,
+            result === "W"
+              ? styles.athleteResultMarkWin
+              : styles.athleteResultMarkLoss,
           ]}
         >
-          {match.delta >= 0 ? "+" : ""}
-          {match.delta.toFixed(2)}
-        </Text>
-        <Text style={styles.athleteResultExpected}>{expected}% expected</Text>
+          <Text style={styles.athleteResultMarkText}>{result}</Text>
+        </View>
+        <View style={styles.flex}>
+          <Text numberOfLines={1} style={styles.athleteResultOpponent}>
+            vs. {sides.opponent || "opponent pending"}
+          </Text>
+          <Text numberOfLines={1} style={styles.athleteResultMeta}>
+            {new Intl.DateTimeFormat("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            }).format(new Date(match.occurredAt))}
+            {match.sets.length
+              ? ` · ${match.sets.map((set) => `${set.a}–${set.b}`).join(", ")}`
+              : ""}
+          </Text>
+        </View>
+        <View style={styles.athleteResultDelta}>
+          <Text
+            style={[
+              styles.athleteResultDeltaValue,
+              match.delta >= 0 ? styles.positiveText : styles.negativeText,
+            ]}
+          >
+            {match.delta >= 0 ? "+" : ""}
+            {match.delta.toFixed(2)}
+          </Text>
+          <Text style={styles.athleteResultExpected}>{expected}% expected</Text>
+        </View>
       </View>
+      {expanded && (
+        <View style={styles.athleteResultBreakdown}>
+          <View>
+            <Text style={styles.athleteResultBreakdownLabel}>SAND RATING</Text>
+            <Text style={styles.athleteResultBreakdownValue}>
+              {match.beforeDisplay.toFixed(2)} → {match.afterDisplay.toFixed(2)}
+            </Text>
+          </View>
+          <View>
+            <Text style={styles.athleteResultBreakdownLabel}>VERIFIED</Text>
+            <Text style={styles.athleteResultBreakdownValue}>
+              {Math.round(match.verificationWeightBps / 100)}%
+            </Text>
+          </View>
+          <View>
+            <Text style={styles.athleteResultBreakdownLabel}>POINT SHARE</Text>
+            <Text style={styles.athleteResultBreakdownValue}>
+              {Math.round(match.pointShare * 100)}%
+            </Text>
+          </View>
+        </View>
+      )}
     </Pressable>
   );
 }
 
 function PerformanceScreen({
+  onArtwork,
   onBack,
+  onEditProfile,
   onHealth,
   onPredictions,
   onWallet,
 }: {
+  readonly onArtwork: () => void;
   readonly onBack: () => void;
+  readonly onEditProfile: () => void;
   readonly onHealth: () => void;
   readonly onPredictions: () => void;
   readonly onWallet: () => void;
@@ -7230,6 +7553,7 @@ function PerformanceScreen({
   const fallbackMatches = dashboard?.recentMatches ?? demoMatches;
   const [intelligence, setIntelligence] = useState<MobilePlayerIntelligence>();
   const [performance, setPerformance] = useState<MobilePlayerPerformance>();
+  const [showAllResults, setShowAllResults] = useState(false);
 
   useEffect(() => {
     if (!client || mode === "preview") return;
@@ -7252,7 +7576,8 @@ function PerformanceScreen({
   }, [client, mode, player.handle]);
 
   const profile = intelligence?.profile;
-  const history = performance?.history ?? [];
+  const history =
+    performance?.history ?? (mode === "preview" ? demoPerformanceHistory : []);
   const chronological = [...history].reverse();
   const recentForm = history.slice(0, 10);
   const wins = history.filter((match) => match.actualResult >= 0.5).length;
@@ -7283,6 +7608,30 @@ function PerformanceScreen({
         right.expectedWinProbability - left.expectedWinProbability,
     )[0];
   const chartMatches = chronological.slice(-18);
+  const pulseMatches = history.slice(0, 12).reverse();
+  const positiveDeltas = history
+    .filter((match) => match.delta > 0)
+    .map((match) => match.delta);
+  const negativeDeltas = history
+    .filter((match) => match.delta < 0)
+    .map((match) => Math.abs(match.delta));
+  const averagePositiveDelta = positiveDeltas.length
+    ? positiveDeltas.reduce((total, value) => total + value, 0) /
+      positiveDeltas.length
+    : 0;
+  const averageNegativeDelta = negativeDeltas.length
+    ? negativeDeltas.reduce((total, value) => total + value, 0) /
+      negativeDeltas.length
+    : 0;
+  const upsetWins = history.filter(
+    (match) => match.actualResult >= 0.5 && match.expectedWinProbability < 0.5,
+  ).length;
+  const favoriteWins = history.filter(
+    (match) => match.actualResult >= 0.5 && match.expectedWinProbability >= 0.5,
+  ).length;
+  const favoriteLosses = history.filter(
+    (match) => match.actualResult < 0.5 && match.expectedWinProbability >= 0.5,
+  ).length;
   const ratingValues = chartMatches.flatMap((match) => [
     match.beforeDisplay,
     match.afterDisplay,
@@ -7294,6 +7643,7 @@ function PerformanceScreen({
     ? Math.max(...ratingValues)
     : currentRating + 0.12;
   const worldRank = performance?.worldRanking;
+  const professionalStatistics = performance?.professionalStatistics;
   const worldMovement = worldRank?.previousRank
     ? worldRank.previousRank - worldRank.rank
     : undefined;
@@ -7382,12 +7732,7 @@ function PerformanceScreen({
               </Text>
             </Pressable>
             <Pressable
-              disabled={mode === "preview"}
-              onPress={() =>
-                void WebBrowser.openBrowserAsync(
-                  `${dunaWebUrl}/app/settings#player-artwork`,
-                )
-              }
+              onPress={onArtwork}
               style={styles.athleteHeroSecondaryAction}
             >
               <Text style={styles.athleteHeroSecondaryActionText}>
@@ -7558,6 +7903,121 @@ function PerformanceScreen({
         </View>
       </View>
 
+      {pulseMatches.length ? (
+        <View
+          accessibilityLabel={`Recent form: ${pulseMatches.map((match) => (match.actualResult >= 0.5 ? "win" : "loss")).join(", ")}`}
+          style={styles.performancePulseCard}
+        >
+          <View style={styles.cardTitleRow}>
+            <View>
+              <Text style={styles.eyebrow}>MATCH PULSE</Text>
+              <Text style={styles.performancePulseTitle}>Your last 12.</Text>
+            </View>
+            <Text style={styles.performancePulseRecord}>
+              {lastTenWins}–{recentForm.length - lastTenWins}
+            </Text>
+          </View>
+          <View style={styles.performancePulseTrack}>
+            {pulseMatches.map((match) => (
+              <View
+                key={match.id}
+                style={[
+                  styles.performancePulsePoint,
+                  match.actualResult >= 0.5
+                    ? styles.performancePulsePointWin
+                    : styles.performancePulsePointLoss,
+                ]}
+              >
+                <Text style={styles.performancePulsePointText}>
+                  {match.actualResult >= 0.5 ? "W" : "L"}
+                </Text>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.performancePulseSummary}>
+            {upsetWins} upset {upsetWins === 1 ? "win" : "wins"} ·{" "}
+            {favoriteWins} wins as favorite · {favoriteLosses} favored{" "}
+            {favoriteLosses === 1 ? "loss" : "losses"}
+          </Text>
+        </View>
+      ) : null}
+
+      {history.length ? (
+        <View
+          accessibilityLabel={`Average rating gain ${averagePositiveDelta.toFixed(2)}. Average rating loss ${averageNegativeDelta.toFixed(2)}.`}
+          style={styles.performanceImpactCard}
+        >
+          <Text style={styles.eyebrow}>RATING IMPACT</Text>
+          <Text style={styles.performancePulseTitle}>What results move.</Text>
+          <View style={styles.performanceImpactRows}>
+            <View style={styles.performanceImpactRow}>
+              <Text style={styles.performanceImpactLabel}>Average win</Text>
+              <View style={styles.performanceImpactTrack}>
+                <View
+                  style={[
+                    styles.performanceImpactFill,
+                    styles.performanceImpactFillWin,
+                    {
+                      width: `${Math.max(8, Math.min(100, averagePositiveDelta * 1_000))}%`,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.performanceImpactValue}>
+                +{averagePositiveDelta.toFixed(2)}
+              </Text>
+            </View>
+            <View style={styles.performanceImpactRow}>
+              <Text style={styles.performanceImpactLabel}>Average loss</Text>
+              <View style={styles.performanceImpactTrack}>
+                <View
+                  style={[
+                    styles.performanceImpactFill,
+                    styles.performanceImpactFillLoss,
+                    {
+                      width: `${Math.max(8, Math.min(100, averageNegativeDelta * 1_000))}%`,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.performanceImpactValue}>
+                −{averageNegativeDelta.toFixed(2)}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.performancePulseSummary}>
+            Rating movement blends opponent strength, score shape,
+            responsibility, and verification confidence.
+          </Text>
+        </View>
+      ) : null}
+
+      {professionalStatistics ? (
+        <View style={styles.performanceStatsCard}>
+          <Text style={styles.eyebrow}>PRO MATCH SIGNALS</Text>
+          <Text style={styles.performancePulseTitle}>Tracked per set.</Text>
+          <View style={styles.performanceStatsGrid}>
+            {[
+              ["Aces", professionalStatistics.acesPerSet],
+              ["Blocks", professionalStatistics.blocksPerSet],
+              ["Digs", professionalStatistics.digsPerSet],
+              ["Hit eff.", professionalStatistics.hittingEfficiency],
+            ].map(([label, value]) => (
+              <View key={String(label)} style={styles.performanceStat}>
+                <Text style={styles.performanceStatValue}>
+                  {typeof value === "number" ? value.toFixed(2) : "—"}
+                </Text>
+                <Text style={styles.performanceStatLabel}>{label}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.performancePulseSummary}>
+            Based on {professionalStatistics.matches} tracked professional{" "}
+            {professionalStatistics.matches === 1 ? "match" : "matches"}.
+          </Text>
+        </View>
+      ) : null}
+
       {(biggestUpset || toughestLoss) && (
         <>
           <SectionHeader
@@ -7659,27 +8119,31 @@ function PerformanceScreen({
             title="Recent rated matches."
           />
           <View style={styles.athleteResultsList}>
-            {history.slice(0, 8).map((match) => (
-              <MobileResultCard
-                key={match.id}
-                match={match}
-                personId={player.id}
-              />
-            ))}
+            {history
+              .slice(0, showAllResults ? history.length : 12)
+              .map((match) => (
+                <MobileResultCard
+                  key={match.id}
+                  match={match}
+                  personId={player.id}
+                />
+              ))}
           </View>
-          <Pressable
-            onPress={() =>
-              void WebBrowser.openBrowserAsync(
-                `${dunaWebUrl}/players/${player.handle}#matches`,
-              )
-            }
-            style={styles.athleteFullHistoryButton}
-          >
-            <Text style={styles.athleteFullHistoryButtonText}>
-              Open full match history
-            </Text>
-            <Text style={styles.athleteFullHistoryButtonText}>↗</Text>
-          </Pressable>
+          {history.length > 12 && (
+            <Pressable
+              onPress={() => setShowAllResults((value) => !value)}
+              style={styles.athleteFullHistoryButton}
+            >
+              <Text style={styles.athleteFullHistoryButtonText}>
+                {showAllResults
+                  ? "Show recent 12"
+                  : `Show all ${history.length} results`}
+              </Text>
+              <Text style={styles.athleteFullHistoryButtonText}>
+                {showAllResults ? "↑" : "↓"}
+              </Text>
+            </Pressable>
+          )}
         </>
       ) : null}
 
@@ -7726,8 +8190,8 @@ function PerformanceScreen({
           </View>
         </View>
         <Text style={styles.bodyText}>
-          Add playing details, connect match sources, and submit one action
-          photo plus two or three portraits for your reviewable Duna artwork
+          Add playing details, connect match sources, and submit two to five
+          high-resolution playing photos for your reviewable Duna artwork
           package.
         </Text>
         <View style={styles.profileSetupStatus}>
@@ -7742,27 +8206,12 @@ function PerformanceScreen({
         </View>
         <View style={styles.athleteStudioActions}>
           <Pressable
-            disabled={mode === "preview"}
-            onPress={() =>
-              void WebBrowser.openBrowserAsync(
-                settings?.profile.onboardingStatus === "complete"
-                  ? `${dunaWebUrl}/app/settings#playing-profile`
-                  : `${dunaWebUrl}/app/onboarding`,
-              )
-            }
+            onPress={onEditProfile}
             style={[styles.primaryButton, styles.flex]}
           >
             <Text style={styles.primaryButtonText}>Edit player details</Text>
           </Pressable>
-          <Pressable
-            disabled={mode === "preview"}
-            onPress={() =>
-              void WebBrowser.openBrowserAsync(
-                `${dunaWebUrl}/app/settings#player-artwork`,
-              )
-            }
-            style={styles.athleteStudioSecondary}
-          >
+          <Pressable onPress={onArtwork} style={styles.athleteStudioSecondary}>
             <Text style={styles.athleteStudioSecondaryText}>Artwork</Text>
           </Pressable>
         </View>
@@ -7802,9 +8251,15 @@ function PerformanceScreen({
           <Text style={styles.rowTitle}>Prediction portfolio</Text>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
+        <Pressable onPress={onEditProfile} style={styles.profileMenuRow}>
+          <Text style={styles.rowTitle}>Player details + identity</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+        <Pressable onPress={onArtwork} style={styles.profileMenuRow}>
+          <Text style={styles.rowTitle}>Player artwork</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
         {[
-          ["Player details + identity", "#playing-profile"],
-          ["Player artwork", "#player-artwork"],
           ["Notifications", "#notifications"],
           ["Privacy + safety", "#privacy"],
           ["Language + units", "#profile"],
@@ -7849,6 +8304,7 @@ function BookingModal({
 }) {
   const { client, dashboard, mode, people, refresh, settings } =
     usePlayerRuntime();
+  const { openPlayerProfile } = usePlayerProfileNavigation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [complete, setComplete] = useState<{
@@ -7875,6 +8331,10 @@ function BookingModal({
     readonly TeammateSearchResult[]
   >([]);
   const [inviteTarget, setInviteTarget] = useState("");
+  const [pickupPartner, setPickupPartner] = useState<readonly PersonSummary[]>(
+    [],
+  );
+  const [showPickupPartnerPicker, setShowPickupPartnerPicker] = useState(false);
   const [acceptedPolicyIds, setAcceptedPolicyIds] = useState<readonly string[]>(
     [],
   );
@@ -7925,20 +8385,28 @@ function BookingModal({
     event.startsAt,
   );
   const listedPrice =
-    purchaseKind === "ticket"
-      ? (ticket?.price ?? event.price)
-      : teamPaymentMode === "team"
-        ? (division?.teamPrice ?? division?.price ?? event.price)
-        : (division?.playerPrice ?? division?.price ?? event.price);
+    event.kind === "pickup"
+      ? {
+          ...event.price,
+          amountMinor:
+            event.price.amountMinor * (pickupPartner.length > 0 ? 2 : 1),
+        }
+      : purchaseKind === "ticket"
+        ? (ticket?.price ?? event.price)
+        : teamPaymentMode === "team"
+          ? (division?.teamPrice ?? division?.price ?? event.price)
+          : (division?.playerPrice ?? division?.price ?? event.price);
   const selectedTeamSize =
-    division?.teamSize ??
-    {
-      solo: 1,
-      doubles: 2,
-      "three-person": 3,
-      "four-person": 4,
-      "six-person": 6,
-    }[division?.teamFormat ?? "solo"];
+    event.kind === "pickup"
+      ? 2
+      : (division?.teamSize ??
+        {
+          solo: 1,
+          doubles: 2,
+          "three-person": 3,
+          "four-person": 4,
+          "six-person": 6,
+        }[division?.teamFormat ?? "solo"]);
   const requiredPolicies =
     event.policies?.filter(
       (policy) =>
@@ -7946,7 +8414,9 @@ function BookingModal({
         (purchaseKind === "entry" || policy.kind !== "waiver"),
     ) ?? [];
   const rosterComplete =
-    selectedTeamSize <= 1 || teamRoster.length >= selectedTeamSize - 1;
+    event.kind === "pickup" ||
+    selectedTeamSize <= 1 ||
+    teamRoster.length >= selectedTeamSize - 1;
   const policiesComplete = requiredPolicies.every((policy) =>
     acceptedPolicyIds.includes(policy.id),
   );
@@ -8002,6 +8472,8 @@ function BookingModal({
     setTeammateQuery("");
     setTeammateResults([]);
     setInviteTarget("");
+    setPickupPartner([]);
+    setShowPickupPartnerPicker(false);
     setAcceptedPolicyIds([]);
     setSelectedParticipantId(undefined);
     setBusy(false);
@@ -8033,13 +8505,22 @@ function BookingModal({
         ticketTypeId: purchaseKind === "ticket" ? ticket?.id : undefined,
         ticketQuantity: purchaseKind === "ticket" ? ticketQuantity : undefined,
         teamPaymentMode:
-          purchaseKind === "entry" && selectedTeamSize > 1
-            ? teamPaymentMode
-            : undefined,
+          selectedEvent.kind === "pickup"
+            ? pickupPartner.length
+              ? "team"
+              : "self"
+            : purchaseKind === "entry" && selectedTeamSize > 1
+              ? teamPaymentMode
+              : undefined,
         teamRoster:
-          purchaseKind === "entry" && selectedTeamSize > 1
-            ? [...teamRoster]
-            : undefined,
+          selectedEvent.kind === "pickup"
+            ? pickupPartner.map((partner) => ({
+                personId: partner.id,
+                displayName: partner.displayName,
+              }))
+            : purchaseKind === "entry" && selectedTeamSize > 1
+              ? [...teamRoster]
+              : undefined,
         subjectPersonId:
           purchaseKind === "entry" ? selectedParticipant?.person.id : undefined,
         acceptedPolicyIds: [...acceptedPolicyIds],
@@ -8147,6 +8628,278 @@ function BookingModal({
         onClose={close}
         onUpdated={refresh}
       />
+    );
+  }
+
+  if (selectedEvent.kind === "pickup") {
+    const startsAt = new Date(selectedEvent.startsAt);
+    const endsAt = new Date(selectedEvent.endsAt);
+    const durationMinutes = Math.max(
+      1,
+      Math.round((endsAt.getTime() - startsAt.getTime()) / 60_000),
+    );
+    const partner = pickupPartner[0];
+    const canAddPartner = selectedEvent.spotsRemaining >= 2;
+    return (
+      <>
+        <Modal
+          animationType="slide"
+          onRequestClose={close}
+          presentationStyle="pageSheet"
+          visible={eventIndex !== null}
+        >
+          {showPickupPartnerPicker ? (
+            <PlayerPickerModal
+              embedded
+              excludedPersonIds={[player.id]}
+              maxSelected={1}
+              onChange={setPickupPartner}
+              onClose={() => setShowPickupPartnerPicker(false)}
+              palette={colors}
+              selected={pickupPartner}
+              title="Choose your partner"
+              visible
+            />
+          ) : (
+            <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
+              {complete ? (
+                <View style={styles.completeState}>
+                  <View style={styles.completeIcon}>
+                    <Text style={styles.completeIconText}>✓</Text>
+                  </View>
+                  <Pill
+                    tone={complete.label === "Pending" ? "warning" : "positive"}
+                  >
+                    {complete.label}
+                  </Pill>
+                  <Text style={styles.completeTitle}>{complete.title}</Text>
+                  <Text style={styles.completeBody}>{complete.body}</Text>
+                  <Pressable onPress={close} style={styles.primaryButton}>
+                    <Text style={styles.primaryButtonText}>Done</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.hostedReviewHeader}>
+                    <View style={styles.flex}>
+                      <Text style={styles.eyebrow}>HOSTED MATCH</Text>
+                      <Text style={styles.hostedReviewTitle}>Review</Text>
+                    </View>
+                    <Pressable
+                      accessibilityLabel="Close match review"
+                      onPress={close}
+                      style={styles.hostedReviewClose}
+                    >
+                      <Text style={styles.closeText}>×</Text>
+                    </Pressable>
+                  </View>
+                  <ScrollView
+                    contentContainerStyle={styles.hostedReviewContent}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    <View style={styles.hostedReviewSummary}>
+                      <View style={styles.flex}>
+                        <Text style={styles.hostedReviewDate}>
+                          {startsAt.toLocaleDateString("en-US", {
+                            weekday: "long",
+                            month: "long",
+                            day: "numeric",
+                          })}
+                        </Text>
+                        <Text style={styles.hostedReviewTime}>
+                          {startsAt.toLocaleTimeString("en-US", {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}{" "}
+                          –{" "}
+                          {endsAt.toLocaleTimeString("en-US", {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </Text>
+                        <Text style={styles.hostedReviewMeta}>
+                          {selectedEvent.tags.includes("Competitive")
+                            ? "Competitive"
+                            : "Casual"}{" "}
+                          · {selectedEvent.format?.replace("-", " ") ?? "Beach"}{" "}
+                          · {selectedEvent.venueName}
+                        </Text>
+                        {selectedEvent.ratingRange && (
+                          <Text style={styles.hostedReviewMeta}>
+                            Sand Rating{" "}
+                            {selectedEvent.ratingRange[0].toFixed(2)}–
+                            {selectedEvent.ratingRange[1].toFixed(2)}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={styles.hostedReviewDuration}>
+                        <Text style={styles.hostedReviewDurationMark}>◷</Text>
+                        <Text style={styles.hostedReviewDurationValue}>
+                          {durationMinutes}
+                        </Text>
+                        <Text style={styles.hostedReviewDurationLabel}>
+                          MIN
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.hostedPartnerCard,
+                        !canAddPartner && styles.hostedPartnerCardDisabled,
+                      ]}
+                    >
+                      <View style={styles.hostedPartnerTop}>
+                        <View style={styles.flex}>
+                          <Text style={styles.hostedPartnerTitle}>
+                            Join with a partner
+                          </Text>
+                          <Text style={styles.hostedPartnerMeta}>
+                            Reserve and pay for two places together.
+                          </Text>
+                        </View>
+                        <View style={styles.hostedPartnerIllustration}>
+                          <View style={styles.hostedPartnerSilhouette} />
+                          <View
+                            style={[
+                              styles.hostedPartnerSilhouette,
+                              styles.hostedPartnerSilhouetteBack,
+                            ]}
+                          />
+                        </View>
+                      </View>
+                      {partner ? (
+                        <View style={styles.hostedSelectedPartner}>
+                          <Pressable
+                            accessibilityLabel={
+                              "Open " + partner.displayName + "'s profile"
+                            }
+                            onPress={() => openPlayerProfile(partner)}
+                          >
+                            {partner.avatarUrl ? (
+                              <Image
+                                accessibilityIgnoresInvertColors
+                                source={{ uri: partner.avatarUrl }}
+                                style={styles.hostedPartnerAvatar}
+                              />
+                            ) : (
+                              <View style={styles.hostedPartnerAvatarFallback}>
+                                <Text style={styles.hostedPartnerAvatarText}>
+                                  {partner.initials}
+                                </Text>
+                              </View>
+                            )}
+                          </Pressable>
+                          <Pressable
+                            onPress={() => openPlayerProfile(partner)}
+                            style={styles.flex}
+                          >
+                            <Text style={styles.hostedSelectedPartnerName}>
+                              {partner.displayName}
+                            </Text>
+                            <Text style={styles.hostedSelectedPartnerMeta}>
+                              {partner.homeMarket} ·{" "}
+                              {partner.rating.display.toFixed(2)} Sand
+                            </Text>
+                          </Pressable>
+                          <Pressable
+                            accessibilityLabel="Remove partner"
+                            onPress={() => setPickupPartner([])}
+                            style={styles.hostedRemovePartner}
+                          >
+                            <Text style={styles.hostedRemovePartnerText}>
+                              ×
+                            </Text>
+                          </Pressable>
+                        </View>
+                      ) : (
+                        <Pressable
+                          disabled={!canAddPartner}
+                          onPress={() => setShowPickupPartnerPicker(true)}
+                          style={styles.hostedAddPartner}
+                        >
+                          <Text style={styles.hostedAddPartnerText}>
+                            {canAddPartner
+                              ? "Add partner (0/1)"
+                              : "Two places are not available"}
+                          </Text>
+                          <Text style={styles.hostedAddPartnerArrow}>＋</Text>
+                        </Pressable>
+                      )}
+                      {partner && (
+                        <Text style={styles.hostedPartnerPolicy}>
+                          Both places are managed as one paid booking.
+                          Cancelling releases both places together.
+                        </Text>
+                      )}
+                    </View>
+
+                    <View style={styles.hostedTotalCard}>
+                      <View style={styles.flex}>
+                        <Text style={styles.hostedTotalLabel}>Total</Text>
+                        <Text style={styles.hostedTotalMeta}>
+                          {partner ? "2 places" : "1 place"} · Service fees
+                          shown before payment
+                        </Text>
+                      </View>
+                      <Text style={styles.hostedTotalValue}>
+                        {listedPrice.amountMinor
+                          ? formatMoney(
+                              listedPrice.amountMinor,
+                              listedPrice.currency,
+                            )
+                          : "FREE"}
+                      </Text>
+                    </View>
+
+                    <View style={styles.hostedPolicyCard}>
+                      <Text style={styles.hostedPolicyMark}>i</Text>
+                      <View style={styles.flex}>
+                        <Text style={styles.hostedPolicyTitle}>
+                          Cancellation policy
+                        </Text>
+                        <Text style={styles.hostedPolicyBody}>
+                          Registration closes when the match begins. Any
+                          eligible refund follows the host and venue policy
+                          shown at checkout.
+                        </Text>
+                      </View>
+                    </View>
+
+                    {error && (
+                      <View style={styles.errorBanner}>
+                        <Text style={styles.errorText}>{error}</Text>
+                      </View>
+                    )}
+                  </ScrollView>
+                  <View style={styles.hostedReviewFooter}>
+                    <Pressable
+                      disabled={busy || mode === "preview"}
+                      onPress={() => void checkout()}
+                      style={[
+                        styles.hostedReviewContinue,
+                        (busy || mode === "preview") && styles.buttonDisabled,
+                      ]}
+                    >
+                      <Text style={styles.hostedReviewContinueText}>
+                        {mode === "preview"
+                          ? "Sign in to reserve"
+                          : busy
+                            ? "Securing places…"
+                            : listedPrice.amountMinor
+                              ? "Continue payment"
+                              : partner
+                                ? "Confirm both places"
+                                : "Confirm place"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </>
+              )}
+            </SafeAreaView>
+          )}
+        </Modal>
+      </>
     );
   }
 
@@ -8958,16 +9711,17 @@ function PickupModal({
   readonly onCreated: (title: string) => void;
 }) {
   const { client, dashboard, mode, refresh, venues } = usePlayerRuntime();
+  const [step, setStep] = useState(0);
   const [title, setTitle] = useState("");
   const [venueName, setVenueName] = useState("");
   const [venueId, setVenueId] = useState<string>();
   const [courtBookingId, setCourtBookingId] = useState<string>();
   const [startsAt, setStartsAt] = useState(defaultPickupStart);
-  const [durationMinutes, setDurationMinutes] = useState("120");
-  const [capacity, setCapacity] = useState("8");
+  const [durationMinutes, setDurationMinutes] = useState(90);
+  const [capacity, setCapacity] = useState(4);
   const [format, setFormat] = useState<
     "2s" | "3s" | "4s" | "6s" | "king-queen"
-  >("4s");
+  >("2s");
   const [matchType, setMatchType] = useState<"competitive" | "casual">(
     "competitive",
   );
@@ -8980,31 +9734,89 @@ function PickupModal({
   const [cost, setCost] = useState("0");
   const [note, setNote] = useState("");
   const [recordMatches, setRecordMatches] = useState(true);
+  const [visibility, setVisibility] = useState<"public" | "unlisted">("public");
+  const [selectedPlayers, setSelectedPlayers] = useState<
+    readonly PersonSummary[]
+  >([]);
+  const [showPlayerPicker, setShowPlayerPicker] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const courtReservations = (dashboard?.bookings ?? []).filter(
     (booking) =>
       booking.kind === "court-rental" && new Date(booking.endsAt) > new Date(),
   );
+  const host = dashboard?.player ?? demoPlayer;
+  const start = new Date(startsAt);
+  const dayChoices = Array.from({ length: 7 }, (_, index) => {
+    const day = new Date();
+    day.setHours(start.getHours(), start.getMinutes(), 0, 0);
+    day.setDate(day.getDate() + index);
+    return day;
+  });
+  const timeChoices = [
+    { label: "9:00 AM", hour: 9 },
+    { label: "12:00 PM", hour: 12 },
+    { label: "5:00 PM", hour: 17 },
+    { label: "7:00 PM", hour: 19 },
+  ] as const;
+  const steps = ["Match", "When + where", "Players", "Access", "Review"];
+
+  function localInputValue(date: Date) {
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+    return local.toISOString().slice(0, 16);
+  }
+
+  function chooseDay(day: Date) {
+    const next = new Date(start);
+    next.setFullYear(day.getFullYear(), day.getMonth(), day.getDate());
+    setStartsAt(localInputValue(next));
+    setCourtBookingId(undefined);
+  }
+
+  function chooseTime(hour: number) {
+    const next = new Date(start);
+    next.setHours(hour, 0, 0, 0);
+    setStartsAt(localInputValue(next));
+    setCourtBookingId(undefined);
+  }
+
+  function close() {
+    setError(undefined);
+    setShowPlayerPicker(false);
+    onClose();
+  }
+
+  function nextStep() {
+    setError(undefined);
+    if (step === 0 && title.trim().length < 3) {
+      setError("Give the match a short, recognizable name.");
+      return;
+    }
+    if (
+      step === 1 &&
+      (venueName.trim().length < 2 || !Number.isFinite(start.getTime()))
+    ) {
+      setError("Choose a valid place, day, and time.");
+      return;
+    }
+    if (step === 1 && start.getTime() <= Date.now()) {
+      setError("Choose a future start time.");
+      return;
+    }
+    if (step === 2 && selectedPlayers.length + 1 > capacity) {
+      setError("Remove a player or increase the match capacity.");
+      return;
+    }
+    setStep((current) => Math.min(4, current + 1));
+  }
 
   async function publish() {
     if (!client || mode === "preview") return;
-    const start = new Date(startsAt);
-    const duration = Number(durationMinutes);
-    const playerCapacity = Number(capacity);
     const dollars = Number(cost);
     const ratingMin = Number(ratingMinimum);
     const ratingMax = Number(ratingMaximum);
     if (!Number.isFinite(start.getTime())) {
       setError("Enter the start as YYYY-MM-DDTHH:MM.");
-      return;
-    }
-    if (!Number.isInteger(duration) || duration < 30 || duration > 480) {
-      setError("Duration must be between 30 and 480 minutes.");
-      return;
-    }
-    if (!Number.isInteger(playerCapacity) || playerCapacity < 2) {
-      setError("Capacity must be at least two players.");
       return;
     }
     if (!Number.isFinite(dollars) || dollars < 0 || dollars > 1_000) {
@@ -9029,19 +9841,22 @@ function PickupModal({
       const event = await client.player.createPickup.mutate({
         title: title.trim(),
         startsAt: start.toISOString(),
-        endsAt: new Date(start.getTime() + duration * 60 * 1_000).toISOString(),
+        endsAt: new Date(
+          start.getTime() + durationMinutes * 60 * 1_000,
+        ).toISOString(),
         venueName: venueName.trim(),
         venueId,
         courtBookingId,
-        capacity: playerCapacity,
+        capacity,
         format,
         matchType,
         genderPreference,
         note: note.trim() || undefined,
-        visibility: "public",
+        visibility,
         costMinor: Math.round(dollars * 100),
         currency: "USD",
         recordMatches,
+        participantPersonIds: selectedPlayers.map((player) => player.id),
         ratingMinimum:
           ratingEnabled && matchType === "competitive" ? ratingMin : undefined,
         ratingMaximum:
@@ -9053,6 +9868,10 @@ function PickupModal({
       setTitle("");
       setVenueName("");
       setNote("");
+      setStep(0);
+      setSelectedPlayers([]);
+      setCourtBookingId(undefined);
+      setVenueId(undefined);
     } catch (reason) {
       setError(displayError(reason));
     } finally {
@@ -9061,331 +9880,687 @@ function PickupModal({
   }
 
   return (
-    <Modal
-      animationType="slide"
-      onRequestClose={onClose}
-      presentationStyle="pageSheet"
-      visible={visible}
-    >
-      <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
-        <ScrollView contentContainerStyle={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Pressable onPress={onClose}>
-              <Text style={styles.closeText}>×</Text>
-            </Pressable>
-            <Text style={styles.modalHeaderTitle}>Host pickup</Text>
-            <Text style={styles.rowMeta}>Public</Text>
-          </View>
-          <Text style={styles.checkoutTitle}>Make the next game happen.</Text>
-          <Text style={styles.checkoutMeta}>
-            Choose the game, who it is for, and optionally attach a confirmed
-            court reservation. It appears in Discover immediately.
-          </Text>
-          <View style={styles.formStack}>
-            <TextInput
-              onChangeText={setTitle}
-              placeholder="Pickup title"
-              placeholderTextColor={colors.muted}
-              style={styles.formInput}
-              value={title}
-            />
-            <Text style={styles.formSectionLabel}>MATCH TYPE</Text>
-            <View style={styles.pickupChoiceGrid}>
-              {(["competitive", "casual"] as const).map((option) => (
-                <Pressable
-                  key={option}
-                  onPress={() => {
-                    setMatchType(option);
-                    if (option === "casual") setRatingEnabled(false);
-                  }}
-                  style={[
-                    styles.pickupChoiceCard,
-                    matchType === option && styles.pickupChoiceCardActive,
-                  ]}
-                >
-                  <Text style={styles.rowTitle}>
-                    {option === "competitive" ? "Competitive" : "Casual"}
-                  </Text>
-                  <Text style={styles.rowMeta}>
-                    {option === "competitive"
-                      ? "Rated play with a clear range"
-                      : "Social play without rating impact"}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            {courtReservations.length > 0 && (
-              <>
-                <Text style={styles.formSectionLabel}>
-                  USE A COURT YOU BOOKED
+    <>
+      <Modal
+        animationType="slide"
+        onRequestClose={close}
+        presentationStyle="pageSheet"
+        visible={visible}
+      >
+        {showPlayerPicker ? (
+          <PlayerPickerModal
+            embedded
+            excludedPersonIds={[host.id]}
+            maxSelected={Math.max(1, capacity - 1)}
+            onChange={setSelectedPlayers}
+            onClose={() => setShowPlayerPicker(false)}
+            palette={colors}
+            selected={selectedPlayers}
+            title="Add players"
+            visible
+          />
+        ) : (
+          <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
+            <View style={styles.hostFlowHeader}>
+              <Pressable
+                accessibilityLabel="Close host match"
+                onPress={close}
+                style={styles.hostFlowClose}
+              >
+                <Text style={styles.closeText}>×</Text>
+              </Pressable>
+              <View style={styles.flex}>
+                <Text style={styles.hostFlowEyebrow}>
+                  STEP {step + 1} OF {steps.length}
                 </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.horizontalBleed}
-                >
-                  <View style={styles.pickupReservationRow}>
-                    <Pressable
-                      onPress={() => setCourtBookingId(undefined)}
-                      style={[
-                        styles.pickupReservation,
-                        !courtBookingId && styles.pickupReservationActive,
-                      ]}
-                    >
-                      <Text style={styles.rowTitle}>No linked court</Text>
-                      <Text style={styles.rowMeta}>Use a custom location</Text>
-                    </Pressable>
-                    {courtReservations.map((booking) => (
+                <Text style={styles.hostFlowHeaderTitle}>{steps[step]}</Text>
+              </View>
+              <Text style={styles.hostFlowProgressValue}>
+                {Math.round(((step + 1) / steps.length) * 100)}%
+              </Text>
+            </View>
+            <View style={styles.hostFlowProgressTrack}>
+              <View
+                style={[
+                  styles.hostFlowProgressFill,
+                  { width: `${((step + 1) / steps.length) * 100}%` },
+                ]}
+              />
+            </View>
+            <ScrollView
+              contentContainerStyle={styles.hostFlowContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {step === 0 && (
+                <>
+                  <Text style={styles.hostFlowTitle}>
+                    What are you hosting?
+                  </Text>
+                  <Text style={styles.hostFlowBody}>
+                    Start with the game. You can add the place, players, and
+                    access rules next.
+                  </Text>
+                  <TextInput
+                    autoFocus
+                    onChangeText={setTitle}
+                    placeholder="e.g. Saturday doubles at Hermosa"
+                    placeholderTextColor={colors.muted}
+                    style={styles.hostFlowInput}
+                    value={title}
+                  />
+                  <Text style={styles.hostFlowLabel}>MATCH FEEL</Text>
+                  <View style={styles.hostFlowChoiceGrid}>
+                    {(["competitive", "casual"] as const).map((option) => (
                       <Pressable
-                        key={booking.id}
+                        key={option}
                         onPress={() => {
-                          const start = new Date(booking.startsAt);
-                          const end = new Date(booking.endsAt);
-                          const local = new Date(
-                            start.getTime() -
-                              start.getTimezoneOffset() * 60_000,
-                          );
-                          setCourtBookingId(booking.id);
-                          setVenueName(booking.venueName);
-                          setStartsAt(local.toISOString().slice(0, 16));
-                          setDurationMinutes(
-                            String(
-                              Math.round(
-                                (end.getTime() - start.getTime()) / 60_000,
-                              ),
-                            ),
-                          );
+                          setMatchType(option);
+                          setRatingEnabled(option === "competitive");
                         }}
                         style={[
-                          styles.pickupReservation,
-                          courtBookingId === booking.id &&
-                            styles.pickupReservationActive,
+                          styles.hostFlowChoice,
+                          matchType === option && styles.hostFlowChoiceActive,
                         ]}
                       >
-                        <Text style={styles.rowTitle}>{booking.venueName}</Text>
-                        <Text style={styles.rowMeta}>
-                          {new Date(booking.startsAt).toLocaleString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })}
+                        <Text style={styles.hostFlowChoiceTitle}>
+                          {option === "competitive" ? "Competitive" : "Casual"}
+                        </Text>
+                        <Text style={styles.hostFlowChoiceBody}>
+                          {option === "competitive"
+                            ? "Verified results can affect Sand Rating."
+                            : "Social play without rating impact."}
                         </Text>
                       </Pressable>
                     ))}
                   </View>
-                </ScrollView>
-              </>
-            )}
-            <TextInput
-              editable={!courtBookingId}
-              onChangeText={(value) => {
-                setVenueName(value);
-                setVenueId(undefined);
-              }}
-              placeholder="Venue or court"
-              placeholderTextColor={colors.muted}
-              style={styles.formInput}
-              value={venueName}
-            />
-            {!courtBookingId && venues && venues.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.filterRow}>
-                  {venues.map((venue) => (
-                    <Pressable
-                      key={venue.id}
-                      onPress={() => {
-                        setVenueId(venue.id);
-                        setVenueName(venue.name);
-                      }}
-                      style={[
-                        styles.filterChip,
-                        venueId === venue.id && styles.filterChipActive,
-                      ]}
+                  <Text style={styles.hostFlowLabel}>FORMAT</Text>
+                  <View style={styles.hostFlowChipWrap}>
+                    {(["2s", "3s", "4s", "6s", "king-queen"] as const).map(
+                      (option) => (
+                        <Pressable
+                          key={option}
+                          onPress={() => {
+                            setFormat(option);
+                            const nextCapacity =
+                              option === "2s"
+                                ? 4
+                                : option === "3s"
+                                  ? 6
+                                  : option === "4s"
+                                    ? 8
+                                    : option === "6s"
+                                      ? 12
+                                      : 8;
+                            setCapacity(nextCapacity);
+                            setSelectedPlayers((current) =>
+                              current.slice(0, nextCapacity - 1),
+                            );
+                          }}
+                          style={[
+                            styles.hostFlowChip,
+                            format === option && styles.hostFlowChipActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.hostFlowChipText,
+                              format === option &&
+                                styles.hostFlowChipTextActive,
+                            ]}
+                          >
+                            {option === "king-queen"
+                              ? "King / Queen"
+                              : option.toUpperCase()}
+                          </Text>
+                        </Pressable>
+                      ),
+                    )}
+                  </View>
+                </>
+              )}
+
+              {step === 1 && (
+                <>
+                  <Text style={styles.hostFlowTitle}>When and where?</Text>
+                  <Text style={styles.hostFlowBody}>
+                    Choose a court you already booked or set a clear place and
+                    start time.
+                  </Text>
+                  {courtReservations.length > 0 && (
+                    <>
+                      <Text style={styles.hostFlowLabel}>YOUR COURTS</Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.hostFlowHorizontal}
+                      >
+                        {courtReservations.map((booking) => (
+                          <Pressable
+                            key={booking.id}
+                            onPress={() => {
+                              const bookingStart = new Date(booking.startsAt);
+                              const bookingEnd = new Date(booking.endsAt);
+                              setCourtBookingId(booking.id);
+                              setVenueName(booking.venueName);
+                              setStartsAt(localInputValue(bookingStart));
+                              setDurationMinutes(
+                                Math.round(
+                                  (bookingEnd.getTime() -
+                                    bookingStart.getTime()) /
+                                    60_000,
+                                ),
+                              );
+                            }}
+                            style={[
+                              styles.hostFlowCourt,
+                              courtBookingId === booking.id &&
+                                styles.hostFlowCourtActive,
+                            ]}
+                          >
+                            <Text style={styles.hostFlowCourtTitle}>
+                              {booking.venueName}
+                            </Text>
+                            <Text style={styles.hostFlowCourtMeta}>
+                              {new Date(booking.startsAt).toLocaleString(
+                                "en-US",
+                                {
+                                  weekday: "short",
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                },
+                              )}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </ScrollView>
+                    </>
+                  )}
+                  <Text style={styles.hostFlowLabel}>PLACE</Text>
+                  <TextInput
+                    editable={!courtBookingId}
+                    onChangeText={(value) => {
+                      setVenueName(value);
+                      setVenueId(undefined);
+                      setCourtBookingId(undefined);
+                    }}
+                    placeholder="Venue, beach, or court"
+                    placeholderTextColor={colors.muted}
+                    style={styles.hostFlowInput}
+                    value={venueName}
+                  />
+                  {!courtBookingId && venues && venues.length > 0 && (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.hostFlowHorizontal}
                     >
-                      <Text
+                      {venues.map((venue) => (
+                        <Pressable
+                          key={venue.id}
+                          onPress={() => {
+                            setVenueId(venue.id);
+                            setVenueName(venue.name);
+                          }}
+                          style={[
+                            styles.hostFlowVenueChip,
+                            venueId === venue.id &&
+                              styles.hostFlowVenueChipActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.hostFlowVenueChipText,
+                              venueId === venue.id &&
+                                styles.hostFlowVenueChipTextActive,
+                            ]}
+                          >
+                            {venue.name}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  )}
+                  <Text style={styles.hostFlowLabel}>DAY</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.hostFlowHorizontal}
+                  >
+                    {dayChoices.map((day) => {
+                      const selected =
+                        day.toDateString() === start.toDateString();
+                      return (
+                        <Pressable
+                          key={day.toISOString()}
+                          onPress={() => chooseDay(day)}
+                          style={[
+                            styles.hostFlowDay,
+                            selected && styles.hostFlowDayActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.hostFlowDayName,
+                              selected && styles.hostFlowDayTextActive,
+                            ]}
+                          >
+                            {day
+                              .toLocaleDateString("en-US", {
+                                weekday: "short",
+                              })
+                              .toUpperCase()}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.hostFlowDayNumber,
+                              selected && styles.hostFlowDayTextActive,
+                            ]}
+                          >
+                            {day.getDate()}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                  <Text style={styles.hostFlowLabel}>START</Text>
+                  <View style={styles.hostFlowChipWrap}>
+                    {timeChoices.map((time) => (
+                      <Pressable
+                        key={time.hour}
+                        onPress={() => chooseTime(time.hour)}
                         style={[
-                          styles.filterText,
-                          venueId === venue.id && styles.filterTextActive,
+                          styles.hostFlowChip,
+                          start.getHours() === time.hour &&
+                            start.getMinutes() === 0 &&
+                            styles.hostFlowChipActive,
                         ]}
                       >
-                        {venue.name}
+                        <Text
+                          style={[
+                            styles.hostFlowChipText,
+                            start.getHours() === time.hour &&
+                              start.getMinutes() === 0 &&
+                              styles.hostFlowChipTextActive,
+                          ]}
+                        >
+                          {time.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={styles.hostFlowLabel}>DURATION</Text>
+                  <View style={styles.hostFlowChipWrap}>
+                    {[60, 90, 120].map((minutes) => (
+                      <Pressable
+                        key={minutes}
+                        onPress={() => setDurationMinutes(minutes)}
+                        style={[
+                          styles.hostFlowChip,
+                          durationMinutes === minutes &&
+                            styles.hostFlowChipActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.hostFlowChipText,
+                            durationMinutes === minutes &&
+                              styles.hostFlowChipTextActive,
+                          ]}
+                        >
+                          {minutes} min
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              )}
+
+              {step === 2 && (
+                <>
+                  <Text style={styles.hostFlowTitle}>Who is playing?</Text>
+                  <Text style={styles.hostFlowBody}>
+                    You are already in. Add known players now or leave places
+                    available for discovery.
+                  </Text>
+                  <View style={styles.hostFlowRosterSummary}>
+                    <View>
+                      <Text style={styles.hostFlowRosterCount}>
+                        {selectedPlayers.length + 1} / {capacity}
+                      </Text>
+                      <Text style={styles.hostFlowRosterMeta}>
+                        {capacity - selectedPlayers.length - 1} places available
+                      </Text>
+                    </View>
+                    <Pressable
+                      accessibilityLabel="Add players"
+                      accessibilityRole="button"
+                      disabled={selectedPlayers.length >= capacity - 1}
+                      onPress={() => setShowPlayerPicker(true)}
+                      style={styles.hostFlowAddPlayers}
+                    >
+                      <Text style={styles.hostFlowAddPlayersText}>
+                        ＋ Add players
                       </Text>
                     </Pressable>
-                  ))}
-                </View>
-              </ScrollView>
-            )}
-            <TextInput
-              autoCapitalize="none"
-              onChangeText={setStartsAt}
-              placeholder="YYYY-MM-DDTHH:MM"
-              placeholderTextColor={colors.muted}
-              style={styles.formInput}
-              value={startsAt}
-            />
-            <View style={styles.formRow}>
-              <TextInput
-                keyboardType="number-pad"
-                onChangeText={setDurationMinutes}
-                placeholder="Minutes"
-                placeholderTextColor={colors.muted}
-                style={[styles.formInput, styles.formRowInput]}
-                value={durationMinutes}
-              />
-              <TextInput
-                keyboardType="number-pad"
-                onChangeText={setCapacity}
-                placeholder="Players"
-                placeholderTextColor={colors.muted}
-                style={[styles.formInput, styles.formRowInput]}
-                value={capacity}
-              />
-              <TextInput
-                keyboardType="decimal-pad"
-                onChangeText={setCost}
-                placeholder="$"
-                placeholderTextColor={colors.muted}
-                style={[styles.formInput, styles.formRowInput]}
-                value={cost}
-              />
-            </View>
-            <View style={styles.filterRow}>
-              {(["2s", "3s", "4s", "6s", "king-queen"] as const).map(
-                (option) => (
-                  <Pressable
-                    key={option}
-                    onPress={() => setFormat(option)}
-                    style={[
-                      styles.filterChip,
-                      format === option && styles.filterChipActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.filterText,
-                        format === option && styles.filterTextActive,
-                      ]}
-                    >
-                      {option}
-                    </Text>
-                  </Pressable>
-                ),
+                  </View>
+                  <View style={styles.hostFlowRoster}>
+                    {[host, ...selectedPlayers].map((player, index) => (
+                      <View key={player.id} style={styles.hostFlowPlayerRow}>
+                        {player.avatarUrl ? (
+                          <Image
+                            accessibilityIgnoresInvertColors
+                            source={{ uri: player.avatarUrl }}
+                            style={styles.hostFlowPlayerAvatar}
+                          />
+                        ) : (
+                          <View style={styles.hostFlowPlayerAvatarFallback}>
+                            <Text style={styles.hostFlowPlayerAvatarText}>
+                              {player.initials}
+                            </Text>
+                          </View>
+                        )}
+                        <View style={styles.flex}>
+                          <Text style={styles.hostFlowPlayerName}>
+                            {player.displayName}
+                          </Text>
+                          <Text style={styles.hostFlowPlayerMeta}>
+                            {index === 0
+                              ? "Host"
+                              : `${player.homeMarket} · ${player.rating.display.toFixed(2)} Sand`}
+                          </Text>
+                        </View>
+                        {index > 0 && (
+                          <Pressable
+                            accessibilityLabel={"Remove " + player.displayName}
+                            onPress={() =>
+                              setSelectedPlayers((current) =>
+                                current.filter(
+                                  (candidate) => candidate.id !== player.id,
+                                ),
+                              )
+                            }
+                            style={styles.hostFlowRemovePlayer}
+                          >
+                            <Text style={styles.hostFlowRemovePlayerText}>
+                              ×
+                            </Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    ))}
+                    {Array.from({
+                      length: Math.min(
+                        4,
+                        Math.max(0, capacity - selectedPlayers.length - 1),
+                      ),
+                    }).map((_, index) => (
+                      <Pressable
+                        accessibilityLabel={`Add player to place ${index + selectedPlayers.length + 2}`}
+                        accessibilityRole="button"
+                        key={index}
+                        onPress={() => setShowPlayerPicker(true)}
+                        style={styles.hostFlowOpenPlayer}
+                      >
+                        <View style={styles.hostFlowOpenPlayerMark}>
+                          <Text style={styles.hostFlowOpenPlayerPlus}>＋</Text>
+                        </View>
+                        <Text style={styles.hostFlowOpenPlayerText}>
+                          Available place
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={styles.hostFlowLabel}>WHO CAN JOIN</Text>
+                  <View style={styles.hostFlowChipWrap}>
+                    {(["open", "mixed", "womens", "mens"] as const).map(
+                      (option) => (
+                        <Pressable
+                          key={option}
+                          onPress={() => setGenderPreference(option)}
+                          style={[
+                            styles.hostFlowChip,
+                            genderPreference === option &&
+                              styles.hostFlowChipActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.hostFlowChipText,
+                              genderPreference === option &&
+                                styles.hostFlowChipTextActive,
+                            ]}
+                          >
+                            {option === "open"
+                              ? "All players"
+                              : option === "mixed"
+                                ? "Mixed"
+                                : option === "womens"
+                                  ? "Women"
+                                  : "Men"}
+                          </Text>
+                        </Pressable>
+                      ),
+                    )}
+                  </View>
+                </>
               )}
-            </View>
-            <Text style={styles.formSectionLabel}>WHO CAN JOIN</Text>
-            <View style={styles.filterRow}>
-              {(["open", "mixed", "womens", "mens"] as const).map((option) => (
-                <Pressable
-                  key={option}
-                  onPress={() => setGenderPreference(option)}
-                  style={[
-                    styles.filterChip,
-                    genderPreference === option && styles.filterChipActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.filterText,
-                      genderPreference === option && styles.filterTextActive,
-                    ]}
-                  >
-                    {option === "open"
-                      ? "All"
-                      : option === "mixed"
-                        ? "Mixed"
-                        : option === "womens"
-                          ? "Women"
-                          : "Men"}
+
+              {step === 3 && (
+                <>
+                  <Text style={styles.hostFlowTitle}>Access and details</Text>
+                  <Text style={styles.hostFlowBody}>
+                    Set the level, price per place, and whether the match is
+                    discoverable.
                   </Text>
-                </Pressable>
-              ))}
-            </View>
-            {matchType === "competitive" && (
-              <>
-                <Pressable
-                  onPress={() => setRatingEnabled((current) => !current)}
-                  style={styles.toggleRow}
-                >
-                  <View>
-                    <Text style={styles.rowTitle}>Sand Rating range</Text>
-                    <Text style={styles.rowMeta}>
-                      Out-of-range players can request access.
+                  <Text style={styles.hostFlowLabel}>VISIBILITY</Text>
+                  <View style={styles.hostFlowChoiceGrid}>
+                    {(["public", "unlisted"] as const).map((option) => (
+                      <Pressable
+                        key={option}
+                        onPress={() => setVisibility(option)}
+                        style={[
+                          styles.hostFlowChoice,
+                          visibility === option && styles.hostFlowChoiceActive,
+                        ]}
+                      >
+                        <Text style={styles.hostFlowChoiceTitle}>
+                          {option === "public" ? "Public" : "Link only"}
+                        </Text>
+                        <Text style={styles.hostFlowChoiceBody}>
+                          {option === "public"
+                            ? "Eligible players can discover open places."
+                            : "Only people with the match link can join."}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  {matchType === "competitive" && (
+                    <>
+                      <Pressable
+                        onPress={() => setRatingEnabled((current) => !current)}
+                        style={styles.hostFlowToggle}
+                      >
+                        <View style={styles.flex}>
+                          <Text style={styles.hostFlowToggleTitle}>
+                            Sand Rating range
+                          </Text>
+                          <Text style={styles.hostFlowToggleBody}>
+                            Keep the level clear for everyone.
+                          </Text>
+                        </View>
+                        <Pill tone={ratingEnabled ? "positive" : "neutral"}>
+                          {ratingEnabled ? "On" : "Open"}
+                        </Pill>
+                      </Pressable>
+                      {ratingEnabled && (
+                        <View style={styles.hostFlowInputRow}>
+                          <TextInput
+                            keyboardType="decimal-pad"
+                            onChangeText={setRatingMinimum}
+                            placeholder="Minimum"
+                            placeholderTextColor={colors.muted}
+                            style={[styles.hostFlowInput, styles.flex]}
+                            value={ratingMinimum}
+                          />
+                          <TextInput
+                            keyboardType="decimal-pad"
+                            onChangeText={setRatingMaximum}
+                            placeholder="Maximum"
+                            placeholderTextColor={colors.muted}
+                            style={[styles.hostFlowInput, styles.flex]}
+                            value={ratingMaximum}
+                          />
+                        </View>
+                      )}
+                    </>
+                  )}
+                  <Text style={styles.hostFlowLabel}>PRICE PER PLACE</Text>
+                  <View style={styles.hostFlowPriceInput}>
+                    <Text style={styles.hostFlowPricePrefix}>$</Text>
+                    <TextInput
+                      keyboardType="decimal-pad"
+                      onChangeText={setCost}
+                      placeholder="0"
+                      placeholderTextColor={colors.muted}
+                      style={styles.hostFlowPriceField}
+                      value={cost}
+                    />
+                  </View>
+                  <Text style={styles.hostFlowLabel}>NOTE</Text>
+                  <TextInput
+                    multiline
+                    onChangeText={setNote}
+                    placeholder="Parking, court number, what to bring…"
+                    placeholderTextColor={colors.muted}
+                    style={[styles.hostFlowInput, styles.hostFlowTextarea]}
+                    value={note}
+                  />
+                  <Pressable
+                    onPress={() => setRecordMatches((current) => !current)}
+                    style={styles.hostFlowToggle}
+                  >
+                    <View style={styles.flex}>
+                      <Text style={styles.hostFlowToggleTitle}>
+                        Record results
+                      </Text>
+                      <Text style={styles.hostFlowToggleBody}>
+                        Let confirmed players submit the final score.
+                      </Text>
+                    </View>
+                    <Pill tone={recordMatches ? "positive" : "neutral"}>
+                      {recordMatches ? "On" : "Off"}
+                    </Pill>
+                  </Pressable>
+                </>
+              )}
+
+              {step === 4 && (
+                <>
+                  <Text style={styles.hostFlowTitle}>Ready to host?</Text>
+                  <Text style={styles.hostFlowBody}>
+                    Review the match exactly as players will see it.
+                  </Text>
+                  <View style={styles.hostFlowReviewCard}>
+                    <Text style={styles.hostFlowReviewTitle}>{title}</Text>
+                    <Text style={styles.hostFlowReviewWhen}>
+                      {start.toLocaleDateString("en-US", {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                      })}{" "}
+                      ·{" "}
+                      {start.toLocaleTimeString("en-US", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </Text>
+                    <Text style={styles.hostFlowReviewVenue}>{venueName}</Text>
+                    <View style={styles.hostFlowReviewRule} />
+                    <View style={styles.hostFlowReviewGrid}>
+                      <View>
+                        <Text style={styles.hostFlowReviewLabel}>MATCH</Text>
+                        <Text style={styles.hostFlowReviewValue}>
+                          {matchType === "competitive"
+                            ? "Competitive"
+                            : "Casual"}{" "}
+                          · {format}
+                        </Text>
+                      </View>
+                      <View>
+                        <Text style={styles.hostFlowReviewLabel}>PLAYERS</Text>
+                        <Text style={styles.hostFlowReviewValue}>
+                          {selectedPlayers.length + 1} in ·{" "}
+                          {capacity - selectedPlayers.length - 1} available
+                        </Text>
+                      </View>
+                      <View>
+                        <Text style={styles.hostFlowReviewLabel}>ACCESS</Text>
+                        <Text style={styles.hostFlowReviewValue}>
+                          {visibility === "public" ? "Public" : "Link only"} ·{" "}
+                          {genderPreference}
+                        </Text>
+                      </View>
+                      <View>
+                        <Text style={styles.hostFlowReviewLabel}>PRICE</Text>
+                        <Text style={styles.hostFlowReviewValue}>
+                          {Number(cost) > 0
+                            ? `$${Number(cost).toFixed(2)} / place`
+                            : "Free"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View style={styles.hostFlowTrust}>
+                    <Text style={styles.hostFlowTrustMark}>✓</Text>
+                    <Text style={styles.hostFlowTrustText}>
+                      Added players are locked into the initial roster. They
+                      will see that you added them when they open the match.
                     </Text>
                   </View>
-                  <Pill tone={ratingEnabled ? "positive" : "neutral"}>
-                    {ratingEnabled ? "On" : "Open"}
-                  </Pill>
+                </>
+              )}
+
+              {error && <Text style={styles.formError}>{error}</Text>}
+            </ScrollView>
+            <View style={styles.hostFlowFooter}>
+              {step > 0 && (
+                <Pressable
+                  disabled={busy}
+                  onPress={() => {
+                    setError(undefined);
+                    setStep((current) => Math.max(0, current - 1));
+                  }}
+                  style={styles.hostFlowBack}
+                >
+                  <Text style={styles.hostFlowBackText}>Back</Text>
                 </Pressable>
-                {ratingEnabled && (
-                  <View style={styles.formRow}>
-                    <TextInput
-                      keyboardType="decimal-pad"
-                      onChangeText={setRatingMinimum}
-                      placeholder="Min rating"
-                      placeholderTextColor={colors.muted}
-                      style={[styles.formInput, styles.formRowInput]}
-                      value={ratingMinimum}
-                    />
-                    <TextInput
-                      keyboardType="decimal-pad"
-                      onChangeText={setRatingMaximum}
-                      placeholder="Max rating"
-                      placeholderTextColor={colors.muted}
-                      style={[styles.formInput, styles.formRowInput]}
-                      value={ratingMaximum}
-                    />
-                  </View>
-                )}
-              </>
-            )}
-            <TextInput
-              multiline
-              onChangeText={setNote}
-              placeholder="Optional note for players"
-              placeholderTextColor={colors.muted}
-              style={[styles.formInput, styles.formTextarea]}
-              value={note}
-            />
-            <Pressable
-              onPress={() => setRecordMatches((current) => !current)}
-              style={styles.toggleRow}
-            >
-              <Text style={styles.rowTitle}>Record match results</Text>
-              <Pill tone={recordMatches ? "positive" : "neutral"}>
-                {recordMatches ? "On" : "Off"}
-              </Pill>
-            </Pressable>
-          </View>
-          {error && <Text style={styles.formError}>{error}</Text>}
-          <Pressable
-            disabled={
-              mode === "preview" ||
-              busy ||
-              title.trim().length < 3 ||
-              venueName.trim().length < 2
-            }
-            onPress={() => void publish()}
-            style={[
-              styles.payButton,
-              (mode === "preview" ||
-                busy ||
-                title.trim().length < 3 ||
-                venueName.trim().length < 2) &&
-                styles.buttonDisabled,
-            ]}
-          >
-            <Text style={styles.payButtonText}>
-              {mode === "preview"
-                ? "Preview only · publishing disabled"
-                : busy
-                  ? "Publishing…"
-                  : "Publish pickup"}
-            </Text>
-          </Pressable>
-        </ScrollView>
-      </SafeAreaView>
-    </Modal>
+              )}
+              <Pressable
+                disabled={busy || (step === 4 && mode === "preview")}
+                onPress={() => (step === 4 ? void publish() : nextStep())}
+                style={[
+                  styles.hostFlowContinue,
+                  (busy || (step === 4 && mode === "preview")) &&
+                    styles.buttonDisabled,
+                ]}
+              >
+                <Text style={styles.hostFlowContinueText}>
+                  {step < 4
+                    ? "Continue"
+                    : mode === "preview"
+                      ? "Sign in to publish"
+                      : busy
+                        ? "Publishing…"
+                        : "Publish hosted match"}
+                </Text>
+              </Pressable>
+            </View>
+          </SafeAreaView>
+        )}
+      </Modal>
+    </>
   );
 }
 
@@ -9541,6 +10716,8 @@ function DunaApp() {
   const [organizationSlug, setOrganizationSlug] = useState<string>();
   const [organizationVenueId, setOrganizationVenueId] = useState<string>();
   const [organizationCoach, setOrganizationCoach] = useState<MobileCoach>();
+  const [profileEditorOpen, setProfileEditorOpen] = useState(false);
+  const [artworkStudioOpen, setArtworkStudioOpen] = useState(false);
   const [discoverIntent, setDiscoverIntent] = useState<{
     readonly key: number;
     readonly kind: Exclude<HomeQuickAction, "record-video">;
@@ -9625,111 +10802,130 @@ function DunaApp() {
         },
       }}
     >
-      <HealthHistorySyncAgent paused={tab === "health"} runtime={runtime} />
-      <SafeAreaView edges={["top"]} style={styles.safe}>
-        <StatusBar style={theme === "dark" ? "light" : "dark"} />
-        <View style={styles.app}>
-          <PreviewBanner />
-          <Animated.View
-            style={[
-              styles.animatedScreen,
-              {
-                opacity: screenTransition,
-                transform: [
-                  {
-                    translateY: screenTransition.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [8, 0],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            {tab === "home" && (
-              <HomeScreen
-                onAction={openHomeAction}
-                onBook={setEventIndex}
-                onOpenBooking={setBookingId}
-                onPredictions={() => setTab("predictions")}
-              />
-            )}
-            {tab === "discover" && (
-              <DiscoverScreen
-                intent={discoverIntent}
-                onBook={setEventIndex}
-                onOrganization={setOrganizationSlug}
-              />
-            )}
-            {tab === "play" && (
-              <PlayScreen onBook={setEventIndex} onOpenBooking={setBookingId} />
-            )}
-            {tab === "video" && <VideoStudioScreen runtime={runtime} />}
-            {tab === "wallet" && <WalletScreen />}
-            {tab === "predictions" && (
-              <PredictionPortfolioScreen onBack={() => setTab("wallet")} />
-            )}
-            {tab === "you" && (
-              <ProfileHubScreen
-                onDestination={(destination) => setTab(destination)}
-                onOrganization={setOrganizationSlug}
-              />
-            )}
-            {tab === "health" && (
-              <HealthScreen onBack={() => setTab("you")} theme={theme} />
-            )}
-            {tab === "performance" && (
-              <PerformanceScreen
-                onBack={() => setTab("you")}
-                onHealth={() => setTab("health")}
-                onPredictions={() => setTab("predictions")}
-                onWallet={() => setTab("wallet")}
-              />
-            )}
-          </Animated.View>
-          <TabBar active={tab} onChange={setTab} />
-          <BookingModal
-            eventIndex={eventIndex}
-            onClose={() => setEventIndex(null)}
-          />
-          <BookingManagementModal
-            booking={selectedBooking as ManagedBooking | undefined}
-            client={runtime.client}
-            onClose={() => setBookingId(undefined)}
-            onUpdated={runtime.refresh}
-            visible={Boolean(selectedBooking)}
-          />
-          <OrganizationExperienceModal
-            onClose={() => setOrganizationSlug(undefined)}
-            onOpenCoach={(coach) => {
-              setOrganizationCoach(coach);
-              setOrganizationSlug(undefined);
-            }}
-            onOpenEvent={(eventId) => {
-              const index = (runtime.dashboard?.events ?? []).findIndex(
-                (event) => event.id === eventId,
-              );
-              setOrganizationSlug(undefined);
-              if (index >= 0) setEventIndex(index);
-            }}
-            onOpenVenue={(venueId) => {
-              setOrganizationSlug(undefined);
-              setOrganizationVenueId(venueId);
-            }}
-            slug={organizationSlug}
-          />
-          <VenueBookingModal
-            onClose={() => setOrganizationVenueId(undefined)}
-            venueId={organizationVenueId}
-            visible={Boolean(organizationVenueId)}
-          />
-          <CoachProfileModal
-            coach={organizationCoach}
-            onClose={() => setOrganizationCoach(undefined)}
-          />
-          <WatchScoreInbox />
-        </View>
-      </SafeAreaView>
+      <PlayerProfileProvider palette={colors}>
+        <HealthHistorySyncAgent paused={tab === "health"} runtime={runtime} />
+        <SafeAreaView edges={["top"]} style={styles.safe}>
+          <StatusBar style={theme === "dark" ? "light" : "dark"} />
+          <View style={styles.app}>
+            <PreviewBanner />
+            <Animated.View
+              style={[
+                styles.animatedScreen,
+                {
+                  opacity: screenTransition,
+                  transform: [
+                    {
+                      translateY: screenTransition.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [8, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              {tab === "home" && (
+                <HomeScreen
+                  onAction={openHomeAction}
+                  onBook={setEventIndex}
+                  onOpenBooking={setBookingId}
+                  onPredictions={() => setTab("predictions")}
+                />
+              )}
+              {tab === "discover" && (
+                <DiscoverScreen
+                  intent={discoverIntent}
+                  onBook={setEventIndex}
+                  onOrganization={setOrganizationSlug}
+                />
+              )}
+              {tab === "play" && (
+                <PlayScreen
+                  onBook={setEventIndex}
+                  onOpenBooking={setBookingId}
+                />
+              )}
+              {tab === "video" && <VideoStudioScreen runtime={runtime} />}
+              {tab === "wallet" && (
+                <WalletScreen onClose={() => setTab("you")} />
+              )}
+              {tab === "predictions" && (
+                <PredictionPortfolioScreen onBack={() => setTab("wallet")} />
+              )}
+              {tab === "you" && (
+                <ProfileHubScreen
+                  onArtwork={() => setArtworkStudioOpen(true)}
+                  onDestination={(destination) => setTab(destination)}
+                  onEditProfile={() => setProfileEditorOpen(true)}
+                  onOrganization={setOrganizationSlug}
+                />
+              )}
+              {tab === "health" && (
+                <HealthScreen onBack={() => setTab("you")} theme={theme} />
+              )}
+              {tab === "performance" && (
+                <PerformanceScreen
+                  onArtwork={() => setArtworkStudioOpen(true)}
+                  onBack={() => setTab("you")}
+                  onEditProfile={() => setProfileEditorOpen(true)}
+                  onHealth={() => setTab("health")}
+                  onPredictions={() => setTab("predictions")}
+                  onWallet={() => setTab("wallet")}
+                />
+              )}
+            </Animated.View>
+            <TabBar active={tab} onChange={setTab} />
+            <BookingModal
+              eventIndex={eventIndex}
+              onClose={() => setEventIndex(null)}
+            />
+            <ProfileEditorModal
+              onClose={() => setProfileEditorOpen(false)}
+              visible={profileEditorOpen}
+            />
+            <PlayerArtworkModal
+              onClose={() => setArtworkStudioOpen(false)}
+              visible={artworkStudioOpen}
+            />
+            <BookingManagementModal
+              booking={selectedBooking as ManagedBooking | undefined}
+              client={runtime.client}
+              onClose={() => setBookingId(undefined)}
+              onUpdated={runtime.refresh}
+              visible={Boolean(selectedBooking)}
+            />
+            <OrganizationExperienceModal
+              onClose={() => setOrganizationSlug(undefined)}
+              onOpenCoach={(coach) => {
+                setOrganizationCoach(coach);
+                setOrganizationSlug(undefined);
+              }}
+              onOpenEvent={(eventId) => {
+                const index = (runtime.dashboard?.events ?? []).findIndex(
+                  (event) => event.id === eventId,
+                );
+                setOrganizationSlug(undefined);
+                if (index >= 0) setEventIndex(index);
+              }}
+              onOpenVenue={(venueId) => {
+                setOrganizationSlug(undefined);
+                setOrganizationVenueId(venueId);
+              }}
+              slug={organizationSlug}
+            />
+            <VenueBookingModal
+              onClose={() => setOrganizationVenueId(undefined)}
+              venueId={organizationVenueId}
+              visible={Boolean(organizationVenueId)}
+            />
+            <CoachProfileModal
+              coach={organizationCoach}
+              onClose={() => setOrganizationCoach(undefined)}
+            />
+            <WatchScoreInbox />
+          </View>
+        </SafeAreaView>
+      </PlayerProfileProvider>
     </ThemeContext.Provider>
   );
 }
@@ -10344,6 +11540,461 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.accentRgb, 0.08),
       borderColor: rgba(colors.accentRgb, 0.4),
     },
+    hostFlowHeader: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.06),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    hostFlowClose: {
+      alignItems: "center",
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    hostFlowEyebrow: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.3,
+    },
+    hostFlowHeaderTitle: {
+      color: colors.bone,
+      fontSize: 19,
+      fontWeight: "900",
+      marginTop: 2,
+    },
+    hostFlowProgressValue: {
+      color: colors.muted,
+      fontFamily: "Archivo-Block",
+      fontSize: 10,
+      paddingRight: 6,
+    },
+    hostFlowProgressTrack: {
+      backgroundColor: rgba(colors.overlayRgb, 0.07),
+      height: 3,
+    },
+    hostFlowProgressFill: {
+      backgroundColor: colors.aqua,
+      height: 3,
+    },
+    hostFlowContent: { padding: 20, paddingBottom: 130 },
+    hostFlowTitle: {
+      color: colors.bone,
+      fontSize: 31,
+      fontWeight: "900",
+      letterSpacing: -1.1,
+      lineHeight: 36,
+    },
+    hostFlowBody: {
+      color: colors.muted,
+      fontSize: 14,
+      lineHeight: 21,
+      marginTop: 8,
+    },
+    hostFlowLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+      marginBottom: 9,
+      marginTop: 24,
+    },
+    hostFlowInput: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 16,
+      borderWidth: 1,
+      color: colors.bone,
+      fontSize: 16,
+      marginTop: 20,
+      minHeight: 56,
+      paddingHorizontal: 15,
+    },
+    hostFlowInputRow: { flexDirection: "row", gap: 10, marginTop: -10 },
+    hostFlowChoiceGrid: { flexDirection: "row", gap: 10 },
+    hostFlowChoice: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 18,
+      borderWidth: 1,
+      flex: 1,
+      minHeight: 116,
+      padding: 15,
+    },
+    hostFlowChoiceActive: {
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderColor: colors.aqua,
+      borderWidth: 2,
+    },
+    hostFlowChoiceTitle: {
+      color: colors.bone,
+      fontSize: 17,
+      fontWeight: "900",
+    },
+    hostFlowChoiceBody: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 7,
+    },
+    hostFlowChipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    hostFlowChip: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 15,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 15,
+    },
+    hostFlowChipActive: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.aqua,
+    },
+    hostFlowChipText: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    hostFlowChipTextActive: { color: colors.onAccent },
+    hostFlowHorizontal: { marginHorizontal: -20, paddingHorizontal: 20 },
+    hostFlowCourt: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 18,
+      borderWidth: 1,
+      marginRight: 10,
+      minHeight: 96,
+      padding: 15,
+      width: 220,
+    },
+    hostFlowCourtActive: {
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderColor: colors.aqua,
+      borderWidth: 2,
+    },
+    hostFlowCourtTitle: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    hostFlowCourtMeta: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 7,
+    },
+    hostFlowVenueChip: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 14,
+      borderWidth: 1,
+      marginRight: 8,
+      minHeight: 46,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    hostFlowVenueChipActive: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.aqua,
+    },
+    hostFlowVenueChipText: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    hostFlowVenueChipTextActive: { color: colors.onAccent },
+    hostFlowDay: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 16,
+      borderWidth: 1,
+      height: 70,
+      justifyContent: "center",
+      marginRight: 8,
+      width: 58,
+    },
+    hostFlowDayActive: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.aqua,
+    },
+    hostFlowDayName: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+    hostFlowDayNumber: {
+      color: colors.bone,
+      fontFamily: "Archivo-Block",
+      fontSize: 19,
+      marginTop: 3,
+    },
+    hostFlowDayTextActive: { color: colors.onAccent },
+    hostFlowRosterSummary: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderRadius: 20,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 22,
+      padding: 16,
+    },
+    hostFlowRosterCount: {
+      color: colors.bone,
+      fontFamily: "Archivo-Block",
+      fontSize: 25,
+    },
+    hostFlowRosterMeta: {
+      color: colors.muted,
+      fontSize: 11,
+      marginTop: 3,
+    },
+    hostFlowAddPlayers: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 15,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 15,
+    },
+    hostFlowAddPlayersText: {
+      color: colors.onAccent,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    hostFlowRoster: { gap: 8, marginTop: 16 },
+    hostFlowPlayerRow: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      minHeight: 76,
+      padding: 12,
+    },
+    hostFlowPlayerAvatar: { borderRadius: 24, height: 48, width: 48 },
+    hostFlowPlayerAvatarFallback: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderRadius: 24,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    hostFlowPlayerAvatarText: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    hostFlowPlayerName: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    hostFlowPlayerMeta: {
+      color: colors.muted,
+      fontSize: 11,
+      marginTop: 4,
+    },
+    hostFlowRemovePlayer: {
+      alignItems: "center",
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    hostFlowRemovePlayerText: { color: colors.danger, fontSize: 24 },
+    hostFlowOpenPlayer: {
+      alignItems: "center",
+      borderColor: rgba(colors.accentRgb, 0.22),
+      borderRadius: 18,
+      borderStyle: "dashed",
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 66,
+      padding: 11,
+    },
+    hostFlowOpenPlayerMark: {
+      alignItems: "center",
+      borderColor: colors.aqua,
+      borderRadius: 20,
+      borderWidth: 1,
+      height: 40,
+      justifyContent: "center",
+      width: 40,
+    },
+    hostFlowOpenPlayerPlus: { color: colors.aqua, fontSize: 20 },
+    hostFlowOpenPlayerText: {
+      color: colors.aqua,
+      fontSize: 13,
+      fontWeight: "800",
+    },
+    hostFlowToggle: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 18,
+      minHeight: 76,
+      padding: 14,
+    },
+    hostFlowToggleTitle: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    hostFlowToggleBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 3,
+    },
+    hostFlowPriceInput: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      minHeight: 58,
+      paddingHorizontal: 15,
+    },
+    hostFlowPricePrefix: {
+      color: colors.aqua,
+      fontFamily: "Archivo-Block",
+      fontSize: 22,
+    },
+    hostFlowPriceField: {
+      color: colors.bone,
+      flex: 1,
+      fontFamily: "Archivo-Block",
+      fontSize: 22,
+      minHeight: 56,
+      paddingHorizontal: 10,
+    },
+    hostFlowTextarea: {
+      minHeight: 112,
+      paddingTop: 15,
+      textAlignVertical: "top",
+    },
+    hostFlowReviewCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 24,
+      borderWidth: 1,
+      marginTop: 22,
+      padding: 18,
+    },
+    hostFlowReviewTitle: {
+      color: colors.bone,
+      fontSize: 25,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+    },
+    hostFlowReviewWhen: {
+      color: colors.aqua,
+      fontSize: 14,
+      fontWeight: "800",
+      marginTop: 8,
+    },
+    hostFlowReviewVenue: {
+      color: colors.muted,
+      fontSize: 13,
+      marginTop: 5,
+    },
+    hostFlowReviewRule: {
+      backgroundColor: rgba(colors.overlayRgb, 0.08),
+      height: 1,
+      marginVertical: 18,
+    },
+    hostFlowReviewGrid: { gap: 18 },
+    hostFlowReviewLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
+    hostFlowReviewValue: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "800",
+      marginTop: 5,
+      textTransform: "capitalize",
+    },
+    hostFlowTrust: {
+      alignItems: "flex-start",
+      backgroundColor: rgba(colors.positiveRgb, 0.08),
+      borderColor: rgba(colors.positiveRgb, 0.18),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      marginTop: 14,
+      padding: 14,
+    },
+    hostFlowTrustMark: {
+      color: colors.positive,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    hostFlowTrustText: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 12,
+      lineHeight: 18,
+    },
+    hostFlowFooter: {
+      alignItems: "center",
+      backgroundColor: colors.canvas,
+      borderTopColor: rgba(colors.overlayRgb, 0.09),
+      borderTopWidth: 1,
+      bottom: 0,
+      flexDirection: "row",
+      gap: 10,
+      left: 0,
+      padding: 18,
+      position: "absolute",
+      right: 0,
+    },
+    hostFlowBack: {
+      alignItems: "center",
+      borderColor: colors.aqua,
+      borderRadius: 17,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 56,
+      minWidth: 86,
+    },
+    hostFlowBackText: {
+      color: colors.aqua,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    hostFlowContinue: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 17,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 56,
+    },
+    hostFlowContinueText: {
+      color: colors.onAccent,
+      fontSize: 15,
+      fontWeight: "900",
+    },
     previewBanner: {
       alignItems: "center",
       backgroundColor: rgba(colors.warningRgb, 0.12),
@@ -10564,6 +12215,115 @@ function createStyles(palette: Palette) {
       gap: 13,
       marginBottom: 14,
       padding: 14,
+    },
+    homeNextActivity: {
+      alignItems: "stretch",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 22,
+      borderWidth: 1,
+      flexDirection: "row",
+      marginBottom: 14,
+      minHeight: 228,
+      overflow: "hidden",
+    },
+    homeNextRoster: {
+      alignContent: "center",
+      borderRightColor: rgba(colors.overlayRgb, 0.08),
+      borderRightWidth: 1,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      justifyContent: "center",
+      paddingHorizontal: 9,
+      paddingVertical: 18,
+      width: "44%",
+    },
+    homeNextPlayer: {
+      alignItems: "center",
+      minHeight: 82,
+      width: "46%",
+    },
+    homeNextAvatar: {
+      borderRadius: 25,
+      height: 50,
+      width: 50,
+    },
+    homeNextAvatarFallback: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderRadius: 25,
+      height: 50,
+      justifyContent: "center",
+      width: 50,
+    },
+    homeNextAvatarText: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    homeNextAvailableAvatar: {
+      alignItems: "center",
+      borderColor: rgba(colors.accentRgb, 0.3),
+      borderRadius: 25,
+      borderWidth: 2,
+      height: 50,
+      justifyContent: "center",
+      width: 50,
+    },
+    homeNextAvailablePlus: { color: colors.aqua, fontSize: 22 },
+    homeNextAvailableText: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "800",
+      marginTop: 5,
+    },
+    homeNextAvailableCount: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 1,
+    },
+    homeNextPlayerName: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "800",
+      marginTop: 5,
+      maxWidth: "100%",
+    },
+    homeNextRating: {
+      backgroundColor: rgba(colors.warningRgb, 0.16),
+      borderRadius: 8,
+      color: colors.warning,
+      fontFamily: "Archivo-Block",
+      fontSize: 10,
+      marginTop: 2,
+      overflow: "hidden",
+      paddingHorizontal: 5,
+      paddingVertical: 2,
+    },
+    homeNextActivityInfo: {
+      flex: 1,
+      justifyContent: "center",
+      padding: 16,
+    },
+    homeNextActivityWhen: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: "700",
+      lineHeight: 17,
+      marginTop: 8,
+    },
+    homeNextStatusRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 14,
+    },
+    homeNextDetails: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "800",
     },
     homeNextDate: {
       alignItems: "center",
@@ -10996,7 +12756,7 @@ function createStyles(palette: Palette) {
       borderColor: rgba(colors.overlayRgb, 0.08),
       borderRadius: 20,
       borderWidth: 1,
-      minHeight: 220,
+      minHeight: 246,
       padding: 14,
       width: 172,
     },
@@ -11030,6 +12790,12 @@ function createStyles(palette: Palette) {
       fontSize: 10,
       marginTop: 4,
       maxWidth: "100%",
+    },
+    playerFollowProfileLink: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "800",
+      marginTop: 7,
     },
     playerFollowButton: {
       alignItems: "center",
@@ -13172,6 +14938,132 @@ function createStyles(palette: Palette) {
       borderWidth: 1,
       overflow: "hidden",
     },
+    resultStoryStack: { gap: 14 },
+    resultStoryCard: {
+      borderRadius: 22,
+      overflow: "hidden",
+      padding: 16,
+    },
+    resultStoryCardWon: {
+      backgroundColor: rgba(colors.warningRgb, 0.18),
+      borderColor: rgba(colors.warningRgb, 0.24),
+      borderWidth: 1,
+    },
+    resultStoryCardLost: {
+      backgroundColor: rgba(colors.accentRgb, 0.14),
+      borderColor: rgba(colors.accentRgb, 0.22),
+      borderWidth: 1,
+    },
+    resultStoryHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 12,
+      marginBottom: 14,
+    },
+    resultStoryEyebrow: {
+      color: colors.warning,
+      fontSize: 20,
+      fontWeight: "900",
+      letterSpacing: -0.5,
+    },
+    resultStoryEyebrowLost: { color: colors.aqua },
+    resultStorySubtitle: {
+      color: colors.bone,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: 4,
+    },
+    resultStorySubtitleLost: { color: colors.muted },
+    resultStoryDate: {
+      color: colors.warning,
+      fontFamily: "Archivo-Block",
+      fontSize: 10,
+      paddingTop: 4,
+    },
+    resultStoryDateLost: { color: colors.aqua },
+    resultStoryScorecard: {
+      backgroundColor: colors.depth,
+      borderRadius: 17,
+      overflow: "hidden",
+      padding: 12,
+    },
+    resultStoryTeam: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 70,
+    },
+    resultStoryPlayers: { flex: 1, gap: 5 },
+    resultStoryPlayer: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 31,
+    },
+    resultStoryAvatar: {
+      borderRadius: 15,
+      height: 30,
+      width: 30,
+    },
+    resultStoryAvatarFallback: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderRadius: 15,
+      height: 30,
+      justifyContent: "center",
+      width: 30,
+    },
+    resultStoryAvatarText: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    resultStoryPlayerName: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    resultStoryPlayerRating: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 1,
+    },
+    resultStoryScores: {
+      flexDirection: "row",
+      gap: 10,
+      justifyContent: "flex-end",
+      minWidth: 96,
+    },
+    resultStoryScore: {
+      color: colors.muted,
+      fontFamily: "Archivo-Block",
+      fontSize: 18,
+      minWidth: 20,
+      textAlign: "center",
+    },
+    resultStoryScoreWon: { color: colors.bone },
+    resultStoryDivider: {
+      backgroundColor: rgba(colors.overlayRgb, 0.08),
+      height: 1,
+    },
+    resultStoryFooter: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+      justifyContent: "space-between",
+      marginTop: 11,
+    },
+    resultStoryVenue: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 10,
+    },
+    resultStoryDelta: {
+      color: colors.positive,
+      fontFamily: "Archivo-Block",
+      fontSize: 11,
+    },
+    resultStoryDeltaNegative: { color: colors.danger },
     matchRow: {
       alignItems: "center",
       borderBottomColor: rgba(colors.overlayRgb, 0.06),
@@ -13502,6 +15394,27 @@ function createStyles(palette: Palette) {
       overflow: "hidden",
       padding: 18,
       position: "relative",
+    },
+    walletCloseRow: {
+      alignItems: "flex-end",
+      marginBottom: -42,
+      position: "relative",
+      zIndex: 4,
+    },
+    walletCloseButton: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 24,
+      borderWidth: 1,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    walletCloseText: {
+      color: colors.bone,
+      fontSize: 29,
+      lineHeight: 32,
     },
     walletTop: {
       alignItems: "center",
@@ -14321,6 +16234,128 @@ function createStyles(palette: Palette) {
       marginTop: 10,
     },
     athleteChartLegendLoss: { color: colors.danger },
+    performancePulseCard: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.accentRgb, 0.16),
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 12,
+      padding: 16,
+    },
+    performancePulseTitle: {
+      color: colors.bone,
+      fontSize: 24,
+      fontWeight: "900",
+      letterSpacing: -0.8,
+      marginTop: 3,
+    },
+    performancePulseRecord: {
+      color: colors.aqua,
+      fontFamily: "Archivo-Block",
+      fontSize: 23,
+      fontWeight: "900",
+    },
+    performancePulseTrack: {
+      flexDirection: "row",
+      gap: 5,
+      marginTop: 17,
+    },
+    performancePulsePoint: {
+      alignItems: "center",
+      borderRadius: 8,
+      flex: 1,
+      height: 34,
+      justifyContent: "center",
+      minWidth: 18,
+    },
+    performancePulsePointWin: {
+      backgroundColor: rgba(colors.positiveRgb, 0.22),
+    },
+    performancePulsePointLoss: {
+      backgroundColor: rgba(colors.dangerRgb, 0.18),
+    },
+    performancePulsePointText: {
+      color: colors.bone,
+      fontFamily: "Archivo-Chip",
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    performancePulseSummary: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 12,
+    },
+    performanceImpactCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 12,
+      padding: 16,
+    },
+    performanceImpactRows: { gap: 13, marginTop: 18 },
+    performanceImpactRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+    },
+    performanceImpactLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700",
+      width: 76,
+    },
+    performanceImpactTrack: {
+      backgroundColor: rgba(colors.overlayRgb, 0.06),
+      borderRadius: 999,
+      flex: 1,
+      height: 12,
+      overflow: "hidden",
+    },
+    performanceImpactFill: { borderRadius: 999, height: "100%" },
+    performanceImpactFillWin: { backgroundColor: colors.positive },
+    performanceImpactFillLoss: { backgroundColor: colors.danger },
+    performanceImpactValue: {
+      color: colors.bone,
+      fontFamily: "Archivo-Chip",
+      fontSize: 11,
+      fontWeight: "900",
+      textAlign: "right",
+      width: 42,
+    },
+    performanceStatsCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 12,
+      padding: 16,
+    },
+    performanceStatsGrid: {
+      flexDirection: "row",
+      gap: 7,
+      marginTop: 16,
+    },
+    performanceStat: {
+      backgroundColor: rgba(colors.overlayRgb, 0.04),
+      borderRadius: 14,
+      flex: 1,
+      paddingHorizontal: 8,
+      paddingVertical: 13,
+    },
+    performanceStatValue: {
+      color: colors.bone,
+      fontFamily: "Archivo-Table",
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    performanceStatLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700",
+      marginTop: 4,
+    },
     athleteMomentGrid: { flexDirection: "row", gap: 9 },
     athleteMomentCard: {
       backgroundColor: colors.navy,
@@ -14412,13 +16447,15 @@ function createStyles(palette: Palette) {
       overflow: "hidden",
     },
     athleteResultCard: {
-      alignItems: "center",
       borderBottomColor: rgba(colors.overlayRgb, 0.07),
       borderBottomWidth: 1,
-      flexDirection: "row",
-      gap: 10,
       minHeight: 78,
       padding: 11,
+    },
+    athleteResultTopline: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
     },
     athleteResultMark: {
       alignItems: "center",
@@ -14447,6 +16484,27 @@ function createStyles(palette: Palette) {
       fontWeight: "900",
     },
     athleteResultExpected: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    athleteResultBreakdown: {
+      borderTopColor: rgba(colors.overlayRgb, 0.07),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 11,
+      paddingTop: 11,
+    },
+    athleteResultBreakdownLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.5,
+    },
+    athleteResultBreakdownValue: {
+      color: colors.bone,
+      fontFamily: "Archivo-Table",
+      fontSize: 11,
+      fontWeight: "800",
+      marginTop: 3,
+    },
     athleteFullHistoryButton: {
       alignItems: "center",
       borderColor: rgba(colors.overlayRgb, 0.11),
@@ -14754,6 +16812,289 @@ function createStyles(palette: Palette) {
     tabActive: { color: colors.aqua },
     modalSafe: { backgroundColor: colors.canvas, flex: 1 },
     modalContent: { padding: 18, paddingBottom: 45 },
+    hostedReviewHeader: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.09),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      paddingHorizontal: 20,
+      paddingVertical: 13,
+    },
+    hostedReviewTitle: {
+      color: colors.bone,
+      fontSize: 30,
+      fontWeight: "900",
+      letterSpacing: -0.8,
+      marginTop: 3,
+    },
+    hostedReviewClose: {
+      alignItems: "center",
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    hostedReviewContent: { padding: 18, paddingBottom: 130 },
+    hostedReviewSummary: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 22,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      padding: 18,
+    },
+    hostedReviewDate: {
+      color: colors.bone,
+      fontSize: 20,
+      fontWeight: "900",
+      letterSpacing: -0.4,
+    },
+    hostedReviewTime: {
+      color: colors.bone,
+      fontSize: 18,
+      fontWeight: "800",
+      marginTop: 4,
+    },
+    hostedReviewMeta: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 8,
+      textTransform: "capitalize",
+    },
+    hostedReviewDuration: {
+      alignItems: "center",
+      borderLeftColor: rgba(colors.overlayRgb, 0.09),
+      borderLeftWidth: 1,
+      justifyContent: "center",
+      minWidth: 68,
+      paddingLeft: 14,
+    },
+    hostedReviewDurationMark: { color: colors.aqua, fontSize: 25 },
+    hostedReviewDurationValue: {
+      color: colors.bone,
+      fontFamily: "Archivo-Block",
+      fontSize: 19,
+      marginTop: 5,
+    },
+    hostedReviewDurationLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1,
+    },
+    hostedPartnerCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 14,
+      overflow: "hidden",
+    },
+    hostedPartnerCardDisabled: { opacity: 0.58 },
+    hostedPartnerTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 104,
+      padding: 18,
+    },
+    hostedPartnerTitle: {
+      color: colors.bone,
+      fontSize: 20,
+      fontWeight: "900",
+      letterSpacing: -0.4,
+    },
+    hostedPartnerMeta: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 5,
+    },
+    hostedPartnerIllustration: {
+      height: 68,
+      position: "relative",
+      width: 78,
+    },
+    hostedPartnerSilhouette: {
+      backgroundColor: colors.aqua,
+      borderRadius: 28,
+      bottom: 0,
+      height: 56,
+      position: "absolute",
+      right: 0,
+      transform: [{ rotate: "7deg" }],
+      width: 34,
+    },
+    hostedPartnerSilhouetteBack: {
+      backgroundColor: colors.sand,
+      left: 4,
+      right: undefined,
+      transform: [{ rotate: "-7deg" }],
+    },
+    hostedAddPartner: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.09),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: 60,
+      paddingHorizontal: 18,
+    },
+    hostedAddPartnerText: {
+      color: colors.aqua,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    hostedAddPartnerArrow: { color: colors.aqua, fontSize: 22 },
+    hostedSelectedPartner: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.09),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      minHeight: 78,
+      padding: 14,
+    },
+    hostedPartnerAvatar: { borderRadius: 25, height: 50, width: 50 },
+    hostedPartnerAvatarFallback: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderRadius: 25,
+      height: 50,
+      justifyContent: "center",
+      width: 50,
+    },
+    hostedPartnerAvatarText: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    hostedSelectedPartnerName: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    hostedSelectedPartnerMeta: {
+      color: colors.muted,
+      fontSize: 11,
+      marginTop: 4,
+    },
+    hostedRemovePartner: {
+      alignItems: "center",
+      borderColor: rgba(colors.dangerRgb, 0.22),
+      borderRadius: 18,
+      borderWidth: 1,
+      height: 38,
+      justifyContent: "center",
+      width: 38,
+    },
+    hostedRemovePartnerText: { color: colors.danger, fontSize: 21 },
+    hostedPartnerPolicy: {
+      backgroundColor: rgba(colors.accentRgb, 0.06),
+      borderTopColor: rgba(colors.overlayRgb, 0.08),
+      borderTopWidth: 1,
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      padding: 15,
+    },
+    hostedTotalCard: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 20,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 14,
+      padding: 18,
+    },
+    hostedTotalLabel: {
+      color: colors.bone,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    hostedTotalMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 4,
+    },
+    hostedTotalValue: {
+      color: colors.aqua,
+      fontFamily: "Archivo-Block",
+      fontSize: 25,
+    },
+    hostedPolicyCard: {
+      alignItems: "flex-start",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 20,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 14,
+      padding: 16,
+    },
+    hostedPolicyMark: {
+      borderColor: colors.aqua,
+      borderRadius: 13,
+      borderWidth: 1,
+      color: colors.aqua,
+      fontSize: 13,
+      fontWeight: "900",
+      height: 26,
+      lineHeight: 24,
+      textAlign: "center",
+      width: 26,
+    },
+    hostedPolicyTitle: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    hostedPolicyBody: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 4,
+    },
+    errorBanner: {
+      backgroundColor: rgba(colors.dangerRgb, 0.08),
+      borderColor: rgba(colors.dangerRgb, 0.2),
+      borderRadius: 14,
+      borderWidth: 1,
+      padding: 12,
+    },
+    errorText: {
+      color: colors.danger,
+      fontSize: 13,
+      fontWeight: "700",
+      lineHeight: 19,
+    },
+    hostedReviewFooter: {
+      backgroundColor: colors.canvas,
+      borderTopColor: rgba(colors.overlayRgb, 0.09),
+      borderTopWidth: 1,
+      bottom: 0,
+      left: 0,
+      padding: 18,
+      position: "absolute",
+      right: 0,
+    },
+    hostedReviewContinue: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 18,
+      justifyContent: "center",
+      minHeight: 58,
+    },
+    hostedReviewContinueText: {
+      color: colors.onAccent,
+      fontSize: 16,
+      fontWeight: "900",
+    },
     watchDraftContent: {
       alignItems: "center",
       flexGrow: 1,

@@ -4217,11 +4217,13 @@ const playerRouter = router({
           .array(
             z.object({
               url: publicHttpsUrlSchema,
-              kind: z.enum(["action", "portrait"]),
+              kind: z.literal("action"),
+              width: z.number().int().min(1_080).max(20_000),
+              height: z.number().int().min(1_080).max(20_000),
             }),
           )
-          .min(3)
-          .max(4),
+          .min(2)
+          .max(5),
         brief: z.string().trim().max(1_000).optional(),
         rightsConfirmed: z.literal(true),
         idempotencyKey: z.string().uuid(),
@@ -5054,11 +5056,19 @@ const playerRouter = router({
           recordMatches: z.boolean(),
           ratingMinimum: z.number().min(1).max(8).optional(),
           ratingMaximum: z.number().min(1).max(8).optional(),
+          participantPersonIds: z.array(z.string().uuid()).max(47).default([]),
           idempotencyKey: z.string().uuid(),
         })
         .refine(
           (value) => new Date(value.endsAt) > new Date(value.startsAt),
           "Pickup must end after it begins",
+        )
+        .refine(
+          (value) =>
+            new Set(value.participantPersonIds).size ===
+              value.participantPersonIds.length &&
+            value.participantPersonIds.length < value.capacity,
+          "Added players must be distinct and fit within the match capacity",
         ),
     )
     .output(eventSummarySchema)
@@ -5094,6 +5104,7 @@ const playerRouter = router({
             recordMatches: input.recordMatches,
             ratingMinimum: input.ratingMinimum,
             ratingMaximum: input.ratingMaximum,
+            participantPersonIds: input.participantPersonIds,
             hostPersonId: ctx.actor!.personId,
             organizationId: ctx.actor!.organizationId,
             requestId: ctx.requestId,

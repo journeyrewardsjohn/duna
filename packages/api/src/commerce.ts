@@ -6,12 +6,14 @@ import {
   eligibilityRules,
   eventTypes,
   getDatabase,
+  getTransactionalDatabase,
   guardianships,
   memberships,
   membershipTiers,
   organizationMemberships,
   people,
   pickupJoinRequests,
+  pickupParticipants,
   pickupSessions,
   ratings,
   sessions,
@@ -413,14 +415,35 @@ export async function evaluatePickupParticipant(input: {
   readonly subjectPersonId: string;
   readonly now: Date;
   readonly requireApproval?: boolean;
+  readonly allowAdultPartnerPurchase?: boolean;
 }): Promise<{
   readonly pickup: typeof pickupSessions.$inferSelect;
   readonly decision: EligibilityResult;
 }> {
-  const authority = await assertSubjectAuthority({
-    actor: input.actor,
-    subjectPersonId: input.subjectPersonId,
-  });
+  const authority =
+    input.allowAdultPartnerPurchase &&
+    input.subjectPersonId !== input.actor.personId
+      ? await (async () => {
+          const person = await getDatabase().query.people.findFirst({
+            where: and(
+              eq(people.id, input.subjectPersonId),
+              eq(people.status, "active"),
+              eq(people.profileVisibility, "public"),
+              eq(people.isMinor, false),
+            ),
+          });
+          if (!person) {
+            throw new CommerceError(
+              "SUBJECT_NOT_FOUND",
+              "Choose an active adult Duna player as your partner.",
+            );
+          }
+          return { person, guardianIds: [] as readonly string[] };
+        })()
+      : await assertSubjectAuthority({
+          actor: input.actor,
+          subjectPersonId: input.subjectPersonId,
+        });
   const pickup = await getDatabase().query.pickupSessions.findFirst({
     where: eq(pickupSessions.id, input.pickupSessionId),
   });
@@ -502,49 +525,161 @@ export async function joinPickup(input: {
   readonly ipAddress?: string;
   readonly now: Date;
 }): Promise<PickupJoinResult> {
-  if (!process.env.DATABASE_URL) return databaseRequired();
-  const subjectPersonId = input.subjectPersonId ?? input.actor.personId;
-  const { decision } = await evaluatePickupParticipant({
-    actor: input.actor,
-    pickupSessionId: input.pickupSessionId,
-    subjectPersonId,
-    now: input.now,
+  const [result] = await joinPickupGroup({
+    ...input,
+    subjectPersonIds: [input.subjectPersonId ?? input.actor.personId],
   });
-  try {
-    const result = await getDatabase().execute(sql`
-      SELECT *
-      FROM duna_join_pickup(
-        ${input.pickupSessionId}::uuid,
-        ${subjectPersonId}::uuid,
-        ${input.actor.personId}::uuid,
-        ${input.orderId ?? null}::uuid,
-        ${input.holdExpiresAt ?? null}::timestamptz,
-        ${JSON.stringify(decision)}::jsonb,
-        ${input.requestId}::text,
-        ${input.ipAddress ?? null}::text
-      )
-    `);
-    const row = result.rows[0] as
-      | {
-          participant_id?: string;
-          result_status?: string;
-          spots_remaining?: number;
-        }
-      | undefined;
-    if (
-      !row?.participant_id ||
-      !["confirmed", "waitlisted", "pending"].includes(
-        row.result_status ?? "",
-      ) ||
-      typeof row.spots_remaining !== "number"
-    ) {
-      throw new Error("Pickup transaction returned an invalid result");
+  if (!result) {
+    throw new Error("Pickup transaction did not return a participant");
+  }
+  return result;
+}
+
+export async function joinPickupGroup(input: {
+  readonly actor: ApiActor;
+  readonly pickupSessionId: string;
+  readonly subjectPersonIds: readonly string[];
+  readonly orderId?: string;
+  readonly holdExpiresAt?: Date;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<readonly PickupJoinResult[]> {
+  if (!process.env.DATABASE_URL) return databaseRequired();
+  const subjectPersonIds = [...new Set(input.subjectPersonIds)];
+  if (
+    subjectPersonIds.length === 0 ||
+    subjectPersonIds.length > 2 ||
+    subjectPersonIds.length !== input.subjectPersonIds.length ||
+    (subjectPersonIds.length === 2 &&
+      !subjectPersonIds.includes(input.actor.personId))
+  ) {
+    throw new CommerceError(
+      "PICKUP_NOT_JOINABLE",
+      "Choose yourself and at most one distinct partner.",
+    );
+  }
+  const evaluations = await Promise.all(
+    subjectPersonIds.map((subjectPersonId) =>
+      evaluatePickupParticipant({
+        actor: input.actor,
+        pickupSessionId: input.pickupSessionId,
+        subjectPersonId,
+        now: input.now,
+        allowAdultPartnerPurchase:
+          subjectPersonId !== input.actor.personId &&
+          subjectPersonIds.length === 2,
+      }),
+    ),
+  );
+  if (subjectPersonIds.length > 1) {
+    const existing = await getDatabase()
+      .select({
+        addedByPersonId: pickupParticipants.addedByPersonId,
+        holdExpiresAt: pickupParticipants.holdExpiresAt,
+        orderId: pickupParticipants.orderId,
+        personId: pickupParticipants.personId,
+        status: pickupParticipants.status,
+      })
+      .from(pickupParticipants)
+      .where(
+        and(
+          eq(pickupParticipants.pickupSessionId, input.pickupSessionId),
+          inArray(pickupParticipants.personId, subjectPersonIds),
+          inArray(pickupParticipants.status, [
+            "pending",
+            "confirmed",
+            "checked-in",
+            "waitlisted",
+          ]),
+        ),
+      );
+    const resumesThisPaidPair = Boolean(
+      input.orderId &&
+      existing.length === subjectPersonIds.length &&
+      existing.every(
+        (participant) =>
+          participant.orderId === input.orderId &&
+          participant.status === "pending" &&
+          participant.holdExpiresAt &&
+          participant.holdExpiresAt > input.now,
+      ),
+    );
+    const repeatsThisFreePair = Boolean(
+      !input.orderId &&
+      existing.length === subjectPersonIds.length &&
+      existing.every(
+        (participant) =>
+          ["confirmed", "checked-in"].includes(participant.status) &&
+          (participant.personId === input.actor.personId ||
+            participant.addedByPersonId === input.actor.personId),
+      ),
+    );
+    if (existing.length > 0 && !resumesThisPaidPair && !repeatsThisFreePair) {
+      throw new CommerceError(
+        "CHECKOUT_IN_PROGRESS",
+        "One of these players already has a place in this hosted match.",
+      );
     }
-    return {
-      participantId: row.participant_id,
-      status: row.result_status as PickupJoinResult["status"],
-      spotsRemaining: row.spots_remaining,
-    };
+  }
+  try {
+    return await getTransactionalDatabase().transaction(async (transaction) => {
+      const joined: PickupJoinResult[] = [];
+      for (const [index, subjectPersonId] of subjectPersonIds.entries()) {
+        const decision = evaluations[index]!.decision;
+        const result = await transaction.execute(sql`
+          SELECT *
+          FROM duna_join_pickup(
+            ${input.pickupSessionId}::uuid,
+            ${subjectPersonId}::uuid,
+            ${input.actor.personId}::uuid,
+            ${input.orderId ?? null}::uuid,
+            ${input.holdExpiresAt ?? null}::timestamptz,
+            ${JSON.stringify(decision)}::jsonb,
+            ${input.requestId}::text,
+            ${input.ipAddress ?? null}::text
+          )
+        `);
+        const row = result.rows[0] as
+          | {
+              participant_id?: string;
+              result_status?: string;
+              spots_remaining?: number;
+            }
+          | undefined;
+        if (
+          !row?.participant_id ||
+          !["confirmed", "waitlisted", "pending"].includes(
+            row.result_status ?? "",
+          ) ||
+          typeof row.spots_remaining !== "number"
+        ) {
+          throw new Error("Pickup transaction returned an invalid result");
+        }
+        if (subjectPersonIds.length > 1 && row.result_status === "waitlisted") {
+          throw new CommerceError(
+            "PICKUP_NOT_JOINABLE",
+            "Two places are no longer available together.",
+          );
+        }
+        if (subjectPersonId !== input.actor.personId) {
+          await transaction
+            .update(pickupParticipants)
+            .set({
+              addedByPersonId: input.actor.personId,
+              paidByPersonId: input.orderId ? input.actor.personId : undefined,
+              updatedAt: input.now,
+            })
+            .where(eq(pickupParticipants.id, row.participant_id));
+        }
+        joined.push({
+          participantId: row.participant_id,
+          status: row.result_status as PickupJoinResult["status"],
+          spotsRemaining: row.spots_remaining,
+        });
+      }
+      return joined;
+    });
   } catch (error) {
     return mapDatabaseOperationError(error);
   }

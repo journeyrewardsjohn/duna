@@ -25,13 +25,17 @@ function money(value: number) {
 }
 
 function ProfileDetailsModal({
+  onArtwork,
   onClose,
+  onEditProfile,
   visible,
 }: {
+  readonly onArtwork: () => void;
   readonly onClose: () => void;
+  readonly onEditProfile: () => void;
   readonly visible: boolean;
 }) {
-  const { dashboard, mode, settings } = usePlayerRuntime();
+  const { dashboard, settings } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
   return (
     <Modal
@@ -101,30 +105,14 @@ function ProfileDetailsModal({
               Keep your details and visuals current.
             </Text>
             <Text style={styles.artworkBody}>
-              Your playing profile, evidence sources, portraits, and reviewed
-              artwork all live together here.
+              Your playing profile, evidence sources, action photos, and
+              reviewed artwork all live together here.
             </Text>
             <View style={styles.artworkActions}>
-              <Pressable
-                disabled={mode === "preview"}
-                onPress={() =>
-                  void WebBrowser.openBrowserAsync(
-                    dunaWebUrl + "/app/settings#playing-profile",
-                  )
-                }
-                style={styles.primary}
-              >
+              <Pressable onPress={onEditProfile} style={styles.primary}>
                 <Text style={styles.primaryText}>Edit profile</Text>
               </Pressable>
-              <Pressable
-                disabled={mode === "preview"}
-                onPress={() =>
-                  void WebBrowser.openBrowserAsync(
-                    dunaWebUrl + "/app/settings#player-artwork",
-                  )
-                }
-                style={styles.secondary}
-              >
+              <Pressable onPress={onArtwork} style={styles.secondary}>
                 <Text style={styles.secondaryText}>Artwork</Text>
               </Pressable>
             </View>
@@ -136,12 +124,16 @@ function ProfileDetailsModal({
 }
 
 export function ProfileHubScreen({
+  onArtwork,
   onDestination,
+  onEditProfile,
   onOrganization,
 }: {
+  readonly onArtwork: () => void;
   readonly onDestination: (
     destination: Exclude<HubDestination, "profile">,
   ) => void;
+  readonly onEditProfile: () => void;
   readonly onOrganization: (organizationSlug: string) => void;
 }) {
   const {
@@ -376,7 +368,15 @@ export function ProfileHubScreen({
         </View>
       </ScrollView>
       <ProfileDetailsModal
+        onArtwork={() => {
+          setProfileOpen(false);
+          onArtwork();
+        }}
         onClose={() => setProfileOpen(false)}
+        onEditProfile={() => {
+          setProfileOpen(false);
+          onEditProfile();
+        }}
         visible={profileOpen}
       />
     </>

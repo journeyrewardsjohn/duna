@@ -166,8 +166,8 @@ type NavDestination = Tab | "paid";
 
 const tabs: readonly { key: NavDestination; label: string; icon: string }[] = [
   { key: "today", label: "Today", icon: "⌂" },
-  { key: "calendar", label: "Calendar", icon: "▦" },
-  { key: "paid", label: "Get Paid", icon: ")))" },
+  { key: "calendar", label: "Courts", icon: "▦" },
+  { key: "paid", label: "Money", icon: ")))" },
   { key: "people", label: "People", icon: "◎" },
   { key: "more", label: "More", icon: "•••" },
 ];
@@ -429,29 +429,189 @@ function Pill({
 }
 
 function Header({ context }: { readonly context: string }) {
-  const { dashboard, mode } = useProRuntime();
+  const {
+    activeAuthOrganizationId,
+    authOrganizations,
+    dashboard,
+    matches = [],
+    mode,
+    signOut,
+    switchOrganization,
+    workspace,
+  } = useProRuntime();
+  const [organizationSheetOpen, setOrganizationSheetOpen] = useState(false);
+  const [switching, setSwitching] = useState<string>();
   const initials = (dashboard?.organization.name ?? demoOrganization.name)
     .split(/\s+/)
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
+  const timezone =
+    workspace?.organization.timezone ??
+    dashboard?.organization.timezone ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = calendarDateKey(new Date(), timezone);
+  const watchMatches = mode === "preview" ? previewOperatorMatches() : matches;
+  const todayMatches = watchMatches.filter(
+    (match) =>
+      !match.scheduledAt ||
+      calendarDateKey(new Date(match.scheduledAt), timezone) === todayKey,
+  );
+  const liveCount = watchMatches.filter(
+    (match) => match.status === "live",
+  ).length;
+  const exceptionCount =
+    (dashboard?.alerts.length ?? 0) +
+    (workspace?.eventRegistrations.filter((registration) =>
+      ["cancelled", "refunded", "waitlisted"].includes(registration.status),
+    ).length ?? 0);
+  const grossSales =
+    dashboard?.metrics.find((metric) => metric.label === "Gross sales")
+      ?.value ?? "—";
   return (
-    <View style={styles.header}>
-      <View>
-        <Mark />
-        <Text style={styles.headerContext}>{context}</Text>
+    <>
+      <View style={styles.headerShell}>
+        <View style={styles.header}>
+          <View>
+            <Mark />
+            <Text style={styles.headerContext}>{context}</Text>
+          </View>
+          <View style={styles.headerButtons}>
+            <ThemeButton />
+            <Pressable accessibilityLabel="Ask Duna" style={styles.aiButton}>
+              <Text style={styles.aiButtonText}>✦</Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Open organization switcher"
+              onPress={() => setOrganizationSheetOpen(true)}
+              style={styles.profileButton}
+            >
+              <Text style={styles.profileText}>{initials}</Text>
+              {mode === "live" && <View style={styles.dot} />}
+            </Pressable>
+          </View>
+        </View>
+        <View
+          accessibilityLabel={`Watch: ${liveCount} live matches, ${exceptionCount} exceptions, ${grossSales} gross sales`}
+          style={styles.watchStrip}
+        >
+          <View style={styles.watchBrand}>
+            <View style={styles.watchPulse} />
+            <Text style={styles.watchBrandText}>WATCH</Text>
+          </View>
+          <View style={styles.watchMetric}>
+            <Text style={styles.watchMetricValue}>{liveCount}</Text>
+            <Text style={styles.watchMetricLabel}>LIVE</Text>
+          </View>
+          <View style={styles.watchMetric}>
+            <Text style={styles.watchMetricValue}>{todayMatches.length}</Text>
+            <Text style={styles.watchMetricLabel}>MATCHES</Text>
+          </View>
+          <View style={styles.watchMetric}>
+            <Text style={styles.watchMetricValue}>{exceptionCount}</Text>
+            <Text style={styles.watchMetricLabel}>ALERTS</Text>
+          </View>
+          <View style={[styles.watchMetric, styles.watchMoney]}>
+            <Text numberOfLines={1} style={styles.watchMetricValue}>
+              {grossSales}
+            </Text>
+            <Text style={styles.watchMetricLabel}>TAKINGS</Text>
+          </View>
+        </View>
       </View>
-      <View style={styles.headerButtons}>
-        <ThemeButton />
-        <Pressable style={styles.aiButton}>
-          <Text style={styles.aiButtonText}>✦</Text>
-        </Pressable>
-        <Pressable style={styles.profileButton}>
-          <Text style={styles.profileText}>{initials}</Text>
-          {mode === "live" && <View style={styles.dot} />}
-        </Pressable>
-      </View>
-    </View>
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setOrganizationSheetOpen(false)}
+        presentationStyle="pageSheet"
+        visible={organizationSheetOpen}
+      >
+        <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
+          <View style={styles.sheetHeader}>
+            <View style={styles.flex}>
+              <Text style={styles.eyebrow}>DUNA PRO WORKSPACE</Text>
+              <Text style={styles.sheetTitle}>Choose an organization.</Text>
+            </View>
+            <Pressable
+              accessibilityLabel="Close organization switcher"
+              onPress={() => setOrganizationSheetOpen(false)}
+              style={styles.closeButton}
+            >
+              <Text style={styles.closeText}>×</Text>
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.organizationSheetContent}>
+            <Text style={styles.organizationSheetLead}>
+              Every schedule, match, court, person, and payment below is scoped
+              to the selected organization.
+            </Text>
+            <View style={styles.organizationSheetList}>
+              {(authOrganizations ?? []).map((organization) => {
+                const active = organization.id === activeAuthOrganizationId;
+                return (
+                  <Pressable
+                    accessibilityState={{ selected: active }}
+                    disabled={active || Boolean(switching)}
+                    key={organization.id}
+                    onPress={() => {
+                      if (!switchOrganization) return;
+                      setSwitching(organization.id);
+                      void switchOrganization(organization.id)
+                        .then(() => setOrganizationSheetOpen(false))
+                        .finally(() => setSwitching(undefined));
+                    }}
+                    style={[
+                      styles.organizationSheetRow,
+                      active && styles.organizationSheetRowActive,
+                    ]}
+                  >
+                    <View style={styles.organizationSheetMark}>
+                      <Text style={styles.organizationSheetMarkText}>
+                        {organization.name.slice(0, 1).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.flex}>
+                      <Text style={styles.organizationSheetName}>
+                        {organization.name}
+                      </Text>
+                      <Text style={styles.organizationSheetRole}>
+                        {(organization.role ?? "member").replaceAll("_", " ")}
+                      </Text>
+                    </View>
+                    <Text style={styles.organizationSheetState}>
+                      {switching === organization.id
+                        ? "OPENING…"
+                        : active
+                          ? "ACTIVE"
+                          : "OPEN"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              {!authOrganizations?.length && (
+                <View style={styles.organizationSheetEmpty}>
+                  <Text style={styles.organizationSheetName}>
+                    {demoOrganization.name}
+                  </Text>
+                  <Text style={styles.organizationSheetRole}>
+                    Preview workspace
+                  </Text>
+                </View>
+              )}
+            </View>
+            {signOut && (
+              <Pressable
+                onPress={() => void signOut()}
+                style={styles.organizationSignOutButton}
+              >
+                <Text style={styles.organizationSignOutText}>
+                  Sign out of Duna Pro
+                </Text>
+              </Pressable>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+    </>
   );
 }
 
@@ -526,18 +686,219 @@ const schedule = [
   ],
 ] as const;
 
+function previewOperatorMatches(): OperatorMatches {
+  const base = new Date();
+  base.setMinutes(0, 0, 0);
+  const person = (index: number) => {
+    const source = demoPeople[index % demoPeople.length]!;
+    return {
+      id: source.id,
+      displayName: source.displayName,
+      initials: source.initials,
+      ratingDisplay: source.rating.display,
+    };
+  };
+  return [
+    {
+      id: "20000000-0000-4000-8000-000000000001",
+      status: "live",
+      scheduledAt: base.toISOString(),
+      venueId: "30000000-0000-4000-8000-000000000001",
+      venueName: "Manhattan Beach Club",
+      courtId: "40000000-0000-4000-8000-000000000001",
+      courtName: "Stadium Court",
+      sessionId: "50000000-0000-4000-8000-000000000001",
+      sessionTitle: "South Bay Open Match",
+      divisionName: "Open Doubles",
+      authoritativeDeviceId: "duna-pro-preview",
+      teamA: {
+        id: "60000000-0000-4000-8000-000000000001",
+        name: "Maya / Zoe",
+        people: [person(0), person(1)],
+      },
+      teamB: {
+        id: "60000000-0000-4000-8000-000000000002",
+        name: "Ari / Liv",
+        people: [person(2), person(3)],
+      },
+    },
+    {
+      id: "20000000-0000-4000-8000-000000000002",
+      status: "scheduled",
+      scheduledAt: new Date(base.getTime() + 2 * 60 * 60_000).toISOString(),
+      venueId: "30000000-0000-4000-8000-000000000001",
+      venueName: "Manhattan Beach Club",
+      courtId: "40000000-0000-4000-8000-000000000002",
+      courtName: "Court 2",
+      sessionId: "50000000-0000-4000-8000-000000000002",
+      sessionTitle: "Members Match Window",
+      divisionName: "Competitive Doubles",
+      teamA: {
+        id: "60000000-0000-4000-8000-000000000003",
+        name: "Nina / Jo",
+        people: [person(4), person(5)],
+      },
+      teamB: {
+        id: "60000000-0000-4000-8000-000000000004",
+        name: "Cam / Riley",
+        people: [person(6), person(7)],
+      },
+    },
+  ] as OperatorMatches;
+}
+
+function VenueMatchesSection({
+  dateKey,
+  onScore,
+  timezone,
+}: {
+  readonly dateKey?: string;
+  readonly onScore: (matchId?: string) => void;
+  readonly timezone: string;
+}) {
+  const { matches, mode } = useProRuntime();
+  const availableMatches =
+    mode === "preview" ? previewOperatorMatches() : (matches ?? []);
+  const visibleMatches = availableMatches
+    .filter(
+      (match) =>
+        !dateKey ||
+        !match.scheduledAt ||
+        calendarDateKey(new Date(match.scheduledAt), timezone) === dateKey,
+    )
+    .slice()
+    .sort((left, right) => {
+      if (left.status !== right.status) return left.status === "live" ? -1 : 1;
+      return (
+        Date.parse(left.scheduledAt ?? "") - Date.parse(right.scheduledAt ?? "")
+      );
+    });
+  return (
+    <View style={styles.venueMatchesSection}>
+      <View style={styles.venueMatchesHeading}>
+        <View>
+          <Text style={styles.eyebrow}>VENUE MATCHES</Text>
+          <Text style={styles.venueMatchesTitle}>On your courts.</Text>
+        </View>
+        <Pill
+          tone={
+            visibleMatches.some((match) => match.status === "live")
+              ? "live"
+              : "neutral"
+          }
+        >
+          {`${visibleMatches.length} ${visibleMatches.length === 1 ? "match" : "matches"}`}
+        </Pill>
+      </View>
+      <View style={styles.venueMatchesList}>
+        {visibleMatches.map((match) => (
+          <View key={match.id} style={styles.venueMatchCard}>
+            <View style={styles.venueMatchTopline}>
+              <View style={styles.venueMatchCourtLane}>
+                <View
+                  style={[
+                    styles.venueMatchCourtDot,
+                    match.status === "live" && styles.venueMatchCourtDotLive,
+                  ]}
+                />
+                <Text style={styles.venueMatchCourtName}>
+                  {match.courtName ?? "Court pending"}
+                </Text>
+              </View>
+              <Text style={styles.venueMatchTime}>
+                {match.status === "live"
+                  ? "LIVE NOW"
+                  : match.scheduledAt
+                    ? formatCalendarTime(match.scheduledAt, timezone)
+                    : "TIME PENDING"}
+              </Text>
+            </View>
+            <Text style={styles.venueMatchContext}>
+              {[match.venueName, match.sessionTitle, match.divisionName]
+                .filter(Boolean)
+                .join(" · ")}
+            </Text>
+            <View style={styles.venueMatchTeams}>
+              {[match.teamA, match.teamB].map((team, index) => (
+                <View key={team.id} style={styles.venueMatchTeam}>
+                  <View style={styles.venueMatchAvatars}>
+                    {team.people.slice(0, 2).map((player, playerIndex) => (
+                      <View
+                        key={player.id}
+                        style={[
+                          styles.venueMatchAvatar,
+                          playerIndex > 0 && styles.venueMatchAvatarOverlap,
+                        ]}
+                      >
+                        <Text style={styles.venueMatchAvatarText}>
+                          {player.initials}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                  <View style={styles.flex}>
+                    <Text numberOfLines={1} style={styles.venueMatchTeamName}>
+                      {team.name}
+                    </Text>
+                    <Text style={styles.venueMatchTeamMeta}>
+                      {team.people
+                        .map((player) => player.ratingDisplay.toFixed(2))
+                        .join(" · ") || "Ratings pending"}
+                    </Text>
+                  </View>
+                  {index === 0 && (
+                    <Text style={styles.venueMatchVersus}>VS</Text>
+                  )}
+                </View>
+              ))}
+            </View>
+            <Pressable
+              accessibilityLabel={`${match.status === "live" ? "Resume" : "Begin"} scoring ${match.teamA.name} versus ${match.teamB.name}`}
+              onPress={() => onScore(match.id)}
+              style={[
+                styles.venueMatchAction,
+                match.status === "live" && styles.venueMatchActionLive,
+              ]}
+            >
+              <Text style={styles.venueMatchActionText}>
+                {match.status === "live"
+                  ? "Resume courtside scoring"
+                  : "Open match + score"}
+              </Text>
+              <Text style={styles.venueMatchActionText}>→</Text>
+            </Pressable>
+          </View>
+        ))}
+        {visibleMatches.length === 0 && (
+          <View style={styles.venueMatchesEmpty}>
+            <Text style={styles.venueMatchesEmptyTitle}>
+              No matches on this day.
+            </Text>
+            <Text style={styles.venueMatchesEmptyBody}>
+              Hosted and event matches appear automatically when their venue,
+              program, or event belongs to this organization.
+            </Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
 function TodayScreen({
   onCalendar,
   onCreate,
   onGetPaid,
   onPeople,
   onRecordNotes,
+  onScore,
 }: {
   readonly onCalendar: (entryId?: string) => void;
   readonly onCreate: () => void;
   readonly onGetPaid: () => void;
   readonly onPeople: () => void;
   readonly onRecordNotes: (sessionId: string) => void;
+  readonly onScore: (matchId?: string) => void;
 }) {
   const { dashboard, mode, workspace } = useProRuntime();
   const organization = dashboard?.organization ?? demoOrganization;
@@ -762,6 +1123,12 @@ function TodayScreen({
         </Text>
       </View>
 
+      <VenueMatchesSection
+        dateKey={todayKey}
+        onScore={onScore}
+        timezone={timezone}
+      />
+
       {focusEntry && (
         <SessionArrivalBoard
           expectedPlayers={focusEntry.participantCount}
@@ -969,7 +1336,7 @@ function CalendarScreen({
   readonly focusEntryId?: string;
   readonly onCreate: () => void;
   readonly onRecordNotes: (sessionId: string) => void;
-  readonly onScore: () => void;
+  readonly onScore: (matchId?: string) => void;
 }) {
   const { client, dashboard, mode, refresh, workspace } = useProRuntime();
   const timezone =
@@ -1222,13 +1589,13 @@ function CalendarScreen({
         showsVerticalScrollIndicator={false}
       >
         <Header
-          context={`${dashboard?.organization.name ?? "DUNA PRO"} · CALENDAR`}
+          context={`${dashboard?.organization.name ?? "DUNA PRO"} · COURTS`}
         />
         <PageTitle
           action="New"
           eyebrow="THE OPERATING HUB"
           onAction={onCreate}
-          title="Calendar."
+          title="Court schedule."
         />
         <Text style={styles.calendarIntro}>
           Sessions, clinics, events, court time, coaches, players, equipment,
@@ -1300,6 +1667,12 @@ function CalendarScreen({
             })}
           </View>
         </ScrollView>
+
+        <VenueMatchesSection
+          dateKey={dayKey}
+          onScore={onScore}
+          timezone={timezone}
+        />
 
         <View style={styles.calendarFilterRow}>
           {(
@@ -2776,7 +3149,13 @@ function MatchPicker({
   );
 }
 
-function ScorerScreen({ onExit }: { readonly onExit: () => void }) {
+function ScorerScreen({
+  initialMatchId,
+  onExit,
+}: {
+  readonly initialMatchId?: string;
+  readonly onExit: () => void;
+}) {
   const { client, matches = [], mode } = useProRuntime();
   const { width: scorerWidth } = useWindowDimensions();
   const expandedScorer = scorerWidth >= 700;
@@ -2791,6 +3170,7 @@ function ScorerScreen({ onExit }: { readonly onExit: () => void }) {
   const [nextCounter, setNextCounter] = useState(2);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const openedInitialMatch = useRef(false);
   const system = serverState?.format.scoringSystem ?? previewSystem;
   const state = useMemo(
     () =>
@@ -2920,6 +3300,21 @@ function ScorerScreen({ onExit }: { readonly onExit: () => void }) {
       setBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (
+      mode !== "live" ||
+      !initialMatchId ||
+      !deviceId ||
+      openedInitialMatch.current
+    ) {
+      return;
+    }
+    const initialMatch = matches.find((match) => match.id === initialMatchId);
+    if (!initialMatch) return;
+    openedInitialMatch.current = true;
+    void openMatch(initialMatch);
+  }, [deviceId, initialMatchId, matches, mode]);
 
   async function submitEvent(event: ScoreEvent) {
     if (scoreComplete || busy) return;
@@ -3739,6 +4134,7 @@ function ProApp() {
   const [tab, setTab] = useState<Tab>("today");
   const [surface, setSurface] = useState<"create" | "get-paid" | "score">();
   const [sessionNotesId, setSessionNotesId] = useState<string>();
+  const [scoreMatchId, setScoreMatchId] = useState<string>();
   const [calendarEntryId, setCalendarEntryId] = useState<string>();
   const [themePreference, setThemePreference] =
     useState<ThemePreference>("light");
@@ -3751,6 +4147,11 @@ function ProApp() {
   const openCalendar = (entryId?: string) => {
     setCalendarEntryId(entryId);
     setTab("calendar");
+  };
+
+  const openScore = (matchId?: string) => {
+    setScoreMatchId(matchId);
+    setSurface("score");
   };
 
   const changeTab = (nextTab: NavDestination) => {
@@ -3772,6 +4173,12 @@ function ProApp() {
 
   useEffect(() => {
     const openActivity = (url: string | null) => {
+      const matchScore = url?.match(/^duna-pro:\/\/match\/([^/?#]+)/);
+      if (matchScore?.[1]) {
+        setScoreMatchId(decodeURIComponent(matchScore[1]));
+        setSurface("score");
+        return;
+      }
       const sessionMatch = url?.match(/^duna-pro:\/\/session\/([^/?#]+)/);
       if (sessionMatch?.[1]) {
         setSurface(undefined);
@@ -3872,7 +4279,13 @@ function ProApp() {
         <SafeAreaView edges={["top"]} style={styles.safe}>
           <StatusBar style="light" />
           <View style={styles.app}>
-            <ScorerScreen onExit={() => setSurface(undefined)} />
+            <ScorerScreen
+              initialMatchId={scoreMatchId}
+              onExit={() => {
+                setScoreMatchId(undefined);
+                setSurface(undefined);
+              }}
+            />
           </View>
         </SafeAreaView>
       ) : (
@@ -3903,6 +4316,7 @@ function ProApp() {
                   onGetPaid={() => setSurface("get-paid")}
                   onPeople={() => setTab("people")}
                   onRecordNotes={setSessionNotesId}
+                  onScore={openScore}
                 />
               )}
               {tab === "calendar" && (
@@ -3910,7 +4324,7 @@ function ProApp() {
                   focusEntryId={calendarEntryId}
                   onCreate={() => setSurface("create")}
                   onRecordNotes={setSessionNotesId}
-                  onScore={() => setSurface("score")}
+                  onScore={openScore}
                 />
               )}
               {tab === "people" && <PeopleScreen />}
@@ -4008,7 +4422,7 @@ function createStyles(palette: Palette) {
       paddingVertical: 6,
       textAlign: "center",
     },
-    signOutButton: {
+    organizationSignOutButton: {
       alignItems: "center",
       borderColor: rgba(colors.dangerRgb, 0.2),
       borderRadius: 14,
@@ -4019,6 +4433,142 @@ function createStyles(palette: Palette) {
     signOutText: { color: colors.danger, fontSize: 10, fontWeight: "800" },
     content: { paddingBottom: 116, paddingHorizontal: 18 },
     todayContent: { paddingBottom: 132, paddingHorizontal: 18 },
+    venueMatchesSection: { marginTop: 24 },
+    venueMatchesHeading: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 11,
+    },
+    venueMatchesTitle: {
+      color: colors.bone,
+      fontSize: 24,
+      fontWeight: "900",
+      letterSpacing: -0.9,
+      marginTop: 4,
+    },
+    venueMatchesList: { gap: 9 },
+    venueMatchCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 20,
+      borderWidth: 1,
+      overflow: "hidden",
+      padding: 14,
+    },
+    venueMatchTopline: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    venueMatchCourtLane: { alignItems: "center", flexDirection: "row", gap: 7 },
+    venueMatchCourtDot: {
+      backgroundColor: colors.warning,
+      borderRadius: 5,
+      height: 10,
+      width: 10,
+    },
+    venueMatchCourtDotLive: { backgroundColor: colors.flare },
+    venueMatchCourtName: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    venueMatchTime: {
+      color: colors.warning,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+    venueMatchContext: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 6,
+    },
+    venueMatchTeams: {
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      borderTopColor: rgba(colors.overlayRgb, 0.07),
+      borderTopWidth: 1,
+      marginTop: 12,
+      paddingVertical: 8,
+    },
+    venueMatchTeam: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 9,
+      minHeight: 49,
+      position: "relative",
+    },
+    venueMatchAvatars: { flexDirection: "row", width: 54 },
+    venueMatchAvatar: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderColor: colors.depth,
+      borderRadius: 17,
+      borderWidth: 2,
+      height: 34,
+      justifyContent: "center",
+      width: 34,
+    },
+    venueMatchAvatarOverlap: { marginLeft: -13 },
+    venueMatchAvatarText: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    venueMatchTeamName: { color: colors.bone, fontSize: 12, fontWeight: "900" },
+    venueMatchTeamMeta: {
+      color: colors.muted,
+      fontFamily: "Archivo-Chip",
+      fontSize: 10,
+      marginTop: 3,
+    },
+    venueMatchVersus: {
+      color: colors.muted,
+      fontFamily: "Archivo-Chip",
+      fontSize: 10,
+      fontWeight: "900",
+      position: "absolute",
+      right: 2,
+      top: 41,
+      zIndex: 2,
+    },
+    venueMatchAction: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 14,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 12,
+      minHeight: 50,
+      paddingHorizontal: 14,
+    },
+    venueMatchActionLive: { backgroundColor: colors.flare },
+    venueMatchActionText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    venueMatchesEmpty: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 19,
+      borderWidth: 1,
+      padding: 18,
+    },
+    venueMatchesEmptyTitle: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    venueMatchesEmptyBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 5,
+    },
     nowCard: {
       backgroundColor: colors.aquaDeep,
       borderRadius: 24,
@@ -5110,9 +5660,10 @@ function createStyles(palette: Palette) {
       alignItems: "center",
       flexDirection: "row",
       justifyContent: "space-between",
-      paddingBottom: 22,
+      paddingBottom: 14,
       paddingTop: 10,
     },
+    headerShell: { marginBottom: 20 },
     headerContext: {
       color: colors.muted,
       fontSize: 10,
@@ -5166,6 +5717,151 @@ function createStyles(palette: Palette) {
       right: 0,
       top: 0,
       width: 9,
+    },
+    watchStrip: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      minHeight: 56,
+      overflow: "hidden",
+      paddingHorizontal: 11,
+    },
+    watchBrand: {
+      alignItems: "center",
+      borderRightColor: rgba(colors.overlayRgb, 0.08),
+      borderRightWidth: 1,
+      flexDirection: "row",
+      gap: 6,
+      marginRight: 7,
+      paddingRight: 9,
+    },
+    watchPulse: {
+      backgroundColor: colors.flare,
+      borderRadius: 4,
+      height: 8,
+      width: 8,
+    },
+    watchBrandText: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    watchMetric: { flex: 1, minWidth: 0, paddingHorizontal: 4 },
+    watchMoney: { flex: 1.35 },
+    watchMetricValue: {
+      color: colors.bone,
+      fontFamily: "Archivo-Chip",
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    watchMetricLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.5,
+      marginTop: 3,
+    },
+    modalSafe: { backgroundColor: colors.canvas, flex: 1 },
+    sheetHeader: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.08),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      paddingHorizontal: 18,
+      paddingVertical: 14,
+    },
+    sheetTitle: {
+      color: colors.bone,
+      fontSize: 25,
+      fontWeight: "900",
+      letterSpacing: -0.8,
+      marginTop: 3,
+    },
+    closeButton: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 24,
+      borderWidth: 1,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    closeText: { color: colors.bone, fontSize: 28, lineHeight: 31 },
+    organizationSheetContent: { padding: 18, paddingBottom: 48 },
+    organizationSheetLead: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 20,
+      marginBottom: 16,
+    },
+    organizationSheetList: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 19,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    organizationSheetRow: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.07),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      minHeight: 76,
+      paddingHorizontal: 13,
+    },
+    organizationSheetRowActive: {
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+    },
+    organizationSheetMark: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 18,
+      height: 38,
+      justifyContent: "center",
+      width: 38,
+    },
+    organizationSheetMarkText: {
+      color: colors.aqua,
+      fontSize: 13,
+      fontWeight: "900",
+    },
+    organizationSheetName: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    organizationSheetRole: {
+      color: colors.muted,
+      fontSize: 11,
+      marginTop: 3,
+      textTransform: "capitalize",
+    },
+    organizationSheetState: {
+      color: colors.warning,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    organizationSheetEmpty: { padding: 16 },
+    signOutButton: {
+      alignItems: "center",
+      borderColor: rgba(colors.dangerRgb, 0.24),
+      borderRadius: 15,
+      borderWidth: 1,
+      justifyContent: "center",
+      marginTop: 18,
+      minHeight: 52,
+    },
+    organizationSignOutText: {
+      color: colors.danger,
+      fontSize: 12,
+      fontWeight: "900",
     },
     pageTitle: {
       alignItems: "flex-end",

@@ -510,6 +510,13 @@ test("pickup host flow publishes a complete listing", async ({ page }) => {
   await expect(page.getByLabel("Where")).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText("Who can see it")).toBeVisible();
+  await expect(page.getByText("Add players now")).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Search Duna player profiles" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /View .*'s profile/ }).first(),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Publish pickup" }).click();
 
   await expect(
@@ -688,6 +695,9 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
       "Here’s what is happening across South Bay Volleyball Club.",
     ),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Matches on your courts" }),
+  ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   await page.goto(`${hqBaseUrl}/locations/create`);
@@ -710,6 +720,9 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible();
   await expect(
     page.getByText("Community Court", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Matches on your courts" }),
   ).toBeVisible();
   await expect(page.getByText("No courts yet")).toHaveCount(0);
   await expectNoHorizontalOverflow(page);

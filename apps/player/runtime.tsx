@@ -25,7 +25,12 @@ import {
   View,
 } from "react-native";
 import Svg, { Line, Path } from "react-native-svg";
-import { createDunaApiClient, type DunaApiClient } from "./mobile-api";
+import {
+  createDunaApiClient,
+  uploadPlayerMedia,
+  type DunaApiClient,
+  type UploadedPlayerMedia,
+} from "./mobile-api";
 import { FellixText as Text } from "./fellix-text";
 
 type PlayerDashboard = Awaited<
@@ -93,6 +98,13 @@ export interface PlayerRuntime {
   readonly selfEnrollOrganizationStaff?: (
     staffRole: "coach" | "director",
   ) => Promise<void>;
+  readonly uploadPlayerMedia?: (input: {
+    readonly uri: string;
+    readonly name?: string;
+    readonly type?: string;
+    readonly width: number;
+    readonly height: number;
+  }) => Promise<UploadedPlayerMedia>;
   readonly signOut?: () => Promise<void>;
 }
 
@@ -461,6 +473,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         refresh,
         switchOrganization,
         selfEnrollOrganizationStaff,
+        uploadPlayerMedia: (input) => uploadPlayerMedia(getToken, input),
         signOut,
       }}
     >

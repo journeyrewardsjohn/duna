@@ -14,12 +14,22 @@ function normalizeApiUrl(value: string | undefined): string {
 }
 
 export const dunaApiUrl = normalizeApiUrl(process.env.EXPO_PUBLIC_DUNA_API_URL);
+export const dunaApiBaseUrl = dunaApiUrl.replace(/\/api\/trpc$/, "");
 export const dunaWebUrl = (
   process.env.EXPO_PUBLIC_DUNA_WEB_URL?.trim() || defaultWebUrl
 ).replace(/\/+$/, "");
 
 export type DunaApiClient = TRPCClient<AppRouter>;
 export type TokenGetter = () => Promise<string | null>;
+
+export interface UploadedPlayerMedia {
+  readonly url: string;
+  readonly kind: "action";
+  readonly contentType: string;
+  readonly size: number;
+  readonly width: number;
+  readonly height: number;
+}
 
 async function fetchWithTimeout(
   input: RequestInfo | URL,
@@ -51,4 +61,44 @@ export function createDunaApiClient(getToken: TokenGetter): DunaApiClient {
       }),
     ],
   });
+}
+
+export async function uploadPlayerMedia(
+  getToken: TokenGetter,
+  input: {
+    readonly uri: string;
+    readonly name?: string;
+    readonly type?: string;
+    readonly width: number;
+    readonly height: number;
+  },
+): Promise<UploadedPlayerMedia> {
+  const token = await getToken();
+  if (!token) throw new Error("Sign in again before uploading your photo.");
+  const form = new FormData();
+  form.append("file", {
+    uri: input.uri,
+    name: input.name ?? `duna-player-${Date.now()}.jpg`,
+    type: input.type ?? "image/jpeg",
+  } as unknown as Blob);
+  form.append("width", String(input.width));
+  form.append("height", String(input.height));
+  const response = await fetch(
+    `${dunaApiBaseUrl}/api/player-media/native-upload`,
+    {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+      body: form,
+    },
+  );
+  const payload = (await response.json()) as
+    UploadedPlayerMedia | { readonly error?: string };
+  if (!response.ok || !("url" in payload)) {
+    throw new Error(
+      "error" in payload && payload.error
+        ? payload.error
+        : "The action photo could not be uploaded.",
+    );
+  }
+  return payload;
 }

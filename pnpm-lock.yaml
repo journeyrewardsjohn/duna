@@ -157,6 +157,9 @@ importers:
       expo-haptics:
         specifier: ~57.0.1
         version: 57.0.1(expo@57.0.10)
+      expo-image-picker:
+        specifier: ~57.0.7
+        version: 57.0.7(expo@57.0.10)
       expo-location:
         specifier: ~57.0.7
         version: 57.0.7(expo@57.0.10)(supports-color@8.1.1)(typescript@6.0.3)

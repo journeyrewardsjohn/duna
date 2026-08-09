@@ -35,10 +35,13 @@ export default async function OperatorModulePage({
       console.error("Stripe onboarding status refresh failed.", error);
     }
   }
-  const [dashboard, workspace, ticketApprovals] = await Promise.all([
+  const [dashboard, workspace, ticketApprovals, matches] = await Promise.all([
     caller.operator.dashboard(),
     caller.operator.workspace(),
     caller.operator.pendingTicketApprovals(),
+    process.env.DATABASE_URL
+      ? caller.operator.scorableMatches()
+      : Promise.resolve([]),
   ]);
   return (
     <OperatorShell
@@ -50,6 +53,7 @@ export default async function OperatorModulePage({
         dashboard={dashboard}
         focusedDraftId={draft}
         module={module as OperatorModule}
+        matches={matches}
         ticketApprovals={ticketApprovals}
         workspace={workspace}
       />

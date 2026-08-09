@@ -12,6 +12,8 @@ type PlayerMediaPayload = {
   readonly kind: "action" | "portrait";
   readonly contentType: string;
   readonly size: number;
+  readonly width: number;
+  readonly height: number;
 };
 
 function parsePayload(value: string | null): PlayerMediaPayload {
@@ -21,7 +23,9 @@ function parsePayload(value: string | null): PlayerMediaPayload {
     typeof parsed.personId !== "string" ||
     (parsed.kind !== "action" && parsed.kind !== "portrait") ||
     typeof parsed.contentType !== "string" ||
-    typeof parsed.size !== "number"
+    typeof parsed.size !== "number" ||
+    typeof parsed.width !== "number" ||
+    typeof parsed.height !== "number"
   ) {
     throw new Error("Player image details are invalid.");
   }
@@ -42,6 +46,15 @@ export async function POST(request: Request) {
           throw new Error("Player images must stay inside your own profile.");
         }
         const media = validatePlayerMediaInput(payload);
+        if (
+          payload.width < 1_080 ||
+          payload.height < 1_080 ||
+          payload.width * payload.height < 2_000_000
+        ) {
+          throw new Error(
+            "Choose a high-resolution photo (at least 1080px on the short edge).",
+          );
+        }
         assertPlayerMediaPath(pathname, {
           personId: context.personId,
           kind: payload.kind,

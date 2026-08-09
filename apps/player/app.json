@@ -23,7 +23,7 @@
         "NSSupportsLiveActivitiesFrequentUpdates": true,
         "NSCameraUsageDescription": "Duna uses the camera to record and live stream beach volleyball.",
         "NSMicrophoneUsageDescription": "Duna uses the microphone only when you choose to include audio in a recording or live stream.",
-        "NSPhotoLibraryUsageDescription": "Duna lets you choose volleyball videos to add to your private archive or profile.",
+        "NSPhotoLibraryUsageDescription": "Duna lets you choose high-resolution volleyball action photos for profile artwork and videos for your private archive or profile.",
         "NSHealthShareUsageDescription": "Duna reads only the Apple Health categories you choose to build private, personalized Readiness, Sleep and Strain trends, compare those patterns with your matches, and align heart rate with your Duna Vision recordings.",
         "NSHealthUpdateUsageDescription": "Duna does not write to or change Apple Health. HealthKit access is read-only so you can choose the data behind your private performance timeline, personal insights and video overlays.",
         "NSContactsUsageDescription": "Duna uses contacts you select to find frequent partners or send a one-time game invitation.",
@@ -59,6 +59,13 @@
       "@bacons/apple-targets",
       "@rnmapbox/maps",
       "expo-contacts",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Duna lets you select high-resolution volleyball action photos for your profile artwork.",
+          "cameraPermission": "Duna uses the camera only when you choose to capture volleyball media."
+        }
+      ],
       [
         "expo-calendar",
         {
