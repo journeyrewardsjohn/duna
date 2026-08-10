@@ -290,11 +290,20 @@ export interface PickupMutationInput extends PickupInput {
 }
 
 export interface OperatorScheduleItem {
+  readonly id: string;
+  readonly slug: string;
   readonly time: string;
+  readonly startsAt: string;
   readonly court: string;
   readonly title: string;
+  readonly kind: EventSummary["kind"];
   readonly detail: string;
-  readonly state: string;
+  readonly participantCount: number;
+  readonly capacity: number;
+  readonly spotsRemaining: number;
+  readonly attendees: NonNullable<EventSummary["attendees"]>;
+  readonly destination: "operations" | "public";
+  readonly state: "live" | "full" | "almost-full" | "open" | "cancelled";
 }
 
 export interface OperatorAlert {

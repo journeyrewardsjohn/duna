@@ -2310,18 +2310,60 @@ function scheduleFromEvents(
   events: readonly EventSummary[],
   timezone: string,
 ): OperatorScheduleItem[] {
-  const formatter = new Intl.DateTimeFormat("en-US", {
+  const timeFormatter = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     hour: "numeric",
     minute: "2-digit",
   });
-  return events.slice(0, 8).map((event) => ({
-    time: formatter.format(new Date(event.startsAt)),
-    court: event.venueName,
-    title: event.title,
-    detail: `${event.spotsRemaining} spots remaining · ${titleCase(event.kind)}`,
-    state: event.live ? "live" : "scheduled",
-  }));
+  const dayFormatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const today = dayFormatter.format(new Date());
+
+  return events
+    .filter((event) => dayFormatter.format(new Date(event.startsAt)) === today)
+    .sort(
+      (left, right) =>
+        new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+    )
+    .slice(0, 8)
+    .map((event) => {
+      const participantCount = Math.max(
+        0,
+        Math.min(event.capacity, event.capacity - event.spotsRemaining),
+      );
+      const almostFullAt = Math.max(2, Math.ceil(event.capacity * 0.2));
+      const state: OperatorScheduleItem["state"] =
+        event.lifecycleStatus === "cancelled"
+          ? "cancelled"
+          : event.live
+            ? "live"
+            : event.spotsRemaining === 0
+              ? "full"
+              : event.spotsRemaining <= almostFullAt
+                ? "almost-full"
+                : "open";
+
+      return {
+        id: event.id,
+        slug: event.slug,
+        time: timeFormatter.format(new Date(event.startsAt)),
+        startsAt: event.startsAt,
+        court: event.venueName,
+        title: event.title,
+        kind: event.kind,
+        detail: `${participantCount} of ${event.capacity} joined`,
+        participantCount,
+        capacity: event.capacity,
+        spotsRemaining: event.spotsRemaining,
+        attendees: event.attendees ?? [],
+        destination: event.kind === "pickup" ? "public" : "operations",
+        state,
+      };
+    });
 }
 
 function connectedBookingStatus(
@@ -3084,14 +3126,22 @@ export const databaseRepository = {
                 : `${occupied} of ${totalCapacity} spots`,
           },
           { label: "Active courts", value: String(courtCount) },
-          {
-            label: "Payments",
-            value: titleCase(organization.stripeStatus),
-            tone:
-              organization.stripeStatus === "connected"
-                ? "positive"
-                : "warning",
-          },
+          ...(organization.stripeStatus === "connected"
+            ? []
+            : [
+                {
+                  label: "Payments",
+                  value:
+                    organization.stripeStatus === "pending"
+                      ? "Finish setup"
+                      : "Needs review",
+                  change:
+                    organization.stripeStatus === "pending"
+                      ? "Verify the account before publishing paid sessions."
+                      : "Charges or payouts may be paused.",
+                  tone: "warning" as const,
+                },
+              ]),
         ],
         schedule: scheduleFromEvents(scopedEvents, organization.timezone),
         events: scopedEvents,
@@ -3102,7 +3152,10 @@ export const databaseRepository = {
                 {
                   id: "stripe",
                   title: "Payments need attention",
-                  detail: "Complete the connected-account readiness steps.",
+                  detail:
+                    organization.stripeStatus === "pending"
+                      ? "Finish account verification before publishing paid sessions."
+                      : "Charges or payouts are limited. Review the processor requirements.",
                   action: "Review payments",
                   tone: "warning",
                 },

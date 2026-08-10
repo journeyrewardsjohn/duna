@@ -9,8 +9,8 @@ import {
   ChevronRight,
   CircleAlert,
   CreditCard,
+  ExternalLink,
   History,
-  MoreHorizontal,
   Sparkles,
   TrendingUp,
   UsersRound,
@@ -20,6 +20,38 @@ import { quickActions } from "./navigation";
 import { VenueMatchOperations } from "./venue-match-operations";
 
 const metricIcons = [TrendingUp, UsersRound, Check, CreditCard] as const;
+const playerWebOrigin = (
+  process.env.NEXT_PUBLIC_WEB_URL ?? "https://duna.coach"
+).replace(/\/$/, "");
+
+function scheduleKindLabel(kind: string): string {
+  return kind
+    .split("-")
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(" ");
+}
+
+function scheduleStatusLabel(
+  state: OperatorDashboard["schedule"][number]["state"],
+  spotsRemaining: number,
+): string | undefined {
+  if (state === "live") return "Live now";
+  if (state === "full") return "Full";
+  if (state === "almost-full") {
+    return `${spotsRemaining} spot${spotsRemaining === 1 ? "" : "s"} left`;
+  }
+  if (state === "cancelled") return "Cancelled";
+  return undefined;
+}
+
+function scheduleAvailability(
+  state: OperatorDashboard["schedule"][number]["state"],
+  spotsRemaining: number,
+): string {
+  if (state === "cancelled") return "Registration closed";
+  if (state === "full") return "At capacity";
+  return `${spotsRemaining} spot${spotsRemaining === 1 ? "" : "s"} open`;
+}
 
 function quickActionDestination(label: string): string {
   if (label === "Add person") return "/members";
@@ -50,6 +82,13 @@ export function OperatorOverview({
     .slice(0, 3);
   const leadMetric = dashboard.metrics[0];
   const topAlert = dashboard.alerts[0];
+  const supportingMetrics = dashboard.metrics
+    .slice(1)
+    .filter(
+      (metric) =>
+        metric.label !== "Payments" ||
+        dashboard.organization.stripeStatus !== "connected",
+    );
 
   return (
     <main className="hq-page hq-overview-page">
@@ -111,10 +150,10 @@ export function OperatorOverview({
             )}
 
             <div className="hq-analytics-metrics">
-              {dashboard.metrics.slice(1).map((metric, index) => {
+              {supportingMetrics.map((metric, index) => {
                 const Icon = metricIcons[(index + 1) % metricIcons.length]!;
                 return (
-                  <article key={metric.label}>
+                  <article data-tone={metric.tone} key={metric.label}>
                     <span>
                       {metric.label}
                       <Icon aria-hidden size={16} />
@@ -132,15 +171,7 @@ export function OperatorOverview({
                       </div>
                     )}
                     {metric.label === "Payments" && (
-                      <Badge
-                        tone={
-                          dashboard.organization.stripeStatus === "connected"
-                            ? "positive"
-                            : "warning"
-                        }
-                      >
-                        {dashboard.organization.stripeStatus}
-                      </Badge>
+                      <Badge tone="warning">Action required</Badge>
                     )}
                   </article>
                 );
@@ -158,29 +189,91 @@ export function OperatorOverview({
                 Full calendar <ArrowRight aria-hidden size={15} />
               </Link>
             </header>
-            <div className="today-list">
-              {dashboard.schedule.map((item) => (
-                <article key={`${item.time}-${item.title}`}>
-                  <time>
-                    <Numeric>{item.time}</Numeric>
-                  </time>
-                  <i className={item.state === "live" ? "live" : undefined} />
-                  <div>
-                    <strong>{item.title}</strong>
-                    <span>{item.court}</span>
-                  </div>
-                  <div>
-                    <small>Capacity</small>
-                    <span>{item.detail}</span>
-                  </div>
-                  <Badge tone={item.state === "live" ? "live" : "neutral"}>
-                    {item.state}
-                  </Badge>
-                  <button aria-label={`More options for ${item.title}`}>
-                    <MoreHorizontal aria-hidden size={18} />
-                  </button>
-                </article>
-              ))}
+            <div className="hq-schedule-list">
+              {dashboard.schedule.map((item) => {
+                const publicDestination = item.destination === "public";
+                const statusLabel = scheduleStatusLabel(
+                  item.state,
+                  item.spotsRemaining,
+                );
+                const visibleAttendees = item.attendees.slice(0, 4);
+                const additionalAttendees = Math.max(
+                  0,
+                  item.participantCount - visibleAttendees.length,
+                );
+
+                return (
+                  <Link
+                    aria-label={`${item.title} · ${publicDestination ? "open player view" : "open session operations"}`}
+                    className="hq-schedule-row"
+                    href={
+                      publicDestination
+                        ? `${playerWebOrigin}/events/${item.slug}`
+                        : `/events/${item.id}`
+                    }
+                    key={item.id}
+                    rel={publicDestination ? "noreferrer" : undefined}
+                    target={publicDestination ? "_blank" : undefined}
+                  >
+                    <time dateTime={item.startsAt}>
+                      <Numeric>{item.time}</Numeric>
+                    </time>
+                    <span className="hq-schedule-row__session">
+                      <i aria-hidden data-state={item.state} />
+                      <span>
+                        <strong>{item.title}</strong>
+                        <small>
+                          {item.court} · {scheduleKindLabel(item.kind)}
+                        </small>
+                      </span>
+                    </span>
+                    <span className="hq-schedule-row__roster">
+                      <span
+                        aria-label={`${item.participantCount} players joined${item.attendees.length ? `: ${item.attendees.map((attendee) => attendee.displayName).join(", ")}` : ""}`}
+                        className="hq-schedule-row__avatars"
+                        role="img"
+                      >
+                        {visibleAttendees.map((attendee) => (
+                          <span key={attendee.id} title={attendee.displayName}>
+                            {attendee.avatarUrl ? (
+                              <img alt="" src={attendee.avatarUrl} />
+                            ) : (
+                              attendee.initials
+                            )}
+                          </span>
+                        ))}
+                        {additionalAttendees > 0 && (
+                          <span aria-hidden>+{additionalAttendees}</span>
+                        )}
+                      </span>
+                      <span>
+                        <strong>
+                          {item.participantCount} of {item.capacity} joined
+                        </strong>
+                        <small>
+                          {scheduleAvailability(
+                            item.state,
+                            item.spotsRemaining,
+                          )}
+                        </small>
+                      </span>
+                    </span>
+                    <span className="hq-schedule-row__action">
+                      {statusLabel && (
+                        <em data-state={item.state}>{statusLabel}</em>
+                      )}
+                      <span>
+                        {publicDestination ? "Player view" : "Open session"}
+                      </span>
+                      {publicDestination ? (
+                        <ExternalLink aria-hidden size={16} />
+                      ) : (
+                        <ArrowRight aria-hidden size={16} />
+                      )}
+                    </span>
+                  </Link>
+                );
+              })}
               {dashboard.schedule.length === 0 && (
                 <article className="hq-empty">
                   <strong>No published sessions today.</strong>
@@ -301,7 +394,7 @@ export function OperatorOverview({
                   <Badge tone="warning">Needs attention</Badge>
                   <h3>{topAlert.title}</h3>
                   <p>{topAlert.detail}</p>
-                  <Link href="/ai">
+                  <Link href={topAlert.id === "stripe" ? "/payments" : "/ai"}>
                     {topAlert.action} <ArrowRight aria-hidden size={14} />
                   </Link>
                 </div>
@@ -326,32 +419,6 @@ export function OperatorOverview({
                 </div>
               </article>
             )}
-
-            <article className="hq-ai-signal">
-              <span>
-                <CreditCard aria-hidden size={18} />
-              </span>
-              <div>
-                <Badge
-                  tone={
-                    dashboard.organization.stripeStatus === "connected"
-                      ? "positive"
-                      : "warning"
-                  }
-                >
-                  Money
-                </Badge>
-                <h3>Payments are {dashboard.organization.stripeStatus}.</h3>
-                <p>
-                  {dashboard.organization.stripeStatus === "connected"
-                    ? "Payment processing is connected for this organization."
-                    : "Complete payment setup before publishing paid inventory."}
-                </p>
-                <Link href="/payments">
-                  Open money <ArrowRight aria-hidden size={14} />
-                </Link>
-              </div>
-            </article>
 
             {!topAlert && !nearlyFull[0] && (
               <article className="hq-ai-signal hq-ai-signal--clear">
