@@ -95,6 +95,7 @@ export const sessionStatusEnum = pgEnum("session_status", [
   "cancelled",
 ]);
 export const registrationStatusEnum = pgEnum("registration_status", [
+  "invited",
   "pending",
   "confirmed",
   "waitlisted",

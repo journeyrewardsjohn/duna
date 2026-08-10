@@ -132,6 +132,187 @@ import {
   type VolleyballWorldTeam,
 } from "./volleyball-world-live";
 
+export interface MatchResultNarrativeInput {
+  readonly id: string;
+  readonly result: "win" | "loss";
+  readonly expectedWinProbability: number;
+  readonly pointShare: number;
+  readonly ratingDelta: number;
+  readonly sets: readonly { readonly a: number; readonly b: number }[];
+}
+
+export interface MatchResultNarrative {
+  readonly summary: string;
+  readonly source: "ai" | "computed";
+}
+
+const matchNarrativeCache = new Map<
+  string,
+  ReadonlyMap<string, MatchResultNarrative>
+>();
+
+export function computedMatchNarrative(
+  match: MatchResultNarrativeInput,
+): MatchResultNarrative {
+  const closeSets = match.sets.filter(
+    (set) => Math.abs(set.a - set.b) <= 2,
+  ).length;
+  const lowerExpectation = match.expectedWinProbability < 0.5;
+  if (match.result === "win") {
+    return {
+      summary: lowerExpectation
+        ? `Beat the pre-match numbers and earned every point of the rise.`
+        : closeSets > 0
+          ? `Held steady through ${closeSets === 1 ? "a tight set" : `${closeSets} tight sets`} and finished the job.`
+          : "Controlled the result and carried positive form into the next match.",
+      source: "computed",
+    };
+  }
+  return {
+    summary:
+      match.pointShare >= 0.48
+        ? "Pushed the match to the edge—small margins, strong signal, next serve ahead."
+        : closeSets > 0
+          ? `Made the difference narrow in ${closeSets === 1 ? "a tight set" : `${closeSets} tight sets`} and kept the level honest.`
+          : "A useful result in the record: clear evidence, reset, and the next chance ahead.",
+    source: "computed",
+  };
+}
+
+function responseOutputText(value: unknown) {
+  if (!value || typeof value !== "object") return undefined;
+  const response = value as {
+    readonly output_text?: string;
+    readonly output?: readonly {
+      readonly content?: readonly {
+        readonly type?: string;
+        readonly text?: string;
+      }[];
+    }[];
+  };
+  return (
+    response.output_text?.trim() ??
+    response.output
+      ?.flatMap((item) => item.content ?? [])
+      .find((block) => block.type === "output_text" && block.text?.trim())
+      ?.text?.trim()
+  );
+}
+
+async function buildMatchResultNarratives(
+  matches: readonly MatchResultNarrativeInput[],
+): Promise<ReadonlyMap<string, MatchResultNarrative>> {
+  const cacheKey = stableHash(matches);
+  const cached = matchNarrativeCache.get(cacheKey);
+  if (cached) return cached;
+  const fallback = new Map(
+    matches.map((match) => [match.id, computedMatchNarrative(match)]),
+  );
+  const credential =
+    process.env.AI_GATEWAY_API_KEY?.trim() ||
+    process.env.VERCEL_OIDC_TOKEN?.trim();
+  if (!credential || matches.length === 0) {
+    matchNarrativeCache.set(cacheKey, fallback);
+    return fallback;
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6_000);
+  try {
+    const response = await fetch("https://ai-gateway.vercel.sh/v1/responses", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${credential}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model:
+          process.env.AI_GATEWAY_SPORTSWRITER_MODEL?.trim() ||
+          "openai/gpt-5.6-luna",
+        store: false,
+        input: [
+          {
+            role: "system",
+            content: [
+              {
+                type: "input_text",
+                text: "Write one upbeat, premium sports-card line per beach-volleyball result. Use only supplied facts. Losses must feel constructive, never patronizing. No quotes, invented context, emojis, player names, or betting language. Each summary must be 8 to 18 words.",
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [{ type: "input_text", text: JSON.stringify(matches) }],
+          },
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "match_result_narratives",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                results: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      id: { type: "string" },
+                      summary: {
+                        type: "string",
+                        minLength: 20,
+                        maxLength: 180,
+                      },
+                    },
+                    required: ["id", "summary"],
+                  },
+                },
+              },
+              required: ["results"],
+            },
+          },
+        },
+      }),
+      signal: controller.signal,
+    });
+    if (response.ok) {
+      const output = responseOutputText(await response.json());
+      const parsed = output
+        ? (JSON.parse(output) as {
+            readonly results?: readonly {
+              readonly id?: unknown;
+              readonly summary?: unknown;
+            }[];
+          })
+        : undefined;
+      for (const result of parsed?.results ?? []) {
+        if (
+          typeof result.id === "string" &&
+          fallback.has(result.id) &&
+          typeof result.summary === "string" &&
+          result.summary.trim()
+        ) {
+          fallback.set(result.id, {
+            summary: result.summary.trim(),
+            source: "ai",
+          });
+        }
+      }
+    }
+  } catch {
+    // Deterministic facts-only copy keeps the result card useful offline.
+  } finally {
+    clearTimeout(timeout);
+  }
+  matchNarrativeCache.set(cacheKey, fallback);
+  if (matchNarrativeCache.size > 120) {
+    matchNarrativeCache.delete(matchNarrativeCache.keys().next().value!);
+  }
+  return fallback;
+}
+
 const sourceNames: Readonly<Record<SandDataSource, string>> = {
   "avp-league": "AVP League",
   bvbinfo: "BVBInfo",
@@ -10283,6 +10464,32 @@ export async function loadPublicPlayerPerformance(personId: string) {
         }
       : undefined;
   const world = latestRanking[0];
+  const resultNarratives = await buildMatchResultNarratives(
+    eventRows.slice(0, 16).map((event) => {
+      return {
+        id: event.id,
+        result:
+          (typeof event.explanation.actualResult === "number"
+            ? event.explanation.actualResult
+            : 0) >= 0.5
+            ? ("win" as const)
+            : ("loss" as const),
+        expectedWinProbability:
+          typeof event.explanation.expectedWinProbability === "number"
+            ? event.explanation.expectedWinProbability
+            : 0.5,
+        pointShare:
+          typeof event.explanation.pointShare === "number"
+            ? event.explanation.pointShare
+            : 0.5,
+        ratingDelta:
+          typeof event.explanation.displayDelta === "number"
+            ? event.explanation.displayDelta
+            : 0,
+        sets: event.sets ?? [],
+      };
+    }),
+  );
   return {
     history: eventRows.map((event) => {
       const backtest = backtestByMatchId.get(event.matchId);
@@ -10355,6 +10562,30 @@ export async function loadPublicPlayerPerformance(personId: string) {
           event.createdAt
         ).toISOString(),
         matchTitle: event.matchTitle ?? "Duna match",
+        resultStory:
+          resultNarratives.get(event.id) ??
+          computedMatchNarrative({
+            id: event.id,
+            result:
+              (typeof event.explanation.actualResult === "number"
+                ? event.explanation.actualResult
+                : 0) >= 0.5
+                ? "win"
+                : "loss",
+            expectedWinProbability:
+              typeof event.explanation.expectedWinProbability === "number"
+                ? event.explanation.expectedWinProbability
+                : 0.5,
+            pointShare:
+              typeof event.explanation.pointShare === "number"
+                ? event.explanation.pointShare
+                : 0.5,
+            ratingDelta:
+              typeof event.explanation.displayDelta === "number"
+                ? event.explanation.displayDelta
+                : 0,
+            sets: event.sets ?? [],
+          }),
         sourceUrl: event.sourceUrl ?? undefined,
         sets: event.sets ?? [],
         participants,

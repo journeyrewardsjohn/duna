@@ -425,6 +425,19 @@ export interface BookingSummary {
     readonly displayName: string;
   };
   readonly pairedSpotCount?: number;
+  readonly pickup?: {
+    readonly capacity: number;
+    readonly confirmedCount: number;
+    readonly spotsRemaining: number;
+    readonly waitlistEnabled: boolean;
+    readonly approvalRequired: boolean;
+    readonly visibility: "public" | "unlisted";
+    readonly note?: string;
+    readonly pricePerPerson: Money;
+    readonly canAddPlayers: boolean;
+    readonly isCreator: boolean;
+    readonly invitationStatus?: "invited";
+  };
   readonly team?: {
     readonly claimToken: string;
     readonly expectedTeamSize: number;

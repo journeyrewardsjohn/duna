@@ -191,6 +191,7 @@ import {
 } from "./commerce";
 import {
   cancelPickup,
+  invitePickupPlayers,
   leavePickup,
   loadPickupManagement,
   requestPickupJoin,
@@ -757,7 +758,12 @@ const pickupManagementSchema = z.object({
   canEdit: z.boolean(),
   canCancel: z.boolean(),
   canLeave: z.boolean(),
+  canAddPlayers: z.boolean(),
+  capacity: z.number().int().min(2),
+  spotsRemaining: z.number().int().nonnegative(),
+  waitlistEnabled: z.boolean(),
   confirmedParticipantCount: z.number().int().nonnegative(),
+  invitedParticipantCount: z.number().int().nonnegative(),
   ownRequestStatus: pickupRequestStatusSchema.optional(),
   requests: z
     .array(
@@ -5125,6 +5131,49 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
+  invitePickupPlayers: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "pickup-player-invite",
+        capacity: 20,
+        refillPerMinute: 8,
+      }),
+    )
+    .input(
+      z.object({
+        pickupSessionId: z.string().uuid(),
+        personIds: z.array(z.string().uuid()).min(1).max(10),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        invitedPersonIds: z.array(z.string().uuid()).readonly(),
+        alreadyActivePersonIds: z.array(z.string().uuid()).readonly(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.invitePickupPlayers",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await invitePickupPlayers({
+              actor: ctx.actor!,
+              pickupSessionId: input.pickupSessionId,
+              personIds: input.personIds,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   requestPickupJoin: protectedProcedure
     .use(
       rateLimitMiddleware({
@@ -5220,6 +5269,7 @@ const playerRouter = router({
         capacity: z.number().int().min(2).max(100),
         note: z.string().trim().max(2_000).optional(),
         approvalRequired: z.boolean(),
+        waitlistEnabled: z.boolean(),
         visibility: z.enum(["public", "unlisted"]),
         idempotencyKey: z.string().uuid(),
       }),
@@ -5618,7 +5668,7 @@ const playerRouter = router({
                 "Each team member needs a Duna player or invite.",
               ),
           )
-          .max(5)
+          .max(10)
           .optional(),
         subjectPersonId: z.string().uuid().optional(),
         acceptedPolicyIds: z

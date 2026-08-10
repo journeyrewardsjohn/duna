@@ -836,6 +836,7 @@ export default async function EventPage({
             <PickupEventActions
               approvalRequired={event.approvalRequired ?? false}
               management={pickupManagement}
+              paidMatch={event.price.amountMinor > 0}
               pickupSessionId={event.id}
               slug={event.slug}
             />

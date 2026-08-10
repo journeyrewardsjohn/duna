@@ -22536,6 +22536,85 @@ html {
   margin-left: auto;
 }
 
+.pickup-actions__player-adder {
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: 0.65rem;
+  padding-top: 0.65rem;
+}
+
+.pickup-actions__player-adder > button {
+  justify-self: start;
+}
+
+.pickup-actions__player-picker {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem;
+}
+
+.pickup-actions__player-picker > p {
+  color: var(--color-aqua-deep);
+  font-size: 0.68rem;
+  margin: 0;
+}
+
+.pickup-actions__player-picker > label {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.pickup-actions__player-picker input {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  color: var(--color-ink);
+  min-height: 40px;
+  padding: 0 0.8rem;
+}
+
+.pickup-actions__player-results {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+}
+
+.pickup-actions__player-results > button {
+  background: var(--color-canvas);
+  border-color: var(--color-line);
+  border-radius: 12px;
+  color: var(--color-ink);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  justify-content: stretch;
+  text-align: left;
+}
+
+.pickup-actions__player-results > button[aria-pressed="true"] {
+  background: var(--color-aqua-haze);
+  border-color: var(--color-aqua);
+}
+
+.pickup-actions__player-results > button > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+}
+
+.pickup-actions__player-decisions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.pickup-actions__player-decisions > button:first-child {
+  background: transparent;
+  color: var(--color-aqua-deep);
+}
+
 .markdown-content {
   color: var(--color-bone-muted);
   font-size: 0.7rem;
@@ -35361,13 +35440,76 @@ button.selected > .choice-radio {
 }
 
 .athlete-match-history > div > article {
-  background: rgb(var(--overlay-rgb) / 2.5%);
+  background: var(--color-surface);
   border: 1px solid var(--color-line);
-  border-radius: 18px;
+  border-radius: 22px;
   display: grid;
   gap: 0;
   grid-template-columns: 1fr;
   padding: 0;
+}
+
+.athlete-match-history > div > article[data-result="win"] {
+  background: #efe5ce;
+  border-color: #d7bd84;
+}
+
+.athlete-match-history > div > article[data-result="loss"] {
+  background: #b5ccd3;
+  border-color: #87aab5;
+}
+
+:root[data-theme="dark"]
+  .athlete-match-history
+  > div
+  > article[data-result="win"] {
+  background: #4a402b;
+  border-color: #8d7748;
+}
+
+:root[data-theme="dark"]
+  .athlete-match-history
+  > div
+  > article[data-result="loss"] {
+  background: #294651;
+  border-color: #527782;
+}
+
+.match-history-card__story {
+  background-position: center;
+  background-size: cover;
+  color: #172126;
+  min-height: 150px;
+  padding: 1.15rem;
+}
+
+.match-history-card__story > div {
+  display: grid;
+  gap: 0.35rem;
+  max-width: min(68%, 560px);
+}
+
+.match-history-card__story small {
+  color: rgb(23 33 38 / 62%) !important;
+  font-size: 0.625rem !important;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  order: 3;
+  padding-top: 0.55rem;
+}
+
+.match-history-card__story strong {
+  color: #172126 !important;
+  font-family: var(--font-display);
+  font-size: clamp(1.55rem, 3vw, 2.2rem) !important;
+  letter-spacing: -0.03em;
+}
+
+.match-history-card__story p {
+  color: #172126;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0;
 }
 
 .athlete-match-history article > header,
@@ -35420,6 +35562,36 @@ button.selected > .choice-radio {
 .match-history-card__score > div.is-player > span {
   color: var(--color-bone);
   font-weight: 800;
+}
+
+.match-history-card__players {
+  display: grid;
+  gap: 0.38rem;
+  min-width: 0;
+}
+
+.match-history-card__player {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.match-history-card__player > span {
+  color: var(--color-bone) !important;
+  font-weight: 760;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.match-history-card__player > b {
+  background: #c8f04a;
+  border-radius: 999px;
+  color: #17200d;
+  font-family: var(--font-numeric);
+  font-size: 0.68rem;
+  padding: 0.16rem 0.42rem;
 }
 
 .match-history-card__score .duna-numeric {

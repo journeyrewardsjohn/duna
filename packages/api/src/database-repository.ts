@@ -2328,7 +2328,8 @@ function connectedBookingStatus(
   status: string,
 ): BookingSummary["status"] | undefined {
   if (status === "waitlisted") return "waitlisted";
-  if (status === "pending" || status === "held") return "needs-action";
+  if (status === "invited" || status === "pending" || status === "held")
+    return "needs-action";
   if (status === "confirmed" || status === "checked-in") return "confirmed";
   return undefined;
 }
@@ -2395,6 +2396,14 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
         orderId: pickupParticipants.orderId,
         addedByPersonId: pickupParticipants.addedByPersonId,
         paidByPersonId: pickupParticipants.paidByPersonId,
+        capacity: pickupSessions.capacity,
+        costMinor: pickupSessions.costMinor,
+        currency: pickupSessions.currency,
+        hostPersonId: pickupSessions.hostPersonId,
+        approvalRequired: pickupSessions.approvalRequired,
+        note: pickupSessions.note,
+        smartRules: pickupSessions.smartRules,
+        visibility: pickupSessions.visibility,
         orderTotalMinor: orders.totalMinor,
         orderCurrency: orders.currency,
         orderStatus: orders.status,
@@ -2410,6 +2419,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
         and(
           eq(pickupParticipants.personId, personId),
           inArray(pickupParticipants.status, [
+            "invited",
             "pending",
             "confirmed",
             "waitlisted",
@@ -2482,13 +2492,21 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
             pickupSessionId: pickupParticipants.pickupSessionId,
             orderId: pickupParticipants.orderId,
             displayName: people.displayName,
+            holdExpiresAt: pickupParticipants.holdExpiresAt,
+            status: pickupParticipants.status,
           })
           .from(pickupParticipants)
           .innerJoin(people, eq(pickupParticipants.personId, people.id))
           .where(
             and(
               inArray(pickupParticipants.pickupSessionId, pickupSessionIds),
-              inArray(pickupParticipants.status, ["confirmed", "checked-in"]),
+              inArray(pickupParticipants.status, [
+                "invited",
+                "pending",
+                "confirmed",
+                "checked-in",
+                "waitlisted",
+              ]),
             ),
           )
       : Promise.resolve([]),
@@ -2503,12 +2521,25 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
   }
   const pickupNamesBySession = new Map<string, string[]>();
   const pickupCountByOrder = new Map<string, number>();
+  const pickupOccupiedBySession = new Map<string, number>();
   for (const row of pickupParticipantRows) {
-    pickupNamesBySession.set(row.pickupSessionId, [
-      ...(pickupNamesBySession.get(row.pickupSessionId) ?? []),
-      row.displayName,
-    ]);
-    if (row.orderId) {
+    if (["confirmed", "checked-in"].includes(row.status)) {
+      pickupNamesBySession.set(row.pickupSessionId, [
+        ...(pickupNamesBySession.get(row.pickupSessionId) ?? []),
+        row.displayName,
+      ]);
+    }
+    if (
+      ["confirmed", "checked-in"].includes(row.status) ||
+      (row.status === "pending" &&
+        Boolean(row.holdExpiresAt && row.holdExpiresAt > now))
+    ) {
+      pickupOccupiedBySession.set(
+        row.pickupSessionId,
+        (pickupOccupiedBySession.get(row.pickupSessionId) ?? 0) + 1,
+      );
+    }
+    if (row.orderId && ["confirmed", "checked-in"].includes(row.status)) {
       pickupCountByOrder.set(
         row.orderId,
         (pickupCountByOrder.get(row.orderId) ?? 0) + 1,
@@ -2609,12 +2640,20 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
       const pairedSpotCount = row.orderId
         ? pickupCountByOrder.get(row.orderId)
         : undefined;
-      const managedByAnotherPlayer = Boolean(row.addedByPersonId);
+      const paidByAnotherPlayer = Boolean(
+        row.paidByPersonId && row.paidByPersonId !== personId,
+      );
+      const occupiedCount =
+        pickupOccupiedBySession.get(row.pickupSessionId) ?? 0;
+      const spotsRemaining = Math.max(0, row.capacity - occupiedCount);
+      const isCreator = row.hostPersonId === personId;
+      const waitlistEnabled = row.smartRules.waitlistEnabled;
       return [
         {
           id: row.id,
           source: "pickup",
           sessionId: row.pickupSessionId,
+          sessionSlug: `pickup-${row.pickupSessionId}`,
           title: row.title,
           kind: "pickup",
           startsAt: row.startsAt.toISOString(),
@@ -2623,25 +2662,52 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
             row.connectedVenueName ?? row.venueName ?? "Community location",
           status,
           amount: {
-            amountMinor: row.orderTotalMinor ?? 0,
-            currency: currency(row.orderCurrency ?? "USD"),
+            amountMinor:
+              row.orderTotalMinor ??
+              (row.status === "invited" ? row.costMinor : 0),
+            currency: currency(row.orderCurrency ?? row.currency ?? "USD"),
           },
           participantNames: pickupNamesBySession.get(row.pickupSessionId) ?? [
             person.displayName,
           ],
           paymentStatus:
-            (row.orderTotalMinor ?? 0) === 0
-              ? "free"
-              : row.orderStatus === "paid" ||
-                  row.orderStatus === "partially-refunded"
-                ? "paid"
-                : row.orderStatus === "refunded"
-                  ? "refunded"
-                  : "payment-required",
-          canEdit: row.startsAt.getTime() > now.getTime(),
+            row.status === "invited" && row.costMinor > 0
+              ? "payment-required"
+              : (row.orderTotalMinor ?? row.costMinor) === 0
+                ? "free"
+                : row.orderStatus === "paid" ||
+                    row.orderStatus === "partially-refunded"
+                  ? "paid"
+                  : row.orderStatus === "refunded"
+                    ? "refunded"
+                    : "payment-required",
+          canEdit: isCreator && row.startsAt.getTime() > now.getTime(),
           canCancel:
-            row.startsAt.getTime() > now.getTime() && !managedByAnotherPlayer,
+            row.startsAt.getTime() > now.getTime() && !paidByAnotherPlayer,
           cancellationDeadline: row.startsAt.toISOString(),
+          pickup: {
+            capacity: row.capacity,
+            confirmedCount: (
+              pickupNamesBySession.get(row.pickupSessionId) ?? []
+            ).length,
+            spotsRemaining,
+            waitlistEnabled,
+            approvalRequired: row.approvalRequired,
+            visibility: row.visibility === "unlisted" ? "unlisted" : "public",
+            ...(row.note ? { note: row.note } : {}),
+            pricePerPerson: {
+              amountMinor: row.costMinor,
+              currency: currency(row.currency),
+            },
+            canAddPlayers:
+              row.startsAt.getTime() > now.getTime() &&
+              (isCreator || ["confirmed", "checked-in"].includes(row.status)) &&
+              (spotsRemaining > 0 || waitlistEnabled),
+            isCreator,
+            ...(row.status === "invited"
+              ? { invitationStatus: "invited" as const }
+              : {}),
+          },
           ...(row.addedByPersonId &&
           pickupAttributionById.has(row.addedByPersonId)
             ? {
@@ -2845,7 +2911,7 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
         pickupSessionId: pickupId,
         personId,
         addedByPersonId: input.hostPersonId,
-        status: "confirmed" as const,
+        status: "invited" as const,
       })),
     ]),
     database.insert(auditLog).values({
@@ -2874,18 +2940,20 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
     endsAt: endsAt.toISOString(),
     timezone: matchingVenue?.timezone ?? "America/New_York",
     price: { amountMinor: input.costMinor, currency: input.currency },
-    spotsRemaining: Math.max(0, input.capacity - participantProfiles.length),
+    spotsRemaining: Math.max(0, input.capacity - 1),
     capacity: input.capacity,
-    attendees: participantProfiles.map((participant) => ({
-      id: participant.id,
-      displayName: participant.displayName,
-      handle: participant.handle,
-      publicPath: participant.publicPath,
-      initials: participant.initials,
-      avatarUrl: participant.avatarUrl,
-      homeMarket: participant.homeMarket,
-      ratingDisplay: participant.rating.display,
-    })),
+    attendees: participantProfiles
+      .filter((participant) => participant.id === input.hostPersonId)
+      .map((participant) => ({
+        id: participant.id,
+        displayName: participant.displayName,
+        handle: participant.handle,
+        publicPath: participant.publicPath,
+        initials: participant.initials,
+        avatarUrl: participant.avatarUrl,
+        homeMarket: participant.homeMarket,
+        ratingDisplay: participant.rating.display,
+      })),
     ratingRange:
       input.ratingMinimum !== undefined && input.ratingMaximum !== undefined
         ? [input.ratingMinimum, input.ratingMaximum]

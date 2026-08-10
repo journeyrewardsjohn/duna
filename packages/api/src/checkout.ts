@@ -30,7 +30,7 @@ import {
   type CurrencyCode,
   type OrderItemKind,
 } from "@duna/pricing";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import {
   evaluatePickupParticipant,
@@ -105,6 +105,7 @@ export interface EventCheckoutStatus {
     | "disputed"
     | "cancelled";
   readonly registrationStatus?:
+    | "invited"
     | "pending"
     | "confirmed"
     | "waitlisted"
@@ -113,6 +114,26 @@ export interface EventCheckoutStatus {
     | "checked-in";
   readonly fulfillmentStatus?: "confirmed" | "pending-approval";
   readonly complete: boolean;
+}
+
+export function validatePickupCoverPayment(input: {
+  readonly pickup: boolean;
+  readonly actorPersonId: string;
+  readonly subjectPersonIds: readonly string[];
+  readonly perPersonAmountMinor?: number;
+}): void {
+  if (
+    input.pickup &&
+    input.subjectPersonIds.some(
+      (personId) => personId !== input.actorPersonId,
+    ) &&
+    input.perPersonAmountMinor === 0
+  ) {
+    throw new CheckoutError(
+      "EVENT_NOT_CHECKOUT_ELIGIBLE",
+      "Invite other players to a free match. Each player confirms their own place.",
+    );
+  }
 }
 
 export interface TeamClaimSummary {
@@ -1174,21 +1195,46 @@ export async function startEventCheckout(input: {
   });
   const expectedTeamSize = Math.max(1, event.teamSize ?? 1);
   const teamRoster = input.teamRoster ?? [];
-  const pickupPartnerPersonId =
-    event.source === "pickup" &&
-    input.teamPaymentMode === "team" &&
-    teamRoster.length === 1
-      ? teamRoster[0]?.personId
+  const pickupRosterPersonIds =
+    event.source === "pickup" && input.teamPaymentMode === "team"
+      ? teamRoster
+          .map((member) => member.personId)
+          .filter((personId): personId is string => Boolean(personId))
+      : [];
+  const pickupActorParticipation =
+    event.source === "pickup"
+      ? await database.query.pickupParticipants.findFirst({
+          where: and(
+            eq(pickupParticipants.pickupSessionId, event.id),
+            eq(pickupParticipants.personId, input.actor.personId),
+            inArray(pickupParticipants.status, ["confirmed", "checked-in"]),
+          ),
+        })
       : undefined;
+  const pickupSubjectPersonIds =
+    event.source === "pickup"
+      ? [
+          ...(!pickupActorParticipation ||
+          subjectPersonId !== input.actor.personId
+            ? [subjectPersonId]
+            : []),
+          ...pickupRosterPersonIds,
+        ]
+      : [];
   if (
     event.source === "pickup" &&
     ((input.teamPaymentMode === "team" &&
-      (!pickupPartnerPersonId || teamRoster[0]?.inviteTarget)) ||
-      (input.teamPaymentMode !== "team" && teamRoster.length > 0))
+      (teamRoster.length === 0 ||
+        pickupRosterPersonIds.length !== teamRoster.length ||
+        new Set(pickupSubjectPersonIds).size !==
+          pickupSubjectPersonIds.length ||
+        pickupSubjectPersonIds.length > 10)) ||
+      (input.teamPaymentMode !== "team" && teamRoster.length > 0) ||
+      pickupSubjectPersonIds.length === 0)
   ) {
     throw new CheckoutError(
       "EVENT_NOT_CHECKOUT_ELIGIBLE",
-      "Choose one active Duna player to join and pay with a partner.",
+      "Choose up to 10 distinct active Duna players to confirm together.",
     );
   }
   if (event.ticketTypeId && teamRoster.length > 0) {
@@ -1204,7 +1250,8 @@ export async function startEventCheckout(input: {
     );
   }
   if (
-    teamRoster.length > Math.max(0, expectedTeamSize - 1) ||
+    (event.source === "session" &&
+      teamRoster.length > Math.max(0, expectedTeamSize - 1)) ||
     teamRoster.some(
       (member) =>
         !member.personId &&
@@ -1217,6 +1264,16 @@ export async function startEventCheckout(input: {
       "The team roster does not match the selected division.",
     );
   }
+  const pickupPerPersonAmount =
+    event.source === "pickup"
+      ? (event.playerPriceMinor ?? event.priceMinor)
+      : undefined;
+  validatePickupCoverPayment({
+    pickup: event.source === "pickup",
+    actorPersonId: input.actor.personId,
+    subjectPersonIds: pickupSubjectPersonIds,
+    perPersonAmountMinor: pickupPerPersonAmount,
+  });
   const hasDunaPlus = await hasActiveDunaPlusMembership(
     input.actor.personId,
     input.now,
@@ -1226,12 +1283,18 @@ export async function startEventCheckout(input: {
     (event.kind === "league" || event.kind === "tournament"
       ? "registration"
       : "booking");
-  const itemQuantity = event.quantity ?? 1;
-  const unitAmountMinor = event.ticketTypeId
-    ? event.priceMinor
-    : expectedTeamSize > 1 && input.teamPaymentMode === "team"
-      ? (event.teamPriceMinor ?? event.priceMinor)
-      : (event.playerPriceMinor ?? event.priceMinor);
+  const itemQuantity =
+    event.source === "pickup"
+      ? pickupSubjectPersonIds.length
+      : (event.quantity ?? 1);
+  const unitAmountMinor =
+    event.source === "pickup"
+      ? pickupPerPersonAmount!
+      : event.ticketTypeId
+        ? event.priceMinor
+        : expectedTeamSize > 1 && input.teamPaymentMode === "team"
+          ? (event.teamPriceMinor ?? event.priceMinor)
+          : (event.playerPriceMinor ?? event.priceMinor);
   const priced = priceConsumerOrder({
     currency: event.currency,
     isDunaPlus: hasDunaPlus,
@@ -1365,10 +1428,7 @@ export async function startEventCheckout(input: {
             await joinPickupGroup({
               actor: input.actor,
               pickupSessionId: event.id,
-              subjectPersonIds: [
-                subjectPersonId,
-                ...(pickupPartnerPersonId ? [pickupPartnerPersonId] : []),
-              ],
+              subjectPersonIds: pickupSubjectPersonIds,
               requestId: input.requestId,
               ipAddress: input.ipAddress,
               now: input.now,
@@ -1557,10 +1617,7 @@ export async function startEventCheckout(input: {
       const participations = await joinPickupGroup({
         actor: input.actor,
         pickupSessionId: event.id,
-        subjectPersonIds: [
-          subjectPersonId,
-          ...(pickupPartnerPersonId ? [pickupPartnerPersonId] : []),
-        ],
+        subjectPersonIds: pickupSubjectPersonIds,
         orderId,
         holdExpiresAt,
         requestId: input.requestId,
