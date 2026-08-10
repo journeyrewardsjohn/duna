@@ -761,6 +761,25 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(
     page.getByRole("heading", { name: "Matches on your courts" }),
   ).toBeVisible();
+  const aiAnalyst = page.locator(".hq-ai-analyst");
+  await expect(aiAnalyst).toBeVisible();
+  const aiAnalystColors = await aiAnalyst.evaluate((rail) => {
+    const color = (selector: string) => {
+      const element = rail.querySelector(selector);
+      return element ? getComputedStyle(element).color : null;
+    };
+
+    return {
+      action: color(".hq-ai-signal a"),
+      heading: color(".hq-ai-analyst__intro h2"),
+      signalHeading: color(".hq-ai-signal h3"),
+    };
+  });
+  expect(aiAnalystColors).toEqual({
+    action: "rgb(169, 196, 99)",
+    heading: "rgb(232, 242, 212)",
+    signalHeading: "rgb(232, 242, 212)",
+  });
   await expectNoHorizontalOverflow(page);
 
   await page.goto(`${hqBaseUrl}/locations/create`);

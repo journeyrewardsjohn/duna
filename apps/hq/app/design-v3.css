@@ -5,6 +5,11 @@
   --hq-core: #a9c463;
   --hq-ink: #3f5417;
   --hq-deep: #1e2a0e;
+  --hq-text-on-deep: var(--hq-tint);
+  --hq-text-on-deep-muted: color-mix(in srgb, var(--hq-tint) 72%, transparent);
+  --hq-action-on-deep: var(--hq-core);
+  --hq-line-on-deep: color-mix(in srgb, var(--hq-tint) 12%, transparent);
+  --hq-surface-on-deep: color-mix(in srgb, var(--hq-tint) 6%, transparent);
   font-synthesis-style: none;
   font-synthesis-weight: none;
 }
@@ -406,8 +411,8 @@ body[data-zone="operator"] :is(h1, h2, h3) {
 .hq-ai-analyst,
 .recommendation-card,
 .guided-product-assist {
-  color: #f2f0ea;
-  border-color: transparent;
+  color: var(--hq-text-on-deep);
+  border-color: var(--hq-line-on-deep);
   background:
     radial-gradient(circle at 85% 8%, rgb(169 196 99 / 20%), transparent 30%),
     var(--hq-deep);
@@ -417,31 +422,66 @@ body[data-zone="operator"] :is(h1, h2, h3) {
 .hq-ai-analyst :where(h2, h3, strong),
 .recommendation-card :where(h2, h3, strong),
 .guided-product-assist :where(h2, h3, strong) {
-  color: #f2f0ea;
+  color: var(--hq-text-on-deep);
 }
 
-.hq-shell .hq-ai-analyst :where(h2, h3, strong),
-.hq-shell .recommendation-card :where(h2, h3, strong),
-.hq-shell .guided-product-assist :where(h2, h3, strong) {
-  color: #f2f0ea;
+.hq-shell .hq-ai-analyst :is(h2, h3, strong),
+.hq-shell .recommendation-card :is(h2, h3, strong),
+.hq-shell .guided-product-assist :is(h2, h3, strong) {
+  color: var(--hq-text-on-deep);
   font-family: var(--font-body);
 }
 
 .hq-ai-analyst :where(p, small, span),
 .recommendation-card :where(p, small, span),
 .guided-product-assist :where(p, small, span) {
-  color: rgb(242 240 234 / 68%);
+  color: var(--hq-text-on-deep-muted);
 }
 
 .hq-shell .hq-ai-analyst :where(p, small, span),
 .hq-shell .recommendation-card :where(p, small, span),
 .hq-shell .guided-product-assist :where(p, small, span) {
-  color: rgb(242 240 234 / 72%);
+  color: var(--hq-text-on-deep-muted);
+}
+
+.hq-shell .hq-ai-analyst > header,
+.hq-shell .hq-ai-analyst > footer {
+  border-color: var(--hq-line-on-deep);
+}
+
+.hq-shell .hq-ai-analyst > header > span {
+  color: var(--hq-text-on-deep);
+}
+
+.hq-shell .hq-ai-analyst > header > span > svg,
+.hq-shell .hq-ai-analyst > header > a,
+.hq-shell .hq-ai-analyst .hq-ai-signal a,
+.hq-shell .hq-ai-analyst > footer a {
+  color: var(--hq-action-on-deep);
+}
+
+.hq-shell .hq-ai-analyst > header > a {
+  border-color: var(--hq-line-on-deep);
 }
 
 .hq-ai-signal {
-  border-color: rgb(242 240 234 / 12%);
-  background: rgb(242 240 234 / 6%);
+  border-color: var(--hq-line-on-deep);
+  background: var(--hq-surface-on-deep);
+}
+
+.hq-shell .hq-ai-analyst .hq-ai-signal > span:first-child {
+  color: var(--hq-deep);
+  background: var(--hq-text-on-deep);
+}
+
+.hq-shell .hq-ai-analyst .duna-badge--positive {
+  color: var(--hq-action-on-deep);
+  border-color: color-mix(in srgb, var(--hq-action-on-deep) 32%, transparent);
+  background: color-mix(in srgb, var(--hq-action-on-deep) 13%, transparent);
+}
+
+.hq-shell .hq-ai-analyst .duna-badge--warning {
+  color: var(--hq-text-on-deep);
 }
 
 /* Guided builders show path, readiness, and a live preview without visual noise. */
