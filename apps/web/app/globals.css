@@ -2393,6 +2393,7 @@
 }
 
 @media (max-width: 980px) {
+  .discover-v2.discover-public,
   .discover-v2-map-page.discover-public,
   .discover-v2-results-page.discover-public {
     padding-top: 98px;
@@ -2434,6 +2435,9 @@
     padding-top: 18px;
     padding-right: 12px;
     padding-left: 12px;
+  }
+  .discover-v2.discover-public {
+    padding-top: 84px;
   }
   .public-venue-summary__hero {
     min-height: 360px;
