@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { VenueLayoutGeoGeometry } from "@duna/api";
 import {
   rectangleCoordinates,
+  venueLayoutMapMoveIsUserInitiated,
   venueLayoutMapViewChanged,
 } from "./venue-layout-geometry";
 
@@ -58,6 +59,13 @@ describe("venue layout map geometry", () => {
         longitude: view.longitude + 0.00001,
       }),
     ).toBe(true);
+  });
+
+  it("persists only user-initiated map movement", () => {
+    expect(venueLayoutMapMoveIsUserInitiated()).toBe(false);
+    expect(venueLayoutMapMoveIsUserInitiated({ type: "resize" })).toBe(false);
+    expect(venueLayoutMapMoveIsUserInitiated({ type: "wheel" })).toBe(true);
+    expect(venueLayoutMapMoveIsUserInitiated({ type: "mousedown" })).toBe(true);
   });
 
   it("preserves dimensions after rotation", () => {

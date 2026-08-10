@@ -14,6 +14,7 @@ import type {
 import {
   moveGeoGeometry,
   venueLayoutFeatureCollection,
+  venueLayoutMapMoveIsUserInitiated,
 } from "@/lib/venue-layout-geometry";
 
 interface MapView {
@@ -444,7 +445,8 @@ export function VenueLayoutMap({
               if (!dragRef.current) map.getCanvas().style.cursor = "";
             });
           }
-          map.on("moveend", () => {
+          map.on("moveend", (event) => {
+            if (!venueLayoutMapMoveIsUserInitiated(event.originalEvent)) return;
             const center = map.getCenter();
             onViewChangeRef.current({
               latitude: center.lat,

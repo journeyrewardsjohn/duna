@@ -47,6 +47,12 @@ export function venueLayoutMapViewChanged(
   );
 }
 
+export function venueLayoutMapMoveIsUserInitiated(originalEvent?: {
+  readonly type?: string;
+}): boolean {
+  return Boolean(originalEvent && originalEvent.type !== "resize");
+}
+
 export const VENUE_LAYOUT_TEMPLATES = [
   {
     key: "fivb-short-court",
