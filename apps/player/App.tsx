@@ -8271,9 +8271,10 @@ function PerformanceScreen({
       </ImageBackground>
 
       <ScrollView
+        contentContainerStyle={styles.athleteMetricShelfContent}
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={[styles.horizontalBleed, styles.athleteMetricShelf]}
+        style={styles.athleteMetricShelf}
       >
         <View style={styles.athleteMetricRow}>
           {fallbackProfileMetrics.map((metric, index) => (
@@ -16763,11 +16764,19 @@ function createStyles(palette: Palette) {
       fontWeight: "500",
       textTransform: "uppercase",
     },
-    athleteMetricShelf: { marginTop: -30, zIndex: 6 },
+    athleteMetricShelf: {
+      marginHorizontal: -18,
+      marginBottom: 18,
+      marginTop: -30,
+      zIndex: 6,
+    },
+    athleteMetricShelfContent: {
+      paddingLeft: 18,
+      paddingRight: 38,
+    },
     athleteMetricRow: {
       flexDirection: "row",
       gap: 9,
-      paddingRight: 38,
     },
     athleteMetricCard: {
       backgroundColor: colors.depth,
