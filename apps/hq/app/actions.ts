@@ -1,5 +1,6 @@
 "use server";
 
+import type { VenueLayoutAsset, VenueLayoutGeometry } from "@duna/api";
 import { normalizeClubColor } from "@duna/ui";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -26,6 +27,20 @@ export interface OperatorActionState {
         | "maintenance"
         | "blocked";
     }[];
+    readonly assumptions: readonly string[];
+  };
+  readonly venueAssignmentPlan?: {
+    readonly sessionId: string;
+    readonly generatedAt: string;
+    readonly assignments: readonly {
+      readonly matchId: string;
+      readonly divisionName: string;
+      readonly courtName: string;
+      readonly scheduledAt: string;
+      readonly estimatedMinutes: number;
+      readonly reason: string;
+    }[];
+    readonly unassignedMatchIds: readonly string[];
     readonly assumptions: readonly string[];
   };
 }
@@ -135,6 +150,7 @@ function revalidateOperator() {
   revalidatePath("/members");
   revalidatePath("/settings");
   revalidatePath("/locations");
+  revalidatePath("/locations", "layout");
 }
 
 export async function createCatalogItemAction(
@@ -1293,14 +1309,214 @@ export async function createRatePlanAction(
   }
 }
 
-export async function createVenueAction(
+export async function createVenueLayoutAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const sourceType = field(formData, "sourceType");
+    if (sourceType !== "satellite" && sourceType !== "floorplan") {
+      throw new Error("Choose satellite or floorplan mode.");
+    }
+    const caller = await getServerCaller();
+    const created = await caller.operator.createVenueLayout({
+      venueId: field(formData, "venueId"),
+      name: field(formData, "name"),
+      sourceType,
+      eventSessionId: optionalField(formData, "eventSessionId"),
+      duplicateFromLayoutId: optionalField(formData, "duplicateFromLayoutId"),
+      floorplanImageUrl: optionalField(formData, "floorplanImageUrl"),
+      mapCenterLatitude: optionalNumberField(formData, "mapCenterLatitude"),
+      mapCenterLongitude: optionalNumberField(formData, "mapCenterLongitude"),
+      mapZoom: optionalNumberField(formData, "mapZoom"),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "A new editable layout version is ready.",
+      undefined,
+      created.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function saveVenueLayoutAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const payload = JSON.parse(field(formData, "layout")) as {
+      readonly layoutId: string;
+      readonly name: string;
+      readonly floorplanImageUrl?: string;
+      readonly floorplanAnalysis?: Record<string, unknown>;
+      readonly mapCenterLatitude?: number;
+      readonly mapCenterLongitude?: number;
+      readonly mapZoom: number;
+      readonly mapBearing: number;
+      readonly mapPitch: number;
+      readonly assets: readonly Omit<VenueLayoutAsset, "layoutId">[];
+    };
+    const caller = await getServerCaller();
+    await caller.operator.saveVenueLayout({
+      ...payload,
+      assets: [...payload.assets],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result("success", "Layout geometry and linked resources saved.");
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function createCourtFromVenueLayoutAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const bookingPolicy = field(formData, "bookingPolicy");
+    if (
+      bookingPolicy !== "public" &&
+      bookingPolicy !== "members" &&
+      bookingPolicy !== "tiers" &&
+      bookingPolicy !== "staff" &&
+      bookingPolicy !== "none"
+    ) {
+      throw new Error("Choose who can book this court.");
+    }
+    const geometry = JSON.parse(
+      field(formData, "geometry"),
+    ) as VenueLayoutGeometry;
+    const caller = await getServerCaller();
+    await caller.operator.createCourtFromVenueLayout({
+      layoutId: field(formData, "layoutId"),
+      assetId: field(formData, "assetId"),
+      name: field(formData, "name"),
+      identifierCode: optionalField(formData, "identifierCode"),
+      surface: field(formData, "surface"),
+      capacity: numberField(formData, "capacity"),
+      bookingPolicy,
+      templateKey: field(formData, "templateKey"),
+      geometry,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Court created and linked to this layout. Its full settings are ready in Courts.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function publishVenueLayoutAction(
   _previous: OperatorActionState,
   formData: FormData,
 ): Promise<OperatorActionState> {
   try {
     const caller = await getServerCaller();
-    await caller.operator.createVenue({
+    await caller.operator.publishVenueLayout({
+      layoutId: field(formData, "layoutId"),
+      makePrimary: field(formData, "makePrimary") === "true",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      field(formData, "makePrimary") === "true"
+        ? "Layout published and set as the player-facing default."
+        : "Layout version published.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function saveVenueLayoutEventSettingsAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.saveVenueLayoutEventSettings({
+      sessionId: field(formData, "sessionId"),
+      layoutId: field(formData, "layoutId"),
+      aiCourtAssignmentEnabled:
+        field(formData, "aiCourtAssignmentEnabled") === "true",
+      averageMatchMinutes: numberField(formData, "averageMatchMinutes"),
+      releaseCourtWhenFree: field(formData, "releaseCourtWhenFree") === "true",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result("success", "Tournament court assignment settings saved.");
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function previewVenueLayoutCourtAssignmentsAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    const plan = await caller.operator.venueLayoutCourtAssignmentPlan({
+      sessionId: field(formData, "sessionId"),
+    });
+    return {
+      status: "success",
+      message: `${plan.assignments.length} court assignment${plan.assignments.length === 1 ? "" : "s"} planned.`,
+      venueAssignmentPlan: plan,
+    };
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function applyVenueLayoutCourtAssignmentsAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.applyVenueLayoutCourtAssignments({
+      sessionId: field(formData, "sessionId"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result("success", "AI court assignments applied to the tournament.");
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function createVenueAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const locationKind = field(formData, "locationKind");
+    if (
+      locationKind !== "public-location" &&
+      locationKind !== "private-venue"
+    ) {
+      throw new Error("Choose a public location or private venue.");
+    }
+    const environment = field(formData, "environment");
+    if (environment !== "indoor" && environment !== "outdoor") {
+      throw new Error("Choose whether this venue is indoors or outdoors.");
+    }
+    const caller = await getServerCaller();
+    const created = await caller.operator.createVenue({
       name: field(formData, "name"),
+      locationKind,
+      environment,
       description: optionalField(formData, "description"),
       capacity: numberField(formData, "capacity"),
       heroImageUrl: optionalField(formData, "heroImageUrl"),
@@ -1309,6 +1525,7 @@ export async function createVenueAction(
         .map((item) => item.trim())
         .filter(Boolean),
       addressLine1: optionalField(formData, "addressLine1"),
+      addressLine2: optionalField(formData, "addressLine2"),
       locality: optionalField(formData, "locality"),
       administrativeArea: optionalField(formData, "administrativeArea"),
       postalCode: optionalField(formData, "postalCode"),
@@ -1324,6 +1541,8 @@ export async function createVenueAction(
     return result(
       "success",
       "Venue draft created. Add and activate a court before publishing it.",
+      undefined,
+      created.id,
     );
   } catch (error) {
     return errorState(error);
@@ -1346,7 +1565,7 @@ export async function createCourtAction(
     ) {
       throw new Error("Choose a valid booking policy.");
     }
-    await caller.operator.createCourt({
+    const created = await caller.operator.createCourt({
       venueId: field(formData, "venueId"),
       name: field(formData, "name"),
       surface: field(formData, "surface"),
@@ -1372,6 +1591,8 @@ export async function createCourtAction(
     return result(
       "success",
       "Court draft created. Review its policy before activation.",
+      undefined,
+      created.id,
     );
   } catch (error) {
     return errorState(error);
@@ -1383,9 +1604,28 @@ export async function updateVenueProfileAction(
   formData: FormData,
 ): Promise<OperatorActionState> {
   try {
+    const locationKind = optionalField(formData, "locationKind");
+    if (
+      locationKind !== undefined &&
+      locationKind !== "public-location" &&
+      locationKind !== "private-venue"
+    ) {
+      throw new Error("Choose a public location or private venue.");
+    }
+    const environment = optionalField(formData, "environment");
+    if (
+      environment !== undefined &&
+      environment !== "indoor" &&
+      environment !== "outdoor"
+    ) {
+      throw new Error("Choose whether this venue is indoors or outdoors.");
+    }
     const caller = await getServerCaller();
     await caller.operator.updateVenueProfile({
       venueId: field(formData, "venueId"),
+      ...(formData.has("name") ? { name: field(formData, "name") } : {}),
+      ...(locationKind ? { locationKind } : {}),
+      ...(environment ? { environment } : {}),
       description: optionalField(formData, "description"),
       capacity: numberField(formData, "capacity"),
       heroImageUrl: optionalField(formData, "heroImageUrl"),
@@ -1393,10 +1633,45 @@ export async function updateVenueProfileAction(
         .split(",")
         .map((item) => item.trim())
         .filter(Boolean),
+      ...(formData.has("addressLine1")
+        ? { addressLine1: optionalField(formData, "addressLine1") }
+        : {}),
+      ...(formData.has("addressLine2")
+        ? { addressLine2: optionalField(formData, "addressLine2") }
+        : {}),
+      ...(formData.has("locality")
+        ? { locality: optionalField(formData, "locality") }
+        : {}),
+      ...(formData.has("administrativeArea")
+        ? {
+            administrativeArea: optionalField(formData, "administrativeArea"),
+          }
+        : {}),
+      ...(formData.has("postalCode")
+        ? { postalCode: optionalField(formData, "postalCode") }
+        : {}),
+      ...(formData.has("countryCode")
+        ? { countryCode: optionalField(formData, "countryCode") }
+        : {}),
+      ...(formData.has("googlePlaceId")
+        ? { googlePlaceId: optionalField(formData, "googlePlaceId") }
+        : {}),
+      ...(formData.has("latitude")
+        ? { latitude: optionalNumberField(formData, "latitude") }
+        : {}),
+      ...(formData.has("longitude")
+        ? { longitude: optionalNumberField(formData, "longitude") }
+        : {}),
+      ...(formData.has("timezone")
+        ? { timezone: optionalField(formData, "timezone") }
+        : {}),
+      ...(formData.has("temporaryPresent")
+        ? { temporary: field(formData, "temporary") === "true" }
+        : {}),
       idempotencyKey: crypto.randomUUID(),
     });
     revalidateOperator();
-    return result("success", "Venue story and capacity updated.");
+    return result("success", "Venue details and exact location updated.");
   } catch (error) {
     return errorState(error);
   }
@@ -1407,17 +1682,62 @@ export async function updateCourtBookingConfigurationAction(
   formData: FormData,
 ): Promise<OperatorActionState> {
   try {
+    const bookingPolicy = optionalField(formData, "bookingPolicy");
+    if (
+      bookingPolicy !== undefined &&
+      bookingPolicy !== "public" &&
+      bookingPolicy !== "members" &&
+      bookingPolicy !== "tiers" &&
+      bookingPolicy !== "staff" &&
+      bookingPolicy !== "none"
+    ) {
+      throw new Error("Choose a valid booking audience.");
+    }
     const caller = await getServerCaller();
     await caller.operator.updateCourtBookingConfiguration({
       courtId: field(formData, "courtId"),
+      ...(formData.has("name") ? { name: field(formData, "name") } : {}),
+      ...(formData.has("surface")
+        ? { surface: field(formData, "surface") }
+        : {}),
       imageUrl: optionalField(formData, "imageUrl"),
+      ...(formData.has("litPresent")
+        ? { lit: field(formData, "lit") === "true" }
+        : {}),
+      ...(bookingPolicy ? { bookingPolicy } : {}),
       ratePlanId: optionalField(formData, "ratePlanId") ?? null,
       capacity: numberField(formData, "capacity"),
+      ...(formData.has("minimumDurationMinutes")
+        ? {
+            minimumDurationMinutes: numberField(
+              formData,
+              "minimumDurationMinutes",
+            ),
+          }
+        : {}),
+      ...(formData.has("maximumDurationMinutes")
+        ? {
+            maximumDurationMinutes: numberField(
+              formData,
+              "maximumDurationMinutes",
+            ),
+          }
+        : {}),
       durationOptionsMinutes: field(formData, "durationOptionsMinutes")
         .split(",")
         .map(Number)
         .filter((value) => Number.isFinite(value)),
       bookingIncrementMinutes: numberField(formData, "bookingIncrementMinutes"),
+      ...(formData.has("bufferBeforeMinutes")
+        ? {
+            bufferBeforeMinutes: numberField(formData, "bufferBeforeMinutes"),
+          }
+        : {}),
+      ...(formData.has("bufferAfterMinutes")
+        ? {
+            bufferAfterMinutes: numberField(formData, "bufferAfterMinutes"),
+          }
+        : {}),
       minimumNoticeMinutes: numberField(formData, "minimumNoticeMinutes"),
       maximumAdvanceDays: numberField(formData, "maximumAdvanceDays"),
       cancellationPolicy: {
@@ -1432,7 +1752,10 @@ export async function updateCourtBookingConfigurationAction(
       idempotencyKey: crypto.randomUUID(),
     });
     revalidateOperator();
-    return result("success", "Court booking and cancellation rules updated.");
+    return result(
+      "success",
+      "Court details, pricing, and booking rules updated.",
+    );
   } catch (error) {
     return errorState(error);
   }

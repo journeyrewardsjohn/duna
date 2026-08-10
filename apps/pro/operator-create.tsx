@@ -364,6 +364,8 @@ export function OperatorCreateScreen({
         if (!selectedVenueId) {
           const createdVenue = await client.operator.createVenue.mutate({
             name: newVenueName.trim(),
+            locationKind: "public-location",
+            environment: "outdoor",
             locality: newVenueCity.trim(),
             administrativeArea:
               workspace?.organization.administrativeArea ?? undefined,

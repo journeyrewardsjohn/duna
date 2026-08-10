@@ -1,5 +1,6 @@
 import "@fontsource-variable/archivo";
 import "@duna/ui/styles.css";
+import "mapbox-gl/dist/mapbox-gl.css";
 import "./globals.css";
 import "./design-v3.css";
 

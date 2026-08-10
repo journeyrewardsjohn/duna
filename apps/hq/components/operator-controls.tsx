@@ -38,7 +38,8 @@ import {
   Waves,
 } from "lucide-react";
 import Link from "next/link";
-import { useActionState, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { useActionState, useEffect, useState, type ReactNode } from "react";
 import {
   activateCourtAction,
   blockCourtTimeAction,
@@ -707,7 +708,7 @@ function TeamMemberComposer({
   );
 }
 
-function RatePlanComposer({
+export function RatePlanComposer({
   workspace,
 }: {
   readonly workspace: OperatorWorkspace;
@@ -814,6 +815,7 @@ function VenueComposer({
         <MapPinned aria-hidden size={24} />
       </header>
       <form action={action} className="operator-form">
+        <input name="locationKind" type="hidden" value="private-venue" />
         <div className="operator-form-grid operator-form-grid--two">
           <label className="operator-field--wide">
             <span>Venue name</span>
@@ -876,11 +878,14 @@ function VenueComposer({
   );
 }
 
-function CourtComposer({
+export function CourtComposer({
   workspace,
+  redirectVenueId,
 }: {
   readonly workspace: OperatorWorkspace;
+  readonly redirectVenueId?: string;
 }) {
+  const router = useRouter();
   const [state, action, pending] = useActionState(
     createCourtAction,
     initialOperatorActionState,
@@ -888,7 +893,7 @@ function CourtComposer({
   const [courtImageUrl, setCourtImageUrl] = useState("");
   const [courtName, setCourtName] = useState("");
   const [selectedVenueId, setSelectedVenueId] = useState(
-    workspace.venues[0]?.id ?? "",
+    redirectVenueId ?? workspace.venues[0]?.id ?? "",
   );
   const [surface, setSurface] = useState("sand");
   const [capacity, setCapacity] = useState("12");
@@ -900,6 +905,13 @@ function CourtComposer({
   const selectedVenue = workspace.venues.find(
     (venue) => venue.id === selectedVenueId,
   );
+  useEffect(() => {
+    if (state.status === "success" && state.entityId && redirectVenueId) {
+      router.push(
+        `/locations/${redirectVenueId}/courts/${state.entityId}?created=true`,
+      );
+    }
+  }, [redirectVenueId, router, state.entityId, state.status]);
   const uploadCourtImage = async (file?: File) => {
     if (!file) return;
     setUploadState("uploading");

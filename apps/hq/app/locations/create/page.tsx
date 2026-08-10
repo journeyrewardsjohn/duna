@@ -1,14 +1,22 @@
-import { OperatorCreatePage } from "@/components/operator-create-page";
+import { OperatorShell } from "@/components/operator-shell";
+import { VenueCreateWorkspace } from "@/components/venue-create-workspace";
+import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Add a venue" };
 
-export default function CreateLocationPage() {
+export default async function CreateLocationPage() {
+  const caller = await getServerCaller();
+  const [dashboard, workspace] = await Promise.all([
+    caller.operator.dashboard(),
+    caller.operator.workspace(),
+  ]);
   return (
-    <OperatorCreatePage
-      description="Connect the place first, then add courts, bookable hours, rates, and the public venue story."
-      eyebrow="Venues · focused workspace"
-      module="locations"
-      title="Bring a venue into Duna."
-    />
+    <OperatorShell
+      active="locations"
+      messageDraftCount={workspace.messageDrafts.length}
+      organization={dashboard.organization}
+    >
+      <VenueCreateWorkspace workspace={workspace} />
+    </OperatorShell>
   );
 }

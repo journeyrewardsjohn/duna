@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { ArrowRight, Clock3, MapPin, Waves } from "lucide-react";
 import { CourtBookingPanel } from "@/components/court-booking-panel";
+import { VenueLayoutViewer } from "@/components/venue-layout-viewer";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
@@ -12,12 +13,14 @@ import { venueJsonLd, venueSummaryJsonLd } from "@/lib/discovery-seo";
 
 const loadVenuePage = cache(async (venueId: string) => {
   const caller = await getServerCaller();
-  const [inventory, venues] = await Promise.all([
+  const [inventory, venues, layout] = await Promise.all([
     caller.public.courtBookingInventory({ venueId }).catch(() => undefined),
     caller.public.venues().catch(() => []),
+    caller.public.venueLayout({ venueId }).catch(() => undefined),
   ]);
   return {
     inventory,
+    layout,
     summary: venues.find((venue) => venue.id === venueId),
   };
 });
@@ -89,7 +92,7 @@ export default async function PublicVenuePage({
   readonly params: Promise<{ venueId: string }>;
 }) {
   const { venueId } = await params;
-  const { inventory, summary } = await loadVenuePage(venueId);
+  const { inventory, summary, layout } = await loadVenuePage(venueId);
   if (!inventory && !summary) notFound();
   const venue = inventory?.venue ?? summary!;
   const returnTo = `/app/venues/${venue.id}`;
@@ -115,6 +118,9 @@ export default async function PublicVenuePage({
             isDunaPlus={false}
             suggestedPlayers={[]}
           />
+          {layout && (
+            <VenueLayoutViewer layout={layout} venueName={venue.name} />
+          )}
         </main>
       ) : (
         <main className="standard-page public-venue-page public-venue-summary">
@@ -174,6 +180,9 @@ export default async function PublicVenuePage({
                 Back to discover <ArrowRight aria-hidden size={17} />
               </Link>
             </div>
+            {layout && (
+              <VenueLayoutViewer layout={layout} venueName={venue.name} />
+            )}
           </section>
         </main>
       )}

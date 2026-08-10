@@ -719,12 +719,14 @@ export function loadDemoOperatorWorkspace(
           "Two purpose-built sand courts for training, rentals, and competition.",
         slug: "beach-elite-training-center",
         status: "active",
+        locationKind: "private-venue",
+        environment: "outdoor",
         temporary: false,
         capacity: 24,
         amenities: [
           "Outdoor showers",
           "Equipment storage",
-          "Spectator seating",
+          "spectator-seating",
         ],
         addressLine1: "1400 Ocean Front Walk",
         locality: "Manhattan Beach",
@@ -1855,12 +1857,18 @@ export async function loadOperatorWorkspace(
         description: venue.description ?? undefined,
         slug: venue.slug,
         status: venue.status,
+        locationKind:
+          venue.locationKind === "public-location"
+            ? "public-location"
+            : "private-venue",
+        environment: venue.environment === "indoor" ? "indoor" : "outdoor",
         temporary: venue.temporary,
         capacity: venue.capacity,
         heroImageUrl: venue.heroImageUrl ?? undefined,
         heroImageTreatmentUrl: venue.heroImageTreatmentUrl ?? undefined,
         amenities: venue.amenities,
         addressLine1: venue.addressLine1 ?? undefined,
+        addressLine2: venue.addressLine2 ?? undefined,
         locality: venue.locality ?? undefined,
         administrativeArea: venue.administrativeArea ?? undefined,
         postalCode: venue.postalCode ?? undefined,
@@ -3685,11 +3693,14 @@ export async function createRatePlan(input: {
 export async function createVenue(input: {
   readonly actor: ApiActor;
   readonly name: string;
+  readonly locationKind: "public-location" | "private-venue";
+  readonly environment: "indoor" | "outdoor";
   readonly description?: string;
   readonly capacity?: number;
   readonly heroImageUrl?: string;
   readonly amenities?: readonly string[];
   readonly addressLine1?: string;
+  readonly addressLine2?: string;
   readonly locality?: string;
   readonly administrativeArea?: string;
   readonly postalCode?: string;
@@ -3707,8 +3718,16 @@ export async function createVenue(input: {
   const organizationId = requireOrganization(input.actor);
   await organizationRow(organizationId);
   const id = crypto.randomUUID();
+  if ((input.latitude === undefined) !== (input.longitude === undefined)) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Latitude and longitude must be provided together.",
+    );
+  }
   const values = {
     name: input.name.trim(),
+    locationKind: input.locationKind,
+    environment: input.environment,
     description: input.description?.trim() || undefined,
     slug: await uniqueVenueSlug(organizationId, input.name),
     status: "draft" as const,
@@ -3719,6 +3738,7 @@ export async function createVenue(input: {
       .map((amenity) => amenity.trim())
       .filter(Boolean),
     addressLine1: input.addressLine1?.trim() || undefined,
+    addressLine2: input.addressLine2?.trim() || undefined,
     locality: input.locality?.trim() || undefined,
     administrativeArea: input.administrativeArea?.trim() || undefined,
     postalCode: input.postalCode?.trim() || undefined,
@@ -3743,7 +3763,10 @@ export async function createVenue(input: {
       entityType: "venue",
       entityId: id,
       afterHash: stableHash(values),
-      reason: "Operator created a private venue draft.",
+      reason:
+        input.locationKind === "public-location"
+          ? "Operator created a public location draft."
+          : "Operator created a private venue draft.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,
@@ -3968,10 +3991,24 @@ async function ownedCourt(actor: ApiActor, courtId: string) {
 export async function updateVenueProfile(input: {
   readonly actor: ApiActor;
   readonly venueId: string;
+  readonly name?: string;
+  readonly locationKind?: "public-location" | "private-venue";
+  readonly environment?: "indoor" | "outdoor";
   readonly description?: string;
   readonly capacity: number;
   readonly heroImageUrl?: string;
   readonly amenities: readonly string[];
+  readonly addressLine1?: string;
+  readonly addressLine2?: string;
+  readonly locality?: string;
+  readonly administrativeArea?: string;
+  readonly postalCode?: string;
+  readonly countryCode?: string;
+  readonly googlePlaceId?: string;
+  readonly latitude?: number;
+  readonly longitude?: number;
+  readonly timezone?: string;
+  readonly temporary?: boolean;
   readonly requestId: string;
   readonly ipAddress?: string;
   readonly now: Date;
@@ -3994,11 +4031,55 @@ export async function updateVenueProfile(input: {
       "Venue belongs to another organization.",
     );
   }
+  if ((input.latitude === undefined) !== (input.longitude === undefined)) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Latitude and longitude must be provided together.",
+    );
+  }
   const values = {
+    name: input.name?.trim() || venue.name,
+    locationKind:
+      input.locationKind ??
+      (venue.locationKind === "public-location"
+        ? "public-location"
+        : "private-venue"),
+    environment:
+      input.environment ??
+      (venue.environment === "indoor" ? "indoor" : "outdoor"),
     description: input.description?.trim() || null,
     capacity: input.capacity,
     heroImageUrl: input.heroImageUrl?.trim() || null,
     amenities: input.amenities.map((amenity) => amenity.trim()).filter(Boolean),
+    addressLine1:
+      input.addressLine1 === undefined
+        ? venue.addressLine1
+        : input.addressLine1.trim() || null,
+    addressLine2:
+      input.addressLine2 === undefined
+        ? venue.addressLine2
+        : input.addressLine2.trim() || null,
+    locality:
+      input.locality === undefined
+        ? venue.locality
+        : input.locality.trim() || null,
+    administrativeArea:
+      input.administrativeArea === undefined
+        ? venue.administrativeArea
+        : input.administrativeArea.trim() || null,
+    postalCode:
+      input.postalCode === undefined
+        ? venue.postalCode
+        : input.postalCode.trim() || null,
+    countryCode: input.countryCode?.trim().toUpperCase() || venue.countryCode,
+    googlePlaceId:
+      input.googlePlaceId === undefined
+        ? venue.googlePlaceId
+        : input.googlePlaceId.trim() || null,
+    latitude: input.latitude ?? venue.latitude,
+    longitude: input.longitude ?? venue.longitude,
+    timezone: input.timezone ? timeZone(input.timezone) : venue.timezone,
+    temporary: input.temporary ?? venue.temporary,
     updatedAt: input.now,
   };
   await database.batch([
@@ -4011,13 +4092,28 @@ export async function updateVenueProfile(input: {
       entityType: "venue",
       entityId: input.venueId,
       beforeHash: stableHash({
+        name: venue.name,
+        locationKind: venue.locationKind,
+        environment: venue.environment,
         description: venue.description,
         capacity: venue.capacity,
         heroImageUrl: venue.heroImageUrl,
         amenities: venue.amenities,
+        addressLine1: venue.addressLine1,
+        addressLine2: venue.addressLine2,
+        locality: venue.locality,
+        administrativeArea: venue.administrativeArea,
+        postalCode: venue.postalCode,
+        countryCode: venue.countryCode,
+        googlePlaceId: venue.googlePlaceId,
+        latitude: venue.latitude,
+        longitude: venue.longitude,
+        timezone: venue.timezone,
+        temporary: venue.temporary,
       }),
       afterHash: stableHash(values),
-      reason: "Operator updated the player-facing venue profile.",
+      reason:
+        "Operator updated venue identity, location, and player-facing details.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,
@@ -4029,11 +4125,19 @@ export async function updateVenueProfile(input: {
 export async function updateCourtBookingConfiguration(input: {
   readonly actor: ApiActor;
   readonly courtId: string;
+  readonly name?: string;
+  readonly surface?: string;
   readonly imageUrl?: string;
+  readonly lit?: boolean;
+  readonly bookingPolicy?: "public" | "members" | "tiers" | "staff" | "none";
   readonly ratePlanId: string | null;
   readonly capacity: number;
+  readonly minimumDurationMinutes?: number;
+  readonly maximumDurationMinutes?: number;
   readonly durationOptionsMinutes: readonly number[];
   readonly bookingIncrementMinutes: number;
+  readonly bufferBeforeMinutes?: number;
+  readonly bufferAfterMinutes?: number;
   readonly minimumNoticeMinutes: number;
   readonly maximumAdvanceDays: number;
   readonly cancellationPolicy: {
@@ -4071,6 +4175,16 @@ export async function updateCourtBookingConfiguration(input: {
       );
     }
   }
+  const minimumDurationMinutes =
+    input.minimumDurationMinutes ?? court.minimumDurationMinutes;
+  const maximumDurationMinutes =
+    input.maximumDurationMinutes ?? court.maximumDurationMinutes;
+  if (maximumDurationMinutes < minimumDurationMinutes) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Maximum duration must be at least the minimum duration.",
+    );
+  }
   const durationOptionsMinutes = [
     ...new Set(input.durationOptionsMinutes),
   ].sort((left, right) => left - right);
@@ -4078,8 +4192,7 @@ export async function updateCourtBookingConfiguration(input: {
     durationOptionsMinutes.length === 0 ||
     durationOptionsMinutes.some(
       (minutes) =>
-        minutes < court.minimumDurationMinutes ||
-        minutes > court.maximumDurationMinutes,
+        minutes < minimumDurationMinutes || minutes > maximumDurationMinutes,
     )
   ) {
     throw new OperatorServiceError(
@@ -4088,14 +4201,22 @@ export async function updateCourtBookingConfiguration(input: {
     );
   }
   const values = {
+    name: input.name?.trim() || court.name,
+    surface: input.surface?.trim().toLowerCase() || court.surface,
     imageUrl:
       input.imageUrl === undefined
         ? court.imageUrl
         : input.imageUrl.trim() || null,
+    lit: input.lit ?? court.lit,
+    bookingPolicy: input.bookingPolicy ?? court.bookingPolicy,
     ratePlanId: input.ratePlanId,
     capacity: input.capacity,
+    minimumDurationMinutes,
+    maximumDurationMinutes,
     durationOptionsMinutes,
     bookingIncrementMinutes: input.bookingIncrementMinutes,
+    bufferBeforeMinutes: input.bufferBeforeMinutes ?? court.bufferBeforeMinutes,
+    bufferAfterMinutes: input.bufferAfterMinutes ?? court.bufferAfterMinutes,
     minimumNoticeMinutes: input.minimumNoticeMinutes,
     maximumAdvanceDays: input.maximumAdvanceDays,
     cancellationPolicy: input.cancellationPolicy,
@@ -4104,6 +4225,15 @@ export async function updateCourtBookingConfiguration(input: {
   const database = getDatabase();
   await database.batch([
     database.update(courts).set(values).where(eq(courts.id, input.courtId)),
+    database
+      .update(schedules)
+      .set({ name: `${values.name} availability`, updatedAt: input.now })
+      .where(
+        and(
+          eq(schedules.resourceType, "court"),
+          eq(schedules.resourceId, input.courtId),
+        ),
+      ),
     database.insert(auditLog).values({
       organizationId,
       actorPersonId: input.actor.personId,
@@ -4112,11 +4242,19 @@ export async function updateCourtBookingConfiguration(input: {
       entityType: "court",
       entityId: input.courtId,
       beforeHash: stableHash({
+        name: court.name,
+        surface: court.surface,
         imageUrl: court.imageUrl,
+        lit: court.lit,
+        bookingPolicy: court.bookingPolicy,
         ratePlanId: court.ratePlanId,
         capacity: court.capacity,
+        minimumDurationMinutes: court.minimumDurationMinutes,
+        maximumDurationMinutes: court.maximumDurationMinutes,
         durationOptionsMinutes: court.durationOptionsMinutes,
         bookingIncrementMinutes: court.bookingIncrementMinutes,
+        bufferBeforeMinutes: court.bufferBeforeMinutes,
+        bufferAfterMinutes: court.bufferAfterMinutes,
         minimumNoticeMinutes: court.minimumNoticeMinutes,
         maximumAdvanceDays: court.maximumAdvanceDays,
         cancellationPolicy: court.cancellationPolicy,

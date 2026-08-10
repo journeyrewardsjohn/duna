@@ -160,6 +160,8 @@ async function main() {
 
     const venue = await caller.operator.createVenue({
       name: "Verification Beach",
+      locationKind: "public-location",
+      environment: "outdoor",
       addressLine1: "1 Verification Way",
       locality: "Hermosa Beach",
       administrativeArea: "CA",

@@ -77,6 +77,7 @@ import {
   operatorScorableMatchSchema,
   operatorSessionDetailSchema,
   operatorWorkspaceSchema,
+  publicVenueLayoutSchema,
   organizationCommissionPolicySchema,
   organizationWalletSummarySchema,
   organizationSummarySchema,
@@ -109,6 +110,10 @@ import {
   ticketScanResultSchema,
   tournamentScheduleSchema,
   venueSummarySchema,
+  venueLayoutAssetSchema,
+  venueLayoutCourtAssignmentPlanSchema,
+  venueLayoutGeometrySchema,
+  venueLayoutWorkspaceSchema,
   courtCalibrationSchema,
   dunaPlusGrantSchema,
   liveVideoSessionSchema,
@@ -342,6 +347,17 @@ import {
   updateEventDraft,
   updateVenueProfile,
 } from "./operator-service";
+import {
+  applyVenueLayoutCourtAssignments,
+  createCourtFromVenueLayout,
+  createVenueLayout,
+  loadPublicVenueLayout,
+  loadVenueLayoutWorkspace,
+  planVenueLayoutCourtAssignments,
+  publishVenueLayout,
+  saveVenueLayout,
+  saveVenueLayoutEventSettings,
+} from "./venue-layout-service";
 import {
   loadPlayerOrganizationAccess,
   PlayerOrganizationError,
@@ -1396,6 +1412,10 @@ const publicRouter = router({
   venues: publicProcedure
     .output(z.array(venueSummarySchema).readonly())
     .query(() => getRepository().public.venues()),
+  venueLayout: publicProcedure
+    .input(z.object({ venueId: z.string().uuid() }))
+    .output(publicVenueLayoutSchema.optional())
+    .query(({ input }) => loadPublicVenueLayout(input.venueId)),
   discoveryMap: publicProcedure
     .output(discoveryMapSchema)
     .query(() => loadDiscoveryMap()),
@@ -6280,6 +6300,35 @@ const operatorRouter = router({
         ? loadDemoOperatorWorkspace(ctx.actor!.organizationId!)
         : loadOperatorWorkspace(ctx.actor!.organizationId!),
     ),
+  venueLayoutWorkspace: organizationProcedure("sessions:read")
+    .input(z.object({ venueId: z.string().uuid() }))
+    .output(venueLayoutWorkspaceSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadVenueLayoutWorkspace({
+          organizationId: ctx.actor!.organizationId!,
+          venueId: input.venueId,
+          demo: Boolean(ctx.actor!.isDemo && !process.env.DATABASE_URL),
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  venueLayoutCourtAssignmentPlan: organizationProcedure("sessions:read")
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .output(venueLayoutCourtAssignmentPlanSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await planVenueLayoutCourtAssignments({
+          organizationId: ctx.actor!.organizationId!,
+          sessionId: input.sessionId,
+          now: ctx.now,
+          demo: Boolean(ctx.actor!.isDemo && !process.env.DATABASE_URL),
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   paymentWorkspace: organizationProcedure("payments:read")
     .output(operatorPaymentWorkspaceSchema)
     .query(async ({ ctx }) => {
@@ -8058,15 +8107,229 @@ const operatorRouter = router({
         },
       }),
     ),
+  createVenueLayout: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        venueId: z.string().uuid(),
+        name: z.string().trim().min(2).max(120),
+        sourceType: z.enum(["satellite", "floorplan"]),
+        eventSessionId: z.string().uuid().optional(),
+        duplicateFromLayoutId: z.string().uuid().optional(),
+        floorplanImageUrl: z.url().optional(),
+        mapCenterLatitude: z.number().min(-90).max(90).optional(),
+        mapCenterLongitude: z.number().min(-180).max(180).optional(),
+        mapZoom: z.number().min(0).max(24).optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createVenueLayout",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createVenueLayout({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  saveVenueLayout: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        layoutId: z.string().uuid(),
+        name: z.string().trim().min(2).max(120),
+        floorplanImageUrl: z.url().optional(),
+        floorplanAnalysis: z.record(z.string(), z.unknown()).optional(),
+        mapCenterLatitude: z.number().min(-90).max(90).optional(),
+        mapCenterLongitude: z.number().min(-180).max(180).optional(),
+        mapZoom: z.number().min(0).max(24),
+        mapBearing: z.number().min(-360).max(360),
+        mapPitch: z.number().min(0).max(85),
+        assets: z
+          .array(
+            venueLayoutAssetSchema.omit({ layoutId: true }).extend({
+              geometry: venueLayoutGeometrySchema,
+            }),
+          )
+          .max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.saveVenueLayout",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await saveVenueLayout({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createCourtFromVenueLayout: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        layoutId: z.string().uuid(),
+        assetId: z.string().uuid(),
+        name: z.string().trim().min(1).max(100),
+        identifierCode: z.string().trim().min(1).max(48).optional(),
+        surface: z.string().trim().min(2).max(32),
+        capacity: z.number().int().min(1).max(1_000),
+        bookingPolicy: z.enum(["public", "members", "tiers", "staff", "none"]),
+        templateKey: z.string().trim().min(1).max(48),
+        geometry: venueLayoutGeometrySchema,
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createCourtFromVenueLayout",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createCourtFromVenueLayout({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  publishVenueLayout: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        layoutId: z.string().uuid(),
+        makePrimary: z.boolean(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.publishVenueLayout",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await publishVenueLayout({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  saveVenueLayoutEventSettings: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        layoutId: z.string().uuid(),
+        aiCourtAssignmentEnabled: z.boolean(),
+        averageMatchMinutes: z.number().int().min(10).max(240),
+        releaseCourtWhenFree: z.boolean(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.saveVenueLayoutEventSettings",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await saveVenueLayoutEventSettings({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  applyVenueLayoutCourtAssignments: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.applyVenueLayoutCourtAssignments",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await applyVenueLayoutCourtAssignments({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   createVenue: organizationProcedure("sessions:write")
     .input(
       z.object({
         name: z.string().trim().min(2).max(120),
+        locationKind: z.enum(["public-location", "private-venue"]),
+        environment: z.enum(["indoor", "outdoor"]),
         description: z.string().trim().max(2_000).optional(),
         capacity: z.number().int().min(0).max(100_000).optional(),
         heroImageUrl: z.url().optional(),
         amenities: z.array(z.string().trim().min(1).max(80)).max(40).optional(),
         addressLine1: z.string().trim().max(160).optional(),
+        addressLine2: z.string().trim().max(160).optional(),
         locality: z.string().trim().max(100).optional(),
         administrativeArea: z.string().trim().max(100).optional(),
         postalCode: z.string().trim().max(24).optional(),
@@ -8163,10 +8426,24 @@ const operatorRouter = router({
     .input(
       z.object({
         venueId: z.string().uuid(),
+        name: z.string().trim().min(2).max(120).optional(),
+        locationKind: z.enum(["public-location", "private-venue"]).optional(),
+        environment: z.enum(["indoor", "outdoor"]).optional(),
         description: z.string().trim().max(2_000).optional(),
         capacity: z.number().int().min(0).max(100_000),
         heroImageUrl: z.url().optional(),
         amenities: z.array(z.string().trim().min(1).max(80)).max(40),
+        addressLine1: z.string().trim().max(160).optional(),
+        addressLine2: z.string().trim().max(160).optional(),
+        locality: z.string().trim().max(100).optional(),
+        administrativeArea: z.string().trim().max(100).optional(),
+        postalCode: z.string().trim().max(24).optional(),
+        countryCode: z.string().trim().length(2).optional(),
+        googlePlaceId: z.string().trim().max(256).optional(),
+        latitude: z.number().min(-90).max(90).optional(),
+        longitude: z.number().min(-180).max(180).optional(),
+        timezone: z.string().trim().min(3).max(64).optional(),
+        temporary: z.boolean().optional(),
         idempotencyKey: z.string().uuid(),
       }),
     )
@@ -8182,10 +8459,24 @@ const operatorRouter = router({
             return await updateVenueProfile({
               actor: ctx.actor!,
               venueId: input.venueId,
+              name: input.name,
+              locationKind: input.locationKind,
+              environment: input.environment,
               description: input.description,
               capacity: input.capacity,
               heroImageUrl: input.heroImageUrl,
               amenities: input.amenities,
+              addressLine1: input.addressLine1,
+              addressLine2: input.addressLine2,
+              locality: input.locality,
+              administrativeArea: input.administrativeArea,
+              postalCode: input.postalCode,
+              countryCode: input.countryCode,
+              googlePlaceId: input.googlePlaceId,
+              latitude: input.latitude,
+              longitude: input.longitude,
+              timezone: input.timezone,
+              temporary: input.temporary,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,
@@ -8200,14 +8491,24 @@ const operatorRouter = router({
     .input(
       z.object({
         courtId: z.string().uuid(),
+        name: z.string().trim().min(1).max(100).optional(),
+        surface: z.string().trim().min(2).max(32).optional(),
         imageUrl: z.url().optional(),
+        lit: z.boolean().optional(),
+        bookingPolicy: z
+          .enum(["public", "members", "tiers", "staff", "none"])
+          .optional(),
         ratePlanId: z.string().uuid().nullable(),
         capacity: z.number().int().min(1).max(1_000),
+        minimumDurationMinutes: z.number().int().min(15).max(1_440).optional(),
+        maximumDurationMinutes: z.number().int().min(15).max(1_440).optional(),
         durationOptionsMinutes: z
           .array(z.number().int().min(15).max(1_440))
           .min(1)
           .max(16),
         bookingIncrementMinutes: z.number().int().min(5).max(240),
+        bufferBeforeMinutes: z.number().int().min(0).max(240).optional(),
+        bufferAfterMinutes: z.number().int().min(0).max(240).optional(),
         minimumNoticeMinutes: z.number().int().min(0).max(43_200),
         maximumAdvanceDays: z.number().int().min(1).max(730),
         cancellationPolicy: z.object({
@@ -8234,11 +8535,19 @@ const operatorRouter = router({
             return await updateCourtBookingConfiguration({
               actor: ctx.actor!,
               courtId: input.courtId,
+              name: input.name,
+              surface: input.surface,
               imageUrl: input.imageUrl,
+              lit: input.lit,
+              bookingPolicy: input.bookingPolicy,
               ratePlanId: input.ratePlanId,
               capacity: input.capacity,
+              minimumDurationMinutes: input.minimumDurationMinutes,
+              maximumDurationMinutes: input.maximumDurationMinutes,
               durationOptionsMinutes: input.durationOptionsMinutes,
               bookingIncrementMinutes: input.bookingIncrementMinutes,
+              bufferBeforeMinutes: input.bufferBeforeMinutes,
+              bufferAfterMinutes: input.bufferAfterMinutes,
               minimumNoticeMinutes: input.minimumNoticeMinutes,
               maximumAdvanceDays: input.maximumAdvanceDays,
               cancellationPolicy: input.cancellationPolicy,
