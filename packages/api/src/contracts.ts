@@ -3309,6 +3309,8 @@ export const discoveryMapItemSchema = z.object({
   live: z.boolean().optional(),
   openNow: z.boolean().optional(),
   courtCount: z.number().int().nonnegative().optional(),
+  spotsRemaining: z.number().int().nonnegative().optional(),
+  level: z.string().optional(),
   price: moneySchema.optional(),
   tags: z.array(z.string()).readonly(),
 });

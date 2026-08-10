@@ -91,11 +91,15 @@ import {
   PlayerProfileProvider,
   usePlayerProfileNavigation,
 } from "./player-social";
+import { DiscoveryMapModal, DiscoveryMapPreview } from "./discovery-map";
+import { DiscoverySearchFlow } from "./discovery-search-flow";
 import {
-  DiscoveryMapModal,
-  DiscoveryMapPreview,
-  DiscoverySearchModal,
-} from "./discovery-map";
+  discoveryResultSummary,
+  discoveryWhatLabel,
+  discoveryWhenLabel,
+  type DiscoveryCoordinates,
+  type DiscoverySearchResult,
+} from "./discovery-search";
 import {
   proEventFeaturedMedia,
   proEventMediaUrl,
@@ -121,11 +125,6 @@ type MobilePredictionPosition = NonNullable<
 type TeammateSearchResult = Awaited<
   ReturnType<DunaApiClient["player"]["teammateSearch"]["query"]>
 >[number];
-type DiscoveryCoordinates = {
-  readonly latitude: number;
-  readonly longitude: number;
-};
-
 function discoveryDistance(
   origin: DiscoveryCoordinates | undefined,
   item: Pick<DiscoveryMapItem, "latitude" | "longitude">,
@@ -5638,13 +5637,16 @@ function DiscoverScreen({
   readonly onBook: (eventIndex: number) => void;
   readonly onOrganization: (slug: string) => void;
 }) {
+  const { theme } = useContext(ThemeContext);
   const [filter, setFilter] = useState("For you");
-  const [search, setSearch] = useState("");
   const [bookingVenueId, setBookingVenueId] = useState<string>();
   const [selectedCoach, setSelectedCoach] = useState<MobileCoach>();
   const [showProTour, setShowProTour] = useState(false);
   const [showDiscoveryMap, setShowDiscoveryMap] = useState(false);
   const [showDiscoverySearch, setShowDiscoverySearch] = useState(false);
+  const [showSearchedMap, setShowSearchedMap] = useState(false);
+  const [discoverySearchResult, setDiscoverySearchResult] =
+    useState<DiscoverySearchResult>();
   const [discoverLocation, setDiscoverLocation] =
     useState<DiscoveryCoordinates>();
   const [selectedProTourSlug, setSelectedProTourSlug] = useState<string>();
@@ -5658,14 +5660,8 @@ function DiscoverScreen({
     venues,
   } = usePlayerRuntime();
   const events = dashboard?.events ?? demoEvents;
-  const discoverProEvents = sortProEvents(proCoverage?.events ?? []).slice(
-    0,
-    3,
-  );
-  const query = search.trim().toLowerCase();
   useEffect(() => {
     if (!intent) return;
-    setSearch("");
     setShowDiscoverySearch(false);
     if (intent.kind === "find-match") {
       setFilter("Open play");
@@ -5705,13 +5701,6 @@ function DiscoverScreen({
   }, []);
   const discoverPlayers = (people ?? demoPeople)
     .filter((player) => player.id !== dashboard?.player.id)
-    .filter((player) =>
-      query
-        ? `${player.displayName} ${player.handle} ${player.homeMarket}`
-            .toLowerCase()
-            .includes(query)
-        : true,
-    )
     .sort(
       (left, right) =>
         Number(Boolean(right.isProfessional)) -
@@ -5744,21 +5733,6 @@ function DiscoverScreen({
   );
   const filteredEvents = discoverableEvents
     .filter((event) => {
-      if (
-        query &&
-        ![
-          event.title,
-          event.venueName,
-          event.organizationName,
-          event.kind,
-          ...event.tags,
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(query)
-      ) {
-        return false;
-      }
       if (filter === "Today") {
         return (
           new Date(event.startsAt).toDateString() === new Date().toDateString()
@@ -5781,25 +5755,11 @@ function DiscoverScreen({
         Number(isHomeOrganizationEvent(left)),
     );
   const homeEvents = filteredEvents.filter(isHomeOrganizationEvent);
-  const matchingCoaches = (coaches ?? [])
-    .filter((coach) => {
-      if (!query) return true;
-      return [
-        coach.displayName,
-        coach.handle,
-        coach.organizationName,
-        coach.homeMarket ?? "",
-        ...coach.services.map((service) => service.title),
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(query);
-    })
-    .sort(
-      (left, right) =>
-        Number(right.organizationId === homeOrganization?.organizationId) -
-        Number(left.organizationId === homeOrganization?.organizationId),
-    );
+  const matchingCoaches = [...(coaches ?? [])].sort(
+    (left, right) =>
+      Number(right.organizationId === homeOrganization?.organizationId) -
+      Number(left.organizationId === homeOrganization?.organizationId),
+  );
   const homeCoaches = matchingCoaches.filter(
     (coach) => coach.organizationId === homeOrganization?.organizationId,
   );
@@ -5846,6 +5806,10 @@ function DiscoverScreen({
         endsAt: event.endsAt,
         imageUrl: event.imageUrl,
         live: event.live,
+        spotsRemaining: event.spotsRemaining,
+        level: event.ratingRange
+          ? `${event.ratingRange[0]}–${event.ratingRange[1]}`
+          : undefined,
         price: event.price,
         tags: [
           event.kind,
@@ -5983,15 +5947,6 @@ function DiscoverScreen({
     [discoverLocation, discoveryItems],
   );
   const visibleDiscoveryItems = locationSortedDiscoveryItems.filter((item) => {
-    if (
-      query &&
-      ![item.title, item.subtitle, item.kind, item.entityType, ...item.tags]
-        .join(" ")
-        .toLowerCase()
-        .includes(query)
-    ) {
-      return false;
-    }
     if (filter === "Today") {
       return Boolean(
         item.startsAt &&
@@ -6014,7 +5969,6 @@ function DiscoverScreen({
     if (filter === "Free") return item.price?.amountMinor === 0;
     return true;
   });
-  const autocompleteItems = query ? visibleDiscoveryItems.slice(0, 5) : [];
   const tournamentEvents = filteredEvents
     .filter(
       (event) =>
@@ -6076,6 +6030,8 @@ function DiscoverScreen({
       }
     }
     if (item.entityType === "pro-tour") {
+      const slug = item.href.match(/^\/events\/([^/?#]+)/)?.[1];
+      if (slug) setSelectedProTourSlug(decodeURIComponent(slug));
       setShowProTour(true);
       return;
     }
@@ -6103,6 +6059,36 @@ function DiscoverScreen({
           }
         />
         <Text style={styles.displayTitle}>Find your game.</Text>
+        <Pressable
+          accessibilityLabel="Search by place, date, and type of play"
+          accessibilityRole="button"
+          onPress={() => {
+            selectionHaptic();
+            setShowDiscoverySearch(true);
+          }}
+          style={({ pressed }) => [
+            styles.discoverSearchPrimary,
+            pressed && styles.proMobilePressed,
+          ]}
+        >
+          <View style={styles.discoverSearchIconWrap}>
+            <Text style={styles.discoverSearchIcon}>⌕</Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.discoverSearchEyebrow}>SEARCH</Text>
+            <Text style={styles.discoverSearchTitle}>Where, when, what?</Text>
+            <Text numberOfLines={1} style={styles.discoverSearchMeta}>
+              {discoverySearchResult
+                ? `${discoverySearchResult.criteria.location.label} · ${discoveryWhenLabel(
+                    discoverySearchResult.criteria.when,
+                  )} · ${discoveryWhatLabel(
+                    discoverySearchResult.criteria.what,
+                  )}`
+                : `${discoverLocation ? "Near you" : "Anywhere"} · Flexible · For You`}
+            </Text>
+          </View>
+          <Text style={styles.discoverSearchArrow}>→</Text>
+        </Pressable>
         <MemberOrganizationCard />
         <Pressable
           onPress={() => {
@@ -6112,103 +6098,21 @@ function DiscoverScreen({
           style={styles.proTourEntry}
         >
           <View style={styles.flex}>
-            <Text style={styles.proTourEntryEyebrow}>
-              {proCoverage?.events.some((event) => event.live)
-                ? "● LIVE PRO TOUR"
-                : "PRO TOUR"}
-            </Text>
-            <Text style={styles.proTourEntryTitle}>
-              Pools, real brackets, predictions.
-            </Text>
+            <Text style={styles.proTourEntryEyebrow}>WATCH + FOLLOW</Text>
+            <Text style={styles.proTourEntryTitle}>Pro Tour</Text>
             <Text style={styles.proTourEntryMeta}>
-              {proCoverage?.events[0]?.name ??
-                "Follow the world’s best beach volleyball."}
+              Pools, real brackets, and predictions.
             </Text>
-          </View>
-          <Text style={styles.proTourEntryArrow}>↗</Text>
-        </Pressable>
-        {discoverProEvents.length > 0 && (
-          <View style={styles.discoverProEvents}>
-            <SectionHeader
-              eyebrow="WATCH + FOLLOW"
-              title="Pro events, live here."
-              action={`${discoverProEvents.length} now`}
-            />
-            <View style={styles.proMobileCardStack}>
-              {discoverProEvents.map((event) => (
-                <ProTourEventCard
-                  event={event}
-                  key={event.id}
-                  onPress={() => {
-                    selectionHaptic();
-                    setSelectedProTourSlug(event.slug);
-                    setShowProTour(true);
-                  }}
-                />
-              ))}
+            <View style={styles.proTourEntryBrands}>
+              <ProTourBrandMark compact source="fivb" />
+              <ProTourBrandMark compact source="avp" />
+              {proCoverage?.events.some((event) => event.live) ? (
+                <Text style={styles.proTourEntryLive}>● LIVE</Text>
+              ) : null}
             </View>
           </View>
-        )}
-        <View style={styles.searchField}>
-          <Text style={styles.searchIcon}>⌕</Text>
-          <TextInput
-            onChangeText={setSearch}
-            onSubmitEditing={() => setShowDiscoverySearch(true)}
-            placeholder="Events, programs, clubs, coaches…"
-            placeholderTextColor={colors.muted}
-            style={styles.searchInput}
-            value={search}
-          />
-          <Pressable onPress={() => setShowDiscoverySearch(true)}>
-            <Text style={styles.searchAllText}>All</Text>
-          </Pressable>
-        </View>
-        {autocompleteItems.length > 0 && (
-          <View style={styles.searchSuggestions}>
-            {autocompleteItems.map((item) => (
-              <Pressable
-                key={item.id}
-                onPress={() => openDiscoveryItem(item)}
-                style={styles.searchSuggestionRow}
-              >
-                <View
-                  style={[
-                    styles.searchSuggestionDot,
-                    {
-                      backgroundColor:
-                        item.entityType === "venue"
-                          ? colors.aqua
-                          : item.entityType === "coach"
-                            ? colors.flare
-                            : item.entityType === "organization"
-                              ? "#4e765d"
-                              : item.entityType === "match"
-                                ? "#35c8bd"
-                                : item.entityType === "pro-tour"
-                                  ? "#d5a13d"
-                                  : colors.aqua,
-                    },
-                  ]}
-                />
-                <View style={styles.flex}>
-                  <Text style={styles.searchSuggestionTitle}>{item.title}</Text>
-                  <Text style={styles.searchSuggestionMeta}>
-                    {item.subtitle} · {item.entityType.replace("-", " ")}
-                  </Text>
-                </View>
-                <Text style={styles.chevron}>›</Text>
-              </Pressable>
-            ))}
-            <Pressable
-              onPress={() => setShowDiscoverySearch(true)}
-              style={styles.searchSuggestionAll}
-            >
-              <Text style={styles.searchSuggestionAllText}>
-                View all {visibleDiscoveryItems.length} results →
-              </Text>
-            </Pressable>
-          </View>
-        )}
+          <Text style={styles.proTourEntryArrow}>›</Text>
+        </Pressable>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -6377,7 +6281,11 @@ function DiscoverScreen({
         )}
         <DiscoveryMapPreview
           items={visibleDiscoveryItems}
-          onOpen={() => setShowDiscoveryMap(true)}
+          onOpen={() => {
+            setShowSearchedMap(false);
+            setShowDiscoveryMap(true);
+          }}
+          theme={theme}
         />
         <SectionHeader
           action="View all"
@@ -6445,19 +6353,50 @@ function DiscoverScreen({
         )}
       </ScrollView>
       <DiscoveryMapModal
-        items={locationSortedDiscoveryItems}
+        items={
+          showSearchedMap && discoverySearchResult
+            ? discoverySearchResult.items
+            : locationSortedDiscoveryItems
+        }
         onClose={() => setShowDiscoveryMap(false)}
         onSearch={() => {
           setShowDiscoveryMap(false);
           setShowDiscoverySearch(true);
         }}
         onSelect={openDiscoveryItem}
+        origin={
+          showSearchedMap ? discoverySearchResult?.origin : discoverLocation
+        }
+        radiusMiles={
+          showSearchedMap ? discoverySearchResult?.radiusMiles : undefined
+        }
+        resultSummary={
+          showSearchedMap && discoverySearchResult
+            ? discoveryResultSummary(discoverySearchResult)
+            : undefined
+        }
+        searchLabel={
+          showSearchedMap && discoverySearchResult
+            ? `${discoverySearchResult.criteria.location.label} · ${discoveryWhenLabel(
+                discoverySearchResult.criteria.when,
+              )}`
+            : "Search Duna"
+        }
+        theme={theme}
         visible={showDiscoveryMap}
       />
-      <DiscoverySearchModal
+      <DiscoverySearchFlow
+        currentLocation={discoverLocation}
+        initialCriteria={discoverySearchResult?.criteria}
         items={locationSortedDiscoveryItems}
         onClose={() => setShowDiscoverySearch(false)}
-        onSelect={openDiscoveryItem}
+        onSubmit={(result) => {
+          setDiscoverySearchResult(result);
+          setShowDiscoverySearch(false);
+          setShowSearchedMap(true);
+          setShowDiscoveryMap(true);
+        }}
+        theme={theme}
         visible={showDiscoverySearch}
       />
       <VenueBookingModal
@@ -13048,6 +12987,47 @@ function createStyles(palette: Palette) {
       letterSpacing: -2.2,
       lineHeight: 42,
     },
+    discoverSearchPrimary: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.12),
+      borderRadius: 24,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 13,
+      marginBottom: 16,
+      marginTop: 18,
+      minHeight: 94,
+      padding: 16,
+    },
+    discoverSearchIconWrap: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 24,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    discoverSearchIcon: { color: colors.bone, fontSize: 25 },
+    discoverSearchEyebrow: {
+      color: colors.flare,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
+    discoverSearchTitle: {
+      color: colors.bone,
+      fontSize: 20,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+      marginTop: 4,
+    },
+    discoverSearchMeta: { color: colors.muted, fontSize: 10, marginTop: 5 },
+    discoverSearchArrow: {
+      color: colors.flare,
+      fontSize: 20,
+      fontWeight: "900",
+    },
     displayTitleCompact: {
       fontSize: 39,
       letterSpacing: -2,
@@ -13372,39 +13352,52 @@ function createStyles(palette: Palette) {
     eventSpots: { color: colors.muted, fontSize: 10 },
     proTourEntry: {
       alignItems: "center",
-      backgroundColor: colors.aquaDeep,
+      backgroundColor: colors.navyLift,
+      borderColor: rgba(colors.overlayRgb, 0.08),
       borderRadius: 20,
+      borderWidth: 1,
       flexDirection: "row",
       gap: 12,
       marginBottom: 18,
       marginTop: 12,
-      minHeight: 128,
+      minHeight: 142,
       overflow: "hidden",
       padding: 18,
     },
-    discoverProEvents: { marginTop: 4 },
     proTourEntryEyebrow: {
-      color: "#9de9ff",
+      color: colors.aqua,
       fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.9,
     },
     proTourEntryTitle: {
-      color: "#ffffff",
+      color: colors.bone,
       fontSize: 22,
       fontWeight: "900",
       letterSpacing: -0.9,
       lineHeight: 24,
-      marginTop: 9,
-    },
-    proTourEntryMeta: {
-      color: "rgba(255,255,255,.7)",
-      fontSize: 10,
       marginTop: 7,
     },
+    proTourEntryMeta: {
+      color: colors.muted,
+      fontSize: 11,
+      marginTop: 5,
+    },
+    proTourEntryBrands: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 7,
+      marginTop: 11,
+    },
+    proTourEntryLive: {
+      color: colors.flare,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
     proTourEntryArrow: {
-      color: "#ffffff",
-      fontSize: 22,
+      color: colors.bone,
+      fontSize: 26,
       marginLeft: 4,
     },
     proTourHeader: {
