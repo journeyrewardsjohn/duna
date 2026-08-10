@@ -33,6 +33,7 @@ export default async function VenueLayoutPage({
   return (
     <OperatorShell
       active="locations"
+      immersive={layoutWorkspace.layouts.length > 0}
       messageDraftCount={operatorWorkspace.messageDrafts.length}
       organization={dashboard.organization}
     >

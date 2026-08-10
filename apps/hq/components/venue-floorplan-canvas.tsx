@@ -1,8 +1,17 @@
 "use client";
 
 import type { VenueLayoutAsset } from "@duna/api";
-import { FileImage, Move } from "lucide-react";
+import { FileImage, Move, Move3D, RotateCw } from "lucide-react";
 import { useRef } from "react";
+
+interface FloorplanDragState {
+  readonly assetId: string;
+  readonly mode: "move" | "rotate";
+}
+
+function normalizeRotation(value: number) {
+  return ((((value + 180) % 360) + 360) % 360) - 180;
+}
 
 interface VenueFloorplanCanvasProps {
   readonly imageUrl?: string;
@@ -24,7 +33,7 @@ export function VenueFloorplanCanvas({
   onAssetChange,
 }: VenueFloorplanCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const dragRef = useRef<string | undefined>(undefined);
+  const dragRef = useRef<FloorplanDragState | undefined>(undefined);
 
   function normalizedPoint(clientX: number, clientY: number) {
     const bounds = svgRef.current?.getBoundingClientRect();
@@ -50,6 +59,37 @@ export function VenueFloorplanCanvas({
     });
   }
 
+  function rotateAsset(assetId: string, x: number, y: number) {
+    const asset = assets.find((item) => item.id === assetId);
+    if (
+      !asset ||
+      asset.locked ||
+      asset.geometry.coordinateSpace !== "floorplan" ||
+      asset.geometry.shape === "circle"
+    ) {
+      return;
+    }
+    const geometry = asset.geometry;
+    const pointerAngle =
+      (Math.atan2(
+        (y - geometry.center.y) * 700,
+        (x - geometry.center.x) * 1000,
+      ) *
+        180) /
+      Math.PI;
+    const cornerAngle =
+      (Math.atan2((-geometry.height * 700) / 2, (geometry.width * 1000) / 2) *
+        180) /
+      Math.PI;
+    onAssetChange({
+      ...asset,
+      geometry: {
+        ...geometry,
+        rotationDegrees: normalizeRotation(pointerAngle - cornerAngle),
+      },
+    });
+  }
+
   function nudgeAsset(asset: VenueLayoutAsset, x: number, y: number) {
     if (asset.geometry.coordinateSpace !== "floorplan") return;
     moveAsset(
@@ -72,10 +112,15 @@ export function VenueFloorplanCanvas({
           dragRef.current = undefined;
         }}
         onPointerMove={(event) => {
-          const assetId = dragRef.current;
-          if (!assetId) return;
+          const drag = dragRef.current;
+          if (!drag) return;
           const point = normalizedPoint(event.clientX, event.clientY);
-          if (point) moveAsset(assetId, point.x, point.y);
+          if (!point) return;
+          if (drag.mode === "move") {
+            moveAsset(drag.assetId, point.x, point.y);
+          } else {
+            rotateAsset(drag.assetId, point.x, point.y);
+          }
         }}
         onPointerUp={() => {
           dragRef.current = undefined;
@@ -141,7 +186,7 @@ export function VenueFloorplanCanvas({
                 event.stopPropagation();
                 onSelect(asset.id);
                 if (readOnly || asset.locked) return;
-                dragRef.current = asset.id;
+                dragRef.current = { assetId: asset.id, mode: "move" };
                 event.currentTarget.setPointerCapture(event.pointerId);
               }}
               role="button"
@@ -183,6 +228,40 @@ export function VenueFloorplanCanvas({
                   />
                 </>
               )}
+              {selected &&
+                !readOnly &&
+                !asset.locked &&
+                geometry.shape !== "circle" && (
+                  <g className="venue-floorplan-asset__rotate-control">
+                    <circle
+                      aria-label={`Rotate ${asset.label}`}
+                      className="venue-floorplan-asset__rotate-handle"
+                      cx={centerX + width / 2}
+                      cy={centerY - height / 2}
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                        dragRef.current = {
+                          assetId: asset.id,
+                          mode: "rotate",
+                        };
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                      }}
+                      r="14"
+                      role="button"
+                    />
+                    <text
+                      aria-hidden
+                      className="venue-floorplan-asset__rotate-icon"
+                      pointerEvents="none"
+                      textAnchor="middle"
+                      transform={`rotate(${-geometry.rotationDegrees} ${centerX + width / 2} ${centerY - height / 2})`}
+                      x={centerX + width / 2}
+                      y={centerY - height / 2 + 5}
+                    >
+                      ↻
+                    </text>
+                  </g>
+                )}
               <text
                 className="venue-floorplan-asset__label"
                 textAnchor="middle"
@@ -226,6 +305,16 @@ export function VenueFloorplanCanvas({
         )}
         {imageUrl ? "Schematic · normalized geometry" : "Schematic needed"}
       </div>
+      {selectedAssetId && !readOnly && (
+        <div className="venue-layout-map__interaction-hint">
+          <span>
+            <Move3D aria-hidden size={14} /> Drag element to move
+          </span>
+          <span>
+            <RotateCw aria-hidden size={14} /> Drag corner to rotate
+          </span>
+        </div>
+      )}
     </div>
   );
 }
