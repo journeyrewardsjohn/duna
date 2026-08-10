@@ -2138,7 +2138,7 @@ export function VenueLayoutStudio({
               layoutEvent ? "Publish and event automation" : "Player publishing"
             }
             aria-modal="true"
-            className="venue-layout-operations"
+            className={`venue-layout-operations ${layoutEvent ? "" : "is-publishing-only"}`}
             role="dialog"
           >
             <header>
