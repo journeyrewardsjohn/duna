@@ -33,7 +33,6 @@ import {
   RotateCw,
   Save,
   ScanLine,
-  Settings2,
   Shapes,
   Sparkles,
   Table2,
@@ -49,7 +48,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import {
   applyVenueLayoutCourtAssignmentsAction,
   createCourtFromVenueLayoutAction,
@@ -1109,6 +1108,7 @@ export function VenueLayoutStudio({
   const [preview, setPreview] = useState(false);
   const [toolboxOpen, setToolboxOpen] = useState(false);
   const [operationsOpen, setOperationsOpen] = useState(false);
+  const openToolboxAfterVersionRef = useRef(false);
   const [courtDraft, setCourtDraft] = useState<CourtDraft>();
   const [pendingCourtDraft, setPendingCourtDraft] = useState<CourtDraft>();
   const [floorplanImageUrl, setFloorplanImageUrl] = useState(
@@ -1177,6 +1177,10 @@ export function VenueLayoutStudio({
   useEffect(() => {
     if (versionState.status === "success" && versionState.entityId) {
       setLayoutId(versionState.entityId);
+      if (openToolboxAfterVersionRef.current) {
+        setToolboxOpen(true);
+        openToolboxAfterVersionRef.current = false;
+      }
       router.replace(
         `/locations/${workspace.venue.id}/layout?layout=${versionState.entityId}`,
       );
@@ -1199,12 +1203,19 @@ export function VenueLayoutStudio({
   const activeLayout = layout;
   const readOnly = layout.status !== "draft" || preview;
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId);
-  const placedCourtIds = new Set(
-    assets.flatMap((asset) => (asset.courtId ? [asset.courtId] : [])),
+  const courtAssetByCourtId = new globalThis.Map(
+    assets.flatMap((asset) =>
+      asset.courtId ? ([[asset.courtId, asset]] as const) : [],
+    ),
   );
-  const unplacedCourts = workspace.venue.courts.filter(
-    (court) => !placedCourtIds.has(court.id),
-  );
+  const editableDraft = workspace.layouts
+    .filter(
+      (version) =>
+        version.status === "draft" &&
+        version.id !== layout.id &&
+        (version.eventSessionId ?? null) === (layout.eventSessionId ?? null),
+    )
+    .sort((left, right) => right.version - left.version)[0];
   const layoutEvent = workspace.events.find(
     (event) => event.id === layout.eventSessionId,
   );
@@ -1292,6 +1303,21 @@ export function VenueLayoutStudio({
       suggestedName,
     });
     setToolboxOpen(false);
+  }
+
+  function selectLayoutVersion(
+    nextLayoutId: string,
+    options: { readonly openToolbox?: boolean } = {},
+  ) {
+    if (dirty && !window.confirm("Switch layouts and discard unsaved changes?"))
+      return;
+    setLayoutId(nextLayoutId);
+    setSelectedAssetId(undefined);
+    setToolboxOpen(options.openToolbox ?? false);
+    setOperationsOpen(false);
+    router.replace(
+      `/locations/${workspace.venue.id}/layout?layout=${nextLayoutId}`,
+    );
   }
 
   function applyFloorplanProposal(proposal: FloorplanAnalysisProposal) {
@@ -1400,13 +1426,25 @@ export function VenueLayoutStudio({
               onClick={() => setOperationsOpen((current) => !current)}
               type="button"
             >
-              <Settings2 aria-hidden size={16} /> Layout settings
+              {layoutEvent ? (
+                <Bot aria-hidden size={16} />
+              ) : (
+                <Eye aria-hidden size={16} />
+              )}
+              {layoutEvent ? "Publish & automation" : "Player publishing"}
             </button>
           )}
           <button
             aria-pressed={preview}
             className="hq-button hq-button--secondary"
-            onClick={() => setPreview((current) => !current)}
+            onClick={() => {
+              if (!preview) {
+                setSelectedAssetId(undefined);
+                setToolboxOpen(false);
+                setOperationsOpen(false);
+              }
+              setPreview((current) => !current);
+            }}
             type="button"
           >
             {preview ? (
@@ -1432,17 +1470,6 @@ export function VenueLayoutStudio({
         </div>
       </header>
 
-      {preview && (
-        <div className="venue-layout-preview-banner">
-          <MapPin aria-hidden size={18} />
-          <span>
-            <strong>Player wayfinding preview</strong>
-            Courts, spaces, identifiers, and live play appear without editing
-            controls.
-          </span>
-        </div>
-      )}
-
       <section className="venue-layout-workspace">
         {!preview && (
           <aside className="venue-layout-versions">
@@ -1457,19 +1484,7 @@ export function VenueLayoutStudio({
                 <button
                   className={version.id === layout.id ? "is-active" : ""}
                   key={version.id}
-                  onClick={() => {
-                    if (
-                      dirty &&
-                      !window.confirm(
-                        "Switch layouts and discard unsaved changes?",
-                      )
-                    )
-                      return;
-                    setLayoutId(version.id);
-                    router.replace(
-                      `/locations/${workspace.venue.id}/layout?layout=${version.id}`,
-                    );
-                  }}
+                  onClick={() => selectLayoutVersion(version.id)}
                   type="button"
                 >
                   <span>
@@ -1506,7 +1521,12 @@ export function VenueLayoutStudio({
                 <Copy aria-hidden size={15} /> New version{" "}
                 <ChevronDown aria-hidden size={14} />
               </summary>
-              <form action={versionAction}>
+              <form
+                action={versionAction}
+                onSubmit={() => {
+                  openToolboxAfterVersionRef.current = false;
+                }}
+              >
                 <input
                   name="venueId"
                   type="hidden"
@@ -1570,45 +1590,196 @@ export function VenueLayoutStudio({
         )}
 
         <section className="venue-layout-stage">
-          {!preview && (
-            <header className="venue-layout-toolbar">
-              <button
-                aria-expanded={toolboxOpen}
-                className={toolboxOpen ? "is-active" : ""}
-                onClick={() => setToolboxOpen((current) => !current)}
-                type="button"
-              >
-                <Plus aria-hidden size={17} /> Add element
-              </button>
+          {preview && (
+            <div className="venue-layout-preview-banner">
+              <MapPin aria-hidden size={18} />
               <span>
-                <Move3D aria-hidden size={15} /> Drag to move
-                <i>·</i>
-                <RotateCw aria-hidden size={14} /> Drag corner to rotate
+                <strong>
+                  {layout.status === "draft"
+                    ? "Draft player preview"
+                    : layout.isPrimary
+                      ? "Live player view"
+                      : "Published player preview"}
+                </strong>
+                {layout.status === "draft"
+                  ? "This private preview is not visible to players until you publish it."
+                  : "Courts, spaces, identifiers, and live play appear exactly as players see them."}
               </span>
-              <label>
-                <span className="sr-only">Layout name</span>
-                <input
-                  disabled={readOnly}
-                  onChange={(event) => {
-                    setLayoutName(event.target.value);
-                    setDirty(true);
-                  }}
-                  value={layoutName}
-                />
-              </label>
-              <Badge tone={dirty ? "warning" : "neutral"}>
-                {dirty ? "Unsaved" : "Saved"}
-              </Badge>
+            </div>
+          )}
+
+          {!preview && (
+            <header
+              className={`venue-layout-toolbar ${layout.status !== "draft" ? "is-published" : ""}`}
+            >
+              {layout.status === "draft" ? (
+                <>
+                  <button
+                    aria-expanded={toolboxOpen}
+                    className={toolboxOpen ? "is-active" : ""}
+                    onClick={() => setToolboxOpen((current) => !current)}
+                    type="button"
+                  >
+                    <Plus aria-hidden size={17} /> Add to layout
+                  </button>
+                  <span>
+                    <Move3D aria-hidden size={15} /> Drag to move
+                    <i>·</i>
+                    <RotateCw aria-hidden size={14} /> Drag corner to rotate
+                  </span>
+                  <label>
+                    <span className="sr-only">Layout name</span>
+                    <input
+                      onChange={(event) => {
+                        setLayoutName(event.target.value);
+                        setDirty(true);
+                      }}
+                      value={layoutName}
+                    />
+                  </label>
+                  <Badge tone={dirty ? "warning" : "neutral"}>
+                    {dirty ? "Unsaved" : "Saved draft"}
+                  </Badge>
+                </>
+              ) : (
+                <>
+                  <div className="venue-layout-toolbar__published-copy">
+                    <Lock aria-hidden size={16} />
+                    <span>
+                      <strong>This published layout is read-only</strong>
+                      <small>
+                        {editableDraft
+                          ? `Continue in draft v${editableDraft.version} to add courts or spaces. Players keep seeing this version until you publish.`
+                          : "Create a draft to add courts or spaces without changing what players see."}
+                      </small>
+                    </span>
+                  </div>
+                  {editableDraft ? (
+                    <button
+                      onClick={() =>
+                        selectLayoutVersion(editableDraft.id, {
+                          openToolbox: true,
+                        })
+                      }
+                      type="button"
+                    >
+                      <Plus aria-hidden size={17} /> Open draft & add
+                    </button>
+                  ) : (
+                    <form
+                      action={versionAction}
+                      className="venue-layout-toolbar__draft-form"
+                      onSubmit={() => {
+                        openToolboxAfterVersionRef.current = true;
+                      }}
+                    >
+                      <input
+                        name="venueId"
+                        type="hidden"
+                        value={workspace.venue.id}
+                      />
+                      <input
+                        name="sourceType"
+                        type="hidden"
+                        value={layout.sourceType}
+                      />
+                      <input
+                        name="duplicateFromLayoutId"
+                        type="hidden"
+                        value={layout.id}
+                      />
+                      <input
+                        name="eventSessionId"
+                        type="hidden"
+                        value={layout.eventSessionId ?? ""}
+                      />
+                      <input
+                        name="mapCenterLatitude"
+                        type="hidden"
+                        value={view.latitude}
+                      />
+                      <input
+                        name="mapCenterLongitude"
+                        type="hidden"
+                        value={view.longitude}
+                      />
+                      <input name="mapZoom" type="hidden" value={view.zoom} />
+                      <input
+                        name="name"
+                        type="hidden"
+                        value={`${layout.name} · revision`}
+                      />
+                      <ActionNotice state={versionState} />
+                      <button disabled={versionPending} type="submit">
+                        <Copy aria-hidden size={17} />
+                        {versionPending
+                          ? "Creating draft…"
+                          : "Create draft & add"}
+                      </button>
+                    </form>
+                  )}
+                </>
+              )}
             </header>
           )}
 
           {toolboxOpen && !readOnly && (
             <section className="venue-layout-toolbox">
-              <div>
+              <div className="venue-layout-toolbox__venue-courts">
                 <span className="venue-layout-toolbox__title">
-                  <Waves aria-hidden size={16} /> Courts
+                  <Link2 aria-hidden size={16} /> Your venue courts
                 </span>
-                <div className="venue-layout-toolbox__items">
+                <p>
+                  Start with courts already configured for this venue. Select a
+                  placed court to edit it, or place one that is still missing.
+                </p>
+                <div className="venue-layout-toolbox__court-list">
+                  {workspace.venue.courts.map((court) => {
+                    const placedAsset = courtAssetByCourtId.get(court.id);
+                    return (
+                      <button
+                        className={placedAsset ? "is-placed" : ""}
+                        key={court.id}
+                        onClick={() => {
+                          if (placedAsset) {
+                            setSelectedAssetId(placedAsset.id);
+                            setToolboxOpen(false);
+                          } else {
+                            addExistingCourt(court);
+                          }
+                        }}
+                        type="button"
+                      >
+                        <span>
+                          {placedAsset ? (
+                            <Check aria-hidden size={17} />
+                          ) : (
+                            <Plus aria-hidden size={17} />
+                          )}
+                        </span>
+                        <strong>{court.name}</strong>
+                        <small>
+                          {placedAsset
+                            ? "Already placed · select on map"
+                            : "Existing court · place on map"}
+                        </small>
+                      </button>
+                    );
+                  })}
+                  {workspace.venue.courts.length === 0 && (
+                    <p>No courts have been configured for this venue yet.</p>
+                  )}
+                </div>
+              </div>
+              <div className="venue-layout-toolbox__new-courts">
+                <span className="venue-layout-toolbox__title">
+                  <Grid2X2 aria-hidden size={16} /> Create a new court
+                </span>
+                <p>
+                  Use a template only when this is a brand-new court. Duna will
+                  add it to the venue and place it on this layout.
+                </p>
+                <div className="venue-layout-toolbox__items is-secondary">
                   {VENUE_LAYOUT_TEMPLATES.filter(
                     (template) => template.category === "court",
                   ).map((template) => (
@@ -1625,20 +1796,6 @@ export function VenueLayoutStudio({
                     </button>
                   ))}
                 </div>
-                {unplacedCourts.length > 0 && (
-                  <div className="venue-layout-toolbox__existing">
-                    <small>Place an existing court</small>
-                    {unplacedCourts.map((court) => (
-                      <button
-                        key={court.id}
-                        onClick={() => addExistingCourt(court)}
-                        type="button"
-                      >
-                        <Link2 aria-hidden size={14} /> {court.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
               <div>
                 <span className="venue-layout-toolbox__title">
@@ -1977,18 +2134,26 @@ export function VenueLayoutStudio({
           role="presentation"
         >
           <aside
-            aria-label="Layout settings"
+            aria-label={
+              layoutEvent ? "Publish and event automation" : "Player publishing"
+            }
             aria-modal="true"
-            className="venue-layout-operations"
+            className={`venue-layout-operations ${layoutEvent ? "" : "is-publishing-only"}`}
             role="dialog"
           >
             <header>
               <div>
-                <span className="hq-eyebrow">Venue operations</span>
-                <strong>Layout settings</strong>
+                <span className="hq-eyebrow">
+                  {layoutEvent ? layoutEvent.title : "Player-facing layout"}
+                </span>
+                <strong>
+                  {layoutEvent
+                    ? "Publish & event automation"
+                    : "Player publishing"}
+                </strong>
               </div>
               <button
-                aria-label="Close layout settings"
+                aria-label="Close publishing panel"
                 onClick={() => setOperationsOpen(false)}
                 type="button"
               >
@@ -1996,29 +2161,32 @@ export function VenueLayoutStudio({
               </button>
             </header>
             <div className="venue-layout-operations__body">
-              <EventAssignmentPanel
-                layout={layout}
-                readOnly={layout.status !== "draft"}
-                workspace={workspace}
-              />
               <section className="venue-layout-publish hq-card">
                 <div>
                   <span className="hq-eyebrow">Player-facing version</span>
                   <h2>
                     {layout.isPrimary
-                      ? "Primary layout"
-                      : "Publish this version when ready"}
+                      ? "Live player default"
+                      : layoutEvent
+                        ? "Publish this event layout"
+                        : "Publish this version when ready"}
                   </h2>
                   <p>
-                    The primary published layout becomes the default map players
-                    use to find courts and ticketed spaces. Event-specific
-                    versions remain available without replacing it.
+                    {layoutEvent
+                      ? `Publishing makes this layout available for ${layoutEvent.title} without replacing the venue's default player map.`
+                      : layout.isPrimary
+                        ? "Players currently use this layout to find courts, ticketed spaces, and venue amenities."
+                        : "Publishing makes this the default venue map players use to find courts and ticketed spaces."}
                   </p>
                 </div>
                 {layout.status === "draft" ? (
                   <form action={publishAction}>
                     <input name="layoutId" type="hidden" value={layout.id} />
-                    <input name="makePrimary" type="hidden" value="true" />
+                    <input
+                      name="makePrimary"
+                      type="hidden"
+                      value={layoutEvent ? "false" : "true"}
+                    />
                     <ActionNotice state={publishState} />
                     <button
                       className="hq-button hq-button--primary"
@@ -2026,7 +2194,11 @@ export function VenueLayoutStudio({
                       type="submit"
                     >
                       <Eye aria-hidden size={16} />{" "}
-                      {publishPending ? "Publishing…" : "Publish & set primary"}
+                      {publishPending
+                        ? "Publishing…"
+                        : layoutEvent
+                          ? "Publish event layout"
+                          : "Publish & set player default"}
                     </button>
                     {dirty && (
                       <small>Save this version before publishing.</small>
@@ -2038,6 +2210,13 @@ export function VenueLayoutStudio({
                   </Badge>
                 )}
               </section>
+              {layoutEvent && (
+                <EventAssignmentPanel
+                  layout={layout}
+                  readOnly={layout.status !== "draft"}
+                  workspace={workspace}
+                />
+              )}
             </div>
           </aside>
         </div>
