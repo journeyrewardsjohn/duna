@@ -25,7 +25,7 @@ import type { SiteNavigationQuickAction } from "@/lib/site-navigation";
 
 const mainNavigation = [
   {
-    href: "/app/discover",
+    href: "/discover",
     label: "Play",
     detail: "Games, sessions, and courts",
   },

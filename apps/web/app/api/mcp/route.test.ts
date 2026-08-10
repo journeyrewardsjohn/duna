@@ -61,6 +61,7 @@ describe("Duna MCP transport", () => {
     expect(resources.result.resources).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ uri: "duna://guide/agents" }),
+        expect.objectContaining({ uri: "duna://discover" }),
       ]),
     );
     const guide = await POST(
@@ -88,6 +89,7 @@ describe("Duna MCP transport", () => {
       expect.arrayContaining([
         expect.objectContaining({ uriTemplate: "duna://events/{slug}" }),
         expect.objectContaining({ uriTemplate: "duna://players/{identifier}" }),
+        expect.objectContaining({ uriTemplate: "duna://venues/{venueId}" }),
       ]),
     );
 

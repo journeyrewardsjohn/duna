@@ -80,7 +80,7 @@ function venuePoint(venue: VenueSummary): DiscoveryMapItem {
     kind: "court-booking",
     title: venue.name,
     subtitle: `${venue.city}, ${venue.region}`,
-    href: `/app/venues/${venue.id}`,
+    href: `/venues/${venue.id}`,
     latitude: venue.latitude,
     longitude: venue.longitude,
     organizationId: venue.organizationId,

@@ -1,4 +1,6 @@
 import type {
+  CourtBookingInventory,
+  DiscoveryMapItem,
   EventSummary,
   MatchSummary,
   OrganizationSummary,
@@ -44,6 +46,17 @@ export const staticPublicPages = [
     description:
       "Live and upcoming Beach Pro Tour and AVP events, matches, scores, broadcasts, rankings, and player identities.",
     sections: [],
+  },
+  {
+    path: "/discover",
+    title: "Discover beach volleyball",
+    description:
+      "Find public beach volleyball events, tournaments, leagues, training, matches, clubs, coaches, and court rentals on Duna.",
+    sections: [
+      "Search by place, current location, flexible or exact dates, and the kind of play you want.",
+      "Nearby searches expand from 10 miles until at least five matching results are available, then fall back to worldwide results.",
+      "Public details are open to people and agents. Registration, booking, checkout, and account actions require sign-in.",
+    ],
   },
   {
     path: "/rankings",
@@ -992,6 +1005,160 @@ export function renderRankingsMarkdown(rankings: PublicWorldRankings): string {
   return `${lines.join("\n")}\n`;
 }
 
+export function renderDiscoveryMarkdown(
+  items: readonly DiscoveryMapItem[],
+): string {
+  const canonicalPath = "/discover";
+  const visible = [
+    ...new Map(items.map((item) => [item.href, item] as const)).values(),
+  ];
+  const labels: Record<DiscoveryMapItem["entityType"], string> = {
+    event: "Events and local play",
+    venue: "Court rentals",
+    coach: "Coaches and training",
+    organization: "Clubs and organizations",
+    match: "Matches",
+    "pro-tour": "Professional tour events",
+  };
+  const lines = [
+    documentHeader({
+      title: "Discover beach volleyball",
+      description:
+        "Public beach volleyball events, tournaments, leagues, training, matches, clubs, coaches, and court rentals available through Duna.",
+      canonicalPath,
+      entityType: "collection_page",
+    }),
+    "## Search behavior",
+    "",
+    "- Where can use the player's current location, a selected place, or Anywhere.",
+    "- Nearby searches expand through 10, 30, 60, 120, 240, and 480 miles and continue outward until at least five matching results are available.",
+    "- When can remain flexible or use a preset or exact date range.",
+    "- What can include events, tournaments, leagues, training, matches, and court rentals.",
+    "- Public reading is open. Registration, booking, checkout, and account actions require sign-in and explicit confirmation.",
+    "",
+    `## Current public index (${visible.length})`,
+  ];
+  for (const entityType of Object.keys(
+    labels,
+  ) as DiscoveryMapItem["entityType"][]) {
+    const matches = visible.filter((item) => item.entityType === entityType);
+    if (matches.length === 0) continue;
+    lines.push("", `### ${labels[entityType]} (${matches.length})`, "");
+    for (const item of matches.slice(0, 100)) {
+      const facts = [
+        clean(item.kind.replaceAll("-", " ")),
+        clean(item.subtitle),
+        item.startsAt ? date(item.startsAt) : undefined,
+        item.level ? `level ${clean(item.level)}` : undefined,
+        item.spotsRemaining !== undefined
+          ? `${item.spotsRemaining} spots remaining`
+          : undefined,
+        item.courtCount !== undefined ? `${item.courtCount} courts` : undefined,
+        item.price
+          ? item.price.amountMinor === 0
+            ? "Free"
+            : money(item.price.amountMinor, item.price.currency)
+          : undefined,
+        item.openNow ? "Open now" : undefined,
+      ].filter(Boolean);
+      lines.push(
+        `- ${markdownLink(item.title, item.href)} — ${facts.join(" — ")}`,
+      );
+    }
+  }
+  lines.push(
+    "",
+    "## Agent routing",
+    "",
+    `Use each linked canonical entity page and its Markdown companion for final facts. Return people to ${internal(canonicalPath)} to refine Where, When, and What.`,
+  );
+  return `${lines.join("\n")}\n`;
+}
+
+export function renderVenueMarkdown(inventory: CourtBookingInventory): string {
+  const venue = inventory.venue;
+  const canonicalPath = `/venues/${venue.id}`;
+  const lines = [
+    documentHeader({
+      title: venue.name,
+      description:
+        venue.description ??
+        `${venue.name} public beach volleyball court details and live availability on Duna.`,
+      canonicalPath,
+      entityType: "sports_activity_location",
+      identifier: venue.id,
+    }),
+    "## Venue details",
+    "",
+    `- Operator: ${clean(venue.organizationName)}`,
+    `- Location: ${clean(venue.city)}, ${clean(venue.region)}`,
+    `- Timezone: ${clean(venue.timezone)}`,
+    `- Public courts: ${inventory.courts.length}`,
+    `- Online payments: ${venue.paymentsReady ? "Available after sign-in" : "Not currently available"}`,
+    ...(venue.latitude !== undefined && venue.longitude !== undefined
+      ? [
+          `- Coordinates: ${venue.latitude}, ${venue.longitude}`,
+          `- Map: https://www.google.com/maps/search/?api=1&query=${venue.latitude},${venue.longitude}`,
+        ]
+      : []),
+  ];
+  if (venue.amenities.length > 0) {
+    lines.push("", "## Amenities", "");
+    for (const amenity of venue.amenities) lines.push(`- ${clean(amenity)}`);
+  }
+  lines.push("", "## Courts and published rates", "");
+  for (const court of inventory.courts) {
+    const rate = court.pricing
+      ? `${money(court.pricing.baseAmountMinor, court.pricing.currency)} per ${court.pricing.rateUnitMinutes} minutes`
+      : "Rate not published";
+    lines.push(
+      `- **${clean(court.name)}** — ${clean(court.surface)} — ${court.lit ? "Lit" : "Natural light"} — ${court.minimumDurationMinutes}–${court.maximumDurationMinutes} minutes — ${rate}`,
+    );
+  }
+  lines.push(
+    "",
+    "## Availability and booking",
+    "",
+    `People can review current dates, open start times, weather, court details, and prices at ${internal(canonicalPath)} without an account. Sign-in is required only to hold a court, create an alert, accept policy terms, or complete payment.`,
+    "",
+    "Do not claim a court is held or booked until Duna returns a confirmed reservation after the authenticated checkout flow.",
+  );
+  return `${lines.join("\n")}\n`;
+}
+
+export function renderVenueSummaryMarkdown(venue: VenueSummary): string {
+  const canonicalPath = `/venues/${venue.id}`;
+  const lines = [
+    documentHeader({
+      title: venue.name,
+      description: `${venue.name} public beach volleyball court guide on Duna.`,
+      canonicalPath,
+      entityType: "sports_activity_location",
+      identifier: venue.id,
+    }),
+    "## Venue details",
+    "",
+    `- Location: ${clean(venue.city)}, ${clean(venue.region)}`,
+    `- Timezone: ${clean(venue.timezone)}`,
+    `- Public courts: ${venue.courtCount}`,
+    `- Coordinates: ${venue.latitude}, ${venue.longitude}`,
+    `- Map: https://www.google.com/maps/search/?api=1&query=${venue.latitude},${venue.longitude}`,
+  ];
+  if (venue.tags.length > 0) {
+    lines.push("", "## Published features", "");
+    for (const tag of venue.tags) lines.push(`- ${clean(tag)}`);
+  }
+  lines.push(
+    "",
+    "## Booking status",
+    "",
+    "Live court inventory and online rates have not been published for this venue. Do not claim a court is available, held, or booked from this guide.",
+    "",
+    `Return to ${internal("/discover")} to find currently published court rentals and nearby play.`,
+  );
+  return `${lines.join("\n")}\n`;
+}
+
 export function renderSitemapMarkdown(
   entries: readonly {
     readonly url: string;
@@ -1037,6 +1204,7 @@ export function renderAgentsGuide(): string {
 - XML canonical sitemap: ${internal("/sitemap.xml")}
 - Compact model index: ${internal("/llms.txt")}
 - MCP Streamable HTTP endpoint: ${internal("/api/mcp")}
+- Public discovery hub: ${internal("/discover")}
 - Professional tour hub: ${internal("/pro")}
 - Player and Sand Rating rankings: ${internal("/rankings")}
 - Sand Rating methodology: ${internal("/methodology")}
@@ -1051,6 +1219,8 @@ Every canonical public page in the Duna sitemap has a Markdown companion. Append
 - \`/pro/teams/{team-number}\` → \`/pro/teams/{team-number}.md\`
 - \`/coaches/{handle}\` → \`/coaches/{handle}.md\`
 - \`/clubs/{club-slug}\` → \`/clubs/{club-slug}.md\`
+- \`/venues/{venue-id}\` → \`/venues/{venue-id}.md\`
+- \`/discover\` → \`/discover.md\`
 - The homepage is \`/index.md\`.
 
 Markdown companions contain only public facts. They include canonical HTML links so a person can inspect live state, register, book, buy a ticket, or complete checkout on Duna.
@@ -1085,10 +1255,11 @@ Event Markdown pages expose the verified venue name, formatted address, event ti
 
 ### Clinics, open play, leagues, lessons, rentals, and registration
 
-1. Call MCP \`search_events\` with the appropriate kind or inspect public event pages in ${internal("/sitemap.md")}.
+1. Start at ${internal("/discover.md")}, call MCP \`search_duna\`, or call \`search_events\` with the appropriate kind.
 2. Use MCP \`find_coaches\` for public coaches and lessons.
-3. Club storefronts list public programs and bookable offers.
-4. Return the canonical Duna page for registration or booking. Do not say a player is registered, a place is held, or payment succeeded until the user completes the Duna flow and receives confirmation.
+3. Club storefronts list public programs and bookable offers. Public venue pages expose current courts, amenities, published rates, and availability.
+4. Discovery and entity details are public. Return the canonical Duna page for registration or booking; account access is required only when the user takes that action.
+5. Do not say a player is registered, a place is held, or payment succeeded until the user completes the Duna flow and receives confirmation.
 
 ### Coaches
 
@@ -1117,6 +1288,7 @@ Core resource templates:
 - \`duna://teams/{teamNo}\`
 - \`duna://coaches/{handle}\`
 - \`duna://clubs/{slug}\`
+- \`duna://venues/{venueId}\`
 
 Public discovery tools return structured data plus canonical and Markdown URLs. Use \`search_duna\` for broad questions, then prefer the entity-specific tools for final details. Any authenticated repair tools are role-gated and audited.
 `;

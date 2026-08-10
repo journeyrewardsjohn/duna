@@ -40,7 +40,7 @@ export default async function PlayPage() {
           </p>
         </div>
         <div className="play-page__actions">
-          <Link className="secondary-action" href="/app/discover">
+          <Link className="secondary-action" href="/discover">
             <Building2 aria-hidden size={17} /> Book a court
           </Link>
           <Link className="primary-action" href="/app/pickup/new">
@@ -137,7 +137,7 @@ export default async function PlayPage() {
             <span className="page-eyebrow">Matches near you</span>
             <h2>Find an easy yes.</h2>
           </div>
-          <Link href="/app/discover">
+          <Link href="/discover">
             Explore all <ArrowRight aria-hidden size={15} />
           </Link>
         </div>

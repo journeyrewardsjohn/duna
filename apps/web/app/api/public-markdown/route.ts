@@ -6,6 +6,7 @@ import {
   renderAgentsGuide,
   renderCoachMarkdown,
   renderConsumerEventMarkdown,
+  renderDiscoveryMarkdown,
   renderMatchMarkdown,
   renderOrganizationMarkdown,
   renderPlayerMarkdown,
@@ -18,6 +19,8 @@ import {
   renderSitemapMarkdown,
   renderStaticPageMarkdown,
   renderStorefrontMarkdown,
+  renderVenueMarkdown,
+  renderVenueSummaryMarkdown,
 } from "@/lib/public-markdown";
 import { absolutePublicUrl } from "@/lib/pro-seo";
 import sitemap from "@/app/sitemap";
@@ -82,6 +85,13 @@ export async function GET(request: Request): Promise<Response> {
   // explicitly anonymous caller so rewritten `.md` requests never depend on
   // AuthKit middleware state or accidentally inherit a signed-in identity.
   const caller = createPublicCallerFromRequest(request);
+
+  if (path === "/discover") {
+    const discovery = await caller.public.discoveryMap().catch(() => undefined);
+    if (discovery) {
+      return markdownResponse(renderDiscoveryMarkdown(discovery.items), path);
+    }
+  }
 
   if (path === "/pro") {
     const coverage = await caller.public.proCoverage().catch(() => undefined);
@@ -183,6 +193,23 @@ export async function GET(request: Request): Promise<Response> {
       .coach({ handle: coachMatch[1]! })
       .catch(() => undefined);
     if (coach) return markdownResponse(renderCoachMarkdown(coach), path);
+    return notFound(path);
+  }
+
+  const venueMatch = path.match(/^\/venues\/([^/]+)$/i);
+  if (venueMatch) {
+    const venueId = venueMatch[1]!;
+    const [inventory, venues] = await Promise.all([
+      caller.public.courtBookingInventory({ venueId }).catch(() => undefined),
+      caller.public.venues().catch(() => []),
+    ]);
+    if (inventory) {
+      return markdownResponse(renderVenueMarkdown(inventory), path);
+    }
+    const venue = venues.find((candidate) => candidate.id === venueId);
+    if (venue) {
+      return markdownResponse(renderVenueSummaryMarkdown(venue), path);
+    }
     return notFound(path);
   }
 

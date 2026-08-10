@@ -89,7 +89,7 @@ export default async function PlayerDashboard() {
     ? `/events/${nextPersonalEvent.slug}`
     : nextBooking
       ? "/app/play"
-      : "/app/discover";
+      : "/discover";
   const nextOpenSpots = nextPersonalEvent?.spotsRemaining;
   const livePlayers = [
     ...new Map(liveVideos.map((video) => [video.owner.id, video])).values(),
@@ -104,7 +104,7 @@ export default async function PlayerDashboard() {
 
   const quickActions = [
     {
-      href: "/app/discover",
+      href: "/discover",
       icon: Search,
       label: "Find play",
       detail: "Matches and events nearby",
@@ -363,7 +363,7 @@ export default async function PlayerDashboard() {
             <span className={styles.eyebrow}>Made for you</span>
             <h2>Play next</h2>
           </div>
-          <Link href="/app/discover">
+          <Link href="/discover">
             See all <ArrowRight aria-hidden size={15} />
           </Link>
         </div>
@@ -477,7 +477,7 @@ export default async function PlayerDashboard() {
             {futureBookings.length === 0 && (
               <article className={styles.emptyState}>
                 <p>Your calendar is open.</p>
-                <Link href="/app/discover">Find something to play</Link>
+                <Link href="/discover">Find something to play</Link>
               </article>
             )}
           </div>

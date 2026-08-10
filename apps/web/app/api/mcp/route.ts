@@ -7,6 +7,7 @@ import {
   renderAgentsGuide,
   renderCoachMarkdown,
   renderConsumerEventMarkdown,
+  renderDiscoveryMarkdown,
   renderMatchMarkdown,
   renderOrganizationMarkdown,
   renderPlayerMarkdown,
@@ -15,6 +16,8 @@ import {
   renderProfessionalTeamMarkdown,
   renderSitemapMarkdown,
   renderStorefrontMarkdown,
+  renderVenueMarkdown,
+  renderVenueSummaryMarkdown,
 } from "../../../lib/public-markdown";
 import { publicSiteOrigin } from "../../../lib/pro-seo";
 
@@ -270,6 +273,15 @@ const publicResources: readonly ResourceDefinition[] = [
     mimeType: "text/markdown",
     annotations: { audience: ["assistant"], priority: 0.95 },
   },
+  {
+    uri: "duna://discover",
+    name: "duna-public-discovery",
+    title: "Duna public beach volleyball discovery",
+    description:
+      "Current public courts, events, tournaments, leagues, matches, clubs, coaches, and training with canonical action links.",
+    mimeType: "text/markdown",
+    annotations: { audience: ["assistant"], priority: 1 },
+  },
 ];
 
 const publicResourceTemplates: readonly ResourceTemplateDefinition[] = [
@@ -333,6 +345,15 @@ const publicResourceTemplates: readonly ResourceTemplateDefinition[] = [
       "Public programs, services, plans, products, and booking links.",
     mimeType: "text/markdown",
     annotations: { audience: ["assistant"], priority: 0.85 },
+  },
+  {
+    uriTemplate: "duna://venues/{venueId}",
+    name: "duna-venue",
+    title: "Duna public venue",
+    description:
+      "Public court inventory, amenities, published rates, and availability with an authenticated booking handoff.",
+    mimeType: "text/markdown",
+    annotations: { audience: ["assistant"], priority: 0.9 },
   },
 ];
 
@@ -967,8 +988,15 @@ async function callTool(input: {
             ...publicLinks(origin, `/coaches/${coach.handle}`),
             actionUrl: `${origin}/coaches/${coach.handle}`,
           })),
-        venues: venues.filter(matchesQuery).slice(0, bounded),
-        discoveryUrl: `${origin}/app/discover`,
+        venues: venues
+          .filter(matchesQuery)
+          .slice(0, bounded)
+          .map((venue) => ({
+            ...venue,
+            ...publicLinks(origin, `/venues/${venue.id}`),
+            actionUrl: `${origin}/venues/${venue.id}`,
+          })),
+        discoveryUrl: `${origin}/discover`,
         checkoutPolicy:
           "Return options only. The user must review eligibility, price, policies, and complete Duna checkout.",
       };
@@ -1073,6 +1101,9 @@ async function readResource(input: {
   } else if (parts[0] === "site" && parts[1] === "index") {
     const { default: buildSitemap } = await import("../../sitemap");
     text = renderSitemapMarkdown(await buildSitemap());
+  } else if (parts[0] === "discover") {
+    const discovery = await caller.public.discoveryMap().catch(() => undefined);
+    if (discovery) text = renderDiscoveryMarkdown(discovery.items);
   } else if (
     parts[0] === "events" &&
     parts[1] &&
@@ -1126,6 +1157,17 @@ async function readResource(input: {
       .coach({ handle: parts[1] })
       .catch(() => undefined);
     if (coach) text = renderCoachMarkdown(coach);
+  } else if (parts[0] === "venues" && parts[1]) {
+    const venueId = parts[1];
+    const [inventory, venues] = await Promise.all([
+      caller.public.courtBookingInventory({ venueId }).catch(() => undefined),
+      caller.public.venues().catch(() => []),
+    ]);
+    if (inventory) text = renderVenueMarkdown(inventory);
+    else {
+      const venue = venues.find((candidate) => candidate.id === venueId);
+      if (venue) text = renderVenueSummaryMarkdown(venue);
+    }
   } else if (parts[0] === "clubs" && parts[1]) {
     const slug = parts[1];
     const [storefront, organization, events, coaches, venues] =

@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./discovery-search": "./src/discovery-search.ts",
     "./workos-environment": "./src/workos-environment.ts",
     "./context": "./src/context.ts",
     "./payments": "./src/payments.ts",

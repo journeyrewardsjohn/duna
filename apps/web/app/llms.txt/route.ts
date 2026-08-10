@@ -22,6 +22,7 @@ Markdown pages include canonical Duna URLs. Return people to the canonical HTML 
 
 ## Canonical public resources
 
+- [Public discovery hub](${absolutePublicUrl("/discover")}): search beach volleyball by Where, When, and What across public courts, events, tournaments, leagues, matches, clubs, coaches, and training. Reading is open; booking and registration actions require sign-in.
 - [Professional tour hub](${absolutePublicUrl("/pro")}): live, current-week, and upcoming professional events plus recent match updates.
 - [World and Duna rankings](${absolutePublicUrl("/rankings")}): top 200 men's and women's official rankings and match-based Sand Rating tables.
 - Public player profiles expose a reviewed biography, nationality, college, career record, Sand Rating history, world ranking, verified match record, model-defined upsets, partnerships, upcoming registered events, broadcast options, videos, and current reporting when those facts have been verified.

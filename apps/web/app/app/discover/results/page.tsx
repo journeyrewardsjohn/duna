@@ -1,23 +1,15 @@
-import { DiscoveryResults } from "@/components/discovery-results";
-import { getServerCaller } from "@/lib/api";
+import { redirect } from "next/navigation";
 
-export const metadata = { title: "Discovery results" };
-
-export default async function DiscoveryResultsPage({
+export default async function LegacyDiscoveryResultsPage({
   searchParams,
 }: {
   readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const params = await searchParams;
-  const caller = await getServerCaller();
-  const discovery = await caller.public.discoveryMap();
-  return (
-    <DiscoveryResults
-      initialKind={typeof params.kind === "string" ? params.kind : undefined}
-      initialQuery={typeof params.q === "string" ? params.q : ""}
-      initialScope={typeof params.scope === "string" ? params.scope : undefined}
-      initialType={typeof params.type === "string" ? params.type : undefined}
-      items={discovery.items}
-    />
-  );
+  const incoming = await searchParams;
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(incoming)) {
+    if (typeof value === "string") query.set(key, value);
+    else for (const item of value ?? []) query.append(key, item);
+  }
+  redirect(`/discover/results${query.size > 0 ? `?${query}` : ""}`);
 }

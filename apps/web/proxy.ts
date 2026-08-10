@@ -18,6 +18,18 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.rewrite(markdown, { request: { headers } });
   }
 
+  if (
+    request.nextUrl.pathname === "/app/discover" ||
+    request.nextUrl.pathname.startsWith("/app/discover/")
+  ) {
+    const publicDiscover = request.nextUrl.clone();
+    publicDiscover.pathname = request.nextUrl.pathname.replace(
+      /^\/app\/discover/,
+      "/discover",
+    );
+    return NextResponse.redirect(publicDiscover);
+  }
+
   if (!isWorkOSAuthKitConfigured()) {
     if (
       isProtectedRoute(request.nextUrl.pathname) &&

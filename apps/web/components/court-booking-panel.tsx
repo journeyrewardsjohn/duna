@@ -105,6 +105,8 @@ export function CourtBookingPanel({
   initialNotice,
   isDunaPlus,
   suggestedPlayers,
+  authenticationHref,
+  backHref = "/discover",
 }: {
   readonly bookingSubjects: readonly PersonSummary[];
   readonly inventory: CourtBookingInventory;
@@ -113,6 +115,8 @@ export function CourtBookingPanel({
   readonly initialNotice?: string;
   readonly isDunaPlus: boolean;
   readonly suggestedPlayers: readonly PersonSummary[];
+  readonly authenticationHref?: string;
+  readonly backHref?: string;
 }) {
   const firstCourt =
     inventory.courts.find((court) => court.pricing) ?? inventory.courts[0];
@@ -429,7 +433,7 @@ export function CourtBookingPanel({
         }
       >
         <div>
-          <Link href="/app/discover">
+          <Link href={backHref}>
             <ArrowLeft aria-hidden size={15} /> Back to discover
           </Link>
           <span className="page-eyebrow">Venue booking</span>
@@ -454,8 +458,8 @@ export function CourtBookingPanel({
       <nav className="venue-booking-tabs" aria-label="Venue">
         <span>Home</span>
         <strong>Book</strong>
-        <Link href="/app/discover?kind=pickup">Open matches</Link>
-        <Link href="/app/discover">Events</Link>
+        <Link href="/discover?kind=pickup">Open matches</Link>
+        <Link href="/discover">Events</Link>
       </nav>
 
       <section className="venue-booking-shell">
@@ -599,14 +603,20 @@ export function CourtBookingPanel({
                   : "Choose an open start"}
               </h3>
             </div>
-            <button
-              type="button"
-              className="venue-priority-alert"
-              onClick={createAlert}
-              disabled={isPending}
-            >
-              <BellRing aria-hidden size={16} /> Priority alert
-            </button>
+            {authenticationHref ? (
+              <Link className="venue-priority-alert" href={authenticationHref}>
+                <BellRing aria-hidden size={16} /> Sign in for alerts
+              </Link>
+            ) : (
+              <button
+                type="button"
+                className="venue-priority-alert"
+                onClick={createAlert}
+                disabled={isPending}
+              >
+                <BellRing aria-hidden size={16} /> Priority alert
+              </button>
+            )}
           </header>
           {selectedSlots.map((slot) => {
             const court = inventory.courts.find(
@@ -660,23 +670,33 @@ export function CourtBookingPanel({
           </p>
         )}
 
-        <button
-          type="button"
-          className="primary-action venue-review-button"
-          disabled={!selectedCourt || !selectedSlot || !estimate}
-          onClick={() => {
-            setReviewOpen(true);
-            setPolicyAccepted(false);
-            setPolicyScrolled(!policy?.requireFullScroll);
-          }}
-        >
-          {estimate
-            ? `Review ${selectedCourt?.name ?? "booking"} · ${formatMoney(
-                estimate.totalMinor,
-                estimate.currency,
-              )}`
-            : "Pricing pending"}
-        </button>
+        {authenticationHref && selectedCourt && selectedSlot && estimate ? (
+          <Link
+            className="primary-action venue-review-button"
+            href={authenticationHref}
+          >
+            Sign in to book {selectedCourt.name} ·{" "}
+            {formatMoney(estimate.totalMinor, estimate.currency)}
+          </Link>
+        ) : (
+          <button
+            type="button"
+            className="primary-action venue-review-button"
+            disabled={!selectedCourt || !selectedSlot || !estimate}
+            onClick={() => {
+              setReviewOpen(true);
+              setPolicyAccepted(false);
+              setPolicyScrolled(!policy?.requireFullScroll);
+            }}
+          >
+            {estimate
+              ? `Review ${selectedCourt?.name ?? "booking"} · ${formatMoney(
+                  estimate.totalMinor,
+                  estimate.currency,
+                )}`
+              : "Pricing pending"}
+          </button>
+        )}
       </section>
 
       {reviewOpen && selectedCourt && selectedSlot && estimate && (
