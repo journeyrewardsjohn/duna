@@ -4,6 +4,7 @@ import {
   divisions,
   eventTypes,
   getDatabase,
+  getTransactionalDatabase,
   matches,
   programs,
   rallyEvents,
@@ -600,7 +601,7 @@ export async function createVenueLayout(
       "A layout can only be duplicated within the same venue.",
     );
   }
-  const database = getDatabase();
+  const database = getTransactionalDatabase();
   const highest = (
     await database
       .select({ version: max(venueLayouts.version) })
@@ -726,7 +727,7 @@ export async function saveVenueLayout(
       "Published layouts are immutable. Create a new version to edit them.",
     );
   }
-  const database = getDatabase();
+  const database = getTransactionalDatabase();
   const expectedCoordinateSpace =
     layout.sourceType === "floorplan" ? "floorplan" : "geo";
   if (
@@ -927,7 +928,7 @@ export async function createCourtFromVenueLayout(
     );
   }
   const courtId = crypto.randomUUID();
-  const database = getDatabase();
+  const database = getTransactionalDatabase();
   const highestSortOrder = (
     await database
       .select({ value: max(venueLayoutAssets.sortOrder) })
@@ -1007,7 +1008,7 @@ export async function publishVenueLayout(
   requireDatabase();
   const organizationId = requireOrganization(input.actor);
   const layout = await ownedLayout(organizationId, input.layoutId);
-  const database = getDatabase();
+  const database = getTransactionalDatabase();
   const assets = await database
     .select({ id: venueLayoutAssets.id })
     .from(venueLayoutAssets)
@@ -1081,7 +1082,7 @@ export async function saveVenueLayoutEventSettings(
       "Court assignment settings must use an event at the layout's venue.",
     );
   }
-  const database = getDatabase();
+  const database = getTransactionalDatabase();
   await database.transaction(async (transaction) => {
     await transaction
       .insert(venueLayoutEventSettings)
@@ -1377,7 +1378,7 @@ export async function applyVenueLayoutCourtAssignments(
     now: input.now,
   });
   const layout = await ownedLayout(organizationId, setting.layoutId);
-  const database = getDatabase();
+  const database = getTransactionalDatabase();
   const appliedAssignments: Array<(typeof plan.assignments)[number]> = [];
   await database.transaction(async (transaction) => {
     for (const assignment of plan.assignments) {

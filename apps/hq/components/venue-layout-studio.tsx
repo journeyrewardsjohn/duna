@@ -196,7 +196,7 @@ function LayoutEmptyState({
   const sourceType =
     workspace.venue.environment === "indoor" ? "floorplan" : "satellite";
   return (
-    <main className="hq-page venue-layout-page">
+    <main className="hq-page venue-layout-page venue-layout-page--empty">
       <header className="venue-layout-header">
         <Link
           aria-label={`Back to ${workspace.venue.name}`}
