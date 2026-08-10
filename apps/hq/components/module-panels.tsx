@@ -622,8 +622,8 @@ function VenuePortfolioPanel({
         <span className="hq-eyebrow">Facility portfolio</span>
         <h2>Add the first venue.</h2>
         <p>
-          Venue identity, courts, pricing, availability, and player booking all
-          begin in one guided setup below.
+          Start with the real-world place, then manage its courts, pricing, and
+          availability in focused workspaces.
         </p>
         <Link
           className="hq-button hq-button--primary module-feature-card__action"
@@ -676,7 +676,11 @@ function VenuePortfolioPanel({
             )}
           </header>
           <div>
-            <span className="hq-eyebrow">Venue operating view</span>
+            <span className="hq-eyebrow">
+              {venue.locationKind === "public-location"
+                ? "Public location"
+                : "Private venue"}
+            </span>
             <h2>{venue.name}</h2>
             <p>
               {venue.description ??
@@ -759,9 +763,9 @@ function VenuePortfolioPanel({
           </div>
           <Link
             className="venue-portfolio-card__manage"
-            href="/locations/create#court-pricing"
+            href={`/locations/${venue.id}`}
           >
-            Manage courts and rates <ArrowRight aria-hidden size={15} />
+            Open venue workspace <ArrowRight aria-hidden size={15} />
           </Link>
           {venue.weather && (
             <small className="venue-weather-updated">

@@ -2284,12 +2284,15 @@ export const operatorVenueSchema = z.object({
   description: z.string().optional(),
   slug: z.string(),
   status: z.enum(["draft", "active", "maintenance", "seasonal", "closed"]),
+  locationKind: z.enum(["public-location", "private-venue"]),
+  environment: z.enum(["indoor", "outdoor"]),
   temporary: z.boolean(),
   capacity: z.number().int().nonnegative(),
   heroImageUrl: z.string().optional(),
   heroImageTreatmentUrl: z.string().optional(),
   amenities: z.array(z.string()).readonly(),
   addressLine1: z.string().optional(),
+  addressLine2: z.string().optional(),
   locality: z.string().optional(),
   administrativeArea: z.string().optional(),
   postalCode: z.string().optional(),
@@ -2340,6 +2343,215 @@ export const operatorSessionSchema = z.object({
     conversionRateBps: z.number().int().min(0).max(10_000),
   }),
 });
+
+export const venueLayoutGeoGeometrySchema = z.object({
+  coordinateSpace: z.literal("geo"),
+  shape: z.enum(["rectangle", "circle", "polygon"]),
+  center: z.object({
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+  }),
+  widthMeters: z.number().positive().max(2_000),
+  heightMeters: z.number().positive().max(2_000),
+  radiusMeters: z.number().positive().max(1_000).optional(),
+  rotationDegrees: z.number().min(-360).max(360),
+  bufferMeters: z.number().nonnegative().max(250),
+  points: z
+    .array(
+      z.object({
+        latitude: z.number().min(-90).max(90),
+        longitude: z.number().min(-180).max(180),
+      }),
+    )
+    .min(3)
+    .max(100)
+    .optional(),
+});
+
+export const venueLayoutFloorplanGeometrySchema = z.object({
+  coordinateSpace: z.literal("floorplan"),
+  shape: z.enum(["rectangle", "circle", "polygon"]),
+  center: z.object({
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+  }),
+  width: z.number().positive().max(1),
+  height: z.number().positive().max(1),
+  radius: z.number().positive().max(0.5).optional(),
+  rotationDegrees: z.number().min(-360).max(360),
+  buffer: z.number().nonnegative().max(0.5),
+  points: z
+    .array(
+      z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }),
+    )
+    .min(3)
+    .max(100)
+    .optional(),
+});
+
+export const venueLayoutGeometrySchema = z.discriminatedUnion(
+  "coordinateSpace",
+  [venueLayoutGeoGeometrySchema, venueLayoutFloorplanGeometrySchema],
+);
+
+export const venueLayoutDivisionPrioritySchema = z.object({
+  divisionId: z.string().uuid(),
+  priority: z.number().int().positive().max(100),
+  startsHere: z.boolean(),
+  allowWhenFree: z.boolean(),
+});
+
+export const venueLayoutAssetSchema = z.object({
+  id: z.string().uuid(),
+  layoutId: z.string().uuid(),
+  kind: z.enum([
+    "court",
+    "shape",
+    "ticketed-space",
+    "table",
+    "amenity",
+    "bookable-block",
+  ]),
+  templateKey: z.string().max(48).optional(),
+  courtId: z.string().uuid().optional(),
+  ticketTypeId: z.string().uuid().optional(),
+  label: z.string().min(1).max(120),
+  identifierCode: z.string().min(1).max(48).optional(),
+  capacity: z.number().int().positive().max(100_000).optional(),
+  geometry: venueLayoutGeometrySchema,
+  appearance: z.object({
+    palette: z
+      .enum(["sand", "ticketed", "amenity", "service", "neutral", "restricted"])
+      .default("neutral"),
+    icon: z.string().max(48).optional(),
+  }),
+  sortOrder: z.number().int().nonnegative(),
+  locked: z.boolean(),
+  divisionPriorities: z
+    .array(venueLayoutDivisionPrioritySchema)
+    .max(50)
+    .readonly(),
+});
+
+export const venueLayoutSchema = z.object({
+  id: z.string().uuid(),
+  venueId: z.string().uuid(),
+  eventSessionId: z.string().uuid().optional(),
+  name: z.string(),
+  version: z.number().int().positive(),
+  status: z.enum(["draft", "published", "archived"]),
+  sourceType: z.enum(["satellite", "floorplan"]),
+  isPrimary: z.boolean(),
+  floorplanImageUrl: z.string().url().optional(),
+  floorplanAnalysis: z.record(z.string(), z.unknown()).optional(),
+  mapCenterLatitude: z.number().min(-90).max(90).optional(),
+  mapCenterLongitude: z.number().min(-180).max(180).optional(),
+  mapZoom: z.number().min(0).max(24),
+  mapBearing: z.number().min(-360).max(360),
+  mapPitch: z.number().min(0).max(85),
+  publishedAt: z.iso.datetime().optional(),
+  updatedAt: z.iso.datetime(),
+  assets: z.array(venueLayoutAssetSchema).readonly(),
+});
+
+export const venueLayoutEventSettingsSchema = z.object({
+  sessionId: z.string().uuid(),
+  layoutId: z.string().uuid(),
+  aiCourtAssignmentEnabled: z.boolean(),
+  averageMatchMinutes: z.number().int().min(10).max(240),
+  releaseCourtWhenFree: z.boolean(),
+});
+
+export const venueLayoutEventSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
+  status: z.string(),
+  divisions: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string(),
+        teamSize: z.number().int().positive(),
+        maximumTeams: z.number().int().positive().optional(),
+      }),
+    )
+    .readonly(),
+  ticketTypes: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string(),
+        quantity: z.number().int().positive().optional(),
+      }),
+    )
+    .readonly(),
+  settings: venueLayoutEventSettingsSchema.optional(),
+});
+
+export const venueLayoutLiveMatchSchema = z.object({
+  id: z.string().uuid(),
+  courtId: z.string().uuid(),
+  divisionId: z.string().uuid().optional(),
+  divisionName: z.string().optional(),
+  status: z.string(),
+  teamAName: z.string(),
+  teamBName: z.string(),
+  score: z
+    .object({
+      setsA: z.number().int().nonnegative(),
+      setsB: z.number().int().nonnegative(),
+      pointsA: z.number().int().nonnegative(),
+      pointsB: z.number().int().nonnegative(),
+    })
+    .optional(),
+});
+
+export const venueLayoutWorkspaceSchema = z.object({
+  venue: operatorVenueSchema,
+  layouts: z.array(venueLayoutSchema).readonly(),
+  events: z.array(venueLayoutEventSchema).readonly(),
+  liveMatches: z.array(venueLayoutLiveMatchSchema).readonly(),
+});
+
+export const venueLayoutCourtAssignmentSchema = z.object({
+  matchId: z.string().uuid(),
+  divisionId: z.string().uuid(),
+  divisionName: z.string(),
+  courtId: z.string().uuid(),
+  courtName: z.string(),
+  scheduledAt: z.iso.datetime(),
+  estimatedMinutes: z.number().int().positive(),
+  reason: z.string(),
+});
+
+export const venueLayoutCourtAssignmentPlanSchema = z.object({
+  sessionId: z.string().uuid(),
+  generatedAt: z.iso.datetime(),
+  assignments: z.array(venueLayoutCourtAssignmentSchema).readonly(),
+  unassignedMatchIds: z.array(z.string().uuid()).readonly(),
+  assumptions: z.array(z.string()).readonly(),
+});
+
+export const publicVenueLayoutSchema = venueLayoutSchema
+  .pick({
+    id: true,
+    venueId: true,
+    name: true,
+    version: true,
+    sourceType: true,
+    floorplanImageUrl: true,
+    mapCenterLatitude: true,
+    mapCenterLongitude: true,
+    mapZoom: true,
+    mapBearing: true,
+    mapPitch: true,
+    assets: true,
+  })
+  .extend({
+    liveMatches: z.array(venueLayoutLiveMatchSchema).readonly(),
+  });
 
 export const operatorEventRegistrationSchema = z.object({
   id: z.string().uuid(),
@@ -3519,6 +3731,9 @@ export const operatorMutationResultSchema = z.object({
     "rate-plan",
     "venue",
     "court",
+    "venue-layout",
+    "venue-layout-assets",
+    "venue-layout-event",
     "session",
     "event",
     "message-draft",
@@ -3611,6 +3826,20 @@ export const ticketApprovalResultSchema = z.object({
 });
 
 export type OperatorWorkspace = z.infer<typeof operatorWorkspaceSchema>;
+export type VenueLayout = z.infer<typeof venueLayoutSchema>;
+export type VenueLayoutAsset = z.infer<typeof venueLayoutAssetSchema>;
+export type VenueLayoutGeometry = z.infer<typeof venueLayoutGeometrySchema>;
+export type VenueLayoutGeoGeometry = z.infer<
+  typeof venueLayoutGeoGeometrySchema
+>;
+export type VenueLayoutFloorplanGeometry = z.infer<
+  typeof venueLayoutFloorplanGeometrySchema
+>;
+export type VenueLayoutWorkspace = z.infer<typeof venueLayoutWorkspaceSchema>;
+export type VenueLayoutCourtAssignmentPlan = z.infer<
+  typeof venueLayoutCourtAssignmentPlanSchema
+>;
+export type PublicVenueLayout = z.infer<typeof publicVenueLayoutSchema>;
 export type OperatorMemberProfile = z.infer<typeof operatorMemberProfileSchema>;
 export type OperatorSessionDetail = z.infer<typeof operatorSessionDetailSchema>;
 export type OperatorSessionNote = z.infer<typeof operatorSessionNoteSchema>;

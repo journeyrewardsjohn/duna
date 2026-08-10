@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { CourtBookingPanel } from "@/components/court-booking-panel";
+import { VenueLayoutViewer } from "@/components/venue-layout-viewer";
 import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Book a court" };
@@ -30,10 +31,11 @@ export default async function VenueBookingPage({
   const { venueId } = await params;
   const query = await searchParams;
   const caller = await getServerCaller();
-  const [inventory, settings, suggestedPlayers] = await Promise.all([
+  const [inventory, settings, suggestedPlayers, layout] = await Promise.all([
     caller.public.courtBookingInventory({ venueId }).catch(() => undefined),
     caller.player.settings(),
     caller.public.players({ limit: 12 }),
+    caller.public.venueLayout({ venueId }).catch(() => undefined),
   ]);
   if (!inventory) notFound();
   return (
@@ -62,6 +64,9 @@ export default async function VenueBookingPage({
           !settings.membership.pausedUntil,
         )}
       />
+      {layout && (
+        <VenueLayoutViewer layout={layout} venueName={inventory.venue.name} />
+      )}
     </main>
   );
 }

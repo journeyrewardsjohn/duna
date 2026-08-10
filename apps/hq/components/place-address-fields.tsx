@@ -18,6 +18,7 @@ import {
   normalizeAddress,
   type AddressValue,
 } from "@/lib/address";
+import { LocationPinPicker } from "./location-pin-picker";
 import { PlaceSearch, type PlaceDetails } from "./place-search";
 
 export type { AddressValue } from "@/lib/address";
@@ -35,6 +36,7 @@ export function AddressEntry({
   structuredFields = true,
   showAddressLine2 = true,
   includeFormFields = true,
+  exactPin = false,
   onChange,
   onVenueName,
   onPlaceResolved,
@@ -45,6 +47,7 @@ export function AddressEntry({
   readonly structuredFields?: boolean;
   readonly showAddressLine2?: boolean;
   readonly includeFormFields?: boolean;
+  readonly exactPin?: boolean;
   readonly onChange?: (value: AddressValue) => void;
   readonly onVenueName?: (value: string) => void;
   readonly onPlaceResolved?: (details: PlaceDetails) => void;
@@ -383,6 +386,17 @@ export function AddressEntry({
           )}
         </div>
       )}
+      {exactPin &&
+        address.latitude !== undefined &&
+        address.longitude !== undefined && (
+          <LocationPinPicker
+            latitude={address.latitude}
+            longitude={address.longitude}
+            onChange={(coordinates) => {
+              commit({ ...address, ...coordinates });
+            }}
+          />
+        )}
     </div>
   );
 }

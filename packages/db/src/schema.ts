@@ -1553,6 +1553,12 @@ export const venues = pgTable(
     name: text("name").notNull(),
     description: text("description"),
     status: venueStatusEnum("status").notNull().default("draft"),
+    locationKind: varchar("location_kind", { length: 32 })
+      .notNull()
+      .default("private-venue"),
+    environment: varchar("environment", { length: 16 })
+      .notNull()
+      .default("outdoor"),
     temporary: boolean("temporary").notNull().default(false),
     capacity: integer("capacity").notNull().default(0),
     heroImageUrl: text("hero_image_url"),
@@ -1581,6 +1587,10 @@ export const venues = pgTable(
     uniqueIndex("venue_org_slug_unique").on(table.organizationId, table.slug),
     index("venue_geo_idx").on(table.latitude, table.longitude),
     check("venue_capacity_nonnegative", sql`${table.capacity} >= 0`),
+    check(
+      "venue_environment_valid",
+      sql`${table.environment} IN ('indoor', 'outdoor')`,
+    ),
   ],
 );
 
@@ -6788,6 +6798,219 @@ export const ticketTypes = pgTable(
     check(
       "ticket_validity_window_valid",
       sql`${table.validityStartsAt} IS NULL OR ${table.validityEndsAt} IS NULL OR ${table.validityEndsAt} > ${table.validityStartsAt}`,
+    ),
+  ],
+);
+
+export type VenueLayoutGeoGeometry = {
+  readonly coordinateSpace: "geo";
+  readonly shape: "rectangle" | "circle" | "polygon";
+  readonly center: {
+    readonly latitude: number;
+    readonly longitude: number;
+  };
+  readonly widthMeters: number;
+  readonly heightMeters: number;
+  readonly radiusMeters?: number;
+  readonly rotationDegrees: number;
+  readonly bufferMeters: number;
+  readonly points?: readonly {
+    readonly latitude: number;
+    readonly longitude: number;
+  }[];
+};
+
+export type VenueLayoutFloorplanGeometry = {
+  readonly coordinateSpace: "floorplan";
+  readonly shape: "rectangle" | "circle" | "polygon";
+  readonly center: { readonly x: number; readonly y: number };
+  readonly width: number;
+  readonly height: number;
+  readonly radius?: number;
+  readonly rotationDegrees: number;
+  readonly buffer: number;
+  readonly points?: readonly { readonly x: number; readonly y: number }[];
+};
+
+export type VenueLayoutGeometry =
+  VenueLayoutGeoGeometry | VenueLayoutFloorplanGeometry;
+
+export const venueLayouts = pgTable(
+  "venue_layouts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => venues.id, { onDelete: "cascade" }),
+    eventSessionId: uuid("event_session_id").references(() => sessions.id, {
+      onDelete: "set null",
+    }),
+    createdByPersonId: uuid("created_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    name: text("name").notNull(),
+    version: integer("version").notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("draft"),
+    sourceType: varchar("source_type", { length: 24 })
+      .notNull()
+      .default("satellite"),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    floorplanImageUrl: text("floorplan_image_url"),
+    floorplanAnalysis:
+      jsonb("floorplan_analysis").$type<Record<string, unknown>>(),
+    mapCenterLatitude: doublePrecision("map_center_latitude"),
+    mapCenterLongitude: doublePrecision("map_center_longitude"),
+    mapZoom: doublePrecision("map_zoom").notNull().default(19),
+    mapBearing: doublePrecision("map_bearing").notNull().default(0),
+    mapPitch: doublePrecision("map_pitch").notNull().default(0),
+    publishedAt: timestamp("published_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("venue_layout_venue_version_unique").on(
+      table.venueId,
+      table.version,
+    ),
+    uniqueIndex("venue_layout_primary_unique")
+      .on(table.venueId)
+      .where(sql`${table.isPrimary} = true`),
+    index("venue_layout_venue_status_idx").on(
+      table.venueId,
+      table.status,
+      table.updatedAt,
+    ),
+    index("venue_layout_event_idx").on(table.eventSessionId),
+    check("venue_layout_version_positive", sql`${table.version} > 0`),
+    check(
+      "venue_layout_status_valid",
+      sql`${table.status} IN ('draft', 'published', 'archived')`,
+    ),
+    check(
+      "venue_layout_source_type_valid",
+      sql`${table.sourceType} IN ('satellite', 'floorplan')`,
+    ),
+    check(
+      "venue_layout_map_center_pair",
+      sql`(${table.mapCenterLatitude} IS NULL AND ${table.mapCenterLongitude} IS NULL) OR (${table.mapCenterLatitude} BETWEEN -90 AND 90 AND ${table.mapCenterLongitude} BETWEEN -180 AND 180)`,
+    ),
+  ],
+);
+
+export const venueLayoutAssets = pgTable(
+  "venue_layout_assets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    layoutId: uuid("layout_id")
+      .notNull()
+      .references(() => venueLayouts.id, { onDelete: "cascade" }),
+    courtId: uuid("court_id").references(() => courts.id, {
+      onDelete: "cascade",
+    }),
+    ticketTypeId: uuid("ticket_type_id").references(() => ticketTypes.id, {
+      onDelete: "set null",
+    }),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    templateKey: varchar("template_key", { length: 48 }),
+    label: text("label").notNull(),
+    identifierCode: varchar("identifier_code", { length: 48 }),
+    capacity: integer("capacity"),
+    geometry: jsonb("geometry").notNull().$type<VenueLayoutGeometry>(),
+    appearance: jsonb("appearance")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    sortOrder: integer("sort_order").notNull().default(0),
+    locked: boolean("locked").notNull().default(false),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("venue_layout_asset_court_unique")
+      .on(table.layoutId, table.courtId)
+      .where(sql`${table.courtId} IS NOT NULL`),
+    uniqueIndex("venue_layout_asset_code_unique")
+      .on(table.layoutId, table.identifierCode)
+      .where(sql`${table.identifierCode} IS NOT NULL`),
+    index("venue_layout_asset_layout_sort_idx").on(
+      table.layoutId,
+      table.sortOrder,
+    ),
+    check(
+      "venue_layout_asset_kind_valid",
+      sql`${table.kind} IN ('court', 'shape', 'ticketed-space', 'table', 'amenity', 'bookable-block')`,
+    ),
+    check(
+      "venue_layout_asset_capacity_positive",
+      sql`${table.capacity} IS NULL OR ${table.capacity} > 0`,
+    ),
+    check(
+      "venue_layout_asset_court_link",
+      sql`(${table.kind} = 'court' AND ${table.courtId} IS NOT NULL) OR ${table.kind} <> 'court'`,
+    ),
+  ],
+);
+
+export const venueLayoutDivisionPriorities = pgTable(
+  "venue_layout_division_priorities",
+  {
+    layoutAssetId: uuid("layout_asset_id")
+      .notNull()
+      .references(() => venueLayoutAssets.id, { onDelete: "cascade" }),
+    divisionId: uuid("division_id")
+      .notNull()
+      .references(() => divisions.id, { onDelete: "cascade" }),
+    priority: integer("priority").notNull(),
+    startsHere: boolean("starts_here").notNull().default(false),
+    allowWhenFree: boolean("allow_when_free").notNull().default(true),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.layoutAssetId, table.divisionId] }),
+    index("venue_layout_division_priority_idx").on(
+      table.divisionId,
+      table.priority,
+    ),
+    check(
+      "venue_layout_division_priority_positive",
+      sql`${table.priority} > 0`,
+    ),
+  ],
+);
+
+export const venueLayoutEventSettings = pgTable(
+  "venue_layout_event_settings",
+  {
+    sessionId: uuid("session_id")
+      .primaryKey()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    layoutId: uuid("layout_id")
+      .notNull()
+      .references(() => venueLayouts.id, { onDelete: "restrict" }),
+    aiCourtAssignmentEnabled: boolean("ai_court_assignment_enabled")
+      .notNull()
+      .default(false),
+    averageMatchMinutes: integer("average_match_minutes").notNull().default(45),
+    releaseCourtWhenFree: boolean("release_court_when_free")
+      .notNull()
+      .default(true),
+    rules: jsonb("rules")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("venue_layout_event_settings_layout_idx").on(table.layoutId),
+    check(
+      "venue_layout_event_match_minutes_positive",
+      sql`${table.averageMatchMinutes} BETWEEN 10 AND 240`,
     ),
   ],
 );

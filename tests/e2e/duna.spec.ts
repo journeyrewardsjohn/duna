@@ -825,17 +825,114 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible();
   await page.goto(`${hqBaseUrl}/`);
 
-  await page.goto(`${hqBaseUrl}/locations/create`);
+  await page.goto(`${hqBaseUrl}/locations`);
+  await expect(page.getByRole("heading", { name: "Venues" })).toBeVisible();
+  const venueWorkspace = page.getByRole("link", {
+    name: "Open venue workspace",
+  });
+  await expect(venueWorkspace).toBeVisible();
+  await venueWorkspace.click();
   await expect(
-    page.getByRole("heading", { name: "Bring a venue into Duna." }),
+    page.getByRole("heading", { name: "Beach Elite Training Center" }).first(),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Venue details", exact: true })
+    .click();
+  await expect(
+    page.getByRole("radio", { name: /Public location/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("radio", { name: /Private venue/ }),
+  ).toBeChecked();
+  const exactPin = page.getByRole("button", { name: /Exact venue pin/ });
+  await expect(exactPin).toBeVisible();
+  const longitudeBefore = await page
+    .locator('input[name="longitude"]')
+    .inputValue();
+  await exactPin.press("ArrowRight");
+  await expect(page.locator('input[name="longitude"]')).not.toHaveValue(
+    longitudeBefore,
+  );
+  await expect(
+    page.getByRole("radio", { name: "Free parking on-site" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("radio", { name: "Paid parking on-site" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("radio", { name: "Public restrooms" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("radio", { name: "Private restrooms" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /Courts & rates/ }).click();
   await expect(
     page.getByText("Championship Court", { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("Community Court", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("Add a court image").first()).toBeVisible();
+  await page.getByRole("link", { name: /Championship Court/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Championship Court" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Availability", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Pricing & rules", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Availability", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Set recurring court hours." }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Monday start time")).toHaveValue("07:00");
+  await page
+    .getByRole("button", { name: "Pricing & rules", exact: true })
+    .click();
+  await expect(page.getByLabel("Rate plan")).toHaveValue(
+    "10000000-0000-4000-8000-000000000102",
+  );
+  await expectNoHorizontalOverflow(page);
+
+  await page.goto(
+    `${hqBaseUrl}/locations/10000000-0000-4000-8000-000000000101/layout`,
+  );
+  await expect(page.getByText("Venue layout studio")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Player preview" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add element" })).toBeVisible();
+  await page
+    .getByRole("button", { name: /Duna short court 16 × 8 m court/ })
+    .click();
+  const courtLayoutDialog = page.getByRole("dialog", {
+    name: "Add Duna short court",
+  });
+  await expect(courtLayoutDialog).toBeVisible();
+  await expect(
+    courtLayoutDialog.getByText("Visual court → real court"),
+  ).toBeVisible();
+  await courtLayoutDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(
+    page.getByRole("heading", { name: "AI Court Assignment" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Publish & set primary" }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await page.goto(`${hqBaseUrl}/locations/create`);
+  await expect(
+    page.getByRole("heading", { name: "Create a place players can find." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("radio", { name: /Public location/ }),
+  ).toBeChecked();
+  await expect(
+    page.getByRole("radio", { name: /Private venue/ }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
   await expectNoHorizontalOverflow(page);
 
   await page.goto(`${hqBaseUrl}/calendar`);
