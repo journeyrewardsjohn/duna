@@ -186,6 +186,21 @@ export function VenueLayoutMap({
   }, [assets, courtActivity, selectedAssetId]);
 
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+    let resizeFrame: number | undefined;
+    const observer = new ResizeObserver(() => {
+      if (resizeFrame) cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => mapRef.current?.resize());
+    });
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+      if (resizeFrame) cancelAnimationFrame(resizeFrame);
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     const container = containerRef.current;
     if (!container || mapRef.current) return;
@@ -221,6 +236,7 @@ export function VenueLayoutMap({
         map.addControl(new mapboxgl.default.ScaleControl({ unit: "metric" }));
         map.on("load", () => {
           setError(undefined);
+          map.resize();
           const colors = mapColors(containerRef.current!);
           const firstLabel = map
             .getStyle()
