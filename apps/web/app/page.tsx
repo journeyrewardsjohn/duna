@@ -100,7 +100,7 @@ export default async function HomePage() {
                   of beach volleyball moving together.
                 </p>
                 <div className={styles.actions}>
-                  <Link className={styles.primaryAction} href="/app/discover">
+                  <Link className={styles.primaryAction} href="/discover">
                     Find a game <ArrowRight aria-hidden size={18} />
                   </Link>
                   <Link
@@ -147,7 +147,7 @@ export default async function HomePage() {
                   tournaments around your city and level. Book without leaving
                   the network.
                 </p>
-                <Link className={styles.textLink} href="/app/discover">
+                <Link className={styles.textLink} href="/discover">
                   Explore what&apos;s next <ArrowRight aria-hidden size={17} />
                 </Link>
               </div>
@@ -155,9 +155,7 @@ export default async function HomePage() {
               <Link
                 className={styles.chapterSignal}
                 href={
-                  featuredEvent
-                    ? `/events/${featuredEvent.slug}`
-                    : "/app/discover"
+                  featuredEvent ? `/events/${featuredEvent.slug}` : "/discover"
                 }
               >
                 <span>
@@ -339,7 +337,7 @@ export default async function HomePage() {
                 Published play will appear here as clubs come online.
               </div>
             )}
-            <Link className={styles.textLink} href="/app/discover">
+            <Link className={styles.textLink} href="/discover">
               Explore everything <ArrowRight aria-hidden size={17} />
             </Link>
           </div>
@@ -591,7 +589,7 @@ export default async function HomePage() {
           <span className={styles.eyebrow}>The court is waiting</span>
           <h2>There&apos;s always another game.</h2>
           <p>Find yours. Bring the whole history with you.</p>
-          <Link className={styles.primaryAction} href="/app/discover">
+          <Link className={styles.primaryAction} href="/discover">
             Enter Duna <ArrowRight aria-hidden size={18} />
           </Link>
         </div>

@@ -13,7 +13,7 @@ export function SiteFooter() {
         <div className="site-footer__links">
           <div>
             <strong>Play</strong>
-            <Link href="/app/discover">Discover</Link>
+            <Link href="/discover">Discover</Link>
             <Link href="/events">Events</Link>
             <Link href="/app/matches">Record a match</Link>
           </div>

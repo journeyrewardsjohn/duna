@@ -16,7 +16,7 @@ export function SiteHeader() {
           <DunaMark />
         </Link>
         <nav aria-label="Main navigation" className="site-header__nav">
-          <Link href="/app/discover">Play</Link>
+          <Link href="/discover">Play</Link>
           <Link href="/pro">Watch</Link>
           <Link href="/rankings">Sand Rating</Link>
           <Link href="/run-your-club">For clubs + coaches</Link>

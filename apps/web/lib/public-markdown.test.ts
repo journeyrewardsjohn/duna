@@ -5,8 +5,10 @@ import {
   markdownPathForCanonical,
   renderAgentsGuide,
   renderConsumerEventMarkdown,
+  renderDiscoveryMarkdown,
   renderSitemapMarkdown,
   renderStaticPageMarkdown,
+  renderVenueSummaryMarkdown,
 } from "./public-markdown";
 
 const event = {
@@ -72,11 +74,55 @@ describe("public Markdown representations", () => {
     expect(guide).toContain("Every canonical public page");
     expect(guide).toContain("find_where_to_watch");
     expect(guide).toContain("Do not infer geography");
+    expect(guide).toContain("https://duna.coach/discover.md");
 
     const index = renderSitemapMarkdown([
       { url: "https://duna.coach/events/golden-hour-4s" },
     ]);
     expect(index).toContain("https://duna.coach/events/golden-hour-4s.md");
+  });
+
+  it("publishes a canonical machine-readable discovery index", () => {
+    const markdown = renderDiscoveryMarkdown([
+      {
+        id: "venue:one",
+        entityType: "venue",
+        kind: "court-booking",
+        title: "Pier Courts",
+        subtitle: "Hermosa Beach, CA",
+        href: "/venues/6b53f4fe-2b1a-401f-8581-81210f0200ad",
+        latitude: 33.86,
+        longitude: -118.4,
+        courtCount: 8,
+        openNow: true,
+        tags: ["courts"],
+      },
+    ]);
+    expect(markdown).toContain('entity_type: "collection_page"');
+    expect(markdown).toContain("Nearby searches expand through 10, 30, 60");
+    expect(markdown).toContain("https://duna.coach/venues/");
+    expect(markdown).toContain("8 courts");
+  });
+
+  it("does not imply bookability for a venue without published inventory", () => {
+    const markdown = renderVenueSummaryMarkdown({
+      id: "6b53f4fe-2b1a-401f-8581-81210f0200ad",
+      organizationId: "7ee5d312-b88a-43cd-95fa-a9c89339e0a4",
+      name: "Pier Courts",
+      city: "Hermosa Beach",
+      region: "CA",
+      timezone: "America/Los_Angeles",
+      courtCount: 8,
+      openNow: true,
+      latitude: 33.86,
+      longitude: -118.4,
+      tags: ["Oceanfront"],
+    });
+    expect(markdown).toContain("sports_activity_location");
+    expect(markdown).toContain(
+      "Live court inventory and online rates have not been published",
+    );
+    expect(markdown).toContain("Do not claim a court is available");
   });
 
   it("documents the distinct club-owner and solo-coach operating paths", () => {

@@ -1,9 +1,11 @@
-import type { DiscoveryMapItem } from "@duna/api";
+import type { DiscoveryMapItem } from "@duna/api/discovery-search";
 import {
   ArrowUpRight,
   CalendarDays,
   CircleDollarSign,
+  Gauge,
   MapPin,
+  UsersRound,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -32,6 +34,12 @@ function formatPrice(item: DiscoveryMapItem): string | undefined {
     currency: item.price.currency,
     maximumFractionDigits: 0,
   }).format(item.price.amountMinor / 100);
+}
+
+function kindLabel(value: string) {
+  return value
+    .replaceAll("-", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export function DiscoveryCard({
@@ -79,12 +87,33 @@ export function DiscoveryCard({
           {item.courtCount !== undefined ? (
             <span>{item.courtCount} courts</span>
           ) : null}
+          {item.level ? (
+            <span>
+              <Gauge aria-hidden size={13} /> Level {item.level}
+            </span>
+          ) : null}
+          {item.spotsRemaining !== undefined ? (
+            <span className={item.spotsRemaining > 0 ? "is-open" : undefined}>
+              <UsersRound aria-hidden size={13} />
+              {item.spotsRemaining > 0
+                ? `${item.spotsRemaining} spots`
+                : "Waitlist"}
+            </span>
+          ) : null}
           {price ? (
             <span>
               <CircleDollarSign aria-hidden size={13} /> {price}
             </span>
           ) : null}
           {item.openNow ? <span className="is-open">Open now</span> : null}
+          {!date &&
+          item.courtCount === undefined &&
+          !item.level &&
+          item.spotsRemaining === undefined &&
+          !price &&
+          !item.openNow ? (
+            <span>{kindLabel(item.kind)}</span>
+          ) : null}
         </div>
       </div>
     </Link>

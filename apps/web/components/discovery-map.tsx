@@ -1,6 +1,10 @@
 "use client";
 
-import type { DiscoveryEntityType, DiscoveryMapItem } from "@duna/api";
+import type {
+  DiscoveryCoordinates,
+  DiscoveryEntityType,
+  DiscoveryMapItem,
+} from "@duna/api/discovery-search";
 import {
   LocateFixed,
   MapIcon,
@@ -14,12 +18,15 @@ import type { GeoJSONSource, Map as MapboxMap } from "mapbox-gl";
 import { DiscoveryCard } from "./discovery-card";
 
 type MapFilter = "all" | DiscoveryEntityType;
+type SheetPosition = "peek" | "half" | "full";
 
 const filters: readonly { value: MapFilter; label: string }[] = [
   { value: "all", label: "Everything" },
   { value: "venue", label: "Courts" },
   { value: "event", label: "Events" },
   { value: "coach", label: "Coaches" },
+  { value: "match", label: "Matches" },
+  { value: "organization", label: "Clubs" },
   { value: "pro-tour", label: "Pro tour" },
 ];
 
@@ -69,9 +76,17 @@ function visibleInBounds(
 export function DiscoveryMap({
   items,
   full = false,
+  origin,
+  radiusMiles,
+  resultsHref = "/discover/map",
+  summary,
 }: {
   readonly items: readonly DiscoveryMapItem[];
   readonly full?: boolean;
+  readonly origin?: DiscoveryCoordinates;
+  readonly radiusMiles?: number;
+  readonly resultsHref?: string;
+  readonly summary?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapboxMap | null>(null);
@@ -80,8 +95,12 @@ export function DiscoveryMap({
   const [unavailable, setUnavailable] = useState(false);
   const [moved, setMoved] = useState(false);
   const [areaIds, setAreaIds] = useState<readonly string[]>();
-  const [sheetExpanded, setSheetExpanded] = useState(false);
+  const [sheetPosition, setSheetPosition] = useState<SheetPosition>(
+    full ? "half" : "peek",
+  );
   const [selectedId, setSelectedId] = useState<string>();
+  const sheetPointerStart = useRef<number | undefined>(undefined);
+  const sheetGestureConsumed = useRef(false);
 
   const filteredItems = useMemo(
     () =>
@@ -119,12 +138,28 @@ export function DiscoveryMap({
         if (cancelled || !containerRef.current) return;
         const mapboxgl = imported.default;
         mapboxgl.accessToken = payload.token;
+        const nearbyZoom =
+          radiusMiles === undefined
+            ? 9.5
+            : radiusMiles <= 10
+              ? 9
+              : radiusMiles <= 30
+                ? 7.5
+                : radiusMiles <= 60
+                  ? 6.5
+                  : radiusMiles <= 120
+                    ? 5.5
+                    : 4.5;
         const map = new mapboxgl.Map({
           container: containerRef.current,
           style: "mapbox://styles/mapbox/standard",
           projection: "globe",
-          center: full ? [-24, 22] : [-118.405, 33.89],
-          zoom: full ? 1.55 : 9.5,
+          center: origin
+            ? [origin.longitude, origin.latitude]
+            : full
+              ? [-24, 22]
+              : [-118.405, 33.89],
+          zoom: origin ? nearbyZoom : full ? 1.55 : 9.5,
           minZoom: 0.7,
           maxZoom: 18,
           attributionControl: false,
@@ -248,6 +283,10 @@ export function DiscoveryMap({
                 "#ec8064",
                 "pro-tour",
                 "#f2c46d",
+                "match",
+                "#8a78d6",
+                "organization",
+                "#2d65a1",
                 "#2d65a1",
               ],
               "circle-radius": [
@@ -285,7 +324,7 @@ export function DiscoveryMap({
           const id = feature?.properties?.id;
           if (typeof id === "string") {
             setSelectedId(id);
-            setSheetExpanded(true);
+            setSheetPosition("full");
           }
         });
         for (const layer of [layerIds.clusters, layerIds.points]) {
@@ -306,7 +345,7 @@ export function DiscoveryMap({
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [full]);
+  }, [full, origin?.latitude, origin?.longitude, radiusMiles]);
 
   useEffect(() => {
     setAreaIds(undefined);
@@ -327,7 +366,27 @@ export function DiscoveryMap({
         .map((item) => item.id),
     );
     setMoved(false);
-    setSheetExpanded(true);
+    setSheetPosition("half");
+  };
+
+  const cycleSheet = () => {
+    setSheetPosition((position) =>
+      position === "peek" ? "half" : position === "half" ? "full" : "peek",
+    );
+  };
+
+  const finishSheetGesture = (clientY: number) => {
+    const start = sheetPointerStart.current;
+    sheetPointerStart.current = undefined;
+    if (start === undefined) return;
+    const distance = clientY - start;
+    if (distance < -36) {
+      sheetGestureConsumed.current = true;
+      setSheetPosition((position) => (position === "peek" ? "half" : "full"));
+    } else if (distance > 36) {
+      sheetGestureConsumed.current = true;
+      setSheetPosition((position) => (position === "full" ? "half" : "peek"));
+    }
   };
 
   const locate = () => {
@@ -378,7 +437,7 @@ export function DiscoveryMap({
         ))}
       </div>
       {!full ? (
-        <Link className="discover-v2-map__open" href="/app/discover/map">
+        <Link className="discover-v2-map__open" href={resultsHref}>
           <MapIcon aria-hidden size={16} /> Explore the full globe
         </Link>
       ) : null}
@@ -403,20 +462,49 @@ export function DiscoveryMap({
       ) : null}
       {full ? (
         <div
-          className={`discover-v2-sheet${sheetExpanded ? " is-expanded" : ""}`}
+          className={`discover-v2-sheet is-${sheetPosition}${sheetPosition === "full" ? " is-expanded" : ""}`}
         >
           <button
-            aria-expanded={sheetExpanded}
+            aria-expanded={sheetPosition === "full"}
             className="discover-v2-sheet__handle"
-            onClick={() => setSheetExpanded((value) => !value)}
+            onClick={() => {
+              if (sheetGestureConsumed.current) {
+                sheetGestureConsumed.current = false;
+                return;
+              }
+              cycleSheet();
+            }}
+            onPointerDown={(event) => {
+              sheetPointerStart.current = event.clientY;
+              event.currentTarget.setPointerCapture(event.pointerId);
+            }}
+            onPointerCancel={() => {
+              sheetPointerStart.current = undefined;
+            }}
+            onPointerUp={(event) => {
+              finishSheetGesture(event.clientY);
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+            }}
             type="button"
           >
             <i />
             <span>
-              <strong>{listItems.length} places in view</strong>
-              <small>Pull up for the list</small>
+              <strong>{summary ?? `${listItems.length} places in view`}</strong>
+              <small>
+                {sheetPosition === "peek"
+                  ? "Pull up for a 50/50 view"
+                  : sheetPosition === "half"
+                    ? "Pull up for the full list · down for the map"
+                    : "Pull down for the map"}
+              </small>
             </span>
-            {sheetExpanded ? <X aria-hidden size={18} /> : <span>↑</span>}
+            {sheetPosition === "full" ? (
+              <X aria-hidden size={18} />
+            ) : (
+              <span>↑</span>
+            )}
           </button>
           <div className="discover-v2-sheet__list">
             {listItems.slice(0, 30).map((item) => (
@@ -439,6 +527,9 @@ export function DiscoveryMap({
           </span>
           <span>
             <i data-type="coach" /> Coaches
+          </span>
+          <span>
+            <i data-type="organization" /> Clubs
           </span>
           <span>
             <i data-type="pro-tour" /> Pro tour

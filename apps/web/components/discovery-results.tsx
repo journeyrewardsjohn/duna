@@ -1,102 +1,75 @@
 "use client";
 
-import type { DiscoveryEntityType, DiscoveryMapItem } from "@duna/api";
+import {
+  discoveryResultSummary,
+  discoveryWhatLabel,
+  discoveryWhenLabel,
+  runDiscoverySearch,
+  type DiscoveryMapItem,
+  type DiscoverySearchCriteria,
+} from "@duna/api/discovery-search";
 import { ArrowLeft, Map, Search } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState } from "react";
+import { discoveryCriteriaToQuery } from "@/lib/discovery-query";
 import { DiscoveryCard } from "./discovery-card";
 
-const resultTypes: readonly {
-  value: "all" | DiscoveryEntityType;
-  label: string;
-}[] = [
+const focusOptions = [
   { value: "all", label: "All" },
-  { value: "event", label: "Events" },
-  { value: "venue", label: "Courts" },
-  { value: "coach", label: "Coaches" },
-  { value: "pro-tour", label: "Pro tour" },
-];
+  { value: "events", label: "Events" },
+  { value: "tournaments", label: "Tournaments" },
+  { value: "leagues", label: "Leagues" },
+  { value: "training", label: "Training" },
+  { value: "matches", label: "Matches" },
+  { value: "courts", label: "Court rentals" },
+  { value: "clubs", label: "Clubs" },
+] as const;
 
-function validType(value?: string): "all" | DiscoveryEntityType {
-  return resultTypes.some((type) => type.value === value)
-    ? (value as "all" | DiscoveryEntityType)
+type Focus = (typeof focusOptions)[number]["value"];
+
+function validFocus(value?: string): Focus {
+  return focusOptions.some((option) => option.value === value)
+    ? (value as Focus)
     : "all";
 }
 
-function distanceMiles(
-  location:
-    { readonly latitude: number; readonly longitude: number } | undefined,
-  item: DiscoveryMapItem,
-) {
-  if (
-    !location ||
-    item.latitude === undefined ||
-    item.longitude === undefined
-  ) {
-    return Number.POSITIVE_INFINITY;
+function matchesFocus(item: DiscoveryMapItem, focus: Focus) {
+  if (focus === "all") return true;
+  if (focus === "events") return item.entityType === "event";
+  if (focus === "tournaments") {
+    return item.entityType === "pro-tour" || item.kind === "tournament";
   }
-  const radians = (value: number) => (value * Math.PI) / 180;
-  const latitudeDelta = radians(item.latitude - location.latitude);
-  const longitudeDelta = radians(item.longitude - location.longitude);
-  const a =
-    Math.sin(latitudeDelta / 2) ** 2 +
-    Math.cos(radians(location.latitude)) *
-      Math.cos(radians(item.latitude)) *
-      Math.sin(longitudeDelta / 2) ** 2;
-  return 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  if (focus === "leagues") return item.kind === "league";
+  if (focus === "training") {
+    return (
+      item.entityType === "coach" ||
+      ["clinic", "private-lesson", "lesson", "training"].includes(item.kind)
+    );
+  }
+  if (focus === "matches") return item.entityType === "match";
+  if (focus === "courts") return item.entityType === "venue";
+  return item.entityType === "organization";
 }
 
 export function DiscoveryResults({
   items,
-  initialQuery,
-  initialType,
-  initialKind,
-  initialScope,
+  initialCriteria,
+  focus,
 }: {
   readonly items: readonly DiscoveryMapItem[];
-  readonly initialQuery: string;
-  readonly initialType?: string;
-  readonly initialKind?: string;
-  readonly initialScope?: string;
+  readonly initialCriteria: DiscoverySearchCriteria;
+  readonly focus?: string;
 }) {
-  const [query, setQuery] = useState(initialQuery);
-  const [committedQuery, setCommittedQuery] = useState(initialQuery);
-  const [type, setType] = useState(validType(initialType));
-  const [location, setLocation] = useState<{
-    readonly latitude: number;
-    readonly longitude: number;
-  }>();
-  useEffect(() => {
-    if (initialScope !== "nearby" || !navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (position) =>
-        setLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        }),
-      () => undefined,
-      { enableHighAccuracy: false, maximumAge: 300_000, timeout: 8_000 },
-    );
-  }, [initialScope]);
-  const results = useMemo(() => {
-    const normalized = committedQuery.trim().toLowerCase();
-    const now = Date.now();
-    return items
-      .filter((item) => {
-        if (!item.endsAt) return true;
-        const timestamp = Date.parse(item.endsAt);
-        return Number.isNaN(timestamp) || timestamp >= now;
-      })
-      .filter((item) => type === "all" || item.entityType === type)
-      .filter(
-        (item) =>
-          !initialKind ||
-          (initialKind === "tournament"
-            ? (item.entityType === "pro-tour" || item.kind === "tournament") &&
-              new Date(item.endsAt ?? item.startsAt ?? 0).getTime() >=
-                new Date().setHours(0, 0, 0, 0)
-            : item.kind === initialKind),
-      )
+  const [activeFocus, setActiveFocus] = useState<Focus>(validFocus(focus));
+  const [query, setQuery] = useState("");
+  const result = useMemo(
+    () => runDiscoverySearch(items, initialCriteria),
+    [initialCriteria, items],
+  );
+  const filtered = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return result.items
+      .filter((item) => matchesFocus(item, activeFocus))
       .filter((item) =>
         normalized
           ? [item.title, item.subtitle, item.kind, ...item.tags]
@@ -104,68 +77,64 @@ export function DiscoveryResults({
               .toLowerCase()
               .includes(normalized)
           : true,
-      )
-      .sort((left, right) =>
-        initialScope === "nearby"
-          ? distanceMiles(location, left) - distanceMiles(location, right)
-          : (left.startsAt ?? "9999").localeCompare(right.startsAt ?? "9999"),
       );
-  }, [committedQuery, initialKind, initialScope, items, location, type]);
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    setCommittedQuery(query);
-  };
+  }, [activeFocus, query, result.items]);
+  const serialized = discoveryCriteriaToQuery(initialCriteria);
   return (
-    <main className="discover-v2-results-page">
+    <main className="discover-v2-results-page discover-public">
       <header>
-        <Link href="/app/discover">
-          <ArrowLeft aria-hidden size={17} /> Discover
+        <Link href="/discover">
+          <ArrowLeft aria-hidden size={17} /> Edit search
         </Link>
         <div>
-          <span>
-            {initialScope === "nearby" ? "AROUND YOU" : "SEARCH DUNA"}
-          </span>
-          <h1>
-            {initialKind === "tournament"
-              ? "Tournaments coming up."
-              : "Find exactly your kind of play."}
-          </h1>
+          <span>PUBLIC DISCOVERY</span>
+          <h1>Find exactly your kind of play.</h1>
+          <p>
+            {initialCriteria.location.label} ·{" "}
+            {discoveryWhenLabel(initialCriteria.when)} ·{" "}
+            {discoveryWhatLabel(initialCriteria.what)}
+          </p>
         </div>
-        <Link className="discover-v2-map-button" href="/app/discover/map">
+        <Link
+          className="discover-v2-map-button"
+          href={`/discover/map?${serialized}`}
+        >
           <Map aria-hidden size={17} /> Map
         </Link>
       </header>
-      <form onSubmit={submit}>
+      <label className="discover-results-search">
         <Search aria-hidden size={18} />
         <input
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search these results"
+          placeholder="Search within these results"
           value={query}
         />
-        <button type="submit">Search</button>
-      </form>
+      </label>
       <nav aria-label="Result type">
-        {resultTypes.map((resultType) => (
+        {focusOptions.map((option) => (
           <button
-            aria-pressed={type === resultType.value}
-            key={resultType.value}
-            onClick={() => setType(resultType.value)}
+            aria-pressed={activeFocus === option.value}
+            key={option.value}
+            onClick={() => setActiveFocus(option.value)}
             type="button"
           >
-            {resultType.label}
+            {option.label}
           </button>
         ))}
       </nav>
       <div className="discover-v2-results-page__count">
-        {results.length} {results.length === 1 ? "match" : "matches"}
+        {filtered.length === result.items.length
+          ? discoveryResultSummary(result)
+          : `${filtered.length} of ${result.items.length} results`}
       </div>
       <section className="discover-v2-results-grid">
-        {results.map((item) => (
+        {filtered.map((item) => (
           <DiscoveryCard item={item} key={item.id} />
         ))}
-        {results.length === 0 ? (
+        {filtered.length === 0 ? (
           <div className="discover-v2-empty">
-            No results yet. Try a broader place, person, or play type.
+            Nothing matches this view yet. Clear the text filter, choose All, or
+            broaden Where and When.
           </div>
         ) : null}
       </section>

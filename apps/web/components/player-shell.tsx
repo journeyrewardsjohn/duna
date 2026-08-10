@@ -24,7 +24,7 @@ import { PlayerOrganizationSwitcher } from "./player-organization-switcher";
 
 const navigation = [
   { label: "Home", href: "/app", icon: House },
-  { label: "Discover", href: "/app/discover", icon: Compass },
+  { label: "Discover", href: "/discover", icon: Compass },
   { label: "Play", href: "/app/play", icon: CalendarDays },
   { label: "Matches", href: "/app/matches", icon: Trophy },
   { label: "Health", href: "/app/health", icon: HeartPulse },

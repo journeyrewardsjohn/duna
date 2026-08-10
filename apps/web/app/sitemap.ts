@@ -7,13 +7,14 @@ export const revalidate = 3_600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const caller = createPublicCaller();
-  const [coverage, rankings, events, coaches, professionalTeams] =
+  const [coverage, rankings, events, coaches, professionalTeams, venues] =
     await Promise.all([
       caller.public.proCoverage().catch(() => undefined),
       caller.public.worldRankings().catch(() => undefined),
       caller.public.events().catch(() => []),
       caller.public.coaches().catch(() => []),
       caller.public.proTeams().catch(() => []),
+      caller.public.venues().catch(() => []),
     ]);
 
   const organizationSlugs = [
@@ -107,6 +108,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.72,
     }),
   );
+  const venueEntries: MetadataRoute.Sitemap = venues.map((venue) => ({
+    url: absolutePublicUrl(`/venues/${venue.id}`),
+    changeFrequency: "daily",
+    priority: 0.7,
+  }));
   const storefrontEntries: MetadataRoute.Sitemap = storefronts.flatMap(
     (storefront) =>
       storefront.catalog.map((item) => ({
@@ -127,6 +133,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...teamEntries,
     ...coachEntries,
     ...organizationEntries,
+    ...venueEntries,
     ...storefrontEntries,
   ];
   return [...new Map(entries.map((entry) => [entry.url, entry])).values()];

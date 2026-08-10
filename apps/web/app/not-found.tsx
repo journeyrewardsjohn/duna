@@ -16,7 +16,7 @@ export default function NotFound() {
             back home or find a court, event, or player near you.
           </p>
           <div className="not-found-v3__actions">
-            <Link href="/app/discover">
+            <Link href="/discover">
               Find what is next <Compass aria-hidden size={17} />
             </Link>
             <Link href="/">

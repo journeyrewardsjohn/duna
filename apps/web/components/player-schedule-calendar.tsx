@@ -196,7 +196,7 @@ export function PlayerScheduleCalendar({
               <strong>Your day is open.</strong>
               <p>Reserve a court or host a match for nearby players.</p>
             </div>
-            <Link href="/app/discover">See what’s available</Link>
+            <Link href="/discover">See what’s available</Link>
           </div>
         )}
       </div>

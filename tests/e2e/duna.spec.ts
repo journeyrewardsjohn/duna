@@ -51,10 +51,68 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 
   await page.goto("/app/discover");
+  await expect(page).toHaveURL(/\/discover(?:\?|$)/);
   await expect(
-    page.getByRole("heading", { name: "The whole world of sand." }),
+    page.getByRole("heading", { name: "Find your game." }),
   ).toBeVisible();
   await expect(page.getByLabel("Search Duna")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^WHERE:/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^WHEN:/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^WHAT:/ })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test("public discovery carries Where, When, and What into the map sheet", async ({
+  page,
+}) => {
+  await page.goto("/discover");
+
+  await page.getByRole("button", { name: /^WHERE:/ }).click();
+  const whereDialog = page.getByRole("dialog", {
+    name: "Where do you want to play?",
+  });
+  await whereDialog
+    .getByRole("button", { name: /Manhattan Beach, CA Manhattan Beach Pier/ })
+    .click();
+  await whereDialog.getByRole("button", { name: "Close search" }).click();
+
+  await page.getByRole("button", { name: /^WHEN:/ }).click();
+  const whenDialog = page.getByRole("dialog", { name: "When works for you?" });
+  await whenDialog.getByRole("button", { name: /Next 7 Days/ }).click();
+  await whenDialog.getByRole("button", { name: "Close search" }).click();
+
+  await page.getByRole("button", { name: /^WHAT:/ }).click();
+  const whatDialog = page.getByRole("dialog", {
+    name: "What are you looking for?",
+  });
+  await whatDialog.getByRole("button", { name: /Court Rentals/ }).click();
+  await whatDialog.getByRole("button", { name: /^Show \d+ results$/ }).click();
+
+  await expect(page).toHaveURL(
+    /\/discover\/map\?.*where=place.*when=next-7-days.*what=court-rentals/,
+  );
+  const sheet = page.locator(".discover-v2-sheet");
+  await expect(
+    sheet.getByText(/\d+ results (?:within [\d,]+ mi|· expanded worldwide)/),
+  ).toBeVisible();
+  const handle = page.locator(".discover-v2-sheet__handle");
+  const handleBox = await getBox(handle);
+  await page.mouse.move(
+    handleBox.x + handleBox.width / 2,
+    handleBox.y + handleBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y - 80, {
+    steps: 6,
+  });
+  await page.mouse.up();
+  await expect(sheet).toHaveClass(/is-full/);
+
+  await sheet.locator("a[href^='/venues/']").first().click();
+  await expect(page).toHaveURL(/\/venues\/[^/]+$/);
+  await expect(
+    page.getByRole("heading", { name: "Manhattan Beach Pier" }),
+  ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
 
