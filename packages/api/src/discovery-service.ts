@@ -64,6 +64,10 @@ function eventPoint(
     endsAt: event.endsAt,
     imageUrl,
     ...(event.live !== undefined ? { live: event.live } : {}),
+    spotsRemaining: event.spotsRemaining,
+    ...(event.ratingRange
+      ? { level: `${event.ratingRange[0]}–${event.ratingRange[1]}` }
+      : {}),
     price: event.price,
     tags: [event.kind, event.organizationName, event.venueName, ...event.tags],
   };

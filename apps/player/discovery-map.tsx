@@ -1,9 +1,21 @@
 import type { DiscoveryEntityType, DiscoveryMapItem } from "@duna/api";
+import { formatMoney } from "@duna/core";
+import {
+  environmentalColors,
+  motion,
+  radii,
+  resolveDunaTokens,
+  spacing,
+  type DunaTheme,
+  type ResolvedDunaTokens,
+} from "@duna/ui/tokens";
 import Mapbox, { type MapState } from "@rnmapbox/maps";
 import * as Location from "expo-location";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  AccessibilityInfo,
   Animated,
+  Easing,
   Image,
   Modal,
   PanResponder,
@@ -14,14 +26,16 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import {
-  FellixText as Text,
-  FellixTextInput as TextInput,
-} from "./fellix-text";
+import { FellixText as Text } from "./fellix-text";
 import { dunaWebUrl } from "./mobile-api";
+import {
+  discoveryDistanceMiles,
+  type DiscoveryCoordinates,
+} from "./discovery-search";
 
 type DiscoveryFilter = "all" | DiscoveryEntityType;
 type MapBounds = MapState["properties"]["bounds"];
+type SheetPosition = "list" | "split" | "map";
 
 const filterOptions: readonly { value: DiscoveryFilter; label: string }[] = [
   { value: "all", label: "Everything" },
@@ -31,15 +45,15 @@ const filterOptions: readonly { value: DiscoveryFilter; label: string }[] = [
   { value: "coach", label: "Coaches" },
   { value: "match", label: "Matches" },
   { value: "pro-tour", label: "Pro tour" },
-];
+] as const;
 
 const entityColors: Record<DiscoveryEntityType, string> = {
-  event: "#3d6672",
-  venue: "#d4b77c",
-  coach: "#ec8064",
-  organization: "#4e765d",
-  match: "#35c8bd",
-  "pro-tour": "#f2c46d",
+  event: environmentalColors.marine900,
+  venue: environmentalColors.sand500,
+  coach: environmentalColors.flare,
+  organization: environmentalColors.gain,
+  match: environmentalColors.marine400,
+  "pro-tour": environmentalColors.signal,
 };
 
 let publicTokenRequest: Promise<string | undefined> | undefined;
@@ -72,6 +86,19 @@ export function useMapboxToken(active = true) {
     };
   }, [active]);
   return token;
+}
+
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    void AccessibilityInfo.isReduceMotionEnabled().then(setReduced);
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      setReduced,
+    );
+    return () => subscription.remove();
+  }, []);
+  return reduced;
 }
 
 function mapShape(
@@ -131,11 +158,13 @@ function itemInBounds(item: DiscoveryMapItem, bounds: MapBounds): boolean {
 function MapLayers({
   items,
   onPress,
+  token,
 }: {
   readonly items: readonly DiscoveryMapItem[];
   readonly onPress?: (event: {
     readonly features: readonly GeoJSON.Feature[];
   }) => void;
+  readonly token: ResolvedDunaTokens;
 }) {
   const shape = useMemo(() => mapShape(items), [items]);
   return (
@@ -169,7 +198,7 @@ function MapLayers({
             entityColors["pro-tour"],
             ["==", ["get", "venue_count"], ["get", "point_count"]],
             entityColors.venue,
-            "#22343b",
+            environmentalColors.marine900,
           ] as never,
           circleOpacity: 0.94,
           circleRadius: [
@@ -181,7 +210,7 @@ function MapLayers({
             40,
             29,
           ] as never,
-          circleStrokeColor: "#ffffff",
+          circleStrokeColor: token.surface1,
           circleStrokeWidth: 2,
         }}
       />
@@ -189,7 +218,7 @@ function MapLayers({
         filter={["has", "point_count"] as never}
         id="duna-discovery-cluster-count"
         style={{
-          textColor: "#0d1114",
+          textColor: environmentalColors.ink,
           textField: ["get", "point_count_abbreviated"] as never,
           textSize: 12,
         }}
@@ -204,7 +233,7 @@ function MapLayers({
         }
         id="duna-discovery-pro-halo"
         style={{
-          circleColor: "rgba(242,196,109,0.2)",
+          circleColor: token.flareFill,
           circleRadius: 14,
           circleStrokeColor: entityColors["pro-tour"],
           circleStrokeWidth: 2,
@@ -235,7 +264,7 @@ function MapLayers({
             8,
             7,
           ] as never,
-          circleStrokeColor: "#ffffff",
+          circleStrokeColor: token.surface1,
           circleStrokeWidth: 2,
         }}
       />
@@ -243,40 +272,94 @@ function MapLayers({
   );
 }
 
-function MapFallback({ children }: { readonly children?: ReactNode }) {
+function MapFallback({
+  children,
+  styles,
+}: {
+  readonly children?: ReactNode;
+  readonly styles: ReturnType<typeof createStyles>;
+}) {
   return (
-    <View style={nativeStyles.fallback}>
-      <View style={nativeStyles.fallbackGlobe}>
-        <View style={nativeStyles.fallbackArc} />
+    <View style={styles.fallback}>
+      <View style={styles.fallbackGlobe}>
+        <View style={styles.fallbackArc} />
       </View>
-      <Text style={nativeStyles.fallbackTitle}>The map is almost ready.</Text>
-      <Text style={nativeStyles.fallbackBody}>
-        Geocoded places remain available in the discovery list.
+      <Text style={styles.fallbackTitle}>The map is almost ready.</Text>
+      <Text style={styles.fallbackBody}>
+        Every result remains available in the list.
       </Text>
       {children}
     </View>
   );
 }
 
+function startingCamera(
+  items: readonly DiscoveryMapItem[],
+  origin?: DiscoveryCoordinates,
+  radiusMiles?: number,
+) {
+  if (origin) {
+    const zoomLevel =
+      radiusMiles === undefined
+        ? 2.2
+        : radiusMiles <= 10
+          ? 9.4
+          : radiusMiles <= 30
+            ? 8
+            : radiusMiles <= 60
+              ? 7
+              : radiusMiles <= 120
+                ? 6
+                : radiusMiles <= 240
+                  ? 5
+                  : radiusMiles <= 480
+                    ? 4
+                    : 2.6;
+    return {
+      centerCoordinate: [origin.longitude, origin.latitude] as [number, number],
+      zoomLevel,
+    };
+  }
+  const mapped = items.filter(
+    (item) => item.latitude !== undefined && item.longitude !== undefined,
+  );
+  if (mapped.length === 0) {
+    return { centerCoordinate: [-25, 18] as [number, number], zoomLevel: 1.45 };
+  }
+  const centerCoordinate: [number, number] = [
+    mapped.reduce((sum, item) => sum + item.longitude!, 0) / mapped.length,
+    mapped.reduce((sum, item) => sum + item.latitude!, 0) / mapped.length,
+  ];
+  return {
+    centerCoordinate,
+    zoomLevel: mapped.length > 4 ? 1.8 : mapped.length > 1 ? 4.2 : 9,
+  };
+}
+
 export function DiscoveryMapPreview({
   items,
   onOpen,
+  theme = "light",
 }: {
   readonly items: readonly DiscoveryMapItem[];
   readonly onOpen: () => void;
+  readonly theme?: DunaTheme;
 }) {
-  const token = useMapboxToken();
+  const token = resolveDunaTokens(theme, "editorial");
+  const styles = useMemo(() => createStyles(token), [token]);
+  const mapToken = useMapboxToken();
   const mappedItems = items.filter(
     (item) => item.latitude !== undefined && item.longitude !== undefined,
   );
-  const first = mappedItems[0];
+  const camera = startingCamera(mappedItems);
   return (
     <Pressable
-      accessibilityLabel="Open the full discovery globe"
+      accessibilityLabel="Open the full discovery map"
+      accessibilityRole="button"
       onPress={onOpen}
-      style={nativeStyles.preview}
+      style={styles.preview}
     >
-      {token ? (
+      {mapToken ? (
         <Mapbox.MapView
           attributionEnabled={false}
           compassEnabled={false}
@@ -290,41 +373,33 @@ export function DiscoveryMapPreview({
           styleURL="mapbox://styles/mapbox/standard"
           zoomEnabled={false}
         >
-          <Mapbox.Camera
-            defaultSettings={{
-              centerCoordinate:
-                first?.longitude !== undefined && first.latitude !== undefined
-                  ? [first.longitude, first.latitude]
-                  : [-25, 18],
-              zoomLevel: mappedItems.length > 3 ? 1.45 : 7.4,
-            }}
-          />
-          <MapLayers items={mappedItems} />
+          <Mapbox.Camera defaultSettings={camera} />
+          <MapLayers items={mappedItems} token={token} />
         </Mapbox.MapView>
       ) : (
-        <MapFallback />
+        <MapFallback styles={styles} />
       )}
-      <View style={nativeStyles.previewShade} />
-      <View style={nativeStyles.previewLabel}>
-        <Text style={nativeStyles.previewEyebrow}>GLOBAL DISCOVERY</Text>
-        <Text style={nativeStyles.previewTitle}>
-          {mappedItems.length} places on the map
+      <View style={styles.previewShade} />
+      <View style={styles.previewLabel}>
+        <Text style={styles.previewEyebrow}>MAP DISCOVERY</Text>
+        <Text style={styles.previewTitle}>
+          {mappedItems.length} places to play
         </Text>
-        <Text style={nativeStyles.previewAction}>Open globe ↗</Text>
+        <Text style={styles.previewAction}>Open map ↗</Text>
       </View>
-      <View style={nativeStyles.previewLegend}>
-        {filterOptions.slice(1).map((option) => (
-          <View key={option.value} style={nativeStyles.legendItem}>
+      <View style={styles.previewLegend}>
+        {filterOptions.slice(1, 5).map((option) => (
+          <View key={option.value} style={styles.legendItem}>
             <View
               style={[
-                nativeStyles.legendDot,
+                styles.legendDot,
                 {
                   backgroundColor:
                     entityColors[option.value as DiscoveryEntityType],
                 },
               ]}
             />
-            <Text style={nativeStyles.legendText}>{option.label}</Text>
+            <Text style={styles.legendText}>{option.label}</Text>
           </View>
         ))}
       </View>
@@ -332,88 +407,222 @@ export function DiscoveryMapPreview({
   );
 }
 
+function formatResultDate(item: DiscoveryMapItem) {
+  if (!item.startsAt) return undefined;
+  const date = new Date(item.startsAt);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "short",
+  }).format(date);
+}
+
+function resultTypeLabel(item: DiscoveryMapItem) {
+  if (item.entityType === "pro-tour") return "PRO TOUR";
+  if (item.entityType === "venue") return "COURT RENTAL";
+  if (item.entityType === "coach") return "TRAINING";
+  if (item.entityType === "organization") return "CLUB";
+  if (item.entityType === "match") return "MATCH";
+  if (["open-play", "pickup", "hosted-match"].includes(item.kind)) {
+    return "OPEN MATCH";
+  }
+  return item.kind.replaceAll("-", " ").toUpperCase();
+}
+
+function resultAction(item: DiscoveryMapItem) {
+  if (item.entityType === "venue") return "See open times";
+  if (item.entityType === "coach") return "View coach";
+  if (item.entityType === "organization") return "Open club";
+  if (item.entityType === "match")
+    return item.live ? "Open live match" : "View match";
+  if (item.entityType === "pro-tour") return "Open Pro Tour";
+  if (["open-play", "pickup", "hosted-match"].includes(item.kind)) {
+    return item.spotsRemaining ? "Join open match" : "View match";
+  }
+  return item.kind === "tournament" ? "View tournament" : "View event";
+}
+
+function resultFacts(item: DiscoveryMapItem, origin?: DiscoveryCoordinates) {
+  const facts: string[] = [];
+  if (item.live) facts.push("● LIVE");
+  if (item.entityType === "venue" && item.openNow !== undefined) {
+    facts.push(item.openNow ? "Open now" : "Closed now");
+  }
+  if (item.courtCount) {
+    facts.push(
+      `${item.courtCount} ${item.courtCount === 1 ? "court" : "courts"}`,
+    );
+  }
+  if (item.spotsRemaining !== undefined && item.spotsRemaining > 0) {
+    facts.push(
+      `${item.spotsRemaining} ${item.spotsRemaining === 1 ? "spot" : "spots"} open`,
+    );
+  }
+  if (item.level) facts.push(`Level ${item.level}`);
+  const date = formatResultDate(item);
+  if (date) facts.push(date);
+  if (item.price)
+    facts.push(formatMoney(item.price.amountMinor, item.price.currency));
+  const ignoredTags = new Set([
+    item.entityType,
+    item.kind.toLowerCase(),
+    "event",
+    "match",
+    "organization",
+    "pro tour",
+    "venue",
+  ]);
+  item.tags
+    .filter((tag) => {
+      const normalized = tag.trim().toLowerCase();
+      return (
+        normalized.length > 0 &&
+        normalized.length <= 28 &&
+        !ignoredTags.has(normalized) &&
+        !item.title.toLowerCase().includes(normalized) &&
+        !item.subtitle.toLowerCase().includes(normalized)
+      );
+    })
+    .slice(0, 2)
+    .forEach((tag) => facts.push(tag));
+  if (origin && item.latitude !== undefined && item.longitude !== undefined) {
+    const distance = discoveryDistanceMiles(origin, item);
+    facts.push(
+      distance < 10
+        ? `${distance.toFixed(1)} mi`
+        : `${Math.round(distance)} mi`,
+    );
+  }
+  return facts.slice(0, 5);
+}
+
 function NativeResultCard({
   item,
   onPress,
-  compact = false,
+  origin,
+  styles,
 }: {
   readonly item: DiscoveryMapItem;
   readonly onPress: (item: DiscoveryMapItem) => void;
-  readonly compact?: boolean;
+  readonly origin?: DiscoveryCoordinates;
+  readonly styles: ReturnType<typeof createStyles>;
 }) {
+  const facts = resultFacts(item, origin);
   return (
     <Pressable
+      accessibilityLabel={`${item.title}. ${resultAction(item)}`}
+      accessibilityRole="button"
       onPress={() => onPress(item)}
-      style={[
-        nativeStyles.resultCard,
-        compact && nativeStyles.resultCardCompact,
+      style={({ pressed }) => [
+        styles.resultCard,
+        pressed && styles.cardPressed,
       ]}
     >
       {item.imageUrl ? (
-        <Image
-          source={{ uri: item.imageUrl }}
-          style={nativeStyles.resultImage}
-        />
+        <View style={styles.resultMedia}>
+          <Image
+            resizeMode={item.imageFit === "contain" ? "contain" : "cover"}
+            source={{ uri: item.imageUrl }}
+            style={styles.resultImage}
+          />
+          {item.live ? (
+            <View style={styles.liveBadge}>
+              <Text style={styles.liveBadgeText}>● LIVE</Text>
+            </View>
+          ) : null}
+        </View>
       ) : (
         <View
           style={[
-            nativeStyles.resultImagePlaceholder,
-            { backgroundColor: entityColors[item.entityType] },
+            styles.resultPlaceholder,
+            { borderTopColor: entityColors[item.entityType] },
           ]}
         >
-          <Text style={nativeStyles.resultImageText}>
-            {item.entityType === "venue"
-              ? "COURT"
-              : item.entityType === "organization"
-                ? "CLUB"
-                : item.entityType === "pro-tour"
-                  ? "PRO"
-                  : item.entityType.toUpperCase()}
+          <Text style={styles.placeholderEyebrow}>{resultTypeLabel(item)}</Text>
+          <Text numberOfLines={2} style={styles.placeholderTitle}>
+            {item.title}
           </Text>
         </View>
       )}
-      <View style={nativeStyles.resultBody}>
-        <View style={nativeStyles.resultTypeRow}>
+      <View style={styles.resultBody}>
+        <View style={styles.resultTypeRow}>
           <View
             style={[
-              nativeStyles.resultTypeDot,
+              styles.resultTypeDot,
               { backgroundColor: entityColors[item.entityType] },
             ]}
           />
-          <Text style={nativeStyles.resultType}>
-            {item.live ? "LIVE · " : ""}
-            {item.entityType.replace("-", " ").toUpperCase()}
-          </Text>
+          <Text style={styles.resultType}>{resultTypeLabel(item)}</Text>
         </View>
-        <Text numberOfLines={1} style={nativeStyles.resultTitle}>
+        <Text numberOfLines={2} style={styles.resultTitle}>
           {item.title}
         </Text>
-        <Text numberOfLines={1} style={nativeStyles.resultSubtitle}>
+        <Text numberOfLines={2} style={styles.resultSubtitle}>
           {item.subtitle}
         </Text>
+        {facts.length > 0 ? (
+          <View style={styles.factRow}>
+            {facts.map((fact) => (
+              <View key={fact} style={styles.factChip}>
+                <Text style={styles.factText}>{fact}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        <View style={styles.resultFooter}>
+          <Text style={styles.resultAction}>{resultAction(item)}</Text>
+          <Text style={styles.resultArrow}>→</Text>
+        </View>
       </View>
-      <Text style={nativeStyles.resultArrow}>›</Text>
     </Pressable>
   );
 }
 
+function closestSnap(
+  value: number,
+  positions: Record<SheetPosition, number>,
+): SheetPosition {
+  return (Object.entries(positions) as [SheetPosition, number][]).reduce(
+    (closest, candidate) =>
+      Math.abs(candidate[1] - value) < Math.abs(closest[1] - value)
+        ? candidate
+        : closest,
+  )[0];
+}
+
 export function DiscoveryMapModal({
   items,
-  visible,
   onClose,
   onSearch,
   onSelect,
+  origin,
+  radiusMiles,
+  resultSummary,
+  searchLabel,
+  theme = "light",
+  visible,
 }: {
   readonly items: readonly DiscoveryMapItem[];
   readonly visible: boolean;
   readonly onClose: () => void;
   readonly onSearch: () => void;
   readonly onSelect: (item: DiscoveryMapItem) => void;
+  readonly origin?: DiscoveryCoordinates;
+  readonly radiusMiles?: number;
+  readonly resultSummary?: string;
+  readonly searchLabel?: string;
+  readonly theme?: DunaTheme;
 }) {
-  const token = useMapboxToken(visible);
+  const token = resolveDunaTokens(theme, "editorial");
+  const styles = useMemo(() => createStyles(token), [token]);
+  const mapToken = useMapboxToken(visible);
+  const reducedMotion = useReducedMotion();
   const { height } = useWindowDimensions();
   const cameraRef = useRef<React.ElementRef<typeof Mapbox.Camera>>(null);
   const firstIdle = useRef(true);
+  const listScrollY = useRef(0);
   const [filter, setFilter] = useState<DiscoveryFilter>("all");
   const [bounds, setBounds] = useState<MapBounds>();
   const [areaIds, setAreaIds] = useState<readonly string[]>();
@@ -421,11 +630,18 @@ export function DiscoveryMapModal({
   const [zoom, setZoom] = useState(1.45);
   const [showLocation, setShowLocation] = useState(false);
   const [selectedId, setSelectedId] = useState<string>();
-  const expandedY = Math.max(132, height * 0.24);
-  const collapsedY = Math.max(expandedY + 120, height - 154);
-  const sheetY = useRef(new Animated.Value(collapsedY)).current;
-  const sheetValue = useRef(collapsedY);
-  const gestureStart = useRef(collapsedY);
+  const [sheetPosition, setSheetPosition] = useState<SheetPosition>("split");
+  const positions = useMemo(
+    () => ({
+      list: Math.max(92, height * 0.105),
+      split: Math.max(280, height * 0.47),
+      map: Math.max(420, height - 132),
+    }),
+    [height],
+  );
+  const sheetY = useRef(new Animated.Value(positions.split)).current;
+  const sheetValue = useRef(positions.split);
+  const gestureStart = useRef(positions.split);
 
   const filtered = useMemo(
     () =>
@@ -443,24 +659,47 @@ export function DiscoveryMapModal({
       ? [selected, ...inArea.filter((item) => item.id !== selected.id)]
       : inArea;
   }, [areaIds, filtered, selectedId]);
+  const initialCamera = useMemo(
+    () => startingCamera(items, origin, radiusMiles),
+    [items, origin, radiusMiles],
+  );
 
-  const animateSheet = (expanded: boolean) => {
-    Animated.spring(sheetY, {
-      damping: 24,
-      mass: 0.8,
-      stiffness: 220,
-      toValue: expanded ? expandedY : collapsedY,
+  useEffect(() => {
+    if (!visible || !mapToken) return;
+    cameraRef.current?.setCamera({
+      ...initialCamera,
+      animationDuration: 0,
+    });
+  }, [initialCamera, mapToken, visible]);
+
+  const snapTo = (position: SheetPosition) => {
+    setSheetPosition(position);
+    Animated.timing(sheetY, {
+      duration: reducedMotion ? 0 : motion.standard,
+      easing: Easing.bezier(0.22, 1, 0.36, 1),
+      toValue: positions[position],
       useNativeDriver: true,
     }).start();
   };
 
   useEffect(() => {
-    sheetY.setValue(collapsedY);
     const listener = sheetY.addListener(({ value }) => {
       sheetValue.current = value;
     });
     return () => sheetY.removeListener(listener);
-  }, [collapsedY, sheetY]);
+  }, [sheetY]);
+
+  useEffect(() => {
+    if (!visible) return;
+    sheetY.setValue(positions.split);
+    sheetValue.current = positions.split;
+    setSheetPosition("split");
+    setAreaIds(undefined);
+    setMapMoved(false);
+    setSelectedId(undefined);
+    setFilter("all");
+    firstIdle.current = true;
+  }, [positions.split, sheetY, visible]);
 
   useEffect(() => {
     setAreaIds(undefined);
@@ -470,27 +709,44 @@ export function DiscoveryMapModal({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 5,
+        onMoveShouldSetPanResponderCapture: (_, gesture) => {
+          if (
+            Math.abs(gesture.dy) < 8 ||
+            Math.abs(gesture.dy) < Math.abs(gesture.dx)
+          ) {
+            return false;
+          }
+          if (sheetPosition === "list") {
+            return gesture.dy > 0 && listScrollY.current <= 1;
+          }
+          return true;
+        },
         onPanResponderGrant: () => {
           gestureStart.current = sheetValue.current;
         },
         onPanResponderMove: (_, gesture) => {
           sheetY.setValue(
             Math.max(
-              expandedY,
-              Math.min(collapsedY, gestureStart.current + gesture.dy),
+              positions.list,
+              Math.min(positions.map, gestureStart.current + gesture.dy),
             ),
           );
         },
         onPanResponderRelease: (_, gesture) => {
-          const midpoint = (expandedY + collapsedY) / 2;
-          animateSheet(
-            gesture.vy < -0.25 ||
-              (gesture.vy < 0.25 && sheetValue.current < midpoint),
-          );
+          if (gesture.vy < -0.35) {
+            snapTo(
+              sheetValue.current > positions.split + 20 ? "split" : "list",
+            );
+            return;
+          }
+          if (gesture.vy > 0.35) {
+            snapTo(sheetValue.current < positions.split - 20 ? "split" : "map");
+            return;
+          }
+          snapTo(closestSnap(sheetValue.current, positions));
         },
       }),
-    [collapsedY, expandedY, sheetY],
+    [positions, sheetPosition],
   );
 
   const onMapIdle = (state: MapState) => {
@@ -515,7 +771,7 @@ export function DiscoveryMapModal({
     if (!feature) return;
     if (feature.properties?.cluster || feature.properties?.point_count) {
       cameraRef.current?.setCamera({
-        animationDuration: 500,
+        animationDuration: reducedMotion ? 0 : motion.zone,
         animationMode: "easeTo",
         centerCoordinate: feature.geometry.coordinates,
         zoomLevel: Math.min(zoom + 2.4, 16),
@@ -524,7 +780,7 @@ export function DiscoveryMapModal({
     }
     if (feature.properties?.id) {
       setSelectedId(feature.properties.id);
-      animateSheet(true);
+      snapTo("split");
     }
   };
 
@@ -536,7 +792,7 @@ export function DiscoveryMapModal({
         .map((item) => item.id),
     );
     setMapMoved(false);
-    animateSheet(true);
+    snapTo("split");
   };
 
   const locate = async () => {
@@ -547,17 +803,23 @@ export function DiscoveryMapModal({
     });
     setShowLocation(true);
     cameraRef.current?.setCamera({
-      animationDuration: 700,
+      animationDuration: reducedMotion ? 0 : motion.zone,
       animationMode: "flyTo",
       centerCoordinate: [position.coords.longitude, position.coords.latitude],
       zoomLevel: 10,
     });
   };
 
+  const cycleSheet = () => {
+    if (sheetPosition === "map") snapTo("split");
+    else if (sheetPosition === "split") snapTo("list");
+    else snapTo("map");
+  };
+
   return (
     <Modal animationType="slide" onRequestClose={onClose} visible={visible}>
-      <View style={nativeStyles.fullMap}>
-        {token ? (
+      <View style={styles.fullMap}>
+        {mapToken ? (
           <Mapbox.MapView
             attributionEnabled
             compassEnabled
@@ -569,7 +831,7 @@ export function DiscoveryMapModal({
             styleURL="mapbox://styles/mapbox/standard"
           >
             <Mapbox.Camera
-              defaultSettings={{ centerCoordinate: [-25, 18], zoomLevel: 1.45 }}
+              defaultSettings={initialCamera}
               maxZoomLevel={18}
               minZoomLevel={0.7}
               ref={cameraRef}
@@ -577,46 +839,73 @@ export function DiscoveryMapModal({
             {showLocation ? (
               <Mapbox.LocationPuck pulsing={{ isEnabled: true }} />
             ) : null}
-            <MapLayers items={filtered} onPress={handleMapPress} />
+            <MapLayers
+              items={filtered}
+              onPress={handleMapPress}
+              token={token}
+            />
           </Mapbox.MapView>
         ) : (
-          <MapFallback />
+          <MapFallback styles={styles} />
         )}
-        <SafeAreaView pointerEvents="box-none" style={nativeStyles.mapChrome}>
-          <View style={nativeStyles.mapHeader}>
-            <Pressable onPress={onClose} style={nativeStyles.chromeButton}>
-              <Text style={nativeStyles.chromeButtonText}>‹</Text>
-            </Pressable>
-            <Pressable onPress={onSearch} style={nativeStyles.mapSearchButton}>
-              <Text style={nativeStyles.mapSearchIcon}>⌕</Text>
-              <Text style={nativeStyles.mapSearchText}>Search the world</Text>
+        <SafeAreaView pointerEvents="box-none" style={styles.mapChrome}>
+          <View style={styles.mapHeader}>
+            <Pressable
+              accessibilityLabel="Close map"
+              accessibilityRole="button"
+              onPress={onClose}
+              style={styles.chromeButton}
+            >
+              <Text style={styles.chromeButtonText}>‹</Text>
             </Pressable>
             <Pressable
-              onPress={() => void locate()}
-              style={nativeStyles.chromeButton}
+              accessibilityLabel="Edit search"
+              accessibilityRole="button"
+              onPress={onSearch}
+              style={styles.mapSearchButton}
             >
-              <Text style={nativeStyles.locateIcon}>◎</Text>
+              <Text style={styles.mapSearchIcon}>⌕</Text>
+              <View style={styles.mapSearchCopy}>
+                <Text numberOfLines={1} style={styles.mapSearchText}>
+                  {searchLabel ?? "Search Duna"}
+                </Text>
+                {resultSummary ? (
+                  <Text numberOfLines={1} style={styles.mapSearchMeta}>
+                    {resultSummary}
+                  </Text>
+                ) : null}
+              </View>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Show my location"
+              accessibilityRole="button"
+              onPress={() => void locate()}
+              style={styles.chromeButton}
+            >
+              <Text style={styles.locateIcon}>◎</Text>
             </Pressable>
           </View>
           <ScrollView
-            contentContainerStyle={nativeStyles.mapFilterContent}
+            contentContainerStyle={styles.mapFilterContent}
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={nativeStyles.mapFilterScroll}
+            style={styles.mapFilterScroll}
           >
             {filterOptions.map((option) => (
               <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: filter === option.value }}
                 key={option.value}
                 onPress={() => setFilter(option.value)}
                 style={[
-                  nativeStyles.mapFilter,
-                  filter === option.value && nativeStyles.mapFilterActive,
+                  styles.mapFilter,
+                  filter === option.value && styles.mapFilterActive,
                 ]}
               >
                 <Text
                   style={[
-                    nativeStyles.mapFilterText,
-                    filter === option.value && nativeStyles.mapFilterTextActive,
+                    styles.mapFilterText,
+                    filter === option.value && styles.mapFilterTextActive,
                   ]}
                 >
                   {option.label}
@@ -626,61 +915,80 @@ export function DiscoveryMapModal({
           </ScrollView>
           {mapMoved ? (
             <Pressable
+              accessibilityRole="button"
               onPress={searchArea}
-              style={nativeStyles.searchAreaButton}
+              style={styles.searchAreaButton}
             >
-              <Text style={nativeStyles.searchAreaText}>⌕ Search here</Text>
+              <Text style={styles.searchAreaText}>⌕ Search here</Text>
             </Pressable>
           ) : null}
         </SafeAreaView>
         <Animated.View
+          {...panResponder.panHandlers}
           style={[
-            nativeStyles.bottomSheet,
+            styles.bottomSheet,
             { height, transform: [{ translateY: sheetY }] },
           ]}
         >
-          <View
-            {...panResponder.panHandlers}
-            style={nativeStyles.sheetHandleArea}
+          <Pressable
+            accessibilityLabel={`Results sheet, ${sheetPosition} view. Change view.`}
+            accessibilityRole="button"
+            onPress={cycleSheet}
+            style={styles.sheetHandleArea}
           >
-            <View style={nativeStyles.sheetHandle} />
-            <View style={nativeStyles.sheetHeadingRow}>
-              <View>
-                <Text style={nativeStyles.sheetTitle}>
-                  {listItems.length} places in view
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeadingRow}>
+              <View style={styles.sheetHeadingCopy}>
+                <Text style={styles.sheetTitle}>
+                  {listItems.length}{" "}
+                  {listItems.length === 1 ? "place" : "places"} to play
                 </Text>
-                <Text style={nativeStyles.sheetSubtitle}>
-                  Swipe up for the list
+                <Text style={styles.sheetSubtitle}>
+                  {sheetPosition === "map"
+                    ? "Swipe up for cards"
+                    : sheetPosition === "list"
+                      ? "Swipe down for the map"
+                      : "Swipe up for cards · down for map"}
                 </Text>
               </View>
-              <Pressable
-                onPress={() =>
-                  animateSheet(sheetValue.current > expandedY + 20)
-                }
-              >
-                <Text style={nativeStyles.sheetArrow}>
-                  {sheetValue.current > expandedY + 20 ? "↑" : "↓"}
-                </Text>
-              </Pressable>
+              <Text style={styles.sheetArrow}>
+                {sheetPosition === "map"
+                  ? "↑"
+                  : sheetPosition === "list"
+                    ? "↓"
+                    : "↕"}
+              </Text>
             </View>
-          </View>
+          </Pressable>
           <ScrollView
-            contentContainerStyle={nativeStyles.sheetResults}
+            contentContainerStyle={styles.sheetResults}
+            onScroll={(event) => {
+              listScrollY.current = event.nativeEvent.contentOffset.y;
+            }}
+            scrollEventThrottle={16}
             showsVerticalScrollIndicator={false}
           >
-            {listItems.slice(0, 40).map((item) => (
+            {listItems.slice(0, 60).map((item) => (
               <NativeResultCard
-                compact
                 item={item}
                 key={item.id}
                 onPress={onSelect}
+                origin={origin}
+                styles={styles}
               />
             ))}
             {listItems.length === 0 ? (
-              <Text style={nativeStyles.emptyText}>
-                Move the map or clear a filter to find more play.
-              </Text>
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>No play in this map view.</Text>
+                <Text style={styles.emptyText}>
+                  Move the map, clear a map filter, or edit your search.
+                </Text>
+                <Pressable onPress={onSearch} style={styles.emptyButton}>
+                  <Text style={styles.emptyButtonText}>Edit search</Text>
+                </Pressable>
+              </View>
             ) : null}
+            <View style={styles.sheetEndSpace} />
           </ScrollView>
         </Animated.View>
       </View>
@@ -688,458 +996,349 @@ export function DiscoveryMapModal({
   );
 }
 
-export function DiscoverySearchModal({
-  items,
-  visible,
-  onClose,
-  onSelect,
-}: {
-  readonly items: readonly DiscoveryMapItem[];
-  readonly visible: boolean;
-  readonly onClose: () => void;
-  readonly onSelect: (item: DiscoveryMapItem) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<DiscoveryFilter>("all");
-  const [nearMe, setNearMe] = useState(false);
-  const [origin, setOrigin] = useState<{
-    readonly latitude: number;
-    readonly longitude: number;
-  }>();
-  const normalized = query.trim().toLowerCase();
-  const results = items
-    .filter((item) => {
-      if (filter !== "all" && item.entityType !== filter) return false;
-      if (!normalized) return true;
-      return [item.title, item.subtitle, item.kind, ...item.tags]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalized);
-    })
-    .sort((left, right) => {
-      if (!nearMe || !origin) return 0;
-      const distance = (item: DiscoveryMapItem) => {
-        if (item.latitude === undefined || item.longitude === undefined) {
-          return Number.POSITIVE_INFINITY;
-        }
-        const radians = (value: number) => (value * Math.PI) / 180;
-        const latitudeDelta = radians(item.latitude - origin.latitude);
-        const longitudeDelta = radians(item.longitude - origin.longitude);
-        const a =
-          Math.sin(latitudeDelta / 2) ** 2 +
-          Math.cos(radians(origin.latitude)) *
-            Math.cos(radians(item.latitude)) *
-            Math.sin(longitudeDelta / 2) ** 2;
-        return 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      };
-      return distance(left) - distance(right);
-    });
-  const toggleNearMe = async () => {
-    if (nearMe) {
-      setNearMe(false);
-      return;
-    }
-    const permission = await Location.requestForegroundPermissionsAsync();
-    if (!permission.granted) return;
-    const location = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
-    setOrigin(location.coords);
-    setNearMe(true);
-  };
-  return (
-    <Modal animationType="slide" onRequestClose={onClose} visible={visible}>
-      <SafeAreaView style={nativeStyles.searchModal}>
-        <View style={nativeStyles.searchModalHeader}>
-          <Pressable onPress={onClose} style={nativeStyles.searchBack}>
-            <Text style={nativeStyles.searchBackText}>‹</Text>
-          </Pressable>
-          <Text style={nativeStyles.searchModalTitle}>Discover</Text>
-        </View>
-        <View style={nativeStyles.searchInputWrap}>
-          <Text style={nativeStyles.mapSearchIcon}>⌕</Text>
-          <TextInput
-            autoFocus
-            onChangeText={setQuery}
-            placeholder="Club, coach, match, event, or city"
-            placeholderTextColor="#738295"
-            style={nativeStyles.searchInput}
-            value={query}
-          />
-          {query ? (
-            <Pressable onPress={() => setQuery("")}>
-              <Text style={nativeStyles.searchClear}>×</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        <ScrollView
-          contentContainerStyle={nativeStyles.searchFilters}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-        >
-          <Pressable
-            onPress={() => void toggleNearMe()}
-            style={[
-              nativeStyles.searchFilter,
-              nearMe && nativeStyles.searchFilterActive,
-            ]}
-          >
-            <Text
-              style={[
-                nativeStyles.searchFilterText,
-                nearMe && nativeStyles.searchFilterTextActive,
-              ]}
-            >
-              ◎ Near me
-            </Text>
-          </Pressable>
-          {filterOptions.map((option) => (
-            <Pressable
-              key={option.value}
-              onPress={() => setFilter(option.value)}
-              style={[
-                nativeStyles.searchFilter,
-                filter === option.value && nativeStyles.searchFilterActive,
-              ]}
-            >
-              <Text
-                style={[
-                  nativeStyles.searchFilterText,
-                  filter === option.value &&
-                    nativeStyles.searchFilterTextActive,
-                ]}
-              >
-                {option.label}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-        <View style={nativeStyles.searchResultHeading}>
-          <Text style={nativeStyles.searchResultEyebrow}>
-            {nearMe
-              ? "NEAREST TO YOU"
-              : normalized
-                ? "BEST MATCHES"
-                : "SUGGESTED AROUND DUNA"}
-          </Text>
-          <Text style={nativeStyles.searchResultCount}>{results.length}</Text>
-        </View>
-        <ScrollView
-          contentContainerStyle={nativeStyles.searchResultList}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {results.map((item) => (
-            <NativeResultCard item={item} key={item.id} onPress={onSelect} />
-          ))}
-          {results.length === 0 ? (
-            <Text style={nativeStyles.emptyText}>
-              No matches yet. Try a city, coach, or broader play type.
-            </Text>
-          ) : null}
-        </ScrollView>
-      </SafeAreaView>
-    </Modal>
-  );
+function createStyles(token: ResolvedDunaTokens) {
+  return StyleSheet.create({
+    fullMap: { backgroundColor: environmentalColors.marine900, flex: 1 },
+    fallback: {
+      alignItems: "center",
+      backgroundColor: environmentalColors.marine900,
+      bottom: 0,
+      justifyContent: "center",
+      left: 0,
+      padding: spacing[6],
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
+    fallbackGlobe: {
+      backgroundColor: environmentalColors.marine400,
+      borderColor: token.gold,
+      borderRadius: 42,
+      borderWidth: 1,
+      height: 84,
+      marginBottom: spacing[3],
+      overflow: "hidden",
+      width: 84,
+    },
+    fallbackArc: {
+      borderColor: token.signal,
+      borderRadius: 40,
+      borderWidth: 1,
+      height: 34,
+      position: "absolute",
+      top: 22,
+      transform: [{ rotate: "15deg" }],
+      width: 76,
+    },
+    fallbackTitle: {
+      color: environmentalColors.white,
+      fontSize: 15,
+      fontWeight: "800",
+    },
+    fallbackBody: {
+      color: environmentalColors.marine200,
+      fontSize: 11,
+      marginTop: spacing[1],
+      textAlign: "center",
+    },
+    preview: {
+      backgroundColor: environmentalColors.marine900,
+      borderColor: token.hairline,
+      borderRadius: radii.large,
+      borderWidth: 1,
+      height: 286,
+      marginTop: spacing[5],
+      overflow: "hidden",
+      position: "relative",
+    },
+    previewShade: {
+      backgroundColor: token.scrim,
+      bottom: 0,
+      left: 0,
+      opacity: 0.48,
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
+    previewLabel: { left: spacing[5], position: "absolute", top: spacing[5] },
+    previewEyebrow: {
+      color: environmentalColors.signal,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
+    previewTitle: {
+      color: environmentalColors.white,
+      fontSize: 24,
+      fontWeight: "900",
+      letterSpacing: -0.8,
+      marginTop: spacing[2],
+    },
+    previewAction: {
+      color: environmentalColors.sand300,
+      fontSize: 11,
+      fontWeight: "900",
+      marginTop: spacing[2],
+    },
+    previewLegend: {
+      backgroundColor: token.surface1,
+      borderRadius: radii.pill,
+      bottom: spacing[4],
+      flexDirection: "row",
+      gap: spacing[2],
+      left: spacing[4],
+      paddingHorizontal: spacing[3],
+      paddingVertical: spacing[2],
+      position: "absolute",
+    },
+    legendItem: { alignItems: "center", flexDirection: "row", gap: spacing[1] },
+    legendDot: { borderRadius: 4, height: 7, width: 7 },
+    legendText: { color: token.text2, fontSize: 10, fontWeight: "800" },
+    mapChrome: { left: 0, position: "absolute", right: 0, top: 0 },
+    mapHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: spacing[2],
+      paddingHorizontal: spacing[4],
+    },
+    chromeButton: {
+      alignItems: "center",
+      backgroundColor: token.surface1,
+      borderColor: token.hairline,
+      borderRadius: 24,
+      borderWidth: 1,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    chromeButtonText: { color: token.text1, fontSize: 32, lineHeight: 34 },
+    locateIcon: { color: token.text1, fontSize: 22, fontWeight: "800" },
+    mapSearchButton: {
+      alignItems: "center",
+      backgroundColor: token.surface1,
+      borderColor: token.hairline,
+      borderRadius: 24,
+      borderWidth: 1,
+      flex: 1,
+      flexDirection: "row",
+      gap: spacing[2],
+      minHeight: 48,
+      paddingHorizontal: spacing[4],
+    },
+    mapSearchIcon: { color: token.text1, fontSize: 21 },
+    mapSearchCopy: { flex: 1 },
+    mapSearchText: { color: token.text1, fontSize: 12, fontWeight: "800" },
+    mapSearchMeta: { color: token.text3, fontSize: 10, marginTop: 2 },
+    mapFilterScroll: { marginTop: spacing[3] },
+    mapFilterContent: {
+      gap: spacing[2],
+      paddingHorizontal: spacing[4],
+      paddingRight: spacing[8],
+    },
+    mapFilter: {
+      backgroundColor: token.surface1,
+      borderColor: token.hairline,
+      borderRadius: radii.pill,
+      borderWidth: 1,
+      minHeight: 48,
+      paddingHorizontal: spacing[4],
+      paddingVertical: spacing[3],
+    },
+    mapFilterActive: {
+      backgroundColor: token.buttonPrimaryBackground,
+      borderColor: token.buttonPrimaryBackground,
+    },
+    mapFilterText: { color: token.text2, fontSize: 11, fontWeight: "700" },
+    mapFilterTextActive: {
+      color: token.buttonPrimaryForeground,
+      fontWeight: "900",
+    },
+    searchAreaButton: {
+      alignSelf: "center",
+      backgroundColor: token.buttonPrimaryBackground,
+      borderRadius: radii.pill,
+      marginTop: spacing[3],
+      minHeight: 48,
+      paddingHorizontal: spacing[5],
+      paddingVertical: spacing[3],
+    },
+    searchAreaText: {
+      color: token.buttonPrimaryForeground,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    bottomSheet: {
+      backgroundColor: token.ground,
+      borderTopLeftRadius: radii.sheet,
+      borderTopRightRadius: radii.sheet,
+      bottom: 0,
+      left: 0,
+      overflow: "hidden",
+      position: "absolute",
+      right: 0,
+      shadowColor: environmentalColors.ink,
+      shadowOffset: { height: -8, width: 0 },
+      shadowOpacity: 0.18,
+      shadowRadius: 24,
+    },
+    sheetHandleArea: {
+      minHeight: 104,
+      paddingHorizontal: spacing[5],
+      paddingTop: spacing[2],
+    },
+    sheetHandle: {
+      alignSelf: "center",
+      backgroundColor: token.hairlineStrong,
+      borderRadius: radii.pill,
+      height: 5,
+      marginBottom: spacing[4],
+      width: 48,
+    },
+    sheetHeadingRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    sheetHeadingCopy: { flex: 1 },
+    sheetTitle: {
+      color: token.text1,
+      fontSize: 21,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+    },
+    sheetSubtitle: { color: token.text3, fontSize: 11, marginTop: spacing[1] },
+    sheetArrow: { color: token.text2, fontSize: 22, marginLeft: spacing[3] },
+    sheetResults: {
+      gap: spacing[4],
+      padding: spacing[4],
+      paddingTop: spacing[2],
+    },
+    sheetEndSpace: { height: 160 },
+    resultCard: {
+      backgroundColor: token.surface1,
+      borderColor: token.hairline,
+      borderRadius: radii.large,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    cardPressed: { opacity: 0.78 },
+    resultMedia: {
+      backgroundColor: token.surface2,
+      height: 168,
+      position: "relative",
+    },
+    resultImage: { height: "100%", width: "100%" },
+    liveBadge: {
+      backgroundColor: token.flare,
+      borderRadius: radii.pill,
+      left: spacing[3],
+      paddingHorizontal: spacing[3],
+      paddingVertical: spacing[2],
+      position: "absolute",
+      top: spacing[3],
+    },
+    liveBadgeText: {
+      color: token.textOnAccent,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    resultPlaceholder: {
+      backgroundColor: token.surface2,
+      borderTopWidth: 6,
+      height: 144,
+      justifyContent: "flex-end",
+      padding: spacing[4],
+    },
+    placeholderEyebrow: {
+      color: token.text3,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
+    placeholderTitle: {
+      color: token.text1,
+      fontSize: 24,
+      fontWeight: "900",
+      letterSpacing: -0.9,
+      lineHeight: 27,
+      marginTop: spacing[2],
+    },
+    resultBody: { padding: spacing[4] },
+    resultTypeRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: spacing[2],
+    },
+    resultTypeDot: { borderRadius: 4, height: 7, width: 7 },
+    resultType: {
+      color: token.text3,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1,
+    },
+    resultTitle: {
+      color: token.text1,
+      fontSize: 21,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+      lineHeight: 25,
+      marginTop: spacing[2],
+    },
+    resultSubtitle: {
+      color: token.text2,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: spacing[1],
+    },
+    factRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: spacing[2],
+      marginTop: spacing[3],
+    },
+    factChip: {
+      backgroundColor: token.surface2,
+      borderRadius: radii.pill,
+      minHeight: 30,
+      paddingHorizontal: spacing[3],
+      paddingVertical: spacing[2],
+    },
+    factText: { color: token.text2, fontFamily: "Archivo-Chip", fontSize: 10 },
+    resultFooter: {
+      alignItems: "center",
+      borderTopColor: token.hairline,
+      borderTopWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: spacing[4],
+      paddingTop: spacing[3],
+    },
+    resultAction: { color: token.flareText, fontSize: 12, fontWeight: "900" },
+    resultArrow: { color: token.flareText, fontSize: 17 },
+    emptyCard: {
+      alignItems: "center",
+      backgroundColor: token.surface1,
+      borderRadius: radii.large,
+      padding: spacing[8],
+    },
+    emptyTitle: { color: token.text1, fontSize: 18, fontWeight: "900" },
+    emptyText: {
+      color: token.text3,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: spacing[2],
+      textAlign: "center",
+    },
+    emptyButton: {
+      borderColor: token.buttonGhostBorder,
+      borderRadius: radii.pill,
+      borderWidth: 1,
+      marginTop: spacing[4],
+      minHeight: 48,
+      paddingHorizontal: spacing[5],
+      paddingVertical: spacing[3],
+    },
+    emptyButtonText: { color: token.text1, fontSize: 12, fontWeight: "800" },
+  });
 }
-
-const nativeStyles = StyleSheet.create({
-  bottomSheet: {
-    backgroundColor: "#f7f5ef",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    bottom: 0,
-    left: 0,
-    overflow: "hidden",
-    position: "absolute",
-    right: 0,
-    shadowColor: "#0d1114",
-    shadowOffset: { height: -8, width: 0 },
-    shadowOpacity: 0.22,
-    shadowRadius: 24,
-  },
-  chromeButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.94)",
-    borderRadius: 23,
-    height: 46,
-    justifyContent: "center",
-    shadowColor: "#0d1114",
-    shadowOpacity: 0.16,
-    shadowRadius: 14,
-    width: 46,
-  },
-  chromeButtonText: { color: "#0d1114", fontSize: 31, lineHeight: 33 },
-  emptyText: {
-    color: "#67768a",
-    fontSize: 13,
-    lineHeight: 20,
-    padding: 24,
-    textAlign: "center",
-  },
-  fallback: {
-    alignItems: "center",
-    backgroundColor: "#101a20",
-    bottom: 0,
-    justifyContent: "center",
-    left: 0,
-    padding: 24,
-    position: "absolute",
-    right: 0,
-    top: 0,
-  },
-  fallbackArc: {
-    borderColor: "rgba(53,200,189,0.8)",
-    borderRadius: 40,
-    borderWidth: 1,
-    height: 34,
-    position: "absolute",
-    top: 22,
-    transform: [{ rotate: "15deg" }],
-    width: 76,
-  },
-  fallbackBody: {
-    color: "rgba(255,255,255,0.58)",
-    fontSize: 11,
-    marginTop: 5,
-    textAlign: "center",
-  },
-  fallbackGlobe: {
-    backgroundColor: "#22343b",
-    borderColor: "#d4b77c",
-    borderRadius: 42,
-    borderWidth: 1,
-    height: 84,
-    marginBottom: 12,
-    overflow: "hidden",
-    width: 84,
-  },
-  fallbackTitle: { color: "#ffffff", fontSize: 15, fontWeight: "800" },
-  fullMap: { backgroundColor: "#101a20", flex: 1 },
-  legendDot: { borderRadius: 4, height: 7, width: 7 },
-  legendItem: { alignItems: "center", flexDirection: "row", gap: 4 },
-  legendText: { color: "#0d1114", fontSize: 10, fontWeight: "800" },
-  locateIcon: { color: "#0d1114", fontSize: 22, fontWeight: "800" },
-  mapChrome: { left: 0, position: "absolute", right: 0, top: 0 },
-  mapFilter: {
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderColor: "rgba(7,27,45,0.08)",
-    borderRadius: 18,
-    borderWidth: 1,
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-  },
-  mapFilterActive: { backgroundColor: "#0d1114", borderColor: "#0d1114" },
-  mapFilterContent: { gap: 7, paddingHorizontal: 16, paddingRight: 32 },
-  mapFilterScroll: { marginTop: 11 },
-  mapFilterText: { color: "#526275", fontSize: 10, fontWeight: "700" },
-  mapFilterTextActive: { color: "#ffffff", fontWeight: "900" },
-  mapHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 9,
-    paddingHorizontal: 15,
-  },
-  mapSearchButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.94)",
-    borderRadius: 23,
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    height: 46,
-    paddingHorizontal: 16,
-    shadowColor: "#0d1114",
-    shadowOpacity: 0.16,
-    shadowRadius: 14,
-  },
-  mapSearchIcon: { color: "#0d1114", fontSize: 22 },
-  mapSearchText: { color: "#0d1114", fontSize: 12, fontWeight: "700" },
-  preview: {
-    backgroundColor: "#101a20",
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: 22,
-    borderWidth: 1,
-    height: 292,
-    marginTop: 20,
-    overflow: "hidden",
-    position: "relative",
-  },
-  previewAction: {
-    color: "#d4b77c",
-    fontSize: 10,
-    fontWeight: "900",
-    marginTop: 8,
-  },
-  previewEyebrow: {
-    color: "#f2c46d",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-  },
-  previewLabel: {
-    backgroundColor: "rgba(7,27,45,0.88)",
-    borderRadius: 14,
-    bottom: 16,
-    left: 14,
-    padding: 13,
-    position: "absolute",
-  },
-  previewLegend: {
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderRadius: 12,
-    bottom: 16,
-    flexDirection: "row",
-    gap: 7,
-    paddingHorizontal: 9,
-    paddingVertical: 8,
-    position: "absolute",
-    right: 14,
-  },
-  previewShade: {
-    backgroundColor: "rgba(2,11,20,0.06)",
-    bottom: 0,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
-  },
-  previewTitle: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "900",
-    marginTop: 4,
-  },
-  resultArrow: { color: "#d4b77c", fontSize: 26, marginRight: 12 },
-  resultBody: { flex: 1, gap: 3, minWidth: 0 },
-  resultCard: {
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderColor: "rgba(7,27,45,0.08)",
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    minHeight: 92,
-    overflow: "hidden",
-    padding: 9,
-  },
-  resultCardCompact: { minHeight: 76 },
-  resultImage: {
-    borderRadius: 13,
-    height: 68,
-    width: 68,
-  },
-  resultImagePlaceholder: {
-    alignItems: "center",
-    borderRadius: 13,
-    height: 68,
-    justifyContent: "center",
-    width: 68,
-  },
-  resultImageText: {
-    color: "#ffffff",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-  },
-  resultSubtitle: { color: "#6b7b8f", fontSize: 10 },
-  resultTitle: { color: "#0d1114", fontSize: 13, fontWeight: "900" },
-  resultType: {
-    color: "#617185",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 0.6,
-  },
-  resultTypeDot: { borderRadius: 4, height: 7, width: 7 },
-  resultTypeRow: { alignItems: "center", flexDirection: "row", gap: 5 },
-  searchAreaButton: {
-    alignSelf: "center",
-    backgroundColor: "#0d1114",
-    borderRadius: 22,
-    marginTop: 12,
-    paddingHorizontal: 17,
-    paddingVertical: 12,
-    shadowColor: "#0d1114",
-    shadowOpacity: 0.2,
-    shadowRadius: 14,
-  },
-  searchAreaText: { color: "#ffffff", fontSize: 11, fontWeight: "900" },
-  searchBack: {
-    alignItems: "center",
-    height: 42,
-    justifyContent: "center",
-    width: 42,
-  },
-  searchBackText: { color: "#0d1114", fontSize: 34, lineHeight: 36 },
-  searchClear: { color: "#617185", fontSize: 22, paddingHorizontal: 5 },
-  searchFilter: {
-    backgroundColor: "#ffffff",
-    borderColor: "#d8e0e4",
-    borderRadius: 18,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  searchFilterActive: { backgroundColor: "#0d1114", borderColor: "#0d1114" },
-  searchFilterText: { color: "#556579", fontSize: 10, fontWeight: "700" },
-  searchFilterTextActive: { color: "#ffffff", fontWeight: "900" },
-  searchFilters: { gap: 7, paddingHorizontal: 18, paddingVertical: 14 },
-  searchInput: { color: "#0d1114", flex: 1, fontSize: 13, height: 50 },
-  searchInputWrap: {
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderColor: "#dbe2e6",
-    borderRadius: 25,
-    borderWidth: 1,
-    flexDirection: "row",
-    marginHorizontal: 18,
-    marginTop: 10,
-    paddingHorizontal: 15,
-  },
-  searchModal: { backgroundColor: "#f7f5ef", flex: 1 },
-  searchModalHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    paddingHorizontal: 12,
-  },
-  searchModalTitle: { color: "#0d1114", fontSize: 22, fontWeight: "900" },
-  searchResultCount: { color: "#617185", fontSize: 11, fontWeight: "800" },
-  searchResultEyebrow: {
-    color: "#3d6672",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.1,
-  },
-  searchResultHeading: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-    paddingVertical: 5,
-  },
-  searchResultList: { gap: 9, padding: 18, paddingBottom: 40 },
-  sheetArrow: {
-    color: "#0d1114",
-    fontSize: 22,
-    fontWeight: "800",
-    padding: 10,
-  },
-  sheetHandle: {
-    alignSelf: "center",
-    backgroundColor: "#c6cfd5",
-    borderRadius: 3,
-    height: 4,
-    width: 42,
-  },
-  sheetHandleArea: { paddingHorizontal: 18, paddingTop: 9 },
-  sheetHeadingRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 69,
-  },
-  sheetResults: { gap: 9, padding: 14, paddingBottom: 110 },
-  sheetSubtitle: { color: "#718095", fontSize: 10, marginTop: 2 },
-  sheetTitle: { color: "#0d1114", fontSize: 15, fontWeight: "900" },
-});
