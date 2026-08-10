@@ -760,8 +760,70 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Matches on your courts" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  const aiAnalyst = page.locator(".hq-ai-analyst");
+  await expect(aiAnalyst).toBeVisible();
+  const aiAnalystColors = await aiAnalyst.evaluate((rail) => {
+    const color = (selector: string) => {
+      const element = rail.querySelector(selector);
+      return element ? getComputedStyle(element).color : null;
+    };
+
+    return {
+      action: color(".hq-ai-signal a"),
+      heading: color(".hq-ai-analyst__intro h2"),
+      signalHeading: color(".hq-ai-signal h3"),
+    };
+  });
+  expect(aiAnalystColors).toEqual({
+    action: "rgb(169, 196, 99)",
+    heading: "rgb(232, 242, 212)",
+    signalHeading: "rgb(232, 242, 212)",
+  });
+  await expect(page.getByText("Payments are connected.")).toHaveCount(0);
+  await expect(
+    page
+      .locator(".hq-analytics-metrics")
+      .getByText("Payments", { exact: true }),
+  ).toHaveCount(0);
+
+  const schedule = page.locator(".hq-schedule-list");
+  await expect(schedule).toBeVisible();
+  await expect(schedule.locator("a.hq-schedule-row")).toHaveCount(5);
+  await expect(schedule.locator(".hq-schedule-row__roster")).toHaveCount(5);
+  await expect(schedule.getByText(/^scheduled$/i)).toHaveCount(0);
+  await expect(
+    schedule.getByRole("button", { name: /More options/ }),
+  ).toHaveCount(0);
+  const firstSession = schedule.getByRole("link", {
+    name: /Sunset doubles training.*open session operations/,
+  });
+  await expect(firstSession).toHaveAttribute(
+    "href",
+    "/events/10000000-0000-4000-8000-000000000301",
+  );
+  await expect(firstSession.getByText("6 of 8 joined")).toBeVisible();
+  await expect(
+    firstSession.locator(".hq-schedule-row__avatars > span"),
+  ).toHaveCount(5);
+  const playerView = schedule.getByRole("link", {
+    name: /Golden Hour 4s.*open player view/,
+  });
+  await expect(playerView).toHaveAttribute(
+    "href",
+    /\/events\/golden-hour-fours$/,
+  );
+  await expect(playerView).toHaveAttribute("target", "_blank");
   await expectNoHorizontalOverflow(page);
+
+  await firstSession.click();
+  await expect(page).toHaveURL(
+    /\/events\/10000000-0000-4000-8000-000000000301$/,
+  );
+  await expect(
+    page.getByRole("heading", { name: "Sunset doubles training" }),
+  ).toBeVisible();
+  await page.goto(`${hqBaseUrl}/`);
 
   await page.goto(`${hqBaseUrl}/locations/create`);
   await expect(
@@ -785,8 +847,11 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
     page.getByText("Community Court", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Matches on your courts" }),
+    page.getByRole("heading", { name: "No matches ready to score" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Review sessions/ }),
+  ).toHaveAttribute("href", "/events");
   await expect(page.getByText("No courts yet")).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 

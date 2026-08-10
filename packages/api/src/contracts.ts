@@ -2021,11 +2021,33 @@ export const pricingSchema = z.object({
 });
 
 export const operatorScheduleItemSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
   time: z.string(),
+  startsAt: z.iso.datetime(),
   court: z.string(),
   title: z.string(),
+  kind: eventKindSchema,
   detail: z.string(),
-  state: z.string(),
+  participantCount: z.number().int().nonnegative(),
+  capacity: z.number().int().positive(),
+  spotsRemaining: z.number().int().nonnegative(),
+  attendees: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        displayName: z.string(),
+        handle: z.string(),
+        publicPath: z.string().startsWith("/players/").optional(),
+        initials: z.string(),
+        avatarUrl: z.string().optional(),
+        homeMarket: z.string().optional(),
+        ratingDisplay: z.number().optional(),
+      }),
+    )
+    .readonly(),
+  destination: z.enum(["operations", "public"]),
+  state: z.enum(["live", "full", "almost-full", "open", "cancelled"]),
 });
 export const operatorDashboardSchema = z.object({
   organization: organizationSummarySchema,

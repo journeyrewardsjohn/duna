@@ -27543,6 +27543,7 @@ body {
 .venue-match-operations > .hq-card-heading {
   align-items: flex-start;
   gap: 24px;
+  padding: 20px;
 }
 
 .venue-match-operations > .hq-card-heading p {
@@ -27559,17 +27560,23 @@ body {
 }
 
 .venue-match-operations__totals > span {
-  background: rgb(var(--overlay-rgb) / 5%);
-  border: 1px solid rgb(var(--overlay-rgb) / 8%);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
   border-radius: 999px;
-  color: var(--color-muted);
+  color: var(--text-2);
   font-size: 0.75rem;
   padding: 8px 11px;
   white-space: nowrap;
 }
 
+.venue-match-operations__totals > span[data-state="live"] {
+  background: var(--hq-tint);
+  border-color: color-mix(in srgb, var(--hq-core) 40%, transparent);
+  color: var(--hq-ink);
+}
+
 .venue-match-operations__totals .duna-numeric {
-  color: var(--color-bone);
+  color: inherit;
   font-size: 0.86rem;
   font-weight: 800;
 }
@@ -27578,12 +27585,12 @@ body {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 18px;
+  padding: 0 20px 20px;
 }
 
 .venue-match-operations__list > article {
-  background: var(--color-depth);
-  border: 1px solid rgb(var(--overlay-rgb) / 8%);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
   border-radius: 18px;
   display: grid;
   gap: 14px;
@@ -27605,7 +27612,7 @@ body {
 
 .venue-match-operations__court > span:first-child {
   align-items: center;
-  color: var(--color-bone);
+  color: var(--text-1);
   display: inline-flex;
   font-size: 0.78rem;
   font-weight: 800;
@@ -27620,13 +27627,13 @@ body {
 
 .venue-match-operations__identity small,
 .venue-match-operations__identity span {
-  color: var(--color-muted);
+  color: var(--text-2);
   font-size: 0.72rem;
   line-height: 1.4;
 }
 
 .venue-match-operations__identity strong {
-  color: var(--color-bone);
+  color: var(--text-1);
   font-size: 1rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -27650,10 +27657,10 @@ body {
 
 .venue-match-operations__people > span {
   align-items: center;
-  background: var(--color-navy-lift);
-  border: 2px solid var(--color-depth);
+  background: var(--hq-tint);
+  border: 2px solid var(--surface-2);
   border-radius: 50%;
-  color: var(--color-bone);
+  color: var(--hq-ink);
   display: inline-flex;
   font-size: 0.625rem;
   font-weight: 800;
@@ -27665,7 +27672,7 @@ body {
 
 .venue-match-operations__actions {
   align-items: center;
-  border-top: 1px solid rgb(var(--overlay-rgb) / 7%);
+  border-top: 1px solid var(--hairline);
   display: flex;
   gap: 8px;
   grid-column: 1 / -1;
@@ -27675,9 +27682,9 @@ body {
 
 .venue-match-operations__actions a {
   align-items: center;
-  border: 1px solid rgb(var(--overlay-rgb) / 10%);
+  border: 1px solid var(--hairline-strong);
   border-radius: 12px;
-  color: var(--color-bone);
+  color: var(--text-1);
   display: inline-flex;
   font-size: 0.74rem;
   font-weight: 800;
@@ -27688,9 +27695,62 @@ body {
 }
 
 .venue-match-operations__actions a:last-child {
-  background: var(--color-aqua-deep);
+  background: var(--hq-deep);
   border-color: transparent;
-  color: var(--color-on-accent);
+  color: var(--hq-text-on-deep);
+}
+
+.venue-match-operations__actions a:hover {
+  border-color: color-mix(in srgb, var(--hq-core) 48%, var(--hairline));
+}
+
+.venue-match-operations__actions a:last-child:hover {
+  background: var(--hq-ink);
+}
+
+.venue-match-operations--empty {
+  overflow: hidden;
+}
+
+.venue-match-operations__empty {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+}
+
+.venue-match-operations__empty > span:first-child {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  color: var(--hq-ink);
+  border: 1px solid color-mix(in srgb, var(--hq-core) 34%, transparent);
+  border-radius: 50%;
+  background: var(--hq-tint);
+}
+
+.venue-match-operations__empty > div {
+  min-width: 0;
+}
+
+.venue-match-operations__empty h2 {
+  margin: 3px 0 0;
+  font-size: 1.05rem;
+}
+
+.venue-match-operations__empty p {
+  max-width: 66ch;
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.venue-match-operations__empty > a {
+  justify-self: end;
+  white-space: nowrap;
 }
 
 @media (max-width: 880px) {
@@ -27719,6 +27779,17 @@ body {
   }
 
   .venue-match-operations__actions a {
+    justify-content: center;
+  }
+
+  .venue-match-operations__empty {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 16px;
+  }
+
+  .venue-match-operations__empty > a {
+    grid-column: 1 / -1;
+    justify-self: stretch;
     justify-content: center;
   }
 }
