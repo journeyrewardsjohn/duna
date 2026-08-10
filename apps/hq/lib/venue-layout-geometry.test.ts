@@ -1,7 +1,10 @@
 import { distance, point } from "@turf/turf";
 import { describe, expect, it } from "vitest";
 import type { VenueLayoutGeoGeometry } from "@duna/api";
-import { rectangleCoordinates } from "./venue-layout-geometry";
+import {
+  rectangleCoordinates,
+  venueLayoutMapViewChanged,
+} from "./venue-layout-geometry";
 
 function dimensionsAt(latitude: number, rotationDegrees: number) {
   const geometry: VenueLayoutGeoGeometry = {
@@ -32,6 +35,29 @@ describe("venue layout map geometry", () => {
     const dimensions = dimensionsAt(latitude, 0);
     expect(dimensions.width).toBeCloseTo(8, 2);
     expect(dimensions.height).toBeCloseTo(16, 2);
+  });
+
+  it("ignores Mapbox resize noise while preserving real view changes", () => {
+    const view = {
+      latitude: 33.8847,
+      longitude: -118.4109,
+      zoom: 19,
+      bearing: 0,
+      pitch: 0,
+    };
+    expect(
+      venueLayoutMapViewChanged(view, {
+        ...view,
+        latitude: view.latitude + 0.00000001,
+        zoom: view.zoom + 0.00001,
+      }),
+    ).toBe(false);
+    expect(
+      venueLayoutMapViewChanged(view, {
+        ...view,
+        longitude: view.longitude + 0.00001,
+      }),
+    ).toBe(true);
   });
 
   it("preserves dimensions after rotation", () => {

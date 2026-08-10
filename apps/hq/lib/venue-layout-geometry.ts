@@ -26,6 +26,27 @@ export interface VenueLayoutTemplate {
   readonly detail: string;
 }
 
+export interface VenueLayoutMapView {
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly zoom: number;
+  readonly bearing: number;
+  readonly pitch: number;
+}
+
+export function venueLayoutMapViewChanged(
+  current: VenueLayoutMapView,
+  next: VenueLayoutMapView,
+): boolean {
+  return (
+    Math.abs(next.latitude - current.latitude) > 0.0000001 ||
+    Math.abs(next.longitude - current.longitude) > 0.0000001 ||
+    Math.abs(next.zoom - current.zoom) > 0.0001 ||
+    Math.abs(next.bearing - current.bearing) > 0.0001 ||
+    Math.abs(next.pitch - current.pitch) > 0.0001
+  );
+}
+
 export const VENUE_LAYOUT_TEMPLATES = [
   {
     key: "fivb-short-court",
