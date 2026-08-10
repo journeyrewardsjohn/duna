@@ -1,8 +1,8 @@
 "use client";
 
 import { bearing, destination, featureCollection, point } from "@turf/turf";
-import type { VenueLayoutAsset } from "@duna/api";
-import { MapPinned, Satellite } from "lucide-react";
+import type { VenueLayoutAsset, VenueLayoutGeoGeometry } from "@duna/api";
+import { MapPinned, Move3D, RotateCw, Satellite } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type {
   GeoJSONSource,
@@ -38,6 +38,35 @@ interface VenueLayoutMapProps {
 interface DragState {
   readonly assetId: string;
   readonly mode: "move" | "rotate";
+}
+
+function normalizeRotation(value: number) {
+  return ((((value + 180) % 360) + 360) % 360) - 180;
+}
+
+function handleBaseBearing(geometry: VenueLayoutGeoGeometry) {
+  return (
+    (Math.atan2(geometry.widthMeters / 2, geometry.heightMeters / 2) * 180) /
+    Math.PI
+  );
+}
+
+function rotationHandleFeature(
+  geometry: VenueLayoutGeoGeometry,
+  assetId: string,
+) {
+  const distanceMeters = Math.hypot(
+    geometry.widthMeters / 2,
+    geometry.heightMeters / 2,
+  );
+  const handle = destination(
+    point([geometry.center.longitude, geometry.center.latitude]),
+    distanceMeters,
+    handleBaseBearing(geometry) - geometry.rotationDegrees,
+    { units: "meters" },
+  );
+  handle.properties = { assetId };
+  return handle;
 }
 
 function mapColors(container: HTMLElement) {
@@ -125,25 +154,13 @@ export function VenueLayoutMap({
     if (
       !selected ||
       selected.locked ||
-      selected.geometry.coordinateSpace !== "geo"
+      selected.geometry.coordinateSpace !== "geo" ||
+      selected.geometry.shape === "circle"
     ) {
       return featureCollection([]);
     }
     const geometry = selected.geometry;
-    const handleDistance =
-      geometry.shape === "circle"
-        ? (geometry.radiusMeters ?? geometry.widthMeters / 2) +
-          geometry.bufferMeters +
-          3
-        : geometry.heightMeters / 2 + geometry.bufferMeters + 3;
-    const handle = destination(
-      point([geometry.center.longitude, geometry.center.latitude]),
-      handleDistance,
-      -geometry.rotationDegrees,
-      { units: "meters" },
-    );
-    handle.properties = { assetId: selected.id };
-    return featureCollection([handle]);
+    return featureCollection([rotationHandleFeature(geometry, selected.id)]);
   }
 
   function updateSources() {
@@ -194,7 +211,7 @@ export function VenueLayoutMap({
           pitch: view.pitch,
           maxZoom: 22,
           attributionControl: true,
-          cooperativeGestures: true,
+          cooperativeGestures: false,
         });
         mapRef.current = map;
         map.addControl(
@@ -203,6 +220,7 @@ export function VenueLayoutMap({
         );
         map.addControl(new mapboxgl.default.ScaleControl({ unit: "metric" }));
         map.on("load", () => {
+          setError(undefined);
           const colors = mapColors(containerRef.current!);
           const firstLabel = map
             .getStyle()
@@ -292,10 +310,27 @@ export function VenueLayoutMap({
               type: "circle",
               source: "venue-layout-handle",
               paint: {
-                "circle-radius": 7,
+                "circle-radius": 12,
                 "circle-color": colors.handle,
-                "circle-stroke-color": colors.outline,
-                "circle-stroke-width": 2,
+                "circle-stroke-color": colors.selected,
+                "circle-stroke-width": 3,
+              },
+            },
+            firstLabel,
+          );
+          map.addLayer(
+            {
+              id: "venue-layout-rotate-handle-icon",
+              type: "symbol",
+              source: "venue-layout-handle",
+              layout: {
+                "text-field": "↻",
+                "text-size": 17,
+                "text-allow-overlap": true,
+                "text-ignore-placement": true,
+              },
+              paint: {
+                "text-color": colors.label,
               },
             },
             firstLabel,
@@ -347,12 +382,15 @@ export function VenueLayoutMap({
                   })
                 : {
                     ...geometry,
-                    rotationDegrees: -bearing(
-                      point([
-                        geometry.center.longitude,
-                        geometry.center.latitude,
-                      ]),
-                      point([coordinate.lng, coordinate.lat]),
+                    rotationDegrees: normalizeRotation(
+                      handleBaseBearing(geometry) -
+                        bearing(
+                          point([
+                            geometry.center.longitude,
+                            geometry.center.latitude,
+                          ]),
+                          point([coordinate.lng, coordinate.lat]),
+                        ),
                     ),
                   };
             onAssetChangeRef.current({ ...asset, geometry: nextGeometry });
@@ -434,6 +472,16 @@ export function VenueLayoutMap({
       <div className="venue-layout-map__mode">
         <Satellite aria-hidden size={15} /> Satellite · metric geometry
       </div>
+      {selectedAssetId && !readOnly && (
+        <div className="venue-layout-map__interaction-hint">
+          <span>
+            <Move3D aria-hidden size={14} /> Drag element to move
+          </span>
+          <span>
+            <RotateCw aria-hidden size={14} /> Drag corner to rotate
+          </span>
+        </div>
+      )}
       {error && (
         <div className="venue-layout-map__error" role="status">
           <MapPinned aria-hidden size={28} />

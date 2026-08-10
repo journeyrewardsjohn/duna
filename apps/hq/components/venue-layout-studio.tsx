@@ -33,6 +33,7 @@ import {
   RotateCw,
   Save,
   ScanLine,
+  Settings2,
   Shapes,
   Sparkles,
   Table2,
@@ -44,6 +45,7 @@ import {
   Users,
   Utensils,
   Waves,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -569,23 +571,7 @@ function AssetInspector({
       </fieldset>
 
       <fieldset disabled={readOnly || asset.locked}>
-        <legend>Position & size</legend>
-        <label>
-          <span>Rotation</span>
-          <div className="venue-layout-rotation-control">
-            <RotateCw aria-hidden size={16} />
-            <input
-              max="180"
-              min="-180"
-              onChange={(event) =>
-                updateGeometry({ rotationDegrees: Number(event.target.value) })
-              }
-              type="range"
-              value={geometry.rotationDegrees}
-            />
-            <Numeric>{Math.round(geometry.rotationDegrees)}°</Numeric>
-          </div>
-        </label>
+        <legend>Dimensions</legend>
         {geometry.coordinateSpace === "geo" ? (
           <div className="venue-layout-inspector__pair">
             <label>
@@ -654,8 +640,9 @@ function AssetInspector({
           </div>
         )}
         <small className="venue-layout-inspector__hint">
-          Drag to move. Use the round handle on the satellite map to rotate.
-          Arrow keys nudge indoor elements; hold Shift for larger steps.
+          Drag the element to move it. Drag its round corner handle to rotate.
+          Use these fields only when you need exact dimensions. Arrow keys nudge
+          indoor elements; hold Shift for larger steps.
         </small>
       </fieldset>
 
@@ -1120,7 +1107,8 @@ export function VenueLayoutStudio({
   const [selectedAssetId, setSelectedAssetId] = useState<string>();
   const [dirty, setDirty] = useState(false);
   const [preview, setPreview] = useState(false);
-  const [toolboxOpen, setToolboxOpen] = useState(true);
+  const [toolboxOpen, setToolboxOpen] = useState(false);
+  const [operationsOpen, setOperationsOpen] = useState(false);
   const [courtDraft, setCourtDraft] = useState<CourtDraft>();
   const [pendingCourtDraft, setPendingCourtDraft] = useState<CourtDraft>();
   const [floorplanImageUrl, setFloorplanImageUrl] = useState(
@@ -1196,6 +1184,17 @@ export function VenueLayoutStudio({
     }
   }, [router, versionState.entityId, versionState.status, workspace.venue.id]);
 
+  useEffect(() => {
+    if (!operationsOpen && !toolboxOpen) return;
+    const closeOverlay = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOperationsOpen(false);
+      setToolboxOpen(false);
+    };
+    window.addEventListener("keydown", closeOverlay);
+    return () => window.removeEventListener("keydown", closeOverlay);
+  }, [operationsOpen, toolboxOpen]);
+
   if (!layout) return <LayoutEmptyState workspace={workspace} />;
   const activeLayout = layout;
   const readOnly = layout.status !== "draft" || preview;
@@ -1251,6 +1250,7 @@ export function VenueLayoutStudio({
     };
     setAssets((current) => [...current, asset]);
     setSelectedAssetId(asset.id);
+    setToolboxOpen(false);
     setDirty(true);
   }
 
@@ -1274,6 +1274,7 @@ export function VenueLayoutStudio({
     };
     setAssets((current) => [...current, asset]);
     setSelectedAssetId(asset.id);
+    setToolboxOpen(false);
     setDirty(true);
   }
 
@@ -1290,6 +1291,7 @@ export function VenueLayoutStudio({
       geometry: geometryForTemplate(activeLayout, workspace, template),
       suggestedName,
     });
+    setToolboxOpen(false);
   }
 
   function applyFloorplanProposal(proposal: FloorplanAnalysisProposal) {
@@ -1391,6 +1393,16 @@ export function VenueLayoutStudio({
           </p>
         </div>
         <div className="venue-layout-header__actions">
+          {!preview && (
+            <button
+              aria-expanded={operationsOpen}
+              className="hq-button hq-button--secondary"
+              onClick={() => setOperationsOpen((current) => !current)}
+              type="button"
+            >
+              <Settings2 aria-hidden size={16} /> Layout settings
+            </button>
+          )}
           <button
             aria-pressed={preview}
             className="hq-button hq-button--secondary"
@@ -1569,7 +1581,9 @@ export function VenueLayoutStudio({
                 <Plus aria-hidden size={17} /> Add element
               </button>
               <span>
-                <Move3D aria-hidden size={15} /> Drag to move · handle to rotate
+                <Move3D aria-hidden size={15} /> Drag to move
+                <i>·</i>
+                <RotateCw aria-hidden size={14} /> Drag corner to rotate
               </span>
               <label>
                 <span className="sr-only">Layout name</span>
@@ -1922,8 +1936,9 @@ export function VenueLayoutStudio({
             <small>Layout version {layout.version}</small>
             <h2>{layout.name}</h2>
             <p>
-              Select any court or space to edit its identity, size, rotation,
-              capacity, ticketing, and tournament priority.
+              Select any court or space to edit its identity, dimensions,
+              capacity, ticketing, and tournament priority. Position and
+              rotation are controlled directly on the canvas.
             </p>
             <dl>
               <div>
@@ -1953,49 +1968,79 @@ export function VenueLayoutStudio({
         ) : null}
       </section>
 
-      {!preview && (
-        <>
-          <EventAssignmentPanel
-            layout={layout}
-            readOnly={layout.status !== "draft"}
-            workspace={workspace}
-          />
-          <section className="venue-layout-publish hq-card">
-            <div>
-              <span className="hq-eyebrow">Player-facing version</span>
-              <h2>
-                {layout.isPrimary
-                  ? "Primary layout"
-                  : "Publish this version when ready"}
-              </h2>
-              <p>
-                The primary published layout becomes the default map players use
-                to find courts and ticketed spaces. Event-specific versions
-                remain available without replacing it.
-              </p>
+      {!preview && operationsOpen && (
+        <div
+          className="venue-layout-operations-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setOperationsOpen(false);
+          }}
+          role="presentation"
+        >
+          <aside
+            aria-label="Layout settings"
+            aria-modal="true"
+            className="venue-layout-operations"
+            role="dialog"
+          >
+            <header>
+              <div>
+                <span className="hq-eyebrow">Venue operations</span>
+                <strong>Layout settings</strong>
+              </div>
+              <button
+                aria-label="Close layout settings"
+                onClick={() => setOperationsOpen(false)}
+                type="button"
+              >
+                <X aria-hidden size={18} />
+              </button>
+            </header>
+            <div className="venue-layout-operations__body">
+              <EventAssignmentPanel
+                layout={layout}
+                readOnly={layout.status !== "draft"}
+                workspace={workspace}
+              />
+              <section className="venue-layout-publish hq-card">
+                <div>
+                  <span className="hq-eyebrow">Player-facing version</span>
+                  <h2>
+                    {layout.isPrimary
+                      ? "Primary layout"
+                      : "Publish this version when ready"}
+                  </h2>
+                  <p>
+                    The primary published layout becomes the default map players
+                    use to find courts and ticketed spaces. Event-specific
+                    versions remain available without replacing it.
+                  </p>
+                </div>
+                {layout.status === "draft" ? (
+                  <form action={publishAction}>
+                    <input name="layoutId" type="hidden" value={layout.id} />
+                    <input name="makePrimary" type="hidden" value="true" />
+                    <ActionNotice state={publishState} />
+                    <button
+                      className="hq-button hq-button--primary"
+                      disabled={publishPending || dirty || assets.length === 0}
+                      type="submit"
+                    >
+                      <Eye aria-hidden size={16} />{" "}
+                      {publishPending ? "Publishing…" : "Publish & set primary"}
+                    </button>
+                    {dirty && (
+                      <small>Save this version before publishing.</small>
+                    )}
+                  </form>
+                ) : (
+                  <Badge tone={layout.isPrimary ? "live" : "neutral"}>
+                    {layout.isPrimary ? "Player default" : "Published version"}
+                  </Badge>
+                )}
+              </section>
             </div>
-            {layout.status === "draft" ? (
-              <form action={publishAction}>
-                <input name="layoutId" type="hidden" value={layout.id} />
-                <input name="makePrimary" type="hidden" value="true" />
-                <ActionNotice state={publishState} />
-                <button
-                  className="hq-button hq-button--primary"
-                  disabled={publishPending || dirty || assets.length === 0}
-                  type="submit"
-                >
-                  <Eye aria-hidden size={16} />{" "}
-                  {publishPending ? "Publishing…" : "Publish & set primary"}
-                </button>
-                {dirty && <small>Save this version before publishing.</small>}
-              </form>
-            ) : (
-              <Badge tone={layout.isPrimary ? "live" : "neutral"}>
-                {layout.isPrimary ? "Player default" : "Published version"}
-              </Badge>
-            )}
-          </section>
-        </>
+          </aside>
+        </div>
       )}
 
       {courtDraft && (

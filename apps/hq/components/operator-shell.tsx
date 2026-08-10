@@ -11,11 +11,13 @@ import { AuthControls } from "./auth-controls";
 export function OperatorShell({
   active,
   children,
+  immersive = false,
   organization,
   messageDraftCount = 0,
 }: {
   readonly active: OperatorModule;
   readonly children: ReactNode;
+  readonly immersive?: boolean;
   readonly organization: OrganizationSummary;
   readonly messageDraftCount?: number;
 }) {
@@ -26,7 +28,7 @@ export function OperatorShell({
     .join("")
     .toUpperCase();
   return (
-    <div className="hq-shell">
+    <div className={`hq-shell${immersive ? " hq-shell--immersive" : ""}`}>
       <aside className="hq-sidebar">
         <Link aria-label="Duna HQ home" className="hq-sidebar__brand" href="/">
           <DunaMark />
