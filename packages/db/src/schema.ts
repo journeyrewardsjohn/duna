@@ -95,6 +95,7 @@ export const sessionStatusEnum = pgEnum("session_status", [
   "cancelled",
 ]);
 export const registrationStatusEnum = pgEnum("registration_status", [
+  "invited",
   "pending",
   "confirmed",
   "waitlisted",
@@ -4085,6 +4086,64 @@ export const matchConfirmations = pgTable(
     check(
       "match_confirmation_decision_valid",
       sql`${table.decision} IN ('confirmed', 'disputed')`,
+    ),
+  ],
+);
+
+export const matchParticipantInvitations = pgTable(
+  "match_participant_invitations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    provisionalPersonId: uuid("provisional_person_id")
+      .notNull()
+      .references(() => people.id),
+    invitedByPersonId: uuid("invited_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    inviteToken: varchar("invite_token", { length: 96 }).notNull().unique(),
+    invitedEmail: text("invited_email"),
+    invitedPhoneE164: varchar("invited_phone_e164", { length: 24 }),
+    status: varchar("status", { length: 24 }).notNull().default("pending"),
+    deliveryChannel: varchar("delivery_channel", { length: 16 }),
+    deliveryStatus: varchar("delivery_status", { length: 24 })
+      .notNull()
+      .default("not-configured"),
+    deliveryMessageId: varchar("delivery_message_id", { length: 160 }),
+    claimedByPersonId: uuid("claimed_by_person_id").references(() => people.id),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    claimedAt: timestamp("claimed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("match_participant_invitation_person_unique").on(
+      table.matchId,
+      table.provisionalPersonId,
+    ),
+    index("match_participant_invitation_match_status_idx").on(
+      table.matchId,
+      table.status,
+    ),
+    check(
+      "match_participant_invitation_destination_present",
+      sql`${table.invitedEmail} IS NOT NULL OR ${table.invitedPhoneE164} IS NOT NULL`,
+    ),
+    check(
+      "match_participant_invitation_status_valid",
+      sql`${table.status} IN ('pending', 'claimed', 'expired', 'cancelled')`,
+    ),
+    check(
+      "match_participant_invitation_delivery_status_valid",
+      sql`${table.deliveryStatus} IN ('not-configured', 'queued', 'sent', 'failed')`,
     ),
   ],
 );

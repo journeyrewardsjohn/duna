@@ -90,6 +90,27 @@ export async function reviewPickupJoinRequestAction(input: {
   }
 }
 
+export async function invitePickupPlayersAction(input: {
+  readonly pickupSessionId: string;
+  readonly slug: string;
+  readonly personIds: readonly string[];
+  readonly idempotencyKey: string;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.invitePickupPlayers({
+      pickupSessionId: input.pickupSessionId,
+      personIds: [...input.personIds],
+      idempotencyKey: input.idempotencyKey,
+    });
+    revalidatePath(`/events/${input.slug}`);
+    revalidatePath("/app/play");
+    return { ok: true as const, result };
+  } catch (error) {
+    return failure(error, "The invitations could not be sent.");
+  }
+}
+
 export async function cancelPickupAction(input: {
   readonly pickupSessionId: string;
   readonly slug: string;
@@ -124,6 +145,7 @@ export async function updatePickupAction(input: {
   readonly capacity: number;
   readonly note?: string;
   readonly approvalRequired: boolean;
+  readonly waitlistEnabled: boolean;
   readonly visibility: "public" | "unlisted";
   readonly idempotencyKey: string;
 }) {
@@ -143,6 +165,7 @@ export async function updatePickupAction(input: {
       capacity: input.capacity,
       note: input.note,
       approvalRequired: input.approvalRequired,
+      waitlistEnabled: input.waitlistEnabled,
       visibility: input.visibility,
       idempotencyKey: input.idempotencyKey,
     });

@@ -81,9 +81,12 @@ import {
   BookingManagementModal,
   type ManagedBooking,
 } from "./booking-management";
+import dunaResultReturn from "./assets/duna-result-return-v1.png";
+import dunaResultRise from "./assets/duna-result-rise-v1.png";
 import { PlayerCalendarModal } from "./player-calendar";
 import { ProfileHubScreen } from "./profile-hub";
 import { PlayerArtworkModal, ProfileEditorModal } from "./profile-studio";
+import { ScoreUploadScreen } from "./score-upload";
 import { OrganizationExperienceModal } from "./organization-experience";
 import {
   LivePlayerRail,
@@ -256,6 +259,8 @@ type MobilePlayerPerformance = Awaited<
   ReturnType<DunaApiClient["public"]["playerPerformance"]["query"]>
 >;
 type MobilePerformanceMatch = MobilePlayerPerformance["history"][number];
+type MobilePerformanceParticipantProfile =
+  MobilePlayerPerformance["participantProfiles"][number];
 
 const demoPerformanceSnapshots = [
   {
@@ -316,8 +321,19 @@ const demoPerformanceHistory = demoMatches.map((match, index) => {
         side: "B" as const,
       })),
     ],
+    resultStory: {
+      summary:
+        snapshot.actualResult >= 0.5
+          ? "Held the line when it tightened and carried the result home."
+          : "Made the margins meaningful—clear evidence, reset, next serve ahead.",
+      source: "computed" as const,
+    },
   };
 }) satisfies readonly MobilePerformanceMatch[];
+
+const demoSandRatingByPersonId = new Map(
+  demoPeople.map((person) => [person.id, person.rating.display] as const),
+);
 
 const lightColors = {
   canvas: "#f6f5f1",
@@ -331,6 +347,12 @@ const lightColors = {
   aquaDeep: "#3a3a36",
   sand: "#c9a96a",
   flare: "#e8683a",
+  resultWin: "#efe5ce",
+  resultWinBorder: "#d7bd84",
+  resultLoss: "#b5ccd3",
+  resultLossBorder: "#87aab5",
+  signal: "#c8f04a",
+  signalInk: "#17200d",
   positive: "#2f6b3a",
   warning: "#8a6a2f",
   danger: "#9a4a2e",
@@ -365,6 +387,12 @@ const darkColors: Palette = {
   aquaDeep: "#8fb0bc",
   sand: "#d4b77c",
   flare: "#f4794c",
+  resultWin: "#4a402b",
+  resultWinBorder: "#8d7748",
+  resultLoss: "#294651",
+  resultLossBorder: "#527782",
+  signal: "#b9dc52",
+  signalInk: "#17200d",
   positive: "#6bae78",
   warning: "#d4b77c",
   danger: "#c4785c",
@@ -411,6 +439,22 @@ function useReducedMotion() {
   return reduced;
 }
 
+type ResultRosterDensity = "regular" | "compact" | "dense";
+
+function resultRosterDensity(playerCount: number): ResultRosterDensity {
+  if (playerCount <= 2) return "regular";
+  if (playerCount <= 4) return "compact";
+  return "dense";
+}
+
+function resultRosterWidth(playerCount: number): `${number}%` {
+  return `${100 / Math.max(1, Math.min(playerCount, 6))}%` as `${number}%`;
+}
+
+function resultRosterName(name: string) {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
 const ThemeContext = createContext<{
   readonly theme: ThemeName;
   readonly preference: ThemePreference;
@@ -438,6 +482,7 @@ function ThemeButton() {
 type Tab =
   | "home"
   | "discover"
+  | "score"
   | "play"
   | "video"
   | "wallet"
@@ -483,6 +528,7 @@ const tabs: readonly {
 }[] = [
   { key: "home", label: "Home", icon: "⌂" },
   { key: "discover", label: "Discover", icon: "⌖" },
+  { key: "score", label: "Score", icon: "↥" },
   { key: "play", label: "Play", icon: "◫" },
   { key: "you", label: "You", icon: "◎" },
 ];
@@ -1219,7 +1265,7 @@ function CoachingNoteCard({ note }: { readonly note: PlayerCoachingNote }) {
 }
 
 type HomeQuickAction =
-  "find-match" | "book-court" | "join-event" | "record-video";
+  "upload-score" | "find-match" | "book-court" | "join-event" | "record-video";
 
 function HomeResultStoryCard({
   match,
@@ -1229,6 +1275,20 @@ function HomeResultStoryCard({
   readonly playerId: string;
 }) {
   const { openPlayerProfile } = usePlayerProfileNavigation();
+  const reducedMotion = useReducedMotion();
+  const reveal = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
+  useEffect(() => {
+    if (reducedMotion) {
+      reveal.setValue(1);
+      return;
+    }
+    Animated.timing(reveal, {
+      toValue: 1,
+      duration: 540,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [reducedMotion, reveal]);
   const playerSide = match.teamB.some((player) => player.id === playerId)
     ? "B"
     : "A";
@@ -1239,65 +1299,120 @@ function HomeResultStoryCard({
     playerSide === "A" ? set : ([set[1], set[0]] as const),
   );
   const subtitle = won
-    ? score.length >= 3
-      ? "Three sets. You closed the match."
-      : "Straight sets. A clear result."
+    ? match.ratingDelta >= 0.08
+      ? "Beat the pre-match signal and earned every point of the rise."
+      : score.length >= 3
+        ? "Stayed composed through the decider and carried it home."
+        : "Set the pace early and kept the result moving your way."
     : score.length >= 3
-      ? "Pushed it to the deciding set."
-      : "A result to learn from.";
+      ? "Took it to the decider—small margins, strong evidence for next time."
+      : "Clear evidence, clean reset, and the next serve already ahead.";
+  const art = won ? dunaResultRise : dunaResultReturn;
   const renderTeam = (
     team: readonly PersonSummary[],
     side: "player" | "opponent",
-  ) => (
-    <View style={styles.resultStoryTeam}>
-      <View style={styles.resultStoryPlayers}>
-        {team.map((person) => (
-          <Pressable
-            accessibilityLabel={"Open " + person.displayName + "'s profile"}
-            key={person.id}
-            onPress={() => openPlayerProfile(person)}
-            style={styles.resultStoryPlayer}
-          >
-            {person.avatarUrl ? (
-              <Image
-                accessibilityIgnoresInvertColors
-                source={{ uri: person.avatarUrl }}
-                style={styles.resultStoryAvatar}
-              />
-            ) : (
-              <View style={styles.resultStoryAvatarFallback}>
-                <Text style={styles.resultStoryAvatarText}>
-                  {person.initials}
+  ) => {
+    const density = resultRosterDensity(team.length);
+    const rosterWidth = resultRosterWidth(team.length);
+    return (
+      <View
+        style={[
+          styles.resultStoryTeam,
+          density === "compact" && styles.resultStoryTeamCompact,
+          density === "dense" && styles.resultStoryTeamDense,
+          team.length > 6 && styles.resultStoryTeamWrapped,
+        ]}
+      >
+        <View style={styles.resultStoryPlayers}>
+          {team.map((person) => (
+            <Pressable
+              accessibilityLabel={"Open " + person.displayName + "'s profile"}
+              key={person.id}
+              onPress={() => openPlayerProfile(person)}
+              style={[
+                styles.resultStoryPlayer,
+                density === "compact" && styles.resultStoryPlayerCompact,
+                density === "dense" && styles.resultStoryPlayerDense,
+                { width: rosterWidth },
+              ]}
+            >
+              {person.avatarUrl ? (
+                <Image
+                  accessibilityIgnoresInvertColors
+                  source={{ uri: person.avatarUrl }}
+                  style={[
+                    styles.resultStoryAvatar,
+                    density === "compact" && styles.resultStoryAvatarCompact,
+                    density === "dense" && styles.resultStoryAvatarDense,
+                  ]}
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.resultStoryAvatarFallback,
+                    density === "compact" &&
+                      styles.resultStoryAvatarFallbackCompact,
+                    density === "dense" &&
+                      styles.resultStoryAvatarFallbackDense,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.resultStoryAvatarText,
+                      density === "dense" && styles.resultStoryAvatarTextDense,
+                    ]}
+                  >
+                    {person.initials}
+                  </Text>
+                </View>
+              )}
+              <Text
+                accessibilityLabel={person.displayName}
+                numberOfLines={1}
+                style={[
+                  styles.resultStoryPlayerName,
+                  density === "compact" && styles.resultStoryPlayerNameCompact,
+                  density === "dense" && styles.resultStoryPlayerNameDense,
+                ]}
+              >
+                {resultRosterName(person.displayName)}
+              </Text>
+              <View
+                style={[
+                  styles.resultStoryPlayerRatingPill,
+                  density === "dense" &&
+                    styles.resultStoryPlayerRatingPillDense,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.resultStoryPlayerRating,
+                    density === "dense" && styles.resultStoryPlayerRatingDense,
+                  ]}
+                >
+                  {person.rating.display.toFixed(2)}
                 </Text>
               </View>
-            )}
-            <View style={styles.flex}>
-              <Text numberOfLines={1} style={styles.resultStoryPlayerName}>
-                {person.displayName}
-              </Text>
-              <Text style={styles.resultStoryPlayerRating}>
-                {person.rating.display.toFixed(2)} Sand
-              </Text>
-            </View>
-          </Pressable>
-        ))}
+            </Pressable>
+          ))}
+        </View>
+        <View style={styles.resultStoryScores}>
+          {score.map((set, index) => (
+            <Text
+              key={index}
+              style={[
+                styles.resultStoryScore,
+                set[side === "player" ? 0 : 1] >
+                  set[side === "player" ? 1 : 0] && styles.resultStoryScoreWon,
+              ]}
+            >
+              {set[side === "player" ? 0 : 1]}
+            </Text>
+          ))}
+        </View>
       </View>
-      <View style={styles.resultStoryScores}>
-        {score.map((set, index) => (
-          <Text
-            key={index}
-            style={[
-              styles.resultStoryScore,
-              set[side === "player" ? 0 : 1] > set[side === "player" ? 1 : 0] &&
-                styles.resultStoryScoreWon,
-            ]}
-          >
-            {set[side === "player" ? 0 : 1]}
-          </Text>
-        ))}
-      </View>
-    </View>
-  );
+    );
+  };
   return (
     <View
       style={[
@@ -1305,34 +1420,41 @@ function HomeResultStoryCard({
         won ? styles.resultStoryCardWon : styles.resultStoryCardLost,
       ]}
     >
-      <View style={styles.resultStoryHeader}>
-        <View style={styles.flex}>
-          <Text
-            style={[
-              styles.resultStoryEyebrow,
-              !won && styles.resultStoryEyebrowLost,
-            ]}
-          >
-            {won ? "MATCH WON" : "MATCH LOST"}
-          </Text>
-          <Text
-            style={[
-              styles.resultStorySubtitle,
-              !won && styles.resultStorySubtitleLost,
-            ]}
-          >
-            {subtitle}
-          </Text>
-        </View>
-        <Text
-          style={[styles.resultStoryDate, !won && styles.resultStoryDateLost]}
+      <ImageBackground
+        imageStyle={styles.resultStoryArtImage}
+        resizeMode="cover"
+        source={art}
+        style={styles.resultStoryHeader}
+      >
+        <Animated.View
+          style={[
+            styles.resultStoryHeaderCopy,
+            {
+              opacity: reveal,
+              transform: [
+                {
+                  translateY: reveal.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [8, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
         >
+          <Text style={styles.resultStoryEyebrow}>
+            {won ? "Match won" : "Match lost"}
+          </Text>
+          <Text style={styles.resultStorySubtitle}>{subtitle}</Text>
+          <Text style={styles.resultStoryRecapLabel}>DUNA RESULT RECAP</Text>
+        </Animated.View>
+        <Text style={styles.resultStoryDate}>
           {new Date(match.playedAt).toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
           })}
         </Text>
-      </View>
+      </ImageBackground>
       <View style={styles.resultStoryScorecard}>
         {renderTeam(playerTeam, "player")}
         <View style={styles.resultStoryDivider} />
@@ -1574,6 +1696,12 @@ function HomeScreen({
     readonly meta: string;
   }[] = [
     {
+      key: "upload-score",
+      icon: "↥",
+      label: "Upload a Score",
+      meta: "Report a match you played",
+    },
+    {
       key: "find-match",
       icon: "⌖",
       label: "Find a Match",
@@ -1782,7 +1910,7 @@ function HomeScreen({
               style={({ pressed }) => [
                 styles.homeQuickAction,
                 index === 0 && styles.homeQuickActionPrimary,
-                index === 3 && styles.homeQuickActionWarm,
+                index === 4 && styles.homeQuickActionWarm,
                 pressed && styles.homeQuickActionPressed,
               ]}
             >
@@ -7392,59 +7520,260 @@ function matchSides(match: MobilePerformanceMatch, personId: string) {
 function MobileResultCard({
   match,
   personId,
+  participantProfiles,
 }: {
   readonly match: MobilePerformanceMatch;
   readonly personId: string;
+  readonly participantProfiles: readonly MobilePerformanceParticipantProfile[];
 }) {
   const [expanded, setExpanded] = useState(false);
+  const reducedMotion = useReducedMotion();
+  const reveal = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
+  useEffect(() => {
+    if (reducedMotion) {
+      reveal.setValue(1);
+      return;
+    }
+    Animated.timing(reveal, {
+      toValue: 1,
+      duration: 620,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [reducedMotion, reveal]);
   const result = match.actualResult >= 0.5 ? "W" : "L";
   const sides = matchSides(match, personId);
   const expected = Math.round(match.expectedWinProbability * 100);
+  const ownSide = match.participants.find(
+    (participant) => participant.personId === personId,
+  )?.side;
+  const profileById = new Map(
+    participantProfiles.map((profile) => [profile.id, profile]),
+  );
+  const sidePlayers = (side: "A" | "B") =>
+    match.participants.filter((participant) => participant.side === side);
+  const winningSide = ownSide
+    ? result === "W"
+      ? ownSide
+      : ownSide === "A"
+        ? "B"
+        : "A"
+    : undefined;
+  const art = result === "W" ? dunaResultRise : dunaResultReturn;
   return (
     <Pressable
       accessibilityHint="Expands the native match breakdown"
       accessibilityLabel={`${result === "W" ? "Win" : "Loss"} versus ${sides.opponent}`}
       onPress={() => setExpanded((value) => !value)}
-      style={styles.athleteResultCard}
+      style={[
+        styles.athleteResultCard,
+        result === "W"
+          ? styles.athleteResultCardWin
+          : styles.athleteResultCardLoss,
+      ]}
     >
-      <View style={styles.athleteResultTopline}>
-        <View
+      <ImageBackground
+        imageStyle={styles.athleteResultArtImage}
+        resizeMode="cover"
+        source={art}
+        style={styles.athleteResultHero}
+      >
+        <Animated.View
           style={[
-            styles.athleteResultMark,
-            result === "W"
-              ? styles.athleteResultMarkWin
-              : styles.athleteResultMarkLoss,
+            styles.athleteResultHeroCopy,
+            {
+              opacity: reveal,
+              transform: [
+                {
+                  translateY: reveal.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [10, 0],
+                  }),
+                },
+              ],
+            },
           ]}
         >
-          <Text style={styles.athleteResultMarkText}>{result}</Text>
-        </View>
-        <View style={styles.flex}>
-          <Text numberOfLines={1} style={styles.athleteResultOpponent}>
-            vs. {sides.opponent || "opponent pending"}
+          <Text style={styles.athleteResultOutcome}>
+            {result === "W" ? "Match won" : "Match lost"}
           </Text>
-          <Text numberOfLines={1} style={styles.athleteResultMeta}>
-            {new Intl.DateTimeFormat("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            }).format(new Date(match.occurredAt))}
-            {match.sets.length
-              ? ` · ${match.sets.map((set) => `${set.a}–${set.b}`).join(", ")}`
-              : ""}
+          <Text style={styles.athleteResultStory}>
+            {match.resultStory.summary}
           </Text>
-        </View>
-        <View style={styles.athleteResultDelta}>
-          <Text
-            style={[
-              styles.athleteResultDeltaValue,
-              match.delta >= 0 ? styles.positiveText : styles.negativeText,
-            ]}
-          >
-            {match.delta >= 0 ? "+" : ""}
-            {match.delta.toFixed(2)}
+          <Text style={styles.athleteResultStorySource}>
+            {match.resultStory.source === "ai" ? "DUNA AI RECAP" : "DUNA RECAP"}
           </Text>
-          <Text style={styles.athleteResultExpected}>{expected}% expected</Text>
+        </Animated.View>
+      </ImageBackground>
+
+      <View style={styles.athleteResultScoreCard}>
+        <View style={styles.athleteResultScoreMeta}>
+          <View style={styles.flex}>
+            <Text numberOfLines={1} style={styles.athleteResultOpponent}>
+              {match.matchTitle}
+            </Text>
+            <Text numberOfLines={1} style={styles.athleteResultMeta}>
+              {new Intl.DateTimeFormat("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              }).format(new Date(match.occurredAt))}
+              {` · ${expected}% pre-match`}
+            </Text>
+          </View>
+          <View style={styles.athleteResultDelta}>
+            <Text
+              style={[
+                styles.athleteResultDeltaValue,
+                match.delta >= 0 ? styles.positiveText : styles.negativeText,
+              ]}
+            >
+              {match.delta >= 0 ? "+" : ""}
+              {match.delta.toFixed(2)}
+            </Text>
+            <Text style={styles.athleteResultExpected}>SAND RATING</Text>
+          </View>
         </View>
+
+        {(["A", "B"] as const).map((side, sideIndex) => {
+          const team = sidePlayers(side);
+          const density = resultRosterDensity(team.length);
+          const rosterWidth = resultRosterWidth(team.length);
+          return (
+            <View
+              key={side}
+              style={[
+                styles.athleteResultTeamRow,
+                density === "compact" && styles.athleteResultTeamRowCompact,
+                density === "dense" && styles.athleteResultTeamRowDense,
+                team.length > 6 && styles.athleteResultTeamRowWrapped,
+                sideIndex > 0 && styles.athleteResultTeamRowDivider,
+              ]}
+            >
+              <View style={styles.athleteResultPeople}>
+                {team.map((participant) => {
+                  const profile = participant.personId
+                    ? profileById.get(participant.personId)
+                    : undefined;
+                  const sandRating =
+                    participant.personId === personId
+                      ? match.beforeDisplay
+                      : (profile?.sandRating ??
+                        (participant.personId
+                          ? demoSandRatingByPersonId.get(participant.personId)
+                          : undefined));
+                  return (
+                    <View
+                      key={participant.personId ?? participant.externalPersonId}
+                      style={[
+                        styles.athleteResultPerson,
+                        density === "compact" &&
+                          styles.athleteResultPersonCompact,
+                        density === "dense" && styles.athleteResultPersonDense,
+                        { width: rosterWidth },
+                      ]}
+                    >
+                      {profile?.avatarUrl ? (
+                        <Image
+                          accessibilityLabel=""
+                          source={{ uri: profile.avatarUrl }}
+                          style={[
+                            styles.athleteResultAvatar,
+                            density === "compact" &&
+                              styles.athleteResultAvatarCompact,
+                            density === "dense" &&
+                              styles.athleteResultAvatarDense,
+                          ]}
+                        />
+                      ) : (
+                        <View
+                          style={[
+                            styles.athleteResultAvatarFallback,
+                            density === "compact" &&
+                              styles.athleteResultAvatarFallbackCompact,
+                            density === "dense" &&
+                              styles.athleteResultAvatarFallbackDense,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.athleteResultAvatarText,
+                              density === "dense" &&
+                                styles.athleteResultAvatarTextDense,
+                            ]}
+                          >
+                            {participant.name
+                              .split(/\s+/)
+                              .slice(0, 2)
+                              .map((part) => part[0])
+                              .join("")}
+                          </Text>
+                        </View>
+                      )}
+                      <Text
+                        accessibilityLabel={participant.name}
+                        numberOfLines={1}
+                        style={[
+                          styles.athleteResultPersonName,
+                          density === "compact" &&
+                            styles.athleteResultPersonNameCompact,
+                          density === "dense" &&
+                            styles.athleteResultPersonNameDense,
+                        ]}
+                      >
+                        {resultRosterName(participant.name)}
+                      </Text>
+                      <View
+                        style={[
+                          styles.athleteResultRatingPill,
+                          density === "dense" &&
+                            styles.athleteResultRatingPillDense,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.athleteResultRatingText,
+                            density === "dense" &&
+                              styles.athleteResultRatingTextDense,
+                          ]}
+                        >
+                          {sandRating?.toFixed(2) ?? "—"}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+              <View style={styles.athleteResultSetScores}>
+                {match.sets.map((set, index) => {
+                  const score = side === "A" ? set.a : set.b;
+                  const wonSet =
+                    (side === "A" && set.a > set.b) ||
+                    (side === "B" && set.b > set.a);
+                  return (
+                    <Text
+                      key={`${side}:${index}`}
+                      style={[
+                        styles.athleteResultSetScore,
+                        wonSet && styles.athleteResultSetScoreWon,
+                      ]}
+                    >
+                      {score}
+                    </Text>
+                  );
+                })}
+                {winningSide === side && (
+                  <Text
+                    accessibilityLabel="Winning side"
+                    style={styles.athleteResultWinnerMark}
+                  >
+                    ✦
+                  </Text>
+                )}
+              </View>
+            </View>
+          );
+        })}
       </View>
       {expanded && (
         <View style={styles.athleteResultBreakdown}>
@@ -7464,6 +7793,12 @@ function MobileResultCard({
             <Text style={styles.athleteResultBreakdownLabel}>POINT SHARE</Text>
             <Text style={styles.athleteResultBreakdownValue}>
               {Math.round(match.pointShare * 100)}%
+            </Text>
+          </View>
+          <View>
+            <Text style={styles.athleteResultBreakdownLabel}>OPPONENT</Text>
+            <Text numberOfLines={1} style={styles.athleteResultBreakdownValue}>
+              {sides.opponent || "Opponent"}
             </Text>
           </View>
         </View>
@@ -7492,7 +7827,10 @@ function PerformanceScreen({
   const fallbackMatches = dashboard?.recentMatches ?? demoMatches;
   const [intelligence, setIntelligence] = useState<MobilePlayerIntelligence>();
   const [performance, setPerformance] = useState<MobilePlayerPerformance>();
-  const [showAllResults, setShowAllResults] = useState(false);
+  const [resultRange, setResultRange] = useState<12 | 30 | "all">(12);
+  const reducedMotion = useReducedMotion();
+  const performanceScrollY = useRef(new Animated.Value(0)).current;
+  const { width: viewportWidth } = useWindowDimensions();
 
   useEffect(() => {
     if (!client || mode === "preview") return;
@@ -7547,6 +7885,8 @@ function PerformanceScreen({
         right.expectedWinProbability - left.expectedWinProbability,
     )[0];
   const chartMatches = chronological.slice(-18);
+  const chartWidth = Math.max(248, viewportWidth - 72);
+  const chartHeight = 132;
   const pulseMatches = history.slice(0, 12).reverse();
   const positiveDeltas = history
     .filter((match) => match.delta > 0)
@@ -7581,6 +7921,87 @@ function PerformanceScreen({
   const maximumRating = ratingValues.length
     ? Math.max(...ratingValues)
     : currentRating + 0.12;
+  const chartRange = Math.max(0.01, maximumRating - minimumRating);
+  const chartPoints = chartMatches.map((match, index) => ({
+    match,
+    x:
+      chartMatches.length <= 1
+        ? chartWidth / 2
+        : (index / (chartMatches.length - 1)) * chartWidth,
+    y:
+      chartHeight -
+      10 -
+      ((match.afterDisplay - minimumRating) / chartRange) * (chartHeight - 20),
+  }));
+  const chartPath = chartPoints
+    .map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`)
+    .join(" ");
+  const participantProfileById = new Map(
+    (performance?.participantProfiles ?? []).map((profile) => [
+      profile.id,
+      profile,
+    ]),
+  );
+  let setsWon = 0;
+  let setsLost = 0;
+  let decidingSetWins = 0;
+  let decidingSetMatches = 0;
+  const opponentRatings: number[] = [];
+  const partnerRecords = new Map<
+    string,
+    { name: string; wins: number; matches: number }
+  >();
+  for (const match of history) {
+    const ownSide = match.participants.find(
+      (participant) => participant.personId === player.id,
+    )?.side;
+    if (!ownSide) continue;
+    for (const set of match.sets) {
+      const ownScore = ownSide === "A" ? set.a : set.b;
+      const opponentScore = ownSide === "A" ? set.b : set.a;
+      if (ownScore > opponentScore) setsWon += 1;
+      if (ownScore < opponentScore) setsLost += 1;
+    }
+    if (match.sets.length >= 3) {
+      decidingSetMatches += 1;
+      if (match.actualResult >= 0.5) decidingSetWins += 1;
+    }
+    for (const participant of match.participants) {
+      if (!participant.personId || participant.personId === player.id) continue;
+      if (participant.side === ownSide) {
+        const record = partnerRecords.get(participant.personId) ?? {
+          name: participant.name,
+          wins: 0,
+          matches: 0,
+        };
+        record.matches += 1;
+        if (match.actualResult >= 0.5) record.wins += 1;
+        partnerRecords.set(participant.personId, record);
+      } else {
+        const rating = participantProfileById.get(
+          participant.personId,
+        )?.sandRating;
+        if (rating !== undefined) opponentRatings.push(rating);
+      }
+    }
+  }
+  const averagePointShare = history.length
+    ? history.reduce((total, match) => total + match.pointShare, 0) /
+      history.length
+    : 0;
+  const averageOpponentRating = opponentRatings.length
+    ? opponentRatings.reduce((total, rating) => total + rating, 0) /
+      opponentRatings.length
+    : undefined;
+  const bestPartners = [...partnerRecords.values()]
+    .sort(
+      (left, right) =>
+        right.matches - left.matches ||
+        right.wins / right.matches - left.wins / left.matches,
+    )
+    .slice(0, 3);
+  const visibleResults =
+    resultRange === "all" ? history : history.slice(0, resultRange);
   const worldRank = performance?.worldRanking;
   const professionalStatistics = performance?.professionalStatistics;
   const worldMovement = worldRank?.previousRank
@@ -7608,9 +8029,84 @@ function PerformanceScreen({
     : undefined;
   const hasPersonalHero = Boolean(heroSource || profile?.cutoutImageUrl);
 
+  const heroGhostMotion = reducedMotion
+    ? undefined
+    : {
+        opacity: performanceScrollY.interpolate({
+          inputRange: [0, 260],
+          outputRange: [0.12, 0.025],
+          extrapolate: "clamp",
+        }),
+        transform: [
+          {
+            translateY: performanceScrollY.interpolate({
+              inputRange: [0, 260],
+              outputRange: [0, 62],
+              extrapolate: "clamp",
+            }),
+          },
+        ],
+      };
+  const heroContentMotion = reducedMotion
+    ? undefined
+    : {
+        transform: [
+          {
+            translateY: performanceScrollY.interpolate({
+              inputRange: [0, 220],
+              outputRange: [0, 22],
+              extrapolate: "clamp",
+            }),
+          },
+        ],
+      };
+  const heroRatingMotion = reducedMotion
+    ? undefined
+    : {
+        transform: [
+          {
+            translateY: performanceScrollY.interpolate({
+              inputRange: [0, 220],
+              outputRange: [0, 38],
+              extrapolate: "clamp",
+            }),
+          },
+        ],
+      };
+  const heroCutoutMotion = reducedMotion
+    ? undefined
+    : {
+        transform: [
+          {
+            translateY: performanceScrollY.interpolate({
+              inputRange: [0, 260],
+              outputRange: [0, 28],
+              extrapolate: "clamp",
+            }),
+          },
+        ],
+      };
+  const ghostName =
+    player.displayName.trim().split(/\s+/).at(-1)?.toUpperCase() ?? "PLAYER";
+
   return (
-    <ScrollView
+    <Animated.ScrollView
       contentContainerStyle={styles.screenContent}
+      onScroll={
+        reducedMotion
+          ? undefined
+          : Animated.event(
+              [
+                {
+                  nativeEvent: {
+                    contentOffset: { y: performanceScrollY },
+                  },
+                },
+              ],
+              { useNativeDriver: true },
+            )
+      }
+      scrollEventThrottle={16}
       showsVerticalScrollIndicator={false}
     >
       <Pressable onPress={onBack} style={styles.profileBack}>
@@ -7631,11 +8127,22 @@ function PerformanceScreen({
             !hasPersonalHero && styles.athleteHeroWashCompact,
           ]}
         />
+        <View style={styles.athleteHeroAtmosphere} />
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.athleteHeroGhost, heroGhostMotion]}
+        >
+          <Text numberOfLines={1} style={styles.athleteHeroGhostText}>
+            {ghostName}
+          </Text>
+        </Animated.View>
+        <View style={styles.athleteHeroHorizon} />
         <View style={styles.athleteHeroGeometry} />
-        <View
+        <Animated.View
           style={[
             styles.athleteHeroContent,
             !hasPersonalHero && styles.athleteHeroContentCompact,
+            heroContentMotion,
           ]}
         >
           <View style={styles.athleteHeroPills}>
@@ -7679,34 +8186,43 @@ function PerformanceScreen({
               </Text>
             </Pressable>
           </View>
-        </View>
+        </Animated.View>
         {profile?.cutoutImageUrl && (
-          <Image
-            accessibilityLabel={profile.imageAlt ?? player.displayName}
-            resizeMode="contain"
-            source={{ uri: profile.cutoutImageUrl }}
-            style={styles.athleteHeroCutout}
-          />
+          <Animated.View style={[styles.athleteHeroCutout, heroCutoutMotion]}>
+            <Image
+              accessibilityLabel={profile.imageAlt ?? player.displayName}
+              resizeMode="contain"
+              source={{ uri: profile.cutoutImageUrl }}
+              style={styles.athleteHeroCutoutImage}
+            />
+          </Animated.View>
         )}
-        <View style={styles.athleteHeroRating}>
+        <Animated.View style={[styles.athleteHeroRating, heroRatingMotion]}>
           <Text style={styles.athleteHeroRatingLabel}>SAND RATING</Text>
           <Text style={styles.athleteHeroRatingValue}>
             {currentRating.toFixed(2)}
           </Text>
-          <Text style={styles.athleteHeroRatingMeta}>
-            {player.rating.confidence}
-          </Text>
-        </View>
+          <View style={styles.athleteHeroRatingMetaRow}>
+            <Text
+              style={[
+                styles.athleteHeroRatingDelta,
+                netMovement >= 0 ? styles.positiveText : styles.negativeText,
+              ]}
+            >
+              {netMovement >= 0 ? "▲" : "▼"} {Math.abs(netMovement).toFixed(2)}
+            </Text>
+            <Text style={styles.athleteHeroRatingMeta}>
+              {player.rating.confidence}
+            </Text>
+          </View>
+        </Animated.View>
       </ImageBackground>
 
-      <MemberOrganizationCard />
-
-      <PredictionWalletSummaryCard onPress={onPredictions} />
-
       <ScrollView
+        contentContainerStyle={styles.athleteMetricShelfContent}
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={styles.horizontalBleed}
+        style={styles.athleteMetricShelf}
       >
         <View style={styles.athleteMetricRow}>
           {fallbackProfileMetrics.map((metric, index) => (
@@ -7746,6 +8262,10 @@ function PerformanceScreen({
           ))}
         </View>
       </ScrollView>
+
+      <MemberOrganizationCard />
+
+      <PredictionWalletSummaryCard onPress={onPredictions} />
 
       <View style={styles.athleteNarrativeCard}>
         <View style={styles.athleteNarrativeHeading}>
@@ -7804,28 +8324,51 @@ function PerformanceScreen({
           </View>
         </View>
         {chartMatches.length ? (
-          <View style={styles.athleteWaveChart}>
-            {chartMatches.map((match) => {
-              const range = Math.max(0.01, maximumRating - minimumRating);
-              const height =
-                28 + ((match.afterDisplay - minimumRating) / range) * 88;
-              return (
-                <View key={match.id} style={styles.athleteWaveColumn}>
-                  <View
-                    style={[
-                      styles.athleteWaveBar,
-                      {
-                        height,
-                        backgroundColor:
-                          match.actualResult >= 0.5
-                            ? colors.aqua
-                            : rgba(colors.dangerRgb, 0.65),
-                      },
-                    ]}
-                  />
-                </View>
-              );
-            })}
+          <View style={styles.athleteLineChart}>
+            <Svg
+              accessibilityLabel={`Sand Rating changed from ${startRating?.toFixed(2) ?? currentRating.toFixed(2)} to ${currentRating.toFixed(2)} across ${chartMatches.length} recent results.`}
+              height={chartHeight}
+              width={chartWidth}
+            >
+              {[0.25, 0.5, 0.75].map((ratio) => (
+                <Line
+                  key={ratio}
+                  stroke={rgba(colors.overlayRgb, 0.1)}
+                  strokeDasharray="4 5"
+                  x1={0}
+                  x2={chartWidth}
+                  y1={chartHeight * ratio}
+                  y2={chartHeight * ratio}
+                />
+              ))}
+              <Path
+                d={chartPath}
+                fill="none"
+                stroke={colors.aqua}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={3}
+              />
+              {chartPoints.map(({ match, x, y }) => (
+                <Circle
+                  cx={x}
+                  cy={y}
+                  fill={
+                    match.actualResult >= 0.5
+                      ? colors.positive
+                      : colors.resultLossBorder
+                  }
+                  key={match.id}
+                  r={4.5}
+                  stroke={colors.depth}
+                  strokeWidth={2}
+                />
+              ))}
+            </Svg>
+            <View style={styles.athleteLineChartAxis}>
+              <Text>{minimumRating.toFixed(2)}</Text>
+              <Text>{maximumRating.toFixed(2)}</Text>
+            </View>
           </View>
         ) : (
           <View style={styles.athleteChartEmpty}>
@@ -7841,6 +8384,60 @@ function PerformanceScreen({
           <Text>{chartMatches.length} recent rated results</Text>
         </View>
       </View>
+
+      {history.length ? (
+        <View style={styles.performanceEvidenceCard}>
+          <Text style={styles.eyebrow}>COMPETITIVE PROFILE</Text>
+          <Text style={styles.performancePulseTitle}>
+            More than wins and losses.
+          </Text>
+          <View style={styles.performanceEvidenceGrid}>
+            {[
+              ["Set record", `${setsWon}–${setsLost}`],
+              ["Point share", `${Math.round(averagePointShare * 100)}%`],
+              ["Opp. rating", averageOpponentRating?.toFixed(2) ?? "Building"],
+              [
+                "Deciders",
+                decidingSetMatches
+                  ? `${decidingSetWins}–${decidingSetMatches - decidingSetWins}`
+                  : "—",
+              ],
+            ].map(([label, value]) => (
+              <View key={label} style={styles.performanceEvidenceMetric}>
+                <Text style={styles.performanceEvidenceValue}>{value}</Text>
+                <Text style={styles.performanceEvidenceLabel}>{label}</Text>
+              </View>
+            ))}
+          </View>
+          {bestPartners.length > 0 && (
+            <View style={styles.performancePartnerList}>
+              <Text style={styles.performancePartnerHeading}>
+                PARTNER CHEMISTRY
+              </Text>
+              {bestPartners.map((partner) => (
+                <View key={partner.name} style={styles.performancePartnerRow}>
+                  <Text numberOfLines={1} style={styles.performancePartnerName}>
+                    {partner.name}
+                  </Text>
+                  <View style={styles.performancePartnerTrack}>
+                    <View
+                      style={[
+                        styles.performancePartnerFill,
+                        {
+                          width: `${Math.round((partner.wins / partner.matches) * 100)}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.performancePartnerRecord}>
+                    {partner.wins}–{partner.matches - partner.wins}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      ) : null}
 
       {pulseMatches.length ? (
         <View
@@ -8057,32 +8654,39 @@ function PerformanceScreen({
             eyebrow="FULL BREAKDOWN"
             title="Recent rated matches."
           />
-          <View style={styles.athleteResultsList}>
-            {history
-              .slice(0, showAllResults ? history.length : 12)
-              .map((match) => (
-                <MobileResultCard
-                  key={match.id}
-                  match={match}
-                  personId={player.id}
-                />
-              ))}
+          <View style={styles.performanceResultFilters}>
+            {([12, 30, "all"] as const).map((range) => (
+              <Pressable
+                accessibilityState={{ selected: resultRange === range }}
+                key={range}
+                onPress={() => setResultRange(range)}
+                style={[
+                  styles.performanceResultFilter,
+                  resultRange === range && styles.performanceResultFilterActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.performanceResultFilterText,
+                    resultRange === range &&
+                      styles.performanceResultFilterTextActive,
+                  ]}
+                >
+                  {range === "all" ? `All ${history.length}` : `Last ${range}`}
+                </Text>
+              </Pressable>
+            ))}
           </View>
-          {history.length > 12 && (
-            <Pressable
-              onPress={() => setShowAllResults((value) => !value)}
-              style={styles.athleteFullHistoryButton}
-            >
-              <Text style={styles.athleteFullHistoryButtonText}>
-                {showAllResults
-                  ? "Show recent 12"
-                  : `Show all ${history.length} results`}
-              </Text>
-              <Text style={styles.athleteFullHistoryButtonText}>
-                {showAllResults ? "↑" : "↓"}
-              </Text>
-            </Pressable>
-          )}
+          <View style={styles.athleteResultsList}>
+            {visibleResults.map((match) => (
+              <MobileResultCard
+                key={match.id}
+                match={match}
+                participantProfiles={performance?.participantProfiles ?? []}
+                personId={player.id}
+              />
+            ))}
+          </View>
         </>
       ) : null}
 
@@ -8230,7 +8834,7 @@ function PerformanceScreen({
           </Pressable>
         )}
       </View>
-    </ScrollView>
+    </Animated.ScrollView>
   );
 }
 
@@ -10531,6 +11135,7 @@ function TabBar({
           }}
           style={[
             styles.tabItem,
+            tab.key === "score" && styles.tabItemScore,
             selectedTab === tab.key && styles.tabItemActive,
           ]}
         >
@@ -10538,6 +11143,7 @@ function TabBar({
             style={[
               styles.tabIcon,
               selectedTab === tab.key && styles.tabActive,
+              tab.key === "score" && styles.tabScoreIcon,
             ]}
           >
             {tab.icon}
@@ -10546,6 +11152,7 @@ function TabBar({
             style={[
               styles.tabLabel,
               selectedTab === tab.key && styles.tabActive,
+              tab.key === "score" && styles.tabScoreLabel,
             ]}
           >
             {tab.label}
@@ -10556,7 +11163,11 @@ function TabBar({
   );
 }
 
-function WatchScoreInbox() {
+function WatchScoreInbox({
+  onReview,
+}: {
+  readonly onReview: (draft: WatchScoreDraft) => void;
+}) {
   const [draft, setDraft] = useState<WatchScoreDraft | null>(null);
 
   useEffect(() => {
@@ -10566,20 +11177,9 @@ function WatchScoreInbox() {
 
   if (!draft) return null;
 
-  const review = async () => {
+  const review = () => {
     selectionHaptic();
-    const watchPayload = encodeURIComponent(
-      JSON.stringify({
-        source: draft.source,
-        draftId: draft.draftId,
-        sets: draft.sets,
-        capturedAt: draft.capturedAt,
-      }),
-    );
-    const query = draft.matchId
-      ? `match=${encodeURIComponent(draft.matchId)}&watch=${watchPayload}`
-      : `watch=${watchPayload}`;
-    await WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/score?${query}`);
+    onReview(draft);
     clearPendingWatchScoreDraft();
     setDraft(null);
   };
@@ -10657,9 +11257,10 @@ function DunaApp() {
   const [organizationCoach, setOrganizationCoach] = useState<MobileCoach>();
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [artworkStudioOpen, setArtworkStudioOpen] = useState(false);
+  const [watchScoreDraft, setWatchScoreDraft] = useState<WatchScoreDraft>();
   const [discoverIntent, setDiscoverIntent] = useState<{
     readonly key: number;
-    readonly kind: Exclude<HomeQuickAction, "record-video">;
+    readonly kind: Exclude<HomeQuickAction, "record-video" | "upload-score">;
   }>();
   const [themePreference, setThemePreference] =
     useState<ThemePreference>("light");
@@ -10709,10 +11310,19 @@ function DunaApp() {
     }).start();
   }, [reduceMotion, screenTransition, tab]);
 
+  useEffect(() => {
+    if (tab !== "score" && watchScoreDraft) setWatchScoreDraft(undefined);
+  }, [tab, watchScoreDraft]);
+
   activePalette = theme === "dark" ? darkColors : lightColors;
   activeStyles = theme === "dark" ? darkStyles : lightStyles;
 
   const openHomeAction = (action: HomeQuickAction) => {
+    if (action === "upload-score") {
+      setWatchScoreDraft(undefined);
+      setTab("score");
+      return;
+    }
     if (action === "record-video") {
       setTab("video");
       return;
@@ -10776,6 +11386,15 @@ function DunaApp() {
                   intent={discoverIntent}
                   onBook={setEventIndex}
                   onOrganization={setOrganizationSlug}
+                />
+              )}
+              {tab === "score" && (
+                <ScoreUploadScreen
+                  initialPlayedAt={watchScoreDraft?.capturedAt}
+                  initialSets={watchScoreDraft?.sets}
+                  key={watchScoreDraft?.draftId ?? "score-upload"}
+                  onComplete={() => setTab("performance")}
+                  palette={colors}
                 />
               )}
               {tab === "play" && (
@@ -10861,7 +11480,12 @@ function DunaApp() {
               coach={organizationCoach}
               onClose={() => setOrganizationCoach(undefined)}
             />
-            <WatchScoreInbox />
+            <WatchScoreInbox
+              onReview={(draft) => {
+                setWatchScoreDraft(draft);
+                setTab("score");
+              }}
+            />
           </View>
         </SafeAreaView>
       </PlayerProfileProvider>
@@ -14934,49 +15558,63 @@ function createStyles(palette: Palette) {
     resultStoryStack: { gap: 14 },
     resultStoryCard: {
       borderRadius: 22,
+      borderWidth: 1,
       overflow: "hidden",
-      padding: 16,
     },
     resultStoryCardWon: {
-      backgroundColor: rgba(colors.warningRgb, 0.18),
-      borderColor: rgba(colors.warningRgb, 0.24),
-      borderWidth: 1,
+      backgroundColor: colors.resultWin,
+      borderColor: colors.resultWinBorder,
     },
     resultStoryCardLost: {
-      backgroundColor: rgba(colors.accentRgb, 0.14),
-      borderColor: rgba(colors.accentRgb, 0.22),
-      borderWidth: 1,
+      backgroundColor: colors.resultLoss,
+      borderColor: colors.resultLossBorder,
     },
     resultStoryHeader: {
       alignItems: "flex-start",
       flexDirection: "row",
       gap: 12,
-      marginBottom: 14,
+      justifyContent: "space-between",
+      minHeight: 145,
+      padding: 18,
+    },
+    resultStoryArtImage: { opacity: 0.94 },
+    resultStoryHeaderCopy: {
+      maxWidth: "70%",
+      minHeight: 108,
     },
     resultStoryEyebrow: {
-      color: colors.warning,
-      fontSize: 20,
+      color: colors.ink,
+      fontSize: 25,
       fontWeight: "900",
-      letterSpacing: -0.5,
+      letterSpacing: -0.6,
+      lineHeight: 29,
     },
-    resultStoryEyebrowLost: { color: colors.aqua },
     resultStorySubtitle: {
-      color: colors.bone,
-      fontSize: 13,
-      lineHeight: 18,
-      marginTop: 4,
+      color: colors.ink,
+      fontSize: 14,
+      fontWeight: "600",
+      lineHeight: 20,
+      marginTop: 8,
     },
-    resultStorySubtitleLost: { color: colors.muted },
+    resultStoryRecapLabel: {
+      color: rgba(colors.inkRgb, 0.62),
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1,
+      marginTop: "auto",
+      paddingTop: 10,
+    },
     resultStoryDate: {
-      color: colors.warning,
+      color: rgba(colors.inkRgb, 0.68),
       fontFamily: "Archivo-Block",
       fontSize: 10,
       paddingTop: 4,
     },
-    resultStoryDateLost: { color: colors.aqua },
     resultStoryScorecard: {
       backgroundColor: colors.depth,
       borderRadius: 17,
+      marginHorizontal: 12,
+      marginTop: -11,
       overflow: "hidden",
       padding: 12,
     },
@@ -14984,44 +15622,89 @@ function createStyles(palette: Palette) {
       alignItems: "center",
       flexDirection: "row",
       gap: 8,
-      minHeight: 70,
+      minHeight: 92,
     },
-    resultStoryPlayers: { flex: 1, gap: 5 },
+    resultStoryTeamCompact: { minHeight: 78 },
+    resultStoryTeamDense: { minHeight: 68 },
+    resultStoryTeamWrapped: { minHeight: 116 },
+    resultStoryPlayers: {
+      flex: 1,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      minWidth: 0,
+    },
     resultStoryPlayer: {
       alignItems: "center",
-      flexDirection: "row",
-      gap: 8,
-      minHeight: 31,
+      justifyContent: "flex-start",
+      minHeight: 74,
+      minWidth: 0,
+      paddingHorizontal: 2,
     },
+    resultStoryPlayerCompact: { minHeight: 64, paddingHorizontal: 1 },
+    resultStoryPlayerDense: { minHeight: 54, paddingHorizontal: 0 },
     resultStoryAvatar: {
-      borderRadius: 15,
-      height: 30,
-      width: 30,
+      borderRadius: 20,
+      height: 40,
+      width: 40,
     },
+    resultStoryAvatarCompact: { borderRadius: 15, height: 30, width: 30 },
+    resultStoryAvatarDense: { borderRadius: 11, height: 22, width: 22 },
     resultStoryAvatarFallback: {
       alignItems: "center",
       backgroundColor: colors.navy,
+      borderRadius: 20,
+      height: 40,
+      justifyContent: "center",
+      width: 40,
+    },
+    resultStoryAvatarFallbackCompact: {
       borderRadius: 15,
       height: 30,
-      justifyContent: "center",
       width: 30,
+    },
+    resultStoryAvatarFallbackDense: {
+      borderRadius: 11,
+      height: 22,
+      width: 22,
     },
     resultStoryAvatarText: {
       color: colors.aqua,
       fontSize: 10,
-      fontWeight: "900",
+      fontWeight: "800",
     },
+    resultStoryAvatarTextDense: { fontSize: 10 },
     resultStoryPlayerName: {
       color: colors.bone,
       fontSize: 11,
-      fontWeight: "800",
+      fontWeight: "600",
+      marginTop: 5,
+      textAlign: "center",
+      width: "100%",
     },
+    resultStoryPlayerNameCompact: { fontSize: 10, marginTop: 3 },
+    resultStoryPlayerNameDense: { fontSize: 10, marginTop: 2 },
     resultStoryPlayerRating: {
-      color: colors.muted,
+      color: colors.signalInk,
+      fontFamily: "Archivo-Chip",
       fontSize: 10,
-      marginTop: 1,
+      fontWeight: "700",
+    },
+    resultStoryPlayerRatingDense: { fontSize: 10 },
+    resultStoryPlayerRatingPill: {
+      alignSelf: "center",
+      backgroundColor: colors.signal,
+      borderRadius: 999,
+      marginTop: 3,
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+    },
+    resultStoryPlayerRatingPillDense: {
+      marginTop: 2,
+      paddingHorizontal: 4,
+      paddingVertical: 1,
     },
     resultStoryScores: {
+      alignItems: "center",
       flexDirection: "row",
       gap: 10,
       justifyContent: "flex-end",
@@ -15044,7 +15727,9 @@ function createStyles(palette: Palette) {
       flexDirection: "row",
       gap: 10,
       justifyContent: "space-between",
-      marginTop: 11,
+      paddingBottom: 14,
+      paddingHorizontal: 16,
+      paddingTop: 11,
     },
     resultStoryVenue: {
       color: colors.muted,
@@ -15918,18 +16603,16 @@ function createStyles(palette: Palette) {
     trustIcon: { color: colors.aqua, fontSize: 17 },
     athleteHero: {
       backgroundColor: colors.navy,
-      borderColor: rgba(colors.overlayRgb, 0.1),
-      borderRadius: 28,
-      borderWidth: 1,
-      minHeight: 470,
-      marginTop: 4,
+      minHeight: 500,
+      marginHorizontal: -18,
+      marginTop: 2,
       overflow: "hidden",
       position: "relative",
     },
-    athleteHeroCompact: { backgroundColor: colors.aquaDeep, minHeight: 330 },
-    athleteHeroImage: { opacity: 0.74 },
+    athleteHeroCompact: { minHeight: 390 },
+    athleteHeroImage: { opacity: 0.66 },
     athleteHeroWash: {
-      backgroundColor: rgba(colors.navyRgb, 0.48),
+      backgroundColor: rgba(colors.navyRgb, 0.42),
       bottom: 0,
       left: 0,
       position: "absolute",
@@ -15937,26 +16620,58 @@ function createStyles(palette: Palette) {
       top: 0,
     },
     athleteHeroWashCompact: {
-      backgroundColor: rgba(colors.inkRgb, 0.18),
+      backgroundColor: rgba(colors.depthRgb, 0.15),
+    },
+    athleteHeroAtmosphere: {
+      backgroundColor: rgba(colors.accentRgb, 0.11),
+      borderRadius: 260,
+      height: 520,
+      position: "absolute",
+      right: -250,
+      top: -250,
+      width: 520,
+    },
+    athleteHeroGhost: {
+      bottom: 74,
+      left: -28,
+      opacity: 0.12,
+      position: "absolute",
+      right: -220,
+    },
+    athleteHeroGhostText: {
+      color: colors.bone,
+      fontFamily: "Archivo-Monument",
+      fontSize: 118,
+      fontWeight: "900",
+      letterSpacing: -3.5,
+      lineHeight: 120,
+    },
+    athleteHeroHorizon: {
+      backgroundColor: rgba(colors.accentRgb, 0.3),
+      height: 1,
+      left: 24,
+      position: "absolute",
+      right: 24,
+      top: 212,
     },
     athleteHeroGeometry: {
       borderColor: rgba(colors.accentRgb, 0.24),
       borderRadius: 220,
       borderWidth: 1,
-      height: 400,
+      height: 430,
       position: "absolute",
-      right: -178,
-      top: -82,
-      width: 400,
+      right: -196,
+      top: -118,
+      width: 430,
     },
     athleteHeroContent: {
-      bottom: 28,
-      left: 20,
-      maxWidth: "72%",
+      bottom: 50,
+      left: 24,
+      maxWidth: "68%",
       position: "absolute",
       zIndex: 4,
     },
-    athleteHeroContentCompact: { maxWidth: "86%" },
+    athleteHeroContentCompact: { maxWidth: "76%" },
     athleteHeroPills: {
       alignItems: "center",
       flexDirection: "row",
@@ -15965,19 +16680,16 @@ function createStyles(palette: Palette) {
       marginBottom: 10,
     },
     athleteHeroName: {
-      color: colors.white,
-      fontSize: 43,
-      fontWeight: "900",
-      letterSpacing: -2.6,
-      lineHeight: 43,
-      textShadowColor: rgba(colors.inkRgb, 0.45),
-      textShadowOffset: { height: 2, width: 0 },
-      textShadowRadius: 12,
+      color: colors.bone,
+      fontSize: 46,
+      fontWeight: "800",
+      letterSpacing: -1.38,
+      lineHeight: 48,
     },
     athleteHeroMeta: {
-      color: rgba(colors.whiteRgb, 0.78),
-      fontSize: 12,
-      fontWeight: "700",
+      color: colors.muted,
+      fontSize: 14,
+      fontWeight: "500",
       marginTop: 8,
       textTransform: "capitalize",
     },
@@ -15989,28 +16701,32 @@ function createStyles(palette: Palette) {
       marginTop: 18,
     },
     athleteHeroPrimaryAction: {
-      backgroundColor: colors.aqua,
+      alignItems: "center",
+      backgroundColor: colors.ink,
       borderRadius: 999,
+      justifyContent: "center",
+      minHeight: 48,
       paddingHorizontal: 15,
-      paddingVertical: 11,
     },
     athleteHeroPrimaryActionText: {
-      color: colors.onAccent,
-      fontSize: 11,
-      fontWeight: "900",
+      color: colors.white,
+      fontSize: 13,
+      fontWeight: "600",
     },
     athleteHeroSecondaryAction: {
-      backgroundColor: rgba(colors.whiteRgb, 0.08),
-      borderColor: rgba(colors.whiteRgb, 0.2),
+      alignItems: "center",
+      backgroundColor: rgba(colors.depthRgb, 0.72),
+      borderColor: rgba(colors.overlayRgb, 0.18),
       borderRadius: 999,
       borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 48,
       paddingHorizontal: 15,
-      paddingVertical: 10,
     },
     athleteHeroSecondaryActionText: {
-      color: colors.white,
-      fontSize: 11,
-      fontWeight: "800",
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "600",
     },
     athleteHeroCutout: {
       height: "90%",
@@ -16020,43 +16736,69 @@ function createStyles(palette: Palette) {
       width: "78%",
       zIndex: 2,
     },
+    athleteHeroCutoutImage: { height: "100%", width: "100%" },
     athleteHeroRating: {
-      alignItems: "center",
-      backgroundColor: rgba(colors.navyRgb, 0.68),
-      borderColor: rgba(colors.accentRgb, 0.38),
-      borderRadius: 52,
-      borderWidth: 2,
-      height: 94,
-      justifyContent: "center",
+      alignItems: "flex-end",
+      backgroundColor: rgba(colors.depthRgb, 0.86),
+      borderColor: rgba(colors.overlayRgb, 0.12),
+      borderLeftColor: colors.sand,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderLeftWidth: 4,
+      minWidth: 154,
+      paddingHorizontal: 15,
+      paddingVertical: 14,
       position: "absolute",
-      right: 18,
-      top: 18,
-      width: 94,
+      right: 20,
+      top: 28,
       zIndex: 5,
     },
     athleteHeroRatingLabel: {
-      color: colors.aqua,
-      fontSize: 10,
-      fontWeight: "900",
-      letterSpacing: 0.8,
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "500",
+      letterSpacing: 1.1,
     },
     athleteHeroRatingValue: {
-      color: colors.white,
+      color: colors.bone,
       fontFamily: "Archivo-Hero",
-      fontSize: 40,
-      fontWeight: "900",
-      letterSpacing: -1.4,
-      lineHeight: 30,
+      fontSize: 58,
+      fontWeight: "800",
+      letterSpacing: -1.16,
+      lineHeight: 60,
+      marginTop: 2,
+    },
+    athleteHeroRatingMetaRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "flex-end",
+      marginTop: 4,
+    },
+    athleteHeroRatingDelta: {
+      fontFamily: "Archivo-Chip",
+      fontSize: 11,
+      fontWeight: "700",
     },
     athleteHeroRatingMeta: {
-      color: rgba(colors.whiteRgb, 0.65),
-      fontSize: 10,
-      fontWeight: "700",
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "500",
+      textTransform: "uppercase",
+    },
+    athleteMetricShelf: {
+      marginHorizontal: -18,
+      marginBottom: 18,
+      marginTop: -30,
+      zIndex: 6,
+    },
+    athleteMetricShelfContent: {
+      paddingLeft: 18,
+      paddingRight: 38,
     },
     athleteMetricRow: {
       flexDirection: "row",
       gap: 9,
-      paddingRight: 38,
     },
     athleteMetricCard: {
       backgroundColor: colors.depth,
@@ -16199,6 +16941,22 @@ function createStyles(palette: Palette) {
       minWidth: 5,
     },
     athleteWaveBar: { borderRadius: 999, minHeight: 12, width: "72%" },
+    athleteLineChart: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.025),
+      borderRadius: 15,
+      marginTop: 14,
+      overflow: "hidden",
+      paddingHorizontal: 6,
+      paddingTop: 8,
+    },
+    athleteLineChartAxis: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingBottom: 8,
+      width: "100%",
+    },
     athleteChartEmpty: {
       alignItems: "center",
       backgroundColor: rgba(colors.overlayRgb, 0.025),
@@ -16227,6 +16985,83 @@ function createStyles(palette: Palette) {
       marginTop: 10,
     },
     athleteChartLegendLoss: { color: colors.danger },
+    performanceEvidenceCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 12,
+      padding: 16,
+    },
+    performanceEvidenceGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 16,
+    },
+    performanceEvidenceMetric: {
+      backgroundColor: rgba(colors.overlayRgb, 0.035),
+      borderRadius: 14,
+      minWidth: "47%",
+      padding: 12,
+    },
+    performanceEvidenceValue: {
+      color: colors.bone,
+      fontFamily: "Archivo-Block",
+      fontSize: 20,
+      fontWeight: "900",
+    },
+    performanceEvidenceLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700",
+      marginTop: 4,
+      textTransform: "uppercase",
+    },
+    performancePartnerList: {
+      borderTopColor: rgba(colors.overlayRgb, 0.08),
+      borderTopWidth: 1,
+      gap: 10,
+      marginTop: 16,
+      paddingTop: 14,
+    },
+    performancePartnerHeading: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    performancePartnerRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 9,
+    },
+    performancePartnerName: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "700",
+      width: 92,
+    },
+    performancePartnerTrack: {
+      backgroundColor: rgba(colors.overlayRgb, 0.06),
+      borderRadius: 999,
+      flex: 1,
+      height: 8,
+      overflow: "hidden",
+    },
+    performancePartnerFill: {
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      height: "100%",
+    },
+    performancePartnerRecord: {
+      color: colors.bone,
+      fontFamily: "Archivo-Chip",
+      fontSize: 10,
+      fontWeight: "900",
+      textAlign: "right",
+      width: 34,
+    },
     performancePulseCard: {
       backgroundColor: colors.navy,
       borderColor: rgba(colors.accentRgb, 0.16),
@@ -16433,17 +17268,92 @@ function createStyles(palette: Palette) {
       marginTop: 5,
     },
     athleteResultsList: {
+      gap: 16,
+    },
+    performanceResultFilters: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.08),
-      borderRadius: 19,
+      borderRadius: 999,
       borderWidth: 1,
+      flexDirection: "row",
+      gap: 4,
+      marginBottom: 12,
+      padding: 4,
+    },
+    performanceResultFilter: {
+      alignItems: "center",
+      borderRadius: 999,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 42,
+      paddingHorizontal: 8,
+    },
+    performanceResultFilterActive: { backgroundColor: colors.aqua },
+    performanceResultFilterText: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    performanceResultFilterTextActive: { color: colors.onAccent },
+    athleteResultCard: {
+      borderRadius: 24,
+      borderWidth: 1,
+      minHeight: 330,
       overflow: "hidden",
     },
-    athleteResultCard: {
-      borderBottomColor: rgba(colors.overlayRgb, 0.07),
-      borderBottomWidth: 1,
-      minHeight: 78,
-      padding: 11,
+    athleteResultCardWin: {
+      backgroundColor: colors.resultWin,
+      borderColor: colors.resultWinBorder,
+    },
+    athleteResultCardLoss: {
+      backgroundColor: colors.resultLoss,
+      borderColor: colors.resultLossBorder,
+    },
+    athleteResultHero: {
+      minHeight: 145,
+      padding: 18,
+    },
+    athleteResultArtImage: {
+      opacity: 0.94,
+    },
+    athleteResultHeroCopy: {
+      maxWidth: "68%",
+      minHeight: 108,
+    },
+    athleteResultOutcome: {
+      color: colors.ink,
+      fontSize: 25,
+      fontWeight: "900",
+      letterSpacing: -0.6,
+      lineHeight: 29,
+    },
+    athleteResultStory: {
+      color: colors.ink,
+      fontSize: 15,
+      fontWeight: "600",
+      lineHeight: 21,
+      marginTop: 8,
+    },
+    athleteResultStorySource: {
+      color: rgba(colors.inkRgb, 0.62),
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+      marginTop: "auto",
+      paddingTop: 10,
+    },
+    athleteResultScoreCard: {
+      backgroundColor: colors.depth,
+      borderTopLeftRadius: 22,
+      borderTopRightRadius: 22,
+      marginTop: -11,
+      padding: 14,
+    },
+    athleteResultScoreMeta: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+      marginBottom: 8,
     },
     athleteResultTopline: {
       alignItems: "center",
@@ -16466,24 +17376,142 @@ function createStyles(palette: Palette) {
     },
     athleteResultOpponent: {
       color: colors.bone,
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: "800",
     },
     athleteResultMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
     athleteResultDelta: { alignItems: "flex-end" },
     athleteResultDeltaValue: {
       fontFamily: "Archivo-Chip",
-      fontSize: 13,
+      fontSize: 16,
       fontWeight: "900",
     },
-    athleteResultExpected: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    athleteResultExpected: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.5,
+      marginTop: 3,
+    },
+    athleteResultTeamRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 98,
+      paddingVertical: 8,
+    },
+    athleteResultTeamRowCompact: { minHeight: 82 },
+    athleteResultTeamRowDense: { minHeight: 70 },
+    athleteResultTeamRowWrapped: { minHeight: 124 },
+    athleteResultTeamRowDivider: {
+      borderTopColor: rgba(colors.overlayRgb, 0.09),
+      borderTopWidth: 1,
+    },
+    athleteResultPeople: {
+      flex: 1,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      minWidth: 0,
+    },
+    athleteResultPerson: {
+      alignItems: "center",
+      justifyContent: "flex-start",
+      minHeight: 80,
+      minWidth: 0,
+      paddingHorizontal: 2,
+    },
+    athleteResultPersonCompact: { minHeight: 68, paddingHorizontal: 1 },
+    athleteResultPersonDense: { minHeight: 56, paddingHorizontal: 0 },
+    athleteResultAvatar: {
+      borderRadius: 22,
+      height: 44,
+      width: 44,
+    },
+    athleteResultAvatarCompact: { borderRadius: 16, height: 32, width: 32 },
+    athleteResultAvatarDense: { borderRadius: 12, height: 24, width: 24 },
+    athleteResultAvatarFallback: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 22,
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    athleteResultAvatarFallbackCompact: {
+      borderRadius: 16,
+      height: 32,
+      width: 32,
+    },
+    athleteResultAvatarFallbackDense: {
+      borderRadius: 12,
+      height: 24,
+      width: 24,
+    },
+    athleteResultAvatarText: {
+      color: colors.onAccent,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    athleteResultAvatarTextDense: { fontSize: 10 },
+    athleteResultPersonName: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "600",
+      marginTop: 5,
+      textAlign: "center",
+      width: "100%",
+    },
+    athleteResultPersonNameCompact: { fontSize: 10, marginTop: 3 },
+    athleteResultPersonNameDense: { fontSize: 10, marginTop: 2 },
+    athleteResultRatingPill: {
+      alignSelf: "center",
+      backgroundColor: colors.signal,
+      borderRadius: 999,
+      marginTop: 3,
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+    },
+    athleteResultRatingPillDense: {
+      marginTop: 2,
+      paddingHorizontal: 4,
+      paddingVertical: 1,
+    },
+    athleteResultRatingText: {
+      color: colors.signalInk,
+      fontFamily: "Archivo-Chip",
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    athleteResultRatingTextDense: { fontSize: 10 },
+    athleteResultSetScores: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 11,
+      justifyContent: "flex-end",
+      minWidth: 92,
+    },
+    athleteResultSetScore: {
+      color: rgba(colors.overlayRgb, 0.38),
+      fontFamily: "Archivo-Table",
+      fontSize: 20,
+      fontWeight: "800",
+    },
+    athleteResultSetScoreWon: { color: colors.bone },
+    athleteResultWinnerMark: {
+      color: colors.warning,
+      fontSize: 18,
+      fontWeight: "900",
+    },
     athleteResultBreakdown: {
+      backgroundColor: colors.depth,
       borderTopColor: rgba(colors.overlayRgb, 0.07),
       borderTopWidth: 1,
       flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 16,
       justifyContent: "space-between",
-      marginTop: 11,
-      paddingTop: 11,
+      padding: 14,
+      paddingTop: 12,
     },
     athleteResultBreakdownLabel: {
       color: colors.muted,
@@ -16800,9 +17828,19 @@ function createStyles(palette: Palette) {
       position: "relative",
     },
     tabItemActive: { backgroundColor: rgba(colors.accentRgb, 0.1) },
+    tabItemScore: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.canvas,
+      borderRadius: 24,
+      borderWidth: 4,
+      marginTop: -18,
+      minHeight: 60,
+    },
     tabIcon: { color: colors.muted, fontSize: 18 },
     tabLabel: { color: colors.muted, fontSize: 10, fontWeight: "700" },
     tabActive: { color: colors.aqua },
+    tabScoreIcon: { color: colors.onAccent, fontSize: 22 },
+    tabScoreLabel: { color: colors.onAccent, fontWeight: "900" },
     modalSafe: { backgroundColor: colors.canvas, flex: 1 },
     modalContent: { padding: 18, paddingBottom: 45 },
     hostedReviewHeader: {

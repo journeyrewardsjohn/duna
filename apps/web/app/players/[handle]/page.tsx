@@ -1614,6 +1614,7 @@ export default async function PublicPlayerPage({
                 event={event}
                 key={event.id}
                 personId={player.id}
+                profileById={profileById}
                 result={result}
               />
             ))}
@@ -1688,17 +1689,20 @@ function SignatureResultCard({
 function MatchHistoryCard({
   event,
   personId,
+  profileById,
   result,
 }: {
   readonly event: PerformanceEvent;
   readonly personId: string;
+  readonly profileById: ReadonlyMap<
+    string,
+    PublicPlayerPerformance["participantProfiles"][number]
+  >;
   readonly result: MatchResult;
 }) {
   const side = event.participants.find(
     (participant) => participant.personId === personId,
   )?.side;
-  const teamA = teamName(event.participants, "A") || "Team A";
-  const teamB = teamName(event.participants, "B") || "Team B";
   const setWins = event.sets.reduce(
     (record, set) => ({
       a: record.a + (set.a > set.b ? 1 : 0),
@@ -1707,8 +1711,51 @@ function MatchHistoryCard({
     { a: 0, b: 0 },
   );
   const sourceUrl = publicSourceUrl(event.sourceUrl);
+  const renderPlayers = (teamSide: "A" | "B") => (
+    <span className="match-history-card__players">
+      {event.participants
+        .filter((participant) => participant.side === teamSide)
+        .map((participant) => {
+          const rating =
+            participant.personId === personId
+              ? event.beforeDisplay
+              : participant.personId
+                ? profileById.get(participant.personId)?.sandRating
+                : undefined;
+          return (
+            <span
+              className="match-history-card__player"
+              key={participant.personId ?? participant.externalPersonId}
+            >
+              <span>{participant.name}</span>
+              <b>{rating?.toFixed(2) ?? "—"}</b>
+            </span>
+          );
+        })}
+    </span>
+  );
   return (
     <article data-result={result}>
+      <div
+        className="match-history-card__story"
+        style={{
+          backgroundImage: `url("/media/brand/${result === "win" ? "duna-result-rise-v1.webp" : "duna-result-return-v1.webp"}")`,
+        }}
+      >
+        <div>
+          <small>
+            {event.resultStory.source === "ai" ? "DUNA AI RECAP" : "DUNA RECAP"}
+          </small>
+          <strong>
+            {result === "win"
+              ? "Match won"
+              : result === "loss"
+                ? "Match lost"
+                : "Match recap"}
+          </strong>
+          <p>{event.resultStory.summary}</p>
+        </div>
+      </div>
       <header>
         <span className={`match-result match-result--${result}`}>
           {result === "win" ? "W" : result === "loss" ? "L" : "—"}
@@ -1725,8 +1772,13 @@ function MatchHistoryCard({
         </div>
       </header>
       <div className="match-history-card__score">
-        <div className={side === "A" ? "is-player" : undefined}>
-          <span>{teamA}</span>
+        <div
+          className={side === "A" ? "is-player" : undefined}
+          style={{
+            gridTemplateColumns: `minmax(0, 1fr) repeat(${event.sets.length}, 48px) 52px`,
+          }}
+        >
+          {renderPlayers("A")}
           {event.sets.map((set, index) => (
             <Numeric
               className={set.a > set.b ? "is-set-winner" : undefined}
@@ -1740,8 +1792,13 @@ function MatchHistoryCard({
             {setWins.a}
           </Numeric>
         </div>
-        <div className={side === "B" ? "is-player" : undefined}>
-          <span>{teamB}</span>
+        <div
+          className={side === "B" ? "is-player" : undefined}
+          style={{
+            gridTemplateColumns: `minmax(0, 1fr) repeat(${event.sets.length}, 48px) 52px`,
+          }}
+        >
+          {renderPlayers("B")}
           {event.sets.map((set, index) => (
             <Numeric
               className={set.b > set.a ? "is-set-winner" : undefined}

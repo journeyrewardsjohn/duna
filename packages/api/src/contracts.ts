@@ -540,6 +540,21 @@ export const bookingSummarySchema = z.object({
     })
     .optional(),
   pairedSpotCount: z.number().int().min(2).optional(),
+  pickup: z
+    .object({
+      capacity: z.number().int().min(2),
+      confirmedCount: z.number().int().nonnegative(),
+      spotsRemaining: z.number().int().nonnegative(),
+      waitlistEnabled: z.boolean(),
+      approvalRequired: z.boolean(),
+      visibility: z.enum(["public", "unlisted"]),
+      note: z.string().optional(),
+      pricePerPerson: moneySchema,
+      canAddPlayers: z.boolean(),
+      isCreator: z.boolean(),
+      invitationStatus: z.literal("invited").optional(),
+    })
+    .optional(),
   team: z
     .object({
       claimToken: z.string().uuid(),
@@ -2335,6 +2350,7 @@ export const operatorEventRegistrationSchema = z.object({
   email: z.string().email().optional(),
   phoneE164: z.string().optional(),
   status: z.enum([
+    "invited",
     "pending",
     "confirmed",
     "waitlisted",
@@ -3136,6 +3152,7 @@ export const operatorCalendarEntrySchema = z.object({
         avatarUrl: z.string().optional(),
         isMinor: z.boolean(),
         status: z.enum([
+          "invited",
           "pending",
           "confirmed",
           "waitlisted",
@@ -4291,6 +4308,7 @@ export const eventCheckoutStatusSchema = z.object({
   ]),
   registrationStatus: z
     .enum([
+      "invited",
       "pending",
       "confirmed",
       "waitlisted",

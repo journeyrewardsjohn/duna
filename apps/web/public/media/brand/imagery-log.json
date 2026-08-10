@@ -7,7 +7,8 @@
     "Higgsfield Nano Banana 2",
     "Higgsfield Seedance 2.0",
     "Higgsfield Soul Location",
-    "Higgsfield GPT Image 2"
+    "Higgsfield GPT Image 2",
+    "Higgsfield Recraft V4.1"
   ],
   "policy": {
     "identity": "No real player likenesses or identifiable public figures.",
@@ -187,6 +188,34 @@
       "outputNames": [
         "/media/brand/people/duna-video-maya-practice-v1.avif",
         "/media/brand/people/duna-video-maya-practice-v1.webp"
+      ]
+    },
+    {
+      "name": "duna-result-rise-v1",
+      "jobId": "3d2b5b21-c4df-46f9-9de3-fb798e50ae64",
+      "model": "Higgsfield Recraft V4.1",
+      "intent": "Original warm editorial rise illustration for a celebratory Duna match-result header.",
+      "promptIntent": "Abstract golden-hour dune crest, rising ball geometry, restrained sand particles, generous copy space, Duna ink and signal-lime accents, with no people, words, logos, trophies, or copied product marks.",
+      "sourceReferences": [],
+      "permissions": "Duna-generated original vector artwork from a text-only prompt; no real person, venue, event, trademark, or source artwork used.",
+      "outputNames": [
+        "/media/brand/duna-result-rise-v1.avif",
+        "/media/brand/duna-result-rise-v1.webp",
+        "apps/player/assets/duna-result-rise-v1.png"
+      ]
+    },
+    {
+      "name": "duna-result-return-v1",
+      "jobId": "a3449b4a-1d53-42b4-ba1b-013ddbb82597",
+      "model": "Higgsfield Recraft V4.1",
+      "intent": "Original marine editorial return-arc illustration for a positive Duna loss recap.",
+      "promptIntent": "Abstract upward return arc over marine court and dune geometry, small gold horizon and signal-lime accent, generous copy space, with no people, words, logos, or copied product marks.",
+      "sourceReferences": [],
+      "permissions": "Duna-generated original vector artwork from a text-only prompt; no real person, venue, event, trademark, or source artwork used.",
+      "outputNames": [
+        "/media/brand/duna-result-return-v1.avif",
+        "/media/brand/duna-result-return-v1.webp",
+        "apps/player/assets/duna-result-return-v1.png"
       ]
     }
   ],
