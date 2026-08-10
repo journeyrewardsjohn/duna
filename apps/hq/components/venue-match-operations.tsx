@@ -1,6 +1,6 @@
 import type { OperatorScorableMatch } from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
-import { ArrowRight, MapPin, Radio, Smartphone } from "lucide-react";
+import { ArrowRight, MapPin, Radio, Smartphone, Trophy } from "lucide-react";
 import Link from "next/link";
 
 function timeLabel(value: string | undefined, timezone: string) {
@@ -20,9 +20,11 @@ function teamPeople(match: OperatorScorableMatch) {
 }
 
 export function VenueMatchOperations({
+  hideWhenEmpty = false,
   matches,
   timezone,
 }: {
+  readonly hideWhenEmpty?: boolean;
   readonly matches: readonly OperatorScorableMatch[];
   readonly timezone: string;
 }) {
@@ -32,7 +34,34 @@ export function VenueMatchOperations({
       Date.parse(left.scheduledAt ?? "") - Date.parse(right.scheduledAt ?? "")
     );
   });
-  const venues = new Set(ordered.map((match) => match.venueName)).size;
+  const liveMatches = ordered.filter((match) => match.status === "live").length;
+  const upcomingMatches = ordered.length - liveMatches;
+
+  if (ordered.length === 0 && hideWhenEmpty) return null;
+
+  if (ordered.length === 0) {
+    return (
+      <section className="hq-card venue-match-operations venue-match-operations--empty">
+        <div className="venue-match-operations__empty">
+          <span aria-hidden>
+            <Trophy size={20} />
+          </span>
+          <div>
+            <span className="hq-eyebrow">Venue match control</span>
+            <h2>No matches ready to score</h2>
+            <p>
+              Assign both teams and a court from a session. Scoring controls
+              will appear here as soon as the match is ready.
+            </p>
+          </div>
+          <Link className="hq-button hq-button--secondary" href="/events">
+            Review sessions <ArrowRight aria-hidden size={15} />
+          </Link>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="hq-card venue-match-operations">
       <header className="hq-card-heading">
@@ -40,17 +69,21 @@ export function VenueMatchOperations({
           <span className="hq-eyebrow">Venue match control</span>
           <h2>Matches on your courts</h2>
           <p>
-            Hosted and event matches appear here when the venue, program, or
-            event belongs to this organization.
+            Score live matches or open the assigned session without leaving
+            today’s operating view.
           </p>
         </div>
         <div className="venue-match-operations__totals">
-          <span>
-            <Numeric>{ordered.length}</Numeric> matches
-          </span>
-          <span>
-            <Numeric>{venues}</Numeric> venues
-          </span>
+          {liveMatches > 0 && (
+            <span data-state="live">
+              <Numeric>{liveMatches}</Numeric> live now
+            </span>
+          )}
+          {upcomingMatches > 0 && (
+            <span>
+              <Numeric>{upcomingMatches}</Numeric> upcoming
+            </span>
+          )}
         </div>
       </header>
       <div className="venue-match-operations__list">
@@ -108,15 +141,6 @@ export function VenueMatchOperations({
             </div>
           </article>
         ))}
-        {ordered.length === 0 && (
-          <div className="hq-empty">
-            <strong>No scheduled venue matches.</strong>
-            <span>
-              Matches appear after teams and a court are assigned. Sessions and
-              court blocks remain visible in the calendar below.
-            </span>
-          </div>
-        )}
       </div>
     </section>
   );

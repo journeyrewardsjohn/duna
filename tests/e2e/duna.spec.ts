@@ -760,7 +760,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Matches on your courts" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   const aiAnalyst = page.locator(".hq-ai-analyst");
   await expect(aiAnalyst).toBeVisible();
   const aiAnalystColors = await aiAnalyst.evaluate((rail) => {
@@ -847,8 +847,11 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
     page.getByText("Community Court", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Matches on your courts" }),
+    page.getByRole("heading", { name: "No matches ready to score" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Review sessions/ }),
+  ).toHaveAttribute("href", "/events");
   await expect(page.getByText("No courts yet")).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 

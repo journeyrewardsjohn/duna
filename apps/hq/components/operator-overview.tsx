@@ -284,6 +284,7 @@ export function OperatorOverview({
           </section>
 
           <VenueMatchOperations
+            hideWhenEmpty
             matches={matches}
             timezone={dashboard.organization.timezone}
           />

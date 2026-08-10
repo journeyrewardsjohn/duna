@@ -26,4 +26,17 @@ describe("HQ empty-state spacing", () => {
     expect(bodyCopy).toMatch(/line-height:\s*1\.5;/);
     expect(action).toMatch(/margin-top:\s*0\.3rem;/);
   });
+
+  it("keeps venue match states compact and evenly padded", () => {
+    const heading = ruleBody(".venue-match-operations > .hq-card-heading");
+    const list = ruleBody(".venue-match-operations__list");
+    const emptyState = ruleBody(".venue-match-operations__empty");
+
+    expect(heading).toMatch(/padding:\s*20px;/);
+    expect(list).toMatch(/padding:\s*0 20px 20px;/);
+    expect(emptyState).toMatch(
+      /grid-template-columns:\s*auto minmax\(0, 1fr\) auto;/,
+    );
+    expect(emptyState).toMatch(/padding:\s*18px 20px;/);
+  });
 });
