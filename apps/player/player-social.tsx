@@ -735,9 +735,11 @@ export function PlayerPickerModal({
   embedded = false,
   excludedPersonIds = [],
   maxSelected,
+  onAddProvisional,
   onChange,
   onClose,
   palette,
+  presentationStyle = "fullScreen",
   selected,
   title,
   visible,
@@ -745,9 +747,11 @@ export function PlayerPickerModal({
   readonly embedded?: boolean;
   readonly excludedPersonIds?: readonly string[];
   readonly maxSelected: number;
+  readonly onAddProvisional?: () => void;
   readonly onChange: (players: readonly PersonSummary[]) => void;
   readonly onClose: () => void;
   readonly palette: MobileSocialPalette;
+  readonly presentationStyle?: "fullScreen" | "pageSheet";
   readonly selected: readonly PersonSummary[];
   readonly title: string;
   readonly visible: boolean;
@@ -898,6 +902,11 @@ export function PlayerPickerModal({
         contentContainerStyle={socialStyles.pickerContent}
         showsVerticalScrollIndicator={false}
       >
+        <Text
+          style={[socialStyles.pickerSectionLabel, { color: palette.muted }]}
+        >
+          {query.trim() ? "SEARCH RESULTS" : "RECOMMENDED FOR YOU"}
+        </Text>
         {candidates
           .filter((result) => !excluded.has(result.person.id))
           .map((result) => {
@@ -1023,6 +1032,28 @@ export function PlayerPickerModal({
           },
         ]}
       >
+        {onAddProvisional && (
+          <Pressable
+            accessibilityRole="button"
+            onPress={onAddProvisional}
+            style={[
+              socialStyles.provisionalButton,
+              {
+                backgroundColor: palette.depth,
+                borderColor: palette.aqua,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                socialStyles.provisionalButtonText,
+                { color: palette.aqua },
+              ]}
+            >
+              Player not on Duna? Add provisional player
+            </Text>
+          </Pressable>
+        )}
         <Pressable
           accessibilityRole="button"
           onPress={onClose}
@@ -1042,7 +1073,7 @@ export function PlayerPickerModal({
     <Modal
       animationType="slide"
       onRequestClose={onClose}
-      presentationStyle="fullScreen"
+      presentationStyle={presentationStyle}
       visible
     >
       {content}
@@ -1292,14 +1323,28 @@ const socialStyles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
-  pickerContent: { gap: 10, paddingHorizontal: 18, paddingBottom: 110 },
+  pickerContent: { gap: 10, paddingHorizontal: 18, paddingBottom: 188 },
   pickerFooter: {
     borderTopWidth: 1,
     bottom: 0,
+    gap: 10,
     left: 0,
     padding: 18,
     position: "absolute",
     right: 0,
+  },
+  provisionalButton: {
+    alignItems: "center",
+    borderRadius: 18,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 52,
+    paddingHorizontal: 16,
+  },
+  provisionalButtonText: {
+    fontSize: 14,
+    fontWeight: "800",
+    textAlign: "center",
   },
   pickerHeader: {
     alignItems: "center",
@@ -1307,6 +1352,13 @@ const socialStyles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: 18,
     paddingVertical: 13,
+  },
+  pickerSectionLabel: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    marginBottom: 2,
+    marginTop: 4,
   },
   pickerTitle: { fontSize: 25, fontWeight: "800", marginTop: 3 },
   playMark: {

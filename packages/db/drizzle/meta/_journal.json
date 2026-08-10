@@ -442,6 +442,13 @@
       "when": 1786318426064,
       "tag": "0062_next_lucky_pierre",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1786365414819,
+      "tag": "0063_faulty_shard",
+      "breakpoints": true
     }
   ]
 }

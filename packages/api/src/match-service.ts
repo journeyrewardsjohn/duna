@@ -6,6 +6,7 @@ import {
   getDatabase,
   matchConfirmations,
   matchHistoryDisputes,
+  matchParticipantInvitations,
   matches,
   organizationMemberships,
   organizationParticipants,
@@ -50,6 +51,8 @@ import {
 import { stableHash } from "./canonical";
 import type { ApiActor } from "./context";
 import { publishMatchLiveActivity } from "./live-activities";
+import { sendTransactionalEmail } from "./resend";
+import { sendTemplateSms } from "./sent";
 
 export class MatchServiceError extends Error {
   constructor(
@@ -124,6 +127,36 @@ export interface ScoreEventEnvelope {
   readonly event: ScoreEvent;
 }
 
+export interface ProvisionalMatchParticipantInput {
+  readonly side: "A" | "B";
+  readonly givenName: string;
+  readonly familyName: string;
+  readonly email?: string;
+  readonly phoneE164?: string;
+}
+
+export interface MatchParticipantInvitationSummary {
+  readonly matchId: string;
+  readonly invitedName: string;
+  readonly reporterName: string;
+  readonly opponentNames: readonly string[];
+  readonly playedAt: string;
+  readonly venueName: string;
+  readonly sets: readonly { readonly a: number; readonly b: number }[];
+  readonly status: "pending" | "claimed" | "expired" | "cancelled";
+  readonly expiresAt: string;
+  readonly appDeepLink: string;
+}
+
+export function matchParticipantInvitationMessage(input: {
+  readonly opponentNames: readonly string[];
+  readonly inviteUrl: string;
+}): string {
+  const opponentLabel =
+    input.opponentNames.filter(Boolean).join(" & ") || "your opponents";
+  return `Your match against ${opponentLabel} has been reported in Duna. Join now to see your rating and track your progress for free. ${input.inviteUrl}`;
+}
+
 export interface OperatorScorableMatch {
   readonly id: string;
   readonly status: "scheduled" | "live";
@@ -155,6 +188,119 @@ function requireDatabase(): void {
       "Match scoring requires the connected Duna database.",
     );
   }
+}
+
+function matchInvitationOrigin(): string {
+  return (
+    process.env.NEXT_PUBLIC_WEB_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    "https://duna.coach"
+  ).replace(/\/$/, "");
+}
+
+function matchInvitationUrl(inviteToken: string): string {
+  return `${matchInvitationOrigin()}/join/match/${encodeURIComponent(inviteToken)}`;
+}
+
+function provisionalHandle(input: {
+  readonly givenName: string;
+  readonly familyName: string;
+  readonly id: string;
+}): string {
+  const base = `${input.givenName}-${input.familyName}`
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/(^-|-$)/g, "")
+    .slice(0, 30);
+  return `${base || "player"}-pending-${input.id.replaceAll("-", "").slice(-8)}`.slice(
+    0,
+    48,
+  );
+}
+
+function firstNames(displayNames: readonly string[]): readonly string[] {
+  return displayNames.map(
+    (name) => name.trim().split(/\s+/)[0] || "Duna player",
+  );
+}
+
+async function deliverMatchParticipantInvitation(input: {
+  readonly invitationId: string;
+  readonly inviteToken: string;
+  readonly invitedName: string;
+  readonly invitedEmail?: string;
+  readonly invitedPhoneE164?: string;
+  readonly reporterName: string;
+  readonly opponentNames: readonly string[];
+  readonly now: Date;
+}): Promise<void> {
+  const inviteUrl = matchInvitationUrl(input.inviteToken);
+  const message = matchParticipantInvitationMessage({
+    opponentNames: input.opponentNames,
+    inviteUrl,
+  });
+  const delivery = input.invitedPhoneE164
+    ? await sendTemplateSms({
+        to: input.invitedPhoneE164,
+        templateName:
+          process.env.SENT_DM_MATCH_INVITE_TEMPLATE_NAME ??
+          "duna_match_report_invitation",
+        parameters: {
+          player_name: input.invitedName,
+          reporter_name: input.reporterName,
+          opponents: input.opponentNames.join(" & "),
+          invite_url: inviteUrl,
+          message,
+        },
+        idempotencyKey: `match-participant-invite:${input.invitationId}`,
+      }).catch((error: unknown) => ({
+        configured: true,
+        sent: false,
+        messageId: undefined,
+        reason:
+          error instanceof Error
+            ? error.message
+            : "SMS delivery did not complete.",
+      }))
+    : input.invitedEmail
+      ? await sendTransactionalEmail({
+          to: input.invitedEmail,
+          subject: "Your match has been reported in Duna",
+          text: [
+            `Hi ${input.invitedName.split(/\s+/)[0] || input.invitedName},`,
+            "",
+            message,
+            "",
+            `${input.reporterName} added the result. The match will not affect Sand Rating until every required player has joined Duna and the result is confirmed.`,
+          ].join("\n"),
+          idempotencyKey: `match-participant-invite:${input.invitationId}`,
+        }).catch((error: unknown) => ({
+          configured: true,
+          sent: false,
+          messageId: undefined,
+          reason:
+            error instanceof Error
+              ? error.message
+              : "Email delivery did not complete.",
+        }))
+      : {
+          configured: false,
+          sent: false,
+          messageId: undefined,
+          reason: "No delivery destination was available.",
+        };
+  await getDatabase()
+    .update(matchParticipantInvitations)
+    .set({
+      deliveryStatus: delivery.configured
+        ? delivery.sent
+          ? "sent"
+          : "failed"
+        : "not-configured",
+      deliveryMessageId: delivery.messageId,
+      updatedAt: input.now,
+    })
+    .where(eq(matchParticipantInvitations.id, input.invitationId));
 }
 
 function recordValue(value: unknown): Record<string, unknown> {
@@ -860,6 +1006,7 @@ export async function recordCompletedMatch(input: {
   readonly actor: ApiActor;
   readonly teamAIds: readonly string[];
   readonly teamBIds: readonly string[];
+  readonly provisionalParticipants?: readonly ProvisionalMatchParticipantInput[];
   readonly venueId?: string;
   readonly location?: MatchFormat["location"];
   readonly playedAt: Date;
@@ -877,14 +1024,53 @@ export async function recordCompletedMatch(input: {
 }): Promise<MatchScoringState> {
   requireDatabase();
   const database = getDatabase();
+  const provisionalParticipants = (input.provisionalParticipants ?? []).map(
+    (participant) => ({
+      ...participant,
+      givenName: participant.givenName.trim(),
+      familyName: participant.familyName.trim(),
+      email: participant.email?.trim().toLowerCase() || undefined,
+      phoneE164: participant.phoneE164?.trim() || undefined,
+    }),
+  );
+  const provisionalTeamA = provisionalParticipants.filter(
+    (participant) => participant.side === "A",
+  );
+  const provisionalTeamB = provisionalParticipants.filter(
+    (participant) => participant.side === "B",
+  );
+  const teamASize = input.teamAIds.length + provisionalTeamA.length;
+  const teamBSize = input.teamBIds.length + provisionalTeamB.length;
+  if (![2, 3, 4, 6].includes(teamASize) || teamASize !== teamBSize) {
+    throw new MatchServiceError(
+      "PARTICIPANT_REQUIRED",
+      "Choose equally sized 2v2, 3v3, 4v4, or 6v6 teams.",
+    );
+  }
   if (
-    input.teamAIds.length < 1 ||
-    input.teamAIds.length > 6 ||
-    input.teamAIds.length !== input.teamBIds.length
+    provisionalParticipants.some(
+      (participant) =>
+        !participant.givenName ||
+        !participant.familyName ||
+        (!participant.email && !participant.phoneE164),
+    )
   ) {
     throw new MatchServiceError(
       "PARTICIPANT_REQUIRED",
-      "Choose equally sized teams with one to six players per side.",
+      "A provisional player needs a first name, last name, and email or mobile number.",
+    );
+  }
+  const provisionalDestinations = provisionalParticipants.map((participant) =>
+    participant.phoneE164
+      ? `phone:${participant.phoneE164}`
+      : `email:${participant.email}`,
+  );
+  if (
+    new Set(provisionalDestinations).size !== provisionalDestinations.length
+  ) {
+    throw new MatchServiceError(
+      "PARTICIPANT_DUPLICATE",
+      "Use a different email or mobile number for each provisional player.",
     );
   }
   const participantIds = [...input.teamAIds, ...input.teamBIds];
@@ -899,6 +1085,40 @@ export async function recordCompletedMatch(input: {
       "PARTICIPANT_REQUIRED",
       "The person recording a match must be one of its players.",
     );
+  }
+  for (const participant of provisionalParticipants) {
+    const existing = participant.email
+      ? await database
+          .select({
+            id: people.id,
+            displayName: people.displayName,
+            profileClaimStatus: people.profileClaimStatus,
+            status: people.status,
+          })
+          .from(people)
+          .where(
+            sql`lower(${people.email}) = ${participant.email.toLowerCase()}`,
+          )
+          .limit(1)
+      : await database
+          .select({
+            id: people.id,
+            displayName: people.displayName,
+            profileClaimStatus: people.profileClaimStatus,
+            status: people.status,
+          })
+          .from(people)
+          .where(eq(people.phoneE164, participant.phoneE164!))
+          .limit(1);
+    if (
+      existing[0]?.status === "active" &&
+      existing[0].profileClaimStatus === "claimed"
+    ) {
+      throw new MatchServiceError(
+        "PARTICIPANT_DUPLICATE",
+        `${existing[0].displayName} already has a Duna profile. Add that profile from player search instead.`,
+      );
+    }
   }
   const maximumSets = input.setsToWin * 2 - 1;
   if (
@@ -949,7 +1169,11 @@ export async function recordCompletedMatch(input: {
     );
   }
   const participantRows = await database
-    .select({ id: people.id, status: people.status })
+    .select({
+      id: people.id,
+      status: people.status,
+      profileClaimStatus: people.profileClaimStatus,
+    })
     .from(people)
     .where(inArray(people.id, participantIds));
   if (
@@ -958,25 +1182,57 @@ export async function recordCompletedMatch(input: {
   ) {
     throw new MatchServiceError(
       "PARTICIPANT_NOT_FOUND",
-      "Every match participant must have an active Duna profile.",
+      "Every selected Duna player must have an active profile.",
     );
   }
   const scoringPeople = await loadScoringPeople(participantIds);
   const personById = new Map(
     scoringPeople.map((person) => [person.id, person] as const),
   );
-  const teamName = (ids: readonly string[]) =>
-    ids
-      .map(
-        (id) =>
-          personById.get(id)?.displayName.split(/\s+/)[0] ?? "Duna player",
-      )
-      .join(" / ");
+  const provisionalRows = provisionalParticipants.map((participant) => {
+    const id = crypto.randomUUID();
+    const displayName = `${participant.givenName} ${participant.familyName}`;
+    return {
+      ...participant,
+      id,
+      displayName,
+      handle: provisionalHandle({
+        givenName: participant.givenName,
+        familyName: participant.familyName,
+        id,
+      }),
+      inviteToken: `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll(
+        "-",
+        "",
+      ),
+      invitationId: crypto.randomUUID(),
+    };
+  });
+  const provisionalA = provisionalRows.filter(
+    (participant) => participant.side === "A",
+  );
+  const provisionalB = provisionalRows.filter(
+    (participant) => participant.side === "B",
+  );
+  const teamAAllIds = [...input.teamAIds, ...provisionalA.map(({ id }) => id)];
+  const teamBAllIds = [...input.teamBIds, ...provisionalB.map(({ id }) => id)];
+  const selectedNames = (ids: readonly string[]) =>
+    ids.map((id) => personById.get(id)?.displayName ?? "Duna player");
+  const teamADisplayNames = [
+    ...selectedNames(input.teamAIds),
+    ...provisionalA.map(({ displayName }) => displayName),
+  ];
+  const teamBDisplayNames = [
+    ...selectedNames(input.teamBIds),
+    ...provisionalB.map(({ displayName }) => displayName),
+  ];
+  const teamName = (displayNames: readonly string[]) =>
+    firstNames(displayNames).join(" / ");
   const matchId = crypto.randomUUID();
   const teamAId = crypto.randomUUID();
   const teamBId = crypto.randomUUID();
   const winnerTeamId = teamAWins > teamBWins ? teamAId : teamBId;
-  const format: MatchFormat = {
+  const format = {
     ...standardBeachFormat,
     setsToWin: input.setsToWin,
     maximumSets,
@@ -992,12 +1248,21 @@ export async function recordCompletedMatch(input: {
     sideSwitchIntervals: Array.from({ length: maximumSets }, (_, index) =>
       index === maximumSets - 1 ? 5 : 7,
     ),
-    teamSize: input.teamAIds.length,
+    teamSize: teamASize,
     matchType: input.matchType,
     recordingMode: "completed",
     allPlayersAgreedToRecord: input.allPlayersAgreedToRecord,
     playedAt: input.playedAt.toISOString(),
     location: input.location,
+    ratingReadiness:
+      provisionalRows.length > 0
+        ? {
+            status: "awaiting-player-claims",
+            requiredClaims: provisionalRows.length,
+            message:
+              "This match will not affect Sand Rating until every required player joins Duna and the result is confirmed.",
+          }
+        : { status: "ready-for-confirmation", requiredClaims: 0 },
   };
   const scoreEvents: readonly ScoreEvent[] = [
     {
@@ -1017,19 +1282,34 @@ export async function recordCompletedMatch(input: {
   await database.batch([
     database.insert(teams).values({
       id: teamAId,
-      name: teamName(input.teamAIds),
+      name: teamName(teamADisplayNames),
       status: "active",
       createdAt: input.now,
       updatedAt: input.now,
     }),
+    ...provisionalRows.map((participant) =>
+      database.insert(people).values({
+        id: participant.id,
+        givenName: participant.givenName,
+        familyName: participant.familyName,
+        displayName: participant.displayName,
+        handle: participant.handle,
+        profileClaimStatus: "unclaimed",
+        profileVisibility: "private",
+        status: "active",
+        ageBand: "unknown",
+        createdAt: input.now,
+        updatedAt: input.now,
+      }),
+    ),
     database.insert(teams).values({
       id: teamBId,
-      name: teamName(input.teamBIds),
+      name: teamName(teamBDisplayNames),
       status: "active",
       createdAt: input.now,
       updatedAt: input.now,
     }),
-    ...input.teamAIds.map((personId) =>
+    ...teamAAllIds.map((personId) =>
       database.insert(teamMembers).values({
         teamId: teamAId,
         personId,
@@ -1037,7 +1317,7 @@ export async function recordCompletedMatch(input: {
         joinedAt: input.now,
       }),
     ),
-    ...input.teamBIds.map((personId) =>
+    ...teamBAllIds.map((personId) =>
       database.insert(teamMembers).values({
         teamId: teamBId,
         personId,
@@ -1058,7 +1338,9 @@ export async function recordCompletedMatch(input: {
       authoritativeDeviceId: input.deviceId,
       verification: "self-reported",
       verificationWeightBps:
-        input.matchType === "competitive" && input.teamAIds.length === 2
+        input.matchType === "competitive" &&
+        teamASize === 2 &&
+        provisionalRows.length === 0
           ? 2_500
           : 0,
       winnerTeamId,
@@ -1066,6 +1348,21 @@ export async function recordCompletedMatch(input: {
       createdAt: input.now,
       updatedAt: input.now,
     }),
+    ...provisionalRows.map((participant) =>
+      database.insert(matchParticipantInvitations).values({
+        id: participant.invitationId,
+        matchId,
+        provisionalPersonId: participant.id,
+        invitedByPersonId: input.actor.personId,
+        inviteToken: participant.inviteToken,
+        invitedEmail: participant.email,
+        invitedPhoneE164: participant.phoneE164,
+        deliveryChannel: participant.phoneE164 ? "sms" : "email",
+        expiresAt: new Date(input.now.getTime() + 30 * 24 * 60 * 60_000),
+        createdAt: input.now,
+        updatedAt: input.now,
+      }),
+    ),
     ...scoreEvents.map((event, index) =>
       database.insert(rallyEvents).values({
         matchId,
@@ -1094,23 +1391,303 @@ export async function recordCompletedMatch(input: {
       afterHash: stableHash({
         teamAIds: input.teamAIds,
         teamBIds: input.teamBIds,
+        provisionalPersonIds: provisionalRows.map(({ id }) => id),
         venueId: input.venueId,
         setScores: input.setScores,
         format,
       }),
       reason:
-        input.matchType === "competitive"
-          ? "Participant recorded a completed competitive match after every player agreed."
-          : "Participant recorded a completed friendly match for history only after every player agreed.",
+        provisionalRows.length > 0
+          ? "Participant recorded a completed match with provisional players; rating remains locked until every required player claims a Duna identity and the result is confirmed."
+          : input.matchType === "competitive"
+            ? "Participant recorded a completed competitive match after every player agreed."
+            : "Participant recorded a completed friendly match for history only after every player agreed.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,
     }),
   ]);
+  await Promise.all(
+    provisionalRows.map((participant) =>
+      deliverMatchParticipantInvitation({
+        invitationId: participant.invitationId,
+        inviteToken: participant.inviteToken,
+        invitedName: participant.displayName,
+        invitedEmail: participant.email,
+        invitedPhoneE164: participant.phoneE164,
+        reporterName: input.actor.displayName,
+        opponentNames:
+          participant.side === "A"
+            ? firstNames(teamBDisplayNames)
+            : firstNames(teamADisplayNames),
+        now: input.now,
+      }).catch(() => undefined),
+    ),
+  );
   return loadMatchScoringState({
     actor: input.actor,
     matchId,
   });
+}
+
+export async function loadMatchParticipantInvitation(
+  inviteToken: string,
+  now = new Date(),
+): Promise<MatchParticipantInvitationSummary> {
+  requireDatabase();
+  const database = getDatabase();
+  const invitation = await database.query.matchParticipantInvitations.findFirst(
+    {
+      where: eq(matchParticipantInvitations.inviteToken, inviteToken),
+    },
+  );
+  if (!invitation) {
+    throw new MatchServiceError(
+      "MATCH_NOT_FOUND",
+      "That match invitation was not found.",
+    );
+  }
+  const [provisionalPerson, reporter, participation] = await Promise.all([
+    database.query.people.findFirst({
+      where: eq(people.id, invitation.provisionalPersonId),
+    }),
+    database.query.people.findFirst({
+      where: eq(people.id, invitation.invitedByPersonId),
+    }),
+    matchParticipants(invitation.matchId),
+  ]);
+  if (!provisionalPerson || !reporter) {
+    throw new MatchServiceError(
+      "MATCH_NOT_FOUND",
+      "That match invitation is no longer available.",
+    );
+  }
+  const scoring = await loadMatchScoringState({
+    actor: {
+      personId: reporter.id,
+      displayName: reporter.displayName,
+      roles: ["player"],
+      scopes: ["matches:read"],
+      ageBand: "adult",
+      isDemo: false,
+    },
+    matchId: invitation.matchId,
+    bypassAuthority: true,
+  });
+  const provisionalSide = participation.teamAIds.includes(
+    invitation.provisionalPersonId,
+  )
+    ? "A"
+    : "B";
+  const opponentNames = (
+    provisionalSide === "A" ? scoring.teamB.people : scoring.teamA.people
+  ).map((person) => person.displayName);
+  const storedFormat = recordValue(participation.match.format);
+  const playedAt =
+    typeof storedFormat.playedAt === "string"
+      ? storedFormat.playedAt
+      : (
+          participation.match.completedAt ??
+          participation.match.startedAt ??
+          invitation.createdAt
+        ).toISOString();
+  return {
+    matchId: invitation.matchId,
+    invitedName: provisionalPerson.displayName,
+    reporterName: reporter.displayName,
+    opponentNames,
+    playedAt,
+    venueName: scoring.venueName,
+    sets: scoring.score.sets
+      .filter((set) => set.winner)
+      .map((set) => ({ a: set.a, b: set.b })),
+    status:
+      invitation.status === "pending" && invitation.expiresAt <= now
+        ? "expired"
+        : (invitation.status as MatchParticipantInvitationSummary["status"]),
+    expiresAt: invitation.expiresAt.toISOString(),
+    appDeepLink: `duna://join/match/${encodeURIComponent(inviteToken)}`,
+  };
+}
+
+export async function claimMatchParticipantInvitation(input: {
+  readonly actor: ApiActor;
+  readonly inviteToken: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{
+  readonly matchId: string;
+  readonly status: "claimed";
+  readonly appDeepLink: string;
+}> {
+  requireDatabase();
+  const database = getDatabase();
+  const invitation = await database.query.matchParticipantInvitations.findFirst(
+    {
+      where: eq(matchParticipantInvitations.inviteToken, input.inviteToken),
+    },
+  );
+  if (!invitation) {
+    throw new MatchServiceError(
+      "MATCH_NOT_FOUND",
+      "That match invitation was not found.",
+    );
+  }
+  if (
+    invitation.status === "claimed" &&
+    invitation.claimedByPersonId === input.actor.personId
+  ) {
+    return {
+      matchId: invitation.matchId,
+      status: "claimed",
+      appDeepLink: `duna://match/${invitation.matchId}`,
+    };
+  }
+  if (invitation.status !== "pending" || invitation.expiresAt <= input.now) {
+    throw new MatchServiceError(
+      "MATCH_NOT_CONFIRMABLE",
+      invitation.expiresAt <= input.now
+        ? "This match invitation has expired."
+        : "This match invitation is no longer available.",
+    );
+  }
+  const participation = await matchParticipants(invitation.matchId);
+  const participantIds = [...participation.teamAIds, ...participation.teamBIds];
+  if (
+    participantIds.includes(input.actor.personId) &&
+    input.actor.personId !== invitation.provisionalPersonId
+  ) {
+    throw new MatchServiceError(
+      "PARTICIPANT_DUPLICATE",
+      "Your Duna profile is already assigned to this match.",
+    );
+  }
+  const teamId = participation.teamAIds.includes(invitation.provisionalPersonId)
+    ? participation.match.teamAId
+    : participation.match.teamBId;
+  if (!teamId) {
+    throw new MatchServiceError(
+      "MATCH_NOT_FOUND",
+      "The invited team could not be found.",
+    );
+  }
+  await database.transaction(async (transaction) => {
+    if (input.actor.personId !== invitation.provisionalPersonId) {
+      await transaction
+        .update(teamMembers)
+        .set({ personId: input.actor.personId })
+        .where(
+          and(
+            eq(teamMembers.teamId, teamId),
+            eq(teamMembers.personId, invitation.provisionalPersonId),
+          ),
+        );
+      await transaction
+        .update(people)
+        .set({
+          profileClaimStatus: "merged",
+          profileVisibility: "private",
+          status: "restricted",
+          updatedAt: input.now,
+        })
+        .where(eq(people.id, invitation.provisionalPersonId));
+    } else {
+      await transaction
+        .update(people)
+        .set({ profileClaimStatus: "claimed", updatedAt: input.now })
+        .where(eq(people.id, invitation.provisionalPersonId));
+    }
+    const claimedInvitation = await transaction
+      .update(matchParticipantInvitations)
+      .set({
+        status: "claimed",
+        claimedByPersonId: input.actor.personId,
+        claimedAt: input.now,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(matchParticipantInvitations.id, invitation.id),
+          eq(matchParticipantInvitations.status, "pending"),
+        ),
+      )
+      .returning({ id: matchParticipantInvitations.id });
+    if (!claimedInvitation[0]) {
+      throw new MatchServiceError(
+        "MATCH_NOT_CONFIRMABLE",
+        "This match invitation was already claimed.",
+      );
+    }
+    const remainingInvitations = await transaction
+      .select({ id: matchParticipantInvitations.id })
+      .from(matchParticipantInvitations)
+      .where(
+        and(
+          eq(matchParticipantInvitations.matchId, invitation.matchId),
+          eq(matchParticipantInvitations.status, "pending"),
+          ne(matchParticipantInvitations.id, invitation.id),
+        ),
+      );
+    const currentFormat = recordValue(participation.match.format);
+    await transaction
+      .update(matches)
+      .set({
+        format: {
+          ...currentFormat,
+          ratingReadiness:
+            remainingInvitations.length > 0
+              ? {
+                  status: "awaiting-player-claims",
+                  requiredClaims: remainingInvitations.length,
+                  message:
+                    "This match will not affect Sand Rating until every required player joins Duna and the result is confirmed.",
+                }
+              : {
+                  status: "ready-for-confirmation",
+                  requiredClaims: 0,
+                },
+        },
+        updatedAt: input.now,
+      })
+      .where(eq(matches.id, invitation.matchId));
+    const teamPeople = await transaction
+      .select({ displayName: people.displayName })
+      .from(teamMembers)
+      .innerJoin(people, eq(teamMembers.personId, people.id))
+      .where(eq(teamMembers.teamId, teamId));
+    await transaction
+      .update(teams)
+      .set({
+        name: firstNames(teamPeople.map((person) => person.displayName)).join(
+          " / ",
+        ),
+        updatedAt: input.now,
+      })
+      .where(eq(teams.id, teamId));
+    await transaction.insert(auditLog).values({
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "match.participant-invitation.claimed",
+      entityType: "match-participant-invitation",
+      entityId: invitation.id,
+      afterHash: stableHash({
+        matchId: invitation.matchId,
+        provisionalPersonId: invitation.provisionalPersonId,
+        claimedByPersonId: input.actor.personId,
+      }),
+      reason:
+        "Invited player claimed their provisional place through the unique match link.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return {
+    matchId: invitation.matchId,
+    status: "claimed",
+    appDeepLink: `duna://match/${invitation.matchId}`,
+  };
 }
 
 export async function loadMatchScoringState(input: {
@@ -2509,6 +3086,25 @@ export async function confirmMatchResult(input: {
     format.matchType !== "friendly" &&
     participation.teamAIds.length === 2 &&
     participation.teamBIds.length === 2;
+  if (ratingCapable) {
+    const ratingParticipants = await database
+      .select({
+        id: people.id,
+        profileClaimStatus: people.profileClaimStatus,
+        status: people.status,
+      })
+      .from(people)
+      .where(inArray(people.id, participantIds));
+    const everyPlayerOnDuna =
+      ratingParticipants.length === participantIds.length &&
+      ratingParticipants.every(
+        (person) =>
+          person.status === "active" && person.profileClaimStatus === "claimed",
+      );
+    if (!everyPlayerOnDuna) {
+      return { status: "pending-verification", ratingApplied: false };
+    }
+  }
   if (!ratingCapable) {
     await database.batch([
       database

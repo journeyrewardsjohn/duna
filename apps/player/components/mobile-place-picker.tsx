@@ -4,6 +4,7 @@ import {
   FellixText as Text,
   FellixTextInput as TextInput,
 } from "../fellix-text";
+import type { MobileSocialPalette } from "../player-social";
 
 interface PlaceSuggestion {
   readonly placeId: string;
@@ -21,14 +22,36 @@ export interface MobilePlaceSelection {
   readonly longitude?: number;
 }
 
-function MapPinGlyph({ confirmed = false }: { readonly confirmed?: boolean }) {
+function MapPinGlyph({
+  confirmed = false,
+  palette,
+}: {
+  readonly confirmed?: boolean;
+  readonly palette?: MobileSocialPalette;
+}) {
   return (
     <View
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={[styles.pin, confirmed && styles.pinConfirmed]}
+      style={[
+        styles.pin,
+        confirmed && styles.pinConfirmed,
+        palette && {
+          backgroundColor: confirmed
+            ? `rgba(${palette.positiveRgb},0.12)`
+            : `rgba(${palette.accentRgb},0.1)`,
+        },
+      ]}
     >
-      <Text style={[styles.pinText, confirmed && styles.pinTextConfirmed]}>
+      <Text
+        style={[
+          styles.pinText,
+          confirmed && styles.pinTextConfirmed,
+          palette && {
+            color: confirmed ? palette.positive : palette.aqua,
+          },
+        ]}
+      >
         {confirmed ? "✓" : "⌖"}
       </Text>
     </View>
@@ -37,13 +60,19 @@ function MapPinGlyph({ confirmed = false }: { readonly confirmed?: boolean }) {
 
 export function MobilePlacePicker({
   baseUrl,
+  description = "Search once, then Duna locks the map-ready place to this video.",
   label = "Venue",
+  lockedLabel = "LOCATION LOCKED · GOOGLE",
   onChange,
+  palette,
   value,
 }: {
   readonly baseUrl: string;
+  readonly description?: string;
   readonly label?: string;
+  readonly lockedLabel?: string;
   readonly value?: MobilePlaceSelection;
+  readonly palette?: MobileSocialPalette;
   readonly onChange: (value: MobilePlaceSelection | undefined) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -125,6 +154,7 @@ export function MobilePlacePicker({
         throw new Error(place.error || "Duna could not confirm that location.");
       }
       onChange({
+        venueId: place.venueId,
         name: place.name || option.mainText,
         address: place.address || option.secondaryText,
         googlePlaceId: place.placeId ?? option.placeId,
@@ -146,23 +176,49 @@ export function MobilePlacePicker({
 
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.description}>
-        Search once, then Duna locks the map-ready place to this video.
+      <Text style={[styles.label, palette && { color: palette.bone }]}>
+        {label}
+      </Text>
+      <Text style={[styles.description, palette && { color: palette.muted }]}>
+        {description}
       </Text>
       {value ? (
-        <View style={styles.lockedCard}>
-          <MapPinGlyph confirmed />
+        <View
+          style={[
+            styles.lockedCard,
+            palette && {
+              backgroundColor: palette.depth,
+              borderColor: palette.positive,
+            },
+          ]}
+        >
+          <MapPinGlyph confirmed palette={palette} />
           <View style={styles.flex}>
-            <Text numberOfLines={2} style={styles.placeName}>
+            <Text
+              numberOfLines={2}
+              style={[styles.placeName, palette && { color: palette.bone }]}
+            >
               {value.name}
             </Text>
             {!!value.address && (
-              <Text numberOfLines={2} style={styles.placeAddress}>
+              <Text
+                numberOfLines={2}
+                style={[
+                  styles.placeAddress,
+                  palette && { color: palette.muted },
+                ]}
+              >
                 {value.address}
               </Text>
             )}
-            <Text style={styles.lockedLabel}>LOCATION LOCKED · GOOGLE</Text>
+            <Text
+              style={[
+                styles.lockedLabel,
+                palette && { color: palette.positive },
+              ]}
+            >
+              {lockedLabel}
+            </Text>
           </View>
           <Pressable
             accessibilityLabel="Change venue"
@@ -171,27 +227,52 @@ export function MobilePlacePicker({
             onPress={() => onChange(undefined)}
             style={styles.changeButton}
           >
-            <Text style={styles.changeText}>Change</Text>
+            <Text
+              style={[styles.changeText, palette && { color: palette.aqua }]}
+            >
+              Change
+            </Text>
           </Pressable>
         </View>
       ) : (
         <>
-          <View style={styles.inputShell}>
-            <MapPinGlyph />
+          <View
+            style={[
+              styles.inputShell,
+              palette && {
+                backgroundColor: palette.depth,
+                borderColor: `rgba(${palette.overlayRgb},0.12)`,
+              },
+            ]}
+          >
+            <MapPinGlyph palette={palette} />
             <TextInput
               autoCapitalize="words"
               autoCorrect={false}
               onChangeText={setQuery}
               placeholder="Search a venue, beach, or address"
-              placeholderTextColor="#8b96a7"
+              placeholderTextColor={palette?.muted ?? "#8b96a7"}
               returnKeyType="search"
-              style={styles.input}
+              style={[styles.input, palette && { color: palette.bone }]}
               value={query}
             />
-            {loading && <ActivityIndicator color="#3d6672" size="small" />}
+            {loading && (
+              <ActivityIndicator
+                color={palette?.aqua ?? "#3d6672"}
+                size="small"
+              />
+            )}
           </View>
           {options.length > 0 && (
-            <View style={styles.results}>
+            <View
+              style={[
+                styles.results,
+                palette && {
+                  backgroundColor: palette.depth,
+                  borderColor: `rgba(${palette.overlayRgb},0.12)`,
+                },
+              ]}
+            >
               {options.map((option) => (
                 <Pressable
                   accessibilityRole="button"
@@ -202,21 +283,41 @@ export function MobilePlacePicker({
                     pressed && styles.resultPressed,
                   ]}
                 >
-                  <MapPinGlyph />
+                  <MapPinGlyph palette={palette} />
                   <View style={styles.flex}>
-                    <Text numberOfLines={1} style={styles.placeName}>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.placeName,
+                        palette && { color: palette.bone },
+                      ]}
+                    >
                       {option.mainText}
                     </Text>
-                    <Text numberOfLines={2} style={styles.placeAddress}>
+                    <Text
+                      numberOfLines={2}
+                      style={[
+                        styles.placeAddress,
+                        palette && { color: palette.muted },
+                      ]}
+                    >
                       {option.secondaryText}
                     </Text>
                   </View>
                 </Pressable>
               ))}
-              <Text style={styles.powered}>Powered by Google</Text>
+              <Text
+                style={[styles.powered, palette && { color: palette.muted }]}
+              >
+                Powered by Google
+              </Text>
             </View>
           )}
-          {!!error && <Text style={styles.error}>{error}</Text>}
+          {!!error && (
+            <Text style={[styles.error, palette && { color: palette.danger }]}>
+              {error}
+            </Text>
+          )}
         </>
       )}
     </View>

@@ -86,6 +86,7 @@ import dunaResultRise from "./assets/duna-result-rise-v1.png";
 import { PlayerCalendarModal } from "./player-calendar";
 import { ProfileHubScreen } from "./profile-hub";
 import { PlayerArtworkModal, ProfileEditorModal } from "./profile-studio";
+import { ScoreUploadScreen } from "./score-upload";
 import { OrganizationExperienceModal } from "./organization-experience";
 import {
   LivePlayerRail,
@@ -482,6 +483,7 @@ function ThemeButton() {
 type Tab =
   | "home"
   | "discover"
+  | "score"
   | "play"
   | "video"
   | "wallet"
@@ -527,6 +529,7 @@ const tabs: readonly {
 }[] = [
   { key: "home", label: "Home", icon: "⌂" },
   { key: "discover", label: "Discover", icon: "⌖" },
+  { key: "score", label: "Score", icon: "↥" },
   { key: "play", label: "Play", icon: "◫" },
   { key: "you", label: "You", icon: "◎" },
 ];
@@ -1263,7 +1266,7 @@ function CoachingNoteCard({ note }: { readonly note: PlayerCoachingNote }) {
 }
 
 type HomeQuickAction =
-  "find-match" | "book-court" | "join-event" | "record-video";
+  "upload-score" | "find-match" | "book-court" | "join-event" | "record-video";
 
 function HomeResultStoryCard({
   match,
@@ -1694,6 +1697,12 @@ function HomeScreen({
     readonly meta: string;
   }[] = [
     {
+      key: "upload-score",
+      icon: "↥",
+      label: "Upload a Score",
+      meta: "Report a match you played",
+    },
+    {
       key: "find-match",
       icon: "⌖",
       label: "Find a Match",
@@ -1902,7 +1911,7 @@ function HomeScreen({
               style={({ pressed }) => [
                 styles.homeQuickAction,
                 index === 0 && styles.homeQuickActionPrimary,
-                index === 3 && styles.homeQuickActionWarm,
+                index === 4 && styles.homeQuickActionWarm,
                 pressed && styles.homeQuickActionPressed,
               ]}
             >
@@ -11187,6 +11196,7 @@ function TabBar({
           }}
           style={[
             styles.tabItem,
+            tab.key === "score" && styles.tabItemScore,
             selectedTab === tab.key && styles.tabItemActive,
           ]}
         >
@@ -11194,6 +11204,7 @@ function TabBar({
             style={[
               styles.tabIcon,
               selectedTab === tab.key && styles.tabActive,
+              tab.key === "score" && styles.tabScoreIcon,
             ]}
           >
             {tab.icon}
@@ -11202,6 +11213,7 @@ function TabBar({
             style={[
               styles.tabLabel,
               selectedTab === tab.key && styles.tabActive,
+              tab.key === "score" && styles.tabScoreLabel,
             ]}
           >
             {tab.label}
@@ -11212,7 +11224,11 @@ function TabBar({
   );
 }
 
-function WatchScoreInbox() {
+function WatchScoreInbox({
+  onReview,
+}: {
+  readonly onReview: (draft: WatchScoreDraft) => void;
+}) {
   const [draft, setDraft] = useState<WatchScoreDraft | null>(null);
 
   useEffect(() => {
@@ -11222,20 +11238,9 @@ function WatchScoreInbox() {
 
   if (!draft) return null;
 
-  const review = async () => {
+  const review = () => {
     selectionHaptic();
-    const watchPayload = encodeURIComponent(
-      JSON.stringify({
-        source: draft.source,
-        draftId: draft.draftId,
-        sets: draft.sets,
-        capturedAt: draft.capturedAt,
-      }),
-    );
-    const query = draft.matchId
-      ? `match=${encodeURIComponent(draft.matchId)}&watch=${watchPayload}`
-      : `watch=${watchPayload}`;
-    await WebBrowser.openBrowserAsync(`${dunaWebUrl}/app/score?${query}`);
+    onReview(draft);
     clearPendingWatchScoreDraft();
     setDraft(null);
   };
@@ -11313,9 +11318,10 @@ function DunaApp() {
   const [organizationCoach, setOrganizationCoach] = useState<MobileCoach>();
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [artworkStudioOpen, setArtworkStudioOpen] = useState(false);
+  const [watchScoreDraft, setWatchScoreDraft] = useState<WatchScoreDraft>();
   const [discoverIntent, setDiscoverIntent] = useState<{
     readonly key: number;
-    readonly kind: Exclude<HomeQuickAction, "record-video">;
+    readonly kind: Exclude<HomeQuickAction, "record-video" | "upload-score">;
   }>();
   const [themePreference, setThemePreference] =
     useState<ThemePreference>("light");
@@ -11365,10 +11371,19 @@ function DunaApp() {
     }).start();
   }, [reduceMotion, screenTransition, tab]);
 
+  useEffect(() => {
+    if (tab !== "score" && watchScoreDraft) setWatchScoreDraft(undefined);
+  }, [tab, watchScoreDraft]);
+
   activePalette = theme === "dark" ? darkColors : lightColors;
   activeStyles = theme === "dark" ? darkStyles : lightStyles;
 
   const openHomeAction = (action: HomeQuickAction) => {
+    if (action === "upload-score") {
+      setWatchScoreDraft(undefined);
+      setTab("score");
+      return;
+    }
     if (action === "record-video") {
       setTab("video");
       return;
@@ -11432,6 +11447,15 @@ function DunaApp() {
                   intent={discoverIntent}
                   onBook={setEventIndex}
                   onOrganization={setOrganizationSlug}
+                />
+              )}
+              {tab === "score" && (
+                <ScoreUploadScreen
+                  initialPlayedAt={watchScoreDraft?.capturedAt}
+                  initialSets={watchScoreDraft?.sets}
+                  key={watchScoreDraft?.draftId ?? "score-upload"}
+                  onComplete={() => setTab("performance")}
+                  palette={colors}
                 />
               )}
               {tab === "play" && (
@@ -11517,7 +11541,12 @@ function DunaApp() {
               coach={organizationCoach}
               onClose={() => setOrganizationCoach(undefined)}
             />
-            <WatchScoreInbox />
+            <WatchScoreInbox
+              onReview={(draft) => {
+                setWatchScoreDraft(draft);
+                setTab("score");
+              }}
+            />
           </View>
         </SafeAreaView>
       </PlayerProfileProvider>
@@ -17806,9 +17835,19 @@ function createStyles(palette: Palette) {
       position: "relative",
     },
     tabItemActive: { backgroundColor: rgba(colors.accentRgb, 0.1) },
+    tabItemScore: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.canvas,
+      borderRadius: 24,
+      borderWidth: 4,
+      marginTop: -18,
+      minHeight: 60,
+    },
     tabIcon: { color: colors.muted, fontSize: 18 },
     tabLabel: { color: colors.muted, fontSize: 10, fontWeight: "700" },
     tabActive: { color: colors.aqua },
+    tabScoreIcon: { color: colors.onAccent, fontSize: 22 },
+    tabScoreLabel: { color: colors.onAccent, fontWeight: "900" },
     modalSafe: { backgroundColor: colors.canvas, flex: 1 },
     modalContent: { padding: 18, paddingBottom: 45 },
     hostedReviewHeader: {
