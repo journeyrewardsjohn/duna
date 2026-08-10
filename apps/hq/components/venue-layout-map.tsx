@@ -503,7 +503,7 @@ export function VenueLayoutMap({
           <MapPinned aria-hidden size={28} />
           <strong>Satellite canvas needs Mapbox</strong>
           <p>{error}</p>
-          <small>Your layout data remains editable in the inspector.</small>
+          <small>Your saved courts and spaces are still intact.</small>
           <div className="venue-layout-map__error-directory">
             {assets.map((asset) => (
               <button
