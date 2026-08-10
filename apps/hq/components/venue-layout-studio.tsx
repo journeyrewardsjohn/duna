@@ -64,6 +64,7 @@ import { createVenueMediaPath, optimizeImageUpload } from "@/lib/media-storage";
 import {
   VENUE_LAYOUT_TEMPLATES,
   type VenueLayoutTemplate,
+  venueLayoutMapViewChanged,
 } from "@/lib/venue-layout-geometry";
 import { VenueFloorplanCanvas } from "./venue-floorplan-canvas";
 import { VenueLayoutMap } from "./venue-layout-map";
@@ -1972,6 +1973,7 @@ export function VenueLayoutStudio({
                 onAssetChange={updateAsset}
                 onSelect={setSelectedAssetId}
                 onViewChange={(nextView) => {
+                  if (!venueLayoutMapViewChanged(view, nextView)) return;
                   setView(nextView);
                   if (!readOnly) setDirty(true);
                 }}
