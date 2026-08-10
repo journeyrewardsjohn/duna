@@ -354,22 +354,24 @@ to understand a value proposition.
 
 The complete list of images Duna needs. Generate nothing outside it.
 
-| ID                             | Page           | Slot                  | Subject direction                                                                                                   |
-| ------------------------------ | -------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `home-hero-{sky,subject,fore}` | /              | Hero, 3 plates        | Lone player at top of swing, wide, small in frame                                                                   |
-| `home-spotlight`               | /              | Player feature        | Portrait, soft backlight, neutral sand background, eyes down                                                        |
-| `home-mobile-context`          | /              | App section           | Hands holding phone at a court edge, dawn, phone screen blank for compositing                                       |
-| `club-hero-{sky,subject,fore}` | /run-your-club | Hero, 3 plates        | **Empty courts before the day starts** — nets being tensioned, lines freshly raked, no people or one distant figure |
-| `club-people`                  | /run-your-club | People chapter        | A coach mid-instruction with two players, backs to camera, distance                                                 |
-| `club-money`                   | /run-your-club | Money chapter         | Abstract: sand texture macro, raking lines, extreme close, near-monochrome                                          |
-| `pro-hero-{sky,subject,fore}`  | /pro           | Dark hero, 3 plates   | Blue hour, stadium court from high behind, floodlights just on, empty seats                                         |
-| `pro-directory`                | /pro           | Player directory band | Backlit silhouette row of players walking off court                                                                 |
-| `event-venue-{slug}`           | /events/*      | Event hero plate      | **Per venue.** Hamburg-Horn: racecourse grandstand + show court, low sun, north-European light, cool grade          |
-| `event-empty-draw`             | /events/*      | Pre-event empty state | Bare court, no net yet, chalk line only                                                                             |
-| `match-court-{cc,c2}`          | /match/*       | Match ambient plate   | Center Court vs Court 2, shot tight and dark, heavily fogged for use behind a scoreboard                            |
-| `rating-texture`               | /methodology   | Background            | Sand ripple macro, near-abstract, very low contrast                                                                 |
-| `empty-generic`                | global         | Empty states          | Single volleyball at rest on sand, long shadow, far off-center                                                      |
-| `og-{page}`                    | global         | Social cards          | 1200×630 crops of the above, never new generations                                                                  |
+| ID                             | Page           | Slot                   | Subject direction                                                                                                   |
+| ------------------------------ | -------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `home-hero-{sky,subject,fore}` | /              | Hero, 3 plates         | Lone player at top of swing, wide, small in frame                                                                   |
+| `home-spotlight`               | /              | Player feature         | Portrait, soft backlight, neutral sand background, eyes down                                                        |
+| `home-mobile-context`          | /              | App section            | Hands holding phone at a court edge, dawn, phone screen blank for compositing                                       |
+| `club-hero-{sky,subject,fore}` | /run-your-club | Hero, 3 plates         | **Empty courts before the day starts** — nets being tensioned, lines freshly raked, no people or one distant figure |
+| `club-people`                  | /run-your-club | People chapter         | A coach mid-instruction with two players, backs to camera, distance                                                 |
+| `club-money`                   | /run-your-club | Money chapter          | Abstract: sand texture macro, raking lines, extreme close, near-monochrome                                          |
+| `pro-hero-{sky,subject,fore}`  | /pro           | Dark hero, 3 plates    | Blue hour, stadium court from high behind, floodlights just on, empty seats                                         |
+| `pro-directory`                | /pro           | Player directory band  | Backlit silhouette row of players walking off court                                                                 |
+| `event-venue-{slug}`           | /events/*      | Event hero plate       | **Per venue.** Hamburg-Horn: racecourse grandstand + show court, low sun, north-European light, cool grade          |
+| `event-empty-draw`             | /events/*      | Pre-event empty state  | Bare court, no net yet, chalk line only                                                                             |
+| `match-court-{cc,c2}`          | /match/*       | Match ambient plate    | Center Court vs Court 2, shot tight and dark, heavily fogged for use behind a scoreboard                            |
+| `result-rise-v1`               | web + Players  | Won-result signal art  | Abstract warm dune rise and court-line movement, no people, text, logos, trophies, or partner marks                 |
+| `result-return-v1`             | web + Players  | Lost-result signal art | Abstract cool marine return arc and upward court-line movement, no people, text, logos, or partner marks            |
+| `rating-texture`               | /methodology   | Background             | Sand ripple macro, near-abstract, very low contrast                                                                 |
+| `empty-generic`                | global         | Empty states           | Single volleyball at rest on sand, long shadow, far off-center                                                      |
+| `og-{page}`                    | global         | Social cards           | 1200×630 crops of the above, never new generations                                                                  |
 
 Venue plates scale per event: one per **venue**, not per event, reused across men's/women's divisions and across years. Two dozen plates covers the tour.
 

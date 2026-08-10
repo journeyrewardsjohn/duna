@@ -45,9 +45,11 @@ function timeLabel(iso: string | undefined) {
 export function PickupEditForm({
   event,
   confirmedParticipantCount,
+  initialWaitlistEnabled,
 }: {
   readonly event: EventSummary;
   readonly confirmedParticipantCount: number;
+  readonly initialWaitlistEnabled: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -78,6 +80,9 @@ export function PickupEditForm({
   const [approvalRequired, setApprovalRequired] = useState(
     event.approvalRequired ?? false,
   );
+  const [waitlistEnabled, setWaitlistEnabled] = useState(
+    initialWaitlistEnabled,
+  );
   const [visibility, setVisibility] = useState<"public" | "unlisted">(
     event.visibility ?? "public",
   );
@@ -99,7 +104,7 @@ export function PickupEditForm({
   const canSave =
     title.trim().length >= 3 &&
     venueName.trim().length > 0 &&
-    capacity >= 2 &&
+    capacity >= Math.max(2, confirmedParticipantCount) &&
     capacity <= 100 &&
     Boolean(endIso) &&
     isFuture;
@@ -112,6 +117,7 @@ export function PickupEditForm({
     capacity !== event.capacity ||
     note !== (event.description ?? event.shortSummary ?? "") ||
     approvalRequired !== (event.approvalRequired ?? false) ||
+    waitlistEnabled !== initialWaitlistEnabled ||
     visibility !== (event.visibility ?? "public");
 
   function choosePlace(place: PlaceDetails) {
@@ -146,6 +152,7 @@ export function PickupEditForm({
         capacity,
         note: note.trim() || undefined,
         approvalRequired,
+        waitlistEnabled,
         visibility,
         idempotencyKey: crypto.randomUUID(),
       });
@@ -176,10 +183,9 @@ export function PickupEditForm({
         <div className={styles.editWindow}>
           <ShieldCheck aria-hidden size={21} />
           <span>
-            <strong>Safe editing window</strong>
-            {confirmedParticipantCount <= 1
-              ? "Core details remain editable until another player joins."
-              : "Players are already confirmed; review changes carefully."}
+            <strong>Creator controls</strong>
+            Only you can publish changes. Confirmed players keep their places,
+            so capacity cannot drop below the active roster.
           </span>
         </div>
       </header>
@@ -254,9 +260,13 @@ export function PickupEditForm({
                 <span className={styles.capacityControl}>
                   <button
                     aria-label="Remove one spot"
-                    disabled={capacity <= 2}
+                    disabled={
+                      capacity <= Math.max(2, confirmedParticipantCount)
+                    }
                     onClick={() =>
-                      setCapacity((value) => Math.max(2, value - 1))
+                      setCapacity((value) =>
+                        Math.max(2, confirmedParticipantCount, value - 1),
+                      )
                     }
                     type="button"
                   >
@@ -265,7 +275,7 @@ export function PickupEditForm({
                   <input
                     id="pickup-capacity"
                     max={100}
-                    min={2}
+                    min={Math.max(2, confirmedParticipantCount)}
                     onChange={(inputEvent) =>
                       setCapacity(Number(inputEvent.target.value))
                     }
@@ -283,7 +293,10 @@ export function PickupEditForm({
                     +
                   </button>
                 </span>
-                <small>Includes your host spot.</small>
+                <small>
+                  Includes your host spot. Pickup formats may have more than
+                  four players.
+                </small>
               </label>
             </div>
             <fieldset className={styles.durationField}>
@@ -422,6 +435,25 @@ export function PickupEditForm({
                 type="checkbox"
               />
             </label>
+            <label className={styles.approvalToggle}>
+              <span className={styles.toggleCopy}>
+                <UsersRound aria-hidden size={20} />
+                <span>
+                  <strong>Enable waitlist when full</strong>
+                  <small>
+                    Players can line up for the next opening without taking a
+                    confirmed spot.
+                  </small>
+                </span>
+              </span>
+              <input
+                checked={waitlistEnabled}
+                onChange={(inputEvent) =>
+                  setWaitlistEnabled(inputEvent.target.checked)
+                }
+                type="checkbox"
+              />
+            </label>
           </section>
         </div>
 
@@ -463,6 +495,7 @@ export function PickupEditForm({
                   {approvalRequired
                     ? "Host approval required"
                     : "Instant confirmation"}
+                  {waitlistEnabled ? " · Waitlist on" : " · Waitlist off"}
                 </small>
               </span>
             </div>
@@ -476,7 +509,8 @@ export function PickupEditForm({
             </div>
             <div className={styles.guard}>
               <ShieldCheck aria-hidden size={18} />
-              Core details lock after another player confirms.
+              Core details lock at the start time. Until then, only the creator
+              can publish edits.
             </div>
             {message && (
               <p className={styles.message} role="status">

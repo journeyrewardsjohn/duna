@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CheckoutError,
   type CheckoutPolicy,
+  validatePickupCoverPayment,
   validatePolicyAcceptances,
 } from "./checkout";
 import { eventCheckoutResultSchema } from "./contracts";
@@ -107,5 +108,29 @@ describe("native event payment contract", () => {
         paymentSheet: partialPaymentSheet,
       }),
     ).toThrow();
+  });
+});
+
+describe("hosted-match covered places", () => {
+  it("keeps free additions unconfirmed until each invited player accepts", () => {
+    expect(() =>
+      validatePickupCoverPayment({
+        pickup: true,
+        actorPersonId: "player-1",
+        subjectPersonIds: ["player-2"],
+        perPersonAmountMinor: 0,
+      }),
+    ).toThrow(/Each player confirms their own place/);
+  });
+
+  it("allows another player's place to be covered when payment is required", () => {
+    expect(() =>
+      validatePickupCoverPayment({
+        pickup: true,
+        actorPersonId: "player-1",
+        subjectPersonIds: ["player-2"],
+        perPersonAmountMinor: 1800,
+      }),
+    ).not.toThrow();
   });
 });

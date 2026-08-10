@@ -191,6 +191,7 @@ import {
 } from "./commerce";
 import {
   cancelPickup,
+  invitePickupPlayers,
   leavePickup,
   loadPickupManagement,
   requestPickupJoin,
@@ -350,11 +351,13 @@ import {
 import {
   appendMatchEvents,
   appendOperatorMatchEvents,
+  claimMatchParticipantInvitation,
   confirmMatchResult,
   flagMatchHistoryInaccurate,
   loadOperatorMatchScoringState,
   loadOperatorScorableMatches,
   loadMatchScoringState,
+  loadMatchParticipantInvitation,
   loadPublicMatchScoringState,
   MatchServiceError,
   recordCompletedMatch,
@@ -757,7 +760,12 @@ const pickupManagementSchema = z.object({
   canEdit: z.boolean(),
   canCancel: z.boolean(),
   canLeave: z.boolean(),
+  canAddPlayers: z.boolean(),
+  capacity: z.number().int().min(2),
+  spotsRemaining: z.number().int().nonnegative(),
+  waitlistEnabled: z.boolean(),
   confirmedParticipantCount: z.number().int().nonnegative(),
+  invitedParticipantCount: z.number().int().nonnegative(),
   ownRequestStatus: pickupRequestStatusSchema.optional(),
   requests: z
     .array(
@@ -1456,6 +1464,37 @@ const publicRouter = router({
     .query(async ({ input, ctx }) => {
       try {
         return await loadPlayerInvitation(input.inviteToken, ctx.now);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  matchParticipantInvitation: publicProcedure
+    .input(z.object({ inviteToken: z.string().min(32).max(96) }))
+    .output(
+      z.object({
+        matchId: z.string().uuid(),
+        invitedName: z.string(),
+        reporterName: z.string(),
+        opponentNames: z.array(z.string()).max(6).readonly(),
+        playedAt: z.iso.datetime(),
+        venueName: z.string(),
+        sets: z
+          .array(
+            z.object({
+              a: z.number().int().nonnegative(),
+              b: z.number().int().nonnegative(),
+            }),
+          )
+          .max(5)
+          .readonly(),
+        status: z.enum(["pending", "claimed", "expired", "cancelled"]),
+        expiresAt: z.iso.datetime(),
+        appDeepLink: z.string(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadMatchParticipantInvitation(input.inviteToken, ctx.now);
       } catch (error) {
         return throwDomainError(error);
       }
@@ -3726,6 +3765,49 @@ const playerRouter = router({
         },
       }),
     ),
+  claimMatchParticipantInvitation: protectedProcedure
+    .use(requireScope("matches:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "match-participant-invitation-claim",
+        capacity: 8,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        inviteToken: z.string().min(32).max(96),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        matchId: z.string().uuid(),
+        status: z.literal("claimed"),
+        appDeepLink: z.string(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.claimMatchParticipantInvitation",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await claimMatchParticipantInvitation({
+              actor: ctx.actor!,
+              inviteToken: input.inviteToken,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   claimStaffInvitation: protectedProcedure
     .use(
       rateLimitMiddleware({
@@ -3863,8 +3945,29 @@ const playerRouter = router({
     .input(
       z
         .object({
-          teamAIds: z.array(z.string().uuid()).min(1).max(6),
-          teamBIds: z.array(z.string().uuid()).min(1).max(6),
+          teamAIds: z.array(z.string().uuid()).max(6),
+          teamBIds: z.array(z.string().uuid()).max(6),
+          provisionalParticipants: z
+            .array(
+              z
+                .object({
+                  side: z.enum(["A", "B"]),
+                  givenName: z.string().trim().min(1).max(80),
+                  familyName: z.string().trim().min(1).max(80),
+                  email: z.string().trim().email().max(320).optional(),
+                  phoneE164: z
+                    .string()
+                    .trim()
+                    .regex(/^\+[1-9]\d{7,14}$/)
+                    .optional(),
+                })
+                .refine((value) => value.email || value.phoneE164, {
+                  message: "Add an email or mobile number.",
+                  path: ["email"],
+                }),
+            )
+            .max(11)
+            .default([]),
           venueId: z.string().uuid().optional(),
           location: z
             .object({
@@ -3892,9 +3995,25 @@ const playerRouter = router({
           deviceId: z.string().trim().min(8).max(128),
           idempotencyKey: z.string().uuid(),
         })
-        .refine((value) => value.teamAIds.length === value.teamBIds.length, {
-          message: "Both teams must have the same number of players.",
-          path: ["teamBIds"],
+        .superRefine((value, ctx) => {
+          const teamASize =
+            value.teamAIds.length +
+            value.provisionalParticipants.filter(
+              (participant) => participant.side === "A",
+            ).length;
+          const teamBSize =
+            value.teamBIds.length +
+            value.provisionalParticipants.filter(
+              (participant) => participant.side === "B",
+            ).length;
+          if (![2, 3, 4, 6].includes(teamASize) || teamASize !== teamBSize) {
+            ctx.addIssue({
+              code: "custom",
+              message:
+                "Both teams must be the same supported size: 2v2, 3v3, 4v4, or 6v6.",
+              path: ["teamBIds"],
+            });
+          }
         }),
     )
     .output(matchScoringStateSchema)
@@ -3910,6 +4029,7 @@ const playerRouter = router({
               actor: ctx.actor!,
               teamAIds: input.teamAIds,
               teamBIds: input.teamBIds,
+              provisionalParticipants: input.provisionalParticipants,
               venueId: input.venueId,
               location: input.location,
               playedAt: new Date(input.playedAt),
@@ -5125,6 +5245,49 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
+  invitePickupPlayers: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "pickup-player-invite",
+        capacity: 20,
+        refillPerMinute: 8,
+      }),
+    )
+    .input(
+      z.object({
+        pickupSessionId: z.string().uuid(),
+        personIds: z.array(z.string().uuid()).min(1).max(10),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        invitedPersonIds: z.array(z.string().uuid()).readonly(),
+        alreadyActivePersonIds: z.array(z.string().uuid()).readonly(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.invitePickupPlayers",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await invitePickupPlayers({
+              actor: ctx.actor!,
+              pickupSessionId: input.pickupSessionId,
+              personIds: input.personIds,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   requestPickupJoin: protectedProcedure
     .use(
       rateLimitMiddleware({
@@ -5220,6 +5383,7 @@ const playerRouter = router({
         capacity: z.number().int().min(2).max(100),
         note: z.string().trim().max(2_000).optional(),
         approvalRequired: z.boolean(),
+        waitlistEnabled: z.boolean(),
         visibility: z.enum(["public", "unlisted"]),
         idempotencyKey: z.string().uuid(),
       }),
@@ -5618,7 +5782,7 @@ const playerRouter = router({
                 "Each team member needs a Duna player or invite.",
               ),
           )
-          .max(5)
+          .max(10)
           .optional(),
         subjectPersonId: z.string().uuid().optional(),
         acceptedPolicyIds: z

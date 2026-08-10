@@ -101,6 +101,11 @@ function mapDatabaseOperationError(error: unknown): never {
     ],
     ["pickup_has_ended", "PICKUP_HAS_ENDED", "This pickup has already ended."],
     [
+      "pickup_full",
+      "PICKUP_NOT_JOINABLE",
+      "This pickup is full and its waitlist is turned off.",
+    ],
+    [
       "pickup_ineligible",
       "INELIGIBLE",
       "This participant is not eligible for the pickup.",
@@ -450,9 +455,20 @@ export async function evaluatePickupParticipant(input: {
   if (!pickup) {
     throw new CommerceError("PICKUP_NOT_FOUND", "Pickup was not found.");
   }
+  const actorParticipation =
+    pickup.hostPersonId === input.actor.personId
+      ? undefined
+      : await getDatabase().query.pickupParticipants.findFirst({
+          where: and(
+            eq(pickupParticipants.pickupSessionId, pickup.id),
+            eq(pickupParticipants.personId, input.actor.personId),
+            inArray(pickupParticipants.status, ["confirmed", "checked-in"]),
+          ),
+        });
   if (
     pickup.visibility !== "public" &&
-    pickup.hostPersonId !== input.actor.personId
+    pickup.hostPersonId !== input.actor.personId &&
+    !actorParticipation
   ) {
     throw new CommerceError(
       "PICKUP_NOT_JOINABLE",
@@ -549,15 +565,36 @@ export async function joinPickupGroup(input: {
   const subjectPersonIds = [...new Set(input.subjectPersonIds)];
   if (
     subjectPersonIds.length === 0 ||
-    subjectPersonIds.length > 2 ||
-    subjectPersonIds.length !== input.subjectPersonIds.length ||
-    (subjectPersonIds.length === 2 &&
-      !subjectPersonIds.includes(input.actor.personId))
+    subjectPersonIds.length > 10 ||
+    subjectPersonIds.length !== input.subjectPersonIds.length
   ) {
     throw new CommerceError(
       "PICKUP_NOT_JOINABLE",
-      "Choose yourself and at most one distinct partner.",
+      "Choose up to 10 distinct Duna players.",
     );
+  }
+  if (!subjectPersonIds.includes(input.actor.personId)) {
+    const pickup = await getDatabase().query.pickupSessions.findFirst({
+      where: eq(pickupSessions.id, input.pickupSessionId),
+    });
+    const actorParticipation =
+      pickup?.hostPersonId === input.actor.personId
+        ? true
+        : Boolean(
+            await getDatabase().query.pickupParticipants.findFirst({
+              where: and(
+                eq(pickupParticipants.pickupSessionId, input.pickupSessionId),
+                eq(pickupParticipants.personId, input.actor.personId),
+                inArray(pickupParticipants.status, ["confirmed", "checked-in"]),
+              ),
+            }),
+          );
+    if (!pickup || !actorParticipation) {
+      throw new CommerceError(
+        "PICKUP_NOT_JOINABLE",
+        "Join this match before adding and paying for other players.",
+      );
+    }
   }
   const evaluations = await Promise.all(
     subjectPersonIds.map((subjectPersonId) =>
@@ -566,9 +603,9 @@ export async function joinPickupGroup(input: {
         pickupSessionId: input.pickupSessionId,
         subjectPersonId,
         now: input.now,
-        allowAdultPartnerPurchase:
-          subjectPersonId !== input.actor.personId &&
-          subjectPersonIds.length === 2,
+        requireApproval:
+          subjectPersonId === input.actor.personId ? undefined : false,
+        allowAdultPartnerPurchase: subjectPersonId !== input.actor.personId,
       }),
     ),
   );
@@ -590,35 +627,36 @@ export async function joinPickupGroup(input: {
             "pending",
             "confirmed",
             "checked-in",
+            "invited",
             "waitlisted",
           ]),
         ),
       );
-    const resumesThisPaidPair = Boolean(
-      input.orderId &&
-      existing.length === subjectPersonIds.length &&
-      existing.every(
-        (participant) =>
-          participant.orderId === input.orderId &&
-          participant.status === "pending" &&
-          participant.holdExpiresAt &&
-          participant.holdExpiresAt > input.now,
-      ),
-    );
-    const repeatsThisFreePair = Boolean(
-      !input.orderId &&
-      existing.length === subjectPersonIds.length &&
-      existing.every(
-        (participant) =>
-          ["confirmed", "checked-in"].includes(participant.status) &&
-          (participant.personId === input.actor.personId ||
-            participant.addedByPersonId === input.actor.personId),
-      ),
-    );
-    if (existing.length > 0 && !resumesThisPaidPair && !repeatsThisFreePair) {
+    const conflicts = existing.some((participant) => {
+      if (["invited", "waitlisted"].includes(participant.status)) return false;
+      if (
+        input.orderId &&
+        participant.status === "pending" &&
+        participant.orderId === input.orderId &&
+        participant.holdExpiresAt &&
+        participant.holdExpiresAt > input.now
+      ) {
+        return false;
+      }
+      if (
+        !input.orderId &&
+        ["confirmed", "checked-in"].includes(participant.status) &&
+        (participant.personId === input.actor.personId ||
+          participant.addedByPersonId === input.actor.personId)
+      ) {
+        return false;
+      }
+      return true;
+    });
+    if (conflicts) {
       throw new CommerceError(
         "CHECKOUT_IN_PROGRESS",
-        "One of these players already has a place in this hosted match.",
+        "One of these players already has a place or a different checkout in this hosted match.",
       );
     }
   }
@@ -659,7 +697,7 @@ export async function joinPickupGroup(input: {
         if (subjectPersonIds.length > 1 && row.result_status === "waitlisted") {
           throw new CommerceError(
             "PICKUP_NOT_JOINABLE",
-            "Two places are no longer available together.",
+            "These places are no longer available together.",
           );
         }
         if (subjectPersonId !== input.actor.personId) {

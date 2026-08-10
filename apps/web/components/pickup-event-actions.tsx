@@ -1,6 +1,7 @@
 "use client";
 
 import type { PickupManagementSummary } from "@duna/api";
+import type { PersonSummary } from "@duna/core";
 import { Badge } from "@duna/ui";
 import {
   ArrowRight,
@@ -10,6 +11,7 @@ import {
   Pencil,
   ShieldCheck,
   Trash2,
+  UserPlus,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -17,15 +19,189 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
   cancelPickupAction,
+  invitePickupPlayersAction,
   leavePickupAction,
   requestPickupJoinAction,
   reviewPickupJoinRequestAction,
 } from "@/app/events/[slug]/actions";
+import {
+  searchTeammatesAction,
+  startEventCheckoutAction,
+} from "@/app/app/checkout/[slug]/actions";
+
+type PickupPlayerResult = {
+  readonly person: PersonSummary;
+  readonly eligible: boolean;
+  readonly eligibilityReasons: readonly string[];
+};
+
+function PickupPlayerAdder({
+  pickupSessionId,
+  slug,
+  management,
+  paidMatch,
+}: {
+  readonly pickupSessionId: string;
+  readonly slug: string;
+  readonly management: PickupManagementSummary;
+  readonly paidMatch: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<readonly PickupPlayerResult[]>([]);
+  const [selected, setSelected] = useState<readonly PickupPlayerResult[]>([]);
+  const [pending, startTransition] = useTransition();
+  const [message, setMessage] = useState("");
+
+  const search = () => {
+    startTransition(async () => {
+      const response = await searchTeammatesAction({
+        query: query.trim() || undefined,
+      });
+      if (!response.ok) {
+        setMessage(response.error);
+        return;
+      }
+      setResults(response.results);
+    });
+  };
+
+  const invite = () => {
+    startTransition(async () => {
+      const response = await invitePickupPlayersAction({
+        pickupSessionId,
+        slug,
+        personIds: selected.map(({ person }) => person.id),
+        idempotencyKey: crypto.randomUUID(),
+      });
+      setMessage(
+        response.ok
+          ? `${response.result.invitedPersonIds.length} invitation(s) sent. Places remain open until each player confirms or pays.`
+          : response.error,
+      );
+      if (response.ok) setSelected([]);
+    });
+  };
+
+  const cover = () => {
+    startTransition(async () => {
+      const response = await startEventCheckoutAction({
+        sessionId: pickupSessionId,
+        slug,
+        teamPaymentMode: "team",
+        teamRoster: selected.map(({ person }) => ({
+          personId: person.id,
+          displayName: person.displayName,
+        })),
+        acceptedPolicyIds: [],
+        readPolicyIds: [],
+        isDunaPlus: false,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      if (!response.ok) {
+        setMessage(response.error);
+        return;
+      }
+      if (response.result.checkoutUrl) {
+        window.location.assign(response.result.checkoutUrl);
+        return;
+      }
+      setMessage(
+        response.result.mode === "waitlist"
+          ? "The match filled while you were choosing; waitlist status was applied."
+          : `${selected.length} place(s) confirmed.`,
+      );
+      setSelected([]);
+    });
+  };
+
+  if (!management.canAddPlayers) return null;
+  return (
+    <section className="pickup-actions__player-adder">
+      <button onClick={() => setOpen((value) => !value)} type="button">
+        <UserPlus aria-hidden size={15} />{" "}
+        {open ? "Close player picker" : "Add or cover players"}
+      </button>
+      {open && (
+        <div className="pickup-actions__player-picker">
+          <p>
+            <strong>{management.spotsRemaining} open</strong> of{" "}
+            {management.capacity}
+            {management.waitlistEnabled ? " · waitlist on" : " · waitlist off"}
+          </p>
+          <label>
+            <input
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search Duna players"
+              value={query}
+            />
+            <button disabled={pending} onClick={search} type="button">
+              Search
+            </button>
+          </label>
+          <div className="pickup-actions__player-results">
+            {results.map((result) => {
+              const chosen = selected.some(
+                ({ person }) => person.id === result.person.id,
+              );
+              return (
+                <button
+                  aria-pressed={chosen}
+                  disabled={!result.eligible}
+                  key={result.person.id}
+                  onClick={() =>
+                    setSelected((current) =>
+                      chosen
+                        ? current.filter(
+                            ({ person }) => person.id !== result.person.id,
+                          )
+                        : [...current, result],
+                    )
+                  }
+                  type="button"
+                >
+                  <span className="avatar">{result.person.initials}</span>
+                  <span>
+                    <strong>{result.person.displayName}</strong>
+                    <small>
+                      Sand Rating {result.person.rating.display.toFixed(2)}
+                    </small>
+                  </span>
+                  <Check aria-hidden size={15} />
+                </button>
+              );
+            })}
+          </div>
+          {selected.length > 0 && (
+            <div className="pickup-actions__player-decisions">
+              <button disabled={pending} onClick={invite} type="button">
+                Invite · not held
+              </button>
+              {paidMatch && (
+                <button
+                  disabled={
+                    pending || selected.length > management.spotsRemaining
+                  }
+                  onClick={cover}
+                  type="button"
+                >
+                  Pay & confirm {selected.length}
+                </button>
+              )}
+            </div>
+          )}
+          {message && <p role="status">{message}</p>}
+        </div>
+      )}
+    </section>
+  );
+}
 
 interface PickupEventActionsProps {
   readonly pickupSessionId: string;
   readonly slug: string;
   readonly approvalRequired: boolean;
+  readonly paidMatch: boolean;
   readonly management?: PickupManagementSummary;
 }
 
@@ -33,6 +209,7 @@ export function PickupEventActions({
   pickupSessionId,
   slug,
   approvalRequired,
+  paidMatch,
   management,
 }: PickupEventActionsProps) {
   const router = useRouter();
@@ -150,6 +327,12 @@ export function PickupEventActions({
             <Pencil aria-hidden size={15} /> Edit pickup
           </Link>
         )}
+        <PickupPlayerAdder
+          management={management}
+          paidMatch={paidMatch}
+          pickupSessionId={pickupSessionId}
+          slug={slug}
+        />
         {management.canCancel ? (
           <button
             className="pickup-actions__danger"
@@ -204,6 +387,12 @@ export function PickupEventActions({
     return (
       <div className="pickup-actions">
         <Badge tone="positive">You&apos;re in</Badge>
+        <PickupPlayerAdder
+          management={management}
+          paidMatch={paidMatch}
+          pickupSessionId={pickupSessionId}
+          slug={slug}
+        />
         <button
           className="pickup-actions__danger"
           disabled={pending}

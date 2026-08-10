@@ -23,6 +23,7 @@ export default async function EditPickupPage({
     <PickupEditForm
       confirmedParticipantCount={management.confirmedParticipantCount}
       event={event}
+      initialWaitlistEnabled={management.waitlistEnabled}
     />
   );
 }

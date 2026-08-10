@@ -10,7 +10,7 @@ import {
   sessions,
   teamEntries,
 } from "@duna/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import { CommerceError } from "./commerce";
 import type { ApiActor } from "./context";
@@ -138,6 +138,7 @@ export async function cancelPlayerBooking(input: {
         eq(pickupParticipants.id, input.bookingId),
         eq(pickupParticipants.personId, input.actor.personId),
         inArray(pickupParticipants.status, [
+          "invited",
           "pending",
           "confirmed",
           "waitlisted",
@@ -153,41 +154,61 @@ export async function cancelPlayerBooking(input: {
       );
     }
     if (
-      pickup.participant.addedByPersonId &&
-      pickup.participant.addedByPersonId !== input.actor.personId
+      pickup.participant.paidByPersonId &&
+      pickup.participant.paidByPersonId !== input.actor.personId
     ) {
       throw new CommerceError(
         "PICKUP_NOT_JOINABLE",
-        pickup.participant.paidByPersonId
-          ? "The player who paid for both places manages this paired booking."
-          : "The player who added this place manages the hosted-match roster.",
+        "The player who paid for this place manages the covered booking.",
       );
     }
     const pairedParticipants =
       pickup.participant.orderId &&
       pickup.orderBuyerPersonId === input.actor.personId
         ? await database
-            .select({ id: pickupParticipants.id })
+            .select({
+              holdExpiresAt: pickupParticipants.holdExpiresAt,
+              id: pickupParticipants.id,
+              status: pickupParticipants.status,
+            })
             .from(pickupParticipants)
             .where(
               and(
                 eq(pickupParticipants.orderId, pickup.participant.orderId),
                 inArray(pickupParticipants.status, [
+                  "invited",
                   "pending",
                   "confirmed",
                   "waitlisted",
                 ]),
               ),
             )
-        : [{ id: pickup.participant.id }];
+        : [pickup.participant];
     const participantIds = pairedParticipants.map(
       (participant) => participant.id,
     );
+    const releasedCapacity = pairedParticipants.filter(
+      (participant) =>
+        ["confirmed", "checked-in"].includes(participant.status) ||
+        (participant.status === "pending" &&
+          Boolean(
+            participant.holdExpiresAt && participant.holdExpiresAt > input.now,
+          )),
+    ).length;
     await getTransactionalDatabase().transaction(async (transaction) => {
       await transaction
         .update(pickupParticipants)
         .set({ status: "cancelled", updatedAt: input.now })
         .where(inArray(pickupParticipants.id, participantIds));
+      if (releasedCapacity > 0) {
+        await transaction.execute(sql`
+          SELECT duna_offer_pickup_waitlist(
+            ${pickup.participant.pickupSessionId}::uuid,
+            ${releasedCapacity}::integer,
+            ${input.requestId}::text
+          )
+        `);
+      }
       await transaction.insert(auditLog).values({
         actorPersonId: input.actor.personId,
         actorType: "person",
@@ -198,7 +219,7 @@ export async function cancelPlayerBooking(input: {
         afterHash: stableHash({ ...pickup.participant, status: "cancelled" }),
         reason:
           participantIds.length > 1
-            ? "Payer cancelled both places in a paired hosted-match booking."
+            ? "Payer cancelled every covered place in a hosted-match booking."
             : "Player left an upcoming pickup from Duna Player.",
         traceId: input.requestId,
         ipAddress: input.ipAddress,
@@ -217,10 +238,10 @@ export async function cancelPlayerBooking(input: {
         : ("not-applicable" as const),
       message: paid
         ? participantIds.length > 1
-          ? "Both hosted-match places were cancelled. Any eligible refund or organization credit will follow the host’s policy."
+          ? "All covered places were cancelled. Any eligible refund or organization credit will follow the host’s policy."
           : "Pickup cancelled. Any eligible refund or organization credit will follow the host’s policy."
         : participantIds.length > 1
-          ? "Both hosted-match places were cancelled."
+          ? "All covered places were cancelled."
           : "Pickup cancelled.",
     };
   }
