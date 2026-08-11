@@ -36,6 +36,7 @@ import {
 import {
   AccessibilityInfo,
   Animated,
+  AppState,
   Easing,
   Image,
   ImageBackground,
@@ -472,7 +473,35 @@ const ThemeContext = createContext<{
 
 const MessagingNavigationContext = createContext<{
   readonly open: (support: boolean) => void;
-}>({ open: () => undefined });
+  readonly openProfile: () => void;
+  readonly unreadCount: number;
+}>({
+  open: () => undefined,
+  openProfile: () => undefined,
+  unreadCount: 0,
+});
+
+function PaperPlaneIcon({ color }: { readonly color: string }) {
+  return (
+    <Svg accessibilityElementsHidden height={20} viewBox="0 0 24 24" width={20}>
+      <Path
+        d="M21.3 2.8 3.2 9.6c-1.2.5-1.2 1.2-.2 1.5l4.7 1.5 1.8 5.6c.2.7.1 1 .8 1 .5 0 .8-.2 1-.5l2.6-2.5 5.3 3.9c1 .6 1.7.3 1.9-.9l3.1-14.8c.4-1.5-.6-2.2-1.9-1.6Z"
+        fill="none"
+        stroke={color}
+        strokeLinejoin="round"
+        strokeWidth={1.8}
+      />
+      <Path
+        d="m7.7 12.6 11-6.8-8.5 8.2"
+        fill="none"
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.8}
+      />
+    </Svg>
+  );
+}
 
 function ThemeButton() {
   const { preference, theme, toggle } = useContext(ThemeContext);
@@ -945,7 +974,7 @@ function PolicyReviewModal({
 }
 
 function AppHeader({ eyebrow }: { readonly eyebrow?: string }) {
-  const { dashboard, mode } = usePlayerRuntime();
+  const { dashboard } = usePlayerRuntime();
   const messaging = useContext(MessagingNavigationContext);
   const initials = dashboard?.player.initials ?? demoPlayer.initials;
   return (
@@ -957,19 +986,19 @@ function AppHeader({ eyebrow }: { readonly eyebrow?: string }) {
       <View style={styles.headerActions}>
         <ThemeButton />
         <Pressable
-          accessibilityLabel="Ask Duna"
-          onPress={() => messaging.open(true)}
-          style={styles.askButton}
-        >
-          <Text style={styles.askButtonText}>✦</Text>
-        </Pressable>
-        <Pressable
           accessibilityLabel="Messages"
           onPress={() => messaging.open(false)}
+          style={styles.askButton}
+        >
+          <PaperPlaneIcon color={activePalette.aqua} />
+          {messaging.unreadCount > 0 && <View style={styles.notificationDot} />}
+        </Pressable>
+        <Pressable
+          accessibilityLabel="Your profile"
+          onPress={messaging.openProfile}
           style={styles.avatarButton}
         >
           <Text style={styles.avatarText}>{initials}</Text>
-          {mode === "live" && <View style={styles.notificationDot} />}
         </Pressable>
       </View>
     </View>
@@ -12094,6 +12123,7 @@ function DunaApp() {
   const [messagesOpenToSupport, setMessagesOpenToSupport] = useState(false);
   const [messagesConversationId, setMessagesConversationId] =
     useState<string>();
+  const [messagingUnreadCount, setMessagingUnreadCount] = useState(0);
   const [eventIndex, setEventIndex] = useState<number | null>(null);
   const [bookingId, setBookingId] = useState<string>();
   const [organizationSlug, setOrganizationSlug] = useState<string>();
@@ -12159,9 +12189,31 @@ function DunaApp() {
     () =>
       listenForMessagingNotificationResponses(() => {
         void runtime.messagingDelivery?.syncAll().catch(() => undefined);
+        void runtime.client?.messaging.inbox
+          .query({ asPrincipal: "user" })
+          .then((inbox) => setMessagingUnreadCount(inbox.totalUnread))
+          .catch(() => undefined);
       }),
-    [runtime.messagingDelivery],
+    [runtime.client, runtime.messagingDelivery],
   );
+
+  useEffect(() => {
+    if (runtime.mode !== "live" || !runtime.client) return;
+    const refreshUnread = () =>
+      runtime
+        .client!.messaging.inbox.query({ asPrincipal: "user" })
+        .then((inbox) => setMessagingUnreadCount(inbox.totalUnread))
+        .catch(() => undefined);
+    void refreshUnread();
+    const appState = AppState.addEventListener("change", (state) => {
+      if (state === "active") void refreshUnread();
+    });
+    const interval = setInterval(() => void refreshUnread(), 30_000);
+    return () => {
+      appState.remove();
+      clearInterval(interval);
+    };
+  }, [runtime.client, runtime.mode]);
 
   useEffect(() => {
     if (reduceMotion) {
@@ -12225,6 +12277,8 @@ function DunaApp() {
             setMessagesOpenToSupport(support);
             setTab("messages");
           },
+          openProfile: () => setTab("you"),
+          unreadCount: messagingUnreadCount,
         }}
       >
         <PlayerProfileProvider palette={colors}>
@@ -12314,6 +12368,7 @@ function DunaApp() {
                   <PlayerMessagingScreen
                     initialConversationId={messagesConversationId}
                     initialSupport={messagesOpenToSupport}
+                    onUnreadCountChange={setMessagingUnreadCount}
                     onClose={() => {
                       setMessagesConversationId(undefined);
                       setMessagesOpenToSupport(false);
@@ -13834,7 +13889,7 @@ function createStyles(palette: Palette) {
     },
     avatarText: { color: colors.bone, fontSize: 10, fontWeight: "800" },
     notificationDot: {
-      backgroundColor: colors.flare,
+      backgroundColor: colors.danger,
       borderColor: colors.ink,
       borderRadius: 5,
       borderWidth: 2,

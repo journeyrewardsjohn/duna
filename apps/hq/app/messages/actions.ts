@@ -24,6 +24,7 @@ export async function sendOrganizationMessage(formData: FormData) {
         formData.get("announcementOnly") === "true" ? "announcement" : "text",
       body: required(formData, "body"),
       widgets: [],
+      attachmentUploadIds: [],
     },
   });
   revalidatePath("/messages");

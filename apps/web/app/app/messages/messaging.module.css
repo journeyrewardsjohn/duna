@@ -352,6 +352,53 @@
   white-space: pre-wrap;
 }
 
+.attachmentImageLink {
+  color: inherit;
+  display: grid;
+  gap: 0.35rem;
+  text-decoration: none;
+}
+
+.attachmentImageLink img {
+  border-radius: 0.8rem;
+  display: block;
+  max-height: 320px;
+  max-width: min(360px, 100%);
+  object-fit: cover;
+}
+
+.attachmentImageLink small {
+  font-size: 0.625rem;
+  opacity: 0.72;
+}
+
+.attachmentFile {
+  align-items: center;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 0.8rem;
+  color: var(--text-1);
+  display: flex;
+  gap: 0.65rem;
+  min-width: min(320px, 100%);
+  padding: 0.75rem;
+  text-decoration: none;
+}
+
+.attachmentFile span {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.attachmentFile strong,
+.attachmentFile small {
+  font-size: 0.68rem;
+}
+
+.attachmentFile small {
+  color: var(--text-2);
+}
+
 .widget {
   align-items: center;
   background: var(--surface-1);

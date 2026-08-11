@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { messageWidgetSchema } from "./contracts";
+import { messageWidgetSchema, sendMessageInputSchema } from "./contracts";
 
 describe("rich message action paths", () => {
   it("accepts an internal Duna destination", () => {
@@ -24,5 +24,36 @@ describe("rich message action paths", () => {
         }).success,
       ).toBe(false);
     }
+  });
+});
+
+describe("message attachment contracts", () => {
+  const base = {
+    conversationId: "10000000-0000-4000-8000-000000000001",
+    clientMessageId: "20000000-0000-4000-8000-000000000001",
+    kind: "text" as const,
+    widgets: [],
+  };
+
+  it("allows an attachment-only message", () => {
+    expect(
+      sendMessageInputSchema.safeParse({
+        ...base,
+        attachmentUploadIds: ["30000000-0000-4000-8000-000000000001"],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects an empty message and more than six attachments", () => {
+    expect(sendMessageInputSchema.safeParse(base).success).toBe(false);
+    expect(
+      sendMessageInputSchema.safeParse({
+        ...base,
+        attachmentUploadIds: Array.from(
+          { length: 7 },
+          (_, index) => `30000000-0000-4000-8000-00000000000${index + 1}`,
+        ),
+      }).success,
+    ).toBe(false);
   });
 });

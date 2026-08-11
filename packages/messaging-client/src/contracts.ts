@@ -8,6 +8,7 @@ export const messagingPrincipalSchema = z.object({
   id: z.string().min(1).max(192),
   displayName: z.string().min(1).max(160),
   avatarUrl: z.string().url().optional(),
+  isProfessional: z.boolean().optional(),
 });
 export type MessagingPrincipal = z.infer<typeof messagingPrincipalSchema>;
 
@@ -135,6 +136,20 @@ export const messageModerationStateSchema = z.enum([
   "blocked",
 ]);
 
+export const messageAttachmentKindSchema = z.enum(["image", "video", "file"]);
+export type MessageAttachmentKind = z.infer<typeof messageAttachmentKindSchema>;
+
+export const messageAttachmentSchema = z.object({
+  id: z.string().uuid(),
+  kind: messageAttachmentKindSchema,
+  mediaType: z.string().min(1).max(80),
+  fileName: z.string().min(1).max(255),
+  byteSize: z.number().int().positive(),
+  safetyStatus: z.enum(["pending", "safe", "review", "blocked"]),
+  downloadUrl: z.string().url().optional(),
+});
+export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
+
 export const conversationMessageSchema = z.object({
   id: z.string().uuid(),
   conversationId: z.string().uuid(),
@@ -144,6 +159,7 @@ export const conversationMessageSchema = z.object({
   kind: messageKindSchema,
   body: z.string().max(10_000).optional(),
   widgets: z.array(messageWidgetSchema).max(8).default([]),
+  attachments: z.array(messageAttachmentSchema).max(6).default([]),
   status: z.enum(["screening", "published", "held", "removed"]),
   moderationState: messageModerationStateSchema,
   createdAt: z.string().datetime(),
@@ -226,11 +242,74 @@ export const sendMessageInputSchema = z
     kind: messageKindSchema.default("text"),
     body: z.string().trim().max(10_000).optional(),
     widgets: z.array(messageWidgetSchema).max(8).default([]),
+    attachmentUploadIds: z.array(z.string().uuid()).max(6).default([]),
   })
-  .refine((value) => Boolean(value.body) || value.widgets.length > 0, {
-    message: "A message needs text or an interactive card.",
-  });
+  .refine(
+    (value) =>
+      Boolean(value.body) ||
+      value.widgets.length > 0 ||
+      value.attachmentUploadIds.length > 0,
+    {
+      message: "A message needs text, an attachment, or an interactive card.",
+    },
+  );
 export type SendMessageInput = z.infer<typeof sendMessageInputSchema>;
+
+export const beginMessageAttachmentUploadInputSchema = z.object({
+  conversationId: z.string().uuid(),
+  fileName: z.string().trim().min(1).max(255),
+  mediaType: z.string().trim().min(1).max(80),
+  byteSize: z
+    .number()
+    .int()
+    .positive()
+    .max(1024 * 1024 * 1024),
+});
+export type BeginMessageAttachmentUploadInput = z.infer<
+  typeof beginMessageAttachmentUploadInputSchema
+>;
+
+export const messageAttachmentUploadSessionSchema = z.object({
+  id: z.string().uuid(),
+  partSizeBytes: z.number().int().positive(),
+  totalParts: z.number().int().positive().max(10_000),
+  expiresAt: z.string().datetime(),
+});
+export type MessageAttachmentUploadSession = z.infer<
+  typeof messageAttachmentUploadSessionSchema
+>;
+
+export const messageAttachmentUploadPartSchema = z.object({
+  url: z.string().url(),
+  expiresAt: z.string().datetime(),
+});
+export type MessageAttachmentUploadPart = z.infer<
+  typeof messageAttachmentUploadPartSchema
+>;
+
+export const completeMessageAttachmentUploadInputSchema = z.object({
+  uploadId: z.string().uuid(),
+  parts: z
+    .array(
+      z.object({
+        partNumber: z.number().int().positive().max(10_000),
+        etag: z.string().trim().min(1).max(512),
+      }),
+    )
+    .min(1)
+    .max(10_000),
+});
+export type CompleteMessageAttachmentUploadInput = z.infer<
+  typeof completeMessageAttachmentUploadInputSchema
+>;
+
+export const messageAttachmentUploadResultSchema = z.object({
+  id: z.string().uuid(),
+  status: z.literal("uploaded"),
+});
+export type MessageAttachmentUploadResult = z.infer<
+  typeof messageAttachmentUploadResultSchema
+>;
 
 export const messageActionInputSchema = z.object({
   messageId: z.string().uuid(),
@@ -263,6 +342,7 @@ export const moderationCaseSchema = z.object({
   categories: z.array(z.string()),
   explanation: z.string(),
   messagePreview: z.string().max(2_000).optional(),
+  attachments: z.array(messageAttachmentSchema).max(6).default([]),
   minorPresent: z.boolean(),
   createdAt: z.string().datetime(),
 });

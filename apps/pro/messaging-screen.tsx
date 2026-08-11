@@ -585,6 +585,7 @@ export function ProMessagingScreen({
       kind: "text",
       body,
       widgets: [],
+      attachmentUploadIds: [],
     };
     const optimistic: ConversationMessage = {
       id: input.clientMessageId,
@@ -595,6 +596,7 @@ export function ProMessagingScreen({
       kind: "text",
       body,
       widgets: [],
+      attachments: [],
       status: detail?.conversation.safety.screeningRequired
         ? "screening"
         : "published",

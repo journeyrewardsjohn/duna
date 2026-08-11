@@ -9,12 +9,18 @@ import {
   type ConversationDetail,
   type ConversationMessage,
   type ConversationSummary,
+  type BeginMessageAttachmentUploadInput,
+  type CompleteMessageAttachmentUploadInput,
   type CreateConversationInput,
   type MessagingActionResult,
   type MessagingComposeOptions,
   type MessagingInbox,
   type MessagingModerationCase,
   type MessagingPrincipal,
+  type MessageAttachment,
+  type MessageAttachmentUploadPart,
+  type MessageAttachmentUploadResult,
+  type MessageAttachmentUploadSession,
   type MessageActionInput,
   type PrincipalType,
   type SendMessageInput,
@@ -23,6 +29,7 @@ import {
 import {
   auditLog,
   conversationMessageActions,
+  conversationMessageAttachments,
   conversationMessages,
   courtBookingParticipants,
   courtBookings,
@@ -33,6 +40,7 @@ import {
   guardianships,
   isDatabaseConfigured,
   messageModerationCases,
+  messagingAttachmentUploads,
   messagingAgentRuns,
   messagingBlocks,
   messagingConversationParticipants,
@@ -48,9 +56,31 @@ import {
   sessions,
   workflowJobs,
 } from "@duna/db";
-import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { ApiActor } from "./context";
 import { scheduleConversationWakeUp } from "./messaging-wakeups";
+import {
+  abortR2VideoUpload,
+  completeR2VideoUpload,
+  createR2MessageAttachmentUpload,
+  deleteR2VideoObject,
+  isR2VideoConfigured,
+  presignR2AttachmentDownload,
+  presignR2VideoPart,
+  R2_VIDEO_PART_SIZE_BYTES,
+  verifyR2ObjectSize,
+} from "./video-providers";
 
 export type MessagingPrincipalMode = "user" | "organization";
 
@@ -449,6 +479,117 @@ export class MessagingError extends Error {
   }
 }
 
+const MESSAGE_ATTACHMENT_UPLOAD_SECONDS = 2 * 60 * 60;
+const MESSAGE_ATTACHMENT_TOTAL_MAXIMUM = 1024 * 1024 * 1024;
+const MESSAGE_ATTACHMENT_ACTIVE_UPLOAD_LIMIT = 12;
+const MESSAGE_ATTACHMENT_ACTIVE_BYTES_MAXIMUM = 2 * 1024 * 1024 * 1024;
+const MESSAGE_ATTACHMENT_MAXIMUMS = {
+  image: 50 * 1024 * 1024,
+  video: 1024 * 1024 * 1024,
+  file: 250 * 1024 * 1024,
+} as const;
+
+const messageImageMediaTypes = new Set([
+  "image/avif",
+  "image/gif",
+  "image/heic",
+  "image/heif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+const messageVideoMediaTypes = new Set([
+  "video/3gpp",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+  "video/x-m4v",
+]);
+
+const messageFileMediaTypes = new Set([
+  "application/pdf",
+  "application/rtf",
+  "application/vnd.oasis.opendocument.presentation",
+  "application/vnd.oasis.opendocument.spreadsheet",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/csv",
+  "text/plain",
+]);
+
+function normalizeAttachmentMediaType(value: string): string {
+  return value.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+}
+
+export function validateMessageAttachment(input: {
+  readonly fileName: string;
+  readonly mediaType: string;
+  readonly byteSize: number;
+}): { readonly kind: "image" | "video" | "file"; readonly mediaType: string } {
+  const mediaType = normalizeAttachmentMediaType(input.mediaType);
+  const kind = messageImageMediaTypes.has(mediaType)
+    ? "image"
+    : messageVideoMediaTypes.has(mediaType)
+      ? "video"
+      : messageFileMediaTypes.has(mediaType)
+        ? "file"
+        : undefined;
+  if (!kind) {
+    throw new MessagingError(
+      "BAD_REQUEST",
+      "Choose an image, video, PDF, text file, or standard office document.",
+    );
+  }
+  if (
+    !Number.isInteger(input.byteSize) ||
+    input.byteSize < 1 ||
+    input.byteSize > MESSAGE_ATTACHMENT_MAXIMUMS[kind]
+  ) {
+    const limit = MESSAGE_ATTACHMENT_MAXIMUMS[kind] / (1024 * 1024);
+    throw new MessagingError(
+      "BAD_REQUEST",
+      `${kind === "image" ? "Images" : kind === "video" ? "Videos" : "Documents"} must be ${limit >= 1024 ? `${limit / 1024} GB` : `${limit} MB`} or smaller.`,
+    );
+  }
+  if (!input.fileName.trim()) {
+    throw new MessagingError(
+      "BAD_REQUEST",
+      "The attachment needs a file name.",
+    );
+  }
+  return { kind, mediaType };
+}
+
+export function validateMessageAttachmentTotal(
+  byteSizes: readonly number[],
+): void {
+  const totalBytes = byteSizes.reduce((total, byteSize) => total + byteSize, 0);
+  if (totalBytes > MESSAGE_ATTACHMENT_TOTAL_MAXIMUM) {
+    throw new MessagingError(
+      "BAD_REQUEST",
+      "Attachments in one message can total up to 1 GB.",
+    );
+  }
+}
+
+function safeAttachmentFileName(value: string): string {
+  const withoutControlCharacters = [...value.normalize("NFKC")]
+    .map((character) => {
+      const code = character.charCodeAt(0);
+      return code <= 31 || code === 127 ? "-" : character;
+    })
+    .join("");
+  const cleaned = withoutControlCharacters
+    .replaceAll(/[/\\]/g, "-")
+    .replaceAll(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+  return cleaned || "duna-attachment";
+}
+
 function identityForActor(
   actor: ApiActor,
   mode: MessagingPrincipalMode = "user",
@@ -519,6 +660,7 @@ async function principalDirectory(input: {
     id: string;
     displayName: string;
     avatarUrl: string | null;
+    isProfessional: boolean;
   }[] = [];
   for (const personBatch of chunks([...personIds], 500)) {
     personRows.push(
@@ -527,6 +669,7 @@ async function principalDirectory(input: {
           id: people.id,
           displayName: people.displayName,
           avatarUrl: people.avatarUrl,
+          isProfessional: people.isProfessional,
         })
         .from(people)
         .where(inArray(people.id, personBatch))),
@@ -548,6 +691,7 @@ async function principalDirectory(input: {
       id: person.id,
       displayName: person.displayName,
       ...(person.avatarUrl ? { avatarUrl: person.avatarUrl } : {}),
+      ...(person.isProfessional ? { isProfessional: true } : {}),
     });
   }
   for (const organization of organizationRows) {
@@ -589,9 +733,73 @@ function widgetsFromRow(row: MessageRow) {
   return parsed.success ? parsed.data : [];
 }
 
+type AttachmentRow = typeof conversationMessageAttachments.$inferSelect;
+type MessageAttachmentDirectory = ReadonlyMap<string, MessageAttachment[]>;
+
+export async function loadMessageAttachmentDirectory(
+  messageIds: readonly string[],
+  options: { readonly includeUnsafe?: boolean } = {},
+): Promise<MessageAttachmentDirectory> {
+  const uniqueMessageIds = [...new Set(messageIds)];
+  if (uniqueMessageIds.length === 0 || !isDatabaseConfigured()) {
+    return new Map();
+  }
+  const rows: AttachmentRow[] = [];
+  for (const messageBatch of chunks(uniqueMessageIds, 500)) {
+    rows.push(
+      ...(await getDatabase()
+        .select()
+        .from(conversationMessageAttachments)
+        .where(
+          inArray(conversationMessageAttachments.messageId, messageBatch),
+        )),
+    );
+  }
+  const resolved = await Promise.all(
+    rows.map(async (row) => {
+      const mayDownload = row.safetyStatus === "safe" || options.includeUnsafe;
+      let downloadUrl: string | undefined;
+      if (mayDownload && isR2VideoConfigured()) {
+        try {
+          downloadUrl = (
+            await presignR2AttachmentDownload({
+              objectKey: row.storageKey,
+              contentType: row.mediaType,
+              fileName: row.fileName,
+              inline: row.kind === "image" || row.kind === "video",
+            })
+          ).url;
+        } catch {
+          // Keep message history readable if private storage is temporarily down.
+        }
+      }
+      return {
+        messageId: row.messageId,
+        attachment: {
+          id: row.id,
+          kind: row.kind as MessageAttachment["kind"],
+          mediaType: row.mediaType,
+          fileName: row.fileName,
+          byteSize: row.byteSize,
+          safetyStatus: row.safetyStatus as MessageAttachment["safetyStatus"],
+          ...(downloadUrl ? { downloadUrl } : {}),
+        } satisfies MessageAttachment,
+      };
+    }),
+  );
+  const directory = new Map<string, MessageAttachment[]>();
+  for (const item of resolved) {
+    const current = directory.get(item.messageId);
+    if (current) current.push(item.attachment);
+    else directory.set(item.messageId, [item.attachment]);
+  }
+  return directory;
+}
+
 function messageFromRow(
   row: MessageRow,
   directory: ReadonlyMap<string, MessagingPrincipal>,
+  attachments: MessageAttachmentDirectory = new Map(),
 ): ConversationMessage {
   return {
     id: row.id,
@@ -606,6 +814,7 @@ function messageFromRow(
     kind: row.kind,
     ...(row.body ? { body: row.body } : {}),
     widgets: widgetsFromRow(row),
+    attachments: attachments.get(row.id) ?? [],
     status: row.status,
     moderationState: row.moderationState,
     createdAt: row.createdAt.toISOString(),
@@ -725,6 +934,9 @@ export async function loadMessagingInbox(input: {
     participants: participantRows,
     messages: messageRows,
   });
+  const attachmentDirectory = await loadMessageAttachmentDirectory(
+    messageRows.map((message) => message.id),
+  );
   const lastMessageByConversation = new Map(
     messageRows.map((message) => [message.conversationId, message]),
   );
@@ -772,7 +984,15 @@ export async function loadMessagingInbox(input: {
             }
           : {}),
         participants: summaryParticipants,
-        ...(lastRow ? { lastMessage: messageFromRow(lastRow, directory) } : {}),
+        ...(lastRow
+          ? {
+              lastMessage: messageFromRow(
+                lastRow,
+                directory,
+                attachmentDirectory,
+              ),
+            }
+          : {}),
         unreadCount: unreadByConversation.get(conversation.id) ?? 0,
         announcementOnly: conversation.announcementOnly,
         muted: membership.notificationLevel === "muted",
@@ -828,6 +1048,358 @@ async function requireConversationMembership(input: {
     throw new MessagingError("NOT_FOUND", "Conversation not found.");
   }
   return participant;
+}
+
+async function cleanupExpiredMessageAttachmentUploads(input: {
+  readonly ownerPersonId: string;
+  readonly now: Date;
+}) {
+  const expired = await getDatabase()
+    .select()
+    .from(messagingAttachmentUploads)
+    .where(
+      and(
+        eq(messagingAttachmentUploads.ownerPersonId, input.ownerPersonId),
+        inArray(messagingAttachmentUploads.status, ["initiated", "uploaded"]),
+        lte(messagingAttachmentUploads.expiresAt, input.now),
+      ),
+    )
+    .limit(12);
+  for (const upload of expired) {
+    try {
+      if (upload.status === "initiated") {
+        await abortR2VideoUpload({
+          objectKey: upload.storageKey,
+          uploadId: upload.providerUploadId,
+        });
+      } else {
+        await deleteR2VideoObject(upload.storageKey);
+      }
+      await getDatabase()
+        .update(messagingAttachmentUploads)
+        .set({ status: "aborted", updatedAt: input.now })
+        .where(eq(messagingAttachmentUploads.id, upload.id));
+    } catch {
+      // A later upload attempt or storage lifecycle policy can retry cleanup.
+    }
+  }
+}
+
+export async function beginMessageAttachmentUpload(input: {
+  readonly actor: ApiActor;
+  readonly asPrincipal?: MessagingPrincipalMode;
+  readonly attachment: BeginMessageAttachmentUploadInput;
+  readonly now?: Date;
+}): Promise<MessageAttachmentUploadSession> {
+  const now = input.now ?? new Date();
+  if (!isDatabaseConfigured() || input.actor.isDemo) {
+    return {
+      id: crypto.randomUUID(),
+      partSizeBytes: R2_VIDEO_PART_SIZE_BYTES,
+      totalParts: Math.ceil(
+        input.attachment.byteSize / R2_VIDEO_PART_SIZE_BYTES,
+      ),
+      expiresAt: new Date(
+        now.getTime() + MESSAGE_ATTACHMENT_UPLOAD_SECONDS * 1_000,
+      ).toISOString(),
+    };
+  }
+  if (!isR2VideoConfigured()) {
+    throw new MessagingError(
+      "PRECONDITION_FAILED",
+      "Private message attachment storage is not configured.",
+    );
+  }
+  await cleanupExpiredMessageAttachmentUploads({
+    ownerPersonId: input.actor.personId,
+    now,
+  });
+  const identity = identityForActor(input.actor, input.asPrincipal);
+  const membership = await requireConversationMembership({
+    conversationId: input.attachment.conversationId,
+    identity,
+  });
+  if (!membership.canPost) {
+    throw new MessagingError(
+      "FORBIDDEN",
+      "You cannot add attachments to this conversation.",
+    );
+  }
+  const conversation =
+    await getDatabase().query.messagingConversations.findFirst({
+      where: and(
+        eq(messagingConversations.id, input.attachment.conversationId),
+        eq(messagingConversations.status, "open"),
+      ),
+    });
+  if (!conversation) {
+    throw new MessagingError("NOT_FOUND", "Conversation not found.");
+  }
+  if (
+    conversation.announcementOnly &&
+    membership.role !== "moderator" &&
+    identity.principalType !== "organization"
+  ) {
+    throw new MessagingError(
+      "FORBIDDEN",
+      "Only conversation moderators can add attachments here.",
+    );
+  }
+  const validated = validateMessageAttachment(input.attachment);
+  const id = crypto.randomUUID();
+  const fileName = safeAttachmentFileName(input.attachment.fileName);
+  const storageKey = `messaging/${input.attachment.conversationId}/${input.actor.personId}/${id}/${fileName}`;
+  const totalParts = Math.ceil(
+    input.attachment.byteSize / R2_VIDEO_PART_SIZE_BYTES,
+  );
+  const expiresAt = new Date(
+    now.getTime() + MESSAGE_ATTACHMENT_UPLOAD_SECONDS * 1_000,
+  );
+  const created = await createR2MessageAttachmentUpload({
+    objectKey: storageKey,
+    contentType: validated.mediaType,
+    attachmentId: id,
+    ownerPersonId: input.actor.personId,
+    conversationId: input.attachment.conversationId,
+  });
+  try {
+    await getTransactionalDatabase().transaction(async (transaction) => {
+      await transaction.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`messaging-attachment:${input.actor.personId}`}))`,
+      );
+      const activeUploads = await transaction
+        .select({ byteSize: messagingAttachmentUploads.byteSize })
+        .from(messagingAttachmentUploads)
+        .where(
+          and(
+            eq(messagingAttachmentUploads.ownerPersonId, input.actor.personId),
+            inArray(messagingAttachmentUploads.status, [
+              "initiated",
+              "uploaded",
+            ]),
+            gt(messagingAttachmentUploads.expiresAt, now),
+          ),
+        )
+        .limit(MESSAGE_ATTACHMENT_ACTIVE_UPLOAD_LIMIT);
+      const activeBytes = activeUploads.reduce(
+        (total, upload) => total + upload.byteSize,
+        0,
+      );
+      if (
+        activeUploads.length >= MESSAGE_ATTACHMENT_ACTIVE_UPLOAD_LIMIT ||
+        activeBytes + input.attachment.byteSize >
+          MESSAGE_ATTACHMENT_ACTIVE_BYTES_MAXIMUM
+      ) {
+        throw new MessagingError(
+          "PRECONDITION_FAILED",
+          "Finish or cancel your current attachment uploads before adding more.",
+        );
+      }
+      await transaction.insert(messagingAttachmentUploads).values({
+        id,
+        conversationId: input.attachment.conversationId,
+        ownerPersonId: input.actor.personId,
+        storageKey,
+        providerUploadId: created.uploadId,
+        kind: validated.kind,
+        mediaType: validated.mediaType,
+        fileName,
+        byteSize: input.attachment.byteSize,
+        partSizeBytes: R2_VIDEO_PART_SIZE_BYTES,
+        totalParts,
+        status: "initiated",
+        expiresAt,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+  } catch (error) {
+    await abortR2VideoUpload({
+      objectKey: storageKey,
+      uploadId: created.uploadId,
+    }).catch(() => undefined);
+    throw error;
+  }
+  return {
+    id,
+    partSizeBytes: R2_VIDEO_PART_SIZE_BYTES,
+    totalParts,
+    expiresAt: expiresAt.toISOString(),
+  };
+}
+
+async function requireMessageAttachmentUpload(input: {
+  readonly actor: ApiActor;
+  readonly uploadId: string;
+  readonly now?: Date;
+}) {
+  const upload = await getDatabase().query.messagingAttachmentUploads.findFirst(
+    {
+      where: and(
+        eq(messagingAttachmentUploads.id, input.uploadId),
+        eq(messagingAttachmentUploads.ownerPersonId, input.actor.personId),
+      ),
+    },
+  );
+  if (!upload) {
+    throw new MessagingError("NOT_FOUND", "Attachment upload not found.");
+  }
+  if (upload.status !== "initiated") {
+    throw new MessagingError(
+      "PRECONDITION_FAILED",
+      upload.status === "uploaded"
+        ? "This attachment has already finished uploading."
+        : "This attachment upload is no longer available.",
+    );
+  }
+  if (upload.expiresAt <= (input.now ?? new Date())) {
+    throw new MessagingError(
+      "PRECONDITION_FAILED",
+      "This attachment upload expired. Choose the file again.",
+    );
+  }
+  return upload;
+}
+
+export async function presignMessageAttachmentPart(input: {
+  readonly actor: ApiActor;
+  readonly uploadId: string;
+  readonly partNumber: number;
+  readonly now?: Date;
+}): Promise<MessageAttachmentUploadPart> {
+  if (!isDatabaseConfigured() || input.actor.isDemo) {
+    return {
+      url: "https://uploads.example.invalid/duna-message-part",
+      expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+    };
+  }
+  const upload = await requireMessageAttachmentUpload(input);
+  if (input.partNumber < 1 || input.partNumber > upload.totalParts) {
+    throw new MessagingError(
+      "BAD_REQUEST",
+      "That attachment upload part is outside the file.",
+    );
+  }
+  const signed = await presignR2VideoPart({
+    objectKey: upload.storageKey,
+    uploadId: upload.providerUploadId,
+    partNumber: input.partNumber,
+  });
+  return { url: signed.url, expiresAt: signed.expiresAt.toISOString() };
+}
+
+export async function completeMessageAttachmentUpload(input: {
+  readonly actor: ApiActor;
+  readonly completion: CompleteMessageAttachmentUploadInput;
+  readonly now?: Date;
+}): Promise<MessageAttachmentUploadResult> {
+  if (!isDatabaseConfigured() || input.actor.isDemo) {
+    return { id: input.completion.uploadId, status: "uploaded" };
+  }
+  const upload = await requireMessageAttachmentUpload({
+    actor: input.actor,
+    uploadId: input.completion.uploadId,
+    now: input.now,
+  });
+  const parts = [...input.completion.parts].sort(
+    (left, right) => left.partNumber - right.partNumber,
+  );
+  if (
+    parts.length !== upload.totalParts ||
+    parts.some((part, index) => part.partNumber !== index + 1)
+  ) {
+    throw new MessagingError(
+      "BAD_REQUEST",
+      "Every attachment upload part must finish before the message is sent.",
+    );
+  }
+  await completeR2VideoUpload({
+    objectKey: upload.storageKey,
+    uploadId: upload.providerUploadId,
+    parts,
+  });
+  try {
+    await verifyR2ObjectSize({
+      objectKey: upload.storageKey,
+      expectedBytes: upload.byteSize,
+    });
+  } catch (error) {
+    await deleteR2VideoObject(upload.storageKey).catch(() => undefined);
+    await getDatabase()
+      .update(messagingAttachmentUploads)
+      .set({ status: "aborted", updatedAt: input.now ?? new Date() })
+      .where(eq(messagingAttachmentUploads.id, upload.id));
+    throw error;
+  }
+  const [completed] = await getDatabase()
+    .update(messagingAttachmentUploads)
+    .set({ status: "uploaded", updatedAt: input.now ?? new Date() })
+    .where(
+      and(
+        eq(messagingAttachmentUploads.id, upload.id),
+        eq(messagingAttachmentUploads.status, "initiated"),
+      ),
+    )
+    .returning({ id: messagingAttachmentUploads.id });
+  if (!completed) {
+    await deleteR2VideoObject(upload.storageKey).catch(() => undefined);
+    throw new MessagingError(
+      "PRECONDITION_FAILED",
+      "This attachment upload is no longer available.",
+    );
+  }
+  return { id: upload.id, status: "uploaded" };
+}
+
+export async function abortMessageAttachmentUpload(input: {
+  readonly actor: ApiActor;
+  readonly uploadId: string;
+  readonly now?: Date;
+}): Promise<MessagingActionResult> {
+  if (!isDatabaseConfigured() || input.actor.isDemo) {
+    return { ok: true, id: input.uploadId, message: "Upload cancelled." };
+  }
+  const upload = await getDatabase().query.messagingAttachmentUploads.findFirst(
+    {
+      where: and(
+        eq(messagingAttachmentUploads.id, input.uploadId),
+        eq(messagingAttachmentUploads.ownerPersonId, input.actor.personId),
+      ),
+    },
+  );
+  if (!upload) {
+    return { ok: true, id: input.uploadId, message: "Upload cancelled." };
+  }
+  if (upload.status === "attached" || upload.status === "aborted") {
+    return { ok: true, id: upload.id, message: "Upload cancelled." };
+  }
+  const [claimed] = await getDatabase()
+    .update(messagingAttachmentUploads)
+    .set({ status: "aborted", updatedAt: input.now ?? new Date() })
+    .where(
+      and(
+        eq(messagingAttachmentUploads.id, upload.id),
+        eq(messagingAttachmentUploads.ownerPersonId, input.actor.personId),
+        eq(messagingAttachmentUploads.status, upload.status),
+      ),
+    )
+    .returning({ id: messagingAttachmentUploads.id });
+  if (!claimed) {
+    return { ok: true, id: upload.id, message: "Upload cancelled." };
+  }
+  if (upload.status === "initiated") {
+    await abortR2VideoUpload({
+      objectKey: upload.storageKey,
+      uploadId: upload.providerUploadId,
+    }).catch(() => undefined);
+    // A concurrent completion can turn a multipart upload into an object
+    // between the state claim and provider abort. Deleting is idempotent and
+    // ensures that race cannot leave a private orphan behind.
+    await deleteR2VideoObject(upload.storageKey).catch(() => undefined);
+  } else if (upload.status === "uploaded") {
+    await deleteR2VideoObject(upload.storageKey).catch(() => undefined);
+  }
+  return { ok: true, id: upload.id, message: "Upload cancelled." };
 }
 
 export async function loadConversation(input: {
@@ -896,6 +1468,9 @@ export async function loadConversation(input: {
     participants: participantRows,
     messages: messageRows,
   });
+  const attachmentDirectory = await loadMessageAttachmentDirectory(
+    messageRows.map((message) => message.id),
+  );
   const lastPublished = [...messageRows]
     .reverse()
     .find((message) => message.status === "published");
@@ -937,7 +1512,13 @@ export async function loadConversation(input: {
       .slice(0, 8)
       .map((participant) => participantPrincipal(participant, directory)),
     ...(lastPublished
-      ? { lastMessage: messageFromRow(lastPublished, directory) }
+      ? {
+          lastMessage: messageFromRow(
+            lastPublished,
+            directory,
+            attachmentDirectory,
+          ),
+        }
       : {}),
     unreadCount: messageRows.filter(
       (message) =>
@@ -967,7 +1548,9 @@ export async function loadConversation(input: {
       lastReadSeq: participant.lastReadSequence,
       lastDeliveredSeq: participant.lastDeliveredSequence,
     })),
-    messages: messageRows.map((message) => messageFromRow(message, directory)),
+    messages: messageRows.map((message) =>
+      messageFromRow(message, directory, attachmentDirectory),
+    ),
     permissions: {
       canPost:
         membership.canPost &&
@@ -1326,6 +1909,7 @@ export async function loadMessagingComposeOptions(input: {
     displayName: string;
     avatarUrl: string | null;
     isMinor: boolean;
+    isProfessional: boolean;
   }[] = [];
   for (const eligibleBatch of chunks(eligibleIds, 500)) {
     candidateRows.push(
@@ -1335,6 +1919,7 @@ export async function loadMessagingComposeOptions(input: {
           displayName: people.displayName,
           avatarUrl: people.avatarUrl,
           isMinor: people.isMinor,
+          isProfessional: people.isProfessional,
         })
         .from(people)
         .where(
@@ -1352,6 +1937,7 @@ export async function loadMessagingComposeOptions(input: {
         id: candidate.id,
         displayName: candidate.displayName,
         ...(candidate.avatarUrl ? { avatarUrl: candidate.avatarUrl } : {}),
+        ...(candidate.isProfessional ? { isProfessional: true } : {}),
       },
       isMinor: candidate.isMinor,
     })),
@@ -1902,6 +2488,7 @@ export async function createMessagingConversation(input: {
         kind: parsed.announcementOnly ? "announcement" : "text",
         body: parsed.initialMessage,
         widgets: [],
+        attachmentUploadIds: [],
       },
       requestId: input.requestId,
       now,
@@ -1937,6 +2524,7 @@ export async function sendConversationMessage(input: {
       kind: input.message.kind,
       ...(input.message.body ? { body: input.message.body } : {}),
       widgets: input.message.widgets,
+      attachments: [],
       status: input.actor.ageBand === "adult" ? "published" : "screening",
       moderationState:
         input.actor.ageBand === "adult" ? "not-required" : "screening",
@@ -2316,6 +2904,18 @@ export async function sendConversationMessage(input: {
         }
         const needsScreening =
           conversation.minorPresent || youthSafetyState.minorPresent;
+        const uniqueAttachmentUploadIds = [
+          ...new Set(input.message.attachmentUploadIds),
+        ];
+        if (
+          uniqueAttachmentUploadIds.length !==
+          input.message.attachmentUploadIds.length
+        ) {
+          throw new MessagingError(
+            "BAD_REQUEST",
+            "The same attachment cannot be added twice.",
+          );
+        }
         const [sequenceUpdate] = await transaction
           .update(messagingConversations)
           .set({
@@ -2359,6 +2959,52 @@ export async function sendConversationMessage(input: {
           .returning();
         if (!message) {
           throw new MessagingError("BAD_REQUEST", "Message could not be sent.");
+        }
+        if (uniqueAttachmentUploadIds.length > 0) {
+          const attachmentUploads = await transaction
+            .update(messagingAttachmentUploads)
+            .set({
+              status: "attached",
+              attachedMessageId: message.id,
+              updatedAt: now,
+            })
+            .where(
+              and(
+                inArray(
+                  messagingAttachmentUploads.id,
+                  uniqueAttachmentUploadIds,
+                ),
+                eq(messagingAttachmentUploads.conversationId, conversation.id),
+                eq(
+                  messagingAttachmentUploads.ownerPersonId,
+                  input.actor.personId,
+                ),
+                eq(messagingAttachmentUploads.status, "uploaded"),
+                gt(messagingAttachmentUploads.expiresAt, now),
+              ),
+            )
+            .returning();
+          if (attachmentUploads.length !== uniqueAttachmentUploadIds.length) {
+            throw new MessagingError(
+              "PRECONDITION_FAILED",
+              "One or more attachments are unavailable. Choose them again.",
+            );
+          }
+          validateMessageAttachmentTotal(
+            attachmentUploads.map((attachment) => attachment.byteSize),
+          );
+          await transaction.insert(conversationMessageAttachments).values(
+            attachmentUploads.map((attachment) => ({
+              messageId: message.id,
+              storageKey: attachment.storageKey,
+              kind: attachment.kind,
+              mediaType: attachment.mediaType,
+              fileName: attachment.fileName,
+              byteSize: attachment.byteSize,
+              safetyStatus: needsScreening ? "pending" : "safe",
+              createdAt: now,
+            })),
+          );
         }
         if (needsScreening) {
           await transaction
@@ -2419,7 +3065,10 @@ export async function sendConversationMessage(input: {
         actorPrincipal(identity),
       ],
     ]);
-    const message = messageFromRow(inserted, directory);
+    const attachmentDirectory = await loadMessageAttachmentDirectory([
+      inserted.id,
+    ]);
+    const message = messageFromRow(inserted, directory, attachmentDirectory);
     scheduleConversationWakeUp({
       conversationId: message.conversationId,
       seq: message.seq,
@@ -2436,7 +3085,10 @@ export async function sendConversationMessage(input: {
     });
     if (existing) {
       const directory = await principalDirectory({ messages: [existing] });
-      const message = messageFromRow(existing, directory);
+      const attachmentDirectory = await loadMessageAttachmentDirectory([
+        existing.id,
+      ]);
+      const message = messageFromRow(existing, directory, attachmentDirectory);
       scheduleConversationWakeUp({
         conversationId: message.conversationId,
         seq: message.seq,
@@ -2559,6 +3211,7 @@ export async function appendAgentConversationMessage(input: {
       kind: "support-response",
       body: input.body,
       widgets: [],
+      attachments: [],
       status: "published",
       moderationState: "not-required",
       createdAt: (input.now ?? new Date()).toISOString(),
@@ -3016,6 +3669,10 @@ export async function loadMessagingModerationQueue(input: {
     )
     .orderBy(desc(messageModerationCases.createdAt))
     .limit(200);
+  const attachmentDirectory = await loadMessageAttachmentDirectory(
+    rows.map(({ message }) => message.id),
+    { includeUnsafe: true },
+  );
   return rows.map(({ moderation, message, conversation }) => ({
     id: moderation.id,
     messageId: message.id,
@@ -3026,6 +3683,7 @@ export async function loadMessagingModerationQueue(input: {
     categories: moderation.categories,
     explanation: moderation.explanation,
     ...(message.body ? { messagePreview: message.body.slice(0, 2_000) } : {}),
+    attachments: attachmentDirectory.get(message.id) ?? [],
     minorPresent: conversation.minorPresent,
     createdAt: moderation.createdAt.toISOString(),
   }));
@@ -3109,6 +3767,9 @@ export async function loadDunaSupportQueue(input: {
     participants: participantRows,
     messages: messageRows,
   });
+  const attachmentDirectory = await loadMessageAttachmentDirectory(
+    messageRows.map((message) => message.id),
+  );
   const participantsByConversation = new Map<string, ParticipantRow[]>();
   for (const participant of participantRows) {
     const existing = participantsByConversation.get(participant.conversationId);
@@ -3156,7 +3817,9 @@ export async function loadDunaSupportQueue(input: {
             id: conversation.createdByPrincipalId,
             displayName: "Duna member",
           },
-      messages: rows.map((message) => messageFromRow(message, directory)),
+      messages: rows.map((message) =>
+        messageFromRow(message, directory, attachmentDirectory),
+      ),
       updatedAt: (
         conversation.lastMessageAt ?? conversation.updatedAt
       ).toISOString(),
@@ -3222,6 +3885,14 @@ export async function reviewMessagingModerationCase(input: {
           updatedAt: now,
         })
         .where(eq(conversationMessages.id, moderation.messageId));
+      await transaction
+        .update(conversationMessageAttachments)
+        .set({
+          safetyStatus: input.decision === "cleared" ? "safe" : "blocked",
+        })
+        .where(
+          eq(conversationMessageAttachments.messageId, moderation.messageId),
+        );
       if (input.decision === "cleared") {
         await markLatePublishedMessageUnread({ transaction, message, now });
         await transaction

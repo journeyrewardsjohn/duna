@@ -7,6 +7,7 @@ import {
 } from "@openai/agents";
 import {
   auditLog,
+  conversationMessageAttachments,
   conversationMessages,
   courtBookingParticipants,
   courtBookings,
@@ -672,6 +673,7 @@ export async function askDunaSupport(input: {
       kind: "text",
       body: input.question,
       widgets: [],
+      attachmentUploadIds: [],
     },
     requestId: input.requestId,
     now,
@@ -916,22 +918,34 @@ export async function processMessageSafetyWorkflow(
         .orderBy(desc(conversationMessages.sequence))
         .limit(20)
     : [];
-  const decision = guardianCoverageActive
-    ? await screenWithDunaSafety({
-        body: message.body ?? "",
-        widgets: message.widgets,
-        recentConversation: recentConversationRows.reverse().map((row) => ({
-          senderType: row.senderType,
-          kind: row.kind,
-          ...(row.body ? { body: row.body } : {}),
-          createdAt: row.createdAt.toISOString(),
-        })),
-        minorPresent: minorParticipants.length > 0,
-        minorParentalConsentComplete: minorParticipants.every((participant) =>
-          Boolean(participant.parentalConsentAt),
-        ),
-      })
-    : guardianCoverageReviewDecision();
+  const attachments = await database
+    .select({ id: conversationMessageAttachments.id })
+    .from(conversationMessageAttachments)
+    .where(eq(conversationMessageAttachments.messageId, message.id));
+  const decision: SafetyDecision = !guardianCoverageActive
+    ? guardianCoverageReviewDecision()
+    : attachments.length > 0 && minorParticipants.length > 0
+      ? {
+          decision: "review",
+          severity: "high",
+          categories: ["youth-attachment-review"],
+          explanation:
+            "A media or document attachment is addressed to a youth conversation. It remains private and unavailable until a Duna safety reviewer clears it.",
+        }
+      : await screenWithDunaSafety({
+          body: message.body ?? "",
+          widgets: message.widgets,
+          recentConversation: recentConversationRows.reverse().map((row) => ({
+            senderType: row.senderType,
+            kind: row.kind,
+            ...(row.body ? { body: row.body } : {}),
+            createdAt: row.createdAt.toISOString(),
+          })),
+          minorPresent: minorParticipants.length > 0,
+          minorParentalConsentComplete: minorParticipants.every((participant) =>
+            Boolean(participant.parentalConsentAt),
+          ),
+        });
   let finalDecision = decision;
   await getTransactionalDatabase().transaction(async (transaction) => {
     if (
@@ -963,6 +977,16 @@ export async function processMessageSafetyWorkflow(
           eq(conversationMessages.moderationState, "screening"),
         ),
       );
+    await transaction
+      .update(conversationMessageAttachments)
+      .set({
+        safetyStatus: publish
+          ? "safe"
+          : finalDecision.decision === "block"
+            ? "blocked"
+            : "review",
+      })
+      .where(eq(conversationMessageAttachments.messageId, message.id));
     if (!publish) {
       await transaction
         .insert(messageModerationCases)

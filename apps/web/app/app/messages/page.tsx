@@ -9,10 +9,12 @@ import {
   ChevronRight,
   CircleDollarSign,
   FileCheck2,
+  FileText,
   LockKeyhole,
   MessageCircle,
   MoreHorizontal,
   Plus,
+  Play,
   Send,
   ShieldCheck,
   Sparkles,
@@ -191,6 +193,49 @@ function Message({
               widget={widget}
             />
           ))}
+          {message.attachments.map((attachment) =>
+            attachment.kind === "image" && attachment.downloadUrl ? (
+              <a
+                className={styles.attachmentImageLink}
+                href={attachment.downloadUrl}
+                key={attachment.id}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <img alt={attachment.fileName} src={attachment.downloadUrl} />
+                <small>{attachment.fileName}</small>
+              </a>
+            ) : attachment.downloadUrl ? (
+              <a
+                className={styles.attachmentFile}
+                href={attachment.downloadUrl}
+                key={attachment.id}
+                rel="noreferrer"
+                target="_blank"
+              >
+                {attachment.kind === "video" ? (
+                  <Play aria-hidden size={18} />
+                ) : (
+                  <FileText aria-hidden size={18} />
+                )}
+                <span>
+                  <strong>{attachment.fileName}</strong>
+                  <small>
+                    {(attachment.byteSize / (1024 * 1024)).toFixed(1)} MB · Open
+                    on demand
+                  </small>
+                </span>
+              </a>
+            ) : (
+              <span className={styles.attachmentFile} key={attachment.id}>
+                <FileText aria-hidden size={18} />
+                <span>
+                  <strong>{attachment.fileName}</strong>
+                  <small>Private while safety review finishes</small>
+                </span>
+              </span>
+            ),
+          )}
         </div>
         <time dateTime={message.createdAt}>
           {new Intl.DateTimeFormat("en", {

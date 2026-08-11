@@ -438,6 +438,40 @@
   padding: 0.75rem;
 }
 
+.reviewAttachments {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.reviewAttachments a {
+  align-items: center;
+  background: var(--hq-wash);
+  border: 1px solid var(--hq-border);
+  border-radius: 0.75rem;
+  color: var(--hq-deep);
+  display: flex;
+  font-size: 0.68rem;
+  font-weight: 800;
+  gap: 0.55rem;
+  min-height: 4rem;
+  overflow: hidden;
+  padding: 0.65rem;
+  text-decoration: none;
+}
+
+.reviewAttachments img {
+  border-radius: 0.55rem;
+  height: 120px;
+  object-fit: cover;
+  width: 100%;
+}
+
+.reviewAttachments a:has(img) {
+  align-items: stretch;
+  display: grid;
+}
+
 .caseCard > p {
   color: var(--hq-muted);
   font-size: 0.69rem;

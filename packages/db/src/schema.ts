@@ -8373,10 +8373,6 @@ export const conversationMessages = pgTable(
       table.createdAt,
     ),
     check("conversation_message_sequence_positive", sql`${table.sequence} > 0`),
-    check(
-      "conversation_message_content_present",
-      sql`${table.body} IS NOT NULL OR jsonb_array_length(${table.widgets}) > 0`,
-    ),
   ],
 );
 
@@ -8413,6 +8409,7 @@ export const conversationMessageAttachments = pgTable(
       .notNull()
       .references(() => conversationMessages.id, { onDelete: "cascade" }),
     storageKey: text("storage_key").notNull(),
+    kind: varchar("kind", { length: 16 }).notNull(),
     mediaType: varchar("media_type", { length: 80 }).notNull(),
     fileName: text("file_name").notNull(),
     byteSize: integer("byte_size").notNull(),
@@ -8425,8 +8422,71 @@ export const conversationMessageAttachments = pgTable(
     index("conversation_attachment_message_idx").on(table.messageId),
     check("conversation_attachment_size_positive", sql`${table.byteSize} > 0`),
     check(
+      "conversation_attachment_kind_valid",
+      sql`${table.kind} IN ('image', 'video', 'file')`,
+    ),
+    check(
       "conversation_attachment_safety_valid",
       sql`${table.safetyStatus} IN ('pending', 'safe', 'review', 'blocked')`,
+    ),
+  ],
+);
+
+export const messagingAttachmentUploads = pgTable(
+  "messaging_attachment_uploads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => messagingConversations.id, { onDelete: "cascade" }),
+    ownerPersonId: uuid("owner_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    storageKey: text("storage_key").notNull().unique(),
+    providerUploadId: text("provider_upload_id").notNull(),
+    kind: varchar("kind", { length: 16 }).notNull(),
+    mediaType: varchar("media_type", { length: 80 }).notNull(),
+    fileName: text("file_name").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    partSizeBytes: integer("part_size_bytes").notNull(),
+    totalParts: integer("total_parts").notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("initiated"),
+    attachedMessageId: uuid("attached_message_id").references(
+      () => conversationMessages.id,
+      { onDelete: "set null" },
+    ),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("messaging_attachment_upload_owner_idx").on(
+      table.ownerPersonId,
+      table.status,
+      table.expiresAt,
+    ),
+    index("messaging_attachment_upload_conversation_idx").on(
+      table.conversationId,
+      table.status,
+    ),
+    check(
+      "messaging_attachment_upload_kind_valid",
+      sql`${table.kind} IN ('image', 'video', 'file')`,
+    ),
+    check(
+      "messaging_attachment_upload_status_valid",
+      sql`${table.status} IN ('initiated', 'uploaded', 'attached', 'aborted')`,
+    ),
+    check(
+      "messaging_attachment_upload_size_valid",
+      sql`${table.byteSize} > 0 AND ${table.byteSize} <= 1073741824`,
+    ),
+    check(
+      "messaging_attachment_upload_parts_valid",
+      sql`${table.partSizeBytes} >= 5242880 AND ${table.totalParts} > 0 AND ${table.totalParts} <= 10000`,
     ),
   ],
 );
