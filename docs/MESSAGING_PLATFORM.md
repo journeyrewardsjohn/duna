@@ -65,6 +65,21 @@ current token before the account session is cleared.
 for roster, reaction, and watermark state deltas. It is the only schema change
 made by the owned-delivery cutover.
 
+`0068_lying_doorman.sql` adds private multipart attachment-upload reservations,
+records an explicit image, video, or document kind on each message attachment,
+and permits attachment-only messages. The sender can attach up to six files and
+1 GB total to one message. Individual limits are 50 MB for images, 1 GB for
+video, and 250 MB for documents. Upload reservations expire after two hours,
+per-person in-flight quotas prevent storage abuse, and atomic state transitions
+prevent a cancellation from deleting an attachment that a message already
+claimed.
+
+Attachment objects remain private in Cloudflare R2. Authorized conversation
+members receive short-lived, on-demand download URLs. Images may preview inline;
+video and documents stay compact until tapped. Any attachment in a youth
+conversation remains unavailable until a Super Admin safety reviewer clears it,
+and verified guardians remain participants in the same conversation.
+
 Every client uses `DeliveryEngine`. Its cursor implementation reads Neon through
 authenticated, keyset-paginated inbox, message, and state endpoints. Historical
 participants keep access only to messages created at or before their departure.
@@ -115,41 +130,49 @@ OPENAI_ZERO_DATA_RETENTION_CONFIRMED
 MESSAGING_SSE_ENABLED
 UPSTASH_REDIS_REST_URL
 UPSTASH_REDIS_REST_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+R2_BUCKET_NAME
+CF_ACCESS_KEY_ID
+CE_SECRET_ACCESS_KEY
 EXPO_ACCESS_TOKEN
 EXPO_PLAYER_ACCESS_TOKEN
 EXPO_PRO_ACCESS_TOKEN
 ```
 
-Only `DATABASE_URL` is required for correct persistent messaging. Missing
-OpenAI configuration creates a human review/handoff path. Missing Upstash
-configuration or `MESSAGING_SSE_ENABLED=false` keeps cursor polling active but
-removes sub-second wake-ups. Cursor sync is the only shipped delivery branch.
-The Expo access tokens are optional unless enhanced Expo Push security is
-enabled; use the per-project values when Player and Pro have independent tokens,
-with `EXPO_ACCESS_TOKEN` as a single-project fallback.
+Only `DATABASE_URL` is required for correct persistent text messaging. Private
+attachments additionally require the four Cloudflare R2 values above and a
+private bucket. Missing OpenAI configuration creates a human review/handoff
+path. Missing Upstash configuration or `MESSAGING_SSE_ENABLED=false` keeps
+cursor polling active but removes sub-second wake-ups. Cursor sync is the only
+shipped delivery branch. The Expo access tokens are optional unless enhanced
+Expo Push security is enabled; use the per-project values when Player and Pro
+have independent tokens, with `EXPO_ACCESS_TOKEN` as a single-project fallback.
 
 ## Release sequence
 
 1. Apply migrations `0065_duna_messaging_platform.sql`,
-   `0066_soft_jean_grey.sql`, and `0067_brown_professor_monster.sql` to the
-   target Neon branch.
+   `0066_soft_jean_grey.sql`, `0067_brown_professor_monster.sql`, and
+   `0068_lying_doorman.sql` to the target Neon branch.
 2. Verify the relationship backfill counts and review the new constraints.
 3. Configure the server-only OpenAI variables and confirm the applicable data
    controls before enabling automated youth screening.
 4. Configure the server-only Upstash REST URL/token, publish a test wake-up, and
    verify cursor convergence once with SSE disabled and once with SSE enabled.
-5. Confirm no Electric dependency, route, environment variable, publication, or
+5. Configure the private R2 credentials in both Duna Web and HQ, then verify an
+   image, video, document, cancellation, and expired-upload cleanup path.
+6. Confirm no Electric dependency, route, environment variable, publication, or
    inactive replication slot remains. Drop a positively identified inactive
    Electric slot and publication only after the application cutover.
-6. Deploy API, Player Web, HQ, and Super Admin from the same commit.
-7. Confirm APNs/FCM credentials for both Expo projects and, if enabled, store
+7. Deploy API, Player Web, HQ, and Super Admin from the same commit.
+8. Confirm APNs/FCM credentials for both Expo projects and, if enabled, store
    the Expo access token only in the server environment.
-8. Make fresh Player and Pro native builds. `expo-sqlite`, `expo-device`, and
-   `expo-notifications` are new native modules, so an over-the-air JavaScript
-   update is not sufficient for existing installs.
-9. Test adult, teen, under-13, guardian, blocked-organization, mutual-follow,
-   follower-broadcast, offline retry, action receipt, AI handoff, and moderation
-   paths with authenticated non-demo accounts.
+9. Make fresh Player and Pro native builds. `expo-sqlite`, `expo-device`,
+   `expo-notifications`, and Player's `expo-file-system` attachment path require
+   native validation; an over-the-air JavaScript update is not sufficient for
+   existing installs.
+10. Test adult, teen, under-13, guardian, blocked-organization, mutual-follow,
+    follower-broadcast, offline retry, action receipt, AI handoff, and moderation
+    paths with authenticated non-demo accounts.
 
 Do not call the feature live until the migration, provider controls, exact-commit
 web deployments, signed native builds, and authenticated end-to-end checks are
