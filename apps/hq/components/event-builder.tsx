@@ -7,7 +7,7 @@ import {
   formatMoney,
   type EventKind as CoreEventKind,
 } from "@duna/core";
-import { Badge, Numeric } from "@duna/ui";
+import { Badge, Numeric, SmartDateRangePicker } from "@duna/ui";
 import { upload } from "@vercel/blob/client";
 import {
   ArrowLeft,
@@ -1474,31 +1474,29 @@ export function EventBuilder({
                   <p>Times are interpreted in the venue timezone.</p>
                 </div>
               </header>
-              <div className="event-form-grid event-form-grid--three">
+              <div className="event-builder-schedule-context">
+                <span>
+                  <small>Venue timezone</small>
+                  <strong>{timezone}</strong>
+                </span>
                 <label>
-                  <span>Start</span>
-                  <input
-                    onChange={(event) => setStartsAt(event.target.value)}
-                    type="datetime-local"
-                    value={startsAt}
-                  />
-                </label>
-                <label>
-                  <span>End</span>
-                  <input
-                    onChange={(event) => setEndsAt(event.target.value)}
-                    type="datetime-local"
-                    value={endsAt}
-                  />
-                </label>
-                <label>
-                  <span>Timezone</span>
+                  <span>Change timezone</span>
                   <input
                     onChange={(event) => setTimezone(event.target.value)}
                     value={timezone}
                   />
                 </label>
               </div>
+              <SmartDateRangePicker
+                applyLabel="Set schedule"
+                label={kind === "league" ? "Season dates" : "Event dates"}
+                onChange={(range) => {
+                  setStartsAt(range.start);
+                  setEndsAt(range.end);
+                }}
+                timeMode="required"
+                value={{ start: startsAt, end: endsAt }}
+              />
               {kind === "league" && (
                 <div className="league-recurrence">
                   <div className="league-recurrence__heading">

@@ -41,6 +41,7 @@ import {
   registrations,
   refundRecords,
   resourceReservations,
+  scheduleBlocks,
   scheduleOverrides,
   schedules,
   sessionOperations,
@@ -5057,6 +5058,156 @@ export async function createCalendarBlock(input: {
     id: blockId,
     entity: "schedule-override",
     status: input.mode,
+  };
+}
+
+export async function createRecurringCalendarBlocks(input: {
+  readonly actor: ApiActor;
+  readonly resourceType: "court" | "coach";
+  readonly resourceId: string;
+  readonly blocks: readonly {
+    readonly weekday: number;
+    readonly startsAtMinute: number;
+    readonly endsAtMinute: number;
+  }[];
+  readonly effectiveFrom?: string;
+  readonly effectiveTo?: string;
+  readonly mode: "blocked" | "maintenance";
+  readonly reason: string;
+  readonly confirmed: boolean;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  if (!input.confirmed) {
+    throw new Error("Review and confirm the proposed schedule before saving.");
+  }
+  if (input.blocks.length === 0 || input.blocks.length > 14) {
+    throw new Error("Add between one and fourteen weekly schedule blocks.");
+  }
+  if (
+    input.blocks.some(
+      (block) =>
+        block.weekday < 0 ||
+        block.weekday > 6 ||
+        block.startsAtMinute < 0 ||
+        block.endsAtMinute > 1_440 ||
+        block.endsAtMinute <= block.startsAtMinute,
+    )
+  ) {
+    throw new Error("One or more weekly blocks has an invalid day or time.");
+  }
+  if (
+    input.effectiveFrom &&
+    input.effectiveTo &&
+    input.effectiveTo < input.effectiveFrom
+  ) {
+    throw new Error("The schedule end date must be after its start date.");
+  }
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const organization = await database.query.organizations.findFirst({
+    where: eq(organizations.id, organizationId),
+  });
+  if (!organization) throw new Error("Organization was not found.");
+  let resourceName: string;
+  if (input.resourceType === "court") {
+    const resource = await database
+      .select({ name: courts.name })
+      .from(courts)
+      .innerJoin(venues, eq(courts.venueId, venues.id))
+      .where(
+        and(
+          eq(courts.id, input.resourceId),
+          eq(venues.organizationId, organizationId),
+        ),
+      )
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (!resource) throw new Error("Court was not found.");
+    resourceName = resource.name;
+  } else {
+    const resource = await database
+      .select({ name: people.displayName })
+      .from(organizationMemberships)
+      .innerJoin(people, eq(organizationMemberships.personId, people.id))
+      .where(
+        and(
+          eq(organizationMemberships.organizationId, organizationId),
+          eq(organizationMemberships.personId, input.resourceId),
+          eq(organizationMemberships.active, true),
+        ),
+      )
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (!resource) throw new Error("Coach was not found.");
+    resourceName = resource.name;
+  }
+  let schedule = await database.query.schedules.findFirst({
+    where: and(
+      eq(schedules.organizationId, organizationId),
+      eq(schedules.resourceType, input.resourceType),
+      eq(schedules.resourceId, input.resourceId),
+    ),
+  });
+  if (!schedule) {
+    const scheduleId = crypto.randomUUID();
+    await database.insert(schedules).values({
+      id: scheduleId,
+      organizationId,
+      name: `${resourceName} availability`,
+      timezone: organization.timezone,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId,
+    });
+    schedule = await database.query.schedules.findFirst({
+      where: eq(schedules.id, scheduleId),
+    });
+  }
+  if (!schedule) throw new Error("Resource schedule could not be created.");
+  const uniqueBlocks = [
+    ...new Map(
+      input.blocks.map((block) => [
+        `${block.weekday}:${block.startsAtMinute}:${block.endsAtMinute}`,
+        block,
+      ]),
+    ).values(),
+  ];
+  const blockRows = uniqueBlocks.map((block) => ({
+    id: crypto.randomUUID(),
+    scheduleId: schedule.id,
+    weekday: block.weekday,
+    startsAtMinute: block.startsAtMinute,
+    endsAtMinute: block.endsAtMinute,
+    mode: input.mode,
+    effectiveFrom: input.effectiveFrom,
+    effectiveTo: input.effectiveTo,
+  }));
+  await database.transaction(async (transaction) => {
+    await transaction.insert(scheduleBlocks).values(blockRows);
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "calendar.recurring_blocks_created",
+      entityType: "schedule",
+      entityId: schedule.id,
+      afterHash: stableHash({
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
+        blocks: blockRows,
+      }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return {
+    id: schedule.id,
+    entity: "schedule",
+    status: `${blockRows.length}-blocks-created`,
   };
 }
 

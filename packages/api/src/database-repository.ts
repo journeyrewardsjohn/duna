@@ -1558,6 +1558,7 @@ async function loadVenues(organizationId?: string): Promise<VenueSummary[]> {
       openNow: row.status === "active",
       latitude: row.latitude ?? 0,
       longitude: row.longitude ?? 0,
+      imageUrl: row.heroImageTreatmentUrl ?? row.heroImageUrl ?? undefined,
       tags: [
         `${courtCount} ${courtCount === 1 ? "court" : "courts"}`,
         row.temporary ? "Temporary" : "Facility",
@@ -2476,7 +2477,9 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
         startsAt: courtBookings.startsAt,
         endsAt: courtBookings.endsAt,
         status: courtBookings.status,
+        venueId: venues.id,
         venueName: venues.name,
+        venueTimezone: venues.timezone,
         orderTotalMinor: orders.totalMinor,
         orderCurrency: orders.currency,
         orderStatus: orders.status,
@@ -2787,7 +2790,9 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
           kind: "court-rental",
           startsAt: row.startsAt.toISOString(),
           endsAt: row.endsAt.toISOString(),
+          venueId: row.venueId,
           venueName: row.venueName,
+          venueTimezone: row.venueTimezone,
           status,
           amount: {
             amountMinor: row.orderTotalMinor ?? 0,

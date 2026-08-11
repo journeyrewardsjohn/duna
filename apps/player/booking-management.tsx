@@ -1,5 +1,10 @@
 import * as Crypto from "expo-crypto";
 import * as WebBrowser from "expo-web-browser";
+import {
+  pickupInviteActionLabel,
+  pickupInviteExplanation,
+  pickupInviteResult,
+} from "@duna/core";
 import { useEffect, useState } from "react";
 import {
   Modal,
@@ -323,17 +328,17 @@ export function BookingManagementModal({
         idempotencyKey: Crypto.randomUUID(),
       });
       setMessage(
-        `${response.invitedPersonIds.length} ${response.invitedPersonIds.length === 1 ? "invite was" : "invites were"} sent. No place is held until each player confirms or pays.`,
+        pickupInviteResult({
+          invitedCount: response.invitedPersonIds.length,
+          alreadyActiveCount: response.alreadyActivePersonIds.length,
+          paidMatch: (booking.pickup?.pricePerPerson.amountMinor ?? 0) > 0,
+        }),
       );
       setPickupPlayers([]);
       setEditing(false);
       await onUpdated();
-    } catch (reason) {
-      setMessage(
-        reason instanceof Error
-          ? reason.message
-          : "Duna could not send these invitations.",
-      );
+    } catch {
+      setMessage("Invitations were not sent. Try again.");
     } finally {
       setBusy(false);
     }
@@ -476,14 +481,14 @@ export function BookingManagementModal({
             {!cancelled && booking.pickup?.invitationStatus === "invited" && (
               <View style={styles.invitationCard}>
                 <Text style={styles.sectionEyebrow}>YOUR INVITATION</Text>
-                <Text style={styles.sectionTitle}>Confirm your own place.</Text>
+                <Text style={styles.sectionTitle}>You’re invited.</Text>
                 <Text style={styles.policy}>
-                  {booking.addedBy?.displayName ?? "A player"} invited you, but
-                  no spot is reserved until you confirm
+                  {booking.addedBy?.displayName ?? "A player"} invited you.
+                  Confirm
                   {booking.pickup.pricePerPerson.amountMinor > 0
                     ? " and pay"
                     : ""}
-                  .
+                  {" to claim an open place."}
                 </Text>
                 <Pressable
                   disabled={busy}
@@ -785,40 +790,50 @@ export function BookingManagementModal({
                       })}
                     </ScrollView>
                     {pickupPlayers.length > 0 && (
-                      <View style={styles.pickupActions}>
-                        <Pressable
-                          disabled={busy}
-                          onPress={() => void invitePickupSelection()}
-                          style={styles.secondaryPickupAction}
-                        >
-                          <Text style={styles.secondaryPickupActionText}>
-                            Invite · not held
-                          </Text>
-                        </Pressable>
-                        {booking.pickup.pricePerPerson.amountMinor > 0 && (
+                      <>
+                        <Text style={styles.pickupActionHelp}>
+                          {pickupInviteExplanation(
+                            booking.pickup.pricePerPerson.amountMinor > 0,
+                          )}
+                        </Text>
+                        <View style={styles.pickupActions}>
                           <Pressable
-                            disabled={
-                              busy ||
-                              pickupPlayers.length >
-                                booking.pickup.spotsRemaining
-                            }
-                            onPress={() =>
-                              void finishPickupCheckout(pickupPlayers)
-                            }
-                            style={[
-                              styles.primaryPickupAction,
-                              (busy ||
-                                pickupPlayers.length >
-                                  booking.pickup.spotsRemaining) &&
-                                styles.actionDisabled,
-                            ]}
+                            accessibilityLabel={pickupInviteActionLabel(
+                              pickupPlayers.length,
+                            )}
+                            disabled={busy}
+                            onPress={() => void invitePickupSelection()}
+                            style={styles.secondaryPickupAction}
                           >
-                            <Text style={styles.primaryText}>
-                              Pay & confirm {pickupPlayers.length}
+                            <Text style={styles.secondaryPickupActionText}>
+                              {pickupInviteActionLabel(pickupPlayers.length)}
                             </Text>
                           </Pressable>
-                        )}
-                      </View>
+                          {booking.pickup.pricePerPerson.amountMinor > 0 && (
+                            <Pressable
+                              disabled={
+                                busy ||
+                                pickupPlayers.length >
+                                  booking.pickup.spotsRemaining
+                              }
+                              onPress={() =>
+                                void finishPickupCheckout(pickupPlayers)
+                              }
+                              style={[
+                                styles.primaryPickupAction,
+                                (busy ||
+                                  pickupPlayers.length >
+                                    booking.pickup.spotsRemaining) &&
+                                  styles.actionDisabled,
+                              ]}
+                            >
+                              <Text style={styles.primaryText}>
+                                Pay & confirm {pickupPlayers.length}
+                              </Text>
+                            </Pressable>
+                          )}
+                        </View>
+                      </>
                     )}
                   </>
                 )}
@@ -1436,6 +1451,12 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   pickupActions: { flexDirection: "row", gap: 10, marginTop: 14 },
+  pickupActionHelp: {
+    color: "#706a60",
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 14,
+  },
   primaryPickupAction: {
     alignItems: "center",
     backgroundColor: "#203740",

@@ -77,6 +77,8 @@ import { VideoStudioScreen } from "./video-studio";
 import { HealthScreen } from "./health-screen";
 import { HealthHistorySyncAgent } from "./health-history-sync-agent";
 import { LiveActivitiesPrompt } from "./live-activities-prompt";
+import { PlayerCalendarSettings } from "./calendar-settings";
+import { TournamentPasses } from "./tournament-passes";
 import {
   BookingManagementModal,
   type ManagedBooking,
@@ -519,6 +521,17 @@ type BookingParticipant = {
   readonly name?: string;
   readonly email?: string;
   readonly phoneE164?: string;
+};
+
+type HostedMatchSeed = {
+  readonly courtBookingId: string;
+  readonly venueId: string;
+  readonly venueName: string;
+  readonly startsAt: string;
+  readonly endsAt: string;
+  readonly localStartsAt: string;
+  readonly localEndsAt: string;
+  readonly durationMinutes: number;
 };
 
 const tabs: readonly {
@@ -2597,10 +2610,14 @@ function VenueBookingModal({
   venueId,
   visible,
   onClose,
+  onHostReady,
+  onOpenMatch,
 }: {
   readonly venueId?: string;
   readonly visible: boolean;
   readonly onClose: () => void;
+  readonly onHostReady?: (seed: HostedMatchSeed) => void;
+  readonly onOpenMatch?: (matchId: string, matchSlug: string) => void;
 }) {
   const { width } = useWindowDimensions();
   const { client, dashboard, mode, people, refresh } = usePlayerRuntime();
@@ -2613,8 +2630,12 @@ function VenueBookingModal({
   );
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState(90);
+  const [selectedLocalStart, setSelectedLocalStart] = useState<string>();
   const [selectedSlot, setSelectedSlot] =
     useState<CourtAvailability["slots"][number]>();
+  const [bookingIntent, setBookingIntent] = useState<"private" | "host">(
+    "private",
+  );
   const [paymentMode, setPaymentMode] = useState<"full" | "split">("full");
   const [participants, setParticipants] = useState<BookingParticipant[]>([]);
   const [contactOptions, setContactOptions] = useState<BookingParticipant[]>(
@@ -2703,6 +2724,24 @@ function VenueBookingModal({
   const selectedForecastDay = availability?.forecast?.days.find(
     (day) => day.date === selectedDate,
   );
+  const timeOptions = useMemo(
+    () =>
+      [
+        ...new Set([
+          ...(availability?.slots ?? []).map((slot) => slot.localStartsAt),
+          ...(availability?.openMatches ?? []).map(
+            (match) => match.localStartsAt,
+          ),
+        ]),
+      ].sort(),
+    [availability],
+  );
+  const selectedOpenMatches = (availability?.openMatches ?? []).filter(
+    (match) => match.localStartsAt === selectedLocalStart,
+  );
+  const selectedStartSlots = (availability?.slots ?? []).filter(
+    (slot) => slot.localStartsAt === selectedLocalStart,
+  );
 
   useEffect(() => {
     if (!visible) {
@@ -2758,6 +2797,7 @@ function VenueBookingModal({
     let cancelled = false;
     setLoading(true);
     setSelectedSlot(undefined);
+    setSelectedLocalStart(undefined);
     setPolicyAccepted(false);
     setPolicyRead(false);
     void client.public.courtAvailability
@@ -2767,7 +2807,13 @@ function VenueBookingModal({
         durationMinutes,
       })
       .then((nextAvailability) => {
-        if (!cancelled) setAvailability(nextAvailability);
+        if (cancelled) return;
+        setAvailability(nextAvailability);
+        const firstStart = [
+          ...nextAvailability.slots.map((slot) => slot.localStartsAt),
+          ...nextAvailability.openMatches.map((match) => match.localStartsAt),
+        ].sort()[0];
+        setSelectedLocalStart(firstStart);
       })
       .catch((reason) => {
         if (!cancelled) setError(displayError(reason));
@@ -2779,6 +2825,19 @@ function VenueBookingModal({
       cancelled = true;
     };
   }, [client, durationMinutes, inventory, selectedDate, venueId, visible]);
+
+  function reviewSlot(
+    slot: CourtAvailability["slots"][number],
+    intent: "private" | "host",
+  ) {
+    selectionHaptic();
+    setBookingIntent(intent);
+    setPaymentMode("full");
+    setParticipants([]);
+    setPolicyAccepted(false);
+    setPolicyRead(false);
+    setSelectedSlot(slot);
+  }
 
   function addParticipant(participant: BookingParticipant) {
     const key =
@@ -2899,12 +2958,54 @@ function VenueBookingModal({
         await WebBrowser.openBrowserAsync(result.checkoutUrl);
       }
       if (result.mode === "free" || result.checkoutUrl) {
+        let confirmed = result.mode === "free";
+        if (
+          bookingIntent === "host" &&
+          result.checkoutSessionId &&
+          !confirmed
+        ) {
+          for (let attempt = 0; attempt < 8; attempt += 1) {
+            const status = await client.player.courtCheckoutStatus.query({
+              checkoutSessionId: result.checkoutSessionId,
+            });
+            if (status.complete) {
+              confirmed = true;
+              break;
+            }
+            await new Promise<void>((resolve) =>
+              setTimeout(resolve, attempt < 3 ? 500 : 1_000),
+            );
+          }
+        }
         successHaptic();
         await refresh();
+        if (
+          bookingIntent === "host" &&
+          confirmed &&
+          result.bookingId &&
+          venueId &&
+          inventory
+        ) {
+          const seed: HostedMatchSeed = {
+            courtBookingId: result.bookingId,
+            venueId,
+            venueName: inventory.venue.name,
+            startsAt: selectedSlot.startsAt,
+            endsAt: selectedSlot.endsAt,
+            localStartsAt: selectedSlot.localStartsAt,
+            localEndsAt: selectedSlot.localEndsAt,
+            durationMinutes,
+          };
+          onClose();
+          onHostReady?.(seed);
+          return;
+        }
         setNotice(
-          paymentMode === "split"
-            ? "Your share is ready. Duna sent each invited player their secure link."
-            : "The court is reserved.",
+          bookingIntent === "host"
+            ? "Your court payment is still confirming. Once it appears in Play, open it to host the match."
+            : paymentMode === "split"
+              ? "Your share is ready. Duna sent each invited player their secure link."
+              : "The court is reserved.",
         );
       } else {
         setError("That court is no longer available. Pick another time.");
@@ -2938,7 +3039,11 @@ function VenueBookingModal({
               <Text style={styles.closeText}>{selectedSlot ? "‹" : "×"}</Text>
             </Pressable>
             <Text style={styles.modalHeaderTitle}>
-              {selectedSlot ? "Review" : "Book a court"}
+              {selectedSlot
+                ? bookingIntent === "host"
+                  ? "Create a match"
+                  : "Review"
+                : "Find a game"}
             </Text>
             <ThemeButton />
           </View>
@@ -3167,40 +3272,263 @@ function VenueBookingModal({
               )}
               {loading ? (
                 <Text style={styles.bookingEmpty}>Finding open courts…</Text>
-              ) : availability?.slots.length ? (
-                <View style={styles.bookingSlotGrid}>
-                  {availability.slots.map((slot) => (
-                    <Pressable
-                      key={`${slot.courtId}-${slot.startsAt}`}
-                      onPress={() => {
-                        selectionHaptic();
-                        setSelectedSlot(slot);
-                      }}
-                      style={styles.bookingSlot}
-                    >
-                      <Text style={styles.bookingSlotTime}>
-                        {localSlotTime(slot.localStartsAt)}
+              ) : timeOptions.length ? (
+                <>
+                  <Text style={styles.bookingTimeSectionLabel}>
+                    OPEN COURTS + MATCHES
+                  </Text>
+                  <View style={styles.bookingTimeGrid}>
+                    {timeOptions.map((localStartsAt) => {
+                      const openMatches = (
+                        availability?.openMatches ?? []
+                      ).filter(
+                        (match) => match.localStartsAt === localStartsAt,
+                      );
+                      const slotCount = (availability?.slots ?? []).filter(
+                        (slot) => slot.localStartsAt === localStartsAt,
+                      ).length;
+                      const active = selectedLocalStart === localStartsAt;
+                      const players = openMatches
+                        .flatMap((match) => [
+                          match.host,
+                          ...match.attendees.filter(
+                            (player) => player.id !== match.host.id,
+                          ),
+                        ])
+                        .slice(0, 2);
+                      return (
+                        <Pressable
+                          accessibilityLabel={`${localSlotTime(localStartsAt)}, ${
+                            openMatches.length
+                              ? `${openMatches.length} open match${openMatches.length === 1 ? "" : "es"}`
+                              : `${slotCount} open court${slotCount === 1 ? "" : "s"}`
+                          }`}
+                          key={localStartsAt}
+                          onPress={() => {
+                            selectionHaptic();
+                            setSelectedLocalStart(localStartsAt);
+                          }}
+                          style={[
+                            styles.bookingTimeOption,
+                            openMatches.length > 0 &&
+                              styles.bookingTimeOptionMatch,
+                            active && styles.bookingTimeOptionActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.bookingTimeOptionTime,
+                              active && styles.bookingTimeOptionTimeActive,
+                            ]}
+                          >
+                            {localSlotTime(localStartsAt)}
+                          </Text>
+                          {players.length > 0 && (
+                            <View style={styles.bookingTimeRoster}>
+                              {players.map((player, index) =>
+                                player.avatarUrl ? (
+                                  <Image
+                                    key={`${player.id}-${index}`}
+                                    source={{ uri: player.avatarUrl }}
+                                    style={styles.bookingTimeAvatar}
+                                  />
+                                ) : (
+                                  <Text
+                                    key={`${player.id}-${index}`}
+                                    style={styles.bookingTimeAvatarFallback}
+                                  >
+                                    {player.initials}
+                                  </Text>
+                                ),
+                              )}
+                            </View>
+                          )}
+                          <Text
+                            style={[
+                              styles.bookingTimeOptionMeta,
+                              active && styles.bookingTimeOptionMetaActive,
+                            ]}
+                          >
+                            {openMatches.length
+                              ? `${openMatches.length} open match${openMatches.length === 1 ? "" : "es"}`
+                              : `${slotCount} court${slotCount === 1 ? "" : "s"}`}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  {selectedOpenMatches.length > 0 && (
+                    <View style={styles.bookingOpenMatchSection}>
+                      <Text style={styles.bookingTimeSectionLabel}>
+                        RESERVE A PLACE IN A MATCH
                       </Text>
-                      <Text numberOfLines={1} style={styles.bookingSlotCourt}>
-                        {slot.courtName}
+                      {selectedOpenMatches.map((match) => {
+                        const roster = [
+                          match.host,
+                          ...match.attendees.filter(
+                            (player) => player.id !== match.host.id,
+                          ),
+                        ];
+                        const matchMinutes = Math.round(
+                          (Date.parse(match.endsAt) -
+                            Date.parse(match.startsAt)) /
+                            60_000,
+                        );
+                        return (
+                          <View key={match.id} style={styles.bookingOpenMatch}>
+                            <View style={styles.rowBetween}>
+                              <View style={styles.flex}>
+                                <Text style={styles.bookingOpenMatchEyebrow}>
+                                  {match.matchType.toUpperCase()} ·{" "}
+                                  {match.format}
+                                </Text>
+                                <Text style={styles.bookingOpenMatchTitle}>
+                                  {match.title}
+                                </Text>
+                                <Text style={styles.rowMeta}>
+                                  Hosted by {match.host.displayName}
+                                </Text>
+                              </View>
+                              <View style={styles.bookingOpenMatchPriceBlock}>
+                                <Text style={styles.bookingOpenMatchPrice}>
+                                  {match.price.amountMinor
+                                    ? formatMoney(
+                                        match.price.amountMinor,
+                                        match.price.currency,
+                                      )
+                                    : "Free"}
+                                </Text>
+                                <Text style={styles.rowMeta}>
+                                  {matchMinutes} min
+                                </Text>
+                              </View>
+                            </View>
+                            <View style={styles.bookingOpenMatchRoster}>
+                              {roster.slice(0, 4).map((player) => (
+                                <View
+                                  key={player.id}
+                                  style={styles.bookingOpenMatchPlayer}
+                                >
+                                  {player.avatarUrl ? (
+                                    <Image
+                                      source={{ uri: player.avatarUrl }}
+                                      style={styles.bookingOpenMatchAvatar}
+                                    />
+                                  ) : (
+                                    <Text
+                                      style={
+                                        styles.bookingOpenMatchAvatarFallback
+                                      }
+                                    >
+                                      {player.initials}
+                                    </Text>
+                                  )}
+                                  <Text
+                                    numberOfLines={1}
+                                    style={styles.bookingOpenMatchPlayerName}
+                                  >
+                                    {player.displayName.split(" ")[0]}
+                                  </Text>
+                                </View>
+                              ))}
+                              {Array.from(
+                                { length: Math.min(2, match.spotsRemaining) },
+                                (_, index) => (
+                                  <View
+                                    key={`${match.id}-open-${index}`}
+                                    style={styles.bookingOpenMatchPlayer}
+                                  >
+                                    <Text
+                                      style={styles.bookingOpenMatchAvailable}
+                                    >
+                                      ＋
+                                    </Text>
+                                    <Text
+                                      style={styles.bookingOpenMatchPlayerName}
+                                    >
+                                      Available
+                                    </Text>
+                                  </View>
+                                ),
+                              )}
+                            </View>
+                            <View style={styles.bookingOpenMatchFooter}>
+                              <Text style={styles.bookingOpenMatchSpots}>
+                                {match.spotsRemaining} spot
+                                {match.spotsRemaining === 1 ? "" : "s"} open
+                              </Text>
+                              <Pressable
+                                onPress={() =>
+                                  onOpenMatch?.(match.id, match.slug)
+                                }
+                                style={styles.bookingOpenMatchJoin}
+                              >
+                                <Text style={styles.payButtonText}>
+                                  Reserve a spot →
+                                </Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  {selectedStartSlots.length > 0 && (
+                    <View style={styles.bookingCreateMatchSection}>
+                      <Text style={styles.bookingTimeSectionLabel}>
+                        {selectedOpenMatches.length
+                          ? "OR CREATE YOUR OWN"
+                          : "CREATE YOUR OWN MATCH"}
                       </Text>
-                      {slot.weather && (
-                        <Text style={styles.bookingSlotWeather}>
-                          {weatherSymbol(slot.weather.icon)}{" "}
-                          {fahrenheit(slot.weather.temperatureC)}
-                        </Text>
-                      )}
-                      <Text style={styles.bookingSlotPrice}>
-                        {slot.price
-                          ? formatMoney(
-                              slot.price.amountMinor,
-                              slot.price.currency,
-                            )
-                          : "Free"}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
+                      {selectedStartSlots.map((slot) => (
+                        <View
+                          key={`${slot.courtId}-${slot.startsAt}`}
+                          style={styles.bookingCourtChoice}
+                        >
+                          <View style={styles.flex}>
+                            <Text style={styles.rowTitle}>
+                              {slot.courtName}
+                            </Text>
+                            <Text style={styles.rowMeta}>
+                              {slot.weather
+                                ? `${weatherSymbol(slot.weather.icon)} ${fahrenheit(slot.weather.temperatureC)} · `
+                                : ""}
+                              {durationMinutes} minutes
+                            </Text>
+                          </View>
+                          <Text style={styles.bookingSlotPrice}>
+                            {slot.price
+                              ? formatMoney(
+                                  slot.price.amountMinor,
+                                  slot.price.currency,
+                                )
+                              : "Free"}
+                          </Text>
+                          <View style={styles.bookingCourtActions}>
+                            <Pressable
+                              onPress={() => reviewSlot(slot, "host")}
+                              style={styles.bookingHostButton}
+                            >
+                              <Text style={styles.bookingHostButtonText}>
+                                Host match
+                              </Text>
+                            </Pressable>
+                            <Pressable
+                              onPress={() => reviewSlot(slot, "private")}
+                              style={styles.bookingPrivateButton}
+                            >
+                              <Text style={styles.bookingPrivateButtonText}>
+                                Book private
+                              </Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </>
               ) : (
                 <View style={styles.bookingEmptyCard}>
                   <Text style={styles.rowTitle}>
@@ -3252,147 +3580,168 @@ function VenueBookingModal({
                   {selectedSlot.courtName} · {durationMinutes} minutes
                 </Text>
               </View>
-              <View style={styles.purchaseKindRow}>
-                {(["full", "split"] as const).map((modeOption) => (
-                  <Pressable
-                    key={modeOption}
-                    onPress={() => setPaymentMode(modeOption)}
-                    style={[
-                      styles.purchaseKindButton,
-                      paymentMode === modeOption &&
-                        styles.purchaseKindButtonActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.purchaseKindText,
-                        paymentMode === modeOption &&
-                          styles.purchaseKindTextActive,
-                      ]}
-                    >
-                      {modeOption === "full"
-                        ? `Pay everything · ${formatMoney(totalMinor, "USD")}`
-                        : `Pay your part · ${formatMoney(shareMinor, "USD")}`}
+              {bookingIntent === "host" && (
+                <View style={styles.bookingHostIntent}>
+                  <Text style={styles.bookingHostIntentIcon}>✦</Text>
+                  <View style={styles.flex}>
+                    <Text style={styles.rowTitle}>
+                      Reserve first, then publish.
                     </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <View style={styles.checkoutSection}>
-                <View style={styles.rowBetween}>
-                  <View>
-                    <Text style={styles.rowTitle}>Add players</Text>
                     <Text style={styles.rowMeta}>
-                      Frequent partners first. Invite any group size.
+                      Duna carries this confirmed court, time, and venue into
+                      the match builder. You choose the format, level, and open
+                      spots next.
                     </Text>
                   </View>
-                  <Pressable onPress={() => void importContacts()}>
-                    <Text style={styles.linkText}>Contacts</Text>
-                  </Pressable>
                 </View>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.bookingPartnerScroll}
-                >
-                  <View style={styles.bookingPartnerRow}>
-                    {people?.slice(0, 6).map((person) => (
+              )}
+              {bookingIntent === "private" && (
+                <>
+                  <View style={styles.purchaseKindRow}>
+                    {(["full", "split"] as const).map((modeOption) => (
                       <Pressable
-                        key={person.id}
-                        onPress={() =>
-                          addParticipant({
-                            personId: person.id,
-                            name: person.displayName,
-                          })
-                        }
-                        style={styles.bookingPartner}
+                        key={modeOption}
+                        onPress={() => setPaymentMode(modeOption)}
+                        style={[
+                          styles.purchaseKindButton,
+                          paymentMode === modeOption &&
+                            styles.purchaseKindButtonActive,
+                        ]}
                       >
-                        <Text style={styles.bookingPartnerAvatar}>
-                          {person.initials}
-                        </Text>
                         <Text
-                          numberOfLines={1}
-                          style={styles.bookingPartnerName}
+                          style={[
+                            styles.purchaseKindText,
+                            paymentMode === modeOption &&
+                              styles.purchaseKindTextActive,
+                          ]}
                         >
-                          {person.displayName.split(" ")[0]}
-                        </Text>
-                      </Pressable>
-                    ))}
-                    {contactOptions.map((contact) => (
-                      <Pressable
-                        key={contact.email ?? contact.phoneE164}
-                        onPress={() => addParticipant(contact)}
-                        style={styles.bookingPartner}
-                      >
-                        <Text style={styles.bookingPartnerAvatar}>
-                          {(contact.name ?? "C").slice(0, 1).toUpperCase()}
-                        </Text>
-                        <Text
-                          numberOfLines={1}
-                          style={styles.bookingPartnerName}
-                        >
-                          {contact.name ?? "Contact"}
+                          {modeOption === "full"
+                            ? `Pay everything · ${formatMoney(totalMinor, "USD")}`
+                            : `Pay your part · ${formatMoney(shareMinor, "USD")}`}
                         </Text>
                       </Pressable>
                     ))}
                   </View>
-                </ScrollView>
-                <View style={styles.bookingManualInvite}>
-                  <TextInput
-                    onChangeText={setManualName}
-                    placeholder="Name"
-                    placeholderTextColor={colors.muted}
-                    style={[styles.formInput, styles.formRowInput]}
-                    value={manualName}
-                  />
-                  <TextInput
-                    autoCapitalize="none"
-                    onChangeText={setManualTarget}
-                    placeholder="Email or mobile"
-                    placeholderTextColor={colors.muted}
-                    style={[styles.formInput, styles.formRowInput]}
-                    value={manualTarget}
-                  />
-                  <Pressable
-                    onPress={addManualParticipant}
-                    style={styles.bookingAddButton}
-                  >
-                    <Text style={styles.payButtonText}>Add</Text>
-                  </Pressable>
-                </View>
-                {participants.map((participant, index) => (
-                  <View
-                    key={
-                      participant.personId ??
-                      participant.email ??
-                      participant.phoneE164
-                    }
-                    style={styles.bookingParticipant}
-                  >
-                    <Text style={styles.checkText}>✓</Text>
-                    <View style={styles.flex}>
-                      <Text style={styles.rowTitle}>
-                        {participant.name ??
-                          participant.email ??
-                          participant.phoneE164}
-                      </Text>
-                      <Text style={styles.rowMeta}>
-                        {paymentMode === "split"
-                          ? `Pays ${formatMoney(shareMinor, "USD")}`
-                          : "Included in your reservation"}
-                      </Text>
+                  <View style={styles.checkoutSection}>
+                    <View style={styles.rowBetween}>
+                      <View>
+                        <Text style={styles.rowTitle}>Add players</Text>
+                        <Text style={styles.rowMeta}>
+                          Frequent partners first. Invite any group size.
+                        </Text>
+                      </View>
+                      <Pressable onPress={() => void importContacts()}>
+                        <Text style={styles.linkText}>Contacts</Text>
+                      </Pressable>
                     </View>
-                    <Pressable
-                      onPress={() =>
-                        setParticipants((current) =>
-                          current.filter((_, itemIndex) => itemIndex !== index),
-                        )
-                      }
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.bookingPartnerScroll}
                     >
-                      <Text style={styles.closeText}>×</Text>
-                    </Pressable>
+                      <View style={styles.bookingPartnerRow}>
+                        {people?.slice(0, 6).map((person) => (
+                          <Pressable
+                            key={person.id}
+                            onPress={() =>
+                              addParticipant({
+                                personId: person.id,
+                                name: person.displayName,
+                              })
+                            }
+                            style={styles.bookingPartner}
+                          >
+                            <Text style={styles.bookingPartnerAvatar}>
+                              {person.initials}
+                            </Text>
+                            <Text
+                              numberOfLines={1}
+                              style={styles.bookingPartnerName}
+                            >
+                              {person.displayName.split(" ")[0]}
+                            </Text>
+                          </Pressable>
+                        ))}
+                        {contactOptions.map((contact) => (
+                          <Pressable
+                            key={contact.email ?? contact.phoneE164}
+                            onPress={() => addParticipant(contact)}
+                            style={styles.bookingPartner}
+                          >
+                            <Text style={styles.bookingPartnerAvatar}>
+                              {(contact.name ?? "C").slice(0, 1).toUpperCase()}
+                            </Text>
+                            <Text
+                              numberOfLines={1}
+                              style={styles.bookingPartnerName}
+                            >
+                              {contact.name ?? "Contact"}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </ScrollView>
+                    <View style={styles.bookingManualInvite}>
+                      <TextInput
+                        onChangeText={setManualName}
+                        placeholder="Name"
+                        placeholderTextColor={colors.muted}
+                        style={[styles.formInput, styles.formRowInput]}
+                        value={manualName}
+                      />
+                      <TextInput
+                        autoCapitalize="none"
+                        onChangeText={setManualTarget}
+                        placeholder="Email or mobile"
+                        placeholderTextColor={colors.muted}
+                        style={[styles.formInput, styles.formRowInput]}
+                        value={manualTarget}
+                      />
+                      <Pressable
+                        onPress={addManualParticipant}
+                        style={styles.bookingAddButton}
+                      >
+                        <Text style={styles.payButtonText}>Add</Text>
+                      </Pressable>
+                    </View>
+                    {participants.map((participant, index) => (
+                      <View
+                        key={
+                          participant.personId ??
+                          participant.email ??
+                          participant.phoneE164
+                        }
+                        style={styles.bookingParticipant}
+                      >
+                        <Text style={styles.checkText}>✓</Text>
+                        <View style={styles.flex}>
+                          <Text style={styles.rowTitle}>
+                            {participant.name ??
+                              participant.email ??
+                              participant.phoneE164}
+                          </Text>
+                          <Text style={styles.rowMeta}>
+                            {paymentMode === "split"
+                              ? `Pays ${formatMoney(shareMinor, "USD")}`
+                              : "Included in your reservation"}
+                          </Text>
+                        </View>
+                        <Pressable
+                          onPress={() =>
+                            setParticipants((current) =>
+                              current.filter(
+                                (_, itemIndex) => itemIndex !== index,
+                              ),
+                            )
+                          }
+                        >
+                          <Text style={styles.closeText}>×</Text>
+                        </Pressable>
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </View>
+                </>
+              )}
               {policy && (
                 <View style={styles.checkoutSection}>
                   <Text style={styles.rowTitle}>{policy.title}</Text>
@@ -3454,7 +3803,9 @@ function VenueBookingModal({
                 <Text style={styles.payButtonText}>
                   {busy
                     ? "Opening secure checkout…"
-                    : `Continue · ${formatMoney(shareMinor, "USD")}`}
+                    : bookingIntent === "host"
+                      ? `Reserve court · ${formatMoney(totalMinor, "USD")}`
+                      : `Continue · ${formatMoney(shareMinor, "USD")}`}
                 </Text>
               </Pressable>
             </>
@@ -5768,6 +6119,7 @@ function DiscoverScreen({
   const { theme } = useContext(ThemeContext);
   const [filter, setFilter] = useState("For you");
   const [bookingVenueId, setBookingVenueId] = useState<string>();
+  const [hostSeed, setHostSeed] = useState<HostedMatchSeed>();
   const [selectedCoach, setSelectedCoach] = useState<MobileCoach>();
   const [showProTour, setShowProTour] = useState(false);
   const [showDiscoveryMap, setShowDiscoveryMap] = useState(false);
@@ -5920,6 +6272,10 @@ function DiscoverScreen({
           candidate.organizationId === event.organizationId ||
           candidate.name === event.venueName,
       );
+      const cover = event.media?.[0];
+      const fallbackImageUrl = `${dunaWebUrl}${
+        defaultEventMedia(event.kind, event.id).path
+      }`;
       return {
         id: `event:${event.id}`,
         entityType: "event",
@@ -5932,7 +6288,11 @@ function DiscoverScreen({
         organizationId: event.organizationId,
         startsAt: event.startsAt,
         endsAt: event.endsAt,
-        imageUrl: event.imageUrl,
+        imageUrl:
+          cover?.kind === "video"
+            ? (cover.posterUrl ?? event.imageUrl ?? fallbackImageUrl)
+            : (cover?.url ?? event.imageUrl ?? fallbackImageUrl),
+        videoUrl: cover?.kind === "video" ? cover.url : undefined,
         live: event.live,
         spotsRemaining: event.spotsRemaining,
         level: event.ratingRange
@@ -6010,6 +6370,8 @@ function DiscoverScreen({
           ? `${event.startsOn}T12:00:00.000Z`
           : undefined,
         endsAt: event.endsOn ? `${event.endsOn}T23:59:59.999Z` : undefined,
+        imageUrl: event.poster?.url,
+        imageFit: event.poster?.kind === "poster" ? "contain" : undefined,
         live: event.live,
         tags: ["pro tour", event.tour, event.source, event.location ?? ""],
       }))
@@ -6529,8 +6891,31 @@ function DiscoverScreen({
       />
       <VenueBookingModal
         onClose={() => setBookingVenueId(undefined)}
+        onHostReady={(seed) => {
+          setBookingVenueId(undefined);
+          setTimeout(() => setHostSeed(seed), 280);
+        }}
+        onOpenMatch={(matchId, matchSlug) => {
+          const eventIndex = events.findIndex((event) => event.id === matchId);
+          setBookingVenueId(undefined);
+          setTimeout(() => {
+            if (eventIndex >= 0) {
+              onBook(eventIndex);
+              return;
+            }
+            void WebBrowser.openBrowserAsync(
+              `${dunaWebUrl}/events/${encodeURIComponent(matchSlug)}`,
+            );
+          }, 280);
+        }}
         venueId={bookingVenueId}
         visible={Boolean(bookingVenueId)}
+      />
+      <PickupModal
+        initialCourtBooking={hostSeed}
+        onClose={() => setHostSeed(undefined)}
+        onCreated={() => setHostSeed(undefined)}
+        visible={Boolean(hostSeed)}
       />
       <ProTourModal
         initialSlug={selectedProTourSlug}
@@ -8760,6 +9145,42 @@ function PerformanceScreen({
         </View>
       </View>
 
+      <PlayerCalendarSettings
+        bookings={dashboard?.bookings ?? []}
+        palette={{
+          surface: colors.depth,
+          border: rgba(colors.overlayRgb, 0.1),
+          accentSurface: colors.navyLift,
+          accent: colors.aqua,
+          text: colors.bone,
+          muted: colors.muted,
+          positive: colors.positive,
+          warningSurface: rgba(colors.warningRgb, 0.12),
+          warning: colors.warning,
+          onWarning: colors.onAccent,
+          primary: colors.aqua,
+          onPrimary: colors.onAccent,
+        }}
+      />
+
+      <TournamentPasses
+        palette={{
+          surface: colors.depth,
+          surfaceAlt: colors.navyLift,
+          border: rgba(colors.overlayRgb, 0.1),
+          text: colors.bone,
+          muted: colors.muted,
+          playerAccent: colors.aqua,
+          fanAccent: colors.warning,
+          positive: colors.positive,
+          warning: colors.warning,
+          button: colors.bone,
+          onButton: colors.depth,
+          qrBackground: colors.bone,
+          qrForeground: colors.depth,
+        }}
+      />
+
       <Pressable
         accessibilityHint="Opens your private Apple Health performance timeline"
         accessibilityLabel="Open Duna Health"
@@ -10248,10 +10669,12 @@ function PickupModal({
   visible,
   onClose,
   onCreated,
+  initialCourtBooking,
 }: {
   readonly visible: boolean;
   readonly onClose: () => void;
   readonly onCreated: (title: string) => void;
+  readonly initialCourtBooking?: HostedMatchSeed;
 }) {
   const { client, dashboard, mode, refresh, venues } = usePlayerRuntime();
   const [step, setStep] = useState(0);
@@ -10284,6 +10707,7 @@ function PickupModal({
   const [showPlayerPicker, setShowPlayerPicker] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const linkedCourtLocked = Boolean(initialCourtBooking && courtBookingId);
   const courtReservations = (dashboard?.bookings ?? []).filter(
     (booking) =>
       booking.kind === "court-rental" && new Date(booking.endsAt) > new Date(),
@@ -10308,6 +10732,17 @@ function PickupModal({
     const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
     return local.toISOString().slice(0, 16);
   }
+
+  useEffect(() => {
+    if (!visible || !initialCourtBooking) return;
+    setStep(0);
+    setVenueName(initialCourtBooking.venueName);
+    setVenueId(initialCourtBooking.venueId);
+    setCourtBookingId(initialCourtBooking.courtBookingId);
+    setStartsAt(initialCourtBooking.localStartsAt.slice(0, 16));
+    setDurationMinutes(initialCourtBooking.durationMinutes);
+    setError(undefined);
+  }, [initialCourtBooking, visible]);
 
   function chooseDay(day: Date) {
     const next = new Date(start);
@@ -10569,6 +11004,33 @@ function PickupModal({
                     Choose a court you already booked or set a clear place and
                     start time.
                   </Text>
+                  {linkedCourtLocked && (
+                    <View style={styles.hostFlowLinkedCourt}>
+                      <Text style={styles.hostFlowLinkedCourtMark}>✓</Text>
+                      <View style={styles.flex}>
+                        <Text style={styles.hostFlowCourtTitle}>
+                          Court reserved
+                        </Text>
+                        <Text style={styles.hostFlowCourtMeta}>
+                          {venueName} ·{" "}
+                          {start.toLocaleDateString("en-US", {
+                            weekday: "long",
+                            month: "short",
+                            day: "numeric",
+                          })}{" "}
+                          at{" "}
+                          {start.toLocaleTimeString("en-US", {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </Text>
+                        <Text style={styles.hostFlowCourtMeta}>
+                          This match stays attached to the court you just
+                          confirmed.
+                        </Text>
+                      </View>
+                    </View>
+                  )}
                   {courtReservations.length > 0 && (
                     <>
                       <Text style={styles.hostFlowLabel}>YOUR COURTS</Text>
@@ -10579,6 +11041,7 @@ function PickupModal({
                       >
                         {courtReservations.map((booking) => (
                           <Pressable
+                            disabled={linkedCourtLocked}
                             key={booking.id}
                             onPress={() => {
                               const bookingStart = new Date(booking.startsAt);
@@ -10676,6 +11139,7 @@ function PickupModal({
                         day.toDateString() === start.toDateString();
                       return (
                         <Pressable
+                          disabled={linkedCourtLocked}
                           key={day.toISOString()}
                           onPress={() => chooseDay(day)}
                           style={[
@@ -10711,6 +11175,7 @@ function PickupModal({
                   <View style={styles.hostFlowChipWrap}>
                     {timeChoices.map((time) => (
                       <Pressable
+                        disabled={linkedCourtLocked}
                         key={time.hour}
                         onPress={() => chooseTime(time.hour)}
                         style={[
@@ -10737,6 +11202,7 @@ function PickupModal({
                   <View style={styles.hostFlowChipWrap}>
                     {[60, 90, 120].map((minutes) => (
                       <Pressable
+                        disabled={linkedCourtLocked}
                         key={minutes}
                         onPress={() => setDurationMinutes(minutes)}
                         style={[
@@ -11254,6 +11720,8 @@ function DunaApp() {
   const [bookingId, setBookingId] = useState<string>();
   const [organizationSlug, setOrganizationSlug] = useState<string>();
   const [organizationVenueId, setOrganizationVenueId] = useState<string>();
+  const [organizationHostSeed, setOrganizationHostSeed] =
+    useState<HostedMatchSeed>();
   const [organizationCoach, setOrganizationCoach] = useState<MobileCoach>();
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [artworkStudioOpen, setArtworkStudioOpen] = useState(false);
@@ -11473,8 +11941,33 @@ function DunaApp() {
             />
             <VenueBookingModal
               onClose={() => setOrganizationVenueId(undefined)}
+              onHostReady={(seed) => {
+                setOrganizationVenueId(undefined);
+                setTimeout(() => setOrganizationHostSeed(seed), 280);
+              }}
+              onOpenMatch={(matchId, matchSlug) => {
+                const index = (runtime.dashboard?.events ?? []).findIndex(
+                  (event) => event.id === matchId,
+                );
+                setOrganizationVenueId(undefined);
+                setTimeout(() => {
+                  if (index >= 0) {
+                    setEventIndex(index);
+                    return;
+                  }
+                  void WebBrowser.openBrowserAsync(
+                    `${dunaWebUrl}/events/${encodeURIComponent(matchSlug)}`,
+                  );
+                }, 280);
+              }}
               venueId={organizationVenueId}
               visible={Boolean(organizationVenueId)}
+            />
+            <PickupModal
+              initialCourtBooking={organizationHostSeed}
+              onClose={() => setOrganizationHostSeed(undefined)}
+              onCreated={() => setOrganizationHostSeed(undefined)}
+              visible={Boolean(organizationHostSeed)}
             />
             <CoachProfileModal
               coach={organizationCoach}
@@ -11907,6 +12400,236 @@ function createStyles(palette: Palette) {
       fontSize: 10,
       textAlign: "right",
     },
+    bookingTimeSectionLabel: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.15,
+      marginBottom: 9,
+      marginTop: 16,
+    },
+    bookingTimeGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    bookingTimeOption: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 14,
+      borderWidth: 1,
+      justifyContent: "space-between",
+      minHeight: 82,
+      padding: 11,
+      width: "31.5%",
+    },
+    bookingTimeOptionMatch: {
+      borderColor: rgba(colors.accentRgb, 0.55),
+    },
+    bookingTimeOptionActive: {
+      backgroundColor: colors.aquaDeep,
+      borderColor: colors.aqua,
+    },
+    bookingTimeOptionTime: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
+    },
+    bookingTimeOptionTimeActive: { color: "#ffffff" },
+    bookingTimeRoster: {
+      alignItems: "center",
+      flexDirection: "row",
+      marginTop: 8,
+    },
+    bookingTimeAvatar: {
+      borderColor: colors.depth,
+      borderRadius: 11,
+      borderWidth: 2,
+      height: 22,
+      marginRight: -4,
+      width: 22,
+    },
+    bookingTimeAvatarFallback: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.depth,
+      borderRadius: 11,
+      borderWidth: 2,
+      color: colors.ink,
+      fontSize: 10,
+      fontWeight: "900",
+      height: 22,
+      lineHeight: 18,
+      marginRight: -4,
+      overflow: "hidden",
+      textAlign: "center",
+      width: 22,
+    },
+    bookingTimeOptionMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+      marginTop: 7,
+    },
+    bookingTimeOptionMetaActive: { color: rgba("255,255,255", 0.72) },
+    bookingOpenMatchSection: { marginTop: 4 },
+    bookingOpenMatch: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.accentRgb, 0.22),
+      borderRadius: 18,
+      borderWidth: 1,
+      marginBottom: 10,
+      padding: 15,
+    },
+    bookingOpenMatchEyebrow: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    bookingOpenMatchTitle: {
+      color: colors.bone,
+      fontSize: 17,
+      fontWeight: "900",
+      marginTop: 4,
+    },
+    bookingOpenMatchPriceBlock: {
+      alignItems: "flex-end",
+      marginLeft: 12,
+    },
+    bookingOpenMatchPrice: {
+      color: colors.aqua,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    bookingOpenMatchRoster: {
+      borderBottomColor: rgba(colors.overlayRgb, 0.08),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 15,
+      paddingBottom: 14,
+    },
+    bookingOpenMatchPlayer: {
+      alignItems: "center",
+      gap: 5,
+      width: 60,
+    },
+    bookingOpenMatchAvatar: {
+      borderRadius: 21,
+      height: 42,
+      width: 42,
+    },
+    bookingOpenMatchAvatarFallback: {
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 21,
+      color: "#ffffff",
+      fontSize: 12,
+      fontWeight: "900",
+      height: 42,
+      lineHeight: 42,
+      overflow: "hidden",
+      textAlign: "center",
+      width: 42,
+    },
+    bookingOpenMatchAvailable: {
+      borderColor: rgba(colors.accentRgb, 0.45),
+      borderRadius: 21,
+      borderWidth: 1,
+      color: colors.aqua,
+      fontSize: 22,
+      height: 42,
+      lineHeight: 38,
+      overflow: "hidden",
+      textAlign: "center",
+      width: 42,
+    },
+    bookingOpenMatchPlayerName: {
+      color: colors.muted,
+      fontSize: 10,
+      maxWidth: 60,
+      textAlign: "center",
+    },
+    bookingOpenMatchFooter: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 13,
+    },
+    bookingOpenMatchSpots: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    bookingOpenMatchJoin: {
+      alignItems: "center",
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 12,
+      justifyContent: "center",
+      minHeight: 44,
+      paddingHorizontal: 14,
+    },
+    bookingCreateMatchSection: { marginTop: 3 },
+    bookingCourtChoice: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      marginBottom: 9,
+      padding: 14,
+    },
+    bookingCourtActions: {
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 12,
+      width: "100%",
+    },
+    bookingHostButton: {
+      alignItems: "center",
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 12,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 44,
+      paddingHorizontal: 10,
+    },
+    bookingHostButtonText: {
+      color: "#ffffff",
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    bookingPrivateButton: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.16),
+      borderRadius: 12,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 44,
+      paddingHorizontal: 10,
+    },
+    bookingPrivateButtonText: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    bookingHostIntent: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderColor: rgba(colors.accentRgb, 0.2),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      marginTop: 13,
+      padding: 14,
+    },
+    bookingHostIntentIcon: {
+      color: colors.aqua,
+      fontSize: 22,
+    },
     bookingSlotGrid: {
       flexDirection: "row",
       flexWrap: "wrap",
@@ -12240,6 +12963,23 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.accentRgb, 0.1),
       borderColor: colors.aqua,
       borderWidth: 2,
+    },
+    hostFlowLinkedCourt: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderColor: rgba(colors.accentRgb, 0.24),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      marginBottom: 8,
+      padding: 14,
+    },
+    hostFlowLinkedCourtMark: {
+      alignSelf: "flex-start",
+      color: colors.aqua,
+      fontSize: 19,
+      fontWeight: "900",
     },
     hostFlowCourtTitle: {
       color: colors.bone,

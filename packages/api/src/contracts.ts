@@ -518,6 +518,8 @@ export const bookingSummarySchema = z.object({
   startsAt: z.iso.datetime(),
   endsAt: z.iso.datetime(),
   venueName: z.string(),
+  venueId: z.string().uuid().optional(),
+  venueTimezone: z.string().optional(),
   status: z.enum(["confirmed", "waitlisted", "needs-action"]),
   amount: moneySchema,
   participantNames: z.array(z.string()).readonly(),
@@ -645,6 +647,33 @@ export const playerDashboardSchema = z.object({
   walletBalanceMinor: z.number().int(),
   currency: z.literal("USD"),
 });
+export const playerAdmissionPassSchema = z.object({
+  id: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  kind: z.enum(["player-registration", "fan-ticket"]),
+  eventTitle: z.string(),
+  holderName: z.string(),
+  passLabel: z.string(),
+  credentialPayload: z.string(),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
+  timezone: z.string(),
+  venueName: z.string(),
+  venueAddress: z.string().optional(),
+  status: z.enum([
+    "confirmed",
+    "checked-in",
+    "issued",
+    "transferred",
+    "scanned",
+  ]),
+  usable: z.boolean(),
+  walletStatus: z.enum(["available", "configuration-required"]),
+  walletPassPath: z.string().startsWith("/api/wallet/passes/").optional(),
+});
+export const playerAdmissionPassesSchema = z
+  .array(playerAdmissionPassSchema)
+  .readonly();
 export const playerOrganizationAccessSchema = z.object({
   activeOrganizationId: z.string().uuid().optional(),
   organizations: z
@@ -3133,6 +3162,17 @@ export const operatorSessionDetailSchema = z.object({
         observedAt: z.iso.datetime(),
       })
       .optional(),
+    weatherKind: z.enum(["forecast", "captured"]).optional(),
+    weatherStatus: z.enum([
+      "captured",
+      "forecast-ready",
+      "forecast-pending",
+      "location-required",
+      "provider-required",
+      "not-captured",
+      "temporarily-unavailable",
+    ]),
+    forecastAvailableAt: z.iso.datetime().optional(),
   }),
   notes: z.array(operatorSessionNoteSchema).readonly(),
   videos: z
@@ -3556,6 +3596,7 @@ export const discoveryMapItemSchema = z.object({
   startsAt: z.iso.datetime().optional(),
   endsAt: z.iso.datetime().optional(),
   imageUrl: z.string().optional(),
+  videoUrl: z.string().optional(),
   imageFit: z.enum(["cover", "contain"]).optional(),
   live: z.boolean().optional(),
   openNow: z.boolean().optional(),
@@ -4284,6 +4325,34 @@ export const courtAvailabilitySlotSchema = z.object({
   weather: weatherForecastPointSchema.optional(),
 });
 
+export const courtOpenMatchPlayerSchema = z.object({
+  id: z.string().uuid(),
+  displayName: z.string(),
+  handle: z.string(),
+  initials: z.string(),
+  avatarUrl: z.string().optional(),
+});
+
+export const courtOpenMatchSchema = z.object({
+  id: z.string().uuid(),
+  slug: z.string(),
+  title: z.string(),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
+  localStartsAt: z.string(),
+  localEndsAt: z.string(),
+  spotsRemaining: z.number().int().positive(),
+  capacity: z.number().int().positive(),
+  format: z.string(),
+  matchType: z.enum(["competitive", "casual"]),
+  genderPreference: z.enum(["open", "mens", "womens", "mixed"]),
+  approvalRequired: z.boolean(),
+  price: moneySchema,
+  ratingRange: z.tuple([z.number(), z.number()]).readonly().optional(),
+  host: courtOpenMatchPlayerSchema,
+  attendees: z.array(courtOpenMatchPlayerSchema).readonly(),
+});
+
 export const courtAvailabilitySchema = z.object({
   venueId: z.string().uuid(),
   date: z.iso.date(),
@@ -4293,6 +4362,7 @@ export const courtAvailabilitySchema = z.object({
   forecast: weatherForecastSchema.optional(),
   excludedAfterDarkCount: z.number().int().nonnegative(),
   slots: z.array(courtAvailabilitySlotSchema).readonly(),
+  openMatches: z.array(courtOpenMatchSchema).readonly(),
 });
 
 export const courtBookingParticipantSchema = z.object({
@@ -4470,6 +4540,28 @@ export const ticketScanResultSchema = z.object({
     "void",
     "refunded",
   ]),
+  ownerName: z.string().optional(),
+  ticketName: z.string().optional(),
+  eventTitle: z.string().optional(),
+});
+
+export const playerRegistrationScanResultSchema = z.object({
+  scanEventId: z.string().uuid(),
+  registrationId: z.string().uuid(),
+  accepted: z.boolean(),
+  duplicate: z.boolean(),
+  reason: z.enum(["not-confirmed", "already-checked-in"]).optional(),
+  registrationStatus: z.enum([
+    "invited",
+    "pending",
+    "confirmed",
+    "waitlisted",
+    "cancelled",
+    "refunded",
+    "checked-in",
+  ]),
+  playerName: z.string(),
+  eventTitle: z.string(),
 });
 
 export const formSubmissionResultSchema = z.object({

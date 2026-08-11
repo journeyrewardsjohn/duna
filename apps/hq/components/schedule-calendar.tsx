@@ -1,7 +1,11 @@
 "use client";
 
 import type { OperatorWorkspace } from "@duna/api";
-import { Badge } from "@duna/ui";
+import {
+  parseNaturalLanguageSchedule,
+  type NaturalLanguageScheduleDraft,
+} from "@duna/scheduling";
+import { Badge, SmartDateRangePicker } from "@duna/ui";
 import {
   AlertTriangle,
   Ban,
@@ -19,6 +23,7 @@ import {
   PackagePlus,
   Rows3,
   ShieldCheck,
+  Sparkles,
   UserMinus,
   UserPlus,
   UsersRound,
@@ -40,6 +45,7 @@ import {
   cancelCalendarSessionAction,
   confirmCalendarChangeAction,
   createCalendarBlockAction,
+  createRecurringCalendarBlocksAction,
   proposeCalendarChangeAction,
   removeCalendarEquipmentAction,
   removeCalendarParticipantAction,
@@ -259,11 +265,31 @@ export function ScheduleCalendar({
   const [view, setView] = useState<CalendarView>("day");
   const [resourceView, setResourceView] = useState<ResourceView>("court");
   const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
+  const [blockRange, setBlockRange] = useState(() => {
+    const start = startOfDay(new Date());
+    start.setHours(12, 0, 0, 0);
+    return {
+      start: toDateTimeLocal(start),
+      end: toDateTimeLocal(new Date(start.getTime() + 60 * 60_000)),
+    };
+  });
   const [draggedId, setDraggedId] = useState<string>();
   const [selectedId, setSelectedId] = useState<string>();
   const [blockOpen, setBlockOpen] = useState(false);
   const [blockResourceType, setBlockResourceType] =
     useState<ResourceView>("court");
+  const [blockCreationMode, setBlockCreationMode] = useState<"one-time" | "ai">(
+    "one-time",
+  );
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiDraft, setAiDraft] = useState<NaturalLanguageScheduleDraft>();
+  const [aiEffectiveRange, setAiEffectiveRange] = useState(() => {
+    const start = startOfDay(new Date());
+    return {
+      start: toDateTimeLocal(start).slice(0, 10),
+      end: toDateTimeLocal(addMonths(start, 3)).slice(0, 10),
+    };
+  });
   const [proposal, proposeAction, proposalPending] = useActionState(
     proposeCalendarChangeAction,
     initialActionState,
@@ -282,6 +308,8 @@ export function ScheduleCalendar({
     createCalendarBlockAction,
     initialActionState,
   );
+  const [recurringBlock, recurringBlockAction, recurringBlockPending] =
+    useActionState(createRecurringCalendarBlocksAction, initialActionState);
   const [equipmentAdd, addEquipmentAction, equipmentAddPending] =
     useActionState(addCalendarEquipmentAction, initialActionState);
   const [equipmentRemove, removeEquipmentAction, equipmentRemovePending] =
@@ -392,6 +420,10 @@ export function ScheduleCalendar({
   useEffect(() => {
     if (calendarBlock.status === "success") setBlockOpen(false);
   }, [calendarBlock.status]);
+
+  useEffect(() => {
+    if (recurringBlock.status === "success") setBlockOpen(false);
+  }, [recurringBlock.status]);
 
   const navigate = (direction: -1 | 1) => {
     const amount =
@@ -516,9 +548,6 @@ export function ScheduleCalendar({
     );
   };
 
-  const blockStart = new Date(anchor);
-  blockStart.setHours(12, 0, 0, 0);
-  const blockEnd = new Date(blockStart.getTime() + 60 * 60_000);
   const blockResources =
     blockResourceType === "court"
       ? workspace.venues.flatMap((venue) =>
@@ -549,7 +578,20 @@ export function ScheduleCalendar({
             <button
               className="hq-button hq-button--secondary"
               onClick={() => {
+                const start = new Date(anchor);
+                start.setHours(12, 0, 0, 0);
                 setBlockResourceType(resourceView);
+                setBlockCreationMode("one-time");
+                setAiPrompt("");
+                setAiDraft(undefined);
+                setBlockRange({
+                  start: toDateTimeLocal(start),
+                  end: toDateTimeLocal(new Date(start.getTime() + 60 * 60_000)),
+                });
+                setAiEffectiveRange({
+                  start: toDateTimeLocal(start).slice(0, 10),
+                  end: toDateTimeLocal(addMonths(start, 3)).slice(0, 10),
+                });
                 setBlockOpen(true);
               }}
               type="button"
@@ -1327,7 +1369,7 @@ export function ScheduleCalendar({
           role="dialog"
         >
           <aside
-            className="schedule-detail-drawer schedule-detail-drawer--compact"
+            className="schedule-detail-drawer schedule-detail-drawer--calendar"
             onClick={(event) => event.stopPropagation()}
           >
             <header className="schedule-detail-drawer__header">
@@ -1344,83 +1386,278 @@ export function ScheduleCalendar({
                 <strong>Block time</strong>
               </span>
             </header>
-            <form action={blockTimeAction} className="operator-form">
-              <div className="operator-form-grid operator-form-grid--two">
-                <label>
-                  <span>Resource type</span>
-                  <select
-                    name="resourceType"
-                    onChange={(event) =>
-                      setBlockResourceType(event.target.value as ResourceView)
-                    }
-                    value={blockResourceType}
-                  >
-                    <option value="court">Court</option>
-                    <option value="coach">Coach</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Block type</span>
-                  <select name="mode">
-                    <option value="blocked">Unavailable</option>
-                    <option value="maintenance">Maintenance</option>
-                  </select>
-                </label>
-              </div>
-              <label>
-                <span>{blockResourceType === "court" ? "Court" : "Coach"}</span>
-                <select name="resourceId" required>
-                  <option value="">Choose a resource</option>
-                  {blockResources.map((resource) => (
-                    <option key={resource.id} value={resource.id}>
-                      {resource.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="operator-form-grid operator-form-grid--two">
-                <label>
-                  <span>Starts</span>
-                  <input
-                    defaultValue={toDateTimeLocal(blockStart)}
-                    name="startsAt"
-                    required
-                    type="datetime-local"
-                  />
-                </label>
-                <label>
-                  <span>Ends</span>
-                  <input
-                    defaultValue={toDateTimeLocal(blockEnd)}
-                    name="endsAt"
-                    required
-                    type="datetime-local"
-                  />
-                </label>
-              </div>
-              <label>
-                <span>Reason</span>
-                <textarea
-                  name="reason"
-                  placeholder="Private hold, lunch, maintenance, travel…"
-                  required
-                />
-              </label>
-              {calendarBlock.status === "error" && (
-                <p className="schedule-action-feedback schedule-action-feedback--error">
-                  <AlertTriangle aria-hidden size={16} />
-                  {calendarBlock.message}
-                </p>
-              )}
+            <div
+              aria-label="Schedule creation method"
+              className="schedule-block-mode"
+              role="tablist"
+            >
               <button
-                className="hq-button hq-button--primary"
-                disabled={blockPending || blockResources.length === 0}
-                type="submit"
+                aria-selected={blockCreationMode === "one-time"}
+                className={
+                  blockCreationMode === "one-time" ? "is-active" : undefined
+                }
+                onClick={() => setBlockCreationMode("one-time")}
+                role="tab"
+                type="button"
               >
-                <Ban size={15} />
-                {blockPending ? "Checking conflicts…" : "Block this time"}
+                <Ban size={16} /> One-time block
               </button>
-            </form>
+              <button
+                aria-selected={blockCreationMode === "ai"}
+                className={blockCreationMode === "ai" ? "is-active" : undefined}
+                onClick={() => setBlockCreationMode("ai")}
+                role="tab"
+                type="button"
+              >
+                <Sparkles size={16} /> Create schedule with Duna AI
+              </button>
+            </div>
+            {blockCreationMode === "one-time" ? (
+              <form action={blockTimeAction} className="operator-form">
+                <div className="operator-form-grid operator-form-grid--two">
+                  <label>
+                    <span>Resource type</span>
+                    <select
+                      name="resourceType"
+                      onChange={(event) =>
+                        setBlockResourceType(event.target.value as ResourceView)
+                      }
+                      value={blockResourceType}
+                    >
+                      <option value="court">Court</option>
+                      <option value="coach">Coach</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Block type</span>
+                    <select name="mode">
+                      <option value="blocked">Unavailable</option>
+                      <option value="maintenance">Maintenance</option>
+                    </select>
+                  </label>
+                </div>
+                <label>
+                  <span>
+                    {blockResourceType === "court" ? "Court" : "Coach"}
+                  </span>
+                  <select name="resourceId" required>
+                    <option value="">Choose a resource</option>
+                    {blockResources.map((resource) => (
+                      <option key={resource.id} value={resource.id}>
+                        {resource.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <input name="startsAt" type="hidden" value={blockRange.start} />
+                <input name="endsAt" type="hidden" value={blockRange.end} />
+                <SmartDateRangePicker
+                  applyLabel="Use this block"
+                  label="Unavailable window"
+                  onChange={setBlockRange}
+                  timeMode="required"
+                  value={blockRange}
+                />
+                <label>
+                  <span>Reason</span>
+                  <textarea
+                    name="reason"
+                    placeholder="Private hold, lunch, maintenance, travel…"
+                    required
+                  />
+                </label>
+                {calendarBlock.status === "error" && (
+                  <p className="schedule-action-feedback schedule-action-feedback--error">
+                    <AlertTriangle aria-hidden size={16} />
+                    {calendarBlock.message}
+                  </p>
+                )}
+                <button
+                  className="hq-button hq-button--primary"
+                  disabled={blockPending || blockResources.length === 0}
+                  type="submit"
+                >
+                  <Ban size={15} />
+                  {blockPending ? "Checking conflicts…" : "Block this time"}
+                </button>
+              </form>
+            ) : (
+              <form action={recurringBlockAction} className="operator-form">
+                <div className="schedule-ai-intro">
+                  <Sparkles aria-hidden size={18} />
+                  <span>
+                    <strong>Describe the real constraint.</strong>
+                    <small>
+                      Duna creates a reviewable draft. Nothing is saved until
+                      you confirm it.
+                    </small>
+                  </span>
+                </div>
+                <div className="operator-form-grid operator-form-grid--two">
+                  <label>
+                    <span>Resource type</span>
+                    <select
+                      name="resourceType"
+                      onChange={(event) =>
+                        setBlockResourceType(event.target.value as ResourceView)
+                      }
+                      value={blockResourceType}
+                    >
+                      <option value="coach">Coach</option>
+                      <option value="court">Court</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>
+                      {blockResourceType === "court" ? "Court" : "Coach"}
+                    </span>
+                    <select name="resourceId" required>
+                      <option value="">Choose a resource</option>
+                      {blockResources.map((resource) => (
+                        <option key={resource.id} value={resource.id}>
+                          {resource.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <label>
+                  <span>Tell Duna what is unavailable</span>
+                  <textarea
+                    onChange={(event) => {
+                      setAiPrompt(event.target.value);
+                      setAiDraft(undefined);
+                    }}
+                    placeholder="I can’t work on Mon, Weds, Fri from noon–3 PM for school."
+                    value={aiPrompt}
+                  />
+                </label>
+                <button
+                  className="hq-button hq-button--secondary"
+                  disabled={aiPrompt.trim().length < 8}
+                  onClick={() =>
+                    setAiDraft(parseNaturalLanguageSchedule(aiPrompt))
+                  }
+                  type="button"
+                >
+                  <Sparkles size={15} /> Build review draft
+                </button>
+                {aiDraft && (
+                  <section
+                    className="schedule-ai-draft"
+                    data-status={aiDraft.status}
+                  >
+                    <header>
+                      <span>
+                        <small>Proposed weekly blocks</small>
+                        <strong>{aiDraft.summary}</strong>
+                      </span>
+                      <Badge
+                        tone={
+                          aiDraft.status === "ready" ? "positive" : "warning"
+                        }
+                      >
+                        {aiDraft.status === "ready"
+                          ? "Ready to review"
+                          : "Needs detail"}
+                      </Badge>
+                    </header>
+                    {aiDraft.warnings.map((warning) => (
+                      <p key={warning}>
+                        <AlertTriangle aria-hidden size={15} /> {warning}
+                      </p>
+                    ))}
+                    {aiDraft.blocks.length > 0 && (
+                      <div>
+                        {aiDraft.blocks.map((block) => (
+                          <span key={block.weekday}>
+                            <strong>{block.day}</strong>
+                            <small>
+                              {String(
+                                Math.floor(block.startsAtMinute / 60),
+                              ).padStart(2, "0")}
+                              :
+                              {String(block.startsAtMinute % 60).padStart(
+                                2,
+                                "0",
+                              )}{" "}
+                              –{" "}
+                              {String(
+                                Math.floor(block.endsAtMinute / 60),
+                              ).padStart(2, "0")}
+                              :
+                              {String(block.endsAtMinute % 60).padStart(2, "0")}
+                            </small>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                )}
+                <SmartDateRangePicker
+                  applyLabel="Use these dates"
+                  label="Schedule applies during"
+                  onChange={setAiEffectiveRange}
+                  timeMode="hidden"
+                  value={aiEffectiveRange}
+                />
+                <input
+                  name="blocks"
+                  type="hidden"
+                  value={JSON.stringify(aiDraft?.blocks ?? [])}
+                />
+                <input
+                  name="effectiveFrom"
+                  type="hidden"
+                  value={aiEffectiveRange.start.slice(0, 10)}
+                />
+                <input
+                  name="effectiveTo"
+                  type="hidden"
+                  value={aiEffectiveRange.end.slice(0, 10)}
+                />
+                <input
+                  name="reason"
+                  type="hidden"
+                  value={aiDraft?.reason ?? aiPrompt}
+                />
+                {aiDraft?.status === "ready" && (
+                  <label className="operator-confirmation">
+                    <input
+                      name="confirmed"
+                      required
+                      type="checkbox"
+                      value="true"
+                    />
+                    <span>
+                      <strong>Confirm this recurring schedule</strong>
+                      Existing bookings stay intact; future availability will
+                      honor these blocks.
+                    </span>
+                  </label>
+                )}
+                {recurringBlock.status === "error" && (
+                  <p className="schedule-action-feedback schedule-action-feedback--error">
+                    <AlertTriangle aria-hidden size={16} />
+                    {recurringBlock.message}
+                  </p>
+                )}
+                <button
+                  className="hq-button hq-button--primary"
+                  disabled={
+                    recurringBlockPending ||
+                    blockResources.length === 0 ||
+                    aiDraft?.status !== "ready"
+                  }
+                  type="submit"
+                >
+                  <Sparkles size={15} />
+                  {recurringBlockPending
+                    ? "Saving reviewed schedule…"
+                    : "Confirm recurring blocks"}
+                </button>
+              </form>
+            )}
           </aside>
         </div>
       )}

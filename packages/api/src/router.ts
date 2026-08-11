@@ -85,7 +85,9 @@ import {
   playerInvitationClaimResultSchema,
   playerInvitationSchema,
   playerCoachingNoteSchema,
+  playerAdmissionPassesSchema,
   playerDashboardSchema,
+  playerRegistrationScanResultSchema,
   playerOrganizationAccessSchema,
   playerSettingsSchema,
   playerWalletSchema,
@@ -135,6 +137,7 @@ import {
   publishPlayerArrivalSignal,
   stopArrivalSharing,
 } from "./arrival-service";
+import { loadPlayerAdmissionPasses } from "./admission-service";
 import { loadPublicImportedMatchSummary } from "./database-repository";
 import { loadDiscoveryMap } from "./discovery-service";
 import {
@@ -155,6 +158,7 @@ import {
   loadPlayerCoachingNotes,
   publishSessionNote,
   recordSessionAttendance,
+  scanPlayerRegistration,
   updateOperatorMemberProfile,
 } from "./people-service";
 import {
@@ -211,6 +215,7 @@ import {
   cancelCalendarSession,
   confirmCalendarChange,
   createCalendarBlock,
+  createRecurringCalendarBlocks,
   createCatalogItem,
   createInventoryStock,
   enableInventoryGoodSales,
@@ -3355,6 +3360,14 @@ const playerRouter = router({
   dashboard: protectedProcedure
     .output(playerDashboardSchema)
     .query(({ ctx }) => getRepository().player.dashboard(ctx.actor!.personId)),
+  admissionPasses: protectedProcedure
+    .output(playerAdmissionPassesSchema)
+    .query(({ ctx }) =>
+      loadPlayerAdmissionPasses({
+        personId: ctx.actor!.personId,
+        now: ctx.now,
+      }),
+    ),
   organizationAccess: protectedProcedure
     .output(playerOrganizationAccessSchema)
     .query(({ ctx }) => loadPlayerOrganizationAccess(ctx.actor!)),
@@ -6794,6 +6807,49 @@ const operatorRouter = router({
         },
       }),
     ),
+  scanPlayerRegistration: organizationProcedure("sessions:write")
+    .use(
+      rateLimitMiddleware({
+        id: "player-registration-scan",
+        capacity: 600,
+        refillPerMinute: 600,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z.object({
+        registrationId: z.string().uuid(),
+        deviceId: z.string().min(3).max(128),
+        scannedAt: z.iso.datetime(),
+        offline: z.boolean(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(playerRegistrationScanResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.scanPlayerRegistration",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await scanPlayerRegistration({
+              actor: ctx.actor!,
+              registrationId: input.registrationId,
+              deviceId: input.deviceId,
+              scannedAt: new Date(input.scannedAt),
+              offline: input.offline,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   updateMemberProfile: organizationProcedure("members:write")
     .input(
       z.object({
@@ -7610,6 +7666,58 @@ const operatorRouter = router({
               endsAt: new Date(input.endsAt),
               mode: input.mode,
               reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createRecurringCalendarBlocks: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        resourceType: z.enum(["court", "coach"]),
+        resourceId: z.string().uuid(),
+        blocks: z
+          .array(
+            z.object({
+              weekday: z.number().int().min(0).max(6),
+              startsAtMinute: z.number().int().min(0).max(1_439),
+              endsAtMinute: z.number().int().min(1).max(1_440),
+            }),
+          )
+          .min(1)
+          .max(14),
+        effectiveFrom: z.iso.date().optional(),
+        effectiveTo: z.iso.date().optional(),
+        mode: z.enum(["blocked", "maintenance"]),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createRecurringCalendarBlocks",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createRecurringCalendarBlocks({
+              actor: ctx.actor!,
+              resourceType: input.resourceType,
+              resourceId: input.resourceId,
+              blocks: input.blocks,
+              effectiveFrom: input.effectiveFrom,
+              effectiveTo: input.effectiveTo,
+              mode: input.mode,
+              reason: input.reason,
+              confirmed: input.confirmed,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,

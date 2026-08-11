@@ -15,6 +15,7 @@ const venue: VenueSummary = {
   openNow: true,
   latitude: 33.8847,
   longitude: -118.4109,
+  imageUrl: "https://example.com/center-court-hero.jpg",
   tags: ["sand"],
 };
 
@@ -65,6 +66,7 @@ describe("buildDiscoveryMap", () => {
       href: "/venues/venue-1",
       openNow: true,
       courtCount: 8,
+      imageUrl: venue.imageUrl,
     });
     expect(
       result.items.find((item) => item.entityType === "organization"),
@@ -87,6 +89,39 @@ describe("buildDiscoveryMap", () => {
     ).toMatchObject({
       latitude: venue.latitude,
       longitude: venue.longitude,
+    });
+  });
+
+  it("preserves a primary hero video and its poster for discovery cards", () => {
+    const result = buildDiscoveryMap({
+      events: [
+        {
+          ...event,
+          media: [
+            {
+              id: "hero-video",
+              kind: "video",
+              url: "https://example.com/weekend-open.mp4",
+              posterUrl: "https://example.com/weekend-open-poster.jpg",
+            },
+            {
+              id: "secondary-image",
+              kind: "image",
+              url: "https://example.com/secondary.jpg",
+            },
+          ],
+        },
+      ],
+      venues: [venue],
+      coaches: [],
+      now: new Date("2026-08-05T12:00:00.000Z"),
+    });
+
+    expect(
+      result.items.find((item) => item.entityType === "event"),
+    ).toMatchObject({
+      imageUrl: "https://example.com/weekend-open-poster.jpg",
+      videoUrl: "https://example.com/weekend-open.mp4",
     });
   });
 
