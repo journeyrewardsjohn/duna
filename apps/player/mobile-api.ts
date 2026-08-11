@@ -1,4 +1,8 @@
 import type { AppRouter } from "@duna/api";
+import {
+  createCursorSyncEngine,
+  type DeliveryEngine,
+} from "@duna/messaging-client";
 import { createTRPCClient, httpBatchLink, type TRPCClient } from "@trpc/client";
 
 const defaultApiUrl = "https://duna.coach/api/trpc";
@@ -60,6 +64,22 @@ export function createDunaApiClient(getToken: TokenGetter): DunaApiClient {
         },
       }),
     ],
+  });
+}
+
+export function createPlayerMessagingDeliveryEngine(
+  getToken: TokenGetter,
+): DeliveryEngine {
+  return createCursorSyncEngine({
+    asPrincipal: "user",
+    baseUrl: `${dunaApiBaseUrl}/api/messaging`,
+    fetchClient: async (input, init) => {
+      const headers = new Headers(init?.headers);
+      const token = await getToken();
+      if (token) headers.set("authorization", `Bearer ${token}`);
+      return fetchWithTimeout(input, { ...init, headers });
+    },
+    pollIntervalMs: 15_000,
   });
 }
 

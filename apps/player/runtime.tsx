@@ -27,11 +27,17 @@ import {
 import Svg, { Line, Path } from "react-native-svg";
 import {
   createDunaApiClient,
+  createPlayerMessagingDeliveryEngine,
   uploadPlayerMedia,
   type DunaApiClient,
   type UploadedPlayerMedia,
 } from "./mobile-api";
+import type { DeliveryEngine } from "@duna/messaging-client";
 import { FellixText as Text } from "./fellix-text";
+import {
+  registerMessagingNotifications,
+  unregisterMessagingNotifications,
+} from "./messaging-notifications";
 
 type PlayerDashboard = Awaited<
   ReturnType<DunaApiClient["player"]["dashboard"]["query"]>
@@ -76,6 +82,7 @@ type PlayerOrganizationAccess = Awaited<
 export interface PlayerRuntime {
   readonly mode: "preview" | "live";
   readonly client?: DunaApiClient;
+  readonly messagingDelivery?: DeliveryEngine;
   readonly publicClient?: DunaApiClient;
   readonly dashboard?: PlayerDashboard;
   readonly wallet?: PlayerWallet;
@@ -302,6 +309,14 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     signOut,
   } = useWorkOSMobileAuth();
   const client = useMemo(() => createDunaApiClient(getToken), [getToken]);
+  const messagingDelivery = useMemo(
+    () => createPlayerMessagingDeliveryEngine(getToken),
+    [getToken],
+  );
+  const safeSignOut = useCallback(async () => {
+    await unregisterMessagingNotifications(client).catch(() => undefined);
+    await signOut();
+  }, [client, signOut]);
   const [dashboard, setDashboard] = useState<PlayerDashboard>();
   const [wallet, setWallet] = useState<PlayerWallet>();
   const [predictionWallet, setPredictionWallet] = useState<PredictionWallet>();
@@ -405,6 +420,11 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     if (isLoaded && isSignedIn) void refresh();
   }, [isLoaded, isSignedIn, refresh]);
 
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    void registerMessagingNotifications(client, false).catch(() => undefined);
+  }, [client, isLoaded, isSignedIn]);
+
   if (!isLoaded) {
     return (
       <CenteredState
@@ -453,6 +473,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       value={{
         mode: "live",
         client,
+        messagingDelivery,
         publicClient: client,
         dashboard,
         wallet,
@@ -474,7 +495,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         switchOrganization,
         selfEnrollOrganizationStaff,
         uploadPlayerMedia: (input) => uploadPlayerMedia(getToken, input),
-        signOut,
+        signOut: safeSignOut,
       }}
     >
       {children}

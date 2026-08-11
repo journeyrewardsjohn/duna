@@ -27977,6 +27977,11 @@ html {
   .player-shell:has(.match-recorder) .ask-duna__panel {
     display: none;
   }
+
+  .player-shell:has([data-messaging-page]) .ask-duna__launcher,
+  .player-shell:has([data-messaging-page]) .ask-duna__panel {
+    display: none;
+  }
 }
 
 .club-profile {

@@ -59,6 +59,7 @@
       "@bacons/apple-targets",
       "@rnmapbox/maps",
       "expo-contacts",
+      "expo-notifications",
       [
         "expo-image-picker",
         {

@@ -42,6 +42,11 @@ import {
 import { connectAccountMoneyReady } from "./stripe-connect";
 import { synchronizeOrganizationFeeMetadata } from "./organization-billing";
 import { organizationPlanForPriceId } from "./payments";
+import { processMessageSafetyWorkflow } from "./duna-ai-support";
+import {
+  dispatchMessagingPushNotifications,
+  processMessagingPushReceipts,
+} from "./messaging-notifications";
 
 export { connectAccountMoneyReady } from "./stripe-connect";
 
@@ -1136,6 +1141,15 @@ export async function processWorkflowJobById(
         workflowJobId: claimed.id,
         now,
       });
+    } else if (claimed.kind === "messaging.safesport-screen") {
+      await processMessageSafetyWorkflow(
+        { ...claimed.payload, traceId: claimed.id },
+        now,
+      );
+    } else if (claimed.kind === "messaging.push-message") {
+      await dispatchMessagingPushNotifications(claimed.payload, now);
+    } else if (claimed.kind === "messaging.push-receipts") {
+      await processMessagingPushReceipts(claimed.payload, now);
     } else {
       throw new Error(`No workflow handler is registered for ${claimed.kind}`);
     }

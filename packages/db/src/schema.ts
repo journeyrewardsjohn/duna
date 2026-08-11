@@ -8121,3 +8121,624 @@ export const featureFlags = pgTable(
       ),
   ],
 );
+
+// Duna Messaging is a relationship-scoped communication system. Neon remains
+// authoritative for every read and write; the owned delivery layer only adds
+// cursor sync and best-effort wake-up hints around these tables.
+export const messagingPrincipalTypeEnum = pgEnum("messaging_principal_type", [
+  "user",
+  "organization",
+  "agent",
+]);
+export const messagingConversationTypeEnum = pgEnum(
+  "messaging_conversation_type",
+  ["dm", "group", "event", "division", "league", "broadcast", "support"],
+);
+export const messagingContextTypeEnum = pgEnum("messaging_context_type", [
+  "organization",
+  "event",
+  "division",
+  "league",
+  "lesson",
+  "rental",
+  "match",
+  "support-case",
+]);
+export const messagingParticipantRoleEnum = pgEnum(
+  "messaging_participant_role",
+  ["member", "moderator", "guardian", "agent"],
+);
+export const conversationMessageKindEnum = pgEnum("conversation_message_kind", [
+  "text",
+  "announcement",
+  "event-update",
+  "schedule-change",
+  "payment-request",
+  "form-request",
+  "score-update",
+  "support-response",
+  "system",
+]);
+export const conversationMessageStatusEnum = pgEnum(
+  "conversation_message_status",
+  ["screening", "published", "held", "removed"],
+);
+export const messageModerationStateEnum = pgEnum("message_moderation_state", [
+  "not-required",
+  "screening",
+  "safe",
+  "review",
+  "blocked",
+]);
+
+export const messagingConversations = pgTable(
+  "messaging_conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "set null",
+    }),
+    type: messagingConversationTypeEnum("type").notNull(),
+    title: text("title").notNull(),
+    contextType: messagingContextTypeEnum("context_type"),
+    contextId: varchar("context_id", { length: 192 }),
+    contextLabel: text("context_label"),
+    createdByPrincipalType: messagingPrincipalTypeEnum(
+      "created_by_principal_type",
+    ).notNull(),
+    createdByPrincipalId: varchar("created_by_principal_id", {
+      length: 192,
+    }).notNull(),
+    announcementOnly: boolean("announcement_only").notNull().default(false),
+    followerBroadcast: boolean("follower_broadcast").notNull().default(false),
+    minorPresent: boolean("minor_present").notNull().default(false),
+    guardianCoverageComplete: boolean("guardian_coverage_complete")
+      .notNull()
+      .default(true),
+    safetyScreeningRequired: boolean("safety_screening_required")
+      .notNull()
+      .default(false),
+    status: varchar("status", { length: 24 }).notNull().default("open"),
+    lastMessageSequence: integer("last_message_sequence").notNull().default(0),
+    lastMessageAt: timestamp("last_message_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    metadata: jsonb("metadata")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("messaging_conversation_org_updated_idx").on(
+      table.organizationId,
+      table.updatedAt,
+    ),
+    index("messaging_conversation_context_idx").on(
+      table.contextType,
+      table.contextId,
+    ),
+    uniqueIndex("messaging_context_conversation_unique")
+      .on(table.organizationId, table.type, table.contextType, table.contextId)
+      .where(sql`${table.contextId} IS NOT NULL AND ${table.status} = 'open'`),
+    check(
+      "messaging_conversation_status_valid",
+      sql`${table.status} IN ('open', 'closed', 'archived')`,
+    ),
+    check(
+      "messaging_conversation_context_pair",
+      sql`(${table.contextType} IS NULL) = (${table.contextId} IS NULL)`,
+    ),
+    check(
+      "messaging_conversation_minor_safety",
+      sql`NOT ${table.minorPresent} OR (${table.guardianCoverageComplete} AND ${table.safetyScreeningRequired})`,
+    ),
+    check(
+      "messaging_conversation_sequence_nonnegative",
+      sql`${table.lastMessageSequence} >= 0`,
+    ),
+  ],
+);
+
+export const messagingConversationParticipants = pgTable(
+  "messaging_conversation_participants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => messagingConversations.id, { onDelete: "cascade" }),
+    principalType: messagingPrincipalTypeEnum("principal_type").notNull(),
+    principalId: varchar("principal_id", { length: 192 }).notNull(),
+    personId: uuid("person_id").references(() => people.id, {
+      onDelete: "cascade",
+    }),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    role: messagingParticipantRoleEnum("role").notNull().default("member"),
+    guardianOfPersonId: uuid("guardian_of_person_id").references(
+      () => people.id,
+      { onDelete: "cascade" },
+    ),
+    canPost: boolean("can_post").notNull().default(true),
+    notificationLevel: varchar("notification_level", { length: 16 })
+      .notNull()
+      .default("all"),
+    lastReadSequence: integer("last_read_sequence").notNull().default(0),
+    lastDeliveredSequence: integer("last_delivered_sequence")
+      .notNull()
+      .default(0),
+    joinedAt: timestamp("joined_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    leftAt: timestamp("left_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("messaging_participant_principal_unique").on(
+      table.conversationId,
+      table.principalType,
+      table.principalId,
+    ),
+    index("messaging_participant_person_inbox_idx").on(
+      table.personId,
+      table.leftAt,
+      table.updatedAt,
+    ),
+    index("messaging_participant_org_inbox_idx").on(
+      table.organizationId,
+      table.leftAt,
+      table.updatedAt,
+    ),
+    check(
+      "messaging_participant_notification_valid",
+      sql`${table.notificationLevel} IN ('all', 'mentions', 'muted')`,
+    ),
+    check(
+      "messaging_participant_watermarks_nonnegative",
+      sql`${table.lastReadSequence} >= 0 AND ${table.lastDeliveredSequence} >= 0 AND ${table.lastDeliveredSequence} >= ${table.lastReadSequence}`,
+    ),
+    check(
+      "messaging_participant_principal_reference",
+      sql`(${table.principalType} = 'user' AND ${table.personId} IS NOT NULL AND ${table.organizationId} IS NULL) OR (${table.principalType} = 'organization' AND ${table.organizationId} IS NOT NULL AND ${table.personId} IS NULL) OR (${table.principalType} = 'agent' AND ${table.personId} IS NULL AND ${table.organizationId} IS NULL)`,
+    ),
+    check(
+      "messaging_guardian_requires_minor",
+      sql`${table.role} <> 'guardian' OR ${table.guardianOfPersonId} IS NOT NULL`,
+    ),
+  ],
+);
+
+export const conversationMessages = pgTable(
+  "conversation_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => messagingConversations.id, { onDelete: "cascade" }),
+    sequence: integer("sequence").notNull(),
+    clientMessageId: uuid("client_message_id").notNull(),
+    senderPrincipalType: messagingPrincipalTypeEnum(
+      "sender_principal_type",
+    ).notNull(),
+    senderPrincipalId: varchar("sender_principal_id", {
+      length: 192,
+    }).notNull(),
+    senderPersonId: uuid("sender_person_id").references(() => people.id, {
+      onDelete: "set null",
+    }),
+    senderOrganizationId: uuid("sender_organization_id").references(
+      () => organizations.id,
+      { onDelete: "set null" },
+    ),
+    kind: conversationMessageKindEnum("kind").notNull().default("text"),
+    body: text("body"),
+    widgets: jsonb("widgets")
+      .notNull()
+      .$type<readonly Record<string, unknown>[]>()
+      .default([]),
+    replyToMessageId: uuid("reply_to_message_id"),
+    status: conversationMessageStatusEnum("status")
+      .notNull()
+      .default("published"),
+    moderationState: messageModerationStateEnum("moderation_state")
+      .notNull()
+      .default("not-required"),
+    publishedAt: timestamp("published_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    editedAt: timestamp("edited_at", { withTimezone: true, mode: "date" }),
+    removedAt: timestamp("removed_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("conversation_message_sequence_unique").on(
+      table.conversationId,
+      table.sequence,
+    ),
+    uniqueIndex("conversation_message_client_id_unique").on(
+      table.clientMessageId,
+    ),
+    index("conversation_message_conversation_created_idx").on(
+      table.conversationId,
+      table.createdAt,
+    ),
+    index("conversation_message_screening_idx").on(
+      table.moderationState,
+      table.createdAt,
+    ),
+    check("conversation_message_sequence_positive", sql`${table.sequence} > 0`),
+    check(
+      "conversation_message_content_present",
+      sql`${table.body} IS NOT NULL OR jsonb_array_length(${table.widgets}) > 0`,
+    ),
+  ],
+);
+
+export const conversationMessageReactions = pgTable(
+  "conversation_message_reactions",
+  {
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => conversationMessages.id, { onDelete: "cascade" }),
+    principalType: messagingPrincipalTypeEnum("principal_type").notNull(),
+    principalId: varchar("principal_id", { length: 192 }).notNull(),
+    emoji: varchar("emoji", { length: 32 }).notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.messageId,
+        table.principalType,
+        table.principalId,
+        table.emoji,
+      ],
+    }),
+    index("conversation_reaction_message_idx").on(table.messageId),
+  ],
+);
+
+export const conversationMessageAttachments = pgTable(
+  "conversation_message_attachments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => conversationMessages.id, { onDelete: "cascade" }),
+    storageKey: text("storage_key").notNull(),
+    mediaType: varchar("media_type", { length: 80 }).notNull(),
+    fileName: text("file_name").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    safetyStatus: varchar("safety_status", { length: 24 })
+      .notNull()
+      .default("pending"),
+    createdAt,
+  },
+  (table) => [
+    index("conversation_attachment_message_idx").on(table.messageId),
+    check("conversation_attachment_size_positive", sql`${table.byteSize} > 0`),
+    check(
+      "conversation_attachment_safety_valid",
+      sql`${table.safetyStatus} IN ('pending', 'safe', 'review', 'blocked')`,
+    ),
+  ],
+);
+
+// Relationship records are append-only evidence that an organization or pair
+// of people has had a legitimate Duna context. Ending a relationship does not
+// erase the fact that it existed, while a current block always wins at send.
+export const messagingRelationships = pgTable(
+  "messaging_relationships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourcePrincipalType: messagingPrincipalTypeEnum(
+      "source_principal_type",
+    ).notNull(),
+    sourcePrincipalId: varchar("source_principal_id", {
+      length: 192,
+    }).notNull(),
+    targetPrincipalType: messagingPrincipalTypeEnum(
+      "target_principal_type",
+    ).notNull(),
+    targetPrincipalId: varchar("target_principal_id", {
+      length: 192,
+    }).notNull(),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    personId: uuid("person_id").references(() => people.id, {
+      onDelete: "cascade",
+    }),
+    contextType: messagingContextTypeEnum("context_type"),
+    contextId: varchar("context_id", { length: 192 }),
+    kind: varchar("kind", { length: 48 }).notNull(),
+    sourceKey: varchar("source_key", { length: 256 }).notNull(),
+    active: boolean("active").notNull().default(true),
+    startedAt: timestamp("started_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    endedAt: timestamp("ended_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("messaging_relationship_source_key_unique").on(table.sourceKey),
+    index("messaging_relationship_pair_idx").on(
+      table.sourcePrincipalType,
+      table.sourcePrincipalId,
+      table.targetPrincipalType,
+      table.targetPrincipalId,
+    ),
+    index("messaging_relationship_org_person_idx").on(
+      table.organizationId,
+      table.personId,
+    ),
+    check(
+      "messaging_relationship_kind_valid",
+      sql`${table.kind} IN ('organization-member', 'event-registration', 'lesson', 'rental', 'league', 'staff', 'follow', 'support')`,
+    ),
+    check(
+      "messaging_relationship_context_pair",
+      sql`(${table.contextType} IS NULL) = (${table.contextId} IS NULL)`,
+    ),
+  ],
+);
+
+export const messagingBlocks = pgTable(
+  "messaging_blocks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    blockerPersonId: uuid("blocker_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    blockedPrincipalType: messagingPrincipalTypeEnum(
+      "blocked_principal_type",
+    ).notNull(),
+    blockedPrincipalId: varchar("blocked_principal_id", {
+      length: 192,
+    }).notNull(),
+    reason: text("reason"),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("messaging_active_block_unique")
+      .on(
+        table.blockerPersonId,
+        table.blockedPrincipalType,
+        table.blockedPrincipalId,
+      )
+      .where(sql`${table.revokedAt} IS NULL`),
+    index("messaging_blocked_principal_idx").on(
+      table.blockedPrincipalType,
+      table.blockedPrincipalId,
+    ),
+    check(
+      "messaging_block_agent_disallowed",
+      sql`${table.blockedPrincipalType} <> 'agent'`,
+    ),
+  ],
+);
+
+// Expo push tokens are tied to the authenticated Duna person, not an email or
+// phone number. Re-registering the same token moves it to the current account,
+// which prevents a shared device from retaining another member's delivery.
+export const messagingPushDevices = pgTable(
+  "messaging_push_devices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    app: varchar("app", { length: 16 }).notNull(),
+    platform: varchar("platform", { length: 16 }).notNull(),
+    expoPushToken: text("expo_push_token").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    lastSeenAt: timestamp("last_seen_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    disabledAt: timestamp("disabled_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    lastErrorCode: varchar("last_error_code", { length: 80 }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("messaging_push_device_token_unique").on(table.expoPushToken),
+    index("messaging_push_device_person_idx").on(table.personId, table.enabled),
+    check(
+      "messaging_push_device_app_valid",
+      sql`${table.app} IN ('player', 'pro')`,
+    ),
+    check(
+      "messaging_push_device_platform_valid",
+      sql`${table.platform} IN ('ios', 'android')`,
+    ),
+  ],
+);
+
+export const messagingPushDeliveries = pgTable(
+  "messaging_push_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => conversationMessages.id, { onDelete: "cascade" }),
+    deviceId: uuid("device_id")
+      .notNull()
+      .references(() => messagingPushDevices.id, { onDelete: "cascade" }),
+    status: varchar("status", { length: 24 }).notNull().default("queued"),
+    attempts: integer("attempts").notNull().default(0),
+    expoTicketId: varchar("expo_ticket_id", { length: 192 }),
+    errorCode: varchar("error_code", { length: 80 }),
+    errorMessage: text("error_message"),
+    sentAt: timestamp("sent_at", { withTimezone: true, mode: "date" }),
+    receiptCheckedAt: timestamp("receipt_checked_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("messaging_push_delivery_message_device_unique").on(
+      table.messageId,
+      table.deviceId,
+    ),
+    index("messaging_push_delivery_receipt_idx").on(
+      table.status,
+      table.receiptCheckedAt,
+      table.createdAt,
+    ),
+    check(
+      "messaging_push_delivery_status_valid",
+      sql`${table.status} IN ('queued', 'submitted', 'delivered', 'retry', 'failed')`,
+    ),
+    check(
+      "messaging_push_delivery_attempts_nonnegative",
+      sql`${table.attempts} >= 0`,
+    ),
+  ],
+);
+
+export const messageModerationCases = pgTable(
+  "message_moderation_cases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => conversationMessages.id, { onDelete: "cascade" }),
+    status: varchar("status", { length: 24 }).notNull().default("open"),
+    severity: varchar("severity", { length: 16 }).notNull(),
+    categories: text("categories")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    explanation: text("explanation").notNull(),
+    model: varchar("model", { length: 160 }),
+    modelVersion: varchar("model_version", { length: 160 }),
+    confidence: doublePrecision("confidence"),
+    assignedToPersonId: uuid("assigned_to_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    reviewedByPersonId: uuid("reviewed_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    reviewedAt: timestamp("reviewed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    resolutionNote: text("resolution_note"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("message_moderation_message_unique").on(table.messageId),
+    index("message_moderation_queue_idx").on(
+      table.status,
+      table.severity,
+      table.createdAt,
+    ),
+    check(
+      "message_moderation_status_valid",
+      sql`${table.status} IN ('open', 'reviewing', 'cleared', 'restricted', 'escalated')`,
+    ),
+    check(
+      "message_moderation_severity_valid",
+      sql`${table.severity} IN ('low', 'medium', 'high', 'critical')`,
+    ),
+    check(
+      "message_moderation_confidence_valid",
+      sql`${table.confidence} IS NULL OR ${table.confidence} BETWEEN 0 AND 1`,
+    ),
+  ],
+);
+
+export const conversationMessageActions = pgTable(
+  "conversation_message_actions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => conversationMessages.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    actionId: varchar("action_id", { length: 64 }).notNull(),
+    actionType: varchar("action_type", { length: 32 }).notNull(),
+    payload: jsonb("payload")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("conversation_message_action_unique").on(
+      table.messageId,
+      table.personId,
+      table.actionId,
+    ),
+  ],
+);
+
+export const messagingAgentRuns = pgTable(
+  "messaging_agent_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => messagingConversations.id, { onDelete: "cascade" }),
+    requestMessageId: uuid("request_message_id").references(
+      () => conversationMessages.id,
+      { onDelete: "set null" },
+    ),
+    responseMessageId: uuid("response_message_id").references(
+      () => conversationMessages.id,
+      { onDelete: "set null" },
+    ),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    agentId: varchar("agent_id", { length: 96 }).notNull(),
+    model: varchar("model", { length: 160 }),
+    status: varchar("status", { length: 24 }).notNull().default("queued"),
+    toolsUsed: text("tools_used")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    contextDigest: varchar("context_digest", { length: 128 }),
+    responseDigest: varchar("response_digest", { length: 128 }),
+    handoffReason: text("handoff_reason"),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("messaging_agent_conversation_idx").on(
+      table.conversationId,
+      table.createdAt,
+    ),
+    check(
+      "messaging_agent_status_valid",
+      sql`${table.status} IN ('queued', 'running', 'completed', 'handoff', 'failed')`,
+    ),
+  ],
+);

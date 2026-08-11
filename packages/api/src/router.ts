@@ -27,6 +27,7 @@ import {
   superAdminProcedure,
 } from "./auth";
 import type { ApiContext } from "./context";
+import { messagingRouter } from "./messaging-router";
 import {
   accountDeletionReadinessSchema,
   adminOrganizationDetailSchema,
@@ -10956,6 +10957,7 @@ export const appRouter = router({
   operator: operatorRouter,
   agent: agentRouter,
   admin: adminRouter,
+  messaging: messagingRouter,
 });
 
 export type AppRouter = typeof appRouter;

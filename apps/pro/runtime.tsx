@@ -17,12 +17,18 @@ import Svg, { Line, Path } from "react-native-svg";
 import {
   createSessionNoteRoom,
   createDunaApiClient,
+  createProMessagingDeliveryEngine,
   uploadProductImage,
   type DunaApiClient,
   type SessionNoteRoom,
   type UploadedProductImage,
 } from "./mobile-api";
+import type { DeliveryEngine } from "@duna/messaging-client";
 import { FellixText as Text } from "./fellix-text";
+import {
+  registerMessagingNotifications,
+  unregisterMessagingNotifications,
+} from "./messaging-notifications";
 
 type OperatorDashboard = Awaited<
   ReturnType<DunaApiClient["operator"]["dashboard"]["query"]>
@@ -46,6 +52,7 @@ export type OperatorMatchScoringState = Awaited<
 export interface ProRuntime {
   readonly mode: "preview" | "live";
   readonly client?: DunaApiClient;
+  readonly messagingDelivery?: DeliveryEngine;
   readonly dashboard?: OperatorDashboard;
   readonly workspace?: OperatorWorkspace;
   readonly members?: OperatorMembers;
@@ -143,6 +150,14 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     signOut,
   } = useWorkOSMobileAuth();
   const client = useMemo(() => createDunaApiClient(getToken), [getToken]);
+  const messagingDelivery = useMemo(
+    () => createProMessagingDeliveryEngine(getToken),
+    [getToken],
+  );
+  const safeSignOut = useCallback(async () => {
+    await unregisterMessagingNotifications(client).catch(() => undefined);
+    await signOut();
+  }, [client, signOut]);
   const [dashboard, setDashboard] = useState<OperatorDashboard>();
   const [workspace, setWorkspace] = useState<OperatorWorkspace>();
   const [members, setMembers] = useState<OperatorMembers>();
@@ -194,6 +209,11 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     if (isLoaded && isSignedIn && organizationId) void refresh();
   }, [isLoaded, isSignedIn, organizationId, refresh]);
 
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    void registerMessagingNotifications(client, false).catch(() => undefined);
+  }, [client, isLoaded, isSignedIn]);
+
   if (!isLoaded) {
     return (
       <CenteredState
@@ -221,7 +241,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       <CenteredState
         action="Sign out"
         body="Your Duna identity is valid, but it has not been invited to a club or coaching organization."
-        onAction={() => void signOut()}
+        onAction={() => void safeSignOut()}
         title="Club access required"
       />
     );
@@ -253,6 +273,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         authOrganizations: organizations,
         mode: "live",
         client,
+        messagingDelivery,
         dashboard,
         workspace,
         members,
@@ -263,7 +284,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         createSessionNoteRoom: (sessionId) =>
           createSessionNoteRoom(getToken, sessionId),
         uploadProductImage: (input) => uploadProductImage(getToken, input),
-        signOut,
+        signOut: safeSignOut,
       }}
     >
       {children}

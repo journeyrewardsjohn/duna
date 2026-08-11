@@ -2944,7 +2944,7 @@ export function OperatorControls({
   readonly module: OperatorModule;
   readonly workspace: OperatorWorkspace;
 }) {
-  if (module === "messages") {
+  if (module === "marketing") {
     return (
       <div className="commerce-controls">
         <MarketingFlowComposer workspace={workspace} />
