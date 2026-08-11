@@ -3,6 +3,18 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 const hqBaseUrl =
   process.env.PLAYWRIGHT_HQ_BASE_URL ??
   `http://127.0.0.1:${process.env.PLAYWRIGHT_HQ_PORT ?? "3001"}`;
+const navigationTimeout = process.env.CI ? 30_000 : 15_000;
+
+async function clickAndWaitForUrl(
+  page: Page,
+  locator: Locator,
+  expected: RegExp | string,
+) {
+  await Promise.all([
+    page.waitForURL(expected, { timeout: navigationTimeout }),
+    locator.click(),
+  ]);
+}
 
 async function expectNoHorizontalOverflow(page: Page) {
   const dimensions = await page.evaluate(() => ({
@@ -86,9 +98,9 @@ test("public discovery carries Where, When, and What into the map sheet", async 
     name: "What are you looking for?",
   });
   await whatDialog.getByRole("button", { name: /Court Rentals/ }).click();
-  await whatDialog.getByRole("button", { name: /^Show \d+ results$/ }).click();
-
-  await expect(page).toHaveURL(
+  await clickAndWaitForUrl(
+    page,
+    whatDialog.getByRole("button", { name: /^Show \d+ results$/ }),
     /\/discover\/map\?.*where=place.*when=next-7-days.*what=court-rentals/,
   );
   const sheet = page.locator(".discover-v2-sheet");
@@ -108,11 +120,14 @@ test("public discovery carries Where, When, and What into the map sheet", async 
   await page.mouse.up();
   await expect(sheet).toHaveClass(/is-full/);
 
-  await sheet.locator("a[href^='/venues/']").first().click();
-  await expect(page).toHaveURL(/\/venues\/[^/]+$/);
+  await clickAndWaitForUrl(
+    page,
+    sheet.locator("a[href^='/venues/']").first(),
+    /\/venues\/[^/]+$/,
+  );
   await expect(
     page.getByRole("heading", { name: "Manhattan Beach Pier" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: navigationTimeout });
   await expectNoHorizontalOverflow(page);
 });
 
@@ -816,13 +831,14 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(playerView).toHaveAttribute("target", "_blank");
   await expectNoHorizontalOverflow(page);
 
-  await firstSession.click();
-  await expect(page).toHaveURL(
+  await clickAndWaitForUrl(
+    page,
+    firstSession,
     /\/events\/10000000-0000-4000-8000-000000000301$/,
   );
   await expect(
     page.getByRole("heading", { name: "Sunset doubles training" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: navigationTimeout });
   await page.goto(`${hqBaseUrl}/`);
 
   await page.goto(`${hqBaseUrl}/locations`);
@@ -831,16 +847,23 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
     name: "Open venue workspace",
   });
   await expect(venueWorkspace).toBeVisible();
-  await venueWorkspace.click();
+  await clickAndWaitForUrl(
+    page,
+    venueWorkspace,
+    /\/locations\/10000000-0000-4000-8000-000000000101$/,
+  );
   await expect(
     page.getByRole("heading", { name: "Beach Elite Training Center" }).first(),
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Venue details", exact: true })
-    .click();
+  ).toBeVisible({ timeout: navigationTimeout });
+  const venueDetails = page.getByRole("button", {
+    name: "Venue details",
+    exact: true,
+  });
+  await expect(venueDetails).toBeVisible({ timeout: navigationTimeout });
+  await venueDetails.click();
   await expect(
     page.getByRole("radio", { name: /Public location/ }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: navigationTimeout });
   await expect(
     page.getByRole("radio", { name: /Private venue/ }),
   ).toBeChecked();
@@ -872,10 +895,14 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(
     page.getByText("Community Court", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("link", { name: /Championship Court/ }).click();
+  await clickAndWaitForUrl(
+    page,
+    page.getByRole("link", { name: /Championship Court/ }),
+    /\/locations\/10000000-0000-4000-8000-000000000101\/courts\/10000000-0000-4000-8000-000000000103$/,
+  );
   await expect(
     page.getByRole("heading", { name: "Championship Court" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: navigationTimeout });
   await expect(
     page.getByRole("button", { name: "Availability", exact: true }),
   ).toBeVisible();
