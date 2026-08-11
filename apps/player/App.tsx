@@ -90,6 +90,8 @@ import { ProfileHubScreen } from "./profile-hub";
 import { PlayerArtworkModal, ProfileEditorModal } from "./profile-studio";
 import { ScoreUploadScreen } from "./score-upload";
 import { OrganizationExperienceModal } from "./organization-experience";
+import { PlayerMessagingScreen } from "./messaging-screen";
+import { listenForMessagingNotificationResponses } from "./messaging-notifications";
 import {
   LivePlayerRail,
   PlayerPickerModal,
@@ -468,6 +470,10 @@ const ThemeContext = createContext<{
   readonly toggle: () => void;
 }>({ theme: "light", preference: "light", toggle: () => undefined });
 
+const MessagingNavigationContext = createContext<{
+  readonly open: (support: boolean) => void;
+}>({ open: () => undefined });
+
 function ThemeButton() {
   const { preference, theme, toggle } = useContext(ThemeContext);
   return (
@@ -497,7 +503,8 @@ type Tab =
   | "predictions"
   | "you"
   | "health"
-  | "performance";
+  | "performance"
+  | "messages";
 
 type CourtInventory = Awaited<
   ReturnType<DunaApiClient["public"]["courtBookingInventory"]["query"]>
@@ -939,6 +946,7 @@ function PolicyReviewModal({
 
 function AppHeader({ eyebrow }: { readonly eyebrow?: string }) {
   const { dashboard, mode } = usePlayerRuntime();
+  const messaging = useContext(MessagingNavigationContext);
   const initials = dashboard?.player.initials ?? demoPlayer.initials;
   return (
     <View style={styles.appHeader}>
@@ -948,11 +956,16 @@ function AppHeader({ eyebrow }: { readonly eyebrow?: string }) {
       </View>
       <View style={styles.headerActions}>
         <ThemeButton />
-        <Pressable accessibilityLabel="Ask Duna" style={styles.askButton}>
+        <Pressable
+          accessibilityLabel="Ask Duna"
+          onPress={() => messaging.open(true)}
+          style={styles.askButton}
+        >
           <Text style={styles.askButtonText}>✦</Text>
         </Pressable>
         <Pressable
-          accessibilityLabel="Notifications"
+          accessibilityLabel="Messages"
+          onPress={() => messaging.open(false)}
           style={styles.avatarButton}
         >
           <Text style={styles.avatarText}>{initials}</Text>
@@ -11944,7 +11957,8 @@ function TabBar({
     active === "health" ||
     active === "wallet" ||
     active === "predictions" ||
-    active === "performance"
+    active === "performance" ||
+    active === "messages"
       ? "you"
       : active === "score" || active === "video"
         ? "play"
@@ -12077,6 +12091,9 @@ function DunaApp() {
   const deviceTheme: ThemeName = useColorScheme() === "dark" ? "dark" : "light";
   const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("home");
+  const [messagesOpenToSupport, setMessagesOpenToSupport] = useState(false);
+  const [messagesConversationId, setMessagesConversationId] =
+    useState<string>();
   const [eventIndex, setEventIndex] = useState<number | null>(null);
   const [bookingId, setBookingId] = useState<string>();
   const [organizationSlug, setOrganizationSlug] = useState<string>();
@@ -12106,6 +12123,19 @@ function DunaApp() {
 
   useEffect(() => {
     const openLiveActivity = (url: string | null) => {
+      if (url?.startsWith("duna://messages")) {
+        setEventIndex(null);
+        const conversationId = url.match(/^duna:\/\/messages\/([^/?#]+)/)?.[1];
+        const decoded = conversationId
+          ? decodeURIComponent(conversationId)
+          : undefined;
+        setMessagesOpenToSupport(decoded === "support");
+        setMessagesConversationId(
+          decoded && decoded !== "support" ? decoded : undefined,
+        );
+        setTab("messages");
+        return;
+      }
       const bookingMatch = url?.match(/^duna:\/\/booking\/([^/?#]+)/);
       if (bookingMatch?.[1]) {
         setEventIndex(null);
@@ -12124,6 +12154,14 @@ function DunaApp() {
     );
     return () => subscription.remove();
   }, []);
+
+  useEffect(
+    () =>
+      listenForMessagingNotificationResponses(() => {
+        void runtime.messagingDelivery?.syncAll().catch(() => undefined);
+      }),
+    [runtime.messagingDelivery],
+  );
 
   useEffect(() => {
     if (reduceMotion) {
@@ -12180,172 +12218,206 @@ function DunaApp() {
         },
       }}
     >
-      <PlayerProfileProvider palette={colors}>
-        <HealthHistorySyncAgent paused={tab === "health"} runtime={runtime} />
-        <SafeAreaView edges={["top"]} style={styles.safe}>
-          <StatusBar style={theme === "dark" ? "light" : "dark"} />
-          <View style={styles.app}>
-            <PreviewBanner />
-            <Animated.View
-              style={[
-                styles.animatedScreen,
-                {
-                  opacity: screenTransition,
-                  transform: [
-                    {
-                      translateY: screenTransition.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [8, 0],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            >
-              {tab === "home" && (
-                <HomeScreen
-                  onAction={openHomeAction}
-                  onBook={setEventIndex}
-                  onOpenBooking={setBookingId}
-                  onPredictions={() => setTab("predictions")}
-                />
-              )}
-              {tab === "discover" && (
-                <DiscoverScreen
-                  intent={discoverIntent}
-                  onBook={setEventIndex}
-                  onOrganization={setOrganizationSlug}
-                />
-              )}
-              {tab === "score" && (
-                <ScoreUploadScreen
-                  initialPlayedAt={watchScoreDraft?.capturedAt}
-                  initialSets={watchScoreDraft?.sets}
-                  key={watchScoreDraft?.draftId ?? "score-upload"}
-                  onComplete={() => setTab("performance")}
-                  palette={colors}
-                />
-              )}
-              {tab === "play" && (
-                <PlayLauncherScreen onAction={openHomeAction} />
-              )}
-              {tab === "plans" && (
-                <PlansScreen
-                  onBook={setEventIndex}
-                  onOpenBooking={setBookingId}
-                />
-              )}
-              {tab === "video" && <VideoStudioScreen runtime={runtime} />}
-              {tab === "wallet" && (
-                <WalletScreen onClose={() => setTab("you")} />
-              )}
-              {tab === "predictions" && (
-                <PredictionPortfolioScreen onBack={() => setTab("wallet")} />
-              )}
-              {tab === "you" && (
-                <ProfileHubScreen
-                  onArtwork={() => setArtworkStudioOpen(true)}
-                  onDestination={(destination) => setTab(destination)}
-                  onEditProfile={() => setProfileEditorOpen(true)}
-                  onOrganization={setOrganizationSlug}
-                />
-              )}
-              {tab === "health" && (
-                <HealthScreen onBack={() => setTab("you")} theme={theme} />
-              )}
-              {tab === "performance" && (
-                <PerformanceScreen
-                  onArtwork={() => setArtworkStudioOpen(true)}
-                  onBack={() => setTab("you")}
-                  onEditProfile={() => setProfileEditorOpen(true)}
-                  onHealth={() => setTab("health")}
-                  onPredictions={() => setTab("predictions")}
-                  onWallet={() => setTab("wallet")}
-                />
-              )}
-            </Animated.View>
-            <TabBar active={tab} onChange={setTab} />
-            <BookingModal
-              eventIndex={eventIndex}
-              onClose={() => setEventIndex(null)}
-            />
-            <ProfileEditorModal
-              onClose={() => setProfileEditorOpen(false)}
-              visible={profileEditorOpen}
-            />
-            <PlayerArtworkModal
-              onClose={() => setArtworkStudioOpen(false)}
-              visible={artworkStudioOpen}
-            />
-            <BookingManagementModal
-              booking={selectedBooking as ManagedBooking | undefined}
-              client={runtime.client}
-              onClose={() => setBookingId(undefined)}
-              onUpdated={runtime.refresh}
-              visible={Boolean(selectedBooking)}
-            />
-            <OrganizationExperienceModal
-              onClose={() => setOrganizationSlug(undefined)}
-              onOpenCoach={(coach) => {
-                setOrganizationCoach(coach);
-                setOrganizationSlug(undefined);
-              }}
-              onOpenEvent={(eventId) => {
-                const index = (runtime.dashboard?.events ?? []).findIndex(
-                  (event) => event.id === eventId,
-                );
-                setOrganizationSlug(undefined);
-                if (index >= 0) setEventIndex(index);
-              }}
-              onOpenVenue={(venueId) => {
-                setOrganizationSlug(undefined);
-                setOrganizationVenueId(venueId);
-              }}
-              slug={organizationSlug}
-            />
-            <VenueBookingModal
-              onClose={() => setOrganizationVenueId(undefined)}
-              onHostReady={(seed) => {
-                setOrganizationVenueId(undefined);
-                setTimeout(() => setOrganizationHostSeed(seed), 280);
-              }}
-              onOpenMatch={(matchId, matchSlug) => {
-                const index = (runtime.dashboard?.events ?? []).findIndex(
-                  (event) => event.id === matchId,
-                );
-                setOrganizationVenueId(undefined);
-                setTimeout(() => {
-                  if (index >= 0) {
-                    setEventIndex(index);
-                    return;
-                  }
-                  void WebBrowser.openBrowserAsync(
-                    `${dunaWebUrl}/events/${encodeURIComponent(matchSlug)}`,
+      <MessagingNavigationContext.Provider
+        value={{
+          open: (support) => {
+            setMessagesConversationId(undefined);
+            setMessagesOpenToSupport(support);
+            setTab("messages");
+          },
+        }}
+      >
+        <PlayerProfileProvider palette={colors}>
+          <HealthHistorySyncAgent paused={tab === "health"} runtime={runtime} />
+          <SafeAreaView edges={["top"]} style={styles.safe}>
+            <StatusBar style={theme === "dark" ? "light" : "dark"} />
+            <View style={styles.app}>
+              <PreviewBanner />
+              <Animated.View
+                style={[
+                  styles.animatedScreen,
+                  {
+                    opacity: screenTransition,
+                    transform: [
+                      {
+                        translateY: screenTransition.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [8, 0],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                {tab === "home" && (
+                  <HomeScreen
+                    onAction={openHomeAction}
+                    onBook={setEventIndex}
+                    onOpenBooking={setBookingId}
+                    onPredictions={() => setTab("predictions")}
+                  />
+                )}
+                {tab === "discover" && (
+                  <DiscoverScreen
+                    intent={discoverIntent}
+                    onBook={setEventIndex}
+                    onOrganization={setOrganizationSlug}
+                  />
+                )}
+                {tab === "score" && (
+                  <ScoreUploadScreen
+                    initialPlayedAt={watchScoreDraft?.capturedAt}
+                    initialSets={watchScoreDraft?.sets}
+                    key={watchScoreDraft?.draftId ?? "score-upload"}
+                    onComplete={() => setTab("performance")}
+                    palette={colors}
+                  />
+                )}
+                {tab === "play" && (
+                  <PlayLauncherScreen onAction={openHomeAction} />
+                )}
+                {tab === "plans" && (
+                  <PlansScreen
+                    onBook={setEventIndex}
+                    onOpenBooking={setBookingId}
+                  />
+                )}
+                {tab === "video" && <VideoStudioScreen runtime={runtime} />}
+                {tab === "wallet" && (
+                  <WalletScreen onClose={() => setTab("you")} />
+                )}
+                {tab === "predictions" && (
+                  <PredictionPortfolioScreen onBack={() => setTab("wallet")} />
+                )}
+                {tab === "you" && (
+                  <ProfileHubScreen
+                    onArtwork={() => setArtworkStudioOpen(true)}
+                    onDestination={(destination) => setTab(destination)}
+                    onEditProfile={() => setProfileEditorOpen(true)}
+                    onOrganization={setOrganizationSlug}
+                  />
+                )}
+                {tab === "health" && (
+                  <HealthScreen onBack={() => setTab("you")} theme={theme} />
+                )}
+                {tab === "performance" && (
+                  <PerformanceScreen
+                    onArtwork={() => setArtworkStudioOpen(true)}
+                    onBack={() => setTab("you")}
+                    onEditProfile={() => setProfileEditorOpen(true)}
+                    onHealth={() => setTab("health")}
+                    onPredictions={() => setTab("predictions")}
+                    onWallet={() => setTab("wallet")}
+                  />
+                )}
+                {tab === "messages" && (
+                  <PlayerMessagingScreen
+                    initialConversationId={messagesConversationId}
+                    initialSupport={messagesOpenToSupport}
+                    onClose={() => {
+                      setMessagesConversationId(undefined);
+                      setMessagesOpenToSupport(false);
+                      setTab("home");
+                    }}
+                    palette={{
+                      canvas: colors.canvas,
+                      surface: colors.depth,
+                      surfaceAlt: colors.navyLift,
+                      border: rgba(colors.overlayRgb, 0.12),
+                      text: colors.bone,
+                      muted: colors.muted,
+                      accent: colors.aqua,
+                      onAccent: colors.onAccent,
+                      positive: colors.positive,
+                      warning: colors.warning,
+                      danger: colors.danger,
+                    }}
+                  />
+                )}
+              </Animated.View>
+              {tab !== "messages" && <TabBar active={tab} onChange={setTab} />}
+              <BookingModal
+                eventIndex={eventIndex}
+                onClose={() => setEventIndex(null)}
+              />
+              <ProfileEditorModal
+                onClose={() => setProfileEditorOpen(false)}
+                visible={profileEditorOpen}
+              />
+              <PlayerArtworkModal
+                onClose={() => setArtworkStudioOpen(false)}
+                visible={artworkStudioOpen}
+              />
+              <BookingManagementModal
+                booking={selectedBooking as ManagedBooking | undefined}
+                client={runtime.client}
+                onClose={() => setBookingId(undefined)}
+                onUpdated={runtime.refresh}
+                visible={Boolean(selectedBooking)}
+              />
+              <OrganizationExperienceModal
+                onClose={() => setOrganizationSlug(undefined)}
+                onOpenCoach={(coach) => {
+                  setOrganizationCoach(coach);
+                  setOrganizationSlug(undefined);
+                }}
+                onOpenEvent={(eventId) => {
+                  const index = (runtime.dashboard?.events ?? []).findIndex(
+                    (event) => event.id === eventId,
                   );
-                }, 280);
-              }}
-              venueId={organizationVenueId}
-              visible={Boolean(organizationVenueId)}
-            />
-            <PickupModal
-              initialCourtBooking={organizationHostSeed}
-              onClose={() => setOrganizationHostSeed(undefined)}
-              onCreated={() => setOrganizationHostSeed(undefined)}
-              visible={Boolean(organizationHostSeed)}
-            />
-            <CoachProfileModal
-              coach={organizationCoach}
-              onClose={() => setOrganizationCoach(undefined)}
-            />
-            <WatchScoreInbox
-              onReview={(draft) => {
-                setWatchScoreDraft(draft);
-                setTab("score");
-              }}
-            />
-          </View>
-        </SafeAreaView>
-      </PlayerProfileProvider>
+                  setOrganizationSlug(undefined);
+                  if (index >= 0) setEventIndex(index);
+                }}
+                onOpenVenue={(venueId) => {
+                  setOrganizationSlug(undefined);
+                  setOrganizationVenueId(venueId);
+                }}
+                slug={organizationSlug}
+              />
+              <VenueBookingModal
+                onClose={() => setOrganizationVenueId(undefined)}
+                onHostReady={(seed) => {
+                  setOrganizationVenueId(undefined);
+                  setTimeout(() => setOrganizationHostSeed(seed), 280);
+                }}
+                onOpenMatch={(matchId, matchSlug) => {
+                  const index = (runtime.dashboard?.events ?? []).findIndex(
+                    (event) => event.id === matchId,
+                  );
+                  setOrganizationVenueId(undefined);
+                  setTimeout(() => {
+                    if (index >= 0) {
+                      setEventIndex(index);
+                      return;
+                    }
+                    void WebBrowser.openBrowserAsync(
+                      `${dunaWebUrl}/events/${encodeURIComponent(matchSlug)}`,
+                    );
+                  }, 280);
+                }}
+                venueId={organizationVenueId}
+                visible={Boolean(organizationVenueId)}
+              />
+              <PickupModal
+                initialCourtBooking={organizationHostSeed}
+                onClose={() => setOrganizationHostSeed(undefined)}
+                onCreated={() => setOrganizationHostSeed(undefined)}
+                visible={Boolean(organizationHostSeed)}
+              />
+              <CoachProfileModal
+                coach={organizationCoach}
+                onClose={() => setOrganizationCoach(undefined)}
+              />
+              <WatchScoreInbox
+                onReview={(draft) => {
+                  setWatchScoreDraft(draft);
+                  setTab("score");
+                }}
+              />
+            </View>
+          </SafeAreaView>
+        </PlayerProfileProvider>
+      </MessagingNavigationContext.Provider>
     </ThemeContext.Provider>
   );
 }

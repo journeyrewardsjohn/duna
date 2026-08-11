@@ -14,12 +14,14 @@ export function OperatorShell({
   immersive = false,
   organization,
   messageDraftCount = 0,
+  messageUnreadCount = 0,
 }: {
   readonly active: OperatorModule;
   readonly children: ReactNode;
   readonly immersive?: boolean;
   readonly organization: OrganizationSummary;
   readonly messageDraftCount?: number;
+  readonly messageUnreadCount?: number;
 }) {
   const initials = organization.name
     .split(/\s+/)
@@ -52,7 +54,10 @@ export function OperatorShell({
                 >
                   <Icon aria-hidden size={18} />
                   <span>{item.label}</span>
-                  {item.slug === "messages" && messageDraftCount > 0 && (
+                  {item.slug === "messages" && messageUnreadCount > 0 && (
+                    <i>{messageUnreadCount}</i>
+                  )}
+                  {item.slug === "marketing" && messageDraftCount > 0 && (
                     <i>{messageDraftCount}</i>
                   )}
                 </Link>

@@ -15,6 +15,7 @@
     "@duna/api": "workspace:*",
     "@duna/core": "workspace:*",
     "@duna/league-engine": "workspace:*",
+    "@duna/messaging-client": "workspace:*",
     "@duna/pricing": "workspace:*",
     "@duna/ui": "workspace:*",
     "@fontsource-variable/archivo": "^5.3.0",

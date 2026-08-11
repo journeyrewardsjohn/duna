@@ -58,6 +58,7 @@
     },
     "plugins": [
       "./plugins/with-ios-path-compatibility",
+      "expo-notifications",
       [
         "@livekit/react-native-expo-plugin",
         {

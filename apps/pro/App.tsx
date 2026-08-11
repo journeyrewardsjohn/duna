@@ -46,6 +46,8 @@ import { OperatorCreateScreen } from "./operator-create";
 import { SessionArrivalBoard } from "./session-arrival-board";
 import { SessionNotesScreen } from "./session-notes";
 import { TicketScannerScreen } from "./ticket-scanner";
+import { ProMessagingScreen } from "./messaging-screen";
+import { listenForMessagingNotificationResponses } from "./messaging-notifications";
 import {
   ProRuntimeProvider,
   useProRuntime,
@@ -4009,11 +4011,13 @@ function MoreScreen({
   onCalendar,
   onCreate,
   onGetPaid,
+  onMessages,
   onPeople,
 }: {
   readonly onCalendar: () => void;
   readonly onCreate: () => void;
   readonly onGetPaid: () => void;
+  readonly onMessages: () => void;
   readonly onPeople: () => void;
 }) {
   const { dashboard, signOut, workspace } = useProRuntime();
@@ -4218,6 +4222,10 @@ function MoreScreen({
                       onCalendar();
                       return;
                     }
+                    if (item === "Messages") {
+                      onMessages();
+                      return;
+                    }
                     setSelectedMenu(item);
                   }}
                   style={styles.menuRow}
@@ -4366,6 +4374,7 @@ function ProApp() {
   const {
     activeAuthOrganizationId,
     authOrganizations,
+    messagingDelivery,
     refresh,
     switchOrganization,
   } = useProRuntime();
@@ -4373,8 +4382,10 @@ function ProApp() {
   const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("today");
   const [surface, setSurface] = useState<
-    "create" | "get-paid" | "scan" | "score"
+    "create" | "get-paid" | "messages" | "scan" | "score"
   >();
+  const [messagesConversationId, setMessagesConversationId] =
+    useState<string>();
   const [sessionNotesId, setSessionNotesId] = useState<string>();
   const [scoreMatchId, setScoreMatchId] = useState<string>();
   const [calendarEntryId, setCalendarEntryId] = useState<string>();
@@ -4416,6 +4427,16 @@ function ProApp() {
 
   useEffect(() => {
     const openActivity = (url: string | null) => {
+      if (url?.startsWith("duna-pro://messages")) {
+        const conversationId = url.match(
+          /^duna-pro:\/\/messages\/([^/?#]+)/,
+        )?.[1];
+        setMessagesConversationId(
+          conversationId ? decodeURIComponent(conversationId) : undefined,
+        );
+        setSurface("messages");
+        return;
+      }
       const matchScore = url?.match(/^duna-pro:\/\/match\/([^/?#]+)/);
       if (matchScore?.[1]) {
         setScoreMatchId(decodeURIComponent(matchScore[1]));
@@ -4466,6 +4487,14 @@ function ProApp() {
     refresh,
     switchOrganization,
   ]);
+
+  useEffect(
+    () =>
+      listenForMessagingNotificationResponses(() => {
+        void messagingDelivery?.syncAll().catch(() => undefined);
+      }),
+    [messagingDelivery],
+  );
 
   useEffect(() => {
     if (reduceMotion) {
@@ -4518,6 +4547,30 @@ function ProApp() {
           onClose={() => setSurface(undefined)}
           onCreate={() => setSurface("create")}
         />
+      ) : surface === "messages" ? (
+        <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
+          <StatusBar style={theme === "dark" ? "light" : "dark"} />
+          <ProMessagingScreen
+            initialConversationId={messagesConversationId}
+            onClose={() => {
+              setMessagesConversationId(undefined);
+              setSurface(undefined);
+            }}
+            palette={{
+              canvas: colors.canvas,
+              surface: colors.depth,
+              surfaceAlt: colors.navyLift,
+              border: rgba(colors.overlayRgb, 0.12),
+              text: colors.bone,
+              muted: colors.muted,
+              accent: colors.aqua,
+              onAccent: colors.onAccent,
+              positive: colors.positive,
+              warning: colors.warning,
+              danger: colors.danger,
+            }}
+          />
+        </SafeAreaView>
       ) : surface === "scan" ? (
         <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
           <StatusBar style="light" />
@@ -4598,6 +4651,7 @@ function ProApp() {
                   onCalendar={() => openCalendar()}
                   onCreate={() => setSurface("create")}
                   onGetPaid={() => setSurface("get-paid")}
+                  onMessages={() => setSurface("messages")}
                   onPeople={() => setTab("people")}
                 />
               )}

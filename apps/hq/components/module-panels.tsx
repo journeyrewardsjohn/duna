@@ -36,7 +36,7 @@ import { TicketApprovalQueue } from "./ticket-approval-queue";
 import { VenueMatchOperations } from "./venue-match-operations";
 
 const moduleCopy: Record<
-  Exclude<OperatorModule, "overview">,
+  Exclude<OperatorModule, "overview" | "messages">,
   {
     readonly eyebrow: string;
     readonly title: string;
@@ -91,7 +91,7 @@ const moduleCopy: Record<
     description:
       "Connected paid-order totals and payment-account readiness without inferred economics.",
   },
-  messages: {
+  marketing: {
     eyebrow: "Audience + lifecycle communication",
     title: "Marketing",
     description:
@@ -1134,7 +1134,7 @@ function MessagesPanel({
               </span>
               <Link
                 className="hq-button hq-button--primary"
-                href="/messages/create"
+                href="/marketing/create"
               >
                 Create the first flow
               </Link>
@@ -1336,7 +1336,7 @@ export function ModulePanel({
   readonly workspace: OperatorWorkspace;
   readonly ticketApprovals: readonly TicketApprovalSummary[];
 }) {
-  if (module === "overview") return null;
+  if (module === "overview" || module === "messages") return null;
   const copy = moduleCopy[module];
   const icon =
     module === "calendar"
@@ -1351,7 +1351,7 @@ export function ModulePanel({
               ? ShoppingBag
               : module === "payments"
                 ? CreditCard
-                : module === "messages"
+                : module === "marketing"
                   ? MessageSquareText
                   : module === "ai"
                     ? Bot
@@ -1370,8 +1370,8 @@ export function ModulePanel({
               ? { href: "/members/invite", label: "Invite person" }
               : module === "team"
                 ? { href: "/team/invite", label: "Invite team member" }
-                : module === "messages"
-                  ? { href: "/messages/create", label: "Create campaign" }
+                : module === "marketing"
+                  ? { href: "/marketing/create", label: "Create campaign" }
                   : module === "payments"
                     ? { href: "/payments/setup", label: "Configure money" }
                     : module === "calendar"
@@ -1463,7 +1463,7 @@ export function ModulePanel({
         </>
       ) : module === "payments" ? (
         <PaymentsPanel dashboard={dashboard} workspace={workspace} />
-      ) : module === "messages" ? (
+      ) : module === "marketing" ? (
         <MessagesPanel workspace={workspace} />
       ) : module === "reports" ? (
         <ReportsPanel dashboard={dashboard} />

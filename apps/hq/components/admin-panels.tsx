@@ -82,6 +82,18 @@ const copy: Record<
     description:
       "Open reports, minor protections, case age, and response SLAs.",
   },
+  support: {
+    eyebrow: "Contextual member help",
+    title: "Duna Support",
+    description:
+      "AI-grounded support conversations, human handoffs, and audited replies.",
+  },
+  "messaging-safety": {
+    eyebrow: "Guardian-visible protection",
+    title: "Message safety",
+    description:
+      "Held minor messages, SafeSport screening context, and human review decisions.",
+  },
   ratings: {
     eyebrow: "Deterministic integrity",
     title: "Ratings",

@@ -51,3 +51,10 @@ minimumReleaseAgeExclude:
   - expo-linking@57.0.5
   - expo-widgets@57.0.8
   - mapbox-gl@3.28.0
+  - "@openai/agents-core@0.15.0"
+  - "@openai/agents-openai@0.15.0"
+  - "@openai/agents-realtime@0.15.0"
+  - "@openai/agents@0.15.0"
+  - "@vercel/cli-config@0.2.3"
+  - "@vercel/functions@3.9.3"
+  - "@vercel/oidc@3.8.4"

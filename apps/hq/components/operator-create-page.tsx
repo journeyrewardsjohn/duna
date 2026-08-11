@@ -21,12 +21,7 @@ export async function OperatorCreatePage({
     caller.operator.dashboard(),
     caller.operator.workspace(),
   ]);
-  const moduleLabel =
-    module === "members"
-      ? "people"
-      : module === "messages"
-        ? "marketing"
-        : module;
+  const moduleLabel = module === "members" ? "people" : module;
   return (
     <OperatorShell
       active={module}

@@ -24,6 +24,7 @@ import { PlayerOrganizationSwitcher } from "./player-organization-switcher";
 
 const navigation = [
   { label: "Home", href: "/app", icon: House },
+  { label: "Messages", href: "/app/messages", icon: MessageCircle },
   { label: "Discover", href: "/discover", icon: Compass },
   { label: "Play", href: "/app/play", icon: CalendarDays },
   { label: "Matches", href: "/app/matches", icon: Trophy },
@@ -131,9 +132,9 @@ export function PlayerShell({
             />
             <div className="player-topbar__actions">
               <ThemeToggle />
-              <button aria-label="Messages">
+              <Link aria-label="Messages" href="/app/messages">
                 <MessageCircle aria-hidden size={19} />
-              </button>
+              </Link>
               <PlayerAccountMenu
                 configured={authConfigured}
                 trigger={
