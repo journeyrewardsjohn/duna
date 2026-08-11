@@ -409,6 +409,8 @@ export interface BookingSummary {
   readonly startsAt: string;
   readonly endsAt: string;
   readonly venueName: string;
+  readonly venueId?: string;
+  readonly venueTimezone?: string;
   readonly status: "confirmed" | "waitlisted" | "needs-action";
   readonly amount: Money;
   readonly participantNames: readonly string[];

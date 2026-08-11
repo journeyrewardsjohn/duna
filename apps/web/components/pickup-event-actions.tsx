@@ -1,7 +1,12 @@
 "use client";
 
 import type { PickupManagementSummary } from "@duna/api";
-import type { PersonSummary } from "@duna/core";
+import {
+  pickupInviteActionLabel,
+  pickupInviteExplanation,
+  pickupInviteResult,
+  type PersonSummary,
+} from "@duna/core";
 import { Badge } from "@duna/ui";
 import {
   ArrowRight,
@@ -76,7 +81,11 @@ function PickupPlayerAdder({
       });
       setMessage(
         response.ok
-          ? `${response.result.invitedPersonIds.length} invitation(s) sent. Places remain open until each player confirms or pays.`
+          ? pickupInviteResult({
+              invitedCount: response.result.invitedPersonIds.length,
+              alreadyActiveCount: response.result.alreadyActivePersonIds.length,
+              paidMatch,
+            })
           : response.error,
       );
       if (response.ok) setSelected([]);
@@ -120,7 +129,7 @@ function PickupPlayerAdder({
     <section className="pickup-actions__player-adder">
       <button onClick={() => setOpen((value) => !value)} type="button">
         <UserPlus aria-hidden size={15} />{" "}
-        {open ? "Close player picker" : "Add or cover players"}
+        {open ? "Close player picker" : "Add players"}
       </button>
       {open && (
         <div className="pickup-actions__player-picker">
@@ -173,22 +182,27 @@ function PickupPlayerAdder({
             })}
           </div>
           {selected.length > 0 && (
-            <div className="pickup-actions__player-decisions">
-              <button disabled={pending} onClick={invite} type="button">
-                Invite · not held
-              </button>
-              {paidMatch && (
-                <button
-                  disabled={
-                    pending || selected.length > management.spotsRemaining
-                  }
-                  onClick={cover}
-                  type="button"
-                >
-                  Pay & confirm {selected.length}
+            <>
+              <small className="pickup-actions__invite-help">
+                {pickupInviteExplanation(paidMatch)}
+              </small>
+              <div className="pickup-actions__player-decisions">
+                <button disabled={pending} onClick={invite} type="button">
+                  {pickupInviteActionLabel(selected.length)}
                 </button>
-              )}
-            </div>
+                {paidMatch && (
+                  <button
+                    disabled={
+                      pending || selected.length > management.spotsRemaining
+                    }
+                    onClick={cover}
+                    type="button"
+                  >
+                    Pay & confirm {selected.length}
+                  </button>
+                )}
+              </div>
+            </>
           )}
           {message && <p role="status">{message}</p>}
         </div>

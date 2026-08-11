@@ -11,6 +11,7 @@ import {
 } from "@duna/ui/tokens";
 import Mapbox, { type MapState } from "@rnmapbox/maps";
 import * as Location from "expo-location";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AccessibilityInfo,
@@ -27,6 +28,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { FellixText as Text } from "./fellix-text";
+import { resolveDiscoveryMediaUrl } from "./discovery-media";
 import { dunaWebUrl } from "./mobile-api";
 import {
   discoveryDistanceMiles,
@@ -498,18 +500,74 @@ function resultFacts(item: DiscoveryMapItem, origin?: DiscoveryCoordinates) {
   return facts.slice(0, 5);
 }
 
+function ActiveResultVideo({
+  fit,
+  posterUrl,
+  styles,
+  videoUrl,
+}: {
+  readonly fit: "cover" | "contain";
+  readonly posterUrl?: string;
+  readonly styles: ReturnType<typeof createStyles>;
+  readonly videoUrl: string;
+}) {
+  const [ready, setReady] = useState(false);
+  const player = useVideoPlayer(videoUrl, (nextPlayer) => {
+    nextPlayer.loop = true;
+    nextPlayer.muted = true;
+    nextPlayer.play();
+  });
+
+  useEffect(() => {
+    player.play();
+    return () => player.pause();
+  }, [player]);
+
+  return (
+    <View pointerEvents="none" style={styles.resultVideoLayer}>
+      <VideoView
+        allowsVideoFrameAnalysis={false}
+        contentFit={fit}
+        nativeControls={false}
+        onFirstFrameRender={() => setReady(true)}
+        player={player}
+        style={styles.resultVideo}
+        useExoShutter={false}
+      />
+      {!ready && posterUrl ? (
+        <Image
+          resizeMode={fit}
+          source={{ uri: posterUrl }}
+          style={styles.resultImage}
+        />
+      ) : null}
+    </View>
+  );
+}
+
 function NativeResultCard({
   item,
   onPress,
+  onVideoToggle,
   origin,
   styles,
+  videoPlaying,
 }: {
   readonly item: DiscoveryMapItem;
   readonly onPress: (item: DiscoveryMapItem) => void;
+  readonly onVideoToggle: (itemId: string, playing: boolean) => void;
   readonly origin?: DiscoveryCoordinates;
   readonly styles: ReturnType<typeof createStyles>;
+  readonly videoPlaying: boolean;
 }) {
   const facts = resultFacts(item, origin);
+  const imageUrl = resolveDiscoveryMediaUrl(item.imageUrl, dunaWebUrl);
+  const videoUrl = resolveDiscoveryMediaUrl(item.videoUrl, dunaWebUrl);
+  const fit = item.imageFit === "contain" ? "contain" : "cover";
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => setImageFailed(false), [imageUrl, item.id]);
+
   return (
     <Pressable
       accessibilityLabel={`${item.title}. ${resultAction(item)}`}
@@ -520,13 +578,57 @@ function NativeResultCard({
         pressed && styles.cardPressed,
       ]}
     >
-      {item.imageUrl ? (
+      {imageUrl || videoUrl ? (
         <View style={styles.resultMedia}>
-          <Image
-            resizeMode={item.imageFit === "contain" ? "contain" : "cover"}
-            source={{ uri: item.imageUrl }}
-            style={styles.resultImage}
-          />
+          <View
+            style={[
+              styles.resultMediaFallback,
+              { borderTopColor: entityColors[item.entityType] },
+            ]}
+          >
+            <Text style={styles.resultMediaFallbackEyebrow}>
+              {resultTypeLabel(item)}
+            </Text>
+            <Text numberOfLines={2} style={styles.resultMediaFallbackTitle}>
+              {item.title}
+            </Text>
+          </View>
+          {imageUrl && !imageFailed ? (
+            <Image
+              onError={() => setImageFailed(true)}
+              resizeMode={fit}
+              source={{ uri: imageUrl }}
+              style={styles.resultImage}
+            />
+          ) : null}
+          {videoUrl && videoPlaying ? (
+            <ActiveResultVideo
+              fit={fit}
+              posterUrl={imageFailed ? undefined : imageUrl}
+              styles={styles}
+              videoUrl={videoUrl}
+            />
+          ) : null}
+          {videoUrl ? (
+            <Pressable
+              accessibilityLabel={
+                videoPlaying ? "Pause hero video" : "Play hero video"
+              }
+              accessibilityRole="button"
+              onPress={(event) => {
+                event.stopPropagation();
+                onVideoToggle(item.id, !videoPlaying);
+              }}
+              style={styles.resultVideoControl}
+            >
+              <Text style={styles.resultVideoControlIcon}>
+                {videoPlaying ? "Ⅱ" : "▶"}
+              </Text>
+              <Text style={styles.resultVideoControlText}>
+                {videoPlaying ? "Pause" : "Video"}
+              </Text>
+            </Pressable>
+          ) : null}
           {item.live ? (
             <View style={styles.liveBadge}>
               <Text style={styles.liveBadgeText}>● LIVE</Text>
@@ -630,6 +732,7 @@ export function DiscoveryMapModal({
   const [zoom, setZoom] = useState(1.45);
   const [showLocation, setShowLocation] = useState(false);
   const [selectedId, setSelectedId] = useState<string>();
+  const [playingVideoId, setPlayingVideoId] = useState<string>();
   const [sheetPosition, setSheetPosition] = useState<SheetPosition>("split");
   const positions = useMemo(
     () => ({
@@ -705,6 +808,19 @@ export function DiscoveryMapModal({
     setAreaIds(undefined);
     setMapMoved(false);
   }, [filter]);
+
+  useEffect(() => {
+    if (!visible || sheetPosition === "map") setPlayingVideoId(undefined);
+  }, [sheetPosition, visible]);
+
+  useEffect(() => {
+    if (
+      playingVideoId &&
+      !listItems.some((item) => item.id === playingVideoId)
+    ) {
+      setPlayingVideoId(undefined);
+    }
+  }, [listItems, playingVideoId]);
 
   const panResponder = useMemo(
     () =>
@@ -973,8 +1089,12 @@ export function DiscoveryMapModal({
                 item={item}
                 key={item.id}
                 onPress={onSelect}
+                onVideoToggle={(itemId, playing) =>
+                  setPlayingVideoId(playing ? itemId : undefined)
+                }
                 origin={origin}
                 styles={styles}
+                videoPlaying={playingVideoId === item.id}
               />
             ))}
             {listItems.length === 0 ? (
@@ -1225,9 +1345,82 @@ function createStyles(token: ResolvedDunaTokens) {
     resultMedia: {
       backgroundColor: token.surface2,
       height: 168,
+      overflow: "hidden",
       position: "relative",
     },
-    resultImage: { height: "100%", width: "100%" },
+    resultMediaFallback: {
+      backgroundColor: token.surface2,
+      borderTopWidth: 6,
+      bottom: 0,
+      justifyContent: "flex-end",
+      left: 0,
+      padding: spacing[4],
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
+    resultMediaFallbackEyebrow: {
+      color: token.text3,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
+    resultMediaFallbackTitle: {
+      color: token.text1,
+      fontSize: 24,
+      fontWeight: "900",
+      letterSpacing: -0.9,
+      lineHeight: 27,
+      marginTop: spacing[2],
+    },
+    resultImage: {
+      bottom: 0,
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
+    resultVideoLayer: {
+      bottom: 0,
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
+    resultVideo: {
+      bottom: 0,
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
+    resultVideoControl: {
+      alignItems: "center",
+      backgroundColor: "rgba(7, 24, 37, 0.82)",
+      borderColor: "rgba(255, 255, 255, 0.34)",
+      borderRadius: radii.pill,
+      borderWidth: 1,
+      bottom: spacing[3],
+      flexDirection: "row",
+      gap: spacing[2],
+      minHeight: 44,
+      paddingHorizontal: spacing[3],
+      position: "absolute",
+      right: spacing[3],
+      zIndex: 4,
+    },
+    resultVideoControlIcon: {
+      color: environmentalColors.white,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    resultVideoControlText: {
+      color: environmentalColors.white,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.65,
+      textTransform: "uppercase",
+    },
     liveBadge: {
       backgroundColor: token.flare,
       borderRadius: radii.pill,
@@ -1236,6 +1429,7 @@ function createStyles(token: ResolvedDunaTokens) {
       paddingVertical: spacing[2],
       position: "absolute",
       top: spacing[3],
+      zIndex: 4,
     },
     liveBadgeText: {
       color: token.textOnAccent,

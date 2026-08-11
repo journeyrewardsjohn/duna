@@ -7,6 +7,8 @@ export interface CreatePickupActionInput {
   readonly startsAt: string;
   readonly endsAt: string;
   readonly venueName: string;
+  readonly venueId?: string;
+  readonly courtBookingId?: string;
   readonly address?: string;
   readonly googlePlaceId?: string;
   readonly latitude?: number;

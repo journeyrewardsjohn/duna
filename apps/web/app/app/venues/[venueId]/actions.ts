@@ -27,6 +27,7 @@ export async function startCourtCheckoutAction(input: {
   }[];
   readonly policyAccepted: boolean;
   readonly policyFullScrollConfirmed: boolean;
+  readonly checkoutIntent: "private" | "host";
   readonly idempotencyKey: string;
 }) {
   try {
@@ -34,6 +35,7 @@ export async function startCourtCheckoutAction(input: {
     const requestHeaders = new Headers();
     incoming.forEach((value, key) => requestHeaders.set(key, value));
     const origin = applicationOrigin(requestHeaders);
+    const intentQuery = input.checkoutIntent === "host" ? "&intent=host" : "";
     const caller = await getServerCaller();
     const result = await caller.player.startCourtCheckout({
       courtId: input.courtId,
@@ -44,7 +46,7 @@ export async function startCourtCheckoutAction(input: {
       participants: [...input.participants],
       policyAccepted: input.policyAccepted,
       policyFullScrollConfirmed: input.policyFullScrollConfirmed,
-      successUrl: `${origin}/app/venues/${input.venueId}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      successUrl: `${origin}/app/venues/${input.venueId}?checkout=success&session_id={CHECKOUT_SESSION_ID}${intentQuery}`,
       cancelUrl: `${origin}/app/venues/${input.venueId}?checkout=cancelled`,
       idempotencyKey: input.idempotencyKey,
     });

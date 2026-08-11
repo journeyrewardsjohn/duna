@@ -1,6 +1,7 @@
 import {
   auditLog,
   getDatabase,
+  getTransactionalDatabase,
   people,
   pickupJoinRequests,
   pickupParticipants,
@@ -205,7 +206,7 @@ export async function requestPickupJoin(input: {
     requireApproval: false,
   });
   const id = crypto.randomUUID();
-  await database.transaction(async (transaction) => {
+  await getTransactionalDatabase().transaction(async (transaction) => {
     await transaction
       .insert(pickupJoinRequests)
       .values({
@@ -279,7 +280,7 @@ export async function reviewPickupJoinRequest(input: {
       "This join request can no longer be reviewed.",
     );
   }
-  await database.transaction(async (transaction) => {
+  await getTransactionalDatabase().transaction(async (transaction) => {
     await transaction
       .update(pickupJoinRequests)
       .set({
@@ -384,7 +385,7 @@ export async function updatePickup(input: {
     approvalRequired: pickup.approvalRequired,
     waitlistEnabled: pickup.smartRules.waitlistEnabled,
   });
-  await database.transaction(async (transaction) => {
+  await getTransactionalDatabase().transaction(async (transaction) => {
     await transaction
       .update(pickupSessions)
       .set({
@@ -521,7 +522,7 @@ export async function invitePickupPlayers(input: {
   const invitedPersonIds = personIds.filter(
     (personId) => !alreadyActivePersonIds.includes(personId),
   );
-  await database.transaction(async (transaction) => {
+  await getTransactionalDatabase().transaction(async (transaction) => {
     for (const personId of invitedPersonIds) {
       const previous = existingByPersonId.get(personId);
       if (previous) {
@@ -593,7 +594,7 @@ export async function cancelPickup(input: {
       "A host can cancel only before another player has joined.",
     );
   }
-  await database.transaction(async (transaction) => {
+  await getTransactionalDatabase().transaction(async (transaction) => {
     await transaction
       .update(pickupSessions)
       .set({ status: "cancelled", updatedAt: input.now })
@@ -668,7 +669,7 @@ export async function leavePickup(input: {
       Boolean(
         participation.holdExpiresAt && participation.holdExpiresAt > input.now,
       ));
-  await database.transaction(async (transaction) => {
+  await getTransactionalDatabase().transaction(async (transaction) => {
     await transaction
       .update(pickupParticipants)
       .set({ status: "cancelled", updatedAt: input.now })

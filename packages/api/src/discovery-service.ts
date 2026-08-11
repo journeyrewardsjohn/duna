@@ -35,14 +35,32 @@ function venueCoordinates(
   return venue ? { latitude: venue.latitude, longitude: venue.longitude } : {};
 }
 
+function eventDiscoveryMedia(
+  event: EventSummary,
+): Pick<DiscoveryMapItem, "imageUrl" | "videoUrl"> {
+  const cover = event.media?.[0];
+  const fallbackImageUrl =
+    event.imageUrl ?? defaultEventMedia(event.kind, event.id).path;
+  if (cover?.kind === "video") {
+    return {
+      imageUrl: cover.posterUrl ?? fallbackImageUrl,
+      videoUrl: cover.url,
+    };
+  }
+  return { imageUrl: cover?.url ?? fallbackImageUrl };
+}
+
+function eventEditorialImage(event: EventSummary): string | undefined {
+  const cover = event.media?.[0];
+  return cover?.kind === "video"
+    ? cover.posterUrl
+    : (cover?.url ?? event.imageUrl);
+}
+
 function eventPoint(
   event: EventSummary,
   venues: readonly VenueSummary[],
 ): DiscoveryMapItem {
-  const imageUrl =
-    event.media?.find((item) => item.kind === "image")?.url ??
-    event.imageUrl ??
-    defaultEventMedia(event.kind, event.id).path;
   const directCoordinates =
     finiteCoordinate(event.location?.latitude) &&
     finiteCoordinate(event.location?.longitude)
@@ -62,7 +80,7 @@ function eventPoint(
     ...(event.organizationId ? { organizationId: event.organizationId } : {}),
     startsAt: event.startsAt,
     endsAt: event.endsAt,
-    imageUrl,
+    ...eventDiscoveryMedia(event),
     ...(event.live !== undefined ? { live: event.live } : {}),
     spotsRemaining: event.spotsRemaining,
     ...(event.ratingRange
@@ -173,9 +191,7 @@ function organizationPoints(
       id: event.organizationId,
       slug: event.organizationSlug,
       name: event.organizationName,
-      imageUrl:
-        event.media?.find((item) => item.kind === "image")?.url ??
-        event.imageUrl,
+      imageUrl: eventEditorialImage(event),
       ...coordinates,
     });
     organization.markets.add(event.venueName);

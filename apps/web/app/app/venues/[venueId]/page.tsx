@@ -26,6 +26,10 @@ export default async function VenueBookingPage({
   readonly searchParams: Promise<{
     checkout?: string;
     session_id?: string;
+    date?: string;
+    duration?: string;
+    start?: string;
+    intent?: string;
   }>;
 }) {
   const { venueId } = await params;
@@ -38,10 +42,26 @@ export default async function VenueBookingPage({
     caller.public.venueLayout({ venueId }).catch(() => undefined),
   ]);
   if (!inventory) notFound();
+  const requestedStart = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(
+    query.start ?? "",
+  )
+    ? query.start
+    : query.date && /^\d{4}-\d{2}-\d{2}$/.test(query.date)
+      ? `${query.date}T10:00`
+      : undefined;
+  const requestedDuration = Number(query.duration);
   return (
     <main className="standard-page court-booking-page">
       <CourtBookingPanel
-        defaultLocalStartsAt={defaultVenueStart(inventory.venue.timezone)}
+        defaultLocalStartsAt={
+          requestedStart ?? defaultVenueStart(inventory.venue.timezone)
+        }
+        defaultDurationMinutes={
+          Number.isInteger(requestedDuration) && requestedDuration > 0
+            ? requestedDuration
+            : undefined
+        }
+        initialCheckoutIntent={query.intent === "host" ? "host" : undefined}
         initialCheckoutSessionId={
           query.checkout === "success" ? query.session_id : undefined
         }

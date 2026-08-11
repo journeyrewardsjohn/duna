@@ -55,6 +55,24 @@ function playerOption(player: PersonSummary): PickupPlayerOption {
   };
 }
 
+function displayVenueLocalDateTime(value: string): string {
+  const [datePart = "", timePart = ""] = value.split("T");
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute] = timePart.split(":").map(Number);
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC",
+  }).format(
+    new Date(
+      Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1, hour ?? 0, minute ?? 0),
+    ),
+  );
+}
+
 const FORMAT_OPTIONS: ReadonlyArray<{
   value: PickupFormat;
   label: string;
@@ -91,9 +109,18 @@ const GENDER_OPTIONS: ReadonlyArray<{
 export function PickupForm({
   hostPersonId,
   initialPlayers,
+  initialCourtBooking,
 }: {
   readonly hostPersonId: string;
   readonly initialPlayers: readonly PersonSummary[];
+  readonly initialCourtBooking?: {
+    readonly id: string;
+    readonly venueId?: string;
+    readonly venueName: string;
+    readonly startsAt: string;
+    readonly endsAt: string;
+    readonly localStartsAt: string;
+  };
 }) {
   const [step, setStep] = useState(1);
   const [createdSlug, setCreatedSlug] = useState<string>();
@@ -105,16 +132,36 @@ export function PickupForm({
   const [capacity, setCapacity] = useState(8);
   const [ratingMinimum, setRatingMinimum] = useState(4);
   const [ratingMaximum, setRatingMaximum] = useState(5);
-  const [venueName, setVenueName] = useState("Hermosa Beach — Pier Courts");
+  const [venueName, setVenueName] = useState(
+    initialCourtBooking?.venueName ?? "Hermosa Beach — Pier Courts",
+  );
+  const [venueId, setVenueId] = useState(initialCourtBooking?.venueId);
+  const [courtBookingId] = useState(initialCourtBooking?.id);
   const [address, setAddress] = useState<string>();
   const [googlePlaceId, setGooglePlaceId] = useState<string>();
   const [latitude, setLatitude] = useState<number>();
   const [longitude, setLongitude] = useState<number>();
-  const [date, setDate] = useState(() =>
-    new Date(Date.now() + 24 * 60 * 60_000).toISOString().slice(0, 10),
+  const [date, setDate] = useState(() => {
+    if (initialCourtBooking)
+      return initialCourtBooking.localStartsAt.slice(0, 10);
+    const instant = new Date(Date.now() + 24 * 60 * 60_000);
+    return new Date(instant.getTime() - instant.getTimezoneOffset() * 60_000)
+      .toISOString()
+      .slice(0, 10);
+  });
+  const [time, setTime] = useState(() => {
+    if (!initialCourtBooking) return "18:00";
+    return initialCourtBooking.localStartsAt.slice(11, 16);
+  });
+  const [durationMinutes, setDurationMinutes] = useState(() =>
+    initialCourtBooking
+      ? Math.round(
+          (Date.parse(initialCourtBooking.endsAt) -
+            Date.parse(initialCourtBooking.startsAt)) /
+            60_000,
+        )
+      : 90,
   );
-  const [time, setTime] = useState("18:00");
-  const [durationMinutes, setDurationMinutes] = useState(90);
   const [costMode, setCostMode] = useState<"free" | "split" | "fixed">("free");
   const [costDollars, setCostDollars] = useState("10.00");
   const [visibility, setVisibility] = useState<"public" | "unlisted">("public");
@@ -420,72 +467,97 @@ export function PickupForm({
 
           {step === 2 && (
             <>
-              <div className="field-group">
-                <label htmlFor="pickup-venue">Where</label>
-                <PlaceSearch
-                  id="pickup-venue"
-                  onPlace={(details: PlaceDetails) => {
-                    setGooglePlaceId(details.placeId);
-                    setAddress(details.address);
-                    setLatitude(details.latitude);
-                    setLongitude(details.longitude);
-                    if (details.name) setVenueName(details.name);
-                  }}
-                  onValue={(value) => {
-                    setVenueName(value);
-                    if (value !== address) {
-                      setGooglePlaceId(undefined);
-                      setLatitude(undefined);
-                      setLongitude(undefined);
-                    }
-                  }}
-                  value={venueName}
-                />
-                <small>
-                  {googlePlaceId
-                    ? "Confirmed with Google Places."
-                    : "Custom locations are shown as approximate until confirmed."}
-                </small>
-              </div>
-              <fieldset className="pickup-choice-section pickup-date-section">
-                <legend>When do you want to play?</legend>
-                <CalendarDatePicker
-                  calendarTitle="When do you want to play?"
-                  minDate={minimumDate}
-                  onChange={setDate}
-                  value={date}
-                />
-              </fieldset>
-              <div className="form-grid pickup-time-row">
-                <div className="field-group">
-                  <label htmlFor="pickup-time">Start time</label>
-                  <input
-                    id="pickup-time"
-                    onChange={(event) => setTime(event.target.value)}
-                    type="time"
-                    value={time}
-                  />
-                </div>
-              </div>
-              <fieldset className="pickup-choice-section">
-                <legend>How long?</legend>
-                <div className="pickup-duration-options">
-                  {[60, 90, 120].map((value) => (
-                    <button
-                      aria-pressed={durationMinutes === value}
-                      className={
-                        durationMinutes === value ? "selected" : undefined
-                      }
-                      key={value}
-                      onClick={() => setDurationMinutes(value)}
-                      type="button"
-                    >
-                      <Clock3 aria-hidden size={17} />
-                      <strong>{value} min</strong>
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
+              {initialCourtBooking ? (
+                <section className="pickup-reserved-court">
+                  <span>
+                    <Check aria-hidden size={22} />
+                  </span>
+                  <div>
+                    <small>COURT RESERVED</small>
+                    <h3>{initialCourtBooking.venueName}</h3>
+                    <p>
+                      {displayVenueLocalDateTime(
+                        initialCourtBooking.localStartsAt,
+                      )}{" "}
+                      · {durationMinutes} minutes
+                    </p>
+                    <small>
+                      This match stays attached to your confirmed court.
+                    </small>
+                  </div>
+                </section>
+              ) : (
+                <>
+                  <div className="field-group">
+                    <label htmlFor="pickup-venue">Where</label>
+                    <PlaceSearch
+                      id="pickup-venue"
+                      onPlace={(details: PlaceDetails) => {
+                        setVenueId(undefined);
+                        setGooglePlaceId(details.placeId);
+                        setAddress(details.address);
+                        setLatitude(details.latitude);
+                        setLongitude(details.longitude);
+                        if (details.name) setVenueName(details.name);
+                      }}
+                      onValue={(value) => {
+                        setVenueId(undefined);
+                        setVenueName(value);
+                        if (value !== address) {
+                          setGooglePlaceId(undefined);
+                          setLatitude(undefined);
+                          setLongitude(undefined);
+                        }
+                      }}
+                      value={venueName}
+                    />
+                    <small>
+                      {googlePlaceId
+                        ? "Confirmed with Google Places."
+                        : "Custom locations are shown as approximate until confirmed."}
+                    </small>
+                  </div>
+                  <fieldset className="pickup-choice-section pickup-date-section">
+                    <legend>When do you want to play?</legend>
+                    <CalendarDatePicker
+                      calendarTitle="When do you want to play?"
+                      minDate={minimumDate}
+                      onChange={setDate}
+                      value={date}
+                    />
+                  </fieldset>
+                  <div className="form-grid pickup-time-row">
+                    <div className="field-group">
+                      <label htmlFor="pickup-time">Start time</label>
+                      <input
+                        id="pickup-time"
+                        onChange={(event) => setTime(event.target.value)}
+                        type="time"
+                        value={time}
+                      />
+                    </div>
+                  </div>
+                  <fieldset className="pickup-choice-section">
+                    <legend>How long?</legend>
+                    <div className="pickup-duration-options">
+                      {[60, 90, 120].map((value) => (
+                        <button
+                          aria-pressed={durationMinutes === value}
+                          className={
+                            durationMinutes === value ? "selected" : undefined
+                          }
+                          key={value}
+                          onClick={() => setDurationMinutes(value)}
+                          type="button"
+                        >
+                          <Clock3 aria-hidden size={17} />
+                          <strong>{value} min</strong>
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                </>
+              )}
               <fieldset className="pickup-choice-section">
                 <legend>Amount per player</legend>
                 <div className="pickup-cost-options">
@@ -897,6 +969,8 @@ export function PickupForm({
                       startsAt,
                       endsAt,
                       venueName,
+                      venueId,
+                      courtBookingId,
                       address,
                       googlePlaceId,
                       latitude,

@@ -14,6 +14,8 @@ import {
   orderItems,
   orders,
   people,
+  pickupParticipants,
+  pickupSessions,
   ratePlans,
   scheduleBlocks,
   scheduleOverrides,
@@ -27,7 +29,7 @@ import {
   type CurrencyCode,
 } from "@duna/pricing";
 import { solveAvailableSlots } from "@duna/scheduling";
-import { and, asc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm";
 import type {
   CourtAvailability,
   CourtBookingInventory,
@@ -155,6 +157,155 @@ function localDateTime(instant: Date, timeZone: string): string {
   const part = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((item) => item.type === type)?.value ?? "";
   return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
+}
+
+function personInitials(displayName: string): string {
+  return displayName
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+async function loadVenueOpenMatches(input: {
+  readonly venueId: string;
+  readonly startsAt: Date;
+  readonly endsAt: Date;
+  readonly timezone: string;
+  readonly now: Date;
+}): Promise<CourtAvailability["openMatches"]> {
+  const database = getDatabase();
+  const windowStart = input.now > input.startsAt ? input.now : input.startsAt;
+  const matches = await database
+    .select({
+      id: pickupSessions.id,
+      title: pickupSessions.title,
+      startsAt: pickupSessions.startsAt,
+      endsAt: pickupSessions.endsAt,
+      capacity: pickupSessions.capacity,
+      format: pickupSessions.format,
+      matchType: pickupSessions.matchType,
+      genderPreference: pickupSessions.genderPreference,
+      approvalRequired: pickupSessions.approvalRequired,
+      costMinor: pickupSessions.costMinor,
+      currency: pickupSessions.currency,
+      ratingMinimum: pickupSessions.ratingMinimum,
+      ratingMaximum: pickupSessions.ratingMaximum,
+      hostId: people.id,
+      hostName: people.displayName,
+      hostHandle: people.handle,
+      hostAvatarUrl: people.avatarUrl,
+    })
+    .from(pickupSessions)
+    .innerJoin(people, eq(pickupSessions.hostPersonId, people.id))
+    .where(
+      and(
+        eq(pickupSessions.venueId, input.venueId),
+        eq(pickupSessions.visibility, "public"),
+        eq(pickupSessions.status, "active"),
+        gte(pickupSessions.startsAt, windowStart),
+        lt(pickupSessions.startsAt, input.endsAt),
+        gt(pickupSessions.endsAt, windowStart),
+      ),
+    )
+    .orderBy(asc(pickupSessions.startsAt));
+  if (matches.length === 0) return [];
+
+  const participants = await database
+    .select({
+      pickupSessionId: pickupParticipants.pickupSessionId,
+      status: pickupParticipants.status,
+      holdExpiresAt: pickupParticipants.holdExpiresAt,
+      personId: people.id,
+      displayName: people.displayName,
+      handle: people.handle,
+      avatarUrl: people.avatarUrl,
+      personStatus: people.status,
+      profileVisibility: people.profileVisibility,
+      isMinor: people.isMinor,
+    })
+    .from(pickupParticipants)
+    .innerJoin(people, eq(pickupParticipants.personId, people.id))
+    .where(
+      inArray(
+        pickupParticipants.pickupSessionId,
+        matches.map((match) => match.id),
+      ),
+    );
+
+  return matches.flatMap((match) => {
+    const occupied = participants.filter(
+      (participant) =>
+        participant.pickupSessionId === match.id &&
+        (participant.status === "confirmed" ||
+          participant.status === "checked-in" ||
+          (participant.status === "pending" &&
+            Boolean(
+              participant.holdExpiresAt &&
+              participant.holdExpiresAt > input.now,
+            ))),
+    );
+    const spotsRemaining = Math.max(0, match.capacity - occupied.length);
+    if (spotsRemaining === 0) return [];
+    const attendees = occupied
+      .filter(
+        (participant) =>
+          (participant.status === "confirmed" ||
+            participant.status === "checked-in") &&
+          participant.personStatus === "active" &&
+          participant.profileVisibility === "public" &&
+          !participant.isMinor,
+      )
+      .map((participant) => ({
+        id: participant.personId,
+        displayName: participant.displayName,
+        handle: participant.handle,
+        initials: personInitials(participant.displayName),
+        avatarUrl: participant.avatarUrl ?? undefined,
+      }));
+    return [
+      {
+        id: match.id,
+        slug: `pickup-${match.id}`,
+        title: match.title,
+        startsAt: match.startsAt.toISOString(),
+        endsAt: match.endsAt.toISOString(),
+        localStartsAt: localDateTime(match.startsAt, input.timezone),
+        localEndsAt: localDateTime(match.endsAt, input.timezone),
+        spotsRemaining,
+        capacity: match.capacity,
+        format: match.format,
+        matchType:
+          match.matchType === "casual"
+            ? ("casual" as const)
+            : ("competitive" as const),
+        genderPreference:
+          match.genderPreference === "mens" ||
+          match.genderPreference === "womens" ||
+          match.genderPreference === "mixed"
+            ? match.genderPreference
+            : ("open" as const),
+        approvalRequired: match.approvalRequired,
+        price: {
+          amountMinor: match.costMinor,
+          currency: currencyCode(match.currency) ?? "USD",
+        },
+        ratingRange:
+          match.ratingMinimum !== null && match.ratingMaximum !== null
+            ? ([match.ratingMinimum, match.ratingMaximum] as const)
+            : undefined,
+        host: {
+          id: match.hostId,
+          displayName: match.hostName,
+          handle: match.hostHandle,
+          initials: personInitials(match.hostName),
+          avatarUrl: match.hostAvatarUrl ?? undefined,
+        },
+        attendees,
+      },
+    ];
+  });
 }
 
 function dateOfLocalDateTime(value: string): string {
@@ -412,6 +563,13 @@ export async function loadCourtAvailability(input: {
     `${nextDate}T00:00`,
     inventory.venue.timezone,
   );
+  const openMatchesPromise = loadVenueOpenMatches({
+    venueId: input.venueId,
+    startsAt: dayStart,
+    endsAt: dayEnd,
+    timezone: inventory.venue.timezone,
+    now,
+  });
   const courtIds = candidates.map((court) => court.id);
   const database = getDatabase();
   const scheduleRows = await database
@@ -481,6 +639,7 @@ export async function loadCourtAvailability(input: {
           now,
         })
       : undefined;
+  const openMatches = await openMatchesPromise;
   const forecastDay = weatherDay(forecast, input.date);
   const scheduleById = new Map(
     scheduleRows.map((schedule) => [schedule.id, schedule]),
@@ -657,6 +816,7 @@ export async function loadCourtAvailability(input: {
     generatedAt: now.toISOString(),
     forecast,
     excludedAfterDarkCount,
+    openMatches,
     slots: slots.sort(
       (left, right) =>
         Date.parse(left.startsAt) - Date.parse(right.startsAt) ||

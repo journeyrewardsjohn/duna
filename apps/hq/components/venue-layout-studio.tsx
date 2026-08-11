@@ -186,6 +186,120 @@ function ActionNotice({ state }: { readonly state: OperatorActionState }) {
   );
 }
 
+function playerPreviewAssetIcon(kind: VenueLayoutAsset["kind"]) {
+  if (kind === "court") return <Waves aria-hidden size={16} />;
+  if (kind === "ticketed-space" || kind === "table") {
+    return <Ticket aria-hidden size={16} />;
+  }
+  if (kind === "amenity") return <MapPin aria-hidden size={16} />;
+  return <Shapes aria-hidden size={16} />;
+}
+
+function PlayerPublishingPreview({
+  assets,
+  courtActivity,
+  dirty,
+  floorplanImageUrl,
+  layout,
+  layoutName,
+  onOpenFullPreview,
+  venueName,
+  view,
+}: {
+  readonly assets: readonly VenueLayoutAsset[];
+  readonly courtActivity: Readonly<Record<string, string>>;
+  readonly dirty: boolean;
+  readonly floorplanImageUrl?: string;
+  readonly layout: VenueLayout;
+  readonly layoutName: string;
+  readonly onOpenFullPreview: () => void;
+  readonly venueName: string;
+  readonly view: {
+    readonly latitude: number;
+    readonly longitude: number;
+    readonly zoom: number;
+    readonly bearing: number;
+    readonly pitch: number;
+  };
+}) {
+  return (
+    <section
+      aria-label="Player map preview"
+      className="venue-layout-player-preview"
+    >
+      <header>
+        <div>
+          <span>
+            <Eye aria-hidden size={15} /> Player preview
+          </span>
+          <strong>Find your court</strong>
+          <small>
+            {layoutName} · {venueName}
+          </small>
+        </div>
+        <Badge tone={dirty ? "warning" : layout.isPrimary ? "live" : "neutral"}>
+          {dirty
+            ? "Unsaved preview"
+            : layout.isPrimary
+              ? "Live now"
+              : `Draft v${layout.version}`}
+        </Badge>
+      </header>
+      {assets.length > 0 ? (
+        <div className="venue-layout-player-preview__canvas">
+          {layout.sourceType === "satellite" ? (
+            <VenueLayoutMap
+              assets={assets}
+              courtActivity={courtActivity}
+              onAssetChange={() => undefined}
+              onSelect={() => undefined}
+              onViewChange={() => undefined}
+              readOnly
+              view={view}
+            />
+          ) : (
+            <VenueFloorplanCanvas
+              assets={assets}
+              courtActivity={courtActivity}
+              imageUrl={floorplanImageUrl}
+              onAssetChange={() => undefined}
+              onSelect={() => undefined}
+              readOnly
+            />
+          )}
+        </div>
+      ) : (
+        <div className="venue-layout-player-preview__empty">
+          <MapPin aria-hidden size={27} />
+          <strong>No places to show yet</strong>
+          <span>Add a court or labeled venue space before publishing.</span>
+        </div>
+      )}
+      <footer>
+        <div className="venue-layout-player-preview__directory">
+          {assets.slice(0, 4).map((asset) => (
+            <span key={asset.id}>
+              <i className={`is-${asset.appearance.palette}`}>
+                {playerPreviewAssetIcon(asset.kind)}
+              </i>
+              <b>{asset.label}</b>
+              <small>
+                {asset.identifierCode ?? assetKindLabel(asset.kind)}
+              </small>
+            </span>
+          ))}
+          {assets.length > 4 && (
+            <span className="is-more">+{assets.length - 4} more</span>
+          )}
+        </div>
+        <button onClick={onOpenFullPreview} type="button">
+          <Maximize2 aria-hidden size={15} /> Open full player preview
+        </button>
+      </footer>
+    </section>
+  );
+}
+
 function LayoutEmptyState({
   workspace,
 }: {
@@ -1231,6 +1345,16 @@ export function VenueLayoutStudio({
       ];
     }),
   );
+  const courtCount = assets.filter((asset) => asset.kind === "court").length;
+  const playerSpaceCount = assets.length - courtCount;
+  const ticketedCapacity = assets
+    .filter(
+      (asset) => asset.kind === "ticketed-space" || asset.kind === "table",
+    )
+    .reduce((total, asset) => total + (asset.capacity ?? 0), 0);
+  const liveDefaultLayout = workspace.layouts.find(
+    (version) => version.isPrimary && version.id !== layout.id,
+  );
 
   function updateAsset(asset: VenueLayoutAsset) {
     setAssets((current) =>
@@ -1432,7 +1556,7 @@ export function VenueLayoutStudio({
               ) : (
                 <Eye aria-hidden size={16} />
               )}
-              {layoutEvent ? "Publish & automation" : "Player publishing"}
+              {layoutEvent ? "Publish & automation" : "Review & publish"}
             </button>
           )}
           <button
@@ -2137,7 +2261,9 @@ export function VenueLayoutStudio({
         >
           <aside
             aria-label={
-              layoutEvent ? "Publish and event automation" : "Player publishing"
+              layoutEvent
+                ? "Publish and event automation"
+                : "Review and publish player map"
             }
             aria-modal="true"
             className={`venue-layout-operations ${layoutEvent ? "" : "is-publishing-only"}`}
@@ -2146,16 +2272,16 @@ export function VenueLayoutStudio({
             <header>
               <div>
                 <span className="hq-eyebrow">
-                  {layoutEvent ? layoutEvent.title : "Player-facing layout"}
+                  {layoutEvent ? layoutEvent.title : "Player map"}
                 </span>
                 <strong>
                   {layoutEvent
                     ? "Publish & event automation"
-                    : "Player publishing"}
+                    : "Review & publish"}
                 </strong>
               </div>
               <button
-                aria-label="Close publishing panel"
+                aria-label="Close player map review"
                 onClick={() => setOperationsOpen(false)}
                 type="button"
               >
@@ -2164,53 +2290,246 @@ export function VenueLayoutStudio({
             </header>
             <div className="venue-layout-operations__body">
               <section className="venue-layout-publish hq-card">
-                <div>
-                  <span className="hq-eyebrow">Player-facing version</span>
-                  <h2>
-                    {layout.isPrimary
-                      ? "Live player default"
-                      : layoutEvent
-                        ? "Publish this event layout"
-                        : "Publish this version when ready"}
-                  </h2>
-                  <p>
-                    {layoutEvent
-                      ? `Publishing makes this layout available for ${layoutEvent.title} without replacing the venue's default player map.`
-                      : layout.isPrimary
-                        ? "Players currently use this layout to find courts, ticketed spaces, and venue amenities."
-                        : "Publishing makes this the default venue map players use to find courts and ticketed spaces."}
-                  </p>
+                <div className="venue-layout-publish__intro">
+                  <span>
+                    <Map aria-hidden size={22} />
+                  </span>
+                  <div>
+                    <small className="hq-eyebrow">Why publish this map?</small>
+                    <h2>
+                      {layoutEvent
+                        ? `Help players navigate ${layoutEvent.title}`
+                        : "Help players find the right court"}
+                    </h2>
+                    <p>
+                      {layoutEvent
+                        ? `This event layout is private while you prepare it. Publishing lets players use the reviewed map for ${layoutEvent.title} without replacing ${workspace.venue.name}'s usual venue map.`
+                        : "Drafts stay private while you arrange and label the venue. Publishing is the deliberate step that puts this reviewed map on the venue and booking pages for players."}
+                    </p>
+                  </div>
                 </div>
-                {layout.status === "draft" ? (
-                  <form action={publishAction}>
-                    <input name="layoutId" type="hidden" value={layout.id} />
-                    <input
-                      name="makePrimary"
-                      type="hidden"
-                      value={layoutEvent ? "false" : "true"}
-                    />
-                    <ActionNotice state={publishState} />
-                    <button
-                      className="hq-button hq-button--primary"
-                      disabled={publishPending || dirty || assets.length === 0}
-                      type="submit"
-                    >
-                      <Eye aria-hidden size={16} />{" "}
-                      {publishPending
-                        ? "Publishing…"
-                        : layoutEvent
-                          ? "Publish event layout"
-                          : "Publish & set player default"}
-                    </button>
-                    {dirty && (
-                      <small>Save this version before publishing.</small>
+
+                <PlayerPublishingPreview
+                  assets={assets}
+                  courtActivity={courtActivity}
+                  dirty={dirty}
+                  floorplanImageUrl={floorplanImageUrl}
+                  layout={layout}
+                  layoutName={layoutName}
+                  onOpenFullPreview={() => {
+                    setSelectedAssetId(undefined);
+                    setToolboxOpen(false);
+                    setOperationsOpen(false);
+                    setPreview(true);
+                  }}
+                  venueName={workspace.venue.name}
+                  view={view}
+                />
+
+                <div className="venue-layout-publish__facts">
+                  <article>
+                    <Numeric>{courtCount}</Numeric>
+                    <span>
+                      <strong>{courtCount === 1 ? "Court" : "Courts"}</strong>
+                      <small>shown to players</small>
+                    </span>
+                  </article>
+                  <article>
+                    <Numeric>{playerSpaceCount}</Numeric>
+                    <span>
+                      <strong>
+                        {playerSpaceCount === 1
+                          ? "Other space"
+                          : "Other spaces"}
+                      </strong>
+                      <small>amenities and labeled areas</small>
+                    </span>
+                  </article>
+                  <article>
+                    <Numeric>
+                      {ticketedCapacity > 0 ? ticketedCapacity : layout.version}
+                    </Numeric>
+                    <span>
+                      <strong>
+                        {ticketedCapacity > 0 ? "Ticketed capacity" : "Version"}
+                      </strong>
+                      <small>
+                        {ticketedCapacity > 0
+                          ? "across mapped spaces"
+                          : layout.status === "draft"
+                            ? "private draft"
+                            : "published map"}
+                      </small>
+                    </span>
+                  </article>
+                </div>
+
+                <div className="venue-layout-publish__impact">
+                  <h3>What happens when you publish</h3>
+                  <ul>
+                    <li>
+                      <Eye aria-hidden size={18} />
+                      <span>
+                        <strong>
+                          {layoutEvent
+                            ? "Players get this event map"
+                            : "This becomes the venue’s player map"}
+                        </strong>
+                        <small>
+                          {layoutEvent
+                            ? `It appears for ${layoutEvent.title}; the usual venue map stays unchanged.`
+                            : `It appears on ${workspace.venue.name}'s venue and booking pages${liveDefaultLayout ? ` in place of version ${liveDefaultLayout.version}` : ""}.`}
+                        </small>
+                      </span>
+                    </li>
+                    <li>
+                      <Lock aria-hidden size={18} />
+                      <span>
+                        <strong>The reviewed version is protected</strong>
+                        <small>
+                          Published maps are read-only. Future changes happen in
+                          a new private draft.
+                        </small>
+                      </span>
+                    </li>
+                    <li>
+                      <Check aria-hidden size={18} />
+                      <span>
+                        <strong>Bookings stay unchanged</strong>
+                        <small>
+                          Prices, availability, reservations, and schedules are
+                          not changed by publishing the map.
+                        </small>
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="venue-layout-publish__action">
+                  <div
+                    className={`venue-layout-publish__readiness ${
+                      dirty || assets.length === 0 ? "is-warning" : "is-ready"
+                    }`}
+                  >
+                    {dirty || assets.length === 0 ? (
+                      <CircleAlert aria-hidden size={19} />
+                    ) : (
+                      <Check aria-hidden size={19} />
                     )}
-                  </form>
-                ) : (
-                  <Badge tone={layout.isPrimary ? "live" : "neutral"}>
-                    {layout.isPrimary ? "Player default" : "Published version"}
-                  </Badge>
-                )}
+                    <span>
+                      <strong>
+                        {layout.status !== "draft"
+                          ? layout.isPrimary
+                            ? "Players are using this map"
+                            : "This version is published"
+                          : assets.length === 0
+                            ? "Add a court or space first"
+                            : dirty
+                              ? "Save the preview you just reviewed"
+                              : "Ready to publish"}
+                      </strong>
+                      <small>
+                        {layout.status !== "draft"
+                          ? layout.isPrimary
+                            ? "This is the current player default."
+                            : "This locked version remains available in layout history."
+                          : assets.length === 0
+                            ? "Players need at least one labeled place to navigate."
+                            : dirty
+                              ? "The preview includes unsaved changes. Save it so the published map matches what you saw."
+                              : "This preview matches the saved layout version."}
+                      </small>
+                    </span>
+                  </div>
+
+                  <ActionNotice
+                    state={
+                      publishPending || publishState.status !== "idle"
+                        ? publishState
+                        : saveState
+                    }
+                  />
+
+                  {layout.status === "draft" ? (
+                    assets.length === 0 ? (
+                      <button
+                        className="hq-button hq-button--secondary"
+                        onClick={() => {
+                          setOperationsOpen(false);
+                          setToolboxOpen(true);
+                        }}
+                        type="button"
+                      >
+                        <Plus aria-hidden size={16} /> Add places to the layout
+                      </button>
+                    ) : dirty ? (
+                      <form action={saveAction}>
+                        <input
+                          name="layout"
+                          type="hidden"
+                          value={serializedLayout}
+                        />
+                        <button
+                          className="hq-button hq-button--primary"
+                          disabled={savePending}
+                          type="submit"
+                        >
+                          <Save aria-hidden size={16} />{" "}
+                          {savePending
+                            ? "Saving preview…"
+                            : "Save this preview"}
+                        </button>
+                        <small>
+                          Publishing becomes available as soon as this version
+                          is saved.
+                        </small>
+                      </form>
+                    ) : (
+                      <form action={publishAction}>
+                        <input
+                          name="layoutId"
+                          type="hidden"
+                          value={layout.id}
+                        />
+                        <input
+                          name="makePrimary"
+                          type="hidden"
+                          value={layoutEvent ? "false" : "true"}
+                        />
+                        <button
+                          className="hq-button hq-button--primary"
+                          disabled={publishPending}
+                          type="submit"
+                        >
+                          <Eye aria-hidden size={16} />{" "}
+                          {publishPending
+                            ? "Publishing…"
+                            : layoutEvent
+                              ? "Publish event map"
+                              : "Publish player map"}
+                        </button>
+                        <small>
+                          {layoutEvent
+                            ? `This map will be available for ${layoutEvent.title}.`
+                            : "Players will use this as the venue default."}
+                        </small>
+                      </form>
+                    )
+                  ) : (
+                    <div className="venue-layout-publish__live-state">
+                      <Badge tone={layout.isPrimary ? "live" : "neutral"}>
+                        {layout.isPrimary
+                          ? "Live player map"
+                          : "Published version"}
+                      </Badge>
+                      <small>
+                        {layout.publishedAt
+                          ? `Published ${new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(layout.publishedAt))}.`
+                          : "This version is locked in layout history."}
+                      </small>
+                    </div>
+                  )}
+                </div>
               </section>
               {layoutEvent && (
                 <EventAssignmentPanel

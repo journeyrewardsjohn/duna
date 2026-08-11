@@ -107,6 +107,8 @@ export function CourtBookingPanel({
   suggestedPlayers,
   authenticationHref,
   backHref = "/discover",
+  defaultDurationMinutes,
+  initialCheckoutIntent,
 }: {
   readonly bookingSubjects: readonly PersonSummary[];
   readonly inventory: CourtBookingInventory;
@@ -117,6 +119,8 @@ export function CourtBookingPanel({
   readonly suggestedPlayers: readonly PersonSummary[];
   readonly authenticationHref?: string;
   readonly backHref?: string;
+  readonly defaultDurationMinutes?: number;
+  readonly initialCheckoutIntent?: "host";
 }) {
   const firstCourt =
     inventory.courts.find((court) => court.pricing) ?? inventory.courts[0];
@@ -127,7 +131,14 @@ export function CourtBookingPanel({
   const [selectedDate, setSelectedDate] = useState(
     defaultLocalStartsAt.slice(0, 10),
   );
-  const [durationMinutes, setDurationMinutes] = useState(firstDuration);
+  const [durationMinutes, setDurationMinutes] = useState(
+    defaultDurationMinutes &&
+      inventory.courts.some((court) =>
+        court.durationOptionsMinutes.includes(defaultDurationMinutes),
+      )
+      ? defaultDurationMinutes
+      : firstDuration,
+  );
   const [availability, setAvailability] = useState<CourtAvailability>();
   const [selectedLocalStart, setSelectedLocalStart] = useState("");
   const [courtId, setCourtId] = useState("");
@@ -138,6 +149,9 @@ export function CourtBookingPanel({
   const [players, setPlayers] = useState<readonly InvitedPlayer[]>([]);
   const [inviteValue, setInviteValue] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [bookingIntent, setBookingIntent] = useState<"private" | "host">(
+    initialCheckoutIntent ?? "private",
+  );
   const [policyAccepted, setPolicyAccepted] = useState(false);
   const [policyScrolled, setPolicyScrolled] = useState(false);
   const [notice, setNotice] = useState(initialNotice ?? "");
@@ -147,6 +161,7 @@ export function CourtBookingPanel({
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [isPending, startTransition] = useTransition();
   const policyRef = useRef<HTMLDivElement>(null);
+  const initialHostReviewOpened = useRef(false);
   const earliestBookableDate = useMemo(
     () => new Date().toISOString().slice(0, 10),
     [],
@@ -164,9 +179,12 @@ export function CourtBookingPanel({
   const uniqueStarts = useMemo(
     () =>
       [
-        ...new Set(
-          (availability?.slots ?? []).map((slot) => slot.localStartsAt),
-        ),
+        ...new Set([
+          ...(availability?.slots ?? []).map((slot) => slot.localStartsAt),
+          ...(availability?.openMatches ?? []).map(
+            (match) => match.localStartsAt,
+          ),
+        ]),
       ].sort(),
     [availability],
   );
@@ -179,6 +197,13 @@ export function CourtBookingPanel({
   );
   const selectedCourt = inventory.courts.find((court) => court.id === courtId);
   const selectedSlot = selectedSlots.find((slot) => slot.courtId === courtId);
+  const selectedOpenMatches = useMemo(
+    () =>
+      (availability?.openMatches ?? []).filter(
+        (match) => match.localStartsAt === selectedLocalStart,
+      ),
+    [availability, selectedLocalStart],
+  );
   const forecastDay = availability?.forecast?.days.find(
     (day) => day.date === selectedDate,
   );
@@ -204,14 +229,26 @@ export function CourtBookingPanel({
         return;
       }
       setAvailability(response.availability);
-      const first = response.availability.slots[0];
-      setSelectedLocalStart(first?.localStartsAt ?? "");
+      const starts = [
+        ...response.availability.slots.map((slot) => slot.localStartsAt),
+        ...response.availability.openMatches.map(
+          (match) => match.localStartsAt,
+        ),
+      ].sort();
+      const requestedStart = defaultLocalStartsAt.slice(0, 16);
+      const selectedStart = starts.includes(requestedStart)
+        ? requestedStart
+        : (starts[0] ?? "");
+      const first = response.availability.slots.find(
+        (slot) => slot.localStartsAt === selectedStart,
+      );
+      setSelectedLocalStart(selectedStart);
       setCourtId(first?.courtId ?? "");
     });
     return () => {
       cancelled = true;
     };
-  }, [durationMinutes, inventory.venue.id, selectedDate]);
+  }, [defaultLocalStartsAt, durationMinutes, inventory.venue.id, selectedDate]);
 
   useEffect(() => {
     if (!selectedSlots.some((slot) => slot.courtId === courtId)) {
@@ -231,6 +268,12 @@ export function CourtBookingPanel({
         return;
       }
       if (response.status.complete) {
+        if (initialCheckoutIntent === "host") {
+          window.location.replace(
+            `/app/pickup/new?courtBookingId=${encodeURIComponent(response.status.bookingId)}`,
+          );
+          return;
+        }
         setNotice("Payment received. Your court is confirmed.");
         setReviewOpen(false);
         return;
@@ -250,7 +293,7 @@ export function CourtBookingPanel({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [checkoutSessionId]);
+  }, [checkoutSessionId, initialCheckoutIntent]);
 
   useEffect(() => {
     if (!reviewOpen || !policy?.requireFullScroll) return;
@@ -285,6 +328,30 @@ export function CourtBookingPanel({
       ],
     });
   }, [durationMinutes, isDunaPlus, selectedCourt]);
+
+  useEffect(() => {
+    if (
+      initialCheckoutIntent !== "host" ||
+      initialCheckoutSessionId ||
+      initialHostReviewOpened.current ||
+      !selectedSlot ||
+      !estimate
+    ) {
+      return;
+    }
+    initialHostReviewOpened.current = true;
+    setBookingIntent("host");
+    setPaymentMode("full");
+    setPolicyAccepted(false);
+    setPolicyScrolled(!policy?.requireFullScroll);
+    setReviewOpen(true);
+  }, [
+    estimate,
+    initialCheckoutIntent,
+    initialCheckoutSessionId,
+    policy?.requireFullScroll,
+    selectedSlot,
+  ]);
 
   const addSuggestedPlayer = (person: PersonSummary) => {
     if (players.some((player) => player.personId === person.id)) return;
@@ -339,6 +406,25 @@ export function CourtBookingPanel({
     setCourtId(court?.courtId ?? "");
   };
 
+  const openReview = (intent: "private" | "host") => {
+    setBookingIntent(intent);
+    if (intent === "host") setPaymentMode("full");
+    setReviewOpen(true);
+    setPolicyAccepted(false);
+    setPolicyScrolled(!policy?.requireFullScroll);
+  };
+
+  const hostReturnHref = selectedLocalStart
+    ? `/app/venues/${inventory.venue.id}?date=${encodeURIComponent(
+        selectedDate,
+      )}&duration=${durationMinutes}&start=${encodeURIComponent(
+        selectedLocalStart,
+      )}&intent=host`
+    : `/app/venues/${inventory.venue.id}`;
+  const hostAuthenticationHref = `/sign-in?returnTo=${encodeURIComponent(
+    hostReturnHref,
+  )}`;
+
   const createAlert = () => {
     startTransition(async () => {
       const response = await createAvailabilityAlertAction({
@@ -392,6 +478,7 @@ export function CourtBookingPanel({
         })),
         policyAccepted,
         policyFullScrollConfirmed: !policy?.requireFullScroll || policyScrolled,
+        checkoutIntent: bookingIntent,
         idempotencyKey: crypto.randomUUID(),
       });
       if (!response.ok) {
@@ -408,6 +495,12 @@ export function CourtBookingPanel({
       if (response.result.mode === "stripe" && response.result.checkoutUrl) {
         setCheckoutSessionId(response.result.checkoutSessionId);
         window.location.assign(response.result.checkoutUrl);
+        return;
+      }
+      if (bookingIntent === "host" && response.result.bookingId) {
+        window.location.assign(
+          `/app/pickup/new?courtBookingId=${encodeURIComponent(response.result.bookingId)}`,
+        );
         return;
       }
       setNotice("Your court is confirmed.");
@@ -546,26 +639,64 @@ export function CourtBookingPanel({
               const representative = availability?.slots.find(
                 (slot) => slot.localStartsAt === localStartsAt,
               );
+              const openMatches = (availability?.openMatches ?? []).filter(
+                (match) => match.localStartsAt === localStartsAt,
+              );
+              const className = [
+                localStartsAt === selectedLocalStart ? "selected" : "",
+                openMatches.length > 0 ? "has-open-match" : "",
+              ]
+                .filter(Boolean)
+                .join(" ");
               return (
                 <button
                   type="button"
-                  className={
-                    localStartsAt === selectedLocalStart
-                      ? "selected"
-                      : undefined
-                  }
+                  aria-label={`${displayTime(localStartsAt)}${
+                    openMatches.length
+                      ? `, ${openMatches.length} open ${openMatches.length === 1 ? "match" : "matches"}`
+                      : ", court available"
+                  }`}
+                  className={className || undefined}
                   key={localStartsAt}
                   onClick={() => selectStart(localStartsAt)}
                 >
                   <span>{displayTime(localStartsAt)}</span>
-                  {representative?.weather && (
+                  {openMatches.length > 0 ? (
+                    <small className="venue-time-match-indicator">
+                      <span aria-hidden>
+                        {openMatches
+                          .flatMap((match) => [
+                            match.host,
+                            ...match.attendees.filter(
+                              (player) => player.id !== match.host.id,
+                            ),
+                          ])
+                          .slice(0, 2)
+                          .map((player, index) =>
+                            player.avatarUrl ? (
+                              <img
+                                alt=""
+                                key={`${player.id}-${index}`}
+                                src={player.avatarUrl}
+                              />
+                            ) : (
+                              <i key={`${player.id}-${index}`}>
+                                {player.initials}
+                              </i>
+                            ),
+                          )}
+                      </span>
+                      {openMatches.length} open match
+                      {openMatches.length === 1 ? "" : "es"}
+                    </small>
+                  ) : representative?.weather ? (
                     <small>
                       {weatherSymbol(representative.weather.icon)}{" "}
                       {representative.weather.temperatureC !== undefined
                         ? `${fahrenheit(representative.weather.temperatureC)}°`
                         : representative.weather.condition}
                     </small>
-                  )}
+                  ) : null}
                 </button>
               );
             })}
@@ -593,14 +724,117 @@ export function CourtBookingPanel({
           </div>
         )}
 
+        {selectedOpenMatches.length > 0 && (
+          <section className="venue-open-matches">
+            <header>
+              <div>
+                <span className="page-eyebrow">
+                  Join what is already forming
+                </span>
+                <h3>Open matches at {displayTime(selectedLocalStart)}</h3>
+              </div>
+              <Badge tone="positive">{selectedOpenMatches.length} live</Badge>
+            </header>
+            <div className="venue-open-match-list">
+              {selectedOpenMatches.map((match) => {
+                const duration = Math.round(
+                  (Date.parse(match.endsAt) - Date.parse(match.startsAt)) /
+                    60_000,
+                );
+                const roster = [
+                  match.host,
+                  ...match.attendees.filter(
+                    (player) => player.id !== match.host.id,
+                  ),
+                ];
+                return (
+                  <article key={match.id}>
+                    <div className="venue-open-match__heading">
+                      <div>
+                        <span>
+                          {match.matchType === "competitive"
+                            ? "Competitive"
+                            : "Casual"}
+                          {match.ratingRange
+                            ? ` · ${match.ratingRange[0].toFixed(1)}–${match.ratingRange[1].toFixed(1)}`
+                            : ""}
+                        </span>
+                        <h4>{match.title}</h4>
+                        <small>
+                          Hosted by {match.host.displayName} · {match.format}
+                        </small>
+                      </div>
+                      <strong>
+                        {match.price.amountMinor
+                          ? formatMoney(
+                              match.price.amountMinor,
+                              match.price.currency,
+                            )
+                          : "Free"}
+                        <small>{duration} min</small>
+                      </strong>
+                    </div>
+                    <div className="venue-open-match__roster">
+                      {roster.slice(0, 4).map((player) => (
+                        <span key={player.id}>
+                          <span className="booking-player-avatar">
+                            {player.avatarUrl ? (
+                              <img alt="" src={player.avatarUrl} />
+                            ) : (
+                              player.initials
+                            )}
+                          </span>
+                          <small>{player.displayName.split(" ")[0]}</small>
+                        </span>
+                      ))}
+                      {Array.from(
+                        { length: Math.min(2, match.spotsRemaining) },
+                        (_, index) => (
+                          <span key={`open-${match.id}-${index}`}>
+                            <span className="booking-player-avatar available">
+                              <Plus aria-hidden size={18} />
+                            </span>
+                            <small>Available</small>
+                          </span>
+                        ),
+                      )}
+                    </div>
+                    <footer>
+                      <span>
+                        <Users aria-hidden size={16} />
+                        <strong>{match.spotsRemaining}</strong>{" "}
+                        {match.spotsRemaining === 1 ? "spot" : "spots"} open
+                      </span>
+                      <Link
+                        className="primary-action"
+                        href={`/events/${encodeURIComponent(match.slug)}`}
+                      >
+                        Reserve a spot <ChevronRight aria-hidden size={16} />
+                      </Link>
+                    </footer>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         <div className="venue-court-list">
           <header>
             <div>
-              <span className="page-eyebrow">Reserve a court</span>
+              <span className="page-eyebrow">
+                {selectedSlots.length === 0 && selectedOpenMatches.length > 0
+                  ? "This match has the court"
+                  : selectedOpenMatches.length > 0
+                    ? "Or start your own"
+                    : "Create your own match"}
+              </span>
               <h3>
-                {selectedLocalStart
-                  ? `${displayTime(selectedLocalStart)} starts`
-                  : "Choose an open start"}
+                {selectedLocalStart && selectedSlots.length > 0
+                  ? `${displayTime(selectedLocalStart)} courts`
+                  : selectedLocalStart
+                    ? `No separate court at ${displayTime(selectedLocalStart)}`
+                    : "Choose an open start"}
               </h3>
             </div>
             {authenticationHref ? (
@@ -618,6 +852,14 @@ export function CourtBookingPanel({
               </button>
             )}
           </header>
+          {selectedLocalStart &&
+            selectedSlots.length === 0 &&
+            selectedOpenMatches.length > 0 && (
+              <p className="venue-court-list-empty">
+                Reserve a place above, or choose another start to create your
+                own open match.
+              </p>
+            )}
           {selectedSlots.map((slot) => {
             const court = inventory.courts.find(
               (candidate) => candidate.id === slot.courtId,
@@ -670,32 +912,44 @@ export function CourtBookingPanel({
           </p>
         )}
 
-        {authenticationHref && selectedCourt && selectedSlot && estimate ? (
-          <Link
-            className="primary-action venue-review-button"
-            href={authenticationHref}
-          >
-            Sign in to book {selectedCourt.name} ·{" "}
-            {formatMoney(estimate.totalMinor, estimate.currency)}
-          </Link>
-        ) : (
-          <button
-            type="button"
-            className="primary-action venue-review-button"
-            disabled={!selectedCourt || !selectedSlot || !estimate}
-            onClick={() => {
-              setReviewOpen(true);
-              setPolicyAccepted(false);
-              setPolicyScrolled(!policy?.requireFullScroll);
-            }}
-          >
-            {estimate
-              ? `Review ${selectedCourt?.name ?? "booking"} · ${formatMoney(
-                  estimate.totalMinor,
-                  estimate.currency,
-                )}`
-              : "Pricing pending"}
-          </button>
+        {selectedSlots.length > 0 && (
+          <div className="venue-booking-actions">
+            {authenticationHref && selectedCourt && selectedSlot && estimate ? (
+              <>
+                <Link className="primary-action" href={hostAuthenticationHref}>
+                  <Users aria-hidden size={17} /> Create an open match
+                </Link>
+                <Link className="secondary-action" href={authenticationHref}>
+                  Book privately ·{" "}
+                  {formatMoney(estimate.totalMinor, estimate.currency)}
+                </Link>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="primary-action"
+                  disabled={!selectedCourt || !selectedSlot || !estimate}
+                  onClick={() => openReview("host")}
+                >
+                  <Users aria-hidden size={17} /> Create an open match
+                </button>
+                <button
+                  type="button"
+                  className="secondary-action"
+                  disabled={!selectedCourt || !selectedSlot || !estimate}
+                  onClick={() => openReview("private")}
+                >
+                  {estimate
+                    ? `Book privately · ${formatMoney(
+                        estimate.totalMinor,
+                        estimate.currency,
+                      )}`
+                    : "Pricing pending"}
+                </button>
+              </>
+            )}
+          </div>
         )}
       </section>
 
@@ -708,8 +962,14 @@ export function CourtBookingPanel({
           >
             <header>
               <div>
-                <span className="page-eyebrow">Review</span>
-                <h2>Your reservation</h2>
+                <span className="page-eyebrow">
+                  {bookingIntent === "host" ? "Step 1 of 2" : "Review"}
+                </span>
+                <h2>
+                  {bookingIntent === "host"
+                    ? "Reserve the court, then publish."
+                    : "Your reservation"}
+                </h2>
               </div>
               <button
                 type="button"
@@ -792,52 +1052,67 @@ export function CourtBookingPanel({
               </section>
             )}
 
-            <section className="booking-payment-choice">
-              <button
-                type="button"
-                className={paymentMode === "full" ? "selected" : undefined}
-                onClick={() => setPaymentMode("full")}
-              >
-                <span className="booking-choice-radio" />
-                <CreditCard aria-hidden size={21} />
-                <span>
-                  <strong>Pay everything</strong>
-                  <small>
-                    {selectedSubject?.isMinor
-                      ? `You cover ${selectedSubject.displayName}'s full court now.`
-                      : "You cover the full court now."}
-                  </small>
-                </span>
-                <Numeric>
-                  {formatMoney(estimate.totalMinor, estimate.currency)}
-                </Numeric>
-              </button>
-              <button
-                type="button"
-                className={paymentMode === "split" ? "selected" : undefined}
-                onClick={() => setPaymentMode("split")}
-              >
-                <span className="booking-choice-radio" />
-                <Users aria-hidden size={21} />
-                <span>
-                  <strong>Pay your part</strong>
-                  <small>
-                    {selectedSubject?.isMinor
-                      ? `You cover ${selectedSubject.displayName}'s share; everyone else gets a secure link.`
-                      : "Everyone gets a secure payment link."}
-                  </small>
-                </span>
-                <Numeric>
-                  {formatMoney(
-                    splitShare +
-                      (estimate.totalMinor - splitShare * splitCount),
-                    estimate.currency,
-                  )}
-                </Numeric>
-              </button>
-            </section>
+            {bookingIntent === "host" && (
+              <section className="booking-host-intent">
+                <Sparkles aria-hidden size={20} />
+                <div>
+                  <strong>Your time stays connected.</strong>
+                  <p>
+                    After the court is confirmed, Duna opens the match builder
+                    with this venue, time, and court already attached.
+                  </p>
+                </div>
+              </section>
+            )}
 
-            {paymentMode === "split" && (
+            {bookingIntent === "private" && (
+              <section className="booking-payment-choice">
+                <button
+                  type="button"
+                  className={paymentMode === "full" ? "selected" : undefined}
+                  onClick={() => setPaymentMode("full")}
+                >
+                  <span className="booking-choice-radio" />
+                  <CreditCard aria-hidden size={21} />
+                  <span>
+                    <strong>Pay everything</strong>
+                    <small>
+                      {selectedSubject?.isMinor
+                        ? `You cover ${selectedSubject.displayName}'s full court now.`
+                        : "You cover the full court now."}
+                    </small>
+                  </span>
+                  <Numeric>
+                    {formatMoney(estimate.totalMinor, estimate.currency)}
+                  </Numeric>
+                </button>
+                <button
+                  type="button"
+                  className={paymentMode === "split" ? "selected" : undefined}
+                  onClick={() => setPaymentMode("split")}
+                >
+                  <span className="booking-choice-radio" />
+                  <Users aria-hidden size={21} />
+                  <span>
+                    <strong>Pay your part</strong>
+                    <small>
+                      {selectedSubject?.isMinor
+                        ? `You cover ${selectedSubject.displayName}'s share; everyone else gets a secure link.`
+                        : "Everyone gets a secure payment link."}
+                    </small>
+                  </span>
+                  <Numeric>
+                    {formatMoney(
+                      splitShare +
+                        (estimate.totalMinor - splitShare * splitCount),
+                      estimate.currency,
+                    )}
+                  </Numeric>
+                </button>
+              </section>
+            )}
+
+            {bookingIntent === "private" && paymentMode === "split" && (
               <section className="booking-player-picker">
                 <header>
                   <div>
@@ -1025,7 +1300,10 @@ export function CourtBookingPanel({
                 "Holding your court…"
               ) : (
                 <>
-                  <Check aria-hidden size={17} /> Continue to secure payment
+                  <Check aria-hidden size={17} />
+                  {bookingIntent === "host"
+                    ? "Reserve court & continue"
+                    : "Continue to secure payment"}
                 </>
               )}
             </button>

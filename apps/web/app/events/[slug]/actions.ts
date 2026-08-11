@@ -106,8 +106,11 @@ export async function invitePickupPlayersAction(input: {
     revalidatePath(`/events/${input.slug}`);
     revalidatePath("/app/play");
     return { ok: true as const, result };
-  } catch (error) {
-    return failure(error, "The invitations could not be sent.");
+  } catch {
+    return {
+      ok: false as const,
+      error: "Invitations were not sent. Try again.",
+    };
   }
 }
 
