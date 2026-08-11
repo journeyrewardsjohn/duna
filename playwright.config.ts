@@ -6,6 +6,12 @@ const webBaseUrl =
   process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${webPort}`;
 const hqBaseUrl =
   process.env.PLAYWRIGHT_HQ_BASE_URL ?? `http://127.0.0.1:${hqPort}`;
+const webServerCommand = process.env.CI
+  ? `pnpm --filter @duna/web exec next start --port ${webPort} --hostname 127.0.0.1`
+  : `pnpm --filter @duna/web exec next dev --port ${webPort} --hostname 127.0.0.1`;
+const hqServerCommand = process.env.CI
+  ? `pnpm --filter @duna/hq exec next start --port ${hqPort} --hostname 127.0.0.1`
+  : `pnpm --filter @duna/hq exec next dev --port ${hqPort} --hostname 127.0.0.1`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -27,14 +33,14 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `pnpm --filter @duna/web exec next dev --port ${webPort} --hostname 127.0.0.1`,
+      command: webServerCommand,
       port: webPort,
       env: { NEXT_PUBLIC_HQ_URL: hqBaseUrl },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
     {
-      command: `pnpm --filter @duna/hq exec next dev --port ${hqPort} --hostname 127.0.0.1`,
+      command: hqServerCommand,
       port: hqPort,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

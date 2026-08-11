@@ -14,6 +14,8 @@ jobs:
   release-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      NEXT_PUBLIC_HQ_URL: http://127.0.0.1:3001
     steps:
       - name: Check out source
         uses: actions/checkout@v4
