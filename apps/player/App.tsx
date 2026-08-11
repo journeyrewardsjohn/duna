@@ -114,6 +114,11 @@ import {
   type ProTourSection,
 } from "./pro-tour";
 import {
+  policyAcceptanceLabel,
+  policyScrollReachedEnd,
+  type PolicyScrollMetrics,
+} from "./policy-review";
+import {
   FellixText as Text,
   FellixTextInput as TextInput,
   useFellixFonts,
@@ -486,6 +491,7 @@ type Tab =
   | "discover"
   | "score"
   | "play"
+  | "plans"
   | "video"
   | "wallet"
   | "predictions"
@@ -541,8 +547,8 @@ const tabs: readonly {
 }[] = [
   { key: "home", label: "Home", icon: "⌂" },
   { key: "discover", label: "Discover", icon: "⌖" },
-  { key: "score", label: "Score", icon: "↥" },
-  { key: "play", label: "Play", icon: "◫" },
+  { key: "play", label: "Play", icon: "＋" },
+  { key: "plans", label: "Plans", icon: "◫" },
   { key: "you", label: "You", icon: "◎" },
 ];
 
@@ -691,6 +697,243 @@ function Pill({
         {children.toUpperCase()}
       </Text>
     </View>
+  );
+}
+
+interface MobilePolicyReviewDocument {
+  readonly id: string;
+  readonly kind: "policy" | "waiver";
+  readonly markdown: string;
+  readonly required: boolean;
+  readonly requireFullScroll: boolean;
+  readonly title: string;
+}
+
+function MobilePolicyReviewCard({
+  accepted,
+  detail,
+  onPress,
+  policy,
+}: {
+  readonly accepted: boolean;
+  readonly detail?: string;
+  readonly onPress: () => void;
+  readonly policy: MobilePolicyReviewDocument;
+}) {
+  return (
+    <Pressable
+      accessibilityHint="Opens the full document and its acceptance button"
+      accessibilityLabel={`Review ${policy.title}`}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.mobilePolicyCard,
+        pressed && styles.mobilePolicyCardPressed,
+      ]}
+    >
+      <View style={styles.mobilePolicyHeader}>
+        <View style={styles.flex}>
+          <Text style={styles.mobilePolicyTitle}>{policy.title}</Text>
+          {detail && <Text style={styles.mobilePolicyDetail}>{detail}</Text>}
+        </View>
+        <Pill tone={accepted ? "positive" : "warning"}>
+          {accepted ? "Accepted" : policy.required ? "Required" : "Optional"}
+        </Pill>
+      </View>
+      <Text numberOfLines={3} style={styles.mobilePolicyDocumentText}>
+        {policy.markdown}
+      </Text>
+      <View
+        style={[
+          styles.mobilePolicyAction,
+          accepted && styles.mobilePolicyActionAccepted,
+        ]}
+      >
+        <View style={styles.flex}>
+          <Text
+            style={[
+              styles.mobilePolicyActionTitle,
+              accepted && styles.mobilePolicyActionTitleAccepted,
+            ]}
+          >
+            {accepted
+              ? "Accepted for this checkout"
+              : policy.requireFullScroll
+                ? `Tap to read the full ${policy.kind}`
+                : "Tap to review and accept"}
+          </Text>
+          <Text style={styles.mobilePolicyActionMeta}>
+            {accepted
+              ? "Tap to review the document again"
+              : policy.requireFullScroll
+                ? "Scroll to the bottom to unlock acceptance"
+                : "The acceptance button is on the review screen"}
+          </Text>
+        </View>
+        <Text
+          style={[
+            styles.mobilePolicyActionIcon,
+            accepted && styles.mobilePolicyActionIconAccepted,
+          ]}
+        >
+          {accepted ? "✓" : "›"}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function PolicyReviewModal({
+  accepted,
+  onAccept,
+  onClose,
+  policy,
+  read,
+  visible,
+}: {
+  readonly accepted: boolean;
+  readonly onAccept: () => void;
+  readonly onClose: () => void;
+  readonly policy?: MobilePolicyReviewDocument;
+  readonly read: boolean;
+  readonly visible: boolean;
+}) {
+  const metrics = useRef<PolicyScrollMetrics>({
+    contentHeight: 0,
+    offsetY: 0,
+    viewportHeight: 0,
+  });
+  const [reachedEnd, setReachedEnd] = useState(false);
+
+  useEffect(() => {
+    metrics.current = {
+      contentHeight: 0,
+      offsetY: 0,
+      viewportHeight: 0,
+    };
+    setReachedEnd(Boolean(policy && (!policy.requireFullScroll || read)));
+  }, [policy?.id, policy?.requireFullScroll, read, visible]);
+
+  if (!policy) return null;
+
+  const updateMetrics = (next: Partial<PolicyScrollMetrics>) => {
+    metrics.current = { ...metrics.current, ...next };
+    if (policyScrollReachedEnd(metrics.current)) setReachedEnd(true);
+  };
+  const canAccept = !policy.requireFullScroll || read || reachedEnd;
+
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="fullScreen"
+      visible={visible}
+    >
+      <SafeAreaView edges={["top", "bottom"]} style={styles.policyReviewSafe}>
+        <View style={styles.policyReviewHeader}>
+          <Pressable
+            accessibilityLabel="Close policy review"
+            hitSlop={12}
+            onPress={onClose}
+            style={styles.policyReviewClose}
+          >
+            <Text style={styles.policyReviewCloseText}>‹</Text>
+          </Pressable>
+          <View style={styles.policyReviewHeading}>
+            <Text style={styles.policyReviewEyebrow}>
+              {policy.kind === "waiver" ? "WAIVER REVIEW" : "POLICY REVIEW"}
+            </Text>
+            <Text numberOfLines={2} style={styles.policyReviewTitle}>
+              {policy.title}
+            </Text>
+          </View>
+          <Pill tone={accepted ? "positive" : "warning"}>
+            {accepted ? "Accepted" : policy.required ? "Required" : "Optional"}
+          </Pill>
+        </View>
+
+        {policy.requireFullScroll && (
+          <View
+            accessibilityLiveRegion="polite"
+            style={[
+              styles.policyReviewInstruction,
+              canAccept && styles.policyReviewInstructionComplete,
+            ]}
+          >
+            <Text style={styles.policyReviewInstructionIcon}>
+              {canAccept ? "✓" : "↓"}
+            </Text>
+            <Text style={styles.policyReviewInstructionText}>
+              {canAccept
+                ? "You reached the end. The acceptance button is ready."
+                : "Read this document and scroll to the bottom to unlock acceptance."}
+            </Text>
+          </View>
+        )}
+
+        <ScrollView
+          accessibilityLabel={`${policy.title} full text`}
+          contentContainerStyle={styles.policyReviewContent}
+          onContentSizeChange={(_width, height) =>
+            updateMetrics({ contentHeight: height })
+          }
+          onLayout={({ nativeEvent }) =>
+            updateMetrics({ viewportHeight: nativeEvent.layout.height })
+          }
+          onScroll={({ nativeEvent }) =>
+            updateMetrics({
+              contentHeight: nativeEvent.contentSize.height,
+              offsetY: nativeEvent.contentOffset.y,
+              viewportHeight: nativeEvent.layoutMeasurement.height,
+            })
+          }
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator
+          style={styles.policyReviewScroll}
+        >
+          <Text style={styles.policyReviewDocument}>{policy.markdown}</Text>
+          <View style={styles.policyReviewEnd}>
+            <Text style={styles.policyReviewEndMark}>✓</Text>
+            <Text style={styles.policyReviewEndText}>End of {policy.kind}</Text>
+          </View>
+        </ScrollView>
+
+        <View style={styles.policyReviewFooter}>
+          <Text style={styles.policyReviewConfirmation}>
+            {policy.kind === "waiver"
+              ? "By accepting, you confirm you read and agree to the waiver shown above."
+              : "By accepting, you confirm you read and agree to the policy shown above."}
+          </Text>
+          <Pressable
+            accessibilityHint={
+              canAccept
+                ? "Records your acceptance for this checkout"
+                : "Scroll to the bottom of the document first"
+            }
+            accessibilityRole="button"
+            accessibilityState={{ disabled: accepted || !canAccept }}
+            disabled={accepted || !canAccept}
+            onPress={() => {
+              successHaptic();
+              onAccept();
+            }}
+            style={[
+              styles.policyReviewAccept,
+              (accepted || !canAccept) && styles.buttonDisabled,
+            ]}
+          >
+            <Text style={styles.policyReviewAcceptText}>
+              {accepted ? "✓ Accepted" : policyAcceptanceLabel(policy.kind)}
+            </Text>
+          </Pressable>
+          {policy.requireFullScroll && !canAccept && (
+            <Text style={styles.policyReviewLockedText}>
+              Acceptance unlocks at the end of the document.
+            </Text>
+          )}
+        </View>
+      </SafeAreaView>
+    </Modal>
   );
 }
 
@@ -1278,7 +1521,13 @@ function CoachingNoteCard({ note }: { readonly note: PlayerCoachingNote }) {
 }
 
 type HomeQuickAction =
-  "upload-score" | "find-match" | "book-court" | "join-event" | "record-video";
+  | "upload-score"
+  | "find-match"
+  | "book-court"
+  | "join-event"
+  | "record-video"
+  | "watch-pros"
+  | "search";
 
 function HomeResultStoryCard({
   match,
@@ -2645,6 +2894,7 @@ function VenueBookingModal({
   const [manualTarget, setManualTarget] = useState("");
   const [policyAccepted, setPolicyAccepted] = useState(false);
   const [policyRead, setPolicyRead] = useState(false);
+  const [policyReviewOpen, setPolicyReviewOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -2714,6 +2964,16 @@ function VenueBookingModal({
     (court) => court.id === selectedSlot?.courtId,
   );
   const policy = selectedCourt?.cancellationPolicy;
+  const policyDocument: MobilePolicyReviewDocument | undefined = policy
+    ? {
+        id: `court-policy-${selectedCourt?.id ?? "selected"}`,
+        kind: "policy",
+        markdown: policy.markdown,
+        required: true,
+        requireFullScroll: policy.requireFullScroll,
+        title: policy.title,
+      }
+    : undefined;
   const policyReady =
     policyAccepted && (!policy?.requireFullScroll || policyRead);
   const totalMinor = selectedSlot?.price?.amountMinor ?? 0;
@@ -2800,6 +3060,7 @@ function VenueBookingModal({
     setSelectedLocalStart(undefined);
     setPolicyAccepted(false);
     setPolicyRead(false);
+    setPolicyReviewOpen(false);
     void client.public.courtAvailability
       .query({
         venueId,
@@ -2836,6 +3097,7 @@ function VenueBookingModal({
     setParticipants([]);
     setPolicyAccepted(false);
     setPolicyRead(false);
+    setPolicyReviewOpen(false);
     setSelectedSlot(slot);
   }
 
@@ -3744,40 +4006,17 @@ function VenueBookingModal({
               )}
               {policy && (
                 <View style={styles.checkoutSection}>
-                  <Text style={styles.rowTitle}>{policy.title}</Text>
-                  <Text style={styles.rowMeta}>
-                    Refund until {policy.refundBeforeHours ?? 0} hours before ·{" "}
-                    {policy.lateCancellation}
-                  </Text>
-                  <ScrollView
-                    nestedScrollEnabled
-                    onScroll={({ nativeEvent }) => {
-                      const atEnd =
-                        nativeEvent.layoutMeasurement.height +
-                          nativeEvent.contentOffset.y >=
-                        nativeEvent.contentSize.height - 12;
-                      if (atEnd) setPolicyRead(true);
-                    }}
-                    scrollEventThrottle={16}
-                    style={styles.bookingPolicyScroll}
-                  >
-                    <Text style={styles.bodyText}>{policy.markdown}</Text>
-                  </ScrollView>
-                  <Pressable
-                    onPress={() => setPolicyAccepted((current) => !current)}
-                    style={styles.toggleRow}
-                  >
-                    <Text style={styles.rowTitle}>
-                      I read and accept this policy
-                    </Text>
-                    <Pill tone={policyAccepted ? "positive" : "neutral"}>
-                      {policyAccepted ? "Accepted" : "Required"}
-                    </Pill>
-                  </Pressable>
-                  {policy.requireFullScroll && !policyRead && (
-                    <Text style={styles.formError}>
-                      Scroll to the end of the policy to continue.
-                    </Text>
+                  <Text style={styles.eyebrow}>CANCELLATION POLICY</Text>
+                  {policyDocument && (
+                    <MobilePolicyReviewCard
+                      accepted={policyAccepted}
+                      detail={`Refund until ${policy.refundBeforeHours ?? 0} hours before · ${policy.lateCancellation}`}
+                      onPress={() => {
+                        selectionHaptic();
+                        setPolicyReviewOpen(true);
+                      }}
+                      policy={policyDocument}
+                    />
                   )}
                 </View>
               )}
@@ -3822,6 +4061,18 @@ function VenueBookingModal({
           onSelect={setSelectedDate}
           selectedDate={selectedDate}
           visible={calendarOpen}
+        />
+        <PolicyReviewModal
+          accepted={policyAccepted}
+          onAccept={() => {
+            setPolicyRead(true);
+            setPolicyAccepted(true);
+            setPolicyReviewOpen(false);
+          }}
+          onClose={() => setPolicyReviewOpen(false)}
+          policy={policyDocument}
+          read={policyRead}
+          visible={policyReviewOpen}
         />
       </SafeAreaView>
     </Modal>
@@ -6111,7 +6362,7 @@ function DiscoverScreen({
 }: {
   readonly intent?: {
     readonly key: number;
-    readonly kind: Exclude<HomeQuickAction, "record-video">;
+    readonly kind: Exclude<HomeQuickAction, "record-video" | "upload-score">;
   };
   readonly onBook: (eventIndex: number) => void;
   readonly onOrganization: (slug: string) => void;
@@ -6137,12 +6388,21 @@ function DiscoverScreen({
     organizationWallets,
     people,
     proCoverage,
+    settings,
     venues,
   } = usePlayerRuntime();
   const events = dashboard?.events ?? demoEvents;
   useEffect(() => {
     if (!intent) return;
     setShowDiscoverySearch(false);
+    if (intent.kind === "search") {
+      setShowDiscoverySearch(true);
+      return;
+    }
+    if (intent.kind === "watch-pros") {
+      setShowProTour(true);
+      return;
+    }
     if (intent.kind === "find-match") {
       setFilter("Open play");
       return;
@@ -6872,6 +7132,7 @@ function DiscoverScreen({
               )}`
             : "Search Duna"
         }
+        measurementSystem={settings?.profile.measurementSystem ?? "imperial"}
         theme={theme}
         visible={showDiscoveryMap}
       />
@@ -6933,7 +7194,102 @@ function DiscoverScreen({
   );
 }
 
-function PlayScreen({
+function PlayLauncherScreen({
+  onAction,
+}: {
+  readonly onAction: (action: HomeQuickAction) => void;
+}) {
+  const actions: readonly {
+    readonly key: HomeQuickAction;
+    readonly icon: string;
+    readonly title: string;
+    readonly detail: string;
+  }[] = [
+    {
+      key: "upload-score",
+      icon: "↥",
+      title: "Upload a Score",
+      detail: "Add a result and update your record",
+    },
+    {
+      key: "find-match",
+      icon: "⌖",
+      title: "Find a Match / Session",
+      detail: "See open play and training near you",
+    },
+    {
+      key: "book-court",
+      icon: "▦",
+      title: "Book a Court",
+      detail: "Find live court availability",
+    },
+    {
+      key: "join-event",
+      icon: "✦",
+      title: "Join an Event",
+      detail: "Tournaments, clinics, and community play",
+    },
+    {
+      key: "record-video",
+      icon: "●",
+      title: "Record a Video",
+      detail: "Open Duna Vision",
+    },
+    {
+      key: "watch-pros",
+      icon: "▶",
+      title: "Watch the Pros",
+      detail: "Live coverage, events, and matches",
+    },
+    {
+      key: "search",
+      icon: "⌕",
+      title: "Search",
+      detail: "Choose where, when, and what",
+    },
+  ];
+  return (
+    <ScrollView
+      contentContainerStyle={styles.screenContent}
+      showsVerticalScrollIndicator={false}
+    >
+      <AppHeader eyebrow="QUICK ACTIONS" />
+      <Text style={styles.displayTitle}>What do you want to play?</Text>
+      <Text style={styles.playLauncherIntro}>
+        Start a score, find something nearby, book a court, or jump into Duna
+        Vision and Pro coverage.
+      </Text>
+      <View style={styles.playLauncherGrid}>
+        {actions.map((action) => (
+          <Pressable
+            accessibilityHint={action.detail}
+            accessibilityRole="button"
+            key={action.key}
+            onPress={() => {
+              selectionHaptic();
+              onAction(action.key);
+            }}
+            style={({ pressed }) => [
+              styles.playLauncherAction,
+              pressed && styles.homeQuickActionPressed,
+            ]}
+          >
+            <View style={styles.playLauncherIcon}>
+              <Text style={styles.playLauncherIconText}>{action.icon}</Text>
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.playLauncherTitle}>{action.title}</Text>
+              <Text style={styles.playLauncherDetail}>{action.detail}</Text>
+            </View>
+            <Text style={styles.playLauncherArrow}>›</Text>
+          </Pressable>
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
+function PlansScreen({
   onBook,
   onOpenBooking,
 }: {
@@ -6971,7 +7327,7 @@ function PlayScreen({
       >
         <AppHeader eyebrow="YOUR CALENDAR + COMMUNITY" />
         <View style={styles.homeGreeting}>
-          <Text style={styles.displayTitle}>Play.</Text>
+          <Text style={styles.displayTitle}>Plans.</Text>
           <Pressable
             onPress={() => setShowHost(true)}
             style={styles.scoreAction}
@@ -9302,6 +9658,8 @@ function BookingModal({
   const [acceptedPolicyIds, setAcceptedPolicyIds] = useState<readonly string[]>(
     [],
   );
+  const [readPolicyIds, setReadPolicyIds] = useState<readonly string[]>([]);
+  const [reviewingPolicyId, setReviewingPolicyId] = useState<string>();
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>();
   const teammateSearchTimeout = useRef<
     ReturnType<typeof setTimeout> | undefined
@@ -9311,6 +9669,9 @@ function BookingModal({
   const event = eventIndex === null ? null : events[eventIndex];
   if (!event) return null;
   const selectedEvent = event;
+  const reviewingPolicy = selectedEvent.policies?.find(
+    (policy) => policy.id === reviewingPolicyId,
+  );
   const division =
     event.divisions?.find((candidate) => candidate.id === divisionId) ??
     event.divisions?.[0];
@@ -9439,6 +9800,8 @@ function BookingModal({
     setPickupPartner([]);
     setShowPickupPartnerPicker(false);
     setAcceptedPolicyIds([]);
+    setReadPolicyIds([]);
+    setReviewingPolicyId(undefined);
     setSelectedParticipantId(undefined);
     setBusy(false);
     onClose();
@@ -9488,7 +9851,7 @@ function BookingModal({
         subjectPersonId:
           purchaseKind === "entry" ? selectedParticipant?.person.id : undefined,
         acceptedPolicyIds: [...acceptedPolicyIds],
-        readPolicyIds: [...acceptedPolicyIds],
+        readPolicyIds: [...readPolicyIds],
         isDunaPlus: Boolean(settings?.membership),
         paymentSurface: Platform.OS === "web" ? "hosted" : "native",
         successUrl: `${dunaWebUrl}/app/checkout/${selectedEvent.slug}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
@@ -10517,46 +10880,17 @@ function BookingModal({
                     )
                     .map((policy) => {
                       const accepted = acceptedPolicyIds.includes(policy.id);
+                      const document: MobilePolicyReviewDocument = policy;
                       return (
-                        <View key={policy.id} style={styles.mobilePolicyCard}>
-                          <View style={styles.mobilePolicyHeader}>
-                            <Text style={styles.rowTitle}>{policy.title}</Text>
-                            <Text style={styles.mobilePolicyKind}>
-                              {policy.kind.toUpperCase()}
-                            </Text>
-                          </View>
-                          <ScrollView
-                            nestedScrollEnabled
-                            style={styles.mobilePolicyDocument}
-                          >
-                            <Text style={styles.mobilePolicyDocumentText}>
-                              {policy.markdown}
-                            </Text>
-                          </ScrollView>
-                          <Pressable
-                            onPress={() =>
-                              setAcceptedPolicyIds((current) =>
-                                accepted
-                                  ? current.filter((id) => id !== policy.id)
-                                  : [...current, policy.id],
-                              )
-                            }
-                            style={[
-                              styles.mobilePolicyAccept,
-                              accepted && styles.mobilePolicyAcceptActive,
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.mobilePolicyAcceptText,
-                                accepted && styles.mobilePolicyAcceptTextActive,
-                              ]}
-                            >
-                              {accepted ? "✓ Accepted" : "I read and accept"}
-                              {policy.required ? " · required" : " · optional"}
-                            </Text>
-                          </Pressable>
-                        </View>
+                        <MobilePolicyReviewCard
+                          accepted={accepted}
+                          key={policy.id}
+                          onPress={() => {
+                            selectionHaptic();
+                            setReviewingPolicyId(policy.id);
+                          }}
+                          policy={document}
+                        />
                       );
                     })}
                 </View>
@@ -10653,6 +10987,31 @@ function BookingModal({
             </Text>
           </ScrollView>
         )}
+        <PolicyReviewModal
+          accepted={Boolean(
+            reviewingPolicy && acceptedPolicyIds.includes(reviewingPolicy.id),
+          )}
+          onAccept={() => {
+            if (!reviewingPolicy) return;
+            setReadPolicyIds((current) =>
+              current.includes(reviewingPolicy.id)
+                ? current
+                : [...current, reviewingPolicy.id],
+            );
+            setAcceptedPolicyIds((current) =>
+              current.includes(reviewingPolicy.id)
+                ? current
+                : [...current, reviewingPolicy.id],
+            );
+            setReviewingPolicyId(undefined);
+          }}
+          onClose={() => setReviewingPolicyId(undefined)}
+          policy={reviewingPolicy}
+          read={Boolean(
+            reviewingPolicy && readPolicyIds.includes(reviewingPolicy.id),
+          )}
+          visible={Boolean(reviewingPolicy)}
+        />
       </SafeAreaView>
     </Modal>
   );
@@ -11587,7 +11946,9 @@ function TabBar({
     active === "predictions" ||
     active === "performance"
       ? "you"
-      : active;
+      : active === "score" || active === "video"
+        ? "play"
+        : active;
   return (
     <View style={[styles.tabBar, { bottom: Math.max(12, insets.bottom) }]}>
       {tabs.map((tab) => (
@@ -11601,7 +11962,7 @@ function TabBar({
           }}
           style={[
             styles.tabItem,
-            tab.key === "score" && styles.tabItemScore,
+            tab.key === "play" && styles.tabItemCenter,
             selectedTab === tab.key && styles.tabItemActive,
           ]}
         >
@@ -11609,7 +11970,7 @@ function TabBar({
             style={[
               styles.tabIcon,
               selectedTab === tab.key && styles.tabActive,
-              tab.key === "score" && styles.tabScoreIcon,
+              tab.key === "play" && styles.tabCenterIcon,
             ]}
           >
             {tab.icon}
@@ -11618,7 +11979,7 @@ function TabBar({
             style={[
               styles.tabLabel,
               selectedTab === tab.key && styles.tabActive,
-              tab.key === "score" && styles.tabScoreLabel,
+              tab.key === "play" && styles.tabCenterLabel,
             ]}
           >
             {tab.label}
@@ -11749,7 +12110,7 @@ function DunaApp() {
       if (bookingMatch?.[1]) {
         setEventIndex(null);
         setBookingId(decodeURIComponent(bookingMatch[1]));
-        setTab("play");
+        setTab("plans");
         return;
       }
       const match = url?.match(/^duna:\/\/live\/([^/]+)\//);
@@ -11866,7 +12227,10 @@ function DunaApp() {
                 />
               )}
               {tab === "play" && (
-                <PlayScreen
+                <PlayLauncherScreen onAction={openHomeAction} />
+              )}
+              {tab === "plans" && (
+                <PlansScreen
                   onBook={setEventIndex}
                   onOpenBooking={setBookingId}
                 />
@@ -13508,6 +13872,58 @@ function createStyles(palette: Palette) {
     homeQuickLabelPrimary: { color: colors.onAccent },
     homeQuickMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
     homeQuickMetaPrimary: { color: rgba(colors.whiteRgb, 0.74) },
+    playLauncherIntro: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 20,
+      marginBottom: 20,
+      marginTop: 8,
+      maxWidth: 420,
+    },
+    playLauncherGrid: { gap: 10 },
+    playLauncherAction: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 20,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 13,
+      minHeight: 82,
+      paddingHorizontal: 15,
+      paddingVertical: 13,
+    },
+    playLauncherIcon: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderRadius: 15,
+      height: 46,
+      justifyContent: "center",
+      width: 46,
+    },
+    playLauncherIconText: {
+      color: colors.aqua,
+      fontSize: 21,
+      fontWeight: "900",
+    },
+    playLauncherTitle: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+      letterSpacing: -0.35,
+    },
+    playLauncherDetail: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 3,
+    },
+    playLauncherArrow: {
+      color: colors.aqua,
+      fontSize: 28,
+      lineHeight: 30,
+      marginLeft: 4,
+    },
     homeNextSession: {
       alignItems: "center",
       backgroundColor: colors.depth,
@@ -18568,7 +18984,7 @@ function createStyles(palette: Palette) {
       position: "relative",
     },
     tabItemActive: { backgroundColor: rgba(colors.accentRgb, 0.1) },
-    tabItemScore: {
+    tabItemCenter: {
       backgroundColor: colors.aqua,
       borderColor: colors.canvas,
       borderRadius: 24,
@@ -18579,8 +18995,8 @@ function createStyles(palette: Palette) {
     tabIcon: { color: colors.muted, fontSize: 18 },
     tabLabel: { color: colors.muted, fontSize: 10, fontWeight: "700" },
     tabActive: { color: colors.aqua },
-    tabScoreIcon: { color: colors.onAccent, fontSize: 22 },
-    tabScoreLabel: { color: colors.onAccent, fontWeight: "900" },
+    tabCenterIcon: { color: colors.onAccent, fontSize: 22 },
+    tabCenterLabel: { color: colors.onAccent, fontWeight: "900" },
     modalSafe: { backgroundColor: colors.canvas, flex: 1 },
     modalContent: { padding: 18, paddingBottom: 45 },
     hostedReviewHeader: {
@@ -19339,50 +19755,216 @@ function createStyles(palette: Palette) {
       fontWeight: "800",
       marginTop: 5,
     },
-    mobilePolicyList: { gap: 9, marginTop: 11 },
+    mobilePolicyList: { gap: 10, marginTop: 2 },
     mobilePolicyCard: {
       backgroundColor: colors.canvas,
-      borderColor: rgba(colors.overlayRgb, 0.08),
-      borderRadius: 14,
+      borderColor: rgba(colors.overlayRgb, 0.12),
+      borderRadius: 16,
       borderWidth: 1,
-      overflow: "hidden",
-      padding: 10,
+      marginTop: 9,
+      padding: 14,
     },
+    mobilePolicyCardPressed: { opacity: 0.78 },
     mobilePolicyHeader: {
+      alignItems: "flex-start",
       flexDirection: "row",
-      gap: 8,
+      gap: 12,
       justifyContent: "space-between",
     },
-    mobilePolicyKind: {
+    mobilePolicyTitle: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+      lineHeight: 20,
+    },
+    mobilePolicyDetail: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 4,
+    },
+    mobilePolicyDocumentText: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 20,
+      marginTop: 12,
+    },
+    mobilePolicyAction: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderColor: rgba(colors.accentRgb, 0.2),
+      borderRadius: 13,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 10,
+      minHeight: 64,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    mobilePolicyActionAccepted: {
+      backgroundColor: rgba(colors.positiveRgb, 0.09),
+      borderColor: rgba(colors.positiveRgb, 0.24),
+    },
+    mobilePolicyActionTitle: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
+      lineHeight: 18,
+    },
+    mobilePolicyActionTitleAccepted: { color: colors.positive },
+    mobilePolicyActionMeta: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 2,
+    },
+    mobilePolicyActionIcon: {
+      color: colors.aqua,
+      fontSize: 28,
+      fontWeight: "600",
+    },
+    mobilePolicyActionIconAccepted: {
+      color: colors.positive,
+      fontSize: 19,
+      fontWeight: "900",
+    },
+    policyReviewSafe: { backgroundColor: colors.canvas, flex: 1 },
+    policyReviewHeader: {
+      alignItems: "center",
+      borderBottomColor: rgba(colors.overlayRgb, 0.1),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 76,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+    policyReviewClose: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.12),
+      borderRadius: 22,
+      borderWidth: 1,
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    policyReviewCloseText: {
+      color: colors.bone,
+      fontSize: 30,
+      fontWeight: "500",
+      lineHeight: 32,
+      marginTop: -2,
+    },
+    policyReviewHeading: { flex: 1, minWidth: 0 },
+    policyReviewEyebrow: {
       color: colors.warning,
       fontSize: 10,
       fontWeight: "900",
+      letterSpacing: 1,
     },
-    mobilePolicyDocument: { marginTop: 9, maxHeight: 145 },
-    mobilePolicyDocumentText: {
-      color: colors.muted,
-      fontSize: 10,
-      lineHeight: 16,
-    },
-    mobilePolicyAccept: {
-      alignItems: "center",
-      borderColor: rgba(colors.overlayRgb, 0.12),
-      borderRadius: 11,
-      borderWidth: 1,
-      justifyContent: "center",
-      marginTop: 10,
-      minHeight: 42,
-    },
-    mobilePolicyAcceptActive: {
-      backgroundColor: colors.aqua,
-      borderColor: colors.aqua,
-    },
-    mobilePolicyAcceptText: {
+    policyReviewTitle: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 16,
+      fontWeight: "900",
+      lineHeight: 20,
+      marginTop: 3,
+    },
+    policyReviewInstruction: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.warningRgb, 0.1),
+      borderColor: rgba(colors.warningRgb, 0.25),
+      borderRadius: 13,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginHorizontal: 18,
+      marginTop: 14,
+      paddingHorizontal: 13,
+      paddingVertical: 11,
+    },
+    policyReviewInstructionComplete: {
+      backgroundColor: rgba(colors.positiveRgb, 0.09),
+      borderColor: rgba(colors.positiveRgb, 0.24),
+    },
+    policyReviewInstructionIcon: {
+      color: colors.warning,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    policyReviewInstructionText: {
+      color: colors.bone,
+      flex: 1,
+      fontSize: 12,
+      fontWeight: "700",
+      lineHeight: 18,
+    },
+    policyReviewScroll: { flex: 1 },
+    policyReviewContent: {
+      paddingBottom: 42,
+      paddingHorizontal: 22,
+      paddingTop: 22,
+    },
+    policyReviewDocument: {
+      color: colors.bone,
+      fontSize: 15,
+      lineHeight: 25,
+    },
+    policyReviewEnd: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.12),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      marginTop: 32,
+      paddingTop: 18,
+    },
+    policyReviewEndMark: {
+      color: colors.positive,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    policyReviewEndText: {
+      color: colors.muted,
+      fontSize: 12,
       fontWeight: "800",
     },
-    mobilePolicyAcceptTextActive: { color: colors.onAccent },
+    policyReviewFooter: {
+      backgroundColor: colors.depth,
+      borderTopColor: rgba(colors.overlayRgb, 0.12),
+      borderTopWidth: 1,
+      paddingHorizontal: 18,
+      paddingTop: 14,
+      paddingBottom: 12,
+    },
+    policyReviewConfirmation: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginBottom: 10,
+      textAlign: "center",
+    },
+    policyReviewAccept: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 15,
+      justifyContent: "center",
+      minHeight: 56,
+      paddingHorizontal: 18,
+    },
+    policyReviewAcceptText: {
+      color: colors.onAccent,
+      fontSize: 15,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+    policyReviewLockedText: {
+      color: colors.warning,
+      fontSize: 11,
+      fontWeight: "700",
+      marginTop: 8,
+      textAlign: "center",
+    },
     mobileTeamNotice: {
       alignItems: "flex-start",
       backgroundColor: rgba(colors.accentRgb, 0.07),

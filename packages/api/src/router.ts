@@ -280,9 +280,11 @@ import {
   startStripeIdentityVerification,
 } from "./identity-verification";
 import {
+  changeOrganizationMembership,
   changeDunaPlusMembership,
   MembershipError,
   openDunaPlusPortal,
+  openPlayerBillingPortal,
 } from "./membership";
 import {
   abortVideoUpload,
@@ -6254,6 +6256,73 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
+  openPlayerBillingPortal: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "player-billing-portal",
+        capacity: 10,
+        refillPerMinute: 5,
+      }),
+    )
+    .input(z.object({ returnUrl: publicHttpsUrlSchema }))
+    .output(z.object({ url: z.url() }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await openPlayerBillingPortal({
+          actor: ctx.actor!,
+          returnUrl: input.returnUrl,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  changeOrganizationMembership: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "organization-membership-change",
+        capacity: 8,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        membershipId: z.string().uuid(),
+        action: z.enum(["cancel", "resume"]),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        membershipId: z.string().uuid(),
+        action: z.enum(["cancel", "resume"]),
+        effectiveAt: z.iso.datetime().optional(),
+        cancelAtPeriodEnd: z.boolean(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.changeOrganizationMembership",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await changeOrganizationMembership({
+              actor: ctx.actor!,
+              membershipId: input.membershipId,
+              action: input.action,
+              idempotencyKey: input.idempotencyKey,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   changeDunaPlusMembership: adultProcedure
     .use(
       rateLimitMiddleware({

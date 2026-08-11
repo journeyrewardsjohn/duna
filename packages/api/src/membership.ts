@@ -14,9 +14,20 @@ import {
   getDatabase,
   memberships,
   membershipTiers,
+  organizations,
   people,
 } from "@duna/db";
-import { and, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+} from "drizzle-orm";
 import type { ApiActor } from "./context";
 import {
   createBillingPortalSession,
@@ -26,6 +37,7 @@ import {
 } from "./payments";
 
 export type MembershipAction = "cancel" | "pause" | "resume";
+export type OrganizationMembershipAction = "cancel" | "resume";
 
 export class MembershipError extends Error {
   constructor(
@@ -261,6 +273,169 @@ export async function openDunaPlusPortal(input: {
     customerId,
     returnUrl: input.returnUrl,
   });
+}
+
+export async function openPlayerBillingPortal(input: {
+  readonly actor: ApiActor;
+  readonly returnUrl: string;
+  readonly now: Date;
+}): Promise<{ readonly url: string }> {
+  requireConnections();
+  const person = await getDatabase().query.people.findFirst({
+    columns: { stripeCustomerId: true },
+    where: eq(people.id, input.actor.personId),
+  });
+  let customerId = person?.stripeCustomerId ?? undefined;
+  if (!customerId) {
+    const recurringMembership = (
+      await getDatabase()
+        .select({ stripeSubscriptionId: memberships.stripeSubscriptionId })
+        .from(memberships)
+        .where(
+          and(
+            eq(memberships.personId, input.actor.personId),
+            isNotNull(memberships.stripeSubscriptionId),
+          ),
+        )
+        .orderBy(desc(memberships.updatedAt))
+        .limit(1)
+    )[0];
+    if (recurringMembership?.stripeSubscriptionId) {
+      const subscription = await getStripeClient().subscriptions.retrieve(
+        recurringMembership.stripeSubscriptionId,
+      );
+      customerId =
+        typeof subscription.customer === "string"
+          ? subscription.customer
+          : subscription.customer.id;
+      await getDatabase()
+        .update(people)
+        .set({ stripeCustomerId: customerId, updatedAt: input.now })
+        .where(eq(people.id, input.actor.personId));
+    }
+  }
+  if (!customerId) {
+    throw new MembershipError(
+      "MEMBERSHIP_NOT_FOUND",
+      "No saved Duna billing profile was found yet.",
+    );
+  }
+  return createBillingPortalSession({
+    customerId,
+    returnUrl: input.returnUrl,
+  });
+}
+
+async function connectedOrganizationMembership(
+  personId: string,
+  membershipId: string,
+) {
+  const row = (
+    await getDatabase()
+      .select({
+        id: memberships.id,
+        cancelAtPeriodEnd: memberships.cancelAtPeriodEnd,
+        organizationId: organizations.id,
+        organizationName: organizations.name,
+        stripeSubscriptionId: memberships.stripeSubscriptionId,
+        tierName: membershipTiers.name,
+      })
+      .from(memberships)
+      .innerJoin(membershipTiers, eq(memberships.tierId, membershipTiers.id))
+      .innerJoin(
+        organizations,
+        eq(membershipTiers.organizationId, organizations.id),
+      )
+      .where(
+        and(
+          eq(memberships.id, membershipId),
+          eq(memberships.personId, personId),
+          inArray(memberships.status, [
+            "active",
+            "trialing",
+            "past_due",
+            "unpaid",
+            "incomplete",
+          ]),
+        ),
+      )
+      .limit(1)
+  )[0];
+  if (!row) {
+    throw new MembershipError(
+      "MEMBERSHIP_NOT_FOUND",
+      "That organization membership was not found in this Duna account.",
+    );
+  }
+  if (!row.stripeSubscriptionId) {
+    throw new MembershipError(
+      "MEMBERSHIP_NOT_MANAGEABLE",
+      "This organization manages that membership outside Stripe billing.",
+    );
+  }
+  return { ...row, stripeSubscriptionId: row.stripeSubscriptionId };
+}
+
+export async function changeOrganizationMembership(input: {
+  readonly actor: ApiActor;
+  readonly membershipId: string;
+  readonly action: OrganizationMembershipAction;
+  readonly idempotencyKey: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{
+  readonly membershipId: string;
+  readonly action: OrganizationMembershipAction;
+  readonly effectiveAt?: string;
+  readonly cancelAtPeriodEnd: boolean;
+}> {
+  requireConnections();
+  const database = getDatabase();
+  const membership = await connectedOrganizationMembership(
+    input.actor.personId,
+    input.membershipId,
+  );
+  const cancelAtPeriodEnd = input.action === "cancel";
+  const subscription = await getStripeClient().subscriptions.update(
+    membership.stripeSubscriptionId,
+    { cancel_at_period_end: cancelAtPeriodEnd },
+    { idempotencyKey: input.idempotencyKey },
+  );
+  const firstItem = subscription.items.data[0];
+  const effectiveAt =
+    cancelAtPeriodEnd && firstItem
+      ? new Date(firstItem.current_period_end * 1_000)
+      : undefined;
+  await database
+    .update(memberships)
+    .set({ cancelAtPeriodEnd, updatedAt: input.now })
+    .where(
+      and(
+        eq(memberships.id, membership.id),
+        eq(memberships.personId, input.actor.personId),
+      ),
+    );
+  await database.insert(auditLog).values({
+    actorPersonId: input.actor.personId,
+    actorType: "person",
+    action: `membership.organization.${input.action}`,
+    entityType: "membership",
+    entityId: membership.id,
+    organizationId: membership.organizationId,
+    reason: cancelAtPeriodEnd
+      ? `Member requested ${membership.organizationName} membership cancellation at the end of the paid period.`
+      : `Member resumed the ${membership.organizationName} membership.`,
+    traceId: input.requestId,
+    ipAddress: input.ipAddress,
+    createdAt: input.now,
+  });
+  return {
+    membershipId: membership.id,
+    action: input.action,
+    effectiveAt: effectiveAt?.toISOString(),
+    cancelAtPeriodEnd,
+  };
 }
 
 export async function changeDunaPlusMembership(input: {

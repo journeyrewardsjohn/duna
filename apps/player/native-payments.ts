@@ -28,10 +28,12 @@ export async function presentNativeEventPayment(input: {
   }
 
   await initStripe({
+    merchantIdentifier: "merchant.com.duna.player",
     publishableKey: input.paymentSheet.publishableKey,
     urlScheme: "duna",
   });
   const initialized = await initPaymentSheet({
+    applePay: { merchantCountryCode: "US" },
     merchantDisplayName: "Duna",
     paymentIntentClientSecret: input.paymentSheet.paymentIntentClientSecret,
     customerId: input.paymentSheet.customerId,
@@ -39,6 +41,8 @@ export async function presentNativeEventPayment(input: {
     returnURL: "duna://stripe-redirect",
     link: { display: LinkDisplay.AUTOMATIC },
     allowsDelayedPaymentMethods: false,
+    allowsRemovalOfLastSavedPaymentMethod: true,
+    style: "alwaysLight",
     defaultBillingDetails: {
       name: input.customerName,
       email: input.customerEmail,
@@ -55,10 +59,23 @@ export async function presentNativeEventPayment(input: {
         background: "#F6F5F1",
         componentBackground: "#FFFFFF",
         componentBorder: "#D7DEE8",
+        componentDivider: "#E4E7EA",
+        componentText: "#1B1B19",
         primaryText: "#1b1b19",
         secondaryText: "#766f61",
+        placeholderText: "#777166",
+        icon: "#1B1B19",
+        error: "#B42318",
       },
       shapes: { borderRadius: 16, borderWidth: 1 },
+      primaryButton: {
+        colors: {
+          background: "#3D6672",
+          border: "#3D6672",
+          text: "#FFFFFF",
+        },
+        shapes: { borderRadius: 16, borderWidth: 0, height: 56 },
+      },
     },
   });
   if (initialized.error) throw new Error(initialized.error.message);

@@ -239,18 +239,20 @@ function SearchMain({
   return (
     <>
       <View style={styles.mainHeader}>
-        <View>
-          <Text style={styles.mainEyebrow}>DISCOVER</Text>
-          <Text style={styles.mainTitle}>Search Duna</Text>
-        </View>
         <Pressable
-          accessibilityLabel="Close search"
+          accessibilityLabel="Back to Discover"
           accessibilityRole="button"
+          hitSlop={8}
           onPress={onClose}
           style={styles.iconButton}
         >
-          <Text style={styles.closeIcon}>×</Text>
+          <Text style={styles.backIcon}>‹</Text>
         </Pressable>
+        <View style={styles.mainHeadingCopy}>
+          <Text style={styles.mainEyebrow}>DISCOVER</Text>
+          <Text style={styles.mainTitle}>Search Duna</Text>
+        </View>
+        <View style={styles.iconButtonSpacer} />
       </View>
       <ScrollView
         contentContainerStyle={styles.mainSelectors}
@@ -916,9 +918,13 @@ export function DiscoverySearchFlow({
 }) {
   const insets = useSafeAreaInsets();
   const token = resolveDunaTokens(theme, "editorial");
+  const topInset = Math.max(
+    insets.top,
+    Platform.OS === "ios" ? 54 : spacing[3],
+  );
   const styles = useMemo(
-    () => createStyles(token, insets.bottom),
-    [insets.bottom, token],
+    () => createStyles(token, insets.bottom, topInset),
+    [insets.bottom, token, topInset],
   );
   const [step, setStep] = useState<SearchStep>("main");
   const wasVisible = useRef(false);
@@ -955,7 +961,7 @@ export function DiscoverySearchFlow({
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.root}
       >
-        <SafeAreaView edges={["top"]} style={styles.safeTop}>
+        <SafeAreaView edges={[]} style={styles.safeTop}>
           {step === "main" ? (
             <SearchMain
               criteria={criteria}
@@ -1029,17 +1035,21 @@ export function DiscoverySearchFlow({
   );
 }
 
-function createStyles(token: ResolvedDunaTokens, bottomInset: number) {
+function createStyles(
+  token: ResolvedDunaTokens,
+  bottomInset: number,
+  topInset: number,
+) {
   return StyleSheet.create({
     root: { backgroundColor: token.ground, flex: 1 },
-    safeTop: { flex: 1 },
+    safeTop: { flex: 1, paddingTop: topInset },
     mainHeader: {
-      alignItems: "flex-start",
+      alignItems: "center",
       flexDirection: "row",
-      justifyContent: "space-between",
       paddingHorizontal: spacing[5],
       paddingTop: spacing[3],
     },
+    mainHeadingCopy: { alignItems: "center", flex: 1 },
     mainEyebrow: {
       color: token.flareText,
       fontSize: 11,
@@ -1048,7 +1058,7 @@ function createStyles(token: ResolvedDunaTokens, bottomInset: number) {
     },
     mainTitle: {
       color: token.text1,
-      fontSize: 34,
+      fontSize: 30,
       fontWeight: "900",
       letterSpacing: -1.5,
       lineHeight: 39,
@@ -1064,7 +1074,6 @@ function createStyles(token: ResolvedDunaTokens, bottomInset: number) {
       width: 48,
     },
     iconButtonSpacer: { height: 48, width: 48 },
-    closeIcon: { color: token.text1, fontSize: 27, lineHeight: 29 },
     backIcon: {
       color: token.text1,
       fontSize: 34,

@@ -69,6 +69,7 @@ import { getStripeClient, isStripeConfigured, refundPayment } from "./payments";
 
 type CatalogItemType = OperatorWorkspace["catalog"][number]["type"];
 type CatalogItemSubtype = string;
+type CurrencyCode = OperatorWorkspace["organization"]["currency"];
 type CatalogPaymentKind =
   OperatorWorkspace["catalog"][number]["variants"][number]["prices"][number]["paymentKind"];
 
@@ -92,6 +93,20 @@ const DEFAULT_THEME: OperatorWorkspace["theme"] = {
   cardStyle: "soft",
   profileLayout: "editorial",
 };
+
+function playerMembershipCurrency(value: string): CurrencyCode {
+  const normalized = value.toUpperCase();
+  const supported: readonly CurrencyCode[] = [
+    "USD",
+    "CAD",
+    "AUD",
+    "BRL",
+    "EUR",
+  ];
+  return supported.includes(normalized as CurrencyCode)
+    ? (normalized as CurrencyCode)
+    : "USD";
+}
 
 const BRAND_KNOWLEDGE_SAFETY_RULES = [
   "Approved sources inform drafts, recommendations, and answers.",
@@ -2091,6 +2106,13 @@ export async function loadPlayerOrganizationWallets(
     readonly nextExpiringCredits: number;
     readonly membershipName?: string;
     readonly membershipStatus?: string;
+    readonly membershipId?: string;
+    readonly membershipInterval?: "month" | "year";
+    readonly membershipPriceMinor?: number;
+    readonly membershipCurrency?: CurrencyCode;
+    readonly membershipCurrentPeriodEndsAt?: string;
+    readonly membershipCancelAtPeriodEnd?: boolean;
+    readonly membershipManageable?: boolean;
   }[]
 > {
   requireDatabase();
@@ -2159,6 +2181,13 @@ export async function loadPlayerOrganizationWallets(
       nextExpiringCredits: number;
       membershipName?: string;
       membershipStatus?: string;
+      membershipId?: string;
+      membershipInterval?: "month" | "year";
+      membershipPriceMinor?: number;
+      membershipCurrency?: CurrencyCode;
+      membershipCurrentPeriodEndsAt?: string;
+      membershipCancelAtPeriodEnd?: boolean;
+      membershipManageable?: boolean;
     }
   >();
   for (const row of walletRows) {
@@ -2202,6 +2231,18 @@ export async function loadPlayerOrganizationWallets(
       nextExpiringCredits: current?.nextExpiringCredits ?? 0,
       membershipName: row.tier.name,
       membershipStatus: row.membership.status,
+      membershipId: row.membership.id,
+      membershipInterval: row.tier.interval === "year" ? "year" : "month",
+      membershipPriceMinor: row.tier.priceMinor,
+      membershipCurrency: playerMembershipCurrency(row.tier.currency),
+      membershipCurrentPeriodEndsAt:
+        row.membership.currentPeriodEndsAt?.toISOString(),
+      membershipCancelAtPeriodEnd: row.membership.cancelAtPeriodEnd,
+      membershipManageable:
+        Boolean(row.membership.stripeSubscriptionId) &&
+        ["active", "trialing", "past_due", "unpaid", "incomplete"].includes(
+          row.membership.status,
+        ),
     });
   }
   return [...summaries.values()].toSorted((left, right) =>
