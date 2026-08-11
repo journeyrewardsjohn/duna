@@ -9,7 +9,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "export": "expo export --platform all --output-dir dist",
-    "lint": "eslint App.tsx DunaLiveActivity.tsx arrival-location-task.ts booking-management.tsx components discovery-map.tsx discovery-media.ts discovery-search.ts discovery-search-flow.tsx fellix-text.tsx health-history-sync-agent.tsx health-kit.ts health-screen.tsx health-sync-utils.ts index.js live-activities.ts live-activity-preference.ts live-activities-prompt.tsx mobile-api.ts native-payments.ts organization-experience.tsx player-calendar.tsx player-social.tsx profile-hub.tsx profile-studio.tsx pro-tour.ts runtime.tsx score-upload.tsx score-upload-utils.ts session-arrival-card.tsx video-studio.tsx watch-scoring.ts",
+    "lint": "eslint App.tsx DunaLiveActivity.tsx arrival-location-task.ts booking-management.tsx calendar-settings.tsx components discovery-map.tsx discovery-media.ts discovery-search.ts discovery-search-flow.tsx fellix-text.tsx health-history-sync-agent.tsx health-kit.ts health-screen.tsx health-sync-utils.ts index.js live-activities.ts live-activity-preference.ts live-activities-prompt.tsx mobile-api.ts native-payments.ts organization-experience.tsx player-calendar.tsx player-social.tsx profile-hub.tsx profile-studio.tsx pro-tour.ts runtime.tsx score-upload.tsx score-upload-utils.ts session-arrival-card.tsx tournament-passes.tsx video-studio.tsx watch-scoring.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },

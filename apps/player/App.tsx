@@ -77,6 +77,8 @@ import { VideoStudioScreen } from "./video-studio";
 import { HealthScreen } from "./health-screen";
 import { HealthHistorySyncAgent } from "./health-history-sync-agent";
 import { LiveActivitiesPrompt } from "./live-activities-prompt";
+import { PlayerCalendarSettings } from "./calendar-settings";
+import { TournamentPasses } from "./tournament-passes";
 import {
   BookingManagementModal,
   type ManagedBooking,
@@ -9142,6 +9144,42 @@ function PerformanceScreen({
           </Pressable>
         </View>
       </View>
+
+      <PlayerCalendarSettings
+        bookings={dashboard?.bookings ?? []}
+        palette={{
+          surface: colors.depth,
+          border: rgba(colors.overlayRgb, 0.1),
+          accentSurface: colors.navyLift,
+          accent: colors.aqua,
+          text: colors.bone,
+          muted: colors.muted,
+          positive: colors.positive,
+          warningSurface: rgba(colors.warningRgb, 0.12),
+          warning: colors.warning,
+          onWarning: colors.onAccent,
+          primary: colors.aqua,
+          onPrimary: colors.onAccent,
+        }}
+      />
+
+      <TournamentPasses
+        palette={{
+          surface: colors.depth,
+          surfaceAlt: colors.navyLift,
+          border: rgba(colors.overlayRgb, 0.1),
+          text: colors.bone,
+          muted: colors.muted,
+          playerAccent: colors.aqua,
+          fanAccent: colors.warning,
+          positive: colors.positive,
+          warning: colors.warning,
+          button: colors.bone,
+          onButton: colors.depth,
+          qrBackground: colors.bone,
+          qrForeground: colors.depth,
+        }}
+      />
 
       <Pressable
         accessibilityHint="Opens your private Apple Health performance timeline"

@@ -902,7 +902,9 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(
     page.getByRole("button", { name: "Player preview" }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add element" })).toBeVisible();
+  const addToLayout = page.getByRole("button", { name: "Add to layout" });
+  await expect(addToLayout).toBeVisible();
+  await addToLayout.click();
   await page
     .getByRole("button", { name: /Duna short court 16 × 8 m court/ })
     .click();
@@ -914,11 +916,12 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
     courtLayoutDialog.getByText("Visual court → real court"),
   ).toBeVisible();
   await courtLayoutDialog.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("button", { name: "Publish & automation" }).click();
   await expect(
     page.getByRole("heading", { name: "AI Court Assignment" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Publish & set primary" }),
+    page.getByRole("button", { name: "Publish event map" }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 

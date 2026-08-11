@@ -9,6 +9,7 @@ export type AvailabilityMode =
   | "blocked";
 
 export * from "./arrival";
+export * from "./natural-language-schedule";
 
 export interface TimeRange {
   readonly startsAt: string;

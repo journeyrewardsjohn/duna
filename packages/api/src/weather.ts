@@ -11,7 +11,7 @@ const GOOGLE_PLACES_AUTOCOMPLETE_URL =
 const GOOGLE_PLACES_DETAILS_URL = "https://places.googleapis.com/v1/places";
 const FORECAST_CACHE_MS = 30 * 60_000;
 const TOMORROW_STANDARD_FORECAST_HORIZON_MS = 5 * 24 * 60 * 60_000;
-const TOMORROW_FORECAST_HORIZON_MS = 14 * 24 * 60 * 60_000;
+export const WEATHER_FORECAST_HORIZON_MS = 14 * 24 * 60 * 60_000;
 const LOCATION_CACHE_MS = 7 * 24 * 60 * 60_000;
 const LOCATION_MISS_CACHE_MS = 30 * 60_000;
 
@@ -27,6 +27,17 @@ export type ResolvedWeatherCoordinates = {
   readonly longitude: number;
   readonly googlePlaceId?: string;
 };
+
+export function weatherForecastAvailableAt(startsAt: Date): Date {
+  return new Date(startsAt.getTime() - WEATHER_FORECAST_HORIZON_MS);
+}
+
+export function weatherForecastIsAvailable(
+  startsAt: Date,
+  now: Date = new Date(),
+): boolean {
+  return startsAt.getTime() <= now.getTime() + WEATHER_FORECAST_HORIZON_MS;
+}
 
 type LocationCacheEntry = {
   readonly expiresAt: number;
@@ -545,7 +556,7 @@ export async function loadWeatherForecast(input: {
   let source: WeatherForecast["source"] = "calculated-daylight";
   const apiKey = process.env.TOMORROW_IO_API_KEY?.trim();
   const requestIntersectsForecastHorizon =
-    input.startsAt.getTime() <= now.getTime() + TOMORROW_FORECAST_HORIZON_MS &&
+    input.startsAt.getTime() <= now.getTime() + WEATHER_FORECAST_HORIZON_MS &&
     input.endsAt.getTime() >= now.getTime() - 24 * 60 * 60_000;
   if (apiKey && requestIntersectsForecastHorizon) {
     const controller = new AbortController();

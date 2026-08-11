@@ -174,6 +174,22 @@ summary, detected roster names, and privacy mode before saving. Saving never
 publishes. Player-shareable notes require a second explicit confirmation;
 private notes never enter the player feed.
 
+### Tournament admission and Apple Wallet
+
+Tournament players and attendees receive different admission credentials.
+Player registration QR codes are valid only in Duna Pro's player check-in mode;
+fan ticket QR codes are valid only in the ticket validator. Accepted, duplicate,
+and rejected player scans append audit entries, while fan scans use the atomic
+ticket scan ledger. A network failure never grants admission; the device keeps a
+pending entry for explicit validation after reconnecting.
+
+Apple Wallet downloads use five-minute, person-bound signed links. Pass creation
+remains unavailable until `DUNA_WALLET_DOWNLOAD_SECRET`, the Apple pass type and
+team identifiers, the WWDR certificate, and the Pass Type ID signing certificate
+and key are present in the encrypted server environment. Do not copy certificate
+material into source control or between environments. The in-app QR remains the
+authoritative fallback when Wallet signing is unavailable.
+
 ## Partner match-history backfill
 
 Duna HQ’s Sand Data panel can stage a complete SandRating network snapshot.

@@ -11,6 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.duna.pro",
+      "appleTeamId": "4AMCKQA9GL",
       "icon": {
         "light": "./assets/icon-light.png",
         "dark": "./assets/icon.png",
@@ -91,6 +92,12 @@
         {
           "photosPermission": "Duna Pro uses selected photos for product and member media.",
           "cameraPermission": "Duna Pro uses the camera to photograph products and support club operations."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Duna Pro uses the camera to scan player registration and fan ticket QR codes at tournament gates."
         }
       ],
       [

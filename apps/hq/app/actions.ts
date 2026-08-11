@@ -972,6 +972,54 @@ export async function createCalendarBlockAction(
   }
 }
 
+export async function createRecurringCalendarBlocksAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const resourceType = field(formData, "resourceType");
+    if (resourceType !== "court" && resourceType !== "coach") {
+      throw new Error("Choose a court or coach.");
+    }
+    const parsed = JSON.parse(field(formData, "blocks")) as unknown;
+    if (!Array.isArray(parsed)) {
+      throw new Error("Build a schedule draft before saving it.");
+    }
+    const blocks = parsed.map((value) => {
+      if (!value || typeof value !== "object") {
+        throw new Error("The schedule draft contains an invalid block.");
+      }
+      const block = value as Record<string, unknown>;
+      return {
+        weekday: Number(block.weekday),
+        startsAtMinute: Number(block.startsAtMinute),
+        endsAtMinute: Number(block.endsAtMinute),
+      };
+    });
+    const effectiveFrom = field(formData, "effectiveFrom");
+    const effectiveTo = field(formData, "effectiveTo");
+    const caller = await getServerCaller();
+    await caller.operator.createRecurringCalendarBlocks({
+      resourceType,
+      resourceId: field(formData, "resourceId"),
+      blocks,
+      effectiveFrom: effectiveFrom || undefined,
+      effectiveTo: effectiveTo || undefined,
+      mode: "blocked",
+      reason: field(formData, "reason"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      `${blocks.length} recurring schedule block${blocks.length === 1 ? "" : "s"} saved. Existing bookings were left intact.`,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
 export async function addCalendarEquipmentAction(
   _previous: OperatorActionState,
   formData: FormData,

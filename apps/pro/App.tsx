@@ -7,6 +7,10 @@ import {
   type ScoreEvent,
   type ScoringSystem,
 } from "@duna/league-engine";
+import {
+  parseNaturalLanguageSchedule,
+  type NaturalLanguageScheduleDraft,
+} from "@duna/scheduling";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
@@ -41,6 +45,7 @@ import { GetPaidScreen } from "./get-paid";
 import { OperatorCreateScreen } from "./operator-create";
 import { SessionArrivalBoard } from "./session-arrival-board";
 import { SessionNotesScreen } from "./session-notes";
+import { TicketScannerScreen } from "./ticket-scanner";
 import {
   ProRuntimeProvider,
   useProRuntime,
@@ -1331,11 +1336,13 @@ function CalendarScreen({
   focusEntryId,
   onCreate,
   onRecordNotes,
+  onScan,
   onScore,
 }: {
   readonly focusEntryId?: string;
   readonly onCreate: () => void;
   readonly onRecordNotes: (sessionId: string) => void;
+  readonly onScan: () => void;
   readonly onScore: (matchId?: string) => void;
 }) {
   const { client, dashboard, mode, refresh, workspace } = useProRuntime();
@@ -1363,6 +1370,13 @@ function CalendarScreen({
   const [blockStartHour, setBlockStartHour] = useState(9);
   const [blockDuration, setBlockDuration] = useState(60);
   const [blockReason, setBlockReason] = useState("");
+  const [blockCreationMode, setBlockCreationMode] = useState<"one-time" | "ai">(
+    "one-time",
+  );
+  const [aiSchedulePrompt, setAiSchedulePrompt] = useState("");
+  const [aiScheduleDraft, setAiScheduleDraft] =
+    useState<NaturalLanguageScheduleDraft>();
+  const [aiScheduleConfirmed, setAiScheduleConfirmed] = useState(false);
 
   const previewEntries = useMemo<readonly ProCalendarEntry[]>(() => {
     const start = new Date();
@@ -1526,6 +1540,10 @@ function CalendarScreen({
     selectionHaptic();
     setSelectedId(undefined);
     setSheetMode("block");
+    setBlockCreationMode("one-time");
+    setAiSchedulePrompt("");
+    setAiScheduleDraft(undefined);
+    setAiScheduleConfirmed(false);
     setFeedback(undefined);
   };
 
@@ -1550,6 +1568,36 @@ function CalendarScreen({
           (blockMode === "maintenance"
             ? "Facility maintenance window."
             : "Blocked by the organization."),
+        idempotencyKey: Crypto.randomUUID(),
+      }),
+    );
+    if (saved) closeSheet();
+  };
+
+  const createRecurringBlocks = async () => {
+    if (!blockResourceId || aiScheduleDraft?.status !== "ready") {
+      setFeedback("Choose a resource and build a complete schedule draft.");
+      return;
+    }
+    if (!aiScheduleConfirmed) {
+      setFeedback("Review and confirm the recurring schedule first.");
+      return;
+    }
+    const effectiveEnd = calendarDayAtNoon(selectedDate, 90);
+    const saved = await perform("recurring-block", () =>
+      client!.operator.createRecurringCalendarBlocks.mutate({
+        resourceType: blockResourceType,
+        resourceId: blockResourceId,
+        blocks: aiScheduleDraft.blocks.map((block) => ({
+          weekday: block.weekday,
+          startsAtMinute: block.startsAtMinute,
+          endsAtMinute: block.endsAtMinute,
+        })),
+        effectiveFrom: dayKey,
+        effectiveTo: calendarDateKey(effectiveEnd, timezone),
+        mode: "blocked",
+        reason: aiScheduleDraft.reason,
+        confirmed: true,
         idempotencyKey: Crypto.randomUUID(),
       }),
     );
@@ -1609,6 +1657,9 @@ function CalendarScreen({
             </Pressable>
             <Pressable onPress={onCreate} style={styles.calendarNewButton}>
               <Text style={styles.calendarNewButtonText}>＋ Add session</Text>
+            </Pressable>
+            <Pressable onPress={onScan} style={styles.calendarScanButton}>
+              <Text style={styles.calendarScanButtonText}>⌗ Scan passes</Text>
             </Pressable>
           </View>
           <Text style={styles.calendarTimezone}>{timezone}</Text>
@@ -1907,6 +1958,45 @@ function CalendarScreen({
 
               {sheetMode === "block" ? (
                 <>
+                  <Text style={styles.calendarFieldLabel}>CREATE</Text>
+                  <View style={styles.calendarChoiceRow}>
+                    <Pressable
+                      onPress={() => setBlockCreationMode("one-time")}
+                      style={[
+                        styles.calendarChoice,
+                        blockCreationMode === "one-time" &&
+                          styles.calendarChoiceActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.calendarChoiceText,
+                          blockCreationMode === "one-time" &&
+                            styles.calendarChoiceTextActive,
+                        ]}
+                      >
+                        One-time block
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setBlockCreationMode("ai")}
+                      style={[
+                        styles.calendarChoice,
+                        blockCreationMode === "ai" &&
+                          styles.calendarChoiceActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.calendarChoiceText,
+                          blockCreationMode === "ai" &&
+                            styles.calendarChoiceTextActive,
+                        ]}
+                      >
+                        ✦ Duna AI schedule
+                      </Text>
+                    </Pressable>
+                  </View>
                   <Text style={styles.calendarFieldLabel}>RESOURCE TYPE</Text>
                   <View style={styles.calendarChoiceRow}>
                     {(["court", "coach"] as const).map((type) => (
@@ -1962,109 +2052,259 @@ function CalendarScreen({
                       ))}
                     </View>
                   </ScrollView>
-                  <Text style={styles.calendarFieldLabel}>START TIME</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.calendarOptionRow}>
-                      {[6, 8, 10, 12, 14, 16, 18, 20].map((hour) => (
-                        <Pressable
-                          key={hour}
-                          onPress={() => setBlockStartHour(hour)}
-                          style={[
-                            styles.calendarTimeOption,
-                            blockStartHour === hour &&
-                              styles.calendarOptionActive,
-                          ]}
-                        >
-                          <Text
+                  {blockCreationMode === "one-time" ? (
+                    <>
+                      <Text style={styles.calendarFieldLabel}>START TIME</Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                      >
+                        <View style={styles.calendarOptionRow}>
+                          {[6, 8, 10, 12, 14, 16, 18, 20].map((hour) => (
+                            <Pressable
+                              key={hour}
+                              onPress={() => setBlockStartHour(hour)}
+                              style={[
+                                styles.calendarTimeOption,
+                                blockStartHour === hour &&
+                                  styles.calendarOptionActive,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.calendarOptionText,
+                                  blockStartHour === hour &&
+                                    styles.calendarOptionTextActive,
+                                ]}
+                              >
+                                {new Intl.DateTimeFormat("en-US", {
+                                  hour: "numeric",
+                                }).format(new Date(2026, 0, 1, hour, 0, 0, 0))}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </ScrollView>
+                      <Text style={styles.calendarFieldLabel}>DURATION</Text>
+                      <View style={styles.calendarChoiceRow}>
+                        {[30, 60, 90, 120].map((duration) => (
+                          <Pressable
+                            key={duration}
+                            onPress={() => setBlockDuration(duration)}
                             style={[
-                              styles.calendarOptionText,
-                              blockStartHour === hour &&
-                                styles.calendarOptionTextActive,
+                              styles.calendarChoice,
+                              blockDuration === duration &&
+                                styles.calendarChoiceActive,
                             ]}
                           >
-                            {new Intl.DateTimeFormat("en-US", {
-                              hour: "numeric",
-                            }).format(new Date(2026, 0, 1, hour, 0, 0, 0))}
+                            <Text
+                              style={[
+                                styles.calendarChoiceText,
+                                blockDuration === duration &&
+                                  styles.calendarChoiceTextActive,
+                              ]}
+                            >
+                              {duration} min
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                      <Text style={styles.calendarFieldLabel}>BLOCK TYPE</Text>
+                      <View style={styles.calendarChoiceRow}>
+                        {(["blocked", "maintenance"] as const).map((value) => (
+                          <Pressable
+                            key={value}
+                            onPress={() => setBlockMode(value)}
+                            style={[
+                              styles.calendarChoice,
+                              blockMode === value &&
+                                styles.calendarChoiceActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.calendarChoiceText,
+                                blockMode === value &&
+                                  styles.calendarChoiceTextActive,
+                              ]}
+                            >
+                              {value === "blocked"
+                                ? "Unavailable"
+                                : "Maintenance"}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                      <Text style={styles.calendarFieldLabel}>
+                        NOTE FOR THE TEAM
+                      </Text>
+                      <TextInput
+                        multiline
+                        onChangeText={setBlockReason}
+                        placeholder="Lunch, private hold, facility repair…"
+                        placeholderTextColor={colors.muted}
+                        style={styles.calendarTextArea}
+                        value={blockReason}
+                      />
+                      <Text style={styles.calendarTimezoneNote}>
+                        {new Intl.DateTimeFormat("en-US", {
+                          weekday: "long",
+                          month: "long",
+                          day: "numeric",
+                        }).format(selectedDate)}{" "}
+                        · {timezone}
+                      </Text>
+                      <Pressable
+                        disabled={busyAction === "block"}
+                        onPress={() => void createBlock()}
+                        style={styles.calendarSheetPrimary}
+                      >
+                        <Text style={styles.calendarSheetPrimaryText}>
+                          {busyAction === "block"
+                            ? "Blocking…"
+                            : "Block this time"}
+                        </Text>
+                      </Pressable>
+                    </>
+                  ) : (
+                    <>
+                      <View style={styles.calendarAiIntro}>
+                        <Text style={styles.calendarAiIcon}>✦</Text>
+                        <View style={styles.flex}>
+                          <Text style={styles.calendarAiTitle}>
+                            Describe the real constraint.
                           </Text>
+                          <Text style={styles.calendarAiBody}>
+                            Duna drafts weekly blocks. You review every detail
+                            before anything changes.
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={styles.calendarFieldLabel}>
+                        WHAT IS UNAVAILABLE?
+                      </Text>
+                      <TextInput
+                        multiline
+                        onChangeText={(value) => {
+                          setAiSchedulePrompt(value);
+                          setAiScheduleDraft(undefined);
+                          setAiScheduleConfirmed(false);
+                        }}
+                        placeholder="I can’t work on Mon, Weds, Fri from noon–3 PM for school."
+                        placeholderTextColor={colors.muted}
+                        style={styles.calendarTextArea}
+                        value={aiSchedulePrompt}
+                      />
+                      <Pressable
+                        disabled={aiSchedulePrompt.trim().length < 8}
+                        onPress={() =>
+                          setAiScheduleDraft(
+                            parseNaturalLanguageSchedule(aiSchedulePrompt),
+                          )
+                        }
+                        style={[
+                          styles.calendarSheetSecondary,
+                          styles.calendarAiBuildButton,
+                        ]}
+                      >
+                        <Text style={styles.calendarSheetSecondaryText}>
+                          ✦ Build review draft
+                        </Text>
+                      </Pressable>
+                      {aiScheduleDraft && (
+                        <View style={styles.calendarAiDraft}>
+                          <Text style={styles.calendarFieldLabel}>
+                            PROPOSED WEEKLY BLOCKS
+                          </Text>
+                          <Text style={styles.calendarAiDraftTitle}>
+                            {aiScheduleDraft.summary}
+                          </Text>
+                          {aiScheduleDraft.warnings.map((warning) => (
+                            <Text
+                              key={warning}
+                              style={styles.calendarAiWarning}
+                            >
+                              ! {warning}
+                            </Text>
+                          ))}
+                          {aiScheduleDraft.blocks.map((block) => (
+                            <View
+                              key={block.weekday}
+                              style={styles.calendarAiBlock}
+                            >
+                              <Text style={styles.calendarAiBlockDay}>
+                                {block.day}
+                              </Text>
+                              <Text style={styles.calendarAiBlockTime}>
+                                {String(
+                                  Math.floor(block.startsAtMinute / 60),
+                                ).padStart(2, "0")}
+                                :
+                                {String(block.startsAtMinute % 60).padStart(
+                                  2,
+                                  "0",
+                                )}
+                                {" – "}
+                                {String(
+                                  Math.floor(block.endsAtMinute / 60),
+                                ).padStart(2, "0")}
+                                :
+                                {String(block.endsAtMinute % 60).padStart(
+                                  2,
+                                  "0",
+                                )}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                      <Text style={styles.calendarTimezoneNote}>
+                        Applies for 90 days from{" "}
+                        {new Intl.DateTimeFormat("en-US", {
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        }).format(selectedDate)}{" "}
+                        · {timezone}
+                      </Text>
+                      {aiScheduleDraft?.status === "ready" && (
+                        <Pressable
+                          onPress={() =>
+                            setAiScheduleConfirmed((current) => !current)
+                          }
+                          style={styles.calendarAiConfirm}
+                        >
+                          <Text style={styles.calendarAiConfirmMark}>
+                            {aiScheduleConfirmed ? "✓" : ""}
+                          </Text>
+                          <View style={styles.flex}>
+                            <Text style={styles.calendarAiConfirmTitle}>
+                              Confirm this recurring schedule
+                            </Text>
+                            <Text style={styles.calendarAiConfirmBody}>
+                              Existing bookings stay intact. Future availability
+                              honors these blocks.
+                            </Text>
+                          </View>
                         </Pressable>
-                      ))}
-                    </View>
-                  </ScrollView>
-                  <Text style={styles.calendarFieldLabel}>DURATION</Text>
-                  <View style={styles.calendarChoiceRow}>
-                    {[30, 60, 90, 120].map((duration) => (
+                      )}
                       <Pressable
-                        key={duration}
-                        onPress={() => setBlockDuration(duration)}
-                        style={[
-                          styles.calendarChoice,
-                          blockDuration === duration &&
-                            styles.calendarChoiceActive,
-                        ]}
+                        disabled={
+                          busyAction === "recurring-block" ||
+                          !aiScheduleConfirmed ||
+                          aiScheduleDraft?.status !== "ready"
+                        }
+                        onPress={() => void createRecurringBlocks()}
+                        style={styles.calendarSheetPrimary}
                       >
-                        <Text
-                          style={[
-                            styles.calendarChoiceText,
-                            blockDuration === duration &&
-                              styles.calendarChoiceTextActive,
-                          ]}
-                        >
-                          {duration} min
+                        <Text style={styles.calendarSheetPrimaryText}>
+                          {busyAction === "recurring-block"
+                            ? "Saving reviewed schedule…"
+                            : "Confirm recurring blocks"}
                         </Text>
                       </Pressable>
-                    ))}
-                  </View>
-                  <Text style={styles.calendarFieldLabel}>BLOCK TYPE</Text>
-                  <View style={styles.calendarChoiceRow}>
-                    {(["blocked", "maintenance"] as const).map((value) => (
-                      <Pressable
-                        key={value}
-                        onPress={() => setBlockMode(value)}
-                        style={[
-                          styles.calendarChoice,
-                          blockMode === value && styles.calendarChoiceActive,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.calendarChoiceText,
-                            blockMode === value &&
-                              styles.calendarChoiceTextActive,
-                          ]}
-                        >
-                          {value === "blocked" ? "Unavailable" : "Maintenance"}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                  <Text style={styles.calendarFieldLabel}>
-                    NOTE FOR THE TEAM
-                  </Text>
-                  <TextInput
-                    multiline
-                    onChangeText={setBlockReason}
-                    placeholder="Lunch, private hold, facility repair…"
-                    placeholderTextColor={colors.muted}
-                    style={styles.calendarTextArea}
-                    value={blockReason}
-                  />
-                  <Text style={styles.calendarTimezoneNote}>
-                    {new Intl.DateTimeFormat("en-US", {
-                      weekday: "long",
-                      month: "long",
-                      day: "numeric",
-                    }).format(selectedDate)}{" "}
-                    · {timezone}
-                  </Text>
-                  <Pressable
-                    disabled={busyAction === "block"}
-                    onPress={() => void createBlock()}
-                    style={styles.calendarSheetPrimary}
-                  >
-                    <Text style={styles.calendarSheetPrimaryText}>
-                      {busyAction === "block" ? "Blocking…" : "Block this time"}
-                    </Text>
-                  </Pressable>
+                    </>
+                  )}
                 </>
               ) : (
                 selectedEntry && (
@@ -4132,7 +4372,9 @@ function ProApp() {
   const deviceTheme: ThemeName = useColorScheme() === "dark" ? "dark" : "light";
   const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("today");
-  const [surface, setSurface] = useState<"create" | "get-paid" | "score">();
+  const [surface, setSurface] = useState<
+    "create" | "get-paid" | "scan" | "score"
+  >();
   const [sessionNotesId, setSessionNotesId] = useState<string>();
   const [scoreMatchId, setScoreMatchId] = useState<string>();
   const [calendarEntryId, setCalendarEntryId] = useState<string>();
@@ -4141,7 +4383,8 @@ function ProApp() {
   const theme = themePreference === "system" ? deviceTheme : themePreference;
   // v3 ground inversion: operational browsing follows the chosen appearance,
   // while courtside scoring is always the rare, high-focus live ground.
-  const surfaceTheme: ThemeName = surface === "score" ? "dark" : theme;
+  const surfaceTheme: ThemeName =
+    surface === "score" || surface === "scan" ? "dark" : theme;
   const screenTransition = useRef(new Animated.Value(1)).current;
 
   const openCalendar = (entryId?: string) => {
@@ -4275,6 +4518,27 @@ function ProApp() {
           onClose={() => setSurface(undefined)}
           onCreate={() => setSurface("create")}
         />
+      ) : surface === "scan" ? (
+        <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
+          <StatusBar style="light" />
+          <TicketScannerScreen
+            onClose={() => setSurface(undefined)}
+            palette={{
+              canvas: colors.canvas,
+              surface: colors.depth,
+              surfaceAlt: colors.navyLift,
+              border: rgba(colors.overlayRgb, 0.12),
+              text: colors.bone,
+              muted: colors.muted,
+              accent: colors.aqua,
+              onAccent: colors.onAccent,
+              positive: colors.positive,
+              warning: colors.warning,
+              danger: colors.danger,
+              overlay: rgba(colors.inkRgb, 0.35),
+            }}
+          />
+        </SafeAreaView>
       ) : surface === "score" ? (
         <SafeAreaView edges={["top"]} style={styles.safe}>
           <StatusBar style="light" />
@@ -4324,6 +4588,7 @@ function ProApp() {
                   focusEntryId={calendarEntryId}
                   onCreate={() => setSurface("create")}
                   onRecordNotes={setSessionNotesId}
+                  onScan={() => setSurface("scan")}
                   onScore={openScore}
                 />
               )}
@@ -4908,7 +5173,7 @@ function createStyles(palette: Palette) {
       justifyContent: "space-between",
       marginTop: 18,
     },
-    calendarToolbarActions: { flexDirection: "row", gap: 8 },
+    calendarToolbarActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     calendarBlockButton: {
       alignItems: "center",
       borderColor: rgba(colors.overlayRgb, 0.12),
@@ -4932,6 +5197,19 @@ function createStyles(palette: Palette) {
       paddingHorizontal: 13,
     },
     calendarNewButtonText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    calendarScanButton: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 14,
+      justifyContent: "center",
+      minHeight: 42,
+      paddingHorizontal: 13,
+    },
+    calendarScanButtonText: {
       color: colors.onAccent,
       fontSize: 11,
       fontWeight: "900",
@@ -5353,6 +5631,110 @@ function createStyles(palette: Palette) {
       fontSize: 10,
       lineHeight: 15,
       marginTop: 12,
+    },
+    calendarAiIntro: {
+      alignItems: "flex-start",
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderColor: rgba(colors.accentRgb, 0.18),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 18,
+      padding: 13,
+    },
+    calendarAiIcon: {
+      color: colors.warning,
+      fontSize: 20,
+    },
+    calendarAiTitle: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    calendarAiBody: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 3,
+    },
+    calendarAiBuildButton: {
+      flex: 0,
+      marginTop: 10,
+      width: "100%",
+    },
+    calendarAiDraft: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.positiveRgb, 0.3),
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 7,
+      marginTop: 12,
+      padding: 13,
+    },
+    calendarAiDraftTitle: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+      lineHeight: 20,
+    },
+    calendarAiWarning: {
+      color: colors.warning,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    calendarAiBlock: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 11,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: 46,
+      paddingHorizontal: 11,
+    },
+    calendarAiBlockDay: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    calendarAiBlockTime: {
+      color: colors.muted,
+      fontFamily: "Archivo-Chip",
+      fontSize: 13,
+      fontWeight: "800",
+    },
+    calendarAiConfirm: {
+      alignItems: "flex-start",
+      borderColor: rgba(colors.overlayRgb, 0.12),
+      borderRadius: 15,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginVertical: 14,
+      minHeight: 64,
+      padding: 12,
+    },
+    calendarAiConfirmMark: {
+      borderColor: colors.aqua,
+      borderRadius: 6,
+      borderWidth: 1,
+      color: colors.aqua,
+      fontSize: 15,
+      height: 24,
+      lineHeight: 21,
+      textAlign: "center",
+      width: 24,
+    },
+    calendarAiConfirmTitle: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    calendarAiConfirmBody: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 2,
     },
     calendarSheetSummary: {
       backgroundColor: colors.depth,
