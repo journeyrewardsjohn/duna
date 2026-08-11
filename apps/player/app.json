@@ -110,7 +110,7 @@
       [
         "@stripe/stripe-react-native",
         {
-          "merchantIdentifier": [],
+          "merchantIdentifier": ["merchant.com.duna.player"],
           "enableGooglePay": false
         }
       ]

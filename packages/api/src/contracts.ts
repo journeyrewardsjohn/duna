@@ -3622,6 +3622,13 @@ export const organizationWalletSummarySchema = z.object({
   nextExpiringCredits: z.number().int().nonnegative(),
   membershipName: z.string().optional(),
   membershipStatus: z.string().optional(),
+  membershipId: z.string().uuid().optional(),
+  membershipInterval: z.enum(["month", "year"]).optional(),
+  membershipPriceMinor: z.number().int().nonnegative().optional(),
+  membershipCurrency: currencySchema.optional(),
+  membershipCurrentPeriodEndsAt: z.iso.datetime().optional(),
+  membershipCancelAtPeriodEnd: z.boolean().optional(),
+  membershipManageable: z.boolean().optional(),
 });
 
 export const operatorWorkspaceSchema = z.object({

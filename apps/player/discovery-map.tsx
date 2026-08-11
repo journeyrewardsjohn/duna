@@ -30,10 +30,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { FellixText as Text } from "./fellix-text";
 import { resolveDiscoveryMediaUrl } from "./discovery-media";
 import { dunaWebUrl } from "./mobile-api";
+import { type DiscoveryCoordinates } from "./discovery-search";
 import {
-  discoveryDistanceMiles,
-  type DiscoveryCoordinates,
-} from "./discovery-search";
+  buildDrivingMatrixRequest,
+  formatDrivingDistance,
+  formatDrivingDuration,
+  parseDrivingMatrix,
+  type MeasurementSystem,
+  type TravelEstimate,
+} from "./discovery-travel";
 
 type DiscoveryFilter = "all" | DiscoveryEntityType;
 type MapBounds = MapState["properties"]["bounds"];
@@ -338,6 +343,22 @@ function startingCamera(
   };
 }
 
+function mappedCoordinates(
+  items: readonly DiscoveryMapItem[],
+  origin?: DiscoveryCoordinates,
+): readonly [number, number][] {
+  return [
+    ...(origin
+      ? [[origin.longitude, origin.latitude] as [number, number]]
+      : []),
+    ...items.flatMap((item) =>
+      item.latitude !== undefined && item.longitude !== undefined
+        ? [[item.longitude, item.latitude] as [number, number]]
+        : [],
+    ),
+  ];
+}
+
 export function DiscoveryMapPreview({
   items,
   onOpen,
@@ -446,7 +467,7 @@ function resultAction(item: DiscoveryMapItem) {
   return item.kind === "tournament" ? "View tournament" : "View event";
 }
 
-function resultFacts(item: DiscoveryMapItem, origin?: DiscoveryCoordinates) {
+function resultFacts(item: DiscoveryMapItem) {
   const facts: string[] = [];
   if (item.live) facts.push("● LIVE");
   if (item.entityType === "venue" && item.openNow !== undefined) {
@@ -489,14 +510,6 @@ function resultFacts(item: DiscoveryMapItem, origin?: DiscoveryCoordinates) {
     })
     .slice(0, 2)
     .forEach((tag) => facts.push(tag));
-  if (origin && item.latitude !== undefined && item.longitude !== undefined) {
-    const distance = discoveryDistanceMiles(origin, item);
-    facts.push(
-      distance < 10
-        ? `${distance.toFixed(1)} mi`
-        : `${Math.round(distance)} mi`,
-    );
-  }
   return facts.slice(0, 5);
 }
 
@@ -547,27 +560,28 @@ function ActiveResultVideo({
 
 function NativeResultCard({
   item,
+  measurementSystem,
   onPress,
   onVideoToggle,
-  origin,
   styles,
+  travel,
   videoPlaying,
 }: {
   readonly item: DiscoveryMapItem;
+  readonly measurementSystem: MeasurementSystem;
   readonly onPress: (item: DiscoveryMapItem) => void;
   readonly onVideoToggle: (itemId: string, playing: boolean) => void;
-  readonly origin?: DiscoveryCoordinates;
   readonly styles: ReturnType<typeof createStyles>;
+  readonly travel?: TravelEstimate;
   readonly videoPlaying: boolean;
 }) {
-  const facts = resultFacts(item, origin);
+  const facts = resultFacts(item);
   const imageUrl = resolveDiscoveryMediaUrl(item.imageUrl, dunaWebUrl);
   const videoUrl = resolveDiscoveryMediaUrl(item.videoUrl, dunaWebUrl);
   const fit = item.imageFit === "contain" ? "contain" : "cover";
   const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => setImageFailed(false), [imageUrl, item.id]);
-
   return (
     <Pressable
       accessibilityLabel={`${item.title}. ${resultAction(item)}`}
@@ -664,6 +678,26 @@ function NativeResultCard({
         <Text numberOfLines={2} style={styles.resultSubtitle}>
           {item.subtitle}
         </Text>
+        {travel ? (
+          <View style={styles.travelRow}>
+            <View style={styles.travelMetric}>
+              <Text style={styles.travelLabel}>DRIVING DISTANCE</Text>
+              <Text style={styles.travelValue}>
+                {formatDrivingDistance(
+                  travel.distanceMeters,
+                  measurementSystem,
+                )}
+              </Text>
+            </View>
+            <View style={styles.travelDivider} />
+            <View style={styles.travelMetric}>
+              <Text style={styles.travelLabel}>EST. DRIVE NOW</Text>
+              <Text style={styles.travelValue}>
+                {formatDrivingDuration(travel.durationSeconds)}
+              </Text>
+            </View>
+          </View>
+        ) : null}
         {facts.length > 0 ? (
           <View style={styles.factRow}>
             {facts.map((fact) => (
@@ -696,6 +730,7 @@ function closestSnap(
 
 export function DiscoveryMapModal({
   items,
+  measurementSystem = "imperial",
   onClose,
   onSearch,
   onSelect,
@@ -707,6 +742,7 @@ export function DiscoveryMapModal({
   visible,
 }: {
   readonly items: readonly DiscoveryMapItem[];
+  readonly measurementSystem?: MeasurementSystem;
   readonly visible: boolean;
   readonly onClose: () => void;
   readonly onSearch: () => void;
@@ -733,6 +769,9 @@ export function DiscoveryMapModal({
   const [showLocation, setShowLocation] = useState(false);
   const [selectedId, setSelectedId] = useState<string>();
   const [playingVideoId, setPlayingVideoId] = useState<string>();
+  const [travelEstimates, setTravelEstimates] = useState<
+    Readonly<Record<string, TravelEstimate>>
+  >({});
   const [sheetPosition, setSheetPosition] = useState<SheetPosition>("split");
   const positions = useMemo(
     () => ({
@@ -769,11 +808,61 @@ export function DiscoveryMapModal({
 
   useEffect(() => {
     if (!visible || !mapToken) return;
-    cameraRef.current?.setCamera({
-      ...initialCamera,
-      animationDuration: 0,
-    });
-  }, [initialCamera, mapToken, visible]);
+    const coordinates = mappedCoordinates(filtered, origin);
+    firstIdle.current = true;
+    setShowLocation(Boolean(origin));
+    if (coordinates.length === 0) {
+      cameraRef.current?.setCamera({
+        ...initialCamera,
+        animationDuration: 0,
+      });
+      return;
+    }
+    if (coordinates.length === 1) {
+      cameraRef.current?.setCamera({
+        animationDuration: 0,
+        centerCoordinate: coordinates[0],
+        zoomLevel: 10,
+      });
+      return;
+    }
+    const longitudes = coordinates.map(([longitude]) => longitude);
+    const latitudes = coordinates.map(([, latitude]) => latitude);
+    cameraRef.current?.fitBounds(
+      [Math.max(...longitudes), Math.max(...latitudes)],
+      [Math.min(...longitudes), Math.min(...latitudes)],
+      [150, 38, Math.max(260, height * 0.55), 38],
+      0,
+    );
+  }, [filtered, height, initialCamera, mapToken, origin, visible]);
+
+  useEffect(() => {
+    if (!visible || !mapToken || !origin) {
+      setTravelEstimates({});
+      return;
+    }
+    const request = buildDrivingMatrixRequest(origin, listItems, mapToken);
+    if (!request) {
+      setTravelEstimates({});
+      return;
+    }
+    const controller = new AbortController();
+    void fetch(request.url, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) return {};
+        return parseDrivingMatrix(
+          request.destinationIds,
+          (await response.json()) as unknown,
+        );
+      })
+      .then(setTravelEstimates)
+      .catch((error: unknown) => {
+        if (!(error instanceof Error && error.name === "AbortError")) {
+          setTravelEstimates({});
+        }
+      });
+    return () => controller.abort();
+  }, [listItems, mapToken, origin, visible]);
 
   const snapTo = (position: SheetPosition) => {
     setSheetPosition(position);
@@ -1011,6 +1100,7 @@ export function DiscoveryMapModal({
               <Pressable
                 accessibilityRole="button"
                 accessibilityState={{ selected: filter === option.value }}
+                hitSlop={5}
                 key={option.value}
                 onPress={() => setFilter(option.value)}
                 style={[
@@ -1032,6 +1122,7 @@ export function DiscoveryMapModal({
           {mapMoved ? (
             <Pressable
               accessibilityRole="button"
+              hitSlop={5}
               onPress={searchArea}
               style={styles.searchAreaButton}
             >
@@ -1088,12 +1179,13 @@ export function DiscoveryMapModal({
               <NativeResultCard
                 item={item}
                 key={item.id}
+                measurementSystem={measurementSystem}
                 onPress={onSelect}
                 onVideoToggle={(itemId, playing) =>
                   setPlayingVideoId(playing ? itemId : undefined)
                 }
-                origin={origin}
                 styles={styles}
+                travel={travelEstimates[item.id]}
                 videoPlaying={playingVideoId === item.id}
               />
             ))}
@@ -1260,9 +1352,9 @@ function createStyles(token: ResolvedDunaTokens) {
       borderColor: token.hairline,
       borderRadius: radii.pill,
       borderWidth: 1,
-      minHeight: 48,
-      paddingHorizontal: spacing[4],
-      paddingVertical: spacing[3],
+      minHeight: 38,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
     },
     mapFilterActive: {
       backgroundColor: token.buttonPrimaryBackground,
@@ -1275,15 +1367,22 @@ function createStyles(token: ResolvedDunaTokens) {
     },
     searchAreaButton: {
       alignSelf: "center",
-      backgroundColor: token.buttonPrimaryBackground,
+      backgroundColor: token.surface1,
+      borderColor: token.hairlineStrong,
       borderRadius: radii.pill,
+      borderWidth: 1,
+      elevation: 4,
       marginTop: spacing[3],
-      minHeight: 48,
-      paddingHorizontal: spacing[5],
-      paddingVertical: spacing[3],
+      minHeight: 40,
+      paddingHorizontal: spacing[4],
+      paddingVertical: 10,
+      shadowColor: environmentalColors.ink,
+      shadowOffset: { height: 3, width: 0 },
+      shadowOpacity: 0.16,
+      shadowRadius: 10,
     },
     searchAreaText: {
-      color: token.buttonPrimaryForeground,
+      color: token.text1,
       fontSize: 11,
       fontWeight: "900",
     },
@@ -1483,6 +1582,35 @@ function createStyles(token: ResolvedDunaTokens) {
       color: token.text2,
       fontSize: 12,
       lineHeight: 18,
+      marginTop: spacing[1],
+    },
+    travelRow: {
+      backgroundColor: token.surface2,
+      borderColor: token.hairline,
+      borderRadius: radii.medium,
+      borderWidth: 1,
+      flexDirection: "row",
+      marginTop: spacing[3],
+      paddingHorizontal: spacing[3],
+      paddingVertical: spacing[3],
+    },
+    travelMetric: { flex: 1 },
+    travelDivider: {
+      backgroundColor: token.hairlineStrong,
+      marginHorizontal: spacing[3],
+      width: 1,
+    },
+    travelLabel: {
+      color: token.text3,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+    travelValue: {
+      color: token.text1,
+      fontFamily: "Archivo-Table",
+      fontSize: 14,
+      fontWeight: "900",
       marginTop: spacing[1],
     },
     factRow: {

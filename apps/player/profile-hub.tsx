@@ -1,6 +1,9 @@
+import * as Crypto from "expo-crypto";
 import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   Modal,
   Pressable,
@@ -123,6 +126,368 @@ function ProfileDetailsModal({
   );
 }
 
+function subscriptionPrice(
+  amountMinor: number | undefined,
+  currency: string | undefined,
+  interval: "month" | "year" | undefined,
+) {
+  if (amountMinor === undefined || !currency || !interval) return undefined;
+  return `${new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+  }).format(amountMinor / 100)} / ${interval}`;
+}
+
+function periodLabel(value: string | undefined, ending: boolean) {
+  if (!value) return undefined;
+  const formatted = new Date(value).toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  return `${ending ? "Access through" : "Renews"} ${formatted}`;
+}
+
+function SubscriptionManagementModal({
+  onClose,
+  visible,
+}: {
+  readonly onClose: () => void;
+  readonly visible: boolean;
+}) {
+  const { client, mode, organizationWallets, refresh, settings } =
+    usePlayerRuntime();
+  const [busy, setBusy] = useState<string>();
+  const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
+  const dunaMembership = settings?.membership;
+  const organizationMemberships = (organizationWallets ?? []).filter(
+    (organization) =>
+      organization.membershipId &&
+      !["canceled", "cancelled", "incomplete_expired"].includes(
+        organization.membershipStatus ?? "",
+      ),
+  );
+
+  const run = async (key: string, action: () => Promise<unknown>) => {
+    if (!client || mode === "preview") return;
+    setBusy(key);
+    setError(undefined);
+    setNotice(undefined);
+    try {
+      await action();
+      await refresh?.();
+      setNotice("Your subscription was updated.");
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Duna could not update that subscription.",
+      );
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const confirmCancellation = (
+    title: string,
+    onConfirm: () => Promise<unknown>,
+  ) => {
+    Alert.alert(
+      `Cancel ${title}?`,
+      "Your access remains active through the current paid period. You can resume before then.",
+      [
+        { text: "Keep membership", style: "cancel" },
+        {
+          text: "Cancel at period end",
+          style: "destructive",
+          onPress: () => void onConfirm(),
+        },
+      ],
+    );
+  };
+
+  const openBilling = async () => {
+    if (!client || mode === "preview") return;
+    setBusy("billing");
+    setError(undefined);
+    try {
+      const result = await client.player.openPlayerBillingPortal.mutate({
+        returnUrl: `${dunaWebUrl}/app/settings#membership`,
+      });
+      await WebBrowser.openBrowserAsync(result.url);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Duna could not open secure billing management.",
+      );
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="pageSheet"
+      visible={visible}
+    >
+      <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
+        <View style={styles.modalHeader}>
+          <View style={styles.flex}>
+            <Text style={styles.eyebrow}>SUBSCRIPTIONS + BILLING</Text>
+            <Text style={styles.modalTitle}>Your memberships.</Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Close subscription management"
+            onPress={onClose}
+            style={styles.close}
+          >
+            <Text style={styles.closeText}>×</Text>
+          </Pressable>
+        </View>
+        <ScrollView
+          contentContainerStyle={styles.subscriptionContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.subscriptionIntro}>
+            Manage Duna and organization renewals here. Payment details are
+            encrypted and stored by Stripe—not on Duna’s servers.
+          </Text>
+          {notice ? (
+            <Text style={styles.subscriptionNotice}>{notice}</Text>
+          ) : null}
+          {error ? <Text style={styles.subscriptionError}>{error}</Text> : null}
+
+          {dunaMembership ? (
+            <View style={styles.subscriptionCard}>
+              <View style={styles.subscriptionTopRow}>
+                <View style={styles.flex}>
+                  <Text style={styles.subscriptionOwner}>DUNA</Text>
+                  <Text style={styles.subscriptionTitle}>
+                    {dunaMembership.tierName}
+                  </Text>
+                </View>
+                <View style={styles.subscriptionStatusPill}>
+                  <Text style={styles.subscriptionStatusText}>
+                    {dunaMembership.pausedUntil
+                      ? "Paused"
+                      : dunaMembership.cancelAtPeriodEnd
+                        ? "Ending"
+                        : dunaMembership.status}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.subscriptionMeta}>
+                {subscriptionPrice(
+                  dunaMembership.priceMinor,
+                  dunaMembership.currency,
+                  dunaMembership.interval,
+                )}
+              </Text>
+              <Text style={styles.subscriptionPeriod}>
+                {periodLabel(
+                  dunaMembership.currentPeriodEndsAt,
+                  dunaMembership.cancelAtPeriodEnd,
+                )}
+              </Text>
+              <View style={styles.subscriptionActions}>
+                {dunaMembership.cancelAtPeriodEnd ||
+                dunaMembership.pausedUntil ? (
+                  <Pressable
+                    disabled={Boolean(busy)}
+                    onPress={() =>
+                      void run("duna-resume", () =>
+                        client!.player.changeDunaPlusMembership.mutate({
+                          action: "resume",
+                          idempotencyKey: Crypto.randomUUID(),
+                        }),
+                      )
+                    }
+                    style={styles.subscriptionPrimaryAction}
+                  >
+                    <Text style={styles.subscriptionPrimaryText}>Resume</Text>
+                  </Pressable>
+                ) : (
+                  <>
+                    <Pressable
+                      disabled={Boolean(busy)}
+                      onPress={() =>
+                        void run("duna-pause", () =>
+                          client!.player.changeDunaPlusMembership.mutate({
+                            action: "pause",
+                            idempotencyKey: Crypto.randomUUID(),
+                          }),
+                        )
+                      }
+                      style={styles.subscriptionSecondaryAction}
+                    >
+                      <Text style={styles.subscriptionSecondaryText}>
+                        Pause 1 month
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      disabled={Boolean(busy)}
+                      onPress={() =>
+                        confirmCancellation(dunaMembership.tierName, () =>
+                          run("duna-cancel", () =>
+                            client!.player.changeDunaPlusMembership.mutate({
+                              action: "cancel",
+                              idempotencyKey: Crypto.randomUUID(),
+                            }),
+                          ),
+                        )
+                      }
+                      style={styles.subscriptionDangerAction}
+                    >
+                      <Text style={styles.subscriptionDangerText}>Cancel</Text>
+                    </Pressable>
+                  </>
+                )}
+              </View>
+            </View>
+          ) : settings?.dunaPlus.kind === "complimentary" ? (
+            <View style={styles.subscriptionCard}>
+              <Text style={styles.subscriptionOwner}>DUNA</Text>
+              <Text style={styles.subscriptionTitle}>
+                {settings.dunaPlus.label}
+              </Text>
+              <Text style={styles.subscriptionMeta}>
+                Complimentary access · no recurring charge
+              </Text>
+            </View>
+          ) : null}
+
+          {organizationMemberships.map((organization) => {
+            const membershipId = organization.membershipId!;
+            const ending = organization.membershipCancelAtPeriodEnd === true;
+            return (
+              <View key={membershipId} style={styles.subscriptionCard}>
+                <View style={styles.subscriptionTopRow}>
+                  <View style={styles.flex}>
+                    <Text style={styles.subscriptionOwner}>
+                      {organization.organizationName.toUpperCase()}
+                    </Text>
+                    <Text style={styles.subscriptionTitle}>
+                      {organization.membershipName ?? "Membership"}
+                    </Text>
+                  </View>
+                  <View style={styles.subscriptionStatusPill}>
+                    <Text style={styles.subscriptionStatusText}>
+                      {ending
+                        ? "Ending"
+                        : (organization.membershipStatus ?? "Active")}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.subscriptionMeta}>
+                  {subscriptionPrice(
+                    organization.membershipPriceMinor,
+                    organization.membershipCurrency,
+                    organization.membershipInterval,
+                  )}
+                </Text>
+                <Text style={styles.subscriptionPeriod}>
+                  {periodLabel(
+                    organization.membershipCurrentPeriodEndsAt,
+                    ending,
+                  )}
+                </Text>
+                {organization.membershipManageable ? (
+                  <View style={styles.subscriptionActions}>
+                    <Pressable
+                      disabled={Boolean(busy)}
+                      onPress={() => {
+                        const action = ending ? "resume" : "cancel";
+                        const change = () =>
+                          run(`${membershipId}-${action}`, () =>
+                            client!.player.changeOrganizationMembership.mutate({
+                              action,
+                              membershipId,
+                              idempotencyKey: Crypto.randomUUID(),
+                            }),
+                          );
+                        if (action === "cancel") {
+                          confirmCancellation(
+                            organization.membershipName ??
+                              organization.organizationName,
+                            change,
+                          );
+                        } else {
+                          void change();
+                        }
+                      }}
+                      style={
+                        ending
+                          ? styles.subscriptionPrimaryAction
+                          : styles.subscriptionDangerAction
+                      }
+                    >
+                      <Text
+                        style={
+                          ending
+                            ? styles.subscriptionPrimaryText
+                            : styles.subscriptionDangerText
+                        }
+                      >
+                        {ending ? "Resume" : "Cancel at period end"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Text style={styles.subscriptionManagedExternally}>
+                    Contact {organization.organizationName} to change this
+                    membership.
+                  </Text>
+                )}
+              </View>
+            );
+          })}
+
+          {!dunaMembership &&
+          settings?.dunaPlus.kind !== "complimentary" &&
+          organizationMemberships.length === 0 ? (
+            <View style={styles.subscriptionEmpty}>
+              <Text style={styles.subscriptionTitle}>
+                No active subscriptions.
+              </Text>
+              <Text style={styles.subscriptionMeta}>
+                Club, coach, and Duna memberships will appear here after you
+                join.
+              </Text>
+            </View>
+          ) : null}
+
+          <Pressable
+            accessibilityHint="Opens Stripe’s secure billing management"
+            accessibilityRole="button"
+            disabled={Boolean(busy) || mode === "preview"}
+            onPress={() => void openBilling()}
+            style={styles.billingButton}
+          >
+            {busy === "billing" ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <>
+                <Text style={styles.billingButtonText}>
+                  Payment methods + invoices
+                </Text>
+                <Text style={styles.billingButtonArrow}>↗</Text>
+              </>
+            )}
+          </Pressable>
+          <Text style={styles.billingFootnote}>
+            Stripe opens a secure, account-specific billing page. Duna never
+            receives or stores your full card number or security code.
+          </Text>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 export function ProfileHubScreen({
   onArtwork,
   onDestination,
@@ -147,6 +512,7 @@ export function ProfileHubScreen({
   } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
   const [profileOpen, setProfileOpen] = useState(false);
+  const [subscriptionsOpen, setSubscriptionsOpen] = useState(false);
   const actions: readonly {
     readonly key: HubDestination;
     readonly icon: string;
@@ -339,11 +705,23 @@ export function ProfileHubScreen({
           </View>
         </View>
         <View style={styles.settings}>
+          <Pressable
+            disabled={mode === "preview"}
+            onPress={() => setSubscriptionsOpen(true)}
+            style={styles.setting}
+          >
+            <View style={styles.flex}>
+              <Text style={styles.settingText}>Subscriptions + billing</Text>
+              <Text style={styles.settingMeta}>
+                Duna, clubs, organizations, and coaches
+              </Text>
+            </View>
+            <Text style={styles.settingArrow}>›</Text>
+          </Pressable>
           {[
             ["Notifications", "#notifications"],
             ["Privacy + safety", "#privacy"],
             ["Language + units", "#profile"],
-            ["Manage Duna+", "#membership"],
             ["Account + security", "#account"],
           ].map(([title, anchor]) => (
             <Pressable
@@ -379,6 +757,10 @@ export function ProfileHubScreen({
         }}
         visible={profileOpen}
       />
+      <SubscriptionManagementModal
+        onClose={() => setSubscriptionsOpen(false)}
+        visible={subscriptionsOpen}
+      />
     </>
   );
 }
@@ -410,6 +792,29 @@ const styles = StyleSheet.create({
     width: 48,
   },
   closeText: { color: "#111719", fontSize: 30, lineHeight: 34 },
+  billingButton: {
+    alignItems: "center",
+    backgroundColor: "#203740",
+    borderRadius: 18,
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 8,
+    minHeight: 58,
+    paddingHorizontal: 18,
+  },
+  billingButtonArrow: {
+    color: "#ffffff",
+    fontSize: 18,
+    marginLeft: 10,
+  },
+  billingButtonText: { color: "#ffffff", fontSize: 15, fontWeight: "800" },
+  billingFootnote: {
+    color: "#777166",
+    fontSize: 11,
+    lineHeight: 17,
+    paddingHorizontal: 8,
+    textAlign: "center",
+  },
   detailFact: { alignItems: "center", flex: 1 },
   detailFactLabel: {
     color: "#777166",
@@ -477,6 +882,129 @@ const styles = StyleSheet.create({
     fontSize: 25,
     fontWeight: "800",
     marginTop: 3,
+  },
+  subscriptionActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 17,
+  },
+  subscriptionCard: {
+    backgroundColor: "#ffffff",
+    borderColor: "#dfdfdc",
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 18,
+  },
+  subscriptionContent: { gap: 13, padding: 18, paddingBottom: 48 },
+  subscriptionDangerAction: {
+    alignItems: "center",
+    borderColor: "#d8b0aa",
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 45,
+    paddingHorizontal: 15,
+  },
+  subscriptionDangerText: {
+    color: "#a54032",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  subscriptionEmpty: {
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderColor: "#dfdfdc",
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 26,
+  },
+  subscriptionError: {
+    backgroundColor: "#f9e9e6",
+    borderRadius: 14,
+    color: "#a54032",
+    fontSize: 12,
+    lineHeight: 18,
+    padding: 13,
+  },
+  subscriptionIntro: { color: "#706a60", fontSize: 14, lineHeight: 21 },
+  subscriptionManagedExternally: {
+    color: "#777166",
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 15,
+  },
+  subscriptionMeta: {
+    color: "#706a60",
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 7,
+  },
+  subscriptionNotice: {
+    backgroundColor: "#e6f2ea",
+    borderRadius: 14,
+    color: "#2f6b3a",
+    fontSize: 12,
+    fontWeight: "700",
+    padding: 13,
+  },
+  subscriptionOwner: {
+    color: "#3d6672",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  subscriptionPeriod: { color: "#777166", fontSize: 11, marginTop: 4 },
+  subscriptionPrimaryAction: {
+    alignItems: "center",
+    backgroundColor: "#203740",
+    borderRadius: 14,
+    justifyContent: "center",
+    minHeight: 45,
+    paddingHorizontal: 16,
+  },
+  subscriptionPrimaryText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  subscriptionSecondaryAction: {
+    alignItems: "center",
+    borderColor: "#b7c4c8",
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 45,
+    paddingHorizontal: 15,
+  },
+  subscriptionSecondaryText: {
+    color: "#203740",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  subscriptionStatusPill: {
+    backgroundColor: "#e9efef",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  subscriptionStatusText: {
+    color: "#203740",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "capitalize",
+  },
+  subscriptionTitle: {
+    color: "#111719",
+    fontSize: 20,
+    fontWeight: "900",
+    letterSpacing: -0.4,
+    marginTop: 4,
+  },
+  subscriptionTopRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 10,
   },
   organization: {
     alignItems: "center",
@@ -611,6 +1139,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
   },
   settingArrow: { color: "#777166", fontSize: 23 },
+  settingMeta: { color: "#777166", fontSize: 10, marginTop: 3 },
   settingText: { color: "#111719", flex: 1, fontSize: 15, fontWeight: "700" },
   settings: {
     backgroundColor: "#ffffff",
