@@ -34,6 +34,7 @@ export async function sendPlayerMessage(formData: FormData) {
         kind: "text",
         body,
         widgets: [],
+        attachmentUploadIds: [],
       },
     });
   }

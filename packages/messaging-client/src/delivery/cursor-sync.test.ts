@@ -72,6 +72,7 @@ describe("CursorSyncEngine", () => {
               kind: "text",
               body: "Hello",
               widgets: [],
+              attachments: [],
               status: "published",
               moderationState: "not-required",
               createdAt: "2026-08-11T10:00:00.000Z",
@@ -207,6 +208,7 @@ describe("CursorSyncEngine", () => {
                   },
                   kind: "text",
                   widgets: [],
+                  attachments: [],
                   status,
                   moderationState:
                     status === "removed" ? "blocked" : "not-required",

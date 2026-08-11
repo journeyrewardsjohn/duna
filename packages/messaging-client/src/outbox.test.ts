@@ -10,6 +10,7 @@ describe("MessagingOutbox", () => {
       kind: "text" as const,
       body: "Court 2 is ready.",
       widgets: [],
+      attachmentUploadIds: [],
     };
     await outbox.enqueue(input);
     await outbox.enqueue(input);

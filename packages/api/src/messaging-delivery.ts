@@ -23,6 +23,7 @@ import { and, asc, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { ApiActor } from "./context";
 import {
   canUseOrganizationMessaging,
+  loadMessageAttachmentDirectory,
   MessagingError,
   type MessagingPrincipalMode,
 } from "./messaging-service";
@@ -232,6 +233,10 @@ function fallbackPrincipal(type: PrincipalType, id: string) {
 function messageFromRow(
   row: MessageRow,
   directory: ReadonlyMap<string, MessagingPrincipal>,
+  attachments: ReadonlyMap<
+    string,
+    ConversationMessage["attachments"]
+  > = new Map(),
 ): ConversationMessage {
   const sender =
     directory.get(
@@ -247,6 +252,7 @@ function messageFromRow(
     kind: row.kind,
     ...(!removed && row.body ? { body: row.body } : {}),
     widgets: removed ? [] : (row.widgets as ConversationMessage["widgets"]),
+    attachments: removed ? [] : (attachments.get(row.id) ?? []),
     status: row.status,
     moderationState: row.moderationState,
     createdAt: row.createdAt.toISOString(),
@@ -506,6 +512,9 @@ export async function loadDeliveryInbox(input: {
     messages: latestRows,
     participants: participantRows,
   });
+  const attachmentDirectory = await loadMessageAttachmentDirectory(
+    latestRows.map((message) => message.id),
+  );
   const participantsByConversation = new Map<string, ParticipantRow[]>();
   for (const participant of participantRows) {
     const current = participantsByConversation.get(participant.conversationId);
@@ -565,7 +574,11 @@ export async function loadDeliveryInbox(input: {
           }
         : {}),
       participants,
-      ...(latest ? { lastMessage: messageFromRow(latest, directory) } : {}),
+      ...(latest
+        ? {
+            lastMessage: messageFromRow(latest, directory, attachmentDirectory),
+          }
+        : {}),
       unreadCount: unreadByConversation.get(conversation.id) ?? 0,
       announcementOnly: conversation.announcementOnly,
       muted: membership.notificationLevel === "muted",
@@ -676,8 +689,13 @@ export async function loadDeliveryMessages(input: {
   const pageRows = rows.slice(0, limit);
   if (history) pageRows.reverse();
   const directory = await principalDirectory({ messages: pageRows });
+  const attachmentDirectory = await loadMessageAttachmentDirectory(
+    pageRows.map((message) => message.id),
+  );
   return {
-    items: pageRows.map((message) => messageFromRow(message, directory)),
+    items: pageRows.map((message) =>
+      messageFromRow(message, directory, attachmentDirectory),
+    ),
     nextCursor:
       hasMore && pageRows.length > 0
         ? String(history ? pageRows[0]!.sequence : pageRows.at(-1)!.sequence)

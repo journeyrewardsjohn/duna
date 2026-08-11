@@ -1,10 +1,15 @@
 import {
+  beginMessageAttachmentUploadInputSchema,
+  completeMessageAttachmentUploadInputSchema,
   conversationDetailSchema,
   conversationMessageSchema,
   createConversationInputSchema,
   dunaSupportResultSchema,
   inboxSchema,
   messageActionInputSchema,
+  messageAttachmentUploadPartSchema,
+  messageAttachmentUploadResultSchema,
+  messageAttachmentUploadSessionSchema,
   messagingComposeOptionsSchema,
   messagingActionResultSchema,
   messagingPushDeviceInputSchema,
@@ -21,6 +26,9 @@ import {
   superAdminProcedure,
 } from "./auth";
 import {
+  abortMessageAttachmentUpload,
+  beginMessageAttachmentUpload,
+  completeMessageAttachmentUpload,
   createMessagingConversation,
   appendAgentConversationMessage,
   loadDunaSupportQueue,
@@ -30,6 +38,7 @@ import {
   loadMessagingModerationQueue,
   markConversationRead,
   MessagingError,
+  presignMessageAttachmentPart,
   recordConversationMessageAction,
   reportConversationMessage,
   reviewMessagingModerationCase,
@@ -67,6 +76,14 @@ const messagingWriteProcedure = protectedProcedure.use(
     id: "messaging-write",
     capacity: 90,
     refillPerMinute: 60,
+  }),
+);
+
+const messagingUploadProcedure = protectedProcedure.use(
+  rateLimitMiddleware({
+    id: "messaging-upload-parts",
+    capacity: 600,
+    refillPerMinute: 300,
   }),
 );
 
@@ -155,6 +172,73 @@ export const messagingRouter = router({
           asPrincipal: input.asPrincipal,
           message: input.message,
           requestId: ctx.requestId,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return messagingFailure(error);
+      }
+    }),
+  beginAttachmentUpload: messagingWriteProcedure
+    .input(
+      z.object({
+        asPrincipal: principalModeSchema,
+        attachment: beginMessageAttachmentUploadInputSchema,
+      }),
+    )
+    .output(messageAttachmentUploadSessionSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await beginMessageAttachmentUpload({
+          actor: ctx.actor!,
+          asPrincipal: input.asPrincipal,
+          attachment: input.attachment,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return messagingFailure(error);
+      }
+    }),
+  attachmentPartUrl: messagingUploadProcedure
+    .input(
+      z.object({
+        uploadId: z.string().uuid(),
+        partNumber: z.number().int().positive().max(10_000),
+      }),
+    )
+    .output(messageAttachmentUploadPartSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await presignMessageAttachmentPart({
+          actor: ctx.actor!,
+          ...input,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return messagingFailure(error);
+      }
+    }),
+  completeAttachmentUpload: messagingWriteProcedure
+    .input(completeMessageAttachmentUploadInputSchema)
+    .output(messageAttachmentUploadResultSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await completeMessageAttachmentUpload({
+          actor: ctx.actor!,
+          completion: input,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return messagingFailure(error);
+      }
+    }),
+  abortAttachmentUpload: messagingWriteProcedure
+    .input(z.object({ uploadId: z.string().uuid() }))
+    .output(messagingActionResultSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await abortMessageAttachmentUpload({
+          actor: ctx.actor!,
+          uploadId: input.uploadId,
           now: ctx.now,
         });
       } catch (error) {

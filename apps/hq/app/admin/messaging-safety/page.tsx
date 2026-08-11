@@ -1,6 +1,8 @@
 import {
   CheckCircle2,
   Clock3,
+  FileText,
+  Play,
   Siren,
   MessageSquareWarning,
   ShieldAlert,
@@ -90,6 +92,48 @@ export default async function MessageSafetyPage() {
                   {item.messagePreview ??
                     "Message content is unavailable in this view."}
                 </blockquote>
+                {item.attachments.length > 0 && (
+                  <div className={styles.reviewAttachments}>
+                    {item.attachments.map((attachment) =>
+                      attachment.kind === "image" && attachment.downloadUrl ? (
+                        <a
+                          href={attachment.downloadUrl}
+                          key={attachment.id}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          <img
+                            alt={`Held attachment: ${attachment.fileName}`}
+                            src={attachment.downloadUrl}
+                          />
+                          <span>{attachment.fileName}</span>
+                        </a>
+                      ) : attachment.kind === "video" &&
+                        attachment.downloadUrl ? (
+                        <a
+                          href={attachment.downloadUrl}
+                          key={attachment.id}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          <Play aria-hidden size={20} />
+                          <span>Review video · {attachment.fileName}</span>
+                        </a>
+                      ) : (
+                        <a
+                          aria-disabled={!attachment.downloadUrl}
+                          href={attachment.downloadUrl}
+                          key={attachment.id}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          <FileText aria-hidden size={20} />
+                          <span>{attachment.fileName}</span>
+                        </a>
+                      ),
+                    )}
+                  </div>
+                )}
                 <p>{item.explanation}</p>
                 <div className={styles.categoryRow}>
                   {item.categories.map((category) => (

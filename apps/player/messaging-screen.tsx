@@ -4,6 +4,7 @@ import {
   type ConversationDetail,
   type ConversationMessage,
   type ConversationSummary,
+  type MessageAttachment,
   type MessageWidget,
   type MessagingInbox,
   type MessagingComposeOptions,
@@ -12,12 +13,15 @@ import {
   type SendMessageInput,
 } from "@duna/messaging-client";
 import * as Crypto from "expo-crypto";
+import { File, FileMode } from "expo-file-system";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import {
   ActivityIndicator,
   Alert,
   AppState,
-  KeyboardAvoidingView,
+  Image,
+  Keyboard,
   Linking,
   Modal,
   Platform,
@@ -29,10 +33,12 @@ import {
   View,
 } from "react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   FellixText as Text,
   FellixTextInput as TextInput,
 } from "./fellix-text";
+import VideoCapture from "./modules/duna-video-capture";
 import { createPlayerMessagingOutbox } from "./messaging-outbox";
 import {
   messagingNotificationsEnabled,
@@ -59,7 +65,159 @@ interface PlayerMessagingScreenProps {
   readonly initialConversationId?: string;
   readonly initialSupport?: boolean;
   readonly onClose: () => void;
+  readonly onUnreadCountChange?: (count: number) => void;
   readonly palette: MessagingPalette;
+}
+
+type InboxFilter = "all" | "unread" | "organizations" | "events" | "followers";
+
+interface SelectedAttachment {
+  readonly id: string;
+  readonly uri: string;
+  readonly fileName: string;
+  readonly mediaType: string;
+  readonly byteSize: number;
+  readonly kind: MessageAttachment["kind"];
+  readonly progress: number;
+}
+
+const ATTACHMENT_LIMITS = {
+  image: 50 * 1024 * 1024,
+  video: 1024 * 1024 * 1024,
+  file: 250 * 1024 * 1024,
+} as const;
+const ATTACHMENT_MESSAGE_LIMIT = 1024 * 1024 * 1024;
+
+const IMAGE_MEDIA_TYPES = [
+  "image/avif",
+  "image/gif",
+  "image/heic",
+  "image/heif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+] as const;
+
+const VIDEO_MEDIA_TYPES = [
+  "video/3gpp",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+  "video/x-m4v",
+] as const;
+
+const DOCUMENT_MEDIA_TYPES = [
+  "application/pdf",
+  "application/rtf",
+  "application/vnd.oasis.opendocument.presentation",
+  "application/vnd.oasis.opendocument.spreadsheet",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/csv",
+  "text/plain",
+] as const;
+
+function attachmentKind(
+  mediaType: string,
+): MessageAttachment["kind"] | undefined {
+  if (
+    IMAGE_MEDIA_TYPES.includes(mediaType as (typeof IMAGE_MEDIA_TYPES)[number])
+  ) {
+    return "image";
+  }
+  if (
+    VIDEO_MEDIA_TYPES.includes(mediaType as (typeof VIDEO_MEDIA_TYPES)[number])
+  ) {
+    return "video";
+  }
+  if (
+    DOCUMENT_MEDIA_TYPES.includes(
+      mediaType as (typeof DOCUMENT_MEDIA_TYPES)[number],
+    )
+  ) {
+    return "file";
+  }
+  return undefined;
+}
+
+function attachmentSizeLabel(bytes: number) {
+  if (bytes >= 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  }
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function fallbackMediaType(fileName: string, kind?: "image" | "video") {
+  const extension = fileName.split(".").at(-1)?.toLowerCase();
+  if (kind === "image") {
+    if (extension === "png") return "image/png";
+    if (extension === "webp") return "image/webp";
+    if (extension === "heic") return "image/heic";
+    return "image/jpeg";
+  }
+  if (kind === "video") {
+    if (extension === "mov") return "video/quicktime";
+    return "video/mp4";
+  }
+  const documentTypes: Record<string, string> = {
+    csv: "text/csv",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    pdf: "application/pdf",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    rtf: "application/rtf",
+    txt: "text/plain",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  };
+  return documentTypes[extension ?? ""] ?? "application/octet-stream";
+}
+
+async function uploadMessageAttachmentPart(input: {
+  readonly file: File;
+  readonly fileUri: string;
+  readonly mediaType: string;
+  readonly offset: number;
+  readonly length: number;
+  readonly uploadUrl: string;
+}): Promise<string> {
+  if (VideoCapture) {
+    const uploaded = await VideoCapture.uploadPart(
+      input.fileUri,
+      input.uploadUrl,
+      input.offset,
+      input.length,
+    );
+    if (uploaded.sizeBytes !== input.length || !uploaded.etag) {
+      throw new Error("Private storage did not confirm the upload.");
+    }
+    return uploaded.etag;
+  }
+
+  const handle = input.file.open(FileMode.ReadOnly);
+  let bytes: Uint8Array<ArrayBuffer>;
+  try {
+    handle.offset = input.offset;
+    bytes = handle.readBytes(input.length);
+  } finally {
+    handle.close();
+  }
+  if (bytes.byteLength !== input.length) {
+    throw new Error("The selected file could not be read.");
+  }
+  const response = await fetch(input.uploadUrl, {
+    method: "PUT",
+    body: new Blob([bytes], { type: input.mediaType }),
+  });
+  if (!response.ok) {
+    throw new Error("Private storage rejected part of the upload.");
+  }
+  const etag = response.headers.get("etag");
+  if (!etag) {
+    throw new Error("Private storage did not confirm the upload.");
+  }
+  return etag;
 }
 
 function timeLabel(value: string) {
@@ -244,19 +402,161 @@ function WidgetCard({
   );
 }
 
+function ProBadge({ palette }: { readonly palette: MessagingPalette }) {
+  return (
+    <View
+      accessibilityLabel="Verified Duna Pro"
+      style={[stylesBase.proBadge, { backgroundColor: palette.warning }]}
+    >
+      <Text style={[stylesBase.proBadgeText, { color: palette.canvas }]}>
+        ✓
+      </Text>
+    </View>
+  );
+}
+
+function PrincipalAvatar({
+  palette,
+  principal,
+  size = 52,
+}: {
+  readonly palette: MessagingPalette;
+  readonly principal?: MessagingPrincipal;
+  readonly size?: number;
+}) {
+  const label = principal?.displayName ?? "Duna";
+  if (principal?.avatarUrl) {
+    return (
+      <Image
+        accessibilityLabel={label}
+        source={{ uri: principal.avatarUrl }}
+        style={{ borderRadius: size / 2, height: size, width: size }}
+      />
+    );
+  }
+  return (
+    <View
+      style={{
+        alignItems: "center",
+        backgroundColor: palette.surfaceAlt,
+        borderRadius: size / 2,
+        height: size,
+        justifyContent: "center",
+        width: size,
+      }}
+    >
+      <Text
+        style={{
+          color: palette.accent,
+          fontSize: size * 0.3,
+          fontWeight: "900",
+        }}
+      >
+        {principal?.type === "agent" ? "✦" : label.slice(0, 1).toUpperCase()}
+      </Text>
+    </View>
+  );
+}
+
+function AttachmentPreview({
+  attachment,
+  mine,
+  palette,
+}: {
+  readonly attachment: MessageAttachment;
+  readonly mine: boolean;
+  readonly palette: MessagingPalette;
+}) {
+  const styles = useMemo(() => createStyles(palette), [palette]);
+  const available = Boolean(attachment.downloadUrl);
+  const open = () => {
+    if (attachment.downloadUrl) void Linking.openURL(attachment.downloadUrl);
+  };
+  if (attachment.kind === "image" && attachment.downloadUrl) {
+    return (
+      <Pressable
+        accessibilityLabel={`Open ${attachment.fileName}`}
+        onPress={open}
+      >
+        <Image
+          resizeMode="cover"
+          source={{ uri: attachment.downloadUrl }}
+          style={styles.attachmentImage}
+        />
+        <Text
+          style={[styles.attachmentCaption, mine && styles.messageTimeMine]}
+        >
+          {attachment.fileName} · {attachmentSizeLabel(attachment.byteSize)}
+        </Text>
+      </Pressable>
+    );
+  }
+  return (
+    <Pressable
+      accessibilityLabel={`${available ? "Open" : "Unavailable"} ${attachment.fileName}`}
+      disabled={!available}
+      onPress={open}
+      style={[styles.attachmentCard, mine && styles.attachmentCardMine]}
+    >
+      <View style={styles.attachmentGlyph}>
+        <Text style={styles.attachmentGlyphText}>
+          {attachment.kind === "video" ? "▶" : "DOC"}
+        </Text>
+      </View>
+      <View style={styles.flex}>
+        <Text
+          numberOfLines={1}
+          style={[styles.attachmentName, mine && styles.messageBodyMine]}
+        >
+          {attachment.fileName}
+        </Text>
+        <Text style={[styles.attachmentMeta, mine && styles.messageTimeMine]}>
+          {attachmentSizeLabel(attachment.byteSize)}
+          {!available
+            ? attachment.safetyStatus === "blocked"
+              ? " · Blocked"
+              : attachment.safetyStatus !== "safe"
+                ? " · Safety review"
+                : " · Temporarily unavailable"
+            : attachment.kind === "video"
+              ? " · Tap to play"
+              : " · Tap to open"}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+const stylesBase = StyleSheet.create({
+  proBadge: {
+    alignItems: "center",
+    borderRadius: 8,
+    height: 16,
+    justifyContent: "center",
+    width: 16,
+  },
+  proBadgeText: { fontSize: 10, fontWeight: "900", lineHeight: 12 },
+});
+
 function ConversationRow({
   conversation,
   onPress,
   palette,
+  principal,
   selected,
 }: {
   readonly conversation: ConversationSummary;
   readonly onPress: () => void;
   readonly palette: MessagingPalette;
+  readonly principal: MessagingPrincipal;
   readonly selected: boolean;
 }) {
   const styles = useMemo(() => createStyles(palette), [palette]);
-  const lead = conversation.participants[0]?.displayName ?? conversation.title;
+  const lead =
+    conversation.participants.find(
+      (participant) =>
+        participant.type !== principal.type || participant.id !== principal.id,
+    ) ?? conversation.participants[0];
   return (
     <Pressable
       accessibilityLabel={`${conversation.title}, ${conversation.unreadCount} unread`}
@@ -266,18 +566,15 @@ function ConversationRow({
         selected && styles.conversationRowSelected,
       ]}
     >
-      <View style={styles.conversationMark}>
-        <Text style={styles.conversationMarkText}>
-          {conversation.type === "support"
-            ? "✦"
-            : lead.slice(0, 1).toUpperCase()}
-        </Text>
-      </View>
+      <PrincipalAvatar palette={palette} principal={lead} />
       <View style={styles.flex}>
         <View style={styles.rowBetween}>
-          <Text numberOfLines={1} style={styles.conversationTitle}>
-            {conversation.title}
-          </Text>
+          <View style={styles.conversationTitleRow}>
+            <Text numberOfLines={1} style={styles.conversationTitle}>
+              {conversation.title}
+            </Text>
+            {lead?.isProfessional && <ProBadge palette={palette} />}
+          </View>
           <Text style={styles.timeText}>
             {conversation.lastMessage
               ? timeLabel(conversation.lastMessage.createdAt)
@@ -285,7 +582,10 @@ function ConversationRow({
           </Text>
         </View>
         <Text numberOfLines={2} style={styles.conversationPreview}>
-          {conversation.lastMessage?.body ?? "Start the conversation"}
+          {conversation.lastMessage?.body ??
+            (conversation.lastMessage?.attachments.length
+              ? `${conversation.lastMessage.attachments.length} attachment${conversation.lastMessage.attachments.length === 1 ? "" : "s"}`
+              : "Start the conversation")}
         </Text>
         <View style={styles.conversationMetaRow}>
           {conversation.context && (
@@ -349,6 +649,14 @@ function MessageBubble({
             widget={widget}
           />
         ))}
+        {message.attachments.map((attachment) => (
+          <AttachmentPreview
+            attachment={attachment}
+            key={attachment.id}
+            mine={mine}
+            palette={palette}
+          />
+        ))}
         <View style={styles.messageStatusRow}>
           <Text style={[styles.messageTime, mine && styles.messageTimeMine]}>
             {timeLabel(message.createdAt)}
@@ -369,9 +677,11 @@ export function PlayerMessagingScreen({
   initialConversationId,
   initialSupport = false,
   onClose,
+  onUnreadCountChange,
   palette,
 }: PlayerMessagingScreenProps) {
   const styles = useMemo(() => createStyles(palette), [palette]);
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const wide = width >= 820;
   const { client, dashboard, messagingDelivery, mode } = usePlayerRuntime();
@@ -392,6 +702,11 @@ export function PlayerMessagingScreen({
   const [selectedId, setSelectedId] = useState<string>();
   const [detail, setDetail] = useState<ConversationDetail>();
   const [draft, setDraft] = useState("");
+  const [attachments, setAttachments] = useState<readonly SelectedAttachment[]>(
+    [],
+  );
+  const [inboxFilter, setInboxFilter] = useState<InboxFilter>("all");
+  const [inboxSearch, setInboxSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
@@ -401,7 +716,7 @@ export function PlayerMessagingScreen({
     useState<MessagingComposeOptions>();
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeTitle, setComposeTitle] = useState("");
-  const [composeBody, setComposeBody] = useState("");
+  const [composeSearch, setComposeSearch] = useState("");
   const [composeFollowerBroadcast, setComposeFollowerBroadcast] =
     useState(false);
   const [composeRecipients, setComposeRecipients] = useState<readonly string[]>(
@@ -410,6 +725,7 @@ export function PlayerMessagingScreen({
   const [creating, setCreating] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>();
   const [enablingNotifications, setEnablingNotifications] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const threadScroll = useRef<ScrollView>(null);
 
   const loadInbox = useCallback(async () => {
@@ -469,6 +785,23 @@ export function PlayerMessagingScreen({
               conversationId,
             });
       setDetail(nextDetail);
+      setInbox((current) => {
+        if (!current) return current;
+        const opened = current.conversations.find(
+          (conversation) => conversation.id === conversationId,
+        );
+        if (!opened?.unreadCount) return current;
+        const next = {
+          ...current,
+          conversations: current.conversations.map((conversation) =>
+            conversation.id === conversationId
+              ? { ...conversation, unreadCount: 0 }
+              : conversation,
+          ),
+          totalUnread: Math.max(0, current.totalUnread - opened.unreadCount),
+        };
+        return next;
+      });
       const lastSequence = nextDetail.messages.at(-1)?.seq ?? 0;
       if (mode === "live" && client && lastSequence > 0) {
         if (messagingDelivery) {
@@ -488,6 +821,10 @@ export function PlayerMessagingScreen({
     [client, messagingDelivery, mode],
   );
 
+  useEffect(() => {
+    if (inbox) onUnreadCountChange?.(inbox.totalUnread);
+  }, [inbox, onUnreadCountChange]);
+
   const flushOutbox = useCallback(
     async (inboxSnapshot?: MessagingInbox) => {
       const queued = await outbox.pending();
@@ -502,7 +839,11 @@ export function PlayerMessagingScreen({
               conversation.id === item.input.conversationId &&
               conversation.type === "support",
           );
-          if (support && item.input.body) {
+          if (
+            support &&
+            item.input.body &&
+            item.input.attachmentUploadIds.length === 0
+          ) {
             await client.messaging.askDuna.mutate({
               conversationId: item.input.conversationId,
               question: item.input.body,
@@ -583,7 +924,6 @@ export function PlayerMessagingScreen({
   }, [client, enablingNotifications]);
 
   useEffect(() => {
-    if (!composeOpen) return;
     if (mode === "preview" || !client) {
       setComposeOptions({
         candidates: [
@@ -592,8 +932,26 @@ export function PlayerMessagingScreen({
               type: "user",
               id: "1dc66d99-ec02-4d10-8845-788ee74c63ac",
               displayName: "Mia Rivera",
+              isProfessional: true,
             },
             isMinor: true,
+          },
+          {
+            principal: {
+              type: "user",
+              id: "2dc66d99-ec02-4d10-8845-788ee74c63ac",
+              displayName: "Taylor Sander",
+              isProfessional: true,
+            },
+            isMinor: false,
+          },
+          {
+            principal: {
+              type: "user",
+              id: "3dc66d99-ec02-4d10-8845-788ee74c63ac",
+              displayName: "Jordan Lee",
+            },
+            isMinor: false,
           },
         ],
         canBroadcastFollowers: true,
@@ -611,13 +969,31 @@ export function PlayerMessagingScreen({
             : "Duna could not load your message connections.",
         ),
       );
-  }, [client, composeOpen, mode]);
+  }, [client, mode]);
+
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const show = Keyboard.addListener(showEvent, (event) =>
+      setKeyboardHeight(event.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedId) {
       setDetail(undefined);
+      setAttachments([]);
       return;
     }
+    setAttachments([]);
+    setDraft("");
     setDetail(undefined);
     void loadConversation(selectedId).catch((reason: unknown) =>
       setError(
@@ -664,76 +1040,370 @@ export function PlayerMessagingScreen({
     };
   }, [messagingDelivery, mode, refreshAll, selectedId]);
 
-  const send = useCallback(async () => {
-    const body = draft.trim();
-    if (!body || !selectedId || sending) return;
-    const input: SendMessageInput = {
-      conversationId: selectedId,
-      clientMessageId: Crypto.randomUUID(),
-      kind: "text",
-      body,
-      widgets: [],
-    };
-    setDraft("");
-    setError(undefined);
-    const optimistic: ConversationMessage = {
-      id: input.clientMessageId,
-      conversationId: input.conversationId,
-      clientMessageId: input.clientMessageId,
-      seq: (detail?.messages.at(-1)?.seq ?? 0) + 1,
-      sender: principal,
-      kind: "text",
-      body,
-      widgets: [],
-      status: detail?.conversation.safety.screeningRequired
-        ? "screening"
-        : "published",
-      moderationState: detail?.conversation.safety.screeningRequired
-        ? "screening"
-        : "not-required",
-      createdAt: new Date().toISOString(),
-    };
-    setDetail((current) =>
-      current
-        ? { ...current, messages: [...current.messages, optimistic] }
-        : current,
+  const contextualGroups = useMemo(
+    () =>
+      (inbox?.conversations ?? []).filter(
+        (conversation) =>
+          Boolean(conversation.context) ||
+          ["event", "division", "league"].includes(conversation.type),
+      ),
+    [inbox?.conversations],
+  );
+
+  const filteredComposeCandidates = useMemo(() => {
+    const query = composeSearch.trim().toLowerCase();
+    return (composeOptions?.candidates ?? []).filter((candidate) =>
+      query
+        ? candidate.principal.displayName.toLowerCase().includes(query)
+        : true,
     );
-    if (mode === "preview") {
-      if (detail?.conversation.type === "support") {
-        setTimeout(() => {
-          setDetail((current) =>
-            current
-              ? {
-                  ...current,
-                  messages: [
-                    ...current.messages,
-                    {
-                      ...optimistic,
-                      id: pairedResponseId(input.clientMessageId),
-                      clientMessageId: pairedResponseId(input.clientMessageId),
-                      seq: optimistic.seq + 1,
-                      sender: {
-                        type: "agent",
-                        id: "duna-ai-support",
-                        displayName: "Duna Support",
-                      },
-                      kind: "support-response",
-                      body: "I can help with that. In a signed-in build, I use your Duna events, lessons, rentals, and payments to give a grounded answer.",
-                      status: "published",
-                      moderationState: "not-required",
-                    },
-                  ],
-                }
-              : current,
-          );
-        }, 450);
+  }, [composeOptions?.candidates, composeSearch]);
+
+  const filteredConversations = useMemo(() => {
+    const query = inboxSearch.trim().toLowerCase();
+    return (inbox?.conversations ?? []).filter((conversation) => {
+      const matchesQuery = query
+        ? [
+            conversation.title,
+            conversation.context?.label,
+            conversation.lastMessage?.body,
+            ...conversation.participants.map(
+              (participant) => participant.displayName,
+            ),
+          ].some((value) => value?.toLowerCase().includes(query))
+        : true;
+      if (!matchesQuery) return false;
+      if (inboxFilter === "all") return true;
+      if (inboxFilter === "unread") return conversation.unreadCount > 0;
+      if (inboxFilter === "organizations") {
+        return conversation.participants.some(
+          (participant) => participant.type === "organization",
+        );
       }
+      if (inboxFilter === "events") {
+        return (
+          Boolean(conversation.context) ||
+          ["event", "division", "league"].includes(conversation.type)
+        );
+      }
+      return (
+        !conversation.context &&
+        ["dm", "group", "broadcast"].includes(conversation.type)
+      );
+    });
+  }, [inbox?.conversations, inboxFilter, inboxSearch]);
+
+  const addSelectedAttachments = useCallback(
+    (
+      selected: readonly {
+        readonly uri: string;
+        readonly fileName: string;
+        readonly mediaType: string;
+        readonly byteSize: number;
+      }[],
+    ) => {
+      const availableSlots = 6 - attachments.length;
+      if (availableSlots <= 0) {
+        setError("A message can include up to six attachments.");
+        return;
+      }
+      const additions: SelectedAttachment[] = [];
+      let selectedBytes = attachments.reduce(
+        (total, attachment) => total + attachment.byteSize,
+        0,
+      );
+      for (const item of selected.slice(0, availableSlots)) {
+        const mediaType = item.mediaType.split(";", 1)[0]!.toLowerCase();
+        const kind = attachmentKind(mediaType);
+        if (!kind) {
+          setError(
+            "Choose an image, video, PDF, text file, or standard office document.",
+          );
+          continue;
+        }
+        if (selectedBytes + item.byteSize > ATTACHMENT_MESSAGE_LIMIT) {
+          setError("Attachments in one message can total up to 1 GB.");
+          continue;
+        }
+        if (item.byteSize < 1 || item.byteSize > ATTACHMENT_LIMITS[kind]) {
+          const maximum = attachmentSizeLabel(ATTACHMENT_LIMITS[kind]);
+          setError(
+            `${kind === "image" ? "Images" : kind === "video" ? "Videos" : "Documents"} must be ${maximum} or smaller.`,
+          );
+          continue;
+        }
+        if (
+          attachments.some((attachment) => attachment.uri === item.uri) ||
+          additions.some((attachment) => attachment.uri === item.uri)
+        ) {
+          continue;
+        }
+        additions.push({
+          id: Crypto.randomUUID(),
+          uri: item.uri,
+          fileName: item.fileName.slice(0, 255),
+          mediaType,
+          byteSize: item.byteSize,
+          kind,
+          progress: 0,
+        });
+        selectedBytes += item.byteSize;
+      }
+      if (selected.length > availableSlots) {
+        setError("Only the first six attachments were added.");
+      }
+      if (additions.length > 0) {
+        setAttachments((current) => [...current, ...additions]);
+      }
+    },
+    [attachments],
+  );
+
+  const pickMedia = useCallback(async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setError("Allow photo access to attach images or videos.");
       return;
     }
-    await outbox.enqueue(input);
-    setPending(await outbox.pending());
-    setSending(true);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsMultipleSelection: true,
+      mediaTypes: ["images", "videos"],
+      quality: 1,
+      selectionLimit: Math.max(1, 6 - attachments.length),
+    });
+    if (result.canceled) return;
+    addSelectedAttachments(
+      result.assets.map((asset, index) => {
+        const file = new File(asset.uri);
+        const kind = asset.type === "video" ? "video" : "image";
+        const fileName =
+          asset.fileName ??
+          `duna-${kind}-${Date.now()}-${index}.${kind === "video" ? "mp4" : "jpg"}`;
+        return {
+          uri: asset.uri,
+          fileName,
+          mediaType: asset.mimeType ?? fallbackMediaType(fileName, kind),
+          byteSize: asset.fileSize ?? file.size ?? 0,
+        };
+      }),
+    );
+  }, [addSelectedAttachments, attachments.length]);
+
+  const pickDocuments = useCallback(async () => {
+    const result = await File.pickFileAsync({
+      mimeTypes: [...DOCUMENT_MEDIA_TYPES],
+      multipleFiles: true,
+    });
+    if (result.canceled) return;
+    addSelectedAttachments(
+      result.result.map((file) => ({
+        uri: file.uri,
+        fileName: file.name,
+        mediaType: file.type || fallbackMediaType(file.name),
+        byteSize: file.size ?? 0,
+      })),
+    );
+  }, [addSelectedAttachments]);
+
+  const chooseAttachment = useCallback(() => {
+    Alert.alert("Add to message", "Choose what you want to share.", [
+      { text: "Photos or videos", onPress: () => void pickMedia() },
+      { text: "Document", onPress: () => void pickDocuments() },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }, [pickDocuments, pickMedia]);
+
+  const uploadSelectedAttachments = useCallback(async () => {
+    if (!client || mode !== "live" || attachments.length === 0) return [];
+    const activeUploadIds: string[] = [];
     try {
+      for (const attachment of attachments) {
+        const session = await client.messaging.beginAttachmentUpload.mutate({
+          asPrincipal: "user",
+          attachment: {
+            conversationId: selectedId!,
+            fileName: attachment.fileName,
+            mediaType: attachment.mediaType,
+            byteSize: attachment.byteSize,
+          },
+        });
+        activeUploadIds.push(session.id);
+        const file = new File(attachment.uri);
+        const completedParts: { partNumber: number; etag: string }[] = [];
+        let nextPart = 1;
+        let finishedParts = 0;
+        const uploadPart = async () => {
+          while (nextPart <= session.totalParts) {
+            const partNumber = nextPart++;
+            const signed = await client.messaging.attachmentPartUrl.mutate({
+              uploadId: session.id,
+              partNumber,
+            });
+            const start = (partNumber - 1) * session.partSizeBytes;
+            const end = Math.min(
+              attachment.byteSize,
+              start + session.partSizeBytes,
+            );
+            const etag = await uploadMessageAttachmentPart({
+              file,
+              fileUri: attachment.uri,
+              mediaType: attachment.mediaType,
+              offset: start,
+              length: end - start,
+              uploadUrl: signed.url,
+            });
+            completedParts.push({ partNumber, etag });
+            finishedParts += 1;
+            setAttachments((current) =>
+              current.map((item) =>
+                item.id === attachment.id
+                  ? {
+                      ...item,
+                      progress: finishedParts / session.totalParts,
+                    }
+                  : item,
+              ),
+            );
+          }
+        };
+        await Promise.all(
+          Array.from({ length: Math.min(3, session.totalParts) }, () =>
+            uploadPart(),
+          ),
+        );
+        await client.messaging.completeAttachmentUpload.mutate({
+          uploadId: session.id,
+          parts: completedParts.sort(
+            (left, right) => left.partNumber - right.partNumber,
+          ),
+        });
+      }
+      return activeUploadIds;
+    } catch (reason) {
+      await Promise.all(
+        activeUploadIds.map((uploadId) =>
+          client.messaging.abortAttachmentUpload
+            .mutate({ uploadId })
+            .catch(() => undefined),
+        ),
+      );
+      throw reason;
+    }
+  }, [attachments, client, mode, selectedId]);
+
+  const send = useCallback(async () => {
+    const body = draft.trim();
+    if ((!body && attachments.length === 0) || !selectedId || sending) return;
+    setSending(true);
+    setError(undefined);
+    const clientMessageId = Crypto.randomUUID();
+    let attachmentUploadIds: string[] = [];
+    try {
+      attachmentUploadIds = await uploadSelectedAttachments();
+      const input: SendMessageInput = {
+        conversationId: selectedId,
+        clientMessageId,
+        kind: "text",
+        ...(body ? { body } : {}),
+        widgets: [],
+        attachmentUploadIds,
+      };
+      const optimistic: ConversationMessage = {
+        id: input.clientMessageId,
+        conversationId: input.conversationId,
+        clientMessageId: input.clientMessageId,
+        seq: (detail?.messages.at(-1)?.seq ?? 0) + 1,
+        sender: principal,
+        kind: "text",
+        ...(body ? { body } : {}),
+        widgets: [],
+        attachments: attachments.map((attachment) => ({
+          id: attachment.id,
+          kind: attachment.kind,
+          mediaType: attachment.mediaType,
+          fileName: attachment.fileName,
+          byteSize: attachment.byteSize,
+          safetyStatus: detail?.conversation.safety.screeningRequired
+            ? "pending"
+            : "safe",
+          downloadUrl: attachment.uri,
+        })),
+        status: detail?.conversation.safety.screeningRequired
+          ? "screening"
+          : "published",
+        moderationState: detail?.conversation.safety.screeningRequired
+          ? "screening"
+          : "not-required",
+        createdAt: new Date().toISOString(),
+      };
+      setDraft("");
+      setDetail((current) =>
+        current
+          ? { ...current, messages: [...current.messages, optimistic] }
+          : current,
+      );
+      if (mode === "preview" || !client) {
+        if (
+          detail?.conversation.type === "support" &&
+          attachments.length === 0
+        ) {
+          setTimeout(() => {
+            setDetail((current) =>
+              current
+                ? {
+                    ...current,
+                    messages: [
+                      ...current.messages,
+                      {
+                        ...optimistic,
+                        id: pairedResponseId(input.clientMessageId),
+                        clientMessageId: pairedResponseId(
+                          input.clientMessageId,
+                        ),
+                        seq: optimistic.seq + 1,
+                        sender: {
+                          type: "agent",
+                          id: "duna-ai-support",
+                          displayName: "Duna Support",
+                        },
+                        kind: "support-response",
+                        body: "I can help with that. In a signed-in build, I use your Duna events, lessons, rentals, and payments to give a grounded answer.",
+                        status: "published",
+                        moderationState: "not-required",
+                      },
+                    ],
+                  }
+                : current,
+            );
+          }, 450);
+        }
+        setAttachments([]);
+        return;
+      }
+      if (attachmentUploadIds.length > 0) {
+        const sentMessage = await client.messaging.send.mutate({
+          asPrincipal: "user",
+          message: input,
+        });
+        setAttachments([]);
+        setDetail((current) =>
+          current
+            ? {
+                ...current,
+                messages: current.messages.map((message) =>
+                  message.id === optimistic.id ? sentMessage : message,
+                ),
+              }
+            : current,
+        );
+        void Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success,
+        ).catch(() => undefined);
+        await Promise.all([loadConversation(selectedId), loadInbox()]);
+        return;
+      }
+      await outbox.enqueue(input);
+      setPending(await outbox.pending());
       const sent = await flushOutbox(inbox);
       if (sent > 0) {
         void Haptics.notificationAsync(
@@ -741,10 +1411,38 @@ export function PlayerMessagingScreen({
         ).catch(() => undefined);
         await Promise.all([loadConversation(selectedId), loadInbox()]);
       }
+    } catch (reason) {
+      setDraft(body);
+      setDetail((current) =>
+        current
+          ? {
+              ...current,
+              messages: current.messages.filter(
+                (message) => message.clientMessageId !== clientMessageId,
+              ),
+            }
+          : current,
+      );
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Duna could not send this message.",
+      );
+      if (attachmentUploadIds.length > 0 && client) {
+        await Promise.all(
+          attachmentUploadIds.map((uploadId) =>
+            client.messaging.abortAttachmentUpload
+              .mutate({ uploadId })
+              .catch(() => undefined),
+          ),
+        );
+      }
     } finally {
       setSending(false);
     }
   }, [
+    attachments,
+    client,
     detail,
     draft,
     flushOutbox,
@@ -756,16 +1454,15 @@ export function PlayerMessagingScreen({
     principal,
     selectedId,
     sending,
+    uploadSelectedAttachments,
   ]);
 
   const createConversation = useCallback(async () => {
-    const body = composeBody.trim();
     const selectedCandidates =
       composeOptions?.candidates.filter((candidate) =>
         composeRecipients.includes(candidate.principal.id),
       ) ?? [];
     if (
-      !body ||
       creating ||
       (!composeFollowerBroadcast && selectedCandidates.length === 0)
     ) {
@@ -781,7 +1478,7 @@ export function PlayerMessagingScreen({
     if (mode === "preview" || !client) {
       setComposeOpen(false);
       setComposeTitle("");
-      setComposeBody("");
+      setComposeSearch("");
       setComposeRecipients([]);
       setComposeFollowerBroadcast(false);
       return;
@@ -803,13 +1500,11 @@ export function PlayerMessagingScreen({
             : selectedCandidates.map((candidate) => candidate.principal.id),
           announcementOnly: composeFollowerBroadcast,
           followerBroadcast: composeFollowerBroadcast,
-          initialMessage: body,
-          clientMessageId: Crypto.randomUUID(),
         },
       });
       setComposeOpen(false);
       setComposeTitle("");
-      setComposeBody("");
+      setComposeSearch("");
       setComposeRecipients([]);
       setComposeFollowerBroadcast(false);
       await loadInbox();
@@ -825,7 +1520,6 @@ export function PlayerMessagingScreen({
     }
   }, [
     client,
-    composeBody,
     composeFollowerBroadcast,
     composeOptions?.candidates,
     composeRecipients,
@@ -910,6 +1604,17 @@ export function PlayerMessagingScreen({
     );
   }, [client, detail, loadInbox, principal.id, principal.type]);
 
+  const threadLead = detail?.participants
+    .map((participant) => participant.principal)
+    .find(
+      (participant) =>
+        participant.type !== principal.type || participant.id !== principal.id,
+    );
+  const threadBottomInset =
+    Platform.OS === "ios"
+      ? Math.max(insets.bottom, keyboardHeight)
+      : insets.bottom;
+
   const inboxPane = (
     <View style={[styles.inboxPane, wide && styles.inboxPaneWide]}>
       <View style={styles.topBar}>
@@ -920,27 +1625,20 @@ export function PlayerMessagingScreen({
         >
           <Text style={styles.closeButtonText}>‹</Text>
         </Pressable>
-        <View style={styles.flex}>
-          <Text style={styles.eyebrow}>DUNA MESSAGING</Text>
-          <Text style={styles.title}>Messages.</Text>
+        <View style={styles.inboxHeading}>
+          <Text numberOfLines={1} style={styles.inboxAccountName}>
+            {principal.displayName}
+          </Text>
+          <Text style={styles.inboxAccountMeta}>Messages</Text>
         </View>
         <Pressable
           accessibilityLabel="New conversation"
           onPress={() => setComposeOpen(true)}
           style={styles.newButton}
         >
-          <Text style={styles.newButtonText}>＋</Text>
+          <Text style={styles.newButtonText}>✎</Text>
         </Pressable>
-        {inbox && inbox.totalUnread > 0 && (
-          <View style={styles.totalUnread}>
-            <Text style={styles.totalUnreadText}>{inbox.totalUnread}</Text>
-          </View>
-        )}
       </View>
-      <Text style={styles.inboxLead}>
-        Event details, team updates, people you know, and Duna Support—all in
-        one place.
-      </Text>
       {mode === "live" && client && notificationsEnabled === false && (
         <View style={styles.notificationBanner}>
           <View style={styles.flex}>
@@ -974,7 +1672,12 @@ export function PlayerMessagingScreen({
       )}
       {error && <Text style={styles.errorText}>{error}</Text>}
       <ScrollView
-        contentContainerStyle={styles.inboxList}
+        contentContainerStyle={[
+          styles.inboxList,
+          { paddingBottom: Math.max(34, insets.bottom + 18) },
+        ]}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             onRefresh={() => {
@@ -986,21 +1689,132 @@ export function PlayerMessagingScreen({
           />
         }
       >
+        <View style={styles.searchBar}>
+          <Text style={styles.searchIcon}>⌕</Text>
+          <TextInput
+            accessibilityLabel="Search messages"
+            onChangeText={setInboxSearch}
+            placeholder="Search messages"
+            placeholderTextColor={palette.muted}
+            style={styles.searchInput}
+            value={inboxSearch}
+          />
+        </View>
+        {(composeOptions?.candidates.length ?? 0) > 0 && (
+          <View>
+            <View style={styles.sectionHeadingRow}>
+              <Text style={styles.sectionHeading}>Mutual followers</Text>
+              <Text style={styles.sectionMeta}>People you can message</Text>
+            </View>
+            <ScrollView
+              contentContainerStyle={styles.followerRail}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+            >
+              {composeOptions?.candidates.slice(0, 12).map((candidate) => (
+                <Pressable
+                  accessibilityLabel={`Message ${candidate.principal.displayName}`}
+                  key={candidate.principal.id}
+                  onPress={() => {
+                    const existing = inbox?.conversations.find(
+                      (conversation) =>
+                        conversation.type === "dm" &&
+                        conversation.participants.some(
+                          (participant) =>
+                            participant.type === "user" &&
+                            participant.id === candidate.principal.id,
+                        ),
+                    );
+                    if (existing) {
+                      setSelectedId(existing.id);
+                    } else {
+                      setComposeRecipients([candidate.principal.id]);
+                      setComposeFollowerBroadcast(false);
+                      setComposeOpen(true);
+                    }
+                  }}
+                  style={styles.followerItem}
+                >
+                  <View>
+                    <PrincipalAvatar
+                      palette={palette}
+                      principal={candidate.principal}
+                      size={64}
+                    />
+                    {candidate.principal.isProfessional && (
+                      <View style={styles.followerProBadge}>
+                        <ProBadge palette={palette} />
+                      </View>
+                    )}
+                  </View>
+                  <Text numberOfLines={1} style={styles.followerName}>
+                    {candidate.principal.displayName.split(" ")[0]}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+        <ScrollView
+          contentContainerStyle={styles.filterRail}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+        >
+          {(
+            [
+              ["all", "Primary"],
+              ["unread", "Unread"],
+              ["organizations", "Orgs"],
+              ["events", "Events"],
+              ["followers", "Followers"],
+            ] as const
+          ).map(([key, label]) => (
+            <Pressable
+              key={key}
+              onPress={() => setInboxFilter(key)}
+              style={[
+                styles.filterChip,
+                inboxFilter === key && styles.filterChipSelected,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  inboxFilter === key && styles.filterChipTextSelected,
+                ]}
+              >
+                {label}
+              </Text>
+              {key === "unread" && (inbox?.totalUnread ?? 0) > 0 && (
+                <View style={styles.filterBadge}>
+                  <Text style={styles.filterBadgeText}>
+                    {inbox?.totalUnread}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          ))}
+        </ScrollView>
         {loading && !inbox ? (
           <ActivityIndicator color={palette.accent} style={styles.loading} />
-        ) : inbox?.conversations.length ? (
-          inbox.conversations.map((conversation) => (
+        ) : filteredConversations.length ? (
+          filteredConversations.map((conversation) => (
             <ConversationRow
               conversation={conversation}
               key={conversation.id}
               onPress={() => setSelectedId(conversation.id)}
               palette={palette}
+              principal={principal}
               selected={selectedId === conversation.id}
             />
           ))
         ) : (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Nothing to catch up on.</Text>
+            <Text style={styles.emptyTitle}>
+              {inboxSearch || inboxFilter !== "all"
+                ? "No messages match this view."
+                : "Nothing to catch up on."}
+            </Text>
             <Text style={styles.emptyBody}>
               Messages appear after a booking, registration, lesson, mutual
               follow, or support request.
@@ -1012,28 +1826,22 @@ export function PlayerMessagingScreen({
   );
 
   const threadPane = detail ? (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={8}
-      style={styles.threadPane}
-    >
+    <View style={[styles.threadPane, { paddingBottom: threadBottomInset }]}>
       <View style={styles.threadHeader}>
         {!wide && (
           <Pressable
             accessibilityLabel="Back to conversations"
-            onPress={() => setSelectedId(undefined)}
+            onPress={() => {
+              Keyboard.dismiss();
+              setAttachments([]);
+              setSelectedId(undefined);
+            }}
             style={styles.threadBack}
           >
             <Text style={styles.threadBackText}>‹</Text>
           </Pressable>
         )}
-        <View style={styles.threadMark}>
-          <Text style={styles.threadMarkText}>
-            {detail.conversation.type === "support"
-              ? "✦"
-              : detail.conversation.title.slice(0, 1)}
-          </Text>
-        </View>
+        <PrincipalAvatar palette={palette} principal={threadLead} size={42} />
         <View style={styles.flex}>
           <Text numberOfLines={1} style={styles.threadTitle}>
             {detail.conversation.title}
@@ -1069,10 +1877,13 @@ export function PlayerMessagingScreen({
       )}
       <ScrollView
         contentContainerStyle={styles.messages}
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+        keyboardShouldPersistTaps="handled"
         onContentSizeChange={() =>
           threadScroll.current?.scrollToEnd({ animated: true })
         }
         ref={threadScroll}
+        style={styles.messageScroller}
       >
         {detail.messages.map((message) => (
           <MessageBubble
@@ -1087,32 +1898,94 @@ export function PlayerMessagingScreen({
         ))}
       </ScrollView>
       {detail.permissions.canPost ? (
-        <View style={styles.composer}>
-          <TextInput
-            accessibilityLabel="Message"
-            multiline
-            onChangeText={setDraft}
-            onSubmitEditing={() => void send()}
-            placeholder={
-              detail.conversation.type === "support"
-                ? "Ask Duna Support…"
-                : "Write a message…"
-            }
-            placeholderTextColor={palette.muted}
-            style={styles.composerInput}
-            value={draft}
-          />
-          <Pressable
-            accessibilityLabel="Send message"
-            disabled={!draft.trim() || sending}
-            onPress={() => void send()}
-            style={[
-              styles.sendButton,
-              (!draft.trim() || sending) && styles.sendButtonDisabled,
-            ]}
-          >
-            <Text style={styles.sendButtonText}>{sending ? "…" : "↑"}</Text>
-          </Pressable>
+        <View style={styles.composerShell}>
+          {attachments.length > 0 && (
+            <ScrollView
+              contentContainerStyle={styles.pendingAttachmentRail}
+              horizontal
+              keyboardShouldPersistTaps="handled"
+              showsHorizontalScrollIndicator={false}
+            >
+              {attachments.map((attachment) => (
+                <View key={attachment.id} style={styles.pendingAttachment}>
+                  {attachment.kind === "image" ? (
+                    <Image
+                      source={{ uri: attachment.uri }}
+                      style={styles.pendingAttachmentImage}
+                    />
+                  ) : (
+                    <View style={styles.pendingAttachmentFile}>
+                      <Text style={styles.pendingAttachmentFileText}>
+                        {attachment.kind === "video" ? "▶" : "DOC"}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.pendingAttachmentBody}>
+                    <Text
+                      numberOfLines={1}
+                      style={styles.pendingAttachmentName}
+                    >
+                      {attachment.fileName}
+                    </Text>
+                    <Text style={styles.pendingAttachmentMeta}>
+                      {sending
+                        ? `${Math.round(attachment.progress * 100)}%`
+                        : attachmentSizeLabel(attachment.byteSize)}
+                    </Text>
+                  </View>
+                  {!sending && (
+                    <Pressable
+                      accessibilityLabel={`Remove ${attachment.fileName}`}
+                      onPress={() =>
+                        setAttachments((current) =>
+                          current.filter((item) => item.id !== attachment.id),
+                        )
+                      }
+                      style={styles.pendingAttachmentRemove}
+                    >
+                      <Text style={styles.pendingAttachmentRemoveText}>×</Text>
+                    </Pressable>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+          )}
+          <View style={styles.composer}>
+            <Pressable
+              accessibilityLabel="Add photo, video, or document"
+              disabled={sending}
+              onPress={chooseAttachment}
+              style={styles.attachButton}
+            >
+              <Text style={styles.attachButtonText}>＋</Text>
+            </Pressable>
+            <TextInput
+              accessibilityLabel="Message"
+              multiline
+              onChangeText={setDraft}
+              onSubmitEditing={() => void send()}
+              placeholder={
+                detail.conversation.type === "support"
+                  ? "Message Duna Support…"
+                  : "Message…"
+              }
+              placeholderTextColor={palette.muted}
+              style={styles.composerInput}
+              value={draft}
+            />
+            <Pressable
+              accessibilityLabel="Send message"
+              disabled={(!draft.trim() && attachments.length === 0) || sending}
+              onPress={() => void send()}
+              style={[
+                styles.sendButton,
+                ((!draft.trim() && attachments.length === 0) || sending) &&
+                  styles.sendButtonDisabled,
+              ]}
+            >
+              <Text style={styles.sendButtonText}>{sending ? "…" : "↑"}</Text>
+            </Pressable>
+          </View>
         </View>
       ) : (
         <View style={styles.readOnlyBar}>
@@ -1121,7 +1994,7 @@ export function PlayerMessagingScreen({
           </Text>
         </View>
       )}
-    </KeyboardAvoidingView>
+    </View>
   ) : (
     <View style={styles.threadEmpty}>
       {selectedId ? (
@@ -1157,29 +2030,104 @@ export function PlayerMessagingScreen({
         presentationStyle="pageSheet"
         visible={composeOpen}
       >
-        <View style={styles.composeScreen}>
+        <View
+          style={[
+            styles.composeScreen,
+            { paddingBottom: Math.max(14, insets.bottom) },
+          ]}
+        >
           <View style={styles.composeHeader}>
-            <View style={styles.flex}>
-              <Text style={styles.eyebrow}>NEW CONVERSATION</Text>
-              <Text style={styles.composeTitle}>Message people you know.</Text>
-            </View>
             <Pressable
               accessibilityLabel="Close new conversation"
               onPress={() => setComposeOpen(false)}
               style={styles.composeClose}
             >
-              <Text style={styles.composeCloseText}>×</Text>
+              <Text style={styles.composeCloseText}>‹</Text>
             </Pressable>
+            <Text style={styles.composeTitle}>
+              {composeRecipients.length > 1 ? "New group chat" : "New message"}
+            </Text>
+            <View style={styles.composeHeaderSpacer} />
           </View>
-          <ScrollView contentContainerStyle={styles.composeContent}>
-            <View style={styles.composePolicy}>
-              <Text style={styles.composePolicyMark}>✓</Text>
-              <Text style={styles.composePolicyText}>
-                Member messages require a mutual follow. If a minor is included,
-                Duna adds their verified guardian and screens every message
-                before delivery.
-              </Text>
+          <ScrollView
+            contentContainerStyle={styles.composeContent}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.composeSearchRow}>
+              <Text style={styles.composeToLabel}>To:</Text>
+              <TextInput
+                autoFocus
+                onChangeText={setComposeSearch}
+                placeholder="Search"
+                placeholderTextColor={palette.muted}
+                style={styles.composeSearchInput}
+                value={composeSearch}
+              />
             </View>
+            {composeRecipients.length > 0 && (
+              <ScrollView
+                contentContainerStyle={styles.composeRecipientChips}
+                horizontal
+                keyboardShouldPersistTaps="handled"
+                showsHorizontalScrollIndicator={false}
+              >
+                {composeOptions?.candidates
+                  .filter((candidate) =>
+                    composeRecipients.includes(candidate.principal.id),
+                  )
+                  .map((candidate) => (
+                    <Pressable
+                      key={candidate.principal.id}
+                      onPress={() =>
+                        setComposeRecipients((current) =>
+                          current.filter((id) => id !== candidate.principal.id),
+                        )
+                      }
+                      style={styles.composeRecipientChip}
+                    >
+                      <Text style={styles.composeRecipientChipText}>
+                        {candidate.principal.displayName} ×
+                      </Text>
+                    </Pressable>
+                  ))}
+              </ScrollView>
+            )}
+            {contextualGroups.length > 0 && !composeSearch.trim() && (
+              <View>
+                <Text style={styles.composeSectionTitle}>Your Duna groups</Text>
+                <ScrollView
+                  contentContainerStyle={styles.groupShortcutRail}
+                  horizontal
+                  keyboardShouldPersistTaps="handled"
+                  showsHorizontalScrollIndicator={false}
+                >
+                  {contextualGroups.slice(0, 10).map((conversation) => (
+                    <Pressable
+                      key={conversation.id}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        setComposeOpen(false);
+                        setSelectedId(conversation.id);
+                      }}
+                      style={styles.groupShortcut}
+                    >
+                      <View style={styles.groupShortcutMark}>
+                        <Text style={styles.groupShortcutMarkText}>
+                          {conversation.title.slice(0, 1).toUpperCase()}
+                        </Text>
+                      </View>
+                      <Text numberOfLines={2} style={styles.groupShortcutTitle}>
+                        {conversation.context?.label ?? conversation.title}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.groupShortcutMeta}>
+                        {conversation.context?.type ?? conversation.type}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
             {composeOptions?.canBroadcastFollowers && (
               <Pressable
                 onPress={() => {
@@ -1198,9 +2146,12 @@ export function PlayerMessagingScreen({
                   ]}
                 />
                 <View style={styles.flex}>
-                  <Text style={styles.composeChoiceTitle}>
-                    All my followers
-                  </Text>
+                  <View style={styles.composeNameWithBadge}>
+                    <Text style={styles.composeChoiceTitle}>
+                      All my followers
+                    </Text>
+                    <ProBadge palette={palette} />
+                  </View>
                   <Text style={styles.composeChoiceMeta}>
                     {composeOptions.followerCount} follower
                     {composeOptions.followerCount === 1 ? "" : "s"} · Pro
@@ -1211,12 +2162,12 @@ export function PlayerMessagingScreen({
             )}
             {!composeFollowerBroadcast && (
               <>
-                <Text style={styles.composeFieldLabel}>MUTUAL FOLLOWS</Text>
+                <Text style={styles.composeSectionTitle}>Suggested</Text>
                 {!composeOptions ? (
                   <ActivityIndicator color={palette.accent} />
-                ) : composeOptions.candidates.length ? (
+                ) : filteredComposeCandidates.length ? (
                   <View style={styles.composePeople}>
-                    {composeOptions.candidates.map((candidate) => {
+                    {filteredComposeCandidates.map((candidate) => {
                       const selected = composeRecipients.includes(
                         candidate.principal.id,
                       );
@@ -1237,25 +2188,35 @@ export function PlayerMessagingScreen({
                             selected && styles.composePersonSelected,
                           ]}
                         >
-                          <View style={styles.composePersonMark}>
-                            <Text style={styles.composePersonMarkText}>
-                              {candidate.principal.displayName
-                                .slice(0, 1)
-                                .toUpperCase()}
-                            </Text>
-                          </View>
+                          <PrincipalAvatar
+                            palette={palette}
+                            principal={candidate.principal}
+                            size={48}
+                          />
                           <View style={styles.flex}>
-                            <Text style={styles.composePersonName}>
-                              {candidate.principal.displayName}
-                            </Text>
+                            <View style={styles.composeNameWithBadge}>
+                              <Text style={styles.composePersonName}>
+                                {candidate.principal.displayName}
+                              </Text>
+                              {candidate.principal.isProfessional && (
+                                <ProBadge palette={palette} />
+                              )}
+                            </View>
                             <Text style={styles.composePersonMeta}>
                               Mutual follow
                               {candidate.isMinor ? " · Guardian included" : ""}
                             </Text>
                           </View>
-                          <Text style={styles.composeCheck}>
-                            {selected ? "✓" : ""}
-                          </Text>
+                          <View
+                            style={[
+                              styles.composeCheck,
+                              selected && styles.composeCheckSelected,
+                            ]}
+                          >
+                            <Text style={styles.composeCheckText}>
+                              {selected ? "✓" : ""}
+                            </Text>
+                          </View>
                         </Pressable>
                       );
                     })}
@@ -1263,7 +2224,7 @@ export function PlayerMessagingScreen({
                 ) : (
                   <View style={styles.composeEmpty}>
                     <Text style={styles.composeChoiceTitle}>
-                      No mutual follows yet.
+                      No mutual followers found.
                     </Text>
                     <Text style={styles.composeChoiceMeta}>
                       You can reply in event groups, or follow each other before
@@ -1273,49 +2234,55 @@ export function PlayerMessagingScreen({
                 )}
               </>
             )}
-            <Text style={styles.composeFieldLabel}>
-              CONVERSATION NAME · OPTIONAL
-            </Text>
-            <TextInput
-              maxLength={160}
-              onChangeText={setComposeTitle}
-              placeholder={
-                composeFollowerBroadcast
-                  ? "A note for my followers"
-                  : "Beach plans"
-              }
-              placeholderTextColor={palette.muted}
-              style={styles.composeInput}
-              value={composeTitle}
-            />
-            <Text style={styles.composeFieldLabel}>FIRST MESSAGE</Text>
-            <TextInput
-              maxLength={10_000}
-              multiline
-              onChangeText={setComposeBody}
-              placeholder="Write the useful update…"
-              placeholderTextColor={palette.muted}
-              style={[styles.composeInput, styles.composeTextarea]}
-              value={composeBody}
-            />
+            {(composeRecipients.length > 1 || composeFollowerBroadcast) && (
+              <>
+                <Text style={styles.composeSectionTitle}>
+                  Group name · optional
+                </Text>
+                <TextInput
+                  maxLength={160}
+                  onChangeText={setComposeTitle}
+                  placeholder={
+                    composeFollowerBroadcast
+                      ? "A note for my followers"
+                      : "Beach plans"
+                  }
+                  placeholderTextColor={palette.muted}
+                  style={styles.composeInput}
+                  value={composeTitle}
+                />
+              </>
+            )}
+            <View style={styles.composePolicy}>
+              <Text style={styles.composePolicyMark}>✓</Text>
+              <Text style={styles.composePolicyText}>
+                Member chats require a mutual follow. For minors, Duna includes
+                their verified guardian and screens every message before
+                delivery.
+              </Text>
+            </View>
             <Pressable
               disabled={
-                !composeBody.trim() ||
                 creating ||
                 (!composeFollowerBroadcast && composeRecipients.length === 0)
               }
               onPress={() => void createConversation()}
               style={[
                 styles.composeSubmit,
-                (!composeBody.trim() ||
-                  creating ||
+                (creating ||
                   (!composeFollowerBroadcast &&
                     composeRecipients.length === 0)) &&
                   styles.sendButtonDisabled,
               ]}
             >
               <Text style={styles.composeSubmitText}>
-                {creating ? "Creating…" : "Create and send"}
+                {creating
+                  ? "Opening…"
+                  : composeFollowerBroadcast
+                    ? "Open follower chat"
+                    : composeRecipients.length > 1
+                      ? "Create group chat"
+                      : "Open chat"}
               </Text>
             </Pressable>
           </ScrollView>
@@ -1347,8 +2314,17 @@ function createStyles(palette: MessagingPalette) {
       flexDirection: "row",
       gap: 12,
       paddingHorizontal: 18,
+      paddingBottom: 10,
       paddingTop: 14,
     },
+    inboxHeading: { alignItems: "center", flex: 1, minWidth: 0 },
+    inboxAccountName: {
+      color: palette.text,
+      fontSize: 17,
+      fontWeight: "900",
+      maxWidth: "100%",
+    },
+    inboxAccountMeta: { color: palette.muted, fontSize: 10, marginTop: 2 },
     closeButton: {
       alignItems: "center",
       borderColor: palette.border,
@@ -1388,13 +2364,15 @@ function createStyles(palette: MessagingPalette) {
     },
     newButton: {
       alignItems: "center",
-      backgroundColor: palette.accent,
+      backgroundColor: palette.surface,
+      borderColor: palette.border,
+      borderWidth: 1,
       borderRadius: 18,
       height: 48,
       justifyContent: "center",
       width: 48,
     },
-    newButtonText: { color: palette.onAccent, fontSize: 24, fontWeight: "900" },
+    newButtonText: { color: palette.text, fontSize: 23, fontWeight: "900" },
     inboxLead: {
       color: palette.muted,
       fontSize: 13,
@@ -1439,20 +2417,85 @@ function createStyles(palette: MessagingPalette) {
       fontSize: 11,
       fontWeight: "900",
     },
-    inboxList: { gap: 8, padding: 14, paddingBottom: 34 },
-    loading: { marginTop: 48 },
-    conversationRow: {
+    inboxList: { gap: 10, padding: 14, paddingBottom: 34 },
+    searchBar: {
       alignItems: "center",
       backgroundColor: palette.surface,
+      borderRadius: 18,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 48,
+      paddingHorizontal: 14,
+    },
+    searchIcon: { color: palette.muted, fontSize: 22 },
+    searchInput: {
+      color: palette.text,
+      flex: 1,
+      fontSize: 14,
+      minHeight: 48,
+      paddingVertical: 10,
+    },
+    sectionHeadingRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 9,
+      marginTop: 2,
+    },
+    sectionHeading: { color: palette.text, fontSize: 13, fontWeight: "900" },
+    sectionMeta: { color: palette.muted, fontSize: 10 },
+    followerRail: { gap: 14, paddingRight: 18 },
+    followerItem: { alignItems: "center", gap: 6, width: 70 },
+    followerName: {
+      color: palette.text,
+      fontSize: 10,
+      maxWidth: 70,
+      textAlign: "center",
+    },
+    followerProBadge: { bottom: 0, position: "absolute", right: -1 },
+    filterRail: { gap: 8, paddingRight: 18 },
+    filterChip: {
+      alignItems: "center",
       borderColor: palette.border,
       borderRadius: 18,
       borderWidth: 1,
       flexDirection: "row",
-      gap: 12,
-      minHeight: 92,
-      padding: 13,
+      gap: 6,
+      minHeight: 48,
+      paddingHorizontal: 14,
     },
-    conversationRowSelected: { borderColor: palette.accent, borderWidth: 1.5 },
+    filterChipSelected: {
+      backgroundColor: palette.surface,
+      borderColor: palette.surface,
+    },
+    filterChipText: { color: palette.muted, fontSize: 11, fontWeight: "800" },
+    filterChipTextSelected: { color: palette.text },
+    filterBadge: {
+      alignItems: "center",
+      backgroundColor: palette.danger,
+      borderRadius: 8,
+      justifyContent: "center",
+      minHeight: 16,
+      minWidth: 16,
+      paddingHorizontal: 4,
+    },
+    filterBadgeText: {
+      color: palette.onAccent,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    loading: { marginTop: 48 },
+    conversationRow: {
+      alignItems: "center",
+      backgroundColor: "transparent",
+      borderRadius: 16,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 80,
+      paddingHorizontal: 4,
+      paddingVertical: 9,
+    },
+    conversationRowSelected: { backgroundColor: palette.surface },
     conversationMark: {
       alignItems: "center",
       backgroundColor: palette.surfaceAlt,
@@ -1468,9 +2511,16 @@ function createStyles(palette: MessagingPalette) {
     },
     conversationTitle: {
       color: palette.text,
-      flex: 1,
+      flexShrink: 1,
       fontSize: 14,
       fontWeight: "900",
+    },
+    conversationTitleRow: {
+      alignItems: "center",
+      flex: 1,
+      flexDirection: "row",
+      gap: 5,
+      minWidth: 0,
     },
     conversationPreview: {
       color: palette.muted,
@@ -1499,7 +2549,7 @@ function createStyles(palette: MessagingPalette) {
     timeText: { color: palette.muted, fontSize: 10, marginLeft: 6 },
     unreadBadge: {
       alignItems: "center",
-      backgroundColor: palette.accent,
+      backgroundColor: palette.danger,
       borderRadius: 10,
       justifyContent: "center",
       minHeight: 20,
@@ -1514,7 +2564,7 @@ function createStyles(palette: MessagingPalette) {
       borderWidth: 1,
       marginHorizontal: 18,
       marginTop: 12,
-      minHeight: 44,
+      minHeight: 48,
       justifyContent: "center",
       paddingHorizontal: 12,
     },
@@ -1565,7 +2615,7 @@ function createStyles(palette: MessagingPalette) {
       alignItems: "center",
       height: 48,
       justifyContent: "center",
-      width: 42,
+      width: 48,
     },
     threadBackText: { color: palette.text, fontSize: 34, lineHeight: 36 },
     threadMark: {
@@ -1622,6 +2672,7 @@ function createStyles(palette: MessagingPalette) {
       padding: 16,
       paddingBottom: 24,
     },
+    messageScroller: { flex: 1 },
     messageWrap: { alignSelf: "flex-start", maxWidth: "86%" },
     messageWrapMine: { alignSelf: "flex-end" },
     senderName: {
@@ -1651,6 +2702,40 @@ function createStyles(palette: MessagingPalette) {
     messageStatusRow: { alignItems: "center", flexDirection: "row", gap: 8 },
     messageTime: { color: palette.muted, fontSize: 10 },
     messageTimeMine: { color: palette.onAccent, opacity: 0.72 },
+    attachmentImage: {
+      borderRadius: 13,
+      height: 180,
+      maxWidth: 260,
+      width: 230,
+    },
+    attachmentCaption: { color: palette.muted, fontSize: 10, marginTop: 5 },
+    attachmentCard: {
+      alignItems: "center",
+      backgroundColor: palette.surfaceAlt,
+      borderColor: palette.border,
+      borderRadius: 13,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minWidth: 230,
+      padding: 10,
+    },
+    attachmentCardMine: { backgroundColor: "transparent" },
+    attachmentGlyph: {
+      alignItems: "center",
+      backgroundColor: palette.surface,
+      borderRadius: 10,
+      height: 42,
+      justifyContent: "center",
+      width: 42,
+    },
+    attachmentGlyphText: {
+      color: palette.accent,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    attachmentName: { color: palette.text, fontSize: 11, fontWeight: "900" },
+    attachmentMeta: { color: palette.muted, fontSize: 10, marginTop: 3 },
     screeningLabel: { color: palette.warning, fontSize: 10, fontWeight: "800" },
     heldLabel: { color: palette.danger, fontSize: 10, fontWeight: "800" },
     widget: {
@@ -1687,7 +2772,7 @@ function createStyles(palette: MessagingPalette) {
       backgroundColor: palette.accent,
       borderRadius: 12,
       justifyContent: "center",
-      minHeight: 44,
+      minHeight: 48,
       paddingHorizontal: 14,
     },
     widgetPrimaryText: {
@@ -1701,7 +2786,7 @@ function createStyles(palette: MessagingPalette) {
       borderRadius: 12,
       borderWidth: 1,
       justifyContent: "center",
-      minHeight: 44,
+      minHeight: 48,
       paddingHorizontal: 14,
     },
     widgetSecondaryText: {
@@ -1725,15 +2810,70 @@ function createStyles(palette: MessagingPalette) {
     scoreTeamRight: { textAlign: "right" },
     scoreValue: { color: palette.text, fontSize: 22, fontWeight: "900" },
     scoreDash: { color: palette.muted, fontSize: 13 },
-    composer: {
-      alignItems: "flex-end",
+    composerShell: {
       backgroundColor: palette.surface,
       borderTopColor: palette.border,
       borderTopWidth: 1,
+    },
+    pendingAttachmentRail: { gap: 8, paddingHorizontal: 10, paddingTop: 10 },
+    pendingAttachment: {
+      alignItems: "center",
+      backgroundColor: palette.surfaceAlt,
+      borderRadius: 12,
       flexDirection: "row",
-      gap: 9,
+      minHeight: 54,
+      overflow: "hidden",
+      paddingRight: 8,
+      width: 210,
+    },
+    pendingAttachmentImage: { height: 54, width: 54 },
+    pendingAttachmentFile: {
+      alignItems: "center",
+      backgroundColor: palette.canvas,
+      height: 54,
+      justifyContent: "center",
+      width: 54,
+    },
+    pendingAttachmentFileText: {
+      color: palette.accent,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    pendingAttachmentBody: { flex: 1, minWidth: 0, paddingHorizontal: 8 },
+    pendingAttachmentName: {
+      color: palette.text,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    pendingAttachmentMeta: {
+      color: palette.muted,
+      fontSize: 10,
+      marginTop: 3,
+    },
+    pendingAttachmentRemove: {
+      alignItems: "center",
+      height: 48,
+      justifyContent: "center",
+      width: 40,
+    },
+    pendingAttachmentRemoveText: { color: palette.text, fontSize: 20 },
+    composer: {
+      alignItems: "flex-end",
+      backgroundColor: palette.surface,
+      flexDirection: "row",
+      gap: 7,
       padding: 10,
     },
+    attachButton: {
+      alignItems: "center",
+      borderColor: palette.border,
+      borderRadius: 24,
+      borderWidth: 1,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    attachButtonText: { color: palette.text, fontSize: 25, lineHeight: 27 },
     composerInput: {
       backgroundColor: palette.surfaceAlt,
       borderColor: palette.border,
@@ -1788,26 +2928,96 @@ function createStyles(palette: MessagingPalette) {
       borderBottomColor: palette.border,
       borderBottomWidth: 1,
       flexDirection: "row",
-      gap: 12,
-      padding: 18,
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
     },
     composeTitle: {
       color: palette.text,
-      fontSize: 24,
+      fontSize: 17,
       fontWeight: "900",
-      letterSpacing: -0.7,
     },
     composeClose: {
       alignItems: "center",
-      borderColor: palette.border,
-      borderRadius: 18,
-      borderWidth: 1,
       height: 48,
       justifyContent: "center",
       width: 48,
     },
-    composeCloseText: { color: palette.text, fontSize: 28, lineHeight: 30 },
+    composeCloseText: { color: palette.text, fontSize: 36, lineHeight: 38 },
+    composeHeaderSpacer: { height: 48, width: 48 },
     composeContent: { gap: 12, padding: 18, paddingBottom: 48 },
+    composeSearchRow: {
+      alignItems: "center",
+      borderBottomColor: palette.border,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 54,
+    },
+    composeToLabel: { color: palette.muted, fontSize: 15 },
+    composeSearchInput: {
+      color: palette.text,
+      flex: 1,
+      fontSize: 15,
+      minHeight: 52,
+      paddingVertical: 10,
+    },
+    composeRecipientChips: { gap: 7, paddingVertical: 2 },
+    composeRecipientChip: {
+      backgroundColor: palette.surface,
+      borderRadius: 16,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 11,
+      paddingVertical: 8,
+    },
+    composeRecipientChipText: {
+      color: palette.text,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    composeSectionTitle: {
+      color: palette.text,
+      fontSize: 14,
+      fontWeight: "900",
+      marginTop: 7,
+    },
+    groupShortcutRail: { gap: 9, paddingTop: 9, paddingRight: 16 },
+    groupShortcut: {
+      backgroundColor: palette.surface,
+      borderColor: palette.border,
+      borderRadius: 14,
+      borderWidth: 1,
+      minHeight: 116,
+      padding: 10,
+      width: 126,
+    },
+    groupShortcutMark: {
+      alignItems: "center",
+      backgroundColor: palette.surfaceAlt,
+      borderRadius: 17,
+      height: 34,
+      justifyContent: "center",
+      marginBottom: 8,
+      width: 34,
+    },
+    groupShortcutMarkText: {
+      color: palette.accent,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    groupShortcutTitle: {
+      color: palette.text,
+      fontSize: 11,
+      fontWeight: "900",
+      lineHeight: 14,
+    },
+    groupShortcutMeta: {
+      color: palette.muted,
+      fontSize: 10,
+      marginTop: 5,
+      textTransform: "capitalize",
+    },
     composePolicy: {
       backgroundColor: palette.surface,
       borderColor: palette.border,
@@ -1862,6 +3072,11 @@ function createStyles(palette: MessagingPalette) {
       lineHeight: 15,
       marginTop: 3,
     },
+    composeNameWithBadge: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 5,
+    },
     composeFieldLabel: {
       color: palette.accent,
       fontSize: 10,
@@ -1872,16 +3087,14 @@ function createStyles(palette: MessagingPalette) {
     composePeople: { gap: 7 },
     composePerson: {
       alignItems: "center",
-      backgroundColor: palette.surface,
-      borderColor: palette.border,
+      backgroundColor: "transparent",
       borderRadius: 14,
-      borderWidth: 1,
       flexDirection: "row",
       gap: 11,
       minHeight: 62,
       padding: 10,
     },
-    composePersonSelected: { borderColor: palette.accent },
+    composePersonSelected: { backgroundColor: palette.surface },
     composePersonMark: {
       alignItems: "center",
       backgroundColor: palette.surfaceAlt,
@@ -1898,10 +3111,22 @@ function createStyles(palette: MessagingPalette) {
     composePersonName: { color: palette.text, fontSize: 12, fontWeight: "900" },
     composePersonMeta: { color: palette.muted, fontSize: 10, marginTop: 3 },
     composeCheck: {
-      color: palette.positive,
-      fontSize: 15,
+      alignItems: "center",
+      borderColor: palette.muted,
+      borderRadius: 13,
+      borderWidth: 1.5,
+      height: 26,
+      justifyContent: "center",
+      width: 26,
+    },
+    composeCheckSelected: {
+      backgroundColor: palette.accent,
+      borderColor: palette.accent,
+    },
+    composeCheckText: {
+      color: palette.onAccent,
+      fontSize: 13,
       fontWeight: "900",
-      width: 20,
     },
     composeEmpty: {
       backgroundColor: palette.surface,

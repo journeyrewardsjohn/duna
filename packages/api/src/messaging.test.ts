@@ -5,6 +5,8 @@ import {
   canUseOrganizationMessaging,
   hasActiveGuardianCoverage,
   validateConversationCreationMode,
+  validateMessageAttachment,
+  validateMessageAttachmentTotal,
   validateMessageAuthoring,
 } from "./messaging-service";
 
@@ -157,6 +159,50 @@ describe("messaging safety", () => {
         kind: "schedule-change",
         widgetCount: 1,
       }),
+    ).not.toThrow();
+  });
+
+  it("accepts useful media and enforces a kind-specific size ceiling", () => {
+    expect(
+      validateMessageAttachment({
+        fileName: "practice.mov",
+        mediaType: "video/quicktime",
+        byteSize: 900 * 1024 * 1024,
+      }),
+    ).toEqual({ kind: "video", mediaType: "video/quicktime" });
+    expect(
+      validateMessageAttachment({
+        fileName: "schedule.pdf",
+        mediaType: "application/pdf; charset=binary",
+        byteSize: 2 * 1024 * 1024,
+      }),
+    ).toEqual({ kind: "file", mediaType: "application/pdf" });
+    expect(() =>
+      validateMessageAttachment({
+        fileName: "too-large.jpg",
+        mediaType: "image/jpeg",
+        byteSize: 51 * 1024 * 1024,
+      }),
+    ).toThrow("50 MB");
+    expect(() =>
+      validateMessageAttachment({
+        fileName: "unsafe.html",
+        mediaType: "text/html",
+        byteSize: 100,
+      }),
+    ).toThrow("standard office document");
+    expect(() =>
+      validateMessageAttachment({
+        fileName: "active.svg",
+        mediaType: "image/svg+xml",
+        byteSize: 100,
+      }),
+    ).toThrow("standard office document");
+    expect(() =>
+      validateMessageAttachmentTotal([900 * 1024 * 1024, 125 * 1024 * 1024]),
+    ).toThrow("total up to 1 GB");
+    expect(() =>
+      validateMessageAttachmentTotal([900 * 1024 * 1024, 100 * 1024 * 1024]),
     ).not.toThrow();
   });
 

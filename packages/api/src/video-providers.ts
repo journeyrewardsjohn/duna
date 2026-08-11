@@ -4,6 +4,7 @@ import {
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   S3Client,
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
@@ -99,6 +100,33 @@ export async function createR2VideoUpload(input: {
   return { uploadId: response.UploadId };
 }
 
+export async function createR2MessageAttachmentUpload(input: {
+  readonly objectKey: string;
+  readonly contentType: string;
+  readonly attachmentId: string;
+  readonly ownerPersonId: string;
+  readonly conversationId: string;
+}): Promise<{ readonly uploadId: string }> {
+  const { client, configuration } = getR2Client();
+  const response = await client.send(
+    new CreateMultipartUploadCommand({
+      Bucket: configuration.bucket,
+      Key: input.objectKey,
+      ContentType: input.contentType,
+      CacheControl: "private, max-age=0, no-store",
+      Metadata: {
+        "duna-attachment-id": input.attachmentId,
+        "duna-owner-id": input.ownerPersonId,
+        "duna-conversation-id": input.conversationId,
+      },
+    }),
+  );
+  if (!response.UploadId) {
+    throw new Error("R2 did not return an attachment upload identifier.");
+  }
+  return { uploadId: response.UploadId };
+}
+
 export async function presignR2VideoPart(input: {
   readonly objectKey: string;
   readonly uploadId: string;
@@ -168,6 +196,53 @@ export async function deleteR2VideoObject(objectKey: string): Promise<void> {
       Key: objectKey,
     }),
   );
+}
+
+export async function verifyR2ObjectSize(input: {
+  readonly objectKey: string;
+  readonly expectedBytes: number;
+}): Promise<void> {
+  const { client, configuration } = getR2Client();
+  const response = await client.send(
+    new HeadObjectCommand({
+      Bucket: configuration.bucket,
+      Key: input.objectKey,
+    }),
+  );
+  if (response.ContentLength !== input.expectedBytes) {
+    throw new Error("The completed attachment size did not match the upload.");
+  }
+}
+
+export async function presignR2AttachmentDownload(input: {
+  readonly objectKey: string;
+  readonly contentType: string;
+  readonly fileName: string;
+  readonly inline: boolean;
+  readonly expiresInSeconds?: number;
+}): Promise<{ readonly url: string; readonly expiresAt: Date }> {
+  const { client, configuration } = getR2Client();
+  const expiresInSeconds = Math.min(
+    24 * 60 * 60,
+    Math.max(60, input.expiresInSeconds ?? 60 * 60),
+  );
+  const expiresAt = new Date(Date.now() + expiresInSeconds * 1_000);
+  const safeFileName = input.fileName
+    .replaceAll(/[\r\n"\\]/g, "")
+    .trim()
+    .slice(0, 180);
+  const disposition = input.inline ? "inline" : "attachment";
+  const url = await getSignedUrl(
+    client,
+    new GetObjectCommand({
+      Bucket: configuration.bucket,
+      Key: input.objectKey,
+      ResponseContentType: input.contentType,
+      ResponseContentDisposition: `${disposition}; filename="${safeFileName || "duna-attachment"}"`,
+    }),
+    { expiresIn: expiresInSeconds },
+  );
+  return { url, expiresAt };
 }
 
 export async function presignR2VideoPlayback(input: {
