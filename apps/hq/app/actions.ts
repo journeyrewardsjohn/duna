@@ -384,6 +384,7 @@ export async function updateCatalogItemAction(
       shortSummary: optionalField(formData, "shortSummary"),
       description: optionalField(formData, "description"),
       visibility,
+      membershipRequired: formData.get("membershipRequired") === "true",
       configuration: configurationValue
         ? (JSON.parse(configurationValue) as Record<string, unknown>)
         : {},

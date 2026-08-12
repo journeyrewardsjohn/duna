@@ -3051,6 +3051,7 @@ export async function updateCatalogItem(input: {
   readonly shortSummary?: string;
   readonly description?: string;
   readonly visibility: "public" | "members" | "private";
+  readonly membershipRequired?: boolean;
   readonly configuration: Readonly<Record<string, unknown>>;
   readonly requestId: string;
   readonly ipAddress?: string;
@@ -3066,10 +3067,11 @@ export async function updateCatalogItem(input: {
     ),
   });
   if (!item) throw new Error("Product was not found in this organization.");
-  if (
-    input.visibility === "members" &&
-    !(item.type === "plan" && item.subtype === "membership")
-  ) {
+  const isMembership = item.type === "plan" && item.subtype === "membership";
+  const membershipRequired = isMembership
+    ? false
+    : (input.membershipRequired ?? item.membershipRequired);
+  if ((membershipRequired || input.visibility === "members") && !isMembership) {
     await requireActiveMembershipOffer(organizationId);
   }
 
@@ -3163,6 +3165,7 @@ export async function updateCatalogItem(input: {
     shortSummary: input.shortSummary?.trim() || undefined,
     description: input.description?.trim() || undefined,
     visibility: input.visibility,
+    membershipRequired,
     configuration: normalizedConfiguration,
     updatedAt: input.now,
   };

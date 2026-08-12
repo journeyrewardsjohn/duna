@@ -189,6 +189,7 @@ export function CatalogItemEditor({
       candidate.subtype === "membership" &&
       candidate.status === "active",
   );
+  const isMembership = item.type === "plan" && item.subtype === "membership";
   const liveProductUrl = `https://duna.coach/clubs/${workspace.organization.slug}/products/${item.slug}`;
 
   return (
@@ -406,6 +407,28 @@ export function CatalogItemEditor({
               </option>
               <option value="private">Private link or staff only</option>
             </select>
+          </label>
+          <label className="operator-switch">
+            <input
+              defaultChecked={item.membershipRequired}
+              disabled={
+                isMembership ||
+                (!membershipConfigured && !item.membershipRequired)
+              }
+              name="membershipRequired"
+              type="checkbox"
+              value="true"
+            />
+            <span>
+              <strong>Membership required to buy</strong>
+              {isMembership
+                ? "A membership cannot require another membership."
+                : membershipConfigured
+                  ? "Nonmembers will be offered the club membership in checkout."
+                  : item.membershipRequired
+                    ? "Turn this off, or publish a membership before keeping it required."
+                    : "Publish a membership before turning this on."}
+            </span>
           </label>
         </div>
 
