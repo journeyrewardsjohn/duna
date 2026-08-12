@@ -1,6 +1,7 @@
 "use client";
 
 import type { OperatorWorkspace } from "@duna/api";
+import { productMediaForKind } from "@duna/core";
 import { Badge } from "@duna/ui";
 import { upload } from "@vercel/blob/client";
 import {
@@ -38,8 +39,14 @@ import {
   Video,
 } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useActionState, useMemo, useState, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  useActionState,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   createCatalogItemAction,
   type OperatorActionState,
@@ -62,6 +69,13 @@ type ProductMedia = {
   readonly alt: string;
   readonly variantIndex?: number;
 };
+
+function productMediaPreviewUrl(url: string): string {
+  const libraryPrefix = "https://duna.coach/media/product-library/";
+  return url.startsWith(libraryPrefix)
+    ? url.slice("https://duna.coach".length)
+    : url;
+}
 type OptionDraft = {
   readonly id: string;
   readonly name: string;
@@ -331,6 +345,7 @@ function ChoiceCard({
   active,
   badge,
   detail,
+  disabled = false,
   icon,
   label,
   onClick,
@@ -338,6 +353,7 @@ function ChoiceCard({
   readonly active: boolean;
   readonly badge?: string;
   readonly detail: string;
+  readonly disabled?: boolean;
   readonly icon?: ReactNode;
   readonly label: string;
   readonly onClick: () => void;
@@ -346,6 +362,7 @@ function ChoiceCard({
     <button
       aria-pressed={active}
       className={active ? "guided-choice active" : "guided-choice"}
+      disabled={disabled}
       onClick={onClick}
       type="button"
     >
@@ -417,6 +434,7 @@ export function GuidedProductBuilder({
   readonly workspace: OperatorWorkspace;
 }) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const requestedType = searchParams.get("type");
   const initialType: ProductType =
     requestedType === "good" ||
@@ -440,6 +458,10 @@ export function GuidedProductBuilder({
   const [title, setTitle] = useState("");
   const [shortSummary, setShortSummary] = useState("");
   const [description, setDescription] = useState("");
+  const [bestFor, setBestFor] = useState("");
+  const [highlights, setHighlights] = useState("");
+  const [validityDays, setValidityDays] = useState(0);
+  const [redemptionNotes, setRedemptionNotes] = useState("");
   const [visibility, setVisibility] = useState<
     "public" | "members" | "private"
   >("public");
@@ -502,7 +524,38 @@ export function GuidedProductBuilder({
     "idle" | "uploading" | "ready" | "error"
   >("idle");
   const [mediaUploadMessage, setMediaUploadMessage] = useState("");
+  const [generatedImagePrompt, setGeneratedImagePrompt] = useState("");
+  const [generatedImageState, setGeneratedImageState] = useState<
+    "idle" | "generating" | "ready" | "error"
+  >("idle");
+  const [generatedImageMessage, setGeneratedImageMessage] = useState("");
+  const [customImageAvailable, setCustomImageAvailable] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+
+  useEffect(() => {
+    if (state.status === "success" && state.entityId) {
+      router.push(`/products/${state.entityId}?created=1`);
+    }
+  }, [router, state.entityId, state.status]);
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/product-media/generate", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return false;
+        const result = (await response.json()) as {
+          readonly available?: boolean;
+        };
+        return result.available === true;
+      })
+      .then((available) => {
+        if (active) setCustomImageAvailable(available);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const normalized = useMemo(() => normalizedOptions(options), [options]);
   const coordinates = useMemo(
@@ -530,9 +583,28 @@ export function GuidedProductBuilder({
   const isMembership = type === "plan" && subtype === "membership";
   const isCreditPack = type === "plan" && subtype === "credit-pack";
   const isBundle = type === "plan" && subtype === "bundle";
+  const membershipConfigured = workspace.catalog.some(
+    (item) =>
+      item.type === "plan" &&
+      item.subtype === "membership" &&
+      item.status === "active",
+  );
+  const mediaChoices = useMemo(() => productMediaForKind(subtype), [subtype]);
+  useEffect(() => {
+    if (isMembership || !membershipConfigured) {
+      setMembershipRequired(false);
+    }
+    if (!membershipConfigured && visibility === "members") {
+      setVisibility("public");
+    }
+  }, [isMembership, membershipConfigured, visibility]);
   const parsedBenefits = benefits
     .split("\n")
     .map((benefit) => benefit.trim())
+    .filter(Boolean);
+  const parsedHighlights = highlights
+    .split("\n")
+    .map((highlight) => highlight.trim())
     .filter(Boolean);
   const receiptTotalMinor = moneyMinor(receiptTotalCost);
   const receiptUnitCostMinor =
@@ -629,7 +701,55 @@ export function GuidedProductBuilder({
     }
   };
 
+  const generateProductImage = async () => {
+    const prompt = generatedImagePrompt.trim();
+    if (title.trim().length < 2 || prompt.length < 8) return;
+    setGeneratedImageState("generating");
+    setGeneratedImageMessage("Higgsfield is creating your cover…");
+    try {
+      const response = await fetch("/api/product-media/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          offerName: title,
+          offerType: activeSubtypeLabel,
+          prompt,
+        }),
+      });
+      const result = (await response.json()) as {
+        readonly alt?: string;
+        readonly error?: string;
+        readonly url?: string;
+      };
+      if (!response.ok || !result.url) {
+        throw new Error(result.error ?? "Duna could not create this cover.");
+      }
+      setMedia((current) => [
+        {
+          id: crypto.randomUUID(),
+          kind: "image",
+          url: result.url!,
+          alt: result.alt ?? title,
+        },
+        ...current,
+      ]);
+      setGeneratedImageState("ready");
+      setGeneratedImageMessage(
+        "Your custom cover is saved to Duna and selected.",
+      );
+    } catch (error) {
+      setGeneratedImageState("error");
+      setGeneratedImageMessage(
+        error instanceof Error
+          ? error.message
+          : "Duna could not create this cover.",
+      );
+    }
+  };
+
   const storyReady = title.trim().length >= 2;
+  const storyMediaReady =
+    storyReady && media.some((item) => item.kind === "image");
   const bookingReady =
     (deliveryMode !== "venue" || Boolean(venueId)) &&
     (coachMode !== "selected" || selectedCoachIds.length > 0);
@@ -644,13 +764,13 @@ export function GuidedProductBuilder({
     (!allowCredits || creditCost > 0);
   const stepReadiness: readonly boolean[] =
     type === "service"
-      ? [true, storyReady, bookingReady, checkoutReady, confirmed]
+      ? [true, storyMediaReady, bookingReady, checkoutReady, confirmed]
       : type === "plan"
-        ? [true, storyReady, planStructureReady, checkoutReady, confirmed]
+        ? [true, storyMediaReady, planStructureReady, checkoutReady, confirmed]
         : [
             trackInventory || sellEnabled,
             coordinates.length <= 500,
-            storyReady && media.some((item) => item.kind === "image"),
+            storyMediaReady,
             !sellEnabled || checkoutReady,
             confirmed,
           ];
@@ -731,7 +851,7 @@ export function GuidedProductBuilder({
       : (type !== "good" && step === 1) || (type === "good" && step === 2)
         ? type === "good"
           ? "Add a name and at least one image to continue."
-          : "Add a name with at least two characters to continue."
+          : "Add a name and choose or upload an image to continue."
         : step === 1 && type === "good"
           ? "Reduce the variant combinations to 500 or fewer."
           : step === 2 && type === "service"
@@ -746,7 +866,11 @@ export function GuidedProductBuilder({
 
   const configuration = {
     source: "hq-guided-product-builder",
-    flowVersion: 2,
+    flowVersion: 3,
+    bestFor: bestFor.trim() || undefined,
+    highlights: parsedHighlights,
+    validityDays: validityDays > 0 ? validityDays : undefined,
+    redemptionNotes: redemptionNotes.trim() || undefined,
     ...(type === "service"
       ? {
           service: {
@@ -778,8 +902,8 @@ export function GuidedProductBuilder({
                       ? membershipBookingLimit
                       : undefined,
                   includedCatalogItemIds,
+                  benefits: parsedBenefits,
                 },
-                benefits: parsedBenefits,
               }
             : {}),
           ...(isBundle
@@ -1187,164 +1311,313 @@ export function GuidedProductBuilder({
                     value={description}
                   />
                 </label>
+                <label className="operator-field--wide">
+                  <span>Best for</span>
+                  <input
+                    maxLength={220}
+                    onChange={(event) => setBestFor(event.target.value)}
+                    placeholder="Players who want a flexible way to train twice a week."
+                    value={bestFor}
+                  />
+                </label>
+                <label className="operator-field--wide">
+                  <span>What they get · one benefit per line</span>
+                  <textarea
+                    onChange={(event) => setHighlights(event.target.value)}
+                    placeholder={
+                      isCreditPack
+                        ? "20 club credits\nUse across eligible court and lesson bookings\nBalance appears instantly in Duna"
+                        : "Priority booking\nMember pricing\nA welcoming club community"
+                    }
+                    rows={4}
+                    value={highlights}
+                  />
+                </label>
+                <label>
+                  <span>Valid for · days · optional</span>
+                  <input
+                    min="0"
+                    onChange={(event) =>
+                      setValidityDays(Math.max(0, Number(event.target.value)))
+                    }
+                    placeholder="365"
+                    type="number"
+                    value={validityDays || ""}
+                  />
+                </label>
+                <label>
+                  <span>How to use it · optional</span>
+                  <input
+                    maxLength={280}
+                    onChange={(event) => setRedemptionNotes(event.target.value)}
+                    placeholder="Choose this balance when booking an eligible offer."
+                    value={redemptionNotes}
+                  />
+                </label>
               </div>
 
-              {type === "good" && (
-                <div className="guided-product-media">
-                  <header>
-                    <div>
-                      <strong>Product gallery</strong>
-                      <small>
-                        At least one image is required. Add multiple images or
-                        videos and optionally connect them to a variant.
-                      </small>
-                    </div>
-                    <Badge
-                      tone={
-                        media.some((item) => item.kind === "image")
-                          ? "positive"
-                          : "warning"
-                      }
-                    >
-                      {media.length} media
-                    </Badge>
-                  </header>
-                  <label className="guided-product-media__upload">
-                    <input
-                      accept="image/avif,image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
-                      disabled={mediaUploadState === "uploading"}
-                      multiple
-                      onChange={(event) => void uploadMedia(event.target.files)}
-                      type="file"
-                    />
-                    <UploadCloud aria-hidden size={22} />
-                    <span>
-                      <strong>
-                        {mediaUploadState === "uploading"
-                          ? "Uploading…"
-                          : "Upload images or video"}
-                      </strong>
-                      <small>Images are optimized before storage.</small>
-                    </span>
-                  </label>
-                  {mediaUploadState !== "idle" && (
-                    <p
-                      className={`event-media-status event-media-status--${mediaUploadState}`}
-                      role={mediaUploadState === "error" ? "alert" : "status"}
-                    >
-                      {mediaUploadMessage}
-                    </p>
-                  )}
-                  <div className="guided-product-hosted-media">
-                    <select
-                      aria-label="Hosted media type"
-                      onChange={(event) =>
-                        setHostedMediaKind(
-                          event.target.value === "video" ? "video" : "image",
-                        )
-                      }
-                      value={hostedMediaKind}
-                    >
-                      <option value="image">Image URL</option>
-                      <option value="video">Video URL</option>
-                    </select>
-                    <input
-                      aria-label="Hosted media URL"
-                      onChange={(event) =>
-                        setHostedMediaUrl(event.target.value)
-                      }
-                      placeholder="https://…"
-                      type="url"
-                      value={hostedMediaUrl}
-                    />
-                    <button
-                      className="hq-button hq-button--secondary"
-                      disabled={!hostedMediaUrl.trim()}
-                      onClick={addHostedMedia}
-                      type="button"
-                    >
-                      <Plus aria-hidden size={15} /> Add
-                    </button>
+              <div className="guided-product-media">
+                <header>
+                  <div>
+                    <strong>Offer gallery</strong>
+                    <small>
+                      Choose a Duna cover or upload images and video. The first
+                      item becomes the customer-facing card and hero.
+                    </small>
                   </div>
-                  {media.length > 0 && (
-                    <div className="guided-product-media__grid">
-                      {media.map((item, index) => (
-                        <article key={item.id}>
-                          <div>
+                  <Badge
+                    tone={
+                      media.some((item) => item.kind === "image")
+                        ? "positive"
+                        : "warning"
+                    }
+                  >
+                    {media.length} media
+                  </Badge>
+                </header>
+                <label className="guided-product-media__upload">
+                  <input
+                    accept="image/avif,image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
+                    disabled={mediaUploadState === "uploading"}
+                    multiple
+                    onChange={(event) => void uploadMedia(event.target.files)}
+                    type="file"
+                  />
+                  <UploadCloud aria-hidden size={22} />
+                  <span>
+                    <strong>
+                      {mediaUploadState === "uploading"
+                        ? "Uploading…"
+                        : "Upload images or video"}
+                    </strong>
+                    <small>Images are optimized before storage.</small>
+                  </span>
+                </label>
+                {mediaUploadState !== "idle" && (
+                  <p
+                    className={`event-media-status event-media-status--${mediaUploadState}`}
+                    role={mediaUploadState === "error" ? "alert" : "status"}
+                  >
+                    {mediaUploadMessage}
+                  </p>
+                )}
+                <div className="guided-product-hosted-media">
+                  <select
+                    aria-label="Hosted media type"
+                    onChange={(event) =>
+                      setHostedMediaKind(
+                        event.target.value === "video" ? "video" : "image",
+                      )
+                    }
+                    value={hostedMediaKind}
+                  >
+                    <option value="image">Image URL</option>
+                    <option value="video">Video URL</option>
+                  </select>
+                  <input
+                    aria-label="Hosted media URL"
+                    onChange={(event) => setHostedMediaUrl(event.target.value)}
+                    placeholder="https://…"
+                    type="url"
+                    value={hostedMediaUrl}
+                  />
+                  <button
+                    className="hq-button hq-button--secondary"
+                    disabled={!hostedMediaUrl.trim()}
+                    onClick={addHostedMedia}
+                    type="button"
+                  >
+                    <Plus aria-hidden size={15} /> Add
+                  </button>
+                </div>
+                {customImageAvailable && (
+                  <section className="guided-product-ai-image">
+                    <header>
+                      <span>
+                        <Sparkles aria-hidden size={18} />
+                      </span>
+                      <div>
+                        <strong>Create a custom cover</strong>
+                        <small>
+                          Describe the feeling or scene. Higgsfield creates it,
+                          and Duna saves it to your gallery.
+                        </small>
+                      </div>
+                    </header>
+                    <div>
+                      <input
+                        maxLength={600}
+                        onChange={(event) =>
+                          setGeneratedImagePrompt(event.target.value)
+                        }
+                        placeholder="A sunrise members’ session with prepared courts and a welcoming coastal-club feeling"
+                        value={generatedImagePrompt}
+                      />
+                      <button
+                        className="hq-button hq-button--secondary"
+                        disabled={
+                          generatedImageState === "generating" ||
+                          title.trim().length < 2 ||
+                          generatedImagePrompt.trim().length < 8
+                        }
+                        onClick={() => void generateProductImage()}
+                        type="button"
+                      >
+                        <Sparkles aria-hidden size={15} />
+                        {generatedImageState === "generating"
+                          ? "Creating…"
+                          : "Create image"}
+                      </button>
+                    </div>
+                    {generatedImageState !== "idle" && (
+                      <p
+                        className={`event-media-status event-media-status--${
+                          generatedImageState === "generating"
+                            ? "uploading"
+                            : generatedImageState
+                        }`}
+                        role={
+                          generatedImageState === "error" ? "alert" : "status"
+                        }
+                      >
+                        {generatedImageMessage}
+                      </p>
+                    )}
+                  </section>
+                )}
+                <section className="guided-product-library">
+                  <header>
+                    <span>
+                      <Sparkles aria-hidden size={17} />
+                      <span>
+                        <strong>Created with Higgsfield</strong>
+                        <small>
+                          Product-ready club imagery, matched to this offer.
+                        </small>
+                      </span>
+                    </span>
+                    <Badge>{mediaChoices.length} images</Badge>
+                  </header>
+                  <div>
+                    {mediaChoices.map((choice) => {
+                      const selected = media.some((item) =>
+                        item.url.endsWith(choice.path),
+                      );
+                      return (
+                        <button
+                          aria-label={`Use ${choice.title}`}
+                          aria-pressed={selected}
+                          className={selected ? "selected" : undefined}
+                          key={choice.id}
+                          onClick={() =>
+                            setMedia((current) => [
+                              {
+                                id: crypto.randomUUID(),
+                                kind: "image",
+                                url: `https://duna.coach${choice.path}`,
+                                alt: choice.alt,
+                              },
+                              ...current.filter(
+                                (item) =>
+                                  !item.url.includes("/media/product-library/"),
+                              ),
+                            ])
+                          }
+                          style={{ backgroundImage: `url("${choice.path}")` }}
+                          type="button"
+                        >
+                          <span>{choice.title}</span>
+                          {selected && (
+                            <i>
+                              <Check aria-hidden size={14} />
+                            </i>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+                {media.length > 0 && (
+                  <div className="guided-product-media__grid">
+                    {media.map((item, index) => (
+                      <article key={item.id}>
+                        <div>
+                          {item.kind === "image" ? (
+                            <img
+                              alt={item.alt}
+                              src={productMediaPreviewUrl(item.url)}
+                            />
+                          ) : (
+                            <video
+                              muted
+                              playsInline
+                              preload="metadata"
+                              src={productMediaPreviewUrl(item.url)}
+                            />
+                          )}
+                          <span>
                             {item.kind === "image" ? (
-                              <img alt={item.alt} src={item.url} />
+                              <ImagePlus size={15} />
                             ) : (
-                              <video
-                                muted
-                                playsInline
-                                preload="metadata"
-                                src={item.url}
-                              />
+                              <Video size={15} />
                             )}
-                            <span>
-                              {item.kind === "image" ? (
-                                <ImagePlus size={15} />
-                              ) : (
-                                <Video size={15} />
-                              )}
-                              {index === 0 ? "Cover" : item.kind}
-                            </span>
-                          </div>
-                          <label>
-                            <span>Shown for</span>
-                            <select
-                              onChange={(event) =>
-                                setMedia((current) =>
-                                  current.map((candidate) =>
-                                    candidate.id === item.id
-                                      ? {
-                                          ...candidate,
-                                          variantIndex:
-                                            event.target.value === ""
-                                              ? undefined
-                                              : Number(event.target.value),
-                                        }
-                                      : candidate,
-                                  ),
-                                )
-                              }
-                              value={item.variantIndex ?? ""}
-                            >
-                              <option value="">All variants</option>
-                              {variantLabels.map((label, variantIndex) => (
-                                <option
-                                  key={`${label}-${variantIndex}`}
-                                  value={variantIndex}
-                                >
-                                  {label}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <button
-                            aria-label={`Remove ${item.kind}`}
-                            onClick={() =>
+                            {index === 0 ? "Cover" : item.kind}
+                          </span>
+                        </div>
+                        <label>
+                          <span>Shown for</span>
+                          <select
+                            onChange={(event) =>
                               setMedia((current) =>
-                                current.filter(
-                                  (candidate) => candidate.id !== item.id,
+                                current.map((candidate) =>
+                                  candidate.id === item.id
+                                    ? {
+                                        ...candidate,
+                                        variantIndex:
+                                          event.target.value === ""
+                                            ? undefined
+                                            : Number(event.target.value),
+                                      }
+                                    : candidate,
                                 ),
                               )
                             }
-                            type="button"
+                            value={item.variantIndex ?? ""}
                           >
-                            <Trash2 aria-hidden size={15} />
-                          </button>
-                        </article>
-                      ))}
-                    </div>
-                  )}
-                  {!media.some((item) => item.kind === "image") && (
-                    <p className="guided-product-warning" role="alert">
-                      Add at least one product image to continue.
-                    </p>
-                  )}
-                </div>
-              )}
+                            <option value="">All variants</option>
+                            {variantLabels.map((label, variantIndex) => (
+                              <option
+                                key={`${label}-${variantIndex}`}
+                                value={variantIndex}
+                              >
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          aria-label={`Remove ${item.kind}`}
+                          onClick={() =>
+                            setMedia((current) =>
+                              current.filter(
+                                (candidate) => candidate.id !== item.id,
+                              ),
+                            )
+                          }
+                          type="button"
+                        >
+                          <Trash2 aria-hidden size={15} />
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                )}
+                {!media.some((item) => item.kind === "image") && (
+                  <p className="guided-product-warning" role="alert">
+                    Choose or upload at least one image to continue.
+                  </p>
+                )}
+              </div>
             </section>
           )}
 
@@ -1875,6 +2148,7 @@ export function GuidedProductBuilder({
                 <label className="operator-switch">
                   <input
                     checked={membershipRequired}
+                    disabled={isMembership || !membershipConfigured}
                     onChange={(event) =>
                       setMembershipRequired(event.target.checked)
                     }
@@ -1882,7 +2156,11 @@ export function GuidedProductBuilder({
                   />
                   <span>
                     <strong>Membership required</strong>
-                    Only active members may purchase or book.
+                    {isMembership
+                      ? "A membership cannot require another membership."
+                      : membershipConfigured
+                        ? "Only active members may purchase or book."
+                        : "Publish a membership first to make offers members-only."}
                   </span>
                 </label>
                 <label className="operator-switch">
@@ -1908,7 +2186,12 @@ export function GuidedProductBuilder({
                   />
                   <ChoiceCard
                     active={visibility === "members"}
-                    detail="Visible to active members."
+                    detail={
+                      membershipConfigured
+                        ? "Visible to active members."
+                        : "Publish a membership before using this audience."
+                    }
+                    disabled={!membershipConfigured}
                     label="Members"
                     onClick={() => setVisibility("members")}
                   />
@@ -2315,6 +2598,17 @@ export function GuidedProductBuilder({
                     </span>
                   </article>
                 )}
+                <article>
+                  <small>Customer gallery</small>
+                  <strong>
+                    {media.length} image or video{media.length === 1 ? "" : "s"}
+                  </strong>
+                  <span>
+                    {media[0]
+                      ? "Cover selected · shown on the card and detail page"
+                      : "No cover selected"}
+                  </span>
+                </article>
               </div>
               {type === "good" && costingMethod === "lifo" && (
                 <div className="operator-legal-boundary">
@@ -2360,9 +2654,28 @@ export function GuidedProductBuilder({
               <Badge>Private draft</Badge>
             </header>
             <div className="guided-offer-preview__hero">
-              <span className="guided-offer-preview__icon">
-                <ActiveProductIcon aria-hidden size={22} />
-              </span>
+              {media[0] ? (
+                <span className="guided-offer-preview__media">
+                  {media[0].kind === "image" ? (
+                    <img
+                      alt={media[0].alt}
+                      src={productMediaPreviewUrl(media[0].url)}
+                    />
+                  ) : (
+                    <video
+                      aria-label={media[0].alt}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      src={productMediaPreviewUrl(media[0].url)}
+                    />
+                  )}
+                </span>
+              ) : (
+                <span className="guided-offer-preview__icon">
+                  <ActiveProductIcon aria-hidden size={22} />
+                </span>
+              )}
               <div>
                 <small>{activeProductType.label}</small>
                 <strong>{title.trim() || activeSubtypeLabel}</strong>

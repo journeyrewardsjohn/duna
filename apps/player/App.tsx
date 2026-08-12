@@ -12428,6 +12428,7 @@ function DunaApp() {
                   setOrganizationVenueId(venueId);
                 }}
                 slug={organizationSlug}
+                theme={theme}
               />
               <VenueBookingModal
                 onClose={() => setOrganizationVenueId(undefined)}

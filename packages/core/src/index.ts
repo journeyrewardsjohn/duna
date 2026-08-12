@@ -1,6 +1,7 @@
 export * from "./types";
 export * from "./eligibility";
 export * from "./event-media";
+export * from "./product-media";
 export * from "./forms";
 export * from "./identity";
 export * from "./import-resolution";

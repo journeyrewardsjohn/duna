@@ -60,6 +60,7 @@ import type {
   StripeOnboardingResult,
 } from "./contracts";
 import type { ApiActor } from "./context";
+import { requireActiveMembershipOffer } from "./organization-membership-policy";
 import { resolveOrganizationCommissionPolicy } from "./organization-billing";
 import {
   normalizeCourtCancellationPolicy,
@@ -3837,6 +3838,13 @@ export async function createCourt(input: {
       "Venue belongs to another organization.",
     );
   }
+  if (
+    input.bookingPolicy === "members" ||
+    input.bookingPolicy === "tiers" ||
+    input.weeklySchedule?.some((block) => block.mode === "members-only")
+  ) {
+    await requireActiveMembershipOffer(organizationId);
+  }
   if (input.maximumDurationMinutes < input.minimumDurationMinutes) {
     throw new OperatorServiceError(
       "INVALID_CONFIGURATION",
@@ -4164,6 +4172,9 @@ export async function updateCourtBookingConfiguration(input: {
     input.actor,
     input.courtId,
   );
+  if (input.bookingPolicy === "members" || input.bookingPolicy === "tiers") {
+    await requireActiveMembershipOffer(organizationId);
+  }
   if (input.ratePlanId) {
     const ratePlan = await getDatabase().query.ratePlans.findFirst({
       where: eq(ratePlans.id, input.ratePlanId),
@@ -4385,6 +4396,9 @@ export async function replaceCourtSchedule(input: {
     input.actor,
     input.courtId,
   );
+  if (input.blocks.some((block) => block.mode === "members-only")) {
+    await requireActiveMembershipOffer(organizationId);
+  }
   const database = getDatabase();
   let schedule = await database.query.schedules.findFirst({
     where: and(

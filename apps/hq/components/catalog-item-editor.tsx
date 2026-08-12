@@ -6,9 +6,14 @@ import {
   ArrowLeft,
   Check,
   CircleAlert,
+  Eye,
+  Image as ImageIcon,
+  Pencil,
+  Rocket,
   Search,
   ShoppingBag,
   UserRound,
+  Video,
 } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
@@ -21,6 +26,34 @@ import {
 import { InventoryComposer } from "./commerce-controls";
 
 const initialState: OperatorActionState = { status: "idle", message: "" };
+
+function configurationString(
+  configuration: Record<string, unknown>,
+  key: string,
+) {
+  return typeof configuration[key] === "string"
+    ? (configuration[key] as string)
+    : "";
+}
+
+function configurationStrings(
+  configuration: Record<string, unknown>,
+  key: string,
+) {
+  const value = configuration[key];
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [];
+}
+
+function moneyLabel(amountMinor: number | undefined, currency: string) {
+  if (amountMinor === undefined) return "Price not set";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2,
+  }).format(amountMinor / 100);
+}
 
 function notice(state: OperatorActionState) {
   if (state.status === "idle") return null;
@@ -40,9 +73,11 @@ function notice(state: OperatorActionState) {
 }
 
 export function CatalogItemEditor({
+  created,
   item,
   workspace,
 }: {
+  readonly created: boolean;
   readonly item: OperatorWorkspace["catalog"][number];
   readonly workspace: OperatorWorkspace;
 }) {
@@ -69,6 +104,20 @@ export function CatalogItemEditor({
     configuration.customerCoachSelection !== false,
   );
   const [coachSearch, setCoachSearch] = useState("");
+  const [bestFor, setBestFor] = useState(
+    configurationString(configuration, "bestFor"),
+  );
+  const [highlights, setHighlights] = useState(
+    configurationStrings(configuration, "highlights").join("\n"),
+  );
+  const [validityDays, setValidityDays] = useState(
+    typeof configuration.validityDays === "number"
+      ? String(configuration.validityDays)
+      : "",
+  );
+  const [redemptionNotes, setRedemptionNotes] = useState(
+    configurationString(configuration, "redemptionNotes"),
+  );
   const [state, action, pending] = useActionState(
     updateCatalogItemAction,
     initialState,
@@ -98,8 +147,16 @@ export function CatalogItemEditor({
         coach.homeMarket?.toLowerCase().includes(query),
     );
   }, [coachSearch, eligibleCoaches]);
+  const parsedHighlights = highlights
+    .split("\n")
+    .map((highlight) => highlight.trim())
+    .filter(Boolean);
   const nextConfiguration = {
     ...configuration,
+    bestFor: bestFor.trim() || undefined,
+    highlights: parsedHighlights,
+    validityDays: validityDays ? Math.max(0, Number(validityDays)) : undefined,
+    redemptionNotes: redemptionNotes.trim() || undefined,
     ...(supportsCoaches
       ? {
           coachAssignmentMode: coachMode,
@@ -113,6 +170,26 @@ export function CatalogItemEditor({
       : {}),
   };
   const nextStatus = item.status === "active" ? "draft" : "active";
+  const coverMedia = item.media[0];
+  const primaryPrice = item.variants
+    .flatMap((variant) => variant.prices)
+    .find(
+      (price) =>
+        price.active &&
+        price.paymentKind === "card" &&
+        price.amountMinor !== undefined,
+    );
+  const previewHighlights =
+    parsedHighlights.length > 0
+      ? parsedHighlights
+      : configurationStrings(configuration, "highlights");
+  const membershipConfigured = workspace.catalog.some(
+    (candidate) =>
+      candidate.type === "plan" &&
+      candidate.subtype === "membership" &&
+      candidate.status === "active",
+  );
+  const liveProductUrl = `https://duna.coach/clubs/${workspace.organization.slug}/products/${item.slug}`;
 
   return (
     <div className="catalog-editor">
@@ -134,9 +211,124 @@ export function CatalogItemEditor({
         </Badge>
       </header>
 
+      {created && (
+        <div className="catalog-editor__created" role="status">
+          <Check aria-hidden size={18} />
+          <span>
+            <strong>Draft saved.</strong> This is what customers will see. Edit
+            anything below or publish it live when it feels right.
+          </span>
+        </div>
+      )}
+
+      <section className="catalog-draft-preview" aria-label="Customer preview">
+        <div className="catalog-draft-preview__media">
+          {coverMedia?.kind === "image" ? (
+            <img alt={coverMedia.alt ?? item.title} src={coverMedia.url} />
+          ) : coverMedia?.kind === "video" ? (
+            <video
+              aria-label={coverMedia.alt ?? item.title}
+              controls
+              playsInline
+              poster={coverMedia.posterUrl}
+              preload="metadata"
+              src={coverMedia.url}
+            />
+          ) : (
+            <span>
+              <ImageIcon aria-hidden size={32} />
+              Add a cover image below
+            </span>
+          )}
+          {coverMedia && (
+            <i>
+              {coverMedia.kind === "video" ? (
+                <Video aria-hidden size={14} />
+              ) : (
+                <ImageIcon aria-hidden size={14} />
+              )}
+              Customer cover
+            </i>
+          )}
+        </div>
+        <div className="catalog-draft-preview__story">
+          <span className="hq-eyebrow">Customer page preview</span>
+          <div>
+            <Badge>{item.subtype.replaceAll("-", " ")}</Badge>
+            <Badge tone={item.status === "active" ? "positive" : "neutral"}>
+              {item.status === "active" ? "Live" : "Private draft"}
+            </Badge>
+          </div>
+          <h2>{item.title}</h2>
+          <p>
+            {item.shortSummary ??
+              "Add a short customer-facing summary to make this offer easier to choose."}
+          </p>
+          {bestFor && (
+            <small>
+              <strong>Best for</strong> {bestFor}
+            </small>
+          )}
+          {previewHighlights.length > 0 && (
+            <ul>
+              {previewHighlights.slice(0, 4).map((highlight) => (
+                <li key={highlight}>
+                  <Check aria-hidden size={14} /> {highlight}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <aside className="catalog-draft-preview__checkout">
+          <small>Customer price</small>
+          <strong>
+            {moneyLabel(
+              primaryPrice?.amountMinor,
+              primaryPrice?.currency ?? workspace.organization.currency,
+            )}
+          </strong>
+          {primaryPrice?.recurringInterval && (
+            <span>Renews every {primaryPrice.recurringInterval}</span>
+          )}
+          <a className="hq-button hq-button--secondary" href="#edit-product">
+            <Pencil aria-hidden size={15} /> Edit draft
+          </a>
+          {item.status === "active" ? (
+            <a
+              className="hq-button hq-button--primary"
+              href={liveProductUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <Eye aria-hidden size={15} /> View live
+            </a>
+          ) : (
+            <form action={statusAction}>
+              <input name="catalogItemId" type="hidden" value={item.id} />
+              <input name="status" type="hidden" value="active" />
+              <input name="confirmed" type="hidden" value="true" />
+              <button
+                className="hq-button hq-button--primary"
+                disabled={statusPending || inventoryOnlyGood}
+                type="submit"
+              >
+                <Rocket aria-hidden size={15} />
+                {inventoryOnlyGood
+                  ? "Set sales first"
+                  : statusPending
+                    ? "Publishing…"
+                    : "Publish live"}
+              </button>
+            </form>
+          )}
+          {notice(statusState)}
+        </aside>
+      </section>
+
       <form
         action={action}
         className="hq-card operator-form catalog-editor__form"
+        id="edit-product"
       >
         <input name="catalogItemId" type="hidden" value={item.id} />
         <input
@@ -166,11 +358,52 @@ export function CatalogItemEditor({
               rows={7}
             />
           </label>
+          <label className="operator-field--wide">
+            <span>Best for</span>
+            <input
+              maxLength={220}
+              onChange={(event) => setBestFor(event.target.value)}
+              placeholder="Players who want a flexible way to train twice a week."
+              value={bestFor}
+            />
+          </label>
+          <label className="operator-field--wide">
+            <span>What they get · one benefit per line</span>
+            <textarea
+              onChange={(event) => setHighlights(event.target.value)}
+              placeholder="Priority booking\nMember pricing\nA welcoming club community"
+              rows={4}
+              value={highlights}
+            />
+          </label>
+          <label>
+            <span>Valid for · days · optional</span>
+            <input
+              min="0"
+              onChange={(event) => setValidityDays(event.target.value)}
+              placeholder="365"
+              type="number"
+              value={validityDays}
+            />
+          </label>
+          <label>
+            <span>How to use it · optional</span>
+            <input
+              maxLength={280}
+              onChange={(event) => setRedemptionNotes(event.target.value)}
+              placeholder="Choose this balance when booking an eligible offer."
+              value={redemptionNotes}
+            />
+          </label>
           <label>
             <span>Who can see it?</span>
             <select defaultValue={item.visibility} name="visibility">
               <option value="public">Everyone</option>
-              <option value="members">Members</option>
+              <option disabled={!membershipConfigured} value="members">
+                {membershipConfigured
+                  ? "Members"
+                  : "Members · publish a membership first"}
+              </option>
               <option value="private">Private link or staff only</option>
             </select>
           </label>

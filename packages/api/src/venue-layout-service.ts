@@ -36,6 +36,7 @@ import type {
   VenueLayoutWorkspace,
 } from "./contracts";
 import type { ApiActor } from "./context";
+import { requireActiveMembershipOffer } from "./organization-membership-policy";
 import {
   loadDemoOperatorWorkspace,
   loadOperatorWorkspace,
@@ -284,6 +285,12 @@ function demoVenueLayoutWorkspace(venueId: string): VenueLayoutWorkspace {
   };
   return {
     venue,
+    membershipConfigured: workspace.catalog.some(
+      (item) =>
+        item.type === "plan" &&
+        item.subtype === "membership" &&
+        item.status === "active",
+    ),
     layouts: [
       {
         id: draftLayoutId,
@@ -475,6 +482,12 @@ export async function loadVenueLayoutWorkspace(input: {
   );
   return {
     venue,
+    membershipConfigured: workspace.catalog.some(
+      (item) =>
+        item.type === "plan" &&
+        item.subtype === "membership" &&
+        item.status === "active",
+    ),
     layouts: mapLayoutRows({
       layouts: layoutRows,
       assets: assetRows,
@@ -912,6 +925,9 @@ export async function createCourtFromVenueLayout(
   requireDatabase();
   const organizationId = requireOrganization(input.actor);
   const layout = await ownedLayout(organizationId, input.layoutId);
+  if (input.bookingPolicy === "members" || input.bookingPolicy === "tiers") {
+    await requireActiveMembershipOffer(organizationId);
+  }
   if (layout.status !== "draft") {
     throw new OperatorServiceError(
       "INVALID_CONFIGURATION",

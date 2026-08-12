@@ -8,7 +8,7 @@ import {
 } from "@stripe/stripe-react-native";
 import { Platform } from "react-native";
 
-export interface NativeEventPaymentSheet {
+export interface NativePaymentSheet {
   readonly publishableKey: string;
   readonly paymentIntentId: string;
   readonly paymentIntentClientSecret: string;
@@ -16,8 +16,8 @@ export interface NativeEventPaymentSheet {
   readonly customerSessionClientSecret: string;
 }
 
-export async function presentNativeEventPayment(input: {
-  readonly paymentSheet: NativeEventPaymentSheet;
+export async function presentNativePayment(input: {
+  readonly paymentSheet: NativePaymentSheet;
   readonly customerName?: string;
   readonly customerEmail?: string;
 }): Promise<"completed" | "cancelled"> {
@@ -84,3 +84,5 @@ export async function presentNativeEventPayment(input: {
   if (presented.error) throw new Error(presented.error.message);
   return presented.didCancel ? "cancelled" : "completed";
 }
+
+export const presentNativeEventPayment = presentNativePayment;

@@ -2539,6 +2539,7 @@ export const venueLayoutLiveMatchSchema = z.object({
 
 export const venueLayoutWorkspaceSchema = z.object({
   venue: operatorVenueSchema,
+  membershipConfigured: z.boolean(),
   layouts: z.array(venueLayoutSchema).readonly(),
   events: z.array(venueLayoutEventSchema).readonly(),
   liveMatches: z.array(venueLayoutLiveMatchSchema).readonly(),
@@ -4397,6 +4398,15 @@ export const courtCheckoutResultSchema = z.object({
   paymentMode: z.enum(["full", "split"]).optional(),
   checkoutSessionId: z.string().optional(),
   checkoutUrl: z.url().optional(),
+  paymentSheet: z
+    .object({
+      publishableKey: z.string().startsWith("pk_"),
+      paymentIntentId: z.string().startsWith("pi_"),
+      paymentIntentClientSecret: z.string().min(1),
+      customerId: z.string().startsWith("cus_"),
+      customerSessionClientSecret: z.string().min(1),
+    })
+    .optional(),
   expiresAt: z.iso.datetime().optional(),
   startsAt: z.iso.datetime(),
   endsAt: z.iso.datetime(),
@@ -4458,6 +4468,15 @@ export const catalogCheckoutResultSchema = z.object({
   orderStatus: z.enum(["pending", "paid"]),
   checkoutSessionId: z.string().optional(),
   checkoutUrl: z.url().optional(),
+  paymentSheet: z
+    .object({
+      publishableKey: z.string().startsWith("pk_"),
+      paymentIntentId: z.string().startsWith("pi_"),
+      paymentIntentClientSecret: z.string().min(1),
+      customerId: z.string().startsWith("cus_"),
+      customerSessionClientSecret: z.string().min(1),
+    })
+    .optional(),
   expiresAt: z.iso.datetime().optional(),
   paymentMethod: z.enum(["card", "credit", "cash"]),
   quantity: z.number().int().positive(),

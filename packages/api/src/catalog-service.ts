@@ -65,6 +65,10 @@ import type {
 } from "./contracts";
 import type { ApiActor } from "./context";
 import { enforceGuardianCopies } from "./messaging";
+import {
+  requireActiveMembershipOffer,
+  requireMembershipOfferCanDeactivate,
+} from "./organization-membership-policy";
 import { getStripeClient, isStripeConfigured, refundPayment } from "./payments";
 
 type CatalogItemType = OperatorWorkspace["catalog"][number]["type"];
@@ -2314,6 +2318,12 @@ export async function createCatalogItem(
   });
   if (!organization) throw new Error("Organization was not found.");
   if (
+    (input.membershipRequired || input.visibility === "members") &&
+    !(input.type === "plan" && input.subtype === "membership")
+  ) {
+    await requireActiveMembershipOffer(organizationId);
+  }
+  if (
     input.type === "good" &&
     !input.media.some((media) => media.kind === "image")
   ) {
@@ -3056,6 +3066,12 @@ export async function updateCatalogItem(input: {
     ),
   });
   if (!item) throw new Error("Product was not found in this organization.");
+  if (
+    input.visibility === "members" &&
+    !(item.type === "plan" && item.subtype === "membership")
+  ) {
+    await requireActiveMembershipOffer(organizationId);
+  }
 
   let normalizedConfiguration: Readonly<Record<string, unknown>> = {
     ...item.configuration,
@@ -3486,6 +3502,12 @@ export async function setCatalogItemStatus(input: {
   }
 
   if (input.status === "active") {
+    if (
+      (item.membershipRequired || item.visibility === "members") &&
+      !(item.type === "plan" && item.subtype === "membership")
+    ) {
+      await requireActiveMembershipOffer(organizationId);
+    }
     const [variants, prices, entitlements] = await Promise.all([
       database
         .select()
@@ -3605,6 +3627,15 @@ export async function setCatalogItemStatus(input: {
         now: input.now,
       });
     }
+  }
+
+  if (
+    input.status !== "active" &&
+    item.status === "active" &&
+    item.type === "plan" &&
+    item.subtype === "membership"
+  ) {
+    await requireMembershipOfferCanDeactivate(organizationId, item.id);
   }
 
   const before = {

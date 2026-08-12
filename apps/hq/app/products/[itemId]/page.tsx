@@ -7,10 +7,13 @@ export const metadata = { title: "Edit product" };
 
 export default async function ProductDetailPage({
   params,
+  searchParams,
 }: {
   readonly params: Promise<{ itemId: string }>;
+  readonly searchParams: Promise<{ created?: string }>;
 }) {
   const { itemId } = await params;
+  const query = await searchParams;
   const caller = await getServerCaller();
   const [dashboard, workspace] = await Promise.all([
     caller.operator.dashboard(),
@@ -25,7 +28,11 @@ export default async function ProductDetailPage({
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >
-      <CatalogItemEditor item={item} workspace={workspace} />
+      <CatalogItemEditor
+        created={query.created === "1"}
+        item={item}
+        workspace={workspace}
+      />
     </OperatorShell>
   );
 }

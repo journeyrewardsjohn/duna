@@ -764,10 +764,27 @@ for (const file of designSources) {
 const imageryDirectory = join(root, "apps/web/public/media/brand");
 const imageryLog = JSON.parse(
   readFileSync(join(imageryDirectory, "imagery-log.json"), "utf8"),
-) as { readonly assets?: readonly { readonly name?: string }[] };
+) as {
+  readonly assets?: readonly {
+    readonly name?: string;
+    readonly outputNames?: readonly string[];
+  }[];
+};
 for (const asset of imageryLog.assets ?? []) {
   if (!asset.name) {
     violations.push("imagery-log.json contains an unnamed asset");
+    continue;
+  }
+  if (asset.name.startsWith("product-library/")) {
+    if (!asset.outputNames?.length) {
+      violations.push(`${asset.name} must declare its product-library outputs`);
+      continue;
+    }
+    for (const outputName of asset.outputNames) {
+      if (!existsSync(join(root, outputName))) {
+        violations.push(`${outputName} is missing from the product library`);
+      }
+    }
     continue;
   }
   for (const extension of ["avif", "webp"]) {

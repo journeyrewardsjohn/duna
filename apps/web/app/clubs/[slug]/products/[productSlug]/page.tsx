@@ -1,15 +1,8 @@
-import {
-  ArrowLeft,
-  Check,
-  Clock3,
-  CreditCard,
-  PackageCheck,
-  ShieldCheck,
-  WalletCards,
-} from "lucide-react";
+import { ArrowLeft, Check, WalletCards } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import type { CSSProperties } from "react";
 import { CatalogCheckoutPanel } from "@/components/catalog-checkout-panel";
 import { CatalogMediaGallery } from "@/components/catalog-media-gallery";
 import { MarkdownContent } from "@/components/markdown-content";
@@ -66,6 +59,8 @@ export default async function CatalogProductPage({
   readonly searchParams: Promise<{
     checkout?: string;
     session_id?: string;
+    membership_checkout?: string;
+    membership_session_id?: string;
   }>;
 }) {
   const [{ slug, productSlug }, query] = await Promise.all([
@@ -93,20 +88,47 @@ export default async function CatalogProductPage({
     (wallet) => wallet.organizationId === storefront.organizationId,
   );
   const walletCredits = organizationBenefits?.credits ?? 0;
-  const isMember =
-    organizationBenefits?.membershipStatus === "active" ||
-    organizationBenefits?.membershipStatus === "trialing";
-  const benefits = Array.isArray(item.configuration.benefits)
-    ? item.configuration.benefits.filter(
-        (benefit): benefit is string => typeof benefit === "string",
-      )
-    : [];
+  const isMember = offerEligibility.isMember;
   const membershipConfiguration =
     item.configuration.membership &&
     typeof item.configuration.membership === "object" &&
     !Array.isArray(item.configuration.membership)
       ? (item.configuration.membership as Readonly<Record<string, unknown>>)
       : undefined;
+  const benefits = Array.isArray(membershipConfiguration?.benefits)
+    ? membershipConfiguration.benefits.filter(
+        (benefit): benefit is string => typeof benefit === "string",
+      )
+    : [];
+  const configuredHighlights = Array.isArray(item.configuration.highlights)
+    ? item.configuration.highlights.filter(
+        (highlight): highlight is string => typeof highlight === "string",
+      )
+    : [];
+  const creditsGranted = Number(item.configuration.creditsGranted ?? 0);
+  const highlights =
+    configuredHighlights.length > 0
+      ? configuredHighlights
+      : Number.isSafeInteger(creditsGranted) && creditsGranted > 0
+        ? [
+            `${creditsGranted} ${storefront.name} credits`,
+            "Use credits on eligible bookings and services",
+            "Balance appears in Duna as soon as payment completes",
+          ]
+        : benefits;
+  const bestFor =
+    typeof item.configuration.bestFor === "string"
+      ? item.configuration.bestFor
+      : undefined;
+  const redemptionNotes =
+    typeof item.configuration.redemptionNotes === "string"
+      ? item.configuration.redemptionNotes
+      : undefined;
+  const validityDays = Number(item.configuration.validityDays ?? 0);
+  const membershipOffers = storefront.catalog.filter(
+    (candidate) =>
+      candidate.type === "plan" && candidate.subtype === "membership",
+  );
   const canonicalPath = `/clubs/${slug}/products/${productSlug}`;
   const pageUrl = absolutePublicUrl(canonicalPath);
   const offers = item.variants.flatMap((variant) =>
@@ -165,7 +187,17 @@ export default async function CatalogProductPage({
   };
 
   return (
-    <main className="public-detail catalog-product-page" data-zone="editorial">
+    <main
+      className="public-detail catalog-product-page"
+      data-zone="editorial"
+      style={
+        {
+          "--catalog-primary": storefront.theme.palette.primary,
+          "--catalog-accent": storefront.theme.palette.accent,
+          "--catalog-sand": storefront.theme.palette.sand,
+        } as CSSProperties
+      }
+    >
       <SiteHeader />
       <script
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
@@ -188,99 +220,65 @@ export default async function CatalogProductPage({
               <h1>{item.title}</h1>
               <p className="catalog-product-summary">
                 {item.shortSummary ??
-                  "A connected offer from this Duna organization."}
+                  `A better way to spend time with ${storefront.name}.`}
               </p>
-              {item.description && (
-                <div className="catalog-product-description">
-                  <MarkdownContent>{item.description}</MarkdownContent>
-                </div>
+              {bestFor && (
+                <section className="catalog-product-story">
+                  <span className="section__eyebrow">Best for</span>
+                  <p>{bestFor}</p>
+                </section>
               )}
-              {(benefits.length > 0 || membershipConfiguration) && (
-                <section className="catalog-membership-inclusions">
-                  <span className="section__eyebrow">What is included</span>
+              {highlights.length > 0 && (
+                <section className="catalog-product-highlights">
+                  <span className="section__eyebrow">What you get</span>
                   <div>
-                    {Number(
-                      membershipConfiguration?.includedCreditsPerCycle ?? 0,
-                    ) > 0 && (
-                      <article>
-                        <WalletCards size={18} />
-                        <span>
-                          <strong>
-                            {
-                              membershipConfiguration?.includedCreditsPerCycle as number
-                            }{" "}
-                            credits each billing cycle
-                          </strong>
-                          <small>Valid only with this organization.</small>
-                        </span>
-                      </article>
-                    )}
-                    {benefits.map((benefit) => (
-                      <article key={benefit}>
+                    {highlights.map((highlight) => (
+                      <article key={highlight}>
                         <Check size={18} />
-                        <span>
-                          <strong>{benefit}</strong>
-                        </span>
+                        <strong>{highlight}</strong>
                       </article>
                     ))}
                   </div>
                 </section>
               )}
-              <div className="catalog-product-benefits">
-                <article>
-                  <Check size={18} />
-                  <span>
-                    <strong>Connected to your account</strong>
-                    <small>
-                      Purchases, credits, and membership stay visible in Duna.
-                    </small>
-                  </span>
-                </article>
-                <article>
-                  {item.allowCredits ? (
-                    <WalletCards size={18} />
-                  ) : (
-                    <CreditCard size={18} />
-                  )}
-                  <span>
-                    <strong>Clear payment choices</strong>
-                    <small>
-                      {item.allowCredits
-                        ? "Pay by card or this organization’s credits."
-                        : item.allowCard
-                          ? "Secure online payment."
-                          : "Pay directly with the organization in person."}
-                    </small>
-                  </span>
-                </article>
-                <article>
-                  {item.type === "good" ? (
-                    <PackageCheck size={18} />
-                  ) : (
-                    <Clock3 size={18} />
-                  )}
-                  <span>
-                    <strong>
-                      {item.type === "good" &&
-                      item.configuration.inventoryTracked !== false
-                        ? "Inventory reserved at checkout"
-                        : "Fulfillment tracked"}
-                    </strong>
-                    <small>
-                      Duna keeps the operator and player on the same record.
-                    </small>
-                  </span>
-                </article>
-                <article>
-                  <ShieldCheck size={18} />
-                  <span>
-                    <strong>Organization-scoped</strong>
-                    <small>
-                      Member access and credits are enforced by organization.
-                    </small>
-                  </span>
-                </article>
-              </div>
+              {item.description && (
+                <div className="catalog-product-description">
+                  <span className="section__eyebrow">The details</span>
+                  <MarkdownContent>{item.description}</MarkdownContent>
+                </div>
+              )}
+              {Number(membershipConfiguration?.includedCreditsPerCycle ?? 0) >
+                0 && (
+                <section className="catalog-membership-inclusions">
+                  <span className="section__eyebrow">Every billing cycle</span>
+                  <div>
+                    <article>
+                      <WalletCards size={18} />
+                      <span>
+                        <strong>
+                          {
+                            membershipConfiguration?.includedCreditsPerCycle as number
+                          }{" "}
+                          credits
+                        </strong>
+                        <small>Ready to use only with {storefront.name}.</small>
+                      </span>
+                    </article>
+                  </div>
+                </section>
+              )}
+              {(redemptionNotes || validityDays > 0) && (
+                <section className="catalog-product-story">
+                  <span className="section__eyebrow">How to use it</span>
+                  <p>
+                    {redemptionNotes ??
+                      `Use within ${validityDays} days of purchase.`}
+                    {redemptionNotes && validityDays > 0
+                      ? ` Valid for ${validityDays} days after purchase.`
+                      : ""}
+                  </p>
+                </section>
+              )}
             </div>
           </div>
           <CatalogCheckoutPanel
@@ -290,6 +288,13 @@ export default async function CatalogProductPage({
             initialNotice={
               query.checkout === "cancelled"
                 ? "Checkout was cancelled. Any temporary inventory hold will be released."
+                : query.membership_checkout === "cancelled"
+                  ? "Membership checkout was cancelled. You can change your selection below."
+                  : undefined
+            }
+            initialMembershipCheckoutSessionId={
+              query.membership_checkout === "success"
+                ? query.membership_session_id
                 : undefined
             }
             item={item}
@@ -301,6 +306,7 @@ export default async function CatalogProductPage({
             }}
             isMember={isMember}
             membershipIncluded={offerEligibility.included}
+            membershipOffers={membershipOffers}
             membershipRemainingBookings={offerEligibility.remainingBookings}
             dunaServiceFeeWaived={playerSettings?.dunaPlus.active ?? false}
             walletCredits={walletCredits}

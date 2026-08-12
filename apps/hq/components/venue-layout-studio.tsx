@@ -890,10 +890,12 @@ function AssetInspector({
 function CourtCreator({
   draft,
   layout,
+  membershipConfigured,
   onClose,
 }: {
   readonly draft: CourtDraft;
   readonly layout: VenueLayout;
+  readonly membershipConfigured: boolean;
   readonly onClose: () => void;
 }) {
   const router = useRouter();
@@ -974,8 +976,16 @@ function CourtCreator({
               <span>Who can book it?</span>
               <select defaultValue="public" name="bookingPolicy">
                 <option value="public">Anyone</option>
-                <option value="members">Members</option>
-                <option value="tiers">Selected membership tiers</option>
+                <option disabled={!membershipConfigured} value="members">
+                  {membershipConfigured
+                    ? "Members"
+                    : "Members · publish a membership first"}
+                </option>
+                <option disabled={!membershipConfigured} value="tiers">
+                  {membershipConfigured
+                    ? "Selected membership tiers"
+                    : "Selected tiers · membership needed"}
+                </option>
                 <option value="staff">Staff only</option>
                 <option value="none">Not bookable</option>
               </select>
@@ -2547,6 +2557,7 @@ export function VenueLayoutStudio({
         <CourtCreator
           draft={courtDraft}
           layout={layout}
+          membershipConfigured={workspace.membershipConfigured}
           onClose={() => setCourtDraft(undefined)}
         />
       )}

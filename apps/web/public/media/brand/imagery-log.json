@@ -191,6 +191,126 @@
       ]
     },
     {
+      "name": "product-library/duna-product-club-community",
+      "model": "Higgsfield GPT Image 2",
+      "intent": "Premium club-membership cover showing authentic community warmth after a beach session.",
+      "promptIntent": "Inclusive beach volleyball members gathered around an oceanfront court after an early session, candid and unposed, with polished 4:3 editorial composition, distant or obscured faces, and no marks or text.",
+      "sourceReferences": [],
+      "permissions": "Duna-generated original text-to-image artwork; synthetic non-identifiable people, no real club, player, event, logo, or source artwork used.",
+      "outputNames": [
+        "apps/web/public/media/product-library/duna-product-club-community.webp",
+        "apps/hq/public/media/product-library/duna-product-club-community.webp"
+      ]
+    },
+    {
+      "name": "product-library/duna-product-member-courts",
+      "model": "Higgsfield GPT Image 2",
+      "intent": "Premium membership-access cover centered on pristine reserved courts.",
+      "promptIntent": "Two freshly prepared beach volleyball courts at sunrise with lounge chairs, towels, and water, a quiet member atmosphere, no people, marks, logos, or text, in a polished 4:3 product frame.",
+      "sourceReferences": [],
+      "permissions": "Duna-generated original text-to-image artwork; no real venue, event, person, trademark, or source artwork used.",
+      "outputNames": [
+        "apps/web/public/media/product-library/duna-product-member-courts.webp",
+        "apps/hq/public/media/product-library/duna-product-member-courts.webp"
+      ]
+    },
+    {
+      "name": "product-library/duna-product-credit-pack",
+      "model": "Higgsfield GPT Image 2",
+      "intent": "Flexible-credit product cover using a tactile, premium play-token metaphor.",
+      "promptIntent": "An unbranded volleyball beside blank ceramic tokens on clean sand with a prepared court and ocean behind, polished 4:3 editorial product photography, no letters, numbers, marks, logos, or text.",
+      "sourceReferences": [],
+      "permissions": "Duna-generated original text-to-image artwork; no real product, venue, trademark, or source artwork used.",
+      "outputNames": [
+        "apps/web/public/media/product-library/duna-product-credit-pack.webp",
+        "apps/hq/public/media/product-library/duna-product-credit-pack.webp"
+      ]
+    },
+    {
+      "name": "product-library/duna-product-training-bundle",
+      "model": "Higgsfield GPT Image 2",
+      "intent": "Curated training-bundle cover with premium coastal equipment styling.",
+      "promptIntent": "A beach volleyball training kit on natural canvas with ball, resistance band, bottle, towel, and clipboard with blank pages, oceanfront court behind, no marks, logos, letters, numbers, or text.",
+      "sourceReferences": [],
+      "permissions": "Duna-generated original text-to-image artwork; no real product, trademark, person, or source artwork used.",
+      "outputNames": [
+        "apps/web/public/media/product-library/duna-product-training-bundle.webp",
+        "apps/hq/public/media/product-library/duna-product-training-bundle.webp"
+      ]
+    },
+    {
+      "name": "product-library/duna-product-private-lesson",
+      "model": "Higgsfield GPT Image 2",
+      "intent": "One-on-one coaching cover emphasizing focused personal attention.",
+      "promptIntent": "A private beach volleyball setting lesson at first light with coach and athlete in candid action, distant or obscured faces, warm sophisticated grade, and no marks, logos, letters, numbers, or text.",
+      "sourceReferences": [],
+      "permissions": "Duna-generated original text-to-image artwork; synthetic non-identifiable people, no real coach, player, venue, event, or source artwork used.",
+      "outputNames": [
+        "apps/web/public/media/product-library/duna-product-private-lesson.webp",
+        "apps/hq/public/media/product-library/duna-product-private-lesson.webp"
+      ]
+    },
+    {
+      "name": "product-library/duna-product-group-lesson",
+      "model": "Higgsfield GPT Image 2",
+      "intent": "Group-coaching cover with active movement and supportive energy.",
+      "promptIntent": "A small mixed group in an active passing drill with a coach at center on a bright coastal morning, candid distant or obscured faces, premium 4:3 editorial framing, and no marks or text.",
+      "sourceReferences": [],
+      "permissions": "Duna-generated original text-to-image artwork; synthetic non-identifiable people, no real coach, players, club, event, or source artwork used.",
+      "outputNames": [
+        "apps/web/public/media/product-library/duna-product-group-lesson.webp",
+        "apps/hq/public/media/product-library/duna-product-group-lesson.webp"
+      ]
+    },
+    {
+      "name": "product-library/duna-product-player-assessment",
+      "model": "Higgsfield GPT Image 2",
+      "intent": "Performance-assessment cover with a calm documentary coaching angle.",
+      "promptIntent": "A coach observing an athlete during a controlled beach-volleyball movement assessment with cones and ball, candid side angle, distant or obscured faces, no marks, logos, numbers, or text.",
+      "sourceReferences": [],
+      "permissions": "Duna-generated original text-to-image artwork; synthetic non-identifiable people, no real coach, player, assessment, or source artwork used.",
+      "outputNames": [
+        "apps/web/public/media/product-library/duna-product-player-assessment.webp",
+        "apps/hq/public/media/product-library/duna-product-player-assessment.webp"
+      ]
+    },
+    {
+      "name": "product-library/duna-product-season-program",
+      "model": "Higgsfield GPT Image 2",
+      "intent": "Season-program cover showing coordinated progressive training across courts.",
+      "promptIntent": "An elevated view across three courts running coordinated training stations, athletes moving between drills, distant or obscured faces, premium 4:3 coastal editorial grade, and no marks or text.",
+      "sourceReferences": [],
+      "permissions": "Duna-generated original text-to-image artwork; synthetic non-identifiable people, no real program, players, club, venue, or source artwork used.",
+      "outputNames": [
+        "apps/web/public/media/product-library/duna-product-season-program.webp",
+        "apps/hq/public/media/product-library/duna-product-season-program.webp"
+      ]
+    },
+    {
+      "name": "product-library/duna-product-premium-equipment",
+      "model": "Higgsfield GPT Image 2",
+      "intent": "Premium equipment cover for club products and service bundles.",
+      "promptIntent": "Unbranded beach-volleyball equipment styled on immaculate sand with ball, court lines, rake, and ball cart in ocean light, polished 4:3 product photography, no marks, logos, letters, numbers, or text.",
+      "sourceReferences": [],
+      "permissions": "Duna-generated original text-to-image artwork; no real product, trademark, person, or source artwork used.",
+      "outputNames": [
+        "apps/web/public/media/product-library/duna-product-premium-equipment.webp",
+        "apps/hq/public/media/product-library/duna-product-premium-equipment.webp"
+      ]
+    },
+    {
+      "name": "product-library/duna-product-club-apparel",
+      "model": "Higgsfield GPT Image 2",
+      "intent": "Premium coastal apparel cover for merchandise and bundles.",
+      "promptIntent": "Unbranded athletic apparel folded with cap, towel, and volleyball on a pale wood beach bench, refined natural 4:3 retail styling, with no marks, logos, letters, numbers, or text.",
+      "sourceReferences": [],
+      "permissions": "Duna-generated original text-to-image artwork; no real product, trademark, person, or source artwork used.",
+      "outputNames": [
+        "apps/web/public/media/product-library/duna-product-club-apparel.webp",
+        "apps/hq/public/media/product-library/duna-product-club-apparel.webp"
+      ]
+    },
+    {
       "name": "duna-result-rise-v1",
       "jobId": "3d2b5b21-c4df-46f9-9de3-fb798e50ae64",
       "model": "Higgsfield Recraft V4.1",

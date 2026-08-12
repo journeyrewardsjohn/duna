@@ -396,6 +396,166 @@ export async function createEventPaymentIntent(input: {
   return { id: intent.id, clientSecret: intent.client_secret };
 }
 
+interface CatalogNativePaymentInput {
+  readonly orderId: string;
+  readonly personId: string;
+  readonly customerId: string;
+  readonly customerEmail?: string;
+  readonly organizationId: string;
+  readonly catalogItemId: string;
+  readonly catalogVariantId: string;
+  readonly title: string;
+  readonly stripePriceId: string;
+  readonly quantity: number;
+  readonly subtotalMinor: number;
+  readonly serviceFeeMinor: number;
+  readonly currency: string;
+  readonly applicationFeeMinor: number;
+  readonly organizationCommissionMinor: number;
+  readonly organizationCommissionRateBps: number;
+  readonly connectedAccountId: string;
+  readonly recurringInterval?: "week" | "month" | "year";
+  readonly recurringIntervalCount?: number;
+  readonly idempotencyKey: string;
+}
+
+function catalogPaymentMetadata(input: CatalogNativePaymentInput) {
+  return {
+    dunaOrderId: input.orderId,
+    dunaPersonId: input.personId,
+    dunaOrganizationId: input.organizationId,
+    dunaCatalogItemId: input.catalogItemId,
+    dunaCatalogVariantId: input.catalogVariantId,
+    product: "organization-catalog",
+    channel: "native-payment-sheet",
+    dunaOrganizationCommissionMinor: String(input.organizationCommissionMinor),
+    dunaOrganizationCommissionRateBps: String(
+      input.organizationCommissionRateBps,
+    ),
+  };
+}
+
+async function getOrCreateDunaServiceFeeProduct(): Promise<string> {
+  const stripe = getStripeClient();
+  const configured = process.env.STRIPE_DUNA_SERVICE_FEE_PRODUCT_ID;
+  if (configured?.startsWith("prod_")) return configured;
+
+  const products = await stripe.products.search({
+    query: "metadata['dunaProduct']:'catalog-service-fee'",
+    limit: 1,
+  });
+  const existing = products.data[0];
+  if (existing) return existing.id;
+
+  const product = await stripe.products.create(
+    {
+      name: "Duna service fee",
+      description: "Platform service fee for an organization purchase.",
+      metadata: { dunaProduct: "catalog-service-fee" },
+    },
+    { idempotencyKey: "duna-catalog-service-fee-product" },
+  );
+  return product.id;
+}
+
+/**
+ * Creates the server-side payment objects consumed by Stripe PaymentSheet.
+ * Recurring plans use an incomplete Subscription and its first invoice secret;
+ * one-time products use a normal PaymentIntent.
+ */
+export async function createCatalogNativePayment(
+  input: CatalogNativePaymentInput,
+): Promise<{ readonly id: string; readonly clientSecret: string }> {
+  const totalAmountMinor = input.subtotalMinor + input.serviceFeeMinor;
+  if (!Number.isSafeInteger(totalAmountMinor) || totalAmountMinor <= 0) {
+    throw new Error("Catalog payment amount must be positive");
+  }
+  if (
+    !Number.isSafeInteger(input.applicationFeeMinor) ||
+    input.applicationFeeMinor < 0 ||
+    input.applicationFeeMinor > totalAmountMinor
+  ) {
+    throw new Error("Catalog payment application fee is invalid");
+  }
+  const metadata = catalogPaymentMetadata(input);
+  if (!input.recurringInterval) {
+    const intent = await getStripeClient().paymentIntents.create(
+      {
+        amount: totalAmountMinor,
+        currency: input.currency.toLowerCase(),
+        customer: input.customerId,
+        receipt_email: input.customerEmail,
+        description: input.title,
+        automatic_payment_methods: { enabled: true },
+        application_fee_amount: input.applicationFeeMinor,
+        on_behalf_of: input.connectedAccountId,
+        transfer_data: { destination: input.connectedAccountId },
+        metadata,
+      },
+      { idempotencyKey: `${input.idempotencyKey}:native-payment` },
+    );
+    if (!intent.client_secret) {
+      throw new Error("Stripe did not return a PaymentIntent client secret");
+    }
+    return { id: intent.id, clientSecret: intent.client_secret };
+  }
+
+  if (input.quantity !== 1) {
+    throw new Error("Recurring plans must be purchased one at a time");
+  }
+  const serviceFeeProductId =
+    input.serviceFeeMinor > 0
+      ? await getOrCreateDunaServiceFeeProduct()
+      : undefined;
+  const applicationFeePercent =
+    Math.round((input.applicationFeeMinor / totalAmountMinor) * 10_000) / 100;
+  const subscription = await getStripeClient().subscriptions.create(
+    {
+      customer: input.customerId,
+      items: [
+        { price: input.stripePriceId, quantity: 1 },
+        ...(serviceFeeProductId
+          ? [
+              {
+                price_data: {
+                  currency: input.currency.toLowerCase(),
+                  product: serviceFeeProductId,
+                  recurring: {
+                    interval: input.recurringInterval,
+                    interval_count: input.recurringIntervalCount ?? 1,
+                  },
+                  unit_amount: input.serviceFeeMinor,
+                },
+                quantity: 1,
+              } as const,
+            ]
+          : []),
+      ],
+      application_fee_percent: applicationFeePercent,
+      on_behalf_of: input.connectedAccountId,
+      transfer_data: { destination: input.connectedAccountId },
+      payment_behavior: "default_incomplete",
+      payment_settings: { save_default_payment_method: "on_subscription" },
+      metadata,
+      expand: ["latest_invoice.confirmation_secret"],
+    },
+    { idempotencyKey: `${input.idempotencyKey}:native-subscription` },
+  );
+  const invoice =
+    typeof subscription.latest_invoice === "object"
+      ? subscription.latest_invoice
+      : undefined;
+  const clientSecret = invoice?.confirmation_secret?.client_secret;
+  if (!clientSecret) {
+    throw new Error("Stripe did not return the first invoice payment secret");
+  }
+  const paymentIntentId = clientSecret.split("_secret_")[0];
+  if (!paymentIntentId?.startsWith("pi_")) {
+    throw new Error("Stripe returned an invalid invoice payment secret");
+  }
+  return { id: paymentIntentId, clientSecret };
+}
+
 export async function createCourtCheckoutSession(input: {
   readonly orderId: string;
   readonly bookingId: string;
