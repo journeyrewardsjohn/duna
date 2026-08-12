@@ -7259,6 +7259,7 @@ const operatorRouter = router({
         shortSummary: z.string().trim().max(240).optional(),
         description: z.string().trim().max(20_000).optional(),
         visibility: z.enum(["public", "members", "private"]),
+        membershipRequired: z.boolean().optional(),
         configuration: z.record(z.string(), z.unknown()).default({}),
         confirmed: z.literal(true),
         idempotencyKey: z.string().uuid(),
