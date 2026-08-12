@@ -45,9 +45,8 @@ private final class DunaWatchConnectivityCenter: NSObject, WCSessionDelegate {
     }
     let incomingSessionID = payload["sessionId"] as? String
     let currentSessionID = currentContext["sessionId"] as? String
-    if
-      type == "duna.matchContext" ||
-      (incomingSessionID != nil && incomingSessionID != currentSessionID)
+    if type == "duna.matchContext"
+      || (incomingSessionID != nil && incomingSessionID != currentSessionID)
     {
       currentContext = payload
     } else {
@@ -110,23 +109,60 @@ private final class DunaWatchConnectivityCenter: NSObject, WCSessionDelegate {
     _ = publishContext()
   }
 
-  private func receive(_ payload: [String: Any]) {
-    guard JSONSerialization.isValidJSONObject(payload) else { return }
+  private func receipt(
+    for payload: [String: Any],
+    accepted: Bool,
+    message: String? = nil
+  ) -> [String: Any] {
+    var receipt: [String: Any] = [
+      "type": "duna.watchReceipt",
+      "accepted": accepted,
+      "receivedAt": ISO8601DateFormatter().string(from: Date()),
+    ]
+    for key in ["eventId", "draftId"] {
+      if let value = payload[key] as? String {
+        receipt[key] = value
+      }
+    }
+    if let message {
+      receipt["message"] = message
+    }
+    return receipt
+  }
+
+  private func receive(_ payload: [String: Any]) -> [String: Any] {
+    guard JSONSerialization.isValidJSONObject(payload) else {
+      return receipt(
+        for: payload,
+        accepted: false,
+        message: "iPhone received an invalid action"
+      )
+    }
     if payload["type"] as? String == "duna.scoreDraft" {
       guard
         let data = try? JSONSerialization.data(withJSONObject: payload),
         let json = String(data: data, encoding: .utf8)
       else {
-        return
+        return receipt(
+          for: payload,
+          accepted: false,
+          message: "iPhone could not save the score"
+        )
       }
       UserDefaults.standard.set(json, forKey: scoreDraftDefaultsKey)
       DispatchQueue.main.async { [weak self] in
         self?.onScoreDraft?(json)
       }
-      return
+      return receipt(for: payload, accepted: true)
     }
 
-    guard payload["type"] as? String == "duna.visionEvent" else { return }
+    guard payload["type"] as? String == "duna.visionEvent" else {
+      return receipt(
+        for: payload,
+        accepted: false,
+        message: "iPhone does not recognize this action"
+      )
+    }
     var events = storedVisionEvents()
     let eventID = payload["eventId"] as? String
     if !events.contains(where: { $0["eventId"] as? String == eventID }) {
@@ -137,10 +173,27 @@ private final class DunaWatchConnectivityCenter: NSObject, WCSessionDelegate {
       let data = try? JSONSerialization.data(withJSONObject: payload),
       let json = String(data: data, encoding: .utf8)
     else {
-      return
+      return receipt(
+        for: payload,
+        accepted: false,
+        message: "iPhone could not save the match action"
+      )
     }
     DispatchQueue.main.async { [weak self] in
       self?.onVisionEvent?(json)
+    }
+    return receipt(for: payload, accepted: true)
+  }
+
+  private func sendReceipt(_ receipt: [String: Any], through session: WCSession) {
+    guard session.activationState == .activated else { return }
+    if session.isReachable {
+      session.sendMessage(receipt, replyHandler: nil) { _ in
+        guard session.activationState == .activated else { return }
+        session.transferUserInfo(receipt)
+      }
+    } else {
+      session.transferUserInfo(receipt)
     }
   }
 
@@ -183,14 +236,22 @@ private final class DunaWatchConnectivityCenter: NSObject, WCSessionDelegate {
     _ session: WCSession,
     didReceiveMessage message: [String: Any]
   ) {
-    receive(message)
+    sendReceipt(receive(message), through: session)
+  }
+
+  func session(
+    _ session: WCSession,
+    didReceiveMessage message: [String: Any],
+    replyHandler: @escaping ([String: Any]) -> Void
+  ) {
+    replyHandler(receive(message))
   }
 
   func session(
     _ session: WCSession,
     didReceiveUserInfo userInfo: [String: Any] = [:]
   ) {
-    receive(userInfo)
+    sendReceipt(receive(userInfo), through: session)
   }
 }
 

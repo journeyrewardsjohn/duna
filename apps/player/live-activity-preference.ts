@@ -4,6 +4,15 @@ export const LIVE_ACTIVITY_OPT_IN_KEY = "duna.live-activities.opted-in-at";
 
 const LEGACY_LIVE_ACTIVITY_TOKEN_PREFIX = "duna.live-activity.";
 
+export function liveActivityHomeMode(input: {
+  readonly checking: boolean;
+  readonly isIOS: boolean;
+  readonly optedIn: boolean;
+}): "compact" | "hidden" | "prompt" {
+  if (!input.isIOS || input.checking) return "hidden";
+  return input.optedIn ? "compact" : "prompt";
+}
+
 export async function hasLiveActivityOptIn() {
   const optedInAt = await AsyncStorage.getItem(LIVE_ACTIVITY_OPT_IN_KEY);
   if (optedInAt) return true;

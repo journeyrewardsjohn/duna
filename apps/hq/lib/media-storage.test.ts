@@ -10,6 +10,7 @@ import {
   createEventMediaPath,
   createProfessionalEventMediaPath,
   createVenueMediaPath,
+  inferMediaKindFromUrl,
   validateEventMediaInput,
 } from "./media-storage";
 
@@ -57,6 +58,18 @@ describe("event media storage", () => {
         size: 250_000_001,
       }),
     ).toThrow("Videos must be smaller");
+  });
+
+  it("infers hosted hero media without asking operators for a type", () => {
+    expect(inferMediaKindFromUrl("https://cdn.test/club-hero.WEBM")).toBe(
+      "video",
+    );
+    expect(
+      inferMediaKindFromUrl("https://images.test/render?id=hero&format=avif"),
+    ).toBe("image");
+    expect(inferMediaKindFromUrl("https://cdn.test/asset-without-format")).toBe(
+      undefined,
+    );
   });
 
   it("keeps every object inside its organization UUID path", () => {

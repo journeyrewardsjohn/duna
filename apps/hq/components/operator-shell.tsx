@@ -99,7 +99,10 @@ export function OperatorShell({
               <Bell aria-hidden size={18} />
               <i />
             </button>
-            <AuthControls configured={isWorkOSAuthKitConfigured()} />
+            <AuthControls
+              configured={isWorkOSAuthKitConfigured()}
+              organizationName={organization.name}
+            />
           </div>
         </header>
         <div className="hq-content">{children}</div>

@@ -13,6 +13,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 import {
   hasLiveActivityOptIn,
   LIVE_ACTIVITY_OPT_IN_KEY,
+  liveActivityHomeMode,
   rememberLiveActivityOptIn,
 } from "./live-activity-preference";
 
@@ -51,5 +52,20 @@ describe("live activity preference", () => {
       LIVE_ACTIVITY_OPT_IN_KEY,
       expect.any(String),
     );
+  });
+
+  it("keeps first-time education and post-opt-in controls mutually exclusive", () => {
+    expect(
+      liveActivityHomeMode({ checking: false, isIOS: true, optedIn: false }),
+    ).toBe("prompt");
+    expect(
+      liveActivityHomeMode({ checking: false, isIOS: true, optedIn: true }),
+    ).toBe("compact");
+    expect(
+      liveActivityHomeMode({ checking: true, isIOS: true, optedIn: true }),
+    ).toBe("hidden");
+    expect(
+      liveActivityHomeMode({ checking: false, isIOS: false, optedIn: true }),
+    ).toBe("hidden");
   });
 });

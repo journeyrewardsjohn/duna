@@ -11,11 +11,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { FellixText as Text } from "./fellix-text";
 import {
   hasLiveActivityOptIn,
+  liveActivityHomeMode,
   rememberLiveActivityOptIn,
 } from "./live-activity-preference";
 import type { DunaApiClient } from "./mobile-api";
 import {
   SessionArrivalCard,
+  type ArrivalCardPalette,
   type ArrivalBooking,
 } from "./session-arrival-card";
 
@@ -40,9 +42,11 @@ const liveActivityBenefits = [
 export function LiveActivitiesPrompt({
   booking,
   client,
+  compactPalette,
 }: {
   readonly booking: ArrivalBooking;
   readonly client?: DunaApiClient;
+  readonly compactPalette: ArrivalCardPalette;
 }) {
   const [checking, setChecking] = useState(true);
   const [optedIn, setOptedIn] = useState(false);
@@ -62,7 +66,23 @@ export function LiveActivitiesPrompt({
     };
   }, []);
 
-  if (Platform.OS !== "ios" || checking || optedIn) return null;
+  const homeMode = liveActivityHomeMode({
+    checking,
+    isIOS: Platform.OS === "ios",
+    optedIn,
+  });
+
+  if (homeMode === "hidden") return null;
+
+  if (homeMode === "compact") {
+    return (
+      <SessionArrivalCard
+        booking={booking}
+        client={client}
+        compactPalette={compactPalette}
+      />
+    );
+  }
 
   const finishOptIn = () => {
     void rememberLiveActivityOptIn();

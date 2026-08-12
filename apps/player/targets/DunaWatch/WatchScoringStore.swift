@@ -42,20 +42,19 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
   private var winBy = 2
   private var hardCaps = [0, 0, 0]
   private var sideSwitchIntervals = [7, 7, 5]
+  private var pendingPayloads: [[String: Any]] = []
+  private var pendingDeliveryIDs: Set<String> = []
+  private var backgroundQueuedIDs: Set<String> = []
 
   private var winsA: Int {
     sets.enumerated().reduce(0) { total, item in
-      total +
-        (isComplete(item.element, at: item.offset) &&
-          item.element.a > item.element.b ? 1 : 0)
+      total + (isComplete(item.element, at: item.offset) && item.element.a > item.element.b ? 1 : 0)
     }
   }
 
   private var winsB: Int {
     sets.enumerated().reduce(0) { total, item in
-      total +
-        (isComplete(item.element, at: item.offset) &&
-          item.element.b > item.element.a ? 1 : 0)
+      total + (isComplete(item.element, at: item.offset) && item.element.b > item.element.a ? 1 : 0)
     }
   }
 
@@ -223,14 +222,12 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
       "teamA": teamA,
       "teamB": teamB,
       "sets": scorePayload,
-      "capturedAt": formatter.string(from: Date())
+      "capturedAt": formatter.string(from: Date()),
     ]
     if let matchID {
       payload["matchId"] = matchID
     }
     send(payload)
-    sentNotice = WCSession.default.isReachable
-      ? "Sent to iPhone" : "Queued for iPhone"
     WKInterfaceDevice.current().play(.success)
   }
 
@@ -251,7 +248,7 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
       "eventType": eventType,
       "elapsedMs": min(43_200_000, elapsedMilliseconds(at: now)),
       "occurredAt": ISO8601DateFormatter().string(from: now),
-      "score": scorePayload()
+      "score": scorePayload(),
     ]
     if let matchID { payload["matchId"] = matchID }
     if let winnerSide { payload["winnerSide"] = winnerSide }
@@ -264,21 +261,129 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     var payload: [String: Any] = [
       "setIndex": currentSetIndex,
       "sets": sets.map { ["a": $0.a, "b": $0.b] },
-      "status": matchComplete ? "complete" : "live"
+      "status": matchComplete ? "complete" : "live",
     ]
     if let serving { payload["serving"] = serving }
     return payload
   }
 
   private func send(_ payload: [String: Any]) {
-    guard WCSession.isSupported() else { return }
+    guard WCSession.isSupported() else {
+      sentNotice = "iPhone connection unavailable"
+      return
+    }
     let session = WCSession.default
+    guard session.activationState == .activated else {
+      enqueuePending(payload)
+      sentNotice = "Connecting to iPhone…"
+      session.activate()
+      return
+    }
+    deliver(payload, through: session)
+  }
+
+  private func deliver(_ payload: [String: Any], through session: WCSession) {
+    if let deliveryID = payloadIdentifier(payload) {
+      pendingDeliveryIDs.insert(deliveryID)
+    }
     if session.isReachable {
-      session.sendMessage(payload, replyHandler: nil) { _ in
-        session.transferUserInfo(payload)
+      sentNotice = "Sending to iPhone…"
+      session.sendMessage(payload) { [weak self] receipt in
+        Task { @MainActor in
+          self?.applyReceipt(receipt)
+        }
+      } errorHandler: { [weak self] _ in
+        Task { @MainActor in
+          self?.queueBackgroundDelivery(payload, through: session)
+        }
       }
+      scheduleBackgroundFallback(for: payload, through: session)
     } else {
-      session.transferUserInfo(payload)
+      queueBackgroundDelivery(payload, through: session)
+    }
+  }
+
+  private func scheduleBackgroundFallback(
+    for payload: [String: Any],
+    through session: WCSession
+  ) {
+    guard let identifier = payloadIdentifier(payload) else { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+      guard
+        let self,
+        self.pendingDeliveryIDs.contains(identifier),
+        !self.backgroundQueuedIDs.contains(identifier)
+      else {
+        return
+      }
+      self.queueBackgroundDelivery(payload, through: session)
+    }
+  }
+
+  private func queueBackgroundDelivery(
+    _ payload: [String: Any],
+    through session: WCSession
+  ) {
+    guard session.activationState == .activated else {
+      enqueuePending(payload)
+      sentNotice = "Connecting to iPhone…"
+      session.activate()
+      return
+    }
+    if let identifier = payloadIdentifier(payload) {
+      guard backgroundQueuedIDs.insert(identifier).inserted else { return }
+    }
+    session.transferUserInfo(payload)
+    sentNotice = "Queued safely for iPhone"
+  }
+
+  private func enqueuePending(_ payload: [String: Any]) {
+    guard let identifier = payloadIdentifier(payload) else {
+      pendingPayloads.append(payload)
+      return
+    }
+    guard
+      !pendingPayloads.contains(where: {
+        payloadIdentifier($0) == identifier
+      })
+    else {
+      return
+    }
+    pendingPayloads.append(payload)
+  }
+
+  private func flushPendingPayloads() {
+    guard
+      WCSession.isSupported(),
+      WCSession.default.activationState == .activated,
+      !pendingPayloads.isEmpty
+    else {
+      return
+    }
+    let queued = pendingPayloads
+    pendingPayloads.removeAll()
+    for payload in queued {
+      deliver(payload, through: WCSession.default)
+    }
+  }
+
+  private func payloadIdentifier(_ payload: [String: Any]) -> String? {
+    (payload["eventId"] as? String) ?? (payload["draftId"] as? String)
+  }
+
+  private func applyReceipt(_ receipt: [String: Any]) {
+    guard receipt["type"] as? String == "duna.watchReceipt" else { return }
+    let identifier = payloadIdentifier(receipt)
+    if let identifier {
+      pendingDeliveryIDs.remove(identifier)
+      backgroundQueuedIDs.remove(identifier)
+    }
+    if receipt["accepted"] as? Bool == true {
+      sentNotice = "Saved on iPhone"
+    } else {
+      sentNotice =
+        receipt["message"] as? String ?? "iPhone could not save this action"
+      WKInterfaceDevice.current().play(.failure)
     }
   }
 
@@ -299,8 +404,7 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     let target = value(in: pointTargets, at: setIndex) ?? 21
     let hardCap = value(in: hardCaps, at: setIndex) ?? 0
     let leading = max(set.a, set.b)
-    return (leading >= target && abs(set.a - set.b) >= winBy) ||
-      (hardCap > 0 && leading >= hardCap)
+    return (leading >= target && abs(set.a - set.b) >= winBy) || (hardCap > 0 && leading >= hardCap)
   }
 
   private func value<Element>(in values: [Element], at index: Int) -> Element? {
@@ -348,8 +452,7 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     if let startedAt = applicationContext["recordingStartedAt"] as? String {
       recordingStartedAt = parseDate(startedAt)
     }
-    if
-      let score = applicationContext["score"] as? [String: Any],
+    if let score = applicationContext["score"] as? [String: Any],
       let rows = score["sets"] as? [[String: Any]]
     {
       let next = rows.compactMap { row -> WatchSetScore? in
@@ -394,7 +497,35 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     _ session: WCSession,
     activationDidCompleteWith activationState: WCSessionActivationState,
     error: Error?
-  ) {}
+  ) {
+    guard activationState == .activated, error == nil else {
+      Task { @MainActor [weak self] in
+        self?.sentNotice = "iPhone unavailable · tap again"
+      }
+      return
+    }
+    Task { @MainActor [weak self] in
+      self?.flushPendingPayloads()
+    }
+  }
+
+  nonisolated func session(
+    _ session: WCSession,
+    didReceiveMessage message: [String: Any]
+  ) {
+    Task { @MainActor [weak self] in
+      self?.applyReceipt(message)
+    }
+  }
+
+  nonisolated func session(
+    _ session: WCSession,
+    didReceiveUserInfo userInfo: [String: Any] = [:]
+  ) {
+    Task { @MainActor [weak self] in
+      self?.applyReceipt(userInfo)
+    }
+  }
 
   nonisolated func session(
     _ session: WCSession,
