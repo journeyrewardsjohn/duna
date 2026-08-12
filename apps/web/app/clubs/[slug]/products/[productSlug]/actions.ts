@@ -21,13 +21,16 @@ export async function startCatalogCheckoutAction(input: {
   readonly paymentMethod: "card" | "credit" | "cash";
   readonly quantity: number;
   readonly idempotencyKey: string;
+  readonly returnProductSlug?: string;
+  readonly checkoutRole?: "product" | "membership";
 }) {
   try {
     const incoming = await headers();
     const requestHeaders = new Headers();
     incoming.forEach((value, key) => requestHeaders.set(key, value));
     const origin = applicationOrigin(requestHeaders);
-    const productPath = `/clubs/${input.organizationSlug}/products/${input.productSlug}`;
+    const productPath = `/clubs/${input.organizationSlug}/products/${input.returnProductSlug ?? input.productSlug}`;
+    const membershipStep = input.checkoutRole === "membership";
     const caller = await getServerCaller();
     const result = await caller.player.startCatalogCheckout({
       catalogItemId: input.catalogItemId,
@@ -35,8 +38,12 @@ export async function startCatalogCheckoutAction(input: {
       catalogPriceId: input.catalogPriceId,
       paymentMethod: input.paymentMethod,
       quantity: input.quantity,
-      successUrl: `${origin}${productPath}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${origin}${productPath}?checkout=cancelled`,
+      successUrl: membershipStep
+        ? `${origin}${productPath}?membership_checkout=success&membership_session_id={CHECKOUT_SESSION_ID}`
+        : `${origin}${productPath}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: membershipStep
+        ? `${origin}${productPath}?membership_checkout=cancelled`
+        : `${origin}${productPath}?checkout=cancelled`,
       idempotencyKey: input.idempotencyKey,
     });
     return { ok: true as const, result };
@@ -45,6 +52,24 @@ export async function startCatalogCheckoutAction(input: {
       ok: false as const,
       error:
         error instanceof Error ? error.message : "Checkout could not start.",
+    };
+  }
+}
+
+export async function catalogOfferEligibilityAction(catalogItemId: string) {
+  try {
+    const caller = await getServerCaller();
+    const eligibility = await caller.player.catalogOfferEligibility({
+      catalogItemId,
+    });
+    return { ok: true as const, eligibility };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Membership status is unavailable.",
     };
   }
 }

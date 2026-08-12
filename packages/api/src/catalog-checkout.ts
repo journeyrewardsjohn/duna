@@ -36,7 +36,7 @@ import {
   type CurrencyCode,
   type OrderItemKind,
 } from "@duna/pricing";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import {
   ensureLedgerAccount,
@@ -45,7 +45,13 @@ import {
 import type { ApiActor } from "./context";
 import { hasActiveDunaPlusMembership } from "./membership";
 import { resolveOrganizationCommissionPolicy } from "./organization-billing";
-import { createCatalogCheckoutSession } from "./payments";
+import {
+  createCatalogCheckoutSession,
+  createCatalogNativePayment,
+  createMobilePaymentCustomerSession,
+  getOrCreatePlayerStripeCustomer,
+  getStripePublishableKey,
+} from "./payments";
 
 export class CatalogCheckoutError extends Error {
   constructor(
@@ -75,6 +81,13 @@ export interface CatalogCheckoutResult {
   readonly orderStatus: "pending" | "paid";
   readonly checkoutSessionId?: string;
   readonly checkoutUrl?: string;
+  readonly paymentSheet?: {
+    readonly publishableKey: string;
+    readonly paymentIntentId: string;
+    readonly paymentIntentClientSecret: string;
+    readonly customerId: string;
+    readonly customerSessionClientSecret: string;
+  };
   readonly expiresAt?: string;
   readonly paymentMethod: "card" | "credit" | "cash";
   readonly quantity: number;
@@ -392,6 +405,7 @@ export async function startCatalogCheckout(input: {
   readonly catalogVariantId: string;
   readonly catalogPriceId?: string;
   readonly paymentMethod: "card" | "credit" | "cash";
+  readonly paymentSurface?: "hosted" | "native";
   readonly quantity: number;
   readonly successUrl: string;
   readonly cancelUrl: string;
@@ -967,6 +981,82 @@ export async function startCatalogCheckout(input: {
     where: eq(people.id, input.actor.personId),
   });
   try {
+    const nativePaymentEligible =
+      input.paymentSurface === "native" &&
+      row.item.type !== "good" &&
+      !(row.item.taxable && row.organization.stripeTaxEnabled);
+    if (nativePaymentEligible) {
+      const publishableKey = getStripePublishableKey();
+      const customerId = await getOrCreatePlayerStripeCustomer({
+        personId: input.actor.personId,
+        existingCustomerId: buyer?.stripeCustomerId ?? undefined,
+        email: buyer?.email ?? undefined,
+        displayName: buyer?.displayName,
+      });
+      if (buyer?.stripeCustomerId !== customerId) {
+        await database
+          .update(people)
+          .set({ stripeCustomerId: customerId, updatedAt: input.now })
+          .where(eq(people.id, input.actor.personId));
+      }
+      const [paymentIntent, customerSessionClientSecret] = await Promise.all([
+        createCatalogNativePayment({
+          orderId,
+          personId: input.actor.personId,
+          customerId,
+          customerEmail: buyer?.email ?? undefined,
+          organizationId: row.organization.id,
+          catalogItemId: row.item.id,
+          catalogVariantId: row.variant.id,
+          title: row.item.title,
+          stripePriceId: price.stripePriceId!,
+          quantity: input.quantity,
+          subtotalMinor: priced.subtotalMinor,
+          serviceFeeMinor,
+          currency: orderCurrency,
+          applicationFeeMinor,
+          organizationCommissionMinor:
+            organizationCommissionFee?.amountMinor ?? 0,
+          organizationCommissionRateBps: commissionPolicy.rateBps,
+          connectedAccountId: row.organization.stripeAccountId,
+          recurringInterval:
+            price.recurringInterval === "week" ||
+            price.recurringInterval === "month" ||
+            price.recurringInterval === "year"
+              ? price.recurringInterval
+              : undefined,
+          recurringIntervalCount: price.recurringIntervalCount ?? undefined,
+          idempotencyKey: input.idempotencyKey,
+        }),
+        createMobilePaymentCustomerSession(customerId),
+      ]);
+      await database
+        .update(orders)
+        .set({
+          stripePaymentIntentId: paymentIntent.id,
+          expiresAt: checkoutExpiresAt,
+          updatedAt: input.now,
+        })
+        .where(eq(orders.id, orderId));
+      return {
+        mode: "stripe",
+        orderId,
+        orderStatus: "pending",
+        paymentSheet: {
+          publishableKey,
+          paymentIntentId: paymentIntent.id,
+          paymentIntentClientSecret: paymentIntent.clientSecret,
+          customerId,
+          customerSessionClientSecret,
+        },
+        expiresAt: checkoutExpiresAt.toISOString(),
+        paymentMethod: "card",
+        quantity: input.quantity,
+        amountMinor: priced.totalMinor,
+        creditsApplied: 0,
+        currency: orderCurrency,
+      };
+    }
     const checkout = await createCatalogCheckoutSession({
       orderId,
       personId: input.actor.personId,
@@ -1442,13 +1532,21 @@ export async function fulfillPaidCatalogOrder(
 }
 
 export async function getCatalogCheckoutStatus(
-  checkoutSessionId: string,
+  input: {
+    readonly checkoutSessionId?: string;
+    readonly orderId?: string;
+  },
   personId: string,
 ): Promise<CatalogCheckoutStatus> {
   const database = getDatabase();
   const order = await database.query.orders.findFirst({
     where: and(
-      eq(orders.stripeCheckoutSessionId, checkoutSessionId),
+      or(
+        input.checkoutSessionId
+          ? eq(orders.stripeCheckoutSessionId, input.checkoutSessionId)
+          : undefined,
+        input.orderId ? eq(orders.id, input.orderId) : undefined,
+      ),
       eq(orders.buyerPersonId, personId),
     ),
   });

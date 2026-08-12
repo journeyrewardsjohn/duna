@@ -3657,6 +3657,7 @@ const playerRouter = router({
         catalogVariantId: z.string().uuid(),
         catalogPriceId: z.string().uuid().optional(),
         paymentMethod: z.enum(["card", "credit", "cash"]),
+        paymentSurface: z.enum(["hosted", "native"]).default("hosted"),
         quantity: z.number().int().min(1).max(50),
         successUrl: z.url(),
         cancelUrl: z.url(),
@@ -3686,10 +3687,21 @@ const playerRouter = router({
       }),
     ),
   catalogCheckoutStatus: protectedProcedure
-    .input(z.object({ checkoutSessionId: z.string().min(1).max(255) }))
+    .input(
+      z
+        .object({
+          checkoutSessionId: z.string().min(1).max(255).optional(),
+          orderId: z.string().uuid().optional(),
+        })
+        .refine(
+          (input) =>
+            Boolean(input.checkoutSessionId) !== Boolean(input.orderId),
+          "Provide exactly one catalog checkout reference.",
+        ),
+    )
     .output(catalogCheckoutStatusSchema)
     .query(({ ctx, input }) =>
-      getCatalogCheckoutStatus(input.checkoutSessionId, ctx.actor!.personId),
+      getCatalogCheckoutStatus(input, ctx.actor!.personId),
     ),
   organizationWallets: protectedProcedure
     .output(z.array(organizationWalletSummarySchema).readonly())

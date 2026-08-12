@@ -9,6 +9,7 @@
     "./workos-environment": "./src/workos-environment.ts",
     "./context": "./src/context.ts",
     "./payments": "./src/payments.ts",
+    "./rate-limit": "./src/rate-limit.ts",
     "./messaging-delivery": "./src/messaging-delivery.ts",
     "./messaging-wakeups": "./src/messaging-wakeups.ts",
     "./webhooks": "./src/webhooks.ts"

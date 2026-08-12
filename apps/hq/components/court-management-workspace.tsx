@@ -122,9 +122,11 @@ function policyHiddenFields(court: Court) {
 
 function CourtSpaceEditor({
   court,
+  membershipConfigured,
   organizationId,
 }: {
   readonly court: Court;
+  readonly membershipConfigured: boolean;
   readonly organizationId: string;
 }) {
   const [state, action, pending] = useActionState(
@@ -306,8 +308,16 @@ function CourtSpaceEditor({
             <span>Booking audience</span>
             <select defaultValue={court.bookingPolicy} name="bookingPolicy">
               <option value="public">Public</option>
-              <option value="members">Members</option>
-              <option value="tiers">Selected membership tiers</option>
+              <option disabled={!membershipConfigured} value="members">
+                {membershipConfigured
+                  ? "Members"
+                  : "Members · publish a membership first"}
+              </option>
+              <option disabled={!membershipConfigured} value="tiers">
+                {membershipConfigured
+                  ? "Selected membership tiers"
+                  : "Selected tiers · membership needed"}
+              </option>
               <option value="staff">Staff only</option>
               <option value="none">Not independently bookable</option>
             </select>
@@ -591,9 +601,11 @@ function CourtRulesEditor({
 
 function CourtAvailabilityEditor({
   court,
+  membershipConfigured,
   timezone,
 }: {
   readonly court: Court;
+  readonly membershipConfigured: boolean;
   readonly timezone: string;
 }) {
   const [blocks, setBlocks] = useState<readonly ScheduleBlock[]>(
@@ -697,8 +709,17 @@ function CourtAvailabilityEditor({
                           value={block.mode}
                         >
                           {scheduleModes.map(([value, label]) => (
-                            <option key={value} value={value}>
-                              {label}
+                            <option
+                              disabled={
+                                value === "members-only" &&
+                                !membershipConfigured
+                              }
+                              key={value}
+                              value={value}
+                            >
+                              {value === "members-only" && !membershipConfigured
+                                ? "Members only · publish a membership first"
+                                : label}
                             </option>
                           ))}
                         </select>
@@ -881,6 +902,12 @@ export function CourtManagementWorkspace({
     initialState,
   );
   const rate = workspace.ratePlans.find((item) => item.id === court.ratePlanId);
+  const membershipConfigured = workspace.catalog.some(
+    (item) =>
+      item.type === "plan" &&
+      item.subtype === "membership" &&
+      item.status === "active",
+  );
   return (
     <main className="hq-page court-management-page">
       <header className="court-management-header">
@@ -994,10 +1021,15 @@ export function CourtManagementWorkspace({
       {section === "space" ? (
         <CourtSpaceEditor
           court={court}
+          membershipConfigured={membershipConfigured}
           organizationId={workspace.organization.id}
         />
       ) : section === "availability" ? (
-        <CourtAvailabilityEditor court={court} timezone={venue.timezone} />
+        <CourtAvailabilityEditor
+          court={court}
+          membershipConfigured={membershipConfigured}
+          timezone={venue.timezone}
+        />
       ) : (
         <CourtRulesEditor court={court} workspace={workspace} />
       )}

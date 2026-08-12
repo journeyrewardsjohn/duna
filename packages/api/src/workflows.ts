@@ -249,11 +249,7 @@ async function synchronizeSubscription(input: {
         where: eq(organizations.stripeSubscriptionId, subscriptionId),
       })
     : undefined;
-  if (
-    typeof metadata?.dunaOrganizationId === "string" ||
-    metadata?.product === "duna-hq" ||
-    organization
-  ) {
+  if (metadata?.product === "duna-hq" || organization) {
     await synchronizeOrganizationSubscription(input);
     return;
   }
@@ -707,10 +703,17 @@ async function processStripeWorkflow(
   } else if (action === "order.payment_succeeded") {
     const metadata = object.metadata as
       Readonly<Record<string, unknown>> | undefined;
+    const paymentIntentId =
+      typeof object.id === "string" ? object.id : undefined;
+    const intentOrder = paymentIntentId
+      ? await database.query.orders.findFirst({
+          where: eq(orders.stripePaymentIntentId, paymentIntentId),
+        })
+      : undefined;
     const orderId =
       typeof metadata?.dunaOrderId === "string"
         ? metadata.dunaOrderId
-        : undefined;
+        : intentOrder?.id;
     if (!orderId) throw new Error("Stripe payment is missing dunaOrderId");
     const order = await database.query.orders.findFirst({
       where: eq(orders.id, orderId),
@@ -731,8 +734,6 @@ async function processStripeWorkflow(
     ) {
       throw new Error("Stripe payment amount does not match the Duna order");
     }
-    const paymentIntentId =
-      typeof object.id === "string" ? object.id : undefined;
     if (!paymentIntentId)
       throw new Error("Stripe payment intent id is missing");
     const latestCharge =
@@ -904,10 +905,17 @@ async function processStripeWorkflow(
   ) {
     const metadata = object.metadata as
       Readonly<Record<string, unknown>> | undefined;
+    const failedPaymentIntentId =
+      typeof object.id === "string" ? object.id : undefined;
+    const intentOrder = failedPaymentIntentId
+      ? await database.query.orders.findFirst({
+          where: eq(orders.stripePaymentIntentId, failedPaymentIntentId),
+        })
+      : undefined;
     const orderId =
       typeof metadata?.dunaOrderId === "string"
         ? metadata.dunaOrderId
-        : undefined;
+        : intentOrder?.id;
     const operatorCollectionId =
       typeof metadata?.dunaCollectionId === "string"
         ? metadata.dunaCollectionId

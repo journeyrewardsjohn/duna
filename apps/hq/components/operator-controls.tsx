@@ -902,6 +902,12 @@ export function CourtComposer({
   >("idle");
   const [uploadMessage, setUploadMessage] = useState("");
   const hasVenues = workspace.venues.length > 0;
+  const membershipConfigured = workspace.catalog.some(
+    (item) =>
+      item.type === "plan" &&
+      item.subtype === "membership" &&
+      item.status === "active",
+  );
   const selectedVenue = workspace.venues.find(
     (venue) => venue.id === selectedVenueId,
   );
@@ -1104,8 +1110,16 @@ export function CourtComposer({
                 <span>Booking audience</span>
                 <select name="bookingPolicy" defaultValue="public">
                   <option value="public">Public</option>
-                  <option value="members">Members</option>
-                  <option value="tiers">Selected tiers</option>
+                  <option disabled={!membershipConfigured} value="members">
+                    {membershipConfigured
+                      ? "Members"
+                      : "Members · publish a membership first"}
+                  </option>
+                  <option disabled={!membershipConfigured} value="tiers">
+                    {membershipConfigured
+                      ? "Selected tiers"
+                      : "Selected tiers · membership needed"}
+                  </option>
                   <option value="staff">Staff only</option>
                   <option value="none">Not independently bookable</option>
                 </select>

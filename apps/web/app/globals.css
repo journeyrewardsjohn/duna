@@ -2689,6 +2689,325 @@
   }
 }
 
+/* Club commerce — editorial product pages and an honest, compact checkout. */
+.catalog-product-page {
+  background:
+    radial-gradient(
+      circle at 8% 18%,
+      color-mix(in srgb, var(--catalog-sand) 48%, transparent),
+      transparent 26rem
+    ),
+    var(--ground);
+  color: var(--text-1);
+}
+
+.catalog-product-shell {
+  max-width: 1360px;
+  padding-top: 7.5rem;
+}
+
+.catalog-product-back {
+  color: var(--text-2);
+  font-size: 0.86rem;
+  margin-bottom: 1.6rem;
+}
+
+.catalog-product-layout {
+  gap: clamp(1.5rem, 4vw, 3.25rem);
+  grid-template-columns: minmax(0, 1fr) minmax(350px, 420px);
+}
+
+.catalog-product-main {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+
+.catalog-product-hero {
+  background:
+    radial-gradient(
+      circle at 70% 20%,
+      color-mix(in srgb, var(--surface-1) 62%, transparent),
+      transparent 30%
+    ),
+    linear-gradient(135deg, var(--catalog-sand), var(--catalog-accent));
+  border: 1px solid var(--hairline);
+  border-radius: 20px;
+  height: clamp(340px, 48vw, 660px);
+  overflow: hidden;
+}
+
+.catalog-product-hero > span:first-child:not(.duna-badge) {
+  color: var(--catalog-primary);
+  font-family: var(--font-display);
+  height: 146px;
+  width: 146px;
+}
+
+.catalog-product-hero .duna-badge {
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+  color: var(--text-1);
+}
+
+.catalog-media-thumbnails {
+  background: transparent;
+  border: 0;
+  padding: 0.85rem 0 0;
+}
+
+.catalog-media-thumbnails > button {
+  border-radius: 15px;
+  flex-basis: 96px;
+  height: 72px;
+}
+
+.catalog-media-thumbnails > button[aria-pressed="true"] {
+  border-color: var(--catalog-primary);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--catalog-primary) 16%, transparent);
+}
+
+.catalog-product-copy {
+  padding: clamp(2rem, 4vw, 3.4rem) clamp(0.2rem, 1vw, 0.9rem);
+}
+
+.catalog-product-copy .section__eyebrow {
+  color: var(--catalog-primary);
+}
+
+.catalog-product-copy h1 {
+  color: var(--text-1);
+  font-size: clamp(3.25rem, 7vw, 6.5rem);
+  letter-spacing: -0.03em;
+  line-height: 0.9;
+  margin-block: 0.75rem 1.35rem;
+  word-spacing: 0.05em;
+}
+
+.catalog-product-summary {
+  color: var(--text-2);
+  font-size: clamp(1.18rem, 2vw, 1.55rem);
+  line-height: 1.5;
+  max-width: 720px;
+}
+
+.catalog-product-story,
+.catalog-product-highlights,
+.catalog-product-description,
+.catalog-membership-inclusions {
+  border-top: 1px solid var(--hairline);
+  margin-top: 2.2rem;
+  padding-top: 2rem;
+}
+
+.catalog-product-story > p {
+  color: var(--text-1);
+  font-size: clamp(1.4rem, 2.6vw, 2.05rem);
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0.8rem 0 0;
+  max-width: 760px;
+}
+
+.catalog-product-highlights > div {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.catalog-product-highlights article {
+  align-items: flex-start;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  color: var(--catalog-primary);
+  display: flex;
+  gap: 0.7rem;
+  min-height: 72px;
+  padding: 1rem;
+}
+
+.catalog-product-highlights article strong {
+  color: var(--text-1);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.catalog-product-description {
+  color: var(--text-2);
+  line-height: 1.75;
+  white-space: normal;
+}
+
+.catalog-product-description .markdown-content {
+  margin-top: 1rem;
+}
+
+.catalog-checkout-panel {
+  background: color-mix(in srgb, var(--surface-1) 94%, transparent);
+  border: 1px solid var(--hairline);
+  border-radius: 24px;
+  box-shadow: var(--shadow-large);
+  gap: 1.05rem;
+  padding: 1.5rem;
+  top: 1.25rem;
+}
+
+.catalog-checkout-panel > header > span {
+  color: var(--text-1);
+  font-size: 1.25rem;
+}
+
+.catalog-checkout-state {
+  background: color-mix(in srgb, var(--catalog-accent) 42%, var(--surface-1));
+  border-radius: 999px;
+  color: var(--catalog-primary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 0.45rem 0.65rem;
+  text-transform: uppercase;
+}
+
+.catalog-payment-methods > button,
+.catalog-billing-options button {
+  border-color: var(--hairline);
+  border-radius: 17px;
+  min-height: 66px;
+  padding: 0.95rem;
+}
+
+.catalog-payment-methods > button.active,
+.catalog-billing-options button.active {
+  background: color-mix(in srgb, var(--catalog-accent) 25%, var(--surface-1));
+  border-color: var(--catalog-primary);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--catalog-primary) 10%, transparent);
+}
+
+.catalog-payment-methods > button,
+.catalog-payment-methods > button svg {
+  color: var(--catalog-primary);
+}
+
+.catalog-payment-methods strong,
+.catalog-billing-options button strong {
+  color: var(--text-1);
+  font-size: 0.9rem;
+}
+
+.catalog-membership-add {
+  align-items: center;
+  background: color-mix(in srgb, var(--catalog-sand) 72%, var(--surface-1));
+  border: 1px solid var(--hairline-strong);
+  border-radius: 19px;
+  color: var(--text-1);
+  cursor: pointer;
+  display: flex;
+  gap: 0.85rem;
+  padding: 1rem;
+  text-align: left;
+  width: 100%;
+}
+
+.catalog-membership-add.active {
+  border-color: var(--catalog-primary);
+}
+
+.catalog-membership-add > span:last-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.catalog-membership-add strong {
+  font-size: 0.9rem;
+}
+
+.catalog-membership-add small {
+  color: var(--text-2);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.catalog-membership-check {
+  align-items: center;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 7px;
+  color: var(--surface-1);
+  display: flex;
+  flex: 0 0 25px;
+  height: 25px;
+  justify-content: center;
+}
+
+.catalog-membership-add.active .catalog-membership-check {
+  background: var(--catalog-primary);
+  border-color: var(--catalog-primary);
+}
+
+.catalog-checkout-total strong {
+  color: var(--text-1);
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+}
+
+.catalog-checkout-button {
+  background: var(--catalog-primary);
+  border-radius: 17px;
+  font-size: 0.96rem;
+  min-height: 56px;
+}
+
+.catalog-checkout-button:disabled {
+  background: color-mix(in srgb, var(--text-3) 35%, var(--surface-2));
+}
+
+.catalog-checkout-panel > p.catalog-payment-expectation {
+  color: var(--text-2);
+  font-size: 0.73rem;
+  text-align: center;
+}
+
+.catalog-sign-in-link {
+  color: var(--catalog-primary);
+  font-size: 0.75rem;
+}
+
+@media (max-width: 900px) {
+  .catalog-product-shell {
+    padding-top: 7rem;
+  }
+
+  .catalog-product-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-checkout-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 560px) {
+  .catalog-product-shell {
+    padding-inline: 0.85rem;
+  }
+
+  .catalog-product-hero,
+  .catalog-checkout-panel {
+    border-radius: 20px;
+  }
+
+  .catalog-product-copy {
+    padding-inline: 0.25rem;
+  }
+
+  .catalog-product-highlights > div {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Golden Hour Performance — August 2026 system-wide finish layer */
 
 html {

@@ -2,19 +2,18 @@
 
 import type { PublicCatalogItem } from "@duna/api";
 import { DUNA_SERVICE_FEE_BPS } from "@duna/core";
-import { Badge } from "@duna/ui";
 import {
   Banknote,
   Check,
   CreditCard,
   Minus,
   Plus,
-  ShieldCheck,
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
+  catalogOfferEligibilityAction,
   catalogCheckoutStatusAction,
   startCatalogCheckoutAction,
 } from "@/app/clubs/[slug]/products/[productSlug]/actions";
@@ -35,7 +34,9 @@ export function CatalogCheckoutPanel({
   membershipRemainingBookings,
   dunaServiceFeeWaived,
   initialCheckoutSessionId,
+  initialMembershipCheckoutSessionId,
   initialNotice,
+  membershipOffers,
 }: {
   readonly item: PublicCatalogItem;
   readonly organization: {
@@ -50,7 +51,9 @@ export function CatalogCheckoutPanel({
   readonly membershipRemainingBookings?: number;
   readonly dunaServiceFeeWaived: boolean;
   readonly initialCheckoutSessionId?: string;
+  readonly initialMembershipCheckoutSessionId?: string;
   readonly initialNotice?: string;
+  readonly membershipOffers: readonly PublicCatalogItem[];
 }) {
   const [variantId, setVariantId] = useState(item.variants[0]?.id ?? "");
   const [paymentMethod, setPaymentMethod] = useState<
@@ -59,17 +62,31 @@ export function CatalogCheckoutPanel({
   const [selectedPriceId, setSelectedPriceId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [notice, setNotice] = useState(initialNotice);
+  const [memberActive, setMemberActive] = useState(isMember);
+  const [addMembership, setAddMembership] = useState(true);
   const [complete, setComplete] = useState(false);
   const [completionMode, setCompletionMode] = useState<
     "purchase" | "cash-reservation" | null
   >(null);
   const [isPending, startTransition] = useTransition();
   const idempotencyKey = useRef(crypto.randomUUID());
+  const membershipIdempotencyKey = useRef(crypto.randomUUID());
+  const membershipOffer = membershipOffers[0];
+  const membershipVariant = membershipOffer?.variants[0];
+  const membershipPrice =
+    membershipVariant?.prices.find(
+      (candidate) =>
+        candidate.paymentKind === "card" && candidate.audience === "non-member",
+    ) ??
+    membershipVariant?.prices.find(
+      (candidate) =>
+        candidate.paymentKind === "card" && candidate.audience === "everyone",
+    );
   const variant =
     item.variants.find((candidate) => candidate.id === variantId) ??
     item.variants[0];
   const pricesFor = (method: "card" | "cash" | "credit") => {
-    const audience = isMember ? "member" : "non-member";
+    const audience = memberActive ? "member" : "non-member";
     const audiencePrices =
       variant?.prices.filter(
         (candidate) =>
@@ -119,9 +136,17 @@ export function CatalogCheckoutPanel({
   const canPurchase =
     Boolean(variant && price) &&
     available &&
-    (!requiresMembership || isMember) &&
+    (!requiresMembership || memberActive) &&
     (paymentMethod !== "card" || organization.paymentsReady) &&
     (paymentMethod !== "credit" || walletCredits >= creditTotal);
+  const membershipStep = requiresMembership && !memberActive;
+  const canStartMembership = Boolean(
+    addMembership &&
+    membershipOffer &&
+    membershipVariant &&
+    membershipPrice &&
+    organization.paymentsReady,
+  );
 
   useEffect(() => {
     if (!initialCheckoutSessionId) return;
@@ -147,6 +172,74 @@ export function CatalogCheckoutPanel({
       cancelled = true;
     };
   }, [initialCheckoutSessionId]);
+
+  useEffect(() => setMemberActive(isMember), [isMember]);
+
+  useEffect(() => {
+    if (!initialMembershipCheckoutSessionId) return;
+    let cancelled = false;
+    startTransition(async () => {
+      const payment = await catalogCheckoutStatusAction(
+        initialMembershipCheckoutSessionId,
+      );
+      if (cancelled) return;
+      if (!payment.ok) {
+        setNotice(payment.error);
+        return;
+      }
+      setNotice("Membership paid. Activating your club access…");
+      for (let attempt = 0; attempt < 18 && !cancelled; attempt += 1) {
+        const response = await catalogOfferEligibilityAction(item.id);
+        if (response.ok && response.eligibility.isMember) {
+          setMemberActive(true);
+          setNotice("Membership active. Choose your option below to continue.");
+          return;
+        }
+        await new Promise((resolve) =>
+          setTimeout(resolve, attempt < 5 ? 650 : 1_100),
+        );
+      }
+      if (!cancelled) {
+        setNotice(
+          "Your membership is paid and still activating. Refresh this page in a moment to continue.",
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialMembershipCheckoutSessionId, item.id]);
+
+  const startMembershipCheckout = () => {
+    if (!membershipOffer || !membershipVariant || !membershipPrice) return;
+    setNotice(undefined);
+    startTransition(async () => {
+      const response = await startCatalogCheckoutAction({
+        organizationSlug: organization.slug,
+        productSlug: membershipOffer.slug,
+        returnProductSlug: item.slug,
+        checkoutRole: "membership",
+        catalogItemId: membershipOffer.id,
+        catalogVariantId: membershipVariant.id,
+        catalogPriceId: membershipPrice.id,
+        paymentMethod: "card",
+        quantity: 1,
+        idempotencyKey: membershipIdempotencyKey.current,
+      });
+      if (!response.ok) {
+        setNotice(response.error);
+        membershipIdempotencyKey.current = crypto.randomUUID();
+        return;
+      }
+      if (response.result.checkoutUrl) {
+        window.location.assign(response.result.checkoutUrl);
+        return;
+      }
+      setNotice("Membership added. You can continue with this purchase.");
+      setMemberActive(true);
+      membershipIdempotencyKey.current = crypto.randomUUID();
+    });
+  };
 
   const startCheckout = () => {
     if (!variant || !canPurchase) return;
@@ -191,16 +284,16 @@ export function CatalogCheckoutPanel({
   return (
     <aside className="catalog-checkout-panel">
       <header>
-        <span>Purchase options</span>
-        <Badge tone={complete || membershipIncluded ? "positive" : "neutral"}>
-          {complete
-            ? completionMode === "cash-reservation"
-              ? "Reserved"
-              : "Confirmed"
-            : membershipIncluded
-              ? "Included with membership"
-              : "Secure checkout"}
-        </Badge>
+        <span>Choose your option</span>
+        {(complete || membershipIncluded) && (
+          <small className="catalog-checkout-state">
+            {complete
+              ? completionMode === "cash-reservation"
+                ? "Reserved"
+                : "Confirmed"
+              : "Included"}
+          </small>
+        )}
       </header>
       {membershipIncluded && (
         <div className="catalog-membership-benefit">
@@ -332,6 +425,37 @@ export function CatalogCheckoutPanel({
           )}
         </div>
       )}
+      {membershipStep && (
+        <button
+          aria-checked={addMembership}
+          className={`catalog-membership-add ${addMembership ? "active" : ""}`}
+          onClick={() => setAddMembership((current) => !current)}
+          role="checkbox"
+          type="button"
+        >
+          <span className="catalog-membership-check">
+            {addMembership && <Check size={16} />}
+          </span>
+          <span>
+            <strong>
+              Add {membershipOffer?.title ?? `${organization.name} membership`}
+            </strong>
+            <small>
+              Required for this purchase
+              {membershipPrice?.amountMinor !== undefined
+                ? ` · ${money(
+                    membershipPrice.amountMinor,
+                    membershipPrice.currency ?? organization.currency,
+                  )}${
+                    membershipPrice.recurringInterval
+                      ? ` / ${membershipPrice.recurringInterval}`
+                      : ""
+                  }`
+                : ""}
+            </small>
+          </span>
+        </button>
+      )}
       {item.type === "good" && (
         <div className="catalog-quantity">
           <span>
@@ -394,8 +518,12 @@ export function CatalogCheckoutPanel({
       )}
       <button
         className="catalog-checkout-button"
-        disabled={!canPurchase || isPending || complete}
-        onClick={startCheckout}
+        disabled={
+          (membershipStep ? !canStartMembership : !canPurchase) ||
+          isPending ||
+          complete
+        }
+        onClick={membershipStep ? startMembershipCheckout : startCheckout}
         type="button"
       >
         {isPending
@@ -406,11 +534,13 @@ export function CatalogCheckoutPanel({
               : "Purchased"
             : membershipIncluded
               ? "Book with membership"
-              : paymentMethod === "cash"
-                ? "Reserve · pay in person"
-                : paymentMethod === "credit"
-                  ? `Use ${creditTotal} credits`
-                  : "Continue to payment"}
+              : membershipStep
+                ? "Add membership, then continue"
+                : paymentMethod === "cash"
+                  ? "Reserve · pay in person"
+                  : paymentMethod === "credit"
+                    ? `Use ${creditTotal} credits`
+                    : "Continue to payment"}
       </button>
       {paymentMethod === "cash" && (
         <p>
@@ -426,26 +556,26 @@ export function CatalogCheckoutPanel({
             credits.
           </p>
         )}
-      {requiresMembership && !isMember && (
+      {membershipStep && !membershipOffer && (
         <p>
-          An active {organization.name} membership is required for this product.
+          {organization.name} needs to publish a membership before this product
+          can be purchased.
         </p>
       )}
-      <div className="catalog-checkout-trust">
-        <ShieldCheck size={17} />
-        <span>
-          Card payments stay with the secure payment provider. Cash reservations
-          are recorded by Duna and confirmed by the organization. Organization
-          credits are closed-loop and valid only with {organization.name}.
-        </span>
-      </div>
+      <p className="catalog-payment-expectation">
+        {paymentMethod === "card"
+          ? "Pay by card, Link, or a saved payment method."
+          : paymentMethod === "credit"
+            ? `${organization.name} credits stay with this club.`
+            : `Reserve now; ${organization.name} collects payment in person.`}
+      </p>
       <Link
         className="catalog-sign-in-link"
         href={`/sign-in?returnTo=${encodeURIComponent(
           `/clubs/${organization.slug}/products/${item.slug}`,
         )}`}
       >
-        Sign in if checkout asks for your Duna account
+        Sign in to keep this purchase with your Duna account
       </Link>
     </aside>
   );
