@@ -16151,8 +16151,8 @@ body {
 }
 
 .hq-shell:not(.admin-shell) .hq-sidebar__section {
+  flex: 0 0 auto;
   opacity: 0;
-  overflow: hidden;
   padding-left: 4.05rem;
   transform: translateX(-0.35rem);
   transition:
