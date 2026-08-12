@@ -34,6 +34,7 @@ import {
   courtBookingParticipants,
   courtBookings,
   divisions,
+  eventTypes,
   follows,
   getDatabase,
   getTransactionalDatabase,
@@ -54,6 +55,7 @@ import {
   registrations,
   reports,
   sessions,
+  venues,
   workflowJobs,
 } from "@duna/db";
 import {
@@ -1619,10 +1621,12 @@ async function organizationPriorRelationshipPersonIds(
           .select({ personId: registrations.personId })
           .from(registrations)
           .innerJoin(sessions, eq(registrations.sessionId, sessions.id))
-          .innerJoin(programs, eq(sessions.programId, programs.id))
+          .leftJoin(programs, eq(sessions.programId, programs.id))
+          .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
+          .leftJoin(venues, eq(sessions.venueId, venues.id))
           .where(
             and(
-              eq(programs.organizationId, organizationId),
+              sessionBelongsToOrganization(organizationId),
               inArray(registrations.personId, personBatch),
             ),
           ),
@@ -1658,6 +1662,16 @@ async function organizationPriorRelationshipPersonIds(
     }
   }
   return related;
+}
+
+// Sessions may be owned by a program, a standalone event type, or finally the
+// venue. Keep the same ordered ownership contract used by event operations and
+// checkout so a client-supplied organization never expands the audience.
+export function sessionBelongsToOrganization(organizationId: string) {
+  return eq(
+    sql<string>`coalesce(${programs.organizationId}, ${eventTypes.organizationId}, ${venues.organizationId})`,
+    organizationId,
+  );
 }
 
 async function organizationAudienceForContext(input: {
@@ -1711,11 +1725,13 @@ async function organizationAudienceForContext(input: {
       })
       .from(registrations)
       .innerJoin(sessions, eq(registrations.sessionId, sessions.id))
-      .innerJoin(programs, eq(sessions.programId, programs.id))
+      .leftJoin(programs, eq(sessions.programId, programs.id))
+      .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
+      .leftJoin(venues, eq(sessions.venueId, venues.id))
       .where(
         and(
           eq(registrations.sessionId, input.context.id),
-          eq(programs.organizationId, input.organizationId),
+          sessionBelongsToOrganization(input.organizationId),
           inArray(registrations.status, [
             "invited",
             "pending",
@@ -1733,11 +1749,13 @@ async function organizationAudienceForContext(input: {
       .from(registrations)
       .innerJoin(divisions, eq(registrations.divisionId, divisions.id))
       .innerJoin(sessions, eq(divisions.sessionId, sessions.id))
-      .innerJoin(programs, eq(sessions.programId, programs.id))
+      .leftJoin(programs, eq(sessions.programId, programs.id))
+      .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
+      .leftJoin(venues, eq(sessions.venueId, venues.id))
       .where(
         and(
           eq(registrations.divisionId, input.context.id),
-          eq(programs.organizationId, input.organizationId),
+          sessionBelongsToOrganization(input.organizationId),
           inArray(registrations.status, [
             "invited",
             "pending",

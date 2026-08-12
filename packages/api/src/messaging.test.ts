@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { canSendAt, enforceGuardianCopies } from "./messaging";
 import { canUseMinorAi, resolveDunaAiModel } from "./duna-ai-support";
 import {
   canUseOrganizationMessaging,
   hasActiveGuardianCoverage,
   mergeOrganizationAudiencePersonIds,
+  sessionBelongsToOrganization,
   validateConversationCreationMode,
   validateMessageAttachment,
   validateMessageAttachmentTotal,
@@ -12,6 +14,17 @@ import {
 } from "./messaging-service";
 
 describe("messaging safety", () => {
+  it("resolves standalone event ownership before selecting its audience", () => {
+    const query = new PgDialect().sqlToQuery(
+      sessionBelongsToOrganization("organization-1"),
+    );
+
+    expect(query.sql).toBe(
+      'coalesce("programs"."organization_id", "event_types"."organization_id", "venues"."organization_id") = $1',
+    );
+    expect(query.params).toEqual(["organization-1"]);
+  });
+
   it("automatically includes active staff in organization-wide groups", () => {
     expect(
       mergeOrganizationAudiencePersonIds(
