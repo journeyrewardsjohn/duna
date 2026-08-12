@@ -45,19 +45,36 @@ export function MessagingActionForm({
     startTransition(() => formAction(formData));
   }
 
+  const notice = state.status === "error" && (
+    <p className={styles.actionNotice} role="alert">
+      <CircleAlert aria-hidden size={16} />
+      <span>{state.message}</span>
+    </p>
+  );
+  const submitButton = (
+    <button className={buttonClassName} disabled={pending} type="submit">
+      {pending ? pendingLabel : submitLabel}
+      <Send aria-hidden size={17} />
+    </button>
+  );
+
   return (
     <form aria-busy={pending} className={className} onSubmit={submit}>
-      {children}
-      {state.status === "error" && (
-        <p className={styles.actionNotice} role="alert">
-          <CircleAlert aria-hidden size={16} />
-          <span>{state.message}</span>
-        </p>
+      {mode === "create" ? (
+        <>
+          <div className={styles.composeFields}>{children}</div>
+          <footer className={styles.composeActions}>
+            {notice}
+            {submitButton}
+          </footer>
+        </>
+      ) : (
+        <>
+          {children}
+          {notice}
+          {submitButton}
+        </>
       )}
-      <button className={buttonClassName} disabled={pending} type="submit">
-        {pending ? pendingLabel : submitLabel}
-        <Send aria-hidden size={17} />
-      </button>
     </form>
   );
 }
