@@ -691,7 +691,7 @@ export function EventOperationsWorkspace({
           <span className="event-live-arrivals__pulse" aria-hidden />
           <span>
             <small>Live arrivals · private window</small>
-            <h2>
+            <h2 className="event-live-arrivals__heading">
               {latePlayers
                 ? `${latePlayers} player${latePlayers === 1 ? " is" : "s are"} running late`
                 : "Know who is on the way."}

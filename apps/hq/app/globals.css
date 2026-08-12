@@ -7019,8 +7019,9 @@ button {
   text-transform: uppercase;
 }
 
-.event-live-arrivals h2 {
-  color: #fff;
+.event-live-arrivals h2,
+.event-live-arrivals__heading {
+  color: #fff !important;
   font-family: var(--font-display);
   font-size: 1.25rem;
   letter-spacing: -0.03em;
