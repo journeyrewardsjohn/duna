@@ -48,14 +48,23 @@ import {
   updateThemeAction,
   type OperatorActionState,
 } from "@/app/actions";
-import { createBrandMediaPath, optimizeImageUpload } from "@/lib/media-storage";
+import {
+  createBrandMediaPath,
+  inferMediaKindFromUrl,
+  optimizeImageUpload,
+} from "@/lib/media-storage";
 import { AddressEntry } from "./place-address-fields";
 import { GuidedProductBuilder } from "./guided-product-builder";
 
 const initialState: OperatorActionState = { status: "idle", message: "" };
 
 type BrandMediaTarget =
-  "logoUrl" | "markUrl" | "logoLightUrl" | "logoDarkUrl" | "heroMediaUrl";
+  | "logoUrl"
+  | "markUrl"
+  | "logoLightUrl"
+  | "logoDarkUrl"
+  | "heroMediaUrl"
+  | "heroPosterUrl";
 
 type BrandMediaUpload = {
   readonly status: "idle" | "uploading" | "ready" | "error";
@@ -1937,6 +1946,9 @@ export function ThemeKitEditor({
   const [heroMediaUrl, setHeroMediaUrl] = useState(
     workspace.theme.heroMediaUrl ?? "",
   );
+  const [heroPosterUrl, setHeroPosterUrl] = useState(
+    workspace.theme.heroPosterUrl ?? "",
+  );
   const [tagline, setTagline] = useState(workspace.theme.tagline ?? "");
   const [profileSummary, setProfileSummary] = useState(
     workspace.theme.profileSummary ?? "",
@@ -1967,6 +1979,7 @@ export function ThemeKitEditor({
     logoLightUrl: { status: "idle", message: "" },
     logoDarkUrl: { status: "idle", message: "" },
     heroMediaUrl: { status: "idle", message: "" },
+    heroPosterUrl: { status: "idle", message: "" },
   });
   const normalizedClubColor = useMemo(
     () => normalizeClubColor(submittedClubColor),
@@ -2007,6 +2020,13 @@ export function ThemeKitEditor({
     if (target === "logoLightUrl") setLogoLightUrl(value);
     if (target === "logoDarkUrl") setLogoDarkUrl(value);
     if (target === "heroMediaUrl") setHeroMediaUrl(value);
+    if (target === "heroPosterUrl") setHeroPosterUrl(value);
+  }
+
+  function updateHeroMediaUrl(value: string) {
+    setHeroMediaUrl(value);
+    setHeroMediaType(inferMediaKindFromUrl(value) ?? "image");
+    setMediaUpload("heroMediaUrl", "idle", "");
   }
 
   async function uploadBrandMedia(
@@ -2015,7 +2035,13 @@ export function ThemeKitEditor({
   ) {
     if (!file) return;
     if (target !== "heroMediaUrl" && !file.type.startsWith("image/")) {
-      setMediaUpload(target, "error", "Choose an image for this logo.");
+      setMediaUpload(
+        target,
+        "error",
+        target === "heroPosterUrl"
+          ? "Choose an image for the video poster."
+          : "Choose an image for this logo.",
+      );
       return;
     }
     setMediaUpload(target, "uploading", "Preparing your file…");
@@ -2064,6 +2090,10 @@ export function ThemeKitEditor({
       );
     }
   }
+
+  const mediaUploadPending = Object.values(mediaUploads).some(
+    (item) => item.status === "uploading",
+  );
 
   return (
     <section
@@ -2337,7 +2367,9 @@ export function ThemeKitEditor({
                   style={
                     heroMediaType === "image" && heroMediaUrl
                       ? { backgroundImage: `url("${heroMediaUrl}")` }
-                      : undefined
+                      : heroMediaType === "video" && heroPosterUrl
+                        ? { backgroundImage: `url("${heroPosterUrl}")` }
+                        : undefined
                   }
                 >
                   {heroMediaType === "video" && heroMediaUrl ? (
@@ -2383,21 +2415,11 @@ export function ThemeKitEditor({
                   </span>
                 )}
               <div className="operator-form-grid operator-form-grid--two">
-                <label>
-                  <span>Media type</span>
-                  <select
-                    name="heroMediaType"
-                    onChange={(event) =>
-                      setHeroMediaType(
-                        event.target.value === "video" ? "video" : "image",
-                      )
-                    }
-                    value={heroMediaType}
-                  >
-                    <option value="image">Image</option>
-                    <option value="video">Video</option>
-                  </select>
-                </label>
+                <input
+                  name="heroMediaType"
+                  type="hidden"
+                  value={heroMediaType}
+                />
                 <label>
                   <span>Layout</span>
                   <select
@@ -2421,19 +2443,81 @@ export function ThemeKitEditor({
                   <span>Hosted image or video URL · optional</span>
                   <input
                     name="heroMediaUrl"
-                    onChange={(event) => setHeroMediaUrl(event.target.value)}
+                    onChange={(event) => updateHeroMediaUrl(event.target.value)}
+                    placeholder="https://…"
                     type="url"
                     value={heroMediaUrl}
                   />
+                  <small className="theme-media-detection">
+                    {heroMediaUrl
+                      ? `${heroMediaType === "video" ? "Video" : "Image"} detected automatically from the uploaded file or hosted URL.`
+                      : "Image or video type is detected automatically after upload or when you add a hosted URL."}
+                  </small>
                 </label>
-                <label className="operator-field--wide">
-                  <span>Video poster URL</span>
+                <div className="operator-field--wide theme-poster-field">
+                  <span
+                    className="theme-poster-field__preview"
+                    style={
+                      heroPosterUrl
+                        ? { backgroundImage: `url("${heroPosterUrl}")` }
+                        : undefined
+                    }
+                  >
+                    {!heroPosterUrl && <ImageIcon aria-hidden size={20} />}
+                  </span>
+                  <span className="theme-poster-field__copy">
+                    <strong>Video poster image · optional</strong>
+                    <small>Shown while a video loads or cannot autoplay.</small>
+                  </span>
+                  <label className="theme-asset__upload">
+                    <input
+                      accept="image/avif,image/jpeg,image/png,image/webp"
+                      disabled={
+                        mediaUploads.heroPosterUrl.status === "uploading"
+                      }
+                      onChange={(event) => {
+                        const file = event.currentTarget.files?.[0];
+                        event.currentTarget.value = "";
+                        void uploadBrandMedia(file, "heroPosterUrl");
+                      }}
+                      type="file"
+                    />
+                    <span>
+                      <UploadCloud aria-hidden size={15} />
+                      {mediaUploads.heroPosterUrl.status === "uploading"
+                        ? "Uploading…"
+                        : heroPosterUrl
+                          ? "Replace image"
+                          : "Upload image"}
+                    </span>
+                  </label>
+                  <details className="theme-asset__url">
+                    <summary>Use a hosted URL instead</summary>
+                    <input
+                      aria-label="Video poster image URL"
+                      onChange={(event) => {
+                        setHeroPosterUrl(event.target.value);
+                        setMediaUpload("heroPosterUrl", "idle", "");
+                      }}
+                      placeholder="https://…"
+                      type="url"
+                      value={heroPosterUrl}
+                    />
+                  </details>
                   <input
-                    defaultValue={workspace.theme.heroPosterUrl}
                     name="heroPosterUrl"
-                    type="url"
+                    type="hidden"
+                    value={heroPosterUrl}
                   />
-                </label>
+                  {mediaUploads.heroPosterUrl.message && (
+                    <span
+                      aria-live="polite"
+                      className={`theme-media-status theme-media-status--${mediaUploads.heroPosterUrl.status}`}
+                    >
+                      {mediaUploads.heroPosterUrl.message}
+                    </span>
+                  )}
+                </div>
               </div>
             </section>
 
@@ -2499,11 +2583,20 @@ export function ThemeKitEditor({
                 style={
                   heroMediaType === "image" && heroMediaUrl
                     ? { backgroundImage: `url("${heroMediaUrl}")` }
-                    : undefined
+                    : heroMediaType === "video" && heroPosterUrl
+                      ? { backgroundImage: `url("${heroPosterUrl}")` }
+                      : undefined
                 }
               >
                 {heroMediaType === "video" && heroMediaUrl && (
-                  <video autoPlay loop muted playsInline src={heroMediaUrl} />
+                  <video
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    poster={heroPosterUrl || undefined}
+                    src={heroMediaUrl}
+                  />
                 )}
                 {logoLightUrl || logoUrl ? (
                   <span
@@ -2575,7 +2668,9 @@ export function ThemeKitEditor({
         <div className="operator-form-footer">
           <ActionNotice state={state} />
           <SubmitButton
-            disabled={normalizedClubColor.conflictsWithFlare}
+            disabled={
+              normalizedClubColor.conflictsWithFlare || mediaUploadPending
+            }
             pending={pending}
           >
             Save canonical Theme Kit

@@ -1,17 +1,20 @@
 "use client";
 
 import type { OperatorWorkspace } from "@duna/api";
+import { upload } from "@vercel/blob/client";
 import {
   ArrowLeft,
   ArrowRight,
   Building2,
   Check,
   CircleAlert,
+  Image as ImageIcon,
   MapPinned,
   Plus,
   ShieldCheck,
   Sparkles,
   Sun,
+  UploadCloud,
   Warehouse,
   Waves,
 } from "lucide-react";
@@ -20,6 +23,7 @@ import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 import { createVenueAction, type OperatorActionState } from "@/app/actions";
 import type { AddressValue } from "@/lib/address";
+import { createVenueMediaPath, optimizeImageUpload } from "@/lib/media-storage";
 import { AddressEntry } from "./place-address-fields";
 import { VenueAmenitiesField } from "./venue-amenities-field";
 
@@ -62,6 +66,11 @@ export function VenueCreateWorkspace({
   const [timezone, setTimezone] = useState(workspace.organization.timezone);
   const [capacity, setCapacity] = useState("0");
   const [description, setDescription] = useState("");
+  const [heroImageUrl, setHeroImageUrl] = useState("");
+  const [uploadState, setUploadState] = useState<
+    "idle" | "uploading" | "ready" | "error"
+  >("idle");
+  const [uploadMessage, setUploadMessage] = useState("");
   const [temporary, setTemporary] = useState(false);
 
   useEffect(() => {
@@ -76,6 +85,45 @@ export function VenueCreateWorkspace({
   const detailsReady = name.trim().length >= 2 && Boolean(timezone.trim());
   const readiness = [locationReady, detailsReady, true];
   const completed = readiness.filter(Boolean).length;
+
+  async function uploadVenueImage(file?: File) {
+    if (!file) return;
+    setUploadState("uploading");
+    setUploadMessage("Optimizing your venue image…");
+    try {
+      const prepared = await optimizeImageUpload(file);
+      const stored = await upload(
+        createVenueMediaPath(workspace.organization.id, prepared.type),
+        prepared,
+        {
+          access: "public",
+          clientPayload: JSON.stringify({
+            organizationId: workspace.organization.id,
+            fileName: prepared.name,
+            contentType: prepared.type,
+            size: prepared.size,
+            purpose: "venue",
+          }),
+          contentType: prepared.type,
+          handleUploadUrl: "/api/media/upload",
+          onUploadProgress: ({ percentage }) => {
+            setUploadMessage(`Uploading… ${Math.round(percentage)}%`);
+          },
+        },
+      );
+      if (!stored.url) {
+        throw new Error("Duna storage did not return an image URL.");
+      }
+      setHeroImageUrl(stored.url);
+      setUploadState("ready");
+      setUploadMessage("Venue image ready for this draft.");
+    } catch (error) {
+      setUploadState("error");
+      setUploadMessage(
+        error instanceof Error ? error.message : "Venue image upload failed.",
+      );
+    }
+  }
 
   return (
     <main className="hq-page venue-create-page">
@@ -298,10 +346,68 @@ export function VenueCreateWorkspace({
                   value={description}
                 />
               </label>
-              <label className="venue-form-grid__wide">
-                <span>Venue hero image URL</span>
-                <input name="heroImageUrl" placeholder="https://…" type="url" />
-              </label>
+              <div className="venue-form-grid__wide venue-create-image-field">
+                <span className="venue-field-label">Venue hero image</span>
+                <div className="venue-image-editor venue-image-editor--compact">
+                  <div
+                    aria-label={heroImageUrl ? "Venue hero preview" : undefined}
+                    className={`venue-image-editor__preview ${heroImageUrl ? "has-image" : ""}`}
+                    role={heroImageUrl ? "img" : undefined}
+                    style={
+                      heroImageUrl
+                        ? { backgroundImage: `url("${heroImageUrl}")` }
+                        : undefined
+                    }
+                  >
+                    {!heroImageUrl && <ImageIcon aria-hidden size={28} />}
+                  </div>
+                  <div>
+                    <label className="venue-image-editor__upload">
+                      <UploadCloud aria-hidden size={18} />
+                      <span>
+                        <strong>
+                          {heroImageUrl
+                            ? "Replace image"
+                            : "Upload venue image"}
+                        </strong>
+                        <small>JPEG, PNG, WebP, or AVIF · up to 15 MB</small>
+                      </span>
+                      <input
+                        accept="image/avif,image/jpeg,image/png,image/webp"
+                        disabled={uploadState === "uploading"}
+                        onChange={(event) => {
+                          const file = event.currentTarget.files?.[0];
+                          event.currentTarget.value = "";
+                          void uploadVenueImage(file);
+                        }}
+                        type="file"
+                      />
+                    </label>
+                    <label>
+                      <span>Or use an image URL</span>
+                      <input
+                        onChange={(event) => {
+                          setHeroImageUrl(event.target.value);
+                          setUploadState("idle");
+                          setUploadMessage("");
+                        }}
+                        placeholder="https://…"
+                        type="url"
+                        value={heroImageUrl}
+                      />
+                    </label>
+                    {uploadMessage && (
+                      <small
+                        aria-live="polite"
+                        className={`venue-upload-message is-${uploadState}`}
+                      >
+                        {uploadMessage}
+                      </small>
+                    )}
+                  </div>
+                </div>
+                <input name="heroImageUrl" type="hidden" value={heroImageUrl} />
+              </div>
             </div>
             <input name="temporaryPresent" type="hidden" value="true" />
             <label className="venue-event-toggle">
@@ -403,7 +509,11 @@ export function VenueCreateWorkspace({
               {step < 2 ? (
                 <button
                   className="hq-button hq-button--primary"
-                  disabled={step === 0 ? !locationReady : !detailsReady}
+                  disabled={
+                    step === 0
+                      ? !locationReady
+                      : !detailsReady || uploadState === "uploading"
+                  }
                   onClick={() => setStep((current) => current + 1)}
                   type="button"
                 >
@@ -412,7 +522,12 @@ export function VenueCreateWorkspace({
               ) : (
                 <button
                   className="hq-button hq-button--primary"
-                  disabled={pending || !locationReady || !detailsReady}
+                  disabled={
+                    pending ||
+                    uploadState === "uploading" ||
+                    !locationReady ||
+                    !detailsReady
+                  }
                   type="submit"
                 >
                   <Plus aria-hidden size={16} />

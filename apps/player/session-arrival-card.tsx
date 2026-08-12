@@ -24,6 +24,15 @@ export interface ArrivalBooking {
   readonly kind: string;
 }
 
+export interface ArrivalCardPalette {
+  readonly accent: string;
+  readonly accentSurface: string;
+  readonly border: string;
+  readonly muted: string;
+  readonly surface: string;
+  readonly text: string;
+}
+
 function sharingWindow(startsAt: string) {
   const start = Date.parse(startsAt);
   const now = Date.now();
@@ -57,10 +66,12 @@ function leaveLabel(value: string) {
 export function SessionArrivalCard({
   booking,
   client,
+  compactPalette,
   onActivated,
 }: {
   readonly booking: ArrivalBooking;
   readonly client?: DunaApiClient;
+  readonly compactPalette?: ArrivalCardPalette;
   readonly onActivated?: () => void;
 }) {
   const [signal, setSignal] = useState<ArrivalSignal>();
@@ -298,6 +309,82 @@ export function SessionArrivalCard({
     setMessage("Arrival sharing stopped.");
   };
 
+  if (compactPalette && !signal) {
+    const compactDetail = busy
+      ? "Starting your private ETA…"
+      : window.active
+        ? "Tap to share your trip ETA"
+        : "Available one hour before start";
+
+    return (
+      <View style={styles.compactWrap}>
+        <Pressable
+          accessibilityHint={
+            window.active
+              ? "Starts private arrival sharing"
+              : "Shows the exact time arrival sharing becomes available"
+          }
+          accessibilityLabel={`Live Activities on. Trip Assistant. ${compactDetail}`}
+          accessibilityRole="button"
+          accessibilityState={{ busy, disabled: busy }}
+          disabled={busy}
+          onPress={(event) => {
+            event.stopPropagation();
+            void begin();
+          }}
+          style={({ pressed }) => [
+            styles.compactCard,
+            {
+              backgroundColor: compactPalette.surface,
+              borderColor: compactPalette.border,
+            },
+            pressed && styles.compactCardPressed,
+          ]}
+        >
+          <View
+            style={[
+              styles.compactMark,
+              { backgroundColor: compactPalette.accentSurface },
+            ]}
+          >
+            <Text
+              style={[styles.compactMarkText, { color: compactPalette.accent }]}
+            >
+              ◉
+            </Text>
+          </View>
+          <View style={styles.flex}>
+            <Text
+              style={[styles.compactEyebrow, { color: compactPalette.accent }]}
+            >
+              LIVE ACTIVITIES ON
+            </Text>
+            <Text style={[styles.compactTitle, { color: compactPalette.text }]}>
+              Trip Assistant
+            </Text>
+            <Text
+              style={[styles.compactDetail, { color: compactPalette.muted }]}
+            >
+              {compactDetail}
+            </Text>
+          </View>
+          <Text
+            style={[styles.compactAction, { color: compactPalette.accent }]}
+          >
+            {window.active ? "START" : "READY"}
+          </Text>
+        </Pressable>
+        {message && (
+          <Text
+            style={[styles.compactMessage, { color: compactPalette.muted }]}
+          >
+            {message}
+          </Text>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.card}>
       <View style={styles.topRow}>
@@ -448,6 +535,39 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 14,
     marginTop: 9,
+    textAlign: "center",
+  },
+  compactWrap: { marginTop: 12 },
+  compactCard: {
+    alignItems: "center",
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 11,
+    minHeight: 72,
+    padding: 12,
+  },
+  compactCardPressed: { opacity: 0.72 },
+  compactMark: {
+    alignItems: "center",
+    borderRadius: 14,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  compactMarkText: { fontSize: 18, fontWeight: "800" },
+  compactEyebrow: {
+    fontSize: 11.5,
+    fontWeight: "500",
+    letterSpacing: 1.2,
+  },
+  compactTitle: { fontSize: 16, fontWeight: "600", marginTop: 2 },
+  compactDetail: { fontSize: 14.5, lineHeight: 19, marginTop: 1 },
+  compactAction: { fontSize: 11.5, fontWeight: "700", paddingHorizontal: 4 },
+  compactMessage: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 8,
     textAlign: "center",
   },
 });

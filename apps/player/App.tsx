@@ -2178,7 +2178,18 @@ function HomeScreen({
               </View>
             </Pressable>
             {!["pickup", "court-rental"].includes(nextBooking.kind) && (
-              <LiveActivitiesPrompt booking={nextBooking} client={client} />
+              <LiveActivitiesPrompt
+                booking={nextBooking}
+                client={client}
+                compactPalette={{
+                  accent: colors.aqua,
+                  accentSurface: rgba(colors.accentRgb, 0.12),
+                  border: rgba(colors.overlayRgb, 0.1),
+                  muted: colors.muted,
+                  surface: colors.navyLift,
+                  text: colors.bone,
+                }}
+              />
             )}
           </>
         ) : (

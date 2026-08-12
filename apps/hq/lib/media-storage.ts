@@ -46,6 +46,45 @@ function mediaType(contentType: string): ValidatedEventMedia | undefined {
   };
 }
 
+export function inferMediaKindFromUrl(
+  value: string,
+): EventMediaKind | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (/^data:image\//i.test(trimmed)) return "image";
+  if (/^data:video\//i.test(trimmed)) return "video";
+
+  try {
+    const url = new URL(trimmed);
+    const candidates = [
+      url.pathname.split(".").pop(),
+      url.searchParams.get("format"),
+      url.searchParams.get("fm"),
+    ]
+      .filter((candidate): candidate is string => Boolean(candidate))
+      .map((candidate) => candidate.toLowerCase());
+
+    if (
+      candidates.some((candidate) => ["mp4", "mov", "webm"].includes(candidate))
+    ) {
+      return "video";
+    }
+    if (
+      candidates.some((candidate) =>
+        ["avif", "gif", "jpeg", "jpg", "png", "svg", "webp"].includes(
+          candidate,
+        ),
+      )
+    ) {
+      return "image";
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+}
+
 export function validateEventMediaInput(
   input: EventMediaInput,
 ): ValidatedEventMedia {
