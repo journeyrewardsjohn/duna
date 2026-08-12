@@ -8,7 +8,6 @@ import {
   Megaphone,
   MessageSquareText,
   Plus,
-  Send,
   ShieldCheck,
   Sparkles,
   UsersRound,
@@ -16,11 +15,8 @@ import {
 import Link from "next/link";
 import { OperatorShell } from "@/components/operator-shell";
 import { getServerCaller } from "@/lib/api";
-import {
-  createOrganizationConversation,
-  sendOrganizationMessage,
-} from "./actions";
 import { MessagingLiveRefresh } from "./live-refresh";
+import { MessagingActionForm } from "./messaging-action-form";
 import styles from "./messaging.module.css";
 
 export const metadata = { title: "Messages" };
@@ -217,7 +213,12 @@ export default async function OrganizationMessagesPage({
                   <strong>Start with who needs the update.</strong>
                 </span>
               </header>
-              <form action={createOrganizationConversation}>
+              <MessagingActionForm
+                buttonClassName={styles.sendButton}
+                mode="create"
+                pendingLabel="Creating and sending…"
+                submitLabel="Create and send"
+              >
                 <input
                   name="organizationId"
                   type="hidden"
@@ -239,15 +240,27 @@ export default async function OrganizationMessagesPage({
                     >
                       Active organization members
                     </option>
-                    {workspace.sessions.map((session) => (
-                      <option
-                        key={session.id}
-                        value={`${session.kind === "league" ? "league" : session.kind === "private-lesson" ? "lesson" : "event"}::${session.kind === "league" && session.programId ? session.programId : session.id}::${session.title}`}
-                      >
-                        {session.title} · {session.analytics.registrations}{" "}
-                        registered
-                      </option>
-                    ))}
+                    {workspace.sessions.map((session) => {
+                      const leagueProgramId =
+                        session.kind === "league"
+                          ? session.programId
+                          : undefined;
+                      const audienceType = leagueProgramId
+                        ? "league"
+                        : session.kind === "private-lesson"
+                          ? "lesson"
+                          : "event";
+                      const audienceId = leagueProgramId ?? session.id;
+                      return (
+                        <option
+                          key={session.id}
+                          value={`${audienceType}::${audienceId}::${session.title}`}
+                        >
+                          {session.title} · {session.analytics.registrations}{" "}
+                          registered
+                        </option>
+                      );
+                    })}
                     {events.flatMap((event) =>
                       (event.divisions ?? []).map((division) => (
                         <option
@@ -333,10 +346,7 @@ export default async function OrganizationMessagesPage({
                     screening.
                   </span>
                 </div>
-                <button className={styles.sendButton} type="submit">
-                  Create and send <Send aria-hidden size={17} />
-                </button>
-              </form>
+              </MessagingActionForm>
             </section>
           ) : detail ? (
             <section className={styles.thread}>
@@ -403,9 +413,11 @@ export default async function OrganizationMessagesPage({
                   );
                 })}
               </div>
-              <form
-                action={sendOrganizationMessage}
+              <MessagingActionForm
                 className={styles.composer}
+                mode="send"
+                pendingLabel="Sending…"
+                submitLabel="Send"
               >
                 <input
                   name="conversationId"
@@ -426,10 +438,7 @@ export default async function OrganizationMessagesPage({
                   required
                   rows={2}
                 />
-                <button type="submit">
-                  <Send aria-hidden size={17} /> Send
-                </button>
-              </form>
+              </MessagingActionForm>
             </section>
           ) : (
             <section className={styles.empty}>
