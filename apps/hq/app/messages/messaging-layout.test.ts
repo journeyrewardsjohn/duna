@@ -21,9 +21,16 @@ function ruleBody(selector: string) {
 }
 
 describe("HQ messaging layout", () => {
-  it("lets the center panel shrink so its action stays in the scroll frame", () => {
+  it("keeps compose actions inside a fixed footer while fields scroll", () => {
     expect(ruleBody(".workspace > *")).toMatch(/min-height:\s*0;/);
-    expect(ruleBody(".composePanel > form")).toMatch(/overflow:\s*auto;/);
+    expect(ruleBody(".composePanel > form")).toMatch(
+      /grid-template-rows:\s*minmax\(0,\s*1fr\)\s*auto;/,
+    );
+    expect(ruleBody(".composePanel > form")).toMatch(/overflow:\s*hidden;/);
+    expect(ruleBody(".composeFields")).toMatch(/overflow:\s*auto;/);
+    expect(actionFormSource).toContain(
+      "<footer className={styles.composeActions}>",
+    );
   });
 
   it("keeps the operator draft when a server validation stays inline", () => {

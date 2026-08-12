@@ -423,9 +423,25 @@
 
 .composePanel > form {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.composeFields {
+  display: grid;
   gap: 0.9rem;
+  min-height: 0;
   overflow: auto;
-  padding: 1.2rem clamp(1rem, 4vw, 2.4rem) 2rem;
+  padding: 1.2rem clamp(1rem, 4vw, 2.4rem);
+}
+
+.composeActions {
+  background: var(--color-panel);
+  border-top: 1px solid var(--hq-border);
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem clamp(1rem, 4vw, 2.4rem) 1rem;
 }
 
 .composePanel label:not(.checkLabel) {
