@@ -89,6 +89,18 @@ function activeRegistration(status: string): boolean {
   return ["pending", "confirmed", "waitlisted", "checked-in"].includes(status);
 }
 
+export function registrationCanReceiveEventCancellationRefund(
+  status: string,
+): boolean {
+  return [
+    "pending",
+    "confirmed",
+    "waitlisted",
+    "checked-in",
+    "cancelled",
+  ].includes(status);
+}
+
 /** Captures both the captain order and split-pay teammate orders. */
 export function collectRegistrationOrderIds(
   registrationOrderId: string | null | undefined,
@@ -227,19 +239,19 @@ export async function loadEventCancellationPreview(input: {
   const operation = await database.query.sessionOperations.findFirst({
     where: eq(sessionOperations.sessionId, input.sessionId),
   });
-  const active = registrationRows.filter((row) =>
-    activeRegistration(row.status),
+  const refundCandidates = registrationRows.filter((row) =>
+    registrationCanReceiveEventCancellationRefund(row.status),
   );
-  const activeRegistrationIds = new Set(active.map((row) => row.id));
+  const refundCandidateIds = new Set(refundCandidates.map((row) => row.id));
   const retryOrderIds =
     session.status === "cancelled" && operation?.refundStatus === "attention"
       ? (operation.refundSummary?.failedOrderIds ?? [])
       : [];
   const orderIds = [
     ...new Set([
-      ...active.flatMap((row) => (row.orderId ? [row.orderId] : [])),
+      ...refundCandidates.flatMap((row) => (row.orderId ? [row.orderId] : [])),
       ...teamPaymentRows.flatMap((team) =>
-        activeRegistrationIds.has(team.registrationId)
+        refundCandidateIds.has(team.registrationId)
           ? collectRegistrationOrderIds(undefined, team.roster)
           : [],
       ),
@@ -352,13 +364,26 @@ export async function loadEventCancellationPreview(input: {
       };
     })
     .filter((order) => order.cashRefundMinor > 0 || order.creditsToRestore > 0);
+  const previewOrderIds = new Set(previewOrders.map((order) => order.orderId));
+  const teamRosterByRegistration = new Map(
+    teamPaymentRows.map((team) => [team.registrationId, team.roster] as const),
+  );
+  const affectedRegistrationCount = registrationRows.filter(
+    (registration) =>
+      activeRegistration(registration.status) ||
+      (registration.status === "cancelled" &&
+        collectRegistrationOrderIds(
+          registration.orderId,
+          teamRosterByRegistration.get(registration.id) ?? [],
+        ).some((orderId) => previewOrderIds.has(orderId))),
+  ).length;
   return {
     sessionId: input.sessionId,
     sessionStatus: session.status,
     registrationCount:
       session.status === "cancelled" && operation?.refundSummary
         ? operation.refundSummary.registrationCount
-        : active.length,
+        : affectedRegistrationCount,
     orderCount: previewOrders.length,
     cashRefundMinor: previewOrders.reduce(
       (total, order) => total + order.cashRefundMinor,
