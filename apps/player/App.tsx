@@ -1,5 +1,6 @@
 import {
   defaultEventMedia,
+  evaluateDivisionCriteria,
   formatMoney,
   formatVenueTime,
   type EventDivisionSummary,
@@ -88,8 +89,6 @@ import {
   BookingConfirmationView,
   type ShareableBookingDetails,
 } from "./booking-share";
-import dunaResultReturn from "./assets/duna-result-return-v1.png";
-import dunaResultRise from "./assets/duna-result-rise-v1.png";
 import { PlayerCalendarModal } from "./player-calendar";
 import { PlayerCalendarAutoSync } from "./player-calendar-sync";
 import { ProfileHubScreen } from "./profile-hub";
@@ -105,6 +104,10 @@ import {
   usePlayerProfileNavigation,
 } from "./player-social";
 import { DiscoveryMapModal, DiscoveryMapPreview } from "./discovery-map";
+import {
+  checkoutRosterComplete,
+  initialPurchaseKind,
+} from "./event-checkout-state";
 import { DiscoverySearchFlow } from "./discovery-search-flow";
 import {
   discoveryResultSummary,
@@ -126,6 +129,7 @@ import {
   policyScrollReachedEnd,
   type PolicyScrollMetrics,
 } from "./policy-review";
+import { ResultPlayIcon } from "./result-play-icon";
 import {
   FellixText as Text,
   FellixTextInput as TextInput,
@@ -178,75 +182,25 @@ function registrationParticipantEligibility(
   if (!participant?.available) {
     return { eligible: false, reason: "Guardian verification required" };
   }
-  const rating = participant.person.rating.display;
-  if (
-    division?.ratingMinimum !== undefined &&
-    rating < division.ratingMinimum
-  ) {
-    return {
-      eligible: false,
-      reason: `Rating must be ${division.ratingMinimum.toFixed(2)}+`,
-    };
-  }
-  if (
-    division?.ratingMaximum !== undefined &&
-    rating > division.ratingMaximum
-  ) {
-    return {
-      eligible: false,
-      reason: `Rating must be ${division.ratingMaximum.toFixed(2)} or below`,
-    };
-  }
-  const age = participant.birthDate
-    ? Math.floor(
-        (new Date(eligibilityDate).getTime() -
-          new Date(`${participant.birthDate}T00:00:00Z`).getTime()) /
-          (365.2425 * 24 * 60 * 60_000),
-      )
-    : undefined;
-  if (
-    division?.ageMinimum !== undefined &&
-    (age === undefined || age < division.ageMinimum)
-  ) {
-    return {
-      eligible: false,
-      reason:
-        age === undefined
-          ? "Age verification required"
-          : `Must be ${division.ageMinimum}+`,
-    };
-  }
-  if (
-    division?.ageMaximum !== undefined &&
-    (age === undefined || age > division.ageMaximum)
-  ) {
-    return {
-      eligible: false,
-      reason:
-        age === undefined
-          ? "Age verification required"
-          : `Must be ${division.ageMaximum} or younger`,
-    };
-  }
-  const requiredGender = division?.gender?.toLowerCase() ?? "";
-  const participantGender = participant.genderCategory?.toLowerCase() ?? "";
-  const womenOnly = /women|woman|female|girls?/.test(requiredGender);
-  const menOnly =
-    !womenOnly && /(^|\W)(men|man|male|boys?)(\W|$)/.test(requiredGender);
-  if (womenOnly || menOnly) {
-    const matches = womenOnly
-      ? /women|woman|female|girls?/.test(participantGender)
-      : /(^|\W)(men|man|male|boys?)(\W|$)/.test(participantGender);
-    if (!matches) {
-      return {
-        eligible: false,
-        reason: participantGender
-          ? `Not eligible for ${division?.gender}`
-          : "Gender eligibility not verified",
-      };
-    }
-  }
-  return { eligible: true, reason: "Eligible" };
+  const result = evaluateDivisionCriteria({
+    asOf: new Date(eligibilityDate),
+    criteria: {
+      ageMaximum: division?.ageMaximum,
+      ageMinimum: division?.ageMinimum,
+      gender: division?.gender,
+      ratingMaximum: division?.ratingMaximum,
+      ratingMinimum: division?.ratingMinimum,
+    },
+    participant: {
+      birthDate: participant.birthDate,
+      genderCategory: participant.genderCategory,
+      rating: participant.person.rating.display,
+    },
+  });
+  return {
+    eligible: result.eligible,
+    reason: result.eligible ? "Eligible" : result.reasons.join(" · "),
+  };
 }
 
 function registrationParticipantAge(
@@ -1616,7 +1570,6 @@ function HomeResultStoryCard({
     : score.length >= 3
       ? "Took it to the decider—small margins, strong evidence for next time."
       : "Clear evidence, clean reset, and the next serve already ahead.";
-  const art = won ? dunaResultRise : dunaResultReturn;
   const renderTeam = (
     team: readonly PersonSummary[],
     side: "player" | "opponent",
@@ -1729,12 +1682,7 @@ function HomeResultStoryCard({
         won ? styles.resultStoryCardWon : styles.resultStoryCardLost,
       ]}
     >
-      <ImageBackground
-        imageStyle={styles.resultStoryArtImage}
-        resizeMode="cover"
-        source={art}
-        style={styles.resultStoryHeader}
-      >
+      <View style={styles.resultStoryHeader}>
         <Animated.View
           style={[
             styles.resultStoryHeaderCopy,
@@ -1763,7 +1711,14 @@ function HomeResultStoryCard({
             day: "numeric",
           })}
         </Text>
-      </ImageBackground>
+        <View pointerEvents="none" style={styles.resultStoryPlayIcon}>
+          <ResultPlayIcon
+            outcome={won ? "won" : "lost"}
+            playersPerSide={Math.max(playerTeam.length, opponentTeam.length)}
+            size={138}
+          />
+        </View>
+      </View>
       <View style={styles.resultStoryScorecard}>
         {renderTeam(playerTeam, "player")}
         <View style={styles.resultStoryDivider} />
@@ -8445,7 +8400,6 @@ function MobileResultCard({
         ? "B"
         : "A"
     : undefined;
-  const art = result === "W" ? dunaResultRise : dunaResultReturn;
   return (
     <Pressable
       accessibilityHint="Expands the native match breakdown"
@@ -8458,12 +8412,7 @@ function MobileResultCard({
           : styles.athleteResultCardLoss,
       ]}
     >
-      <ImageBackground
-        imageStyle={styles.athleteResultArtImage}
-        resizeMode="cover"
-        source={art}
-        style={styles.athleteResultHero}
-      >
+      <View style={styles.athleteResultHero}>
         <Animated.View
           style={[
             styles.athleteResultHeroCopy,
@@ -8490,7 +8439,17 @@ function MobileResultCard({
             {match.resultStory.source === "ai" ? "DUNA AI RECAP" : "DUNA RECAP"}
           </Text>
         </Animated.View>
-      </ImageBackground>
+        <View pointerEvents="none" style={styles.athleteResultPlayIcon}>
+          <ResultPlayIcon
+            outcome={result === "W" ? "won" : "lost"}
+            playersPerSide={Math.max(
+              sidePlayers("A").length,
+              sidePlayers("B").length,
+            )}
+            size={138}
+          />
+        </View>
+      </View>
 
       <View style={styles.athleteResultScoreCard}>
         <View style={styles.athleteResultScoreMeta}>
@@ -9812,6 +9771,60 @@ function BookingModal({
   const events = dashboard?.events ?? demoEvents;
   const player = dashboard?.player ?? demoPlayer;
   const event = eventIndex === null ? null : events[eventIndex];
+  const eventId = event?.id;
+  const defaultDivisionId = event?.divisions?.[0]?.id;
+  const defaultTicketTypeId = event?.tickets?.[0]?.id;
+  const activeDivisionId = divisionId ?? defaultDivisionId;
+
+  useEffect(() => {
+    if (!eventId) return;
+    setPurchaseKind(
+      initialPurchaseKind({
+        hasDivisions: Boolean(defaultDivisionId),
+        hasTickets: Boolean(defaultTicketTypeId),
+      }),
+    );
+    setDivisionId(defaultDivisionId);
+    setTicketTypeId(defaultTicketTypeId);
+    setTeamRoster([]);
+    setTeammateQuery("");
+    setTeammateResults([]);
+    setError(undefined);
+  }, [defaultDivisionId, defaultTicketTypeId, eventId]);
+
+  useEffect(() => {
+    if (
+      !client ||
+      mode === "preview" ||
+      !eventId ||
+      purchaseKind !== "entry" ||
+      !activeDivisionId
+    ) {
+      return;
+    }
+    let cancelled = false;
+    void client.player.teammateSearch
+      .query({ divisionId: activeDivisionId, limit: 12 })
+      .then((results) => {
+        if (!cancelled) setTeammateResults(results);
+      })
+      .catch(() => {
+        if (!cancelled) setTeammateResults([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeDivisionId, client, eventId, mode, purchaseKind]);
+
+  useEffect(
+    () => () => {
+      if (teammateSearchTimeout.current) {
+        clearTimeout(teammateSearchTimeout.current);
+      }
+    },
+    [],
+  );
+
   if (!event) return null;
   const selectedEvent = event;
   const reviewingPolicy = selectedEvent.policies?.find(
@@ -9883,17 +9896,19 @@ function BookingModal({
         policy.required &&
         (purchaseKind === "entry" || policy.kind !== "waiver"),
     ) ?? [];
-  const rosterComplete =
-    event.kind === "pickup" ||
-    selectedTeamSize <= 1 ||
-    teamRoster.length >= selectedTeamSize - 1;
+  const rosterComplete = checkoutRosterComplete({
+    eventKind: event.kind,
+    purchaseKind,
+    selectedTeamSize,
+    teammateCount: teamRoster.length,
+  });
   const policiesComplete = requiredPolicies.every((policy) =>
     acceptedPolicyIds.includes(policy.id),
   );
   const listedSubtotalMinor =
     listedPrice.amountMinor * (purchaseKind === "ticket" ? ticketQuantity : 1);
   const teammateCandidates =
-    teammateResults.length > 0
+    mode !== "preview"
       ? teammateResults
       : (people ?? demoPeople)
           .filter(
@@ -10450,7 +10465,10 @@ function BookingModal({
             {event.divisions?.length && event.tickets?.length ? (
               <View style={styles.purchaseKindRow}>
                 <Pressable
-                  onPress={() => setPurchaseKind("entry")}
+                  onPress={() => {
+                    setPurchaseKind("entry");
+                    setError(undefined);
+                  }}
                   style={[
                     styles.purchaseKindButton,
                     purchaseKind === "entry" && styles.purchaseKindButtonActive,
@@ -10466,7 +10484,11 @@ function BookingModal({
                   </Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => setPurchaseKind("ticket")}
+                  onPress={() => {
+                    setPurchaseKind("ticket");
+                    setTeamRoster([]);
+                    setError(undefined);
+                  }}
                   style={[
                     styles.purchaseKindButton,
                     purchaseKind === "ticket" &&
@@ -10502,6 +10524,9 @@ function BookingModal({
                           setDivisionId(option.id);
                           setTeamPaymentMode("self");
                           setTeamRoster([]);
+                          setTeammateQuery("");
+                          setTeammateResults([]);
+                          setError(undefined);
                         }}
                         style={[
                           styles.mobileDivisionOption,
@@ -10863,6 +10888,20 @@ function BookingModal({
                               {candidate.gender.replaceAll("-", " ")} ·{" "}
                               {candidate.person.rating.display.toFixed(2)}
                             </Text>
+                            <Text
+                              numberOfLines={3}
+                              style={[
+                                styles.mobileSuggestionEligibility,
+                                candidate.eligible
+                                  ? styles.mobileSuggestionEligible
+                                  : styles.mobileSuggestionIneligible,
+                              ]}
+                            >
+                              {candidate.eligible
+                                ? `Eligible${division ? ` for ${division.name}` : ""}`
+                                : candidate.eligibilityReasons.join(" · ") ||
+                                  "This player does not meet the division criteria"}
+                            </Text>
                             <Pressable
                               disabled={!candidate.eligible}
                               onPress={() =>
@@ -10874,7 +10913,11 @@ function BookingModal({
                                   },
                                 ])
                               }
-                              style={styles.mobileSuggestionAdd}
+                              style={[
+                                styles.mobileSuggestionAdd,
+                                !candidate.eligible &&
+                                  styles.mobileSuggestionAddDisabled,
+                              ]}
                             >
                               <Text style={styles.mobileSuggestionAddText}>
                                 {candidate.eligible ? "Add" : "Not eligible"}
@@ -16981,13 +17024,15 @@ function createStyles(palette: Palette) {
       flexDirection: "row",
       gap: 12,
       justifyContent: "space-between",
-      minHeight: 145,
+      minHeight: 168,
+      overflow: "hidden",
       padding: 18,
+      position: "relative",
     },
-    resultStoryArtImage: { opacity: 0.94 },
     resultStoryHeaderCopy: {
-      maxWidth: "70%",
-      minHeight: 108,
+      maxWidth: "64%",
+      minHeight: 132,
+      zIndex: 2,
     },
     resultStoryEyebrow: {
       color: colors.ink,
@@ -17016,6 +17061,13 @@ function createStyles(palette: Palette) {
       fontFamily: "Archivo-Block",
       fontSize: 10,
       paddingTop: 4,
+      zIndex: 3,
+    },
+    resultStoryPlayIcon: {
+      bottom: -2,
+      position: "absolute",
+      right: -1,
+      zIndex: 1,
     },
     resultStoryScorecard: {
       backgroundColor: colors.depth,
@@ -18724,15 +18776,21 @@ function createStyles(palette: Palette) {
       borderColor: colors.resultLossBorder,
     },
     athleteResultHero: {
-      minHeight: 145,
+      minHeight: 168,
+      overflow: "hidden",
       padding: 18,
-    },
-    athleteResultArtImage: {
-      opacity: 0.94,
+      position: "relative",
     },
     athleteResultHeroCopy: {
-      maxWidth: "68%",
-      minHeight: 108,
+      maxWidth: "64%",
+      minHeight: 132,
+      zIndex: 2,
+    },
+    athleteResultPlayIcon: {
+      bottom: -2,
+      position: "absolute",
+      right: -1,
+      zIndex: 1,
     },
     athleteResultOutcome: {
       color: colors.ink,
@@ -19805,7 +19863,10 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.accentRgb, 0.08),
       borderColor: colors.aqua,
     },
-    mobileParticipantCardDisabled: { opacity: 0.38 },
+    mobileParticipantCardDisabled: {
+      backgroundColor: rgba(colors.warningRgb, 0.045),
+      borderColor: rgba(colors.warningRgb, 0.28),
+    },
     mobileParticipantAvatar: { borderRadius: 31, height: 62, width: 62 },
     mobileParticipantAvatarFallback: {
       alignItems: "center",
@@ -19889,11 +19950,14 @@ function createStyles(palette: Palette) {
       borderRadius: 16,
       borderWidth: 1,
       marginLeft: 10,
-      minHeight: 220,
+      minHeight: 250,
       padding: 11,
       width: 166,
     },
-    mobileSuggestionCardDisabled: { opacity: 0.4 },
+    mobileSuggestionCardDisabled: {
+      backgroundColor: rgba(colors.warningRgb, 0.045),
+      borderColor: rgba(colors.warningRgb, 0.28),
+    },
     mobileSuggestionAvatar: { borderRadius: 30, height: 60, width: 60 },
     mobileSuggestionAvatarFallback: {
       alignItems: "center",
@@ -19911,6 +19975,15 @@ function createStyles(palette: Palette) {
       maxWidth: 140,
     },
     mobileSuggestionMeta: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    mobileSuggestionEligibility: {
+      fontSize: 10,
+      fontWeight: "800",
+      lineHeight: 14,
+      marginTop: 7,
+      textAlign: "center",
+    },
+    mobileSuggestionEligible: { color: colors.positive },
+    mobileSuggestionIneligible: { color: colors.warning },
     mobileSuggestionAdd: {
       alignItems: "center",
       backgroundColor: colors.aqua,
@@ -19919,6 +19992,9 @@ function createStyles(palette: Palette) {
       marginTop: "auto",
       minHeight: 38,
       width: "100%",
+    },
+    mobileSuggestionAddDisabled: {
+      backgroundColor: rgba(colors.warningRgb, 0.12),
     },
     mobileSuggestionAddText: {
       color: colors.onAccent,

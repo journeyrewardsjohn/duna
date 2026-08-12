@@ -87,6 +87,7 @@ export type ManagedBooking = {
     readonly invitationStatus?: "invited";
   };
   readonly team?: {
+    readonly divisionId: string;
     readonly claimToken: string;
     readonly expectedTeamSize: number;
     readonly paymentMode: "self" | "team";
@@ -166,6 +167,7 @@ export function BookingManagementModal({
   const [cancelled, setCancelled] = useState(false);
   const [showAttribution, setShowAttribution] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(false);
+  const [mapImageFailed, setMapImageFailed] = useState(false);
 
   useEffect(() => {
     setRoster(
@@ -196,6 +198,7 @@ export function BookingManagementModal({
     setPickupPlayers([]);
     setShowAttribution(Boolean(booking?.addedBy));
     setCopiedAddress(false);
+    setMapImageFailed(false);
   }, [booking]);
 
   if (!booking) return null;
@@ -204,7 +207,11 @@ export function BookingManagementModal({
     setQuery(value);
     if (!client) return;
     const next = await client.player.teammateSearch
-      .query({ query: value.trim() || undefined, limit: 12 })
+      .query({
+        query: value.trim() || undefined,
+        divisionId: booking?.team?.divisionId,
+        limit: 12,
+      })
       .catch(() => []);
     setResults(next);
   }
@@ -622,12 +629,23 @@ export function BookingManagementModal({
                   onPress={() => void openMap()}
                   style={styles.locationMap}
                 >
-                  {mapImageUrl && (
+                  {mapImageUrl && !mapImageFailed ? (
                     <Image
                       accessibilityIgnoresInvertColors
+                      onError={() => setMapImageFailed(true)}
                       source={{ uri: mapImageUrl }}
                       style={styles.locationMapImage}
                     />
+                  ) : (
+                    <View style={styles.locationMapFallback}>
+                      <Text style={styles.locationMapFallbackPin}>⌖</Text>
+                      <Text
+                        numberOfLines={1}
+                        style={styles.locationMapFallbackText}
+                      >
+                        {location.label}
+                      </Text>
+                    </View>
                   )}
                   <View style={styles.locationMapBadge}>
                     <Text style={styles.locationMapBadgeText}>OPEN MAP ↗</Text>
@@ -1163,6 +1181,20 @@ export function BookingManagementModal({
                             <Text numberOfLines={1} style={styles.resultMeta}>
                               {result.person.homeMarket}
                             </Text>
+                            <Text
+                              numberOfLines={3}
+                              style={[
+                                styles.resultEligibility,
+                                result.eligible
+                                  ? styles.resultEligible
+                                  : styles.resultIneligible,
+                              ]}
+                            >
+                              {result.eligible
+                                ? "Eligible for this division"
+                                : result.eligibilityReasons.join(" · ") ||
+                                  "Does not meet the division criteria"}
+                            </Text>
                             <Pressable
                               disabled={!result.eligible}
                               onPress={() =>
@@ -1181,7 +1213,9 @@ export function BookingManagementModal({
                                 !result.eligible && styles.actionDisabled,
                               ]}
                             >
-                              <Text style={styles.addText}>Add</Text>
+                              <Text style={styles.addText}>
+                                {result.eligible ? "Add" : "Not eligible"}
+                              </Text>
                             </Pressable>
                           </View>
                         ))}
@@ -1675,6 +1709,18 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   locationMapImage: { height: "100%", width: "100%" },
+  locationMapFallback: { alignItems: "center", paddingHorizontal: 24 },
+  locationMapFallbackPin: {
+    color: "#203740",
+    fontSize: 34,
+    fontWeight: "900",
+  },
+  locationMapFallbackText: {
+    color: "#203740",
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: 4,
+  },
   locationName: {
     color: "#111719",
     fontSize: 22,
@@ -1807,6 +1853,14 @@ const styles = StyleSheet.create({
     width: 50,
   },
   resultMeta: { color: "#777166", fontSize: 12, marginTop: 3 },
+  resultEligibility: {
+    fontSize: 10,
+    fontWeight: "800",
+    lineHeight: 14,
+    marginTop: 7,
+  },
+  resultEligible: { color: "#39784d" },
+  resultIneligible: { color: "#9a6b22" },
   resultName: {
     color: "#111719",
     fontSize: 14,

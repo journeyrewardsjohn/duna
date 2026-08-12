@@ -480,6 +480,7 @@ export interface BookingSummary {
     readonly invitationStatus?: "invited";
   };
   readonly team?: {
+    readonly divisionId: string;
     readonly claimToken: string;
     readonly expectedTeamSize: number;
     readonly paymentMode: "self" | "team";

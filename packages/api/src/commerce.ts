@@ -30,6 +30,7 @@ import {
 } from "@duna/core";
 import { and, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
 import type { ApiActor } from "./context";
+import { evaluateDivisionCriteria } from "./division-eligibility";
 
 export type CommerceErrorCode =
   | "DATABASE_REQUIRED"
@@ -254,21 +255,43 @@ export async function evaluateRegistrationForSession(input: {
     : undefined;
   const eligibilityRuleId =
     division?.eligibilityRuleId ?? eventType?.eligibilityRuleId;
+  const discipline = division?.discipline ?? "beach-2s";
+  const rating = await database.query.ratings.findFirst({
+    where: and(
+      eq(ratings.personId, authority.person.id),
+      eq(ratings.discipline, discipline),
+    ),
+  });
+  const directCriteria = evaluateDivisionCriteria({
+    asOf: session.startsAt,
+    criteria: (division?.settings ?? {}) as {
+      readonly ratingMinimum?: number;
+      readonly ratingMaximum?: number;
+      readonly ageMinimum?: number;
+      readonly ageMaximum?: number;
+      readonly gender?: string;
+    },
+    participant: {
+      birthDate: authority.person.birthDate,
+      genderCategory: authority.person.genderCategory,
+      rating: rating?.display ?? 1,
+    },
+  });
+  if (!directCriteria.eligible) {
+    throw new CommerceError("INELIGIBLE", directCriteria.reasons.join(" "), {
+      reasons: directCriteria.reasons,
+      ruleVersion: 0,
+    });
+  }
   if (!eligibilityRuleId) {
     return {
       decision: { status: "eligible", reasons: [], ruleVersion: 0 },
       ruleVersion: 0,
     };
   }
-  const [rule, rating, membershipRows] = await Promise.all([
+  const [rule, membershipRows] = await Promise.all([
     database.query.eligibilityRules.findFirst({
       where: eq(eligibilityRules.id, eligibilityRuleId),
-    }),
-    database.query.ratings.findFirst({
-      where: and(
-        eq(ratings.personId, authority.person.id),
-        eq(ratings.discipline, division?.discipline ?? "beach-2s"),
-      ),
     }),
     database
       .select({ organizationId: organizationMemberships.organizationId })
@@ -289,12 +312,12 @@ export async function evaluateRegistrationForSession(input: {
   const summary = personSummary(authority.person, rating);
   const context: EligibilityContext = {
     person: summary,
-    discipline: division?.discipline ?? "beach-2s",
+    discipline,
     currentRating: rating?.display ?? summary.rating.display,
     peak52WeekRating:
       rating?.current52WeekPeak ?? rating?.display ?? summary.rating.display,
     birthDate: authority.person.birthDate ?? undefined,
-    asOfDate: input.now.toISOString().slice(0, 10),
+    asOfDate: session.startsAt.toISOString().slice(0, 10),
     organizationMemberships: membershipRows,
     inviteCodes: input.inviteCodes,
     flags:
