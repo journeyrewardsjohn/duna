@@ -1491,19 +1491,20 @@ export async function updateEventDraftAction(
     if (!serialized) throw new Error("The event draft is empty.");
     const parsed = JSON.parse(serialized) as Omit<
       UpdateEventDraftPayload,
-      "sessionId" | "confirmedPrice" | "idempotencyKey"
+      "sessionId" | "reason" | "confirmedPrice" | "idempotencyKey"
     >;
     const caller = await getServerCaller();
     const updated = await caller.operator.updateEventDraft({
       ...parsed,
       sessionId: field(formData, "sessionId"),
+      reason: field(formData, "reason") || "Updated event settings.",
       confirmedPrice: confirmed(formData, "confirmedPrice"),
       idempotencyKey: crypto.randomUUID(),
     });
     revalidateOperator();
     return result(
       "success",
-      "Event changes saved. The draft is still private.",
+      "Event settings saved. Existing paid registrations kept their original price.",
       undefined,
       updated.id,
     );

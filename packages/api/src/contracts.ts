@@ -293,7 +293,13 @@ export const leagueRecurrenceSchema = z.object({
 export const eventDraftEditorSchema = z.object({
   id: z.string().uuid(),
   slug: z.string(),
-  status: z.literal("draft"),
+  status: z.enum([
+    "draft",
+    "published",
+    "registration-open",
+    "live",
+    "weather-hold",
+  ]),
   title: z.string(),
   shortSummary: z.string().optional(),
   description: z.string().optional(),
@@ -306,6 +312,7 @@ export const eventDraftEditorSchema = z.object({
   timezone: z.string(),
   localStartsAt: z.string(),
   localEndsAt: z.string(),
+  localRegistrationClosesAt: z.string().optional(),
   divisions: z
     .array(
       z.object({
@@ -350,6 +357,11 @@ export const eventDraftEditorSchema = z.object({
           "sand-rating-ttm",
           "manual",
         ]),
+        activeRegistrationCount: z.number().int().nonnegative(),
+        paidRegistrationCount: z.number().int().nonnegative(),
+        removalLocked: z.boolean(),
+        teamFormatLocked: z.boolean(),
+        competitionLocked: z.boolean(),
       }),
     )
     .readonly(),
@@ -365,6 +377,9 @@ export const eventDraftEditorSchema = z.object({
         approvalRequired: z.boolean(),
         availableOnline: z.boolean(),
         availableInPerson: z.boolean(),
+        soldCount: z.number().int().nonnegative(),
+        activeTicketCount: z.number().int().nonnegative(),
+        hasHistory: z.boolean(),
       }),
     )
     .readonly(),
@@ -372,6 +387,13 @@ export const eventDraftEditorSchema = z.object({
   policies: z.array(eventPolicySchema).readonly(),
   smartRules: eventDraftSmartRulesSchema,
   recurrence: leagueRecurrenceSchema.optional(),
+  pricingProtection: z.object({
+    activeRegistrationCount: z.number().int().nonnegative(),
+    paidRegistrationCount: z.number().int().nonnegative(),
+    paidTicketCount: z.number().int().nonnegative(),
+    pendingCheckoutCount: z.number().int().nonnegative(),
+    eventTypeLocked: z.boolean(),
+  }),
 });
 export const eventSummarySchema = z.object({
   id: z.string(),

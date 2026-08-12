@@ -634,6 +634,7 @@ const courtWindowSchema = timeRangeSchema.extend({
 
 const eventDraftDivisionSchema = z
   .object({
+    id: z.string().uuid().optional(),
     name: z.string().trim().min(1).max(80),
     description: z.string().trim().max(1_000).optional(),
     minimumTeams: z.number().int().min(1).max(512),
@@ -721,6 +722,7 @@ const eventDraftDivisionSchema = z
 
 const eventDraftTicketSchema = z
   .object({
+    id: z.string().uuid().optional(),
     name: z.string().trim().min(1).max(80),
     description: z.string().trim().max(1_000).optional(),
     priceMinor: z.number().int().min(0).max(100_000_000),
@@ -851,6 +853,7 @@ const createEventDraftInputSchema = z
     timezone: z.string().trim().min(1).max(64),
     localStartsAt: z.string().min(16).max(16),
     localEndsAt: z.string().min(16).max(16),
+    localRegistrationClosesAt: z.string().min(16).max(16).optional(),
     divisions: z.array(eventDraftDivisionSchema).min(1).max(64),
     tickets: z.array(eventDraftTicketSchema).max(64),
     features: z.array(eventDraftFeatureSchema).max(64),
@@ -9262,7 +9265,10 @@ const operatorRouter = router({
     .input(
       z.intersection(
         createEventDraftInputSchema,
-        z.object({ sessionId: z.string().uuid() }),
+        z.object({
+          sessionId: z.string().uuid(),
+          reason: z.string().trim().min(3).max(500),
+        }),
       ),
     )
     .output(operatorMutationResultSchema)

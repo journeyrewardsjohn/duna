@@ -177,13 +177,23 @@ function EventManagementControls({
   const preview = detail.cancellationPreview;
   const canChange =
     session.status !== "cancelled" && session.status !== "completed";
+  const supportsFullEventStudio =
+    session.kind === "tournament" || session.kind === "league";
   const canRetryRefunds =
     session.status === "cancelled" &&
     detail.operations.refundStatus === "attention";
   if (!canChange && !canRetryRefunds) return null;
   return (
     <div className="event-management-controls">
-      {canChange && (
+      {canChange && supportsFullEventStudio && (
+        <Link
+          className="hq-button hq-button--secondary"
+          href={`/events/create?draft=${session.id}`}
+        >
+          <Pencil aria-hidden size={16} /> Edit event
+        </Link>
+      )}
+      {canChange && !supportsFullEventStudio && (
         <details>
           <summary className="hq-button hq-button--secondary">
             <Pencil aria-hidden size={16} /> Edit event
