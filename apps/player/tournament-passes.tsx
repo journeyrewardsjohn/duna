@@ -13,9 +13,37 @@ import {
 } from "react-native";
 import { FellixText as Text } from "./fellix-text";
 
-type AdmissionPass = Awaited<
+export type AdmissionPass = Awaited<
   ReturnType<DunaApiClient["player"]["admissionPasses"]["query"]>
 >[number];
+
+type AdmissionPassKind = AdmissionPass["kind"];
+
+async function openWalletPass(input: {
+  readonly client: DunaApiClient;
+  readonly passId: string;
+}): Promise<readonly AdmissionPass[]> {
+  const freshPasses = await input.client.player.admissionPasses.query();
+  const freshPass = freshPasses.find(
+    (candidate) => candidate.id === input.passId,
+  );
+  if (!freshPass?.walletPassPath) {
+    throw new Error("wallet-pass-not-ready");
+  }
+  await Linking.openURL(`${dunaWebUrl}${freshPass.walletPassPath}`);
+  return freshPasses;
+}
+
+function walletButtonLabel(
+  pass: AdmissionPass,
+  index: number,
+  total: number,
+): string {
+  if (total === 1) return "Add to Apple Wallet";
+  return pass.kind === "fan-ticket"
+    ? `Add ticket ${index + 1} to Apple Wallet`
+    : `Add player pass ${index + 1} to Apple Wallet`;
+}
 
 export type TournamentPassPalette = {
   readonly surface: string;
@@ -56,6 +84,7 @@ export function TournamentPasses({
   const [loaded, setLoaded] = useState(mode === "preview");
   const [walletBusyId, setWalletBusyId] = useState<string>();
   const [walletMessage, setWalletMessage] = useState<string>();
+  const supportsAppleWallet = Platform.OS === "ios" || Platform.OS === "web";
 
   useEffect(() => {
     if (!client || mode === "preview") return;
@@ -81,21 +110,11 @@ export function TournamentPasses({
     setWalletBusyId(pass.id);
     setWalletMessage(undefined);
     try {
-      const freshPasses = await client.player.admissionPasses.query();
+      const freshPasses = await openWalletPass({ client, passId: pass.id });
       setPasses(freshPasses);
-      const freshPass = freshPasses.find(
-        (candidate) => candidate.id === pass.id,
-      );
-      if (!freshPass?.walletPassPath) {
-        setWalletMessage(
-          "Apple Wallet is unavailable right now. Your in-app QR remains valid.",
-        );
-        return;
-      }
-      await Linking.openURL(`${dunaWebUrl}${freshPass.walletPassPath}`);
     } catch {
       setWalletMessage(
-        "Duna could not open Apple Wallet. Your in-app QR remains valid.",
+        "Apple Wallet did not open. Your secure Duna QR remains ready here.",
       );
     } finally {
       setWalletBusyId(undefined);
@@ -200,30 +219,30 @@ export function TournamentPasses({
                             : "Ticket already scanned"}
                       </Text>
                     </View>
-                    {(Platform.OS === "ios" || Platform.OS === "web") && (
-                      <Pressable
-                        accessibilityHint="Opens the signed tournament pass in Apple Wallet"
-                        accessibilityLabel="Add tournament pass to Apple Wallet"
-                        disabled={
-                          walletBusyId === pass.id ||
-                          !pass.usable ||
-                          pass.walletStatus !== "available"
-                        }
-                        onPress={() => void addToAppleWallet(pass)}
-                        style={[
-                          styles.walletButton,
-                          (!pass.usable || pass.walletStatus !== "available") &&
-                            styles.walletButtonDisabled,
-                        ]}
-                      >
-                        <Text style={styles.walletButtonText}>
-                          {walletBusyId === pass.id
-                            ? "Preparing pass…"
-                            : pass.walletStatus === "available"
-                              ? "Add to Apple Wallet"
-                              : "Apple Wallet unavailable"}
-                        </Text>
-                      </Pressable>
+                    {supportsAppleWallet &&
+                      pass.walletStatus === "available" && (
+                        <Pressable
+                          accessibilityHint="Opens the signed tournament pass in Apple Wallet"
+                          accessibilityLabel="Add tournament pass to Apple Wallet"
+                          disabled={walletBusyId === pass.id || !pass.usable}
+                          onPress={() => void addToAppleWallet(pass)}
+                          style={[
+                            styles.walletButton,
+                            !pass.usable && styles.walletButtonDisabled,
+                          ]}
+                        >
+                          <Text style={styles.walletButtonText}>
+                            {walletBusyId === pass.id
+                              ? "Preparing pass…"
+                              : "Add to Apple Wallet"}
+                          </Text>
+                        </Pressable>
+                      )}
+                    {(!supportsAppleWallet ||
+                      pass.walletStatus !== "available") && (
+                      <Text style={styles.walletFallback}>
+                        Your secure QR is saved in Duna and ready at the gate.
+                      </Text>
                     )}
                     <Text style={styles.security}>
                       One person, one credential. Duna Pro records accepted,
@@ -242,6 +261,192 @@ export function TournamentPasses({
     </View>
   );
 }
+
+export function TournamentWalletConfirmation({
+  kind,
+  sessionId,
+}: {
+  readonly kind: AdmissionPassKind;
+  readonly sessionId: string;
+}) {
+  const { client, mode } = usePlayerRuntime();
+  const [passes, setPasses] = useState<readonly AdmissionPass[]>([]);
+  const [loaded, setLoaded] = useState(mode === "preview");
+  const [busyId, setBusyId] = useState<string>();
+  const [message, setMessage] = useState<string>();
+
+  useEffect(() => {
+    if (!client || mode !== "live") return;
+    let active = true;
+    const pause = (milliseconds: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+    void (async () => {
+      for (let attempt = 0; attempt < 4 && active; attempt += 1) {
+        if (attempt > 0) await pause(400 + attempt * 350);
+        if (!active) return;
+        try {
+          const nextPasses = await client.player.admissionPasses.query();
+          const matching = nextPasses.filter(
+            (pass) =>
+              pass.sessionId === sessionId && pass.kind === kind && pass.usable,
+          );
+          if (matching.length > 0) {
+            setPasses(matching);
+            break;
+          }
+        } catch {
+          // The confirmation remains valid even if this optional refresh fails.
+        }
+      }
+      if (active) setLoaded(true);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [client, kind, mode, sessionId]);
+
+  async function add(pass: AdmissionPass) {
+    if (!client || mode !== "live") return;
+    setBusyId(pass.id);
+    setMessage(undefined);
+    try {
+      const freshPasses = await openWalletPass({ client, passId: pass.id });
+      setPasses(
+        freshPasses.filter(
+          (candidate) =>
+            candidate.sessionId === sessionId &&
+            candidate.kind === kind &&
+            candidate.usable,
+        ),
+      );
+      setMessage(
+        "Apple Wallet opened. Your secure Duna QR stays available as a backup.",
+      );
+    } catch {
+      setMessage(
+        "Apple Wallet did not open. Your secure Duna QR is still ready in Plans.",
+      );
+    } finally {
+      setBusyId(undefined);
+    }
+  }
+
+  if (!loaded) {
+    return (
+      <View style={confirmationStyles.shell}>
+        <ActivityIndicator color="#203740" />
+        <Text style={confirmationStyles.loading}>Preparing your pass…</Text>
+      </View>
+    );
+  }
+  if (passes.length === 0) return null;
+
+  const walletPasses = passes.filter(
+    (pass) =>
+      (Platform.OS === "ios" || Platform.OS === "web") &&
+      pass.walletStatus === "available",
+  );
+  return (
+    <View style={confirmationStyles.shell}>
+      <Text style={confirmationStyles.eyebrow}>TOURNAMENT ADMISSION</Text>
+      <Text style={confirmationStyles.title}>Save your pass.</Text>
+      <Text style={confirmationStyles.body}>
+        {walletPasses.length === 0
+          ? passes.length === 1
+            ? "Your personal QR is ready in Duna for gate access."
+            : `${passes.length} personal QR passes are ready in Duna for gate access.`
+          : passes.length === 1
+            ? "Your personal QR is ready in Duna. Add it to Apple Wallet for faster gate access."
+            : `${passes.length} personal QR passes are ready in Duna. Add each one to Apple Wallet for faster gate access.`}
+      </Text>
+      {walletPasses.map((pass, index) => (
+        <Pressable
+          accessibilityHint="Opens the signed tournament admission pass in Apple Wallet"
+          accessibilityLabel={walletButtonLabel(
+            pass,
+            index,
+            walletPasses.length,
+          )}
+          disabled={busyId === pass.id}
+          key={pass.id}
+          onPress={() => void add(pass)}
+          style={confirmationStyles.walletButton}
+        >
+          <Text style={confirmationStyles.walletButtonText}>
+            {busyId === pass.id
+              ? "Preparing pass…"
+              : walletButtonLabel(pass, index, walletPasses.length)}
+          </Text>
+        </Pressable>
+      ))}
+      {walletPasses.length === 0 && (
+        <Text style={confirmationStyles.fallback}>
+          Your secure QR is saved under Plans → Tournament admission.
+        </Text>
+      )}
+      {message ? (
+        <Text style={confirmationStyles.message}>{message}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+const confirmationStyles = StyleSheet.create({
+  body: {
+    color: "#746d61",
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 6,
+  },
+  eyebrow: {
+    color: "#78858a",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.1,
+  },
+  fallback: {
+    color: "#203740",
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 20,
+    marginTop: 14,
+  },
+  loading: { color: "#746d61", fontSize: 15 },
+  message: {
+    color: "#746d61",
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 12,
+  },
+  shell: {
+    alignItems: "stretch",
+    backgroundColor: "#ffffff",
+    borderColor: "#d9ddd9",
+    borderRadius: 22,
+    borderWidth: 1,
+    marginTop: 18,
+    padding: 18,
+    width: "100%",
+  },
+  title: {
+    color: "#111719",
+    fontSize: 24,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+    marginTop: 4,
+  },
+  walletButton: {
+    alignItems: "center",
+    backgroundColor: "#111719",
+    borderRadius: 16,
+    justifyContent: "center",
+    marginTop: 14,
+    minHeight: 56,
+    paddingHorizontal: 18,
+    width: "100%",
+  },
+  walletButtonText: { color: "#ffffff", fontSize: 15, fontWeight: "800" },
+});
 
 function createStyles(palette: TournamentPassPalette) {
   return StyleSheet.create({
@@ -370,5 +575,12 @@ function createStyles(palette: TournamentPassPalette) {
       textAlign: "center",
     },
     walletMessage: { color: palette.warning, fontSize: 11, lineHeight: 16 },
+    walletFallback: {
+      color: palette.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 12,
+      textAlign: "center",
+    },
   });
 }

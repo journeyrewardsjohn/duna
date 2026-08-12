@@ -18,3 +18,17 @@ export function initialPurchaseKind(input: {
 }): "entry" | "ticket" {
   return input.hasDivisions || !input.hasTickets ? "entry" : "ticket";
 }
+
+export function admissionPassReady(input: {
+  readonly eventKind: string;
+  readonly purchaseKind: "entry" | "ticket";
+  readonly checkoutComplete: boolean;
+  readonly registrationStatus?: string;
+  readonly fulfillmentStatus?: string;
+}): boolean {
+  if (input.eventKind !== "tournament" || !input.checkoutComplete) return false;
+  return input.purchaseKind === "ticket"
+    ? input.fulfillmentStatus === "confirmed"
+    : input.registrationStatus === "confirmed" ||
+        input.registrationStatus === "checked-in";
+}
