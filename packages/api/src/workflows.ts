@@ -29,6 +29,7 @@ import {
   releaseCatalogOrderInventory,
 } from "./catalog-checkout";
 import { reconcileTeamEntryPayment } from "./checkout";
+import { reconcilePaidOrderDivisionSelections } from "./event-operations-service";
 import {
   containAccountMedia,
   permanentlyDeleteAccount,
@@ -813,6 +814,11 @@ async function processStripeWorkflow(
     }
     await fulfillPaidCatalogOrder(order.id, occurredAt);
     await reconcileTeamEntryPayment(order.id, occurredAt);
+    await reconcilePaidOrderDivisionSelections({
+      orderId: order.id,
+      now: occurredAt,
+      requestId: `payment-selection:${webhook.providerEventId}`,
+    });
   } else if (action === "checkout.completed") {
     const mode = optionalString(object, "mode");
     if (mode === "subscription") {
@@ -898,6 +904,11 @@ async function processStripeWorkflow(
       }
       await fulfillPaidCatalogOrder(order.id, occurredAt);
       await reconcileTeamEntryPayment(order.id, occurredAt);
+      await reconcilePaidOrderDivisionSelections({
+        orderId: order.id,
+        now: occurredAt,
+        requestId: `payment-selection:${webhook.providerEventId}`,
+      });
     }
   } else if (
     action === "order.payment_failed" ||

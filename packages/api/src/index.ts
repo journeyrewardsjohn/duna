@@ -11,6 +11,7 @@ export * from "./catalog-checkout";
 export * from "./court-checkout";
 export * from "./discovery-service";
 export * from "./discovery-search";
+export * from "./event-operations-service";
 export * from "./duna-ai-support";
 export * from "./commerce";
 export * from "./feature-flags";

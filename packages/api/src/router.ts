@@ -70,6 +70,7 @@ import {
   matchSummarySchema,
   matchScoringStateSchema,
   operatorDashboardSchema,
+  operatorDivisionDetailSchema,
   operatorMemberProfileSchema,
   operatorMutationResultSchema,
   operatorPaymentCollectionSchema,
@@ -187,6 +188,7 @@ import {
   loadCourtBookingInventory,
   startCourtCheckout,
   startParticipantShareCheckout,
+  venueWallTimeToUtc,
 } from "./court-checkout";
 import {
   openOrganizationBillingPortal,
@@ -213,7 +215,6 @@ import {
   addCalendarEquipment,
   addCalendarParticipant,
   archiveOrganizationBrandKnowledgeSource,
-  cancelCalendarSession,
   confirmCalendarChange,
   createCalendarBlock,
   createRecurringCalendarBlocks,
@@ -235,6 +236,18 @@ import {
   updateOrganizationProfileSettings,
   updateOrganizationTheme,
 } from "./catalog-service";
+import {
+  cancelEventWithRefunds,
+  expandDivisionField,
+  loadOperatorDivisionDetail,
+  persistDivisionBracket,
+  reconcileDivisionSelection,
+  reconcileRegistrationDivisionSelection,
+  refundEventRegistration,
+  setTeamSelection,
+  updateDivisionMatchSchedule,
+  updateEventSession,
+} from "./event-operations-service";
 import {
   FormSubmissionError,
   recordConsent,
@@ -6780,6 +6793,62 @@ const operatorRouter = router({
             ctx.now,
           ),
     ),
+  divisionDetail: organizationProcedure("sessions:read")
+    .input(z.object({ divisionId: z.string().uuid() }))
+    .output(operatorDivisionDetailSchema)
+    .query(({ input, ctx }) =>
+      loadOperatorDivisionDetail({
+        organizationId: ctx.actor!.organizationId!,
+        divisionId: input.divisionId,
+      }),
+    ),
+  updateEventSession: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        title: z.string().trim().min(2).max(180),
+        localStartsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
+        localEndsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
+        timezone: z.string().trim().min(3).max(64),
+        capacity: z.number().int().positive().max(10_000),
+        localRegistrationClosesAt: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)
+          .optional(),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.updateEventSession",
+        request: input,
+        ctx,
+        execute: () =>
+          updateEventSession({
+            actor: ctx.actor!,
+            sessionId: input.sessionId,
+            title: input.title,
+            startsAt: venueWallTimeToUtc(input.localStartsAt, input.timezone),
+            endsAt: venueWallTimeToUtc(input.localEndsAt, input.timezone),
+            timezone: input.timezone,
+            capacity: input.capacity,
+            registrationClosesAt: input.localRegistrationClosesAt
+              ? venueWallTimeToUtc(
+                  input.localRegistrationClosesAt,
+                  input.timezone,
+                )
+              : undefined,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
   createSessionNote: organizationProcedure("sessions:write")
     .input(
       z
@@ -7674,7 +7743,7 @@ const operatorRouter = router({
         ctx,
         execute: async () => {
           try {
-            return await removeCalendarParticipant({
+            const removed = await removeCalendarParticipant({
               actor: ctx.actor!,
               registrationId: input.registrationId,
               reason: input.reason,
@@ -7682,6 +7751,14 @@ const operatorRouter = router({
               ipAddress: ctx.ipAddress,
               now: ctx.now,
             });
+            await reconcileRegistrationDivisionSelection({
+              actor: ctx.actor!,
+              registrationId: input.registrationId,
+              requestId: `${ctx.requestId}:promote`,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+            return removed;
           } catch (error) {
             return throwDomainError(error);
           }
@@ -7689,6 +7766,7 @@ const operatorRouter = router({
       }),
     ),
   cancelCalendarSession: organizationProcedure("sessions:write")
+    .use(requireScope("payments:write"))
     .input(
       z.object({
         sessionId: z.string().uuid(),
@@ -7706,7 +7784,7 @@ const operatorRouter = router({
         ctx,
         execute: async () => {
           try {
-            return await cancelCalendarSession({
+            return await cancelEventWithRefunds({
               actor: ctx.actor!,
               sessionId: input.sessionId,
               reason: input.reason,
@@ -7718,6 +7796,194 @@ const operatorRouter = router({
             return throwDomainError(error);
           }
         },
+      }),
+    ),
+  refundEventRegistration: organizationProcedure("payments:write")
+    .use(requireScope("sessions:write"))
+    .input(
+      z.object({
+        registrationId: z.string().uuid(),
+        orderId: z.string().uuid().optional(),
+        reason: z.string().trim().min(5).max(1_000),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.refundEventRegistration",
+        request: input,
+        ctx,
+        execute: () =>
+          refundEventRegistration({
+            actor: ctx.actor!,
+            registrationId: input.registrationId,
+            orderId: input.orderId,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  reconcileDivisionSelection: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        divisionId: z.string().uuid(),
+        force: z.boolean().default(false),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.reconcileDivisionSelection",
+        request: input,
+        ctx,
+        execute: () =>
+          reconcileDivisionSelection({
+            actor: ctx.actor!,
+            divisionId: input.divisionId,
+            force: input.force,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  setTeamSelection: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        teamEntryId: z.string().uuid(),
+        selectionStatus: z.enum(["confirmed", "waitlisted", "withdrawn"]),
+        seed: z.number().int().positive().max(10_000).optional(),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.setTeamSelection",
+        request: input,
+        ctx,
+        execute: () =>
+          setTeamSelection({
+            actor: ctx.actor!,
+            teamEntryId: input.teamEntryId,
+            selectionStatus: input.selectionStatus,
+            seed: input.seed,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  expandDivisionField: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        divisionId: z.string().uuid(),
+        maximumTeams: z.number().int().min(2).max(1_000),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.expandDivisionField",
+        request: input,
+        ctx,
+        execute: () =>
+          expandDivisionField({
+            actor: ctx.actor!,
+            divisionId: input.divisionId,
+            maximumTeams: input.maximumTeams,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  persistDivisionBracket: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        divisionId: z.string().uuid(),
+        format: z.enum([
+          "single-elimination",
+          "double-elimination-true-reset",
+          "double-elimination-modified",
+          "double-elimination-crossover",
+          "round-robin",
+          "pool-play",
+        ]),
+        poolCount: z.number().int().min(2).max(64).optional(),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.persistDivisionBracket",
+        request: input,
+        ctx,
+        execute: () =>
+          persistDivisionBracket({
+            actor: ctx.actor!,
+            divisionId: input.divisionId,
+            format: input.format,
+            poolCount: input.poolCount,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  updateDivisionMatchSchedule: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        matchId: z.string().uuid(),
+        courtId: z.string().uuid().optional(),
+        scheduledAt: z.iso.datetime().optional(),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.updateDivisionMatchSchedule",
+        request: input,
+        ctx,
+        execute: () =>
+          updateDivisionMatchSchedule({
+            actor: ctx.actor!,
+            matchId: input.matchId,
+            courtId: input.courtId,
+            scheduledAt: input.scheduledAt
+              ? new Date(input.scheduledAt)
+              : undefined,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
       }),
     ),
   createCalendarBlock: organizationProcedure("sessions:write")

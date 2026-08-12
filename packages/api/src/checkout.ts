@@ -30,7 +30,7 @@ import {
   type CurrencyCode,
   type OrderItemKind,
 } from "@duna/pricing";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import {
   evaluatePickupParticipant,
@@ -39,6 +39,7 @@ import {
   registerForSession,
 } from "./commerce";
 import type { ApiActor } from "./context";
+import { reconcileDivisionSelection } from "./event-operations-service";
 import { hasActiveDunaPlusMembership } from "./membership";
 import { resolveOrganizationCommissionPolicy } from "./organization-billing";
 import { sendTransactionalEmail } from "./resend";
@@ -1481,6 +1482,16 @@ export async function startEventCheckout(input: {
         now: input.now,
       });
     }
+    const changedDivisionId = input.divisionId ?? joiningTeam?.divisionId;
+    if (changedDivisionId && event.organization?.id) {
+      await reconcileDivisionSelection({
+        actor: { ...input.actor, organizationId: event.organization.id },
+        divisionId: changedDivisionId,
+        requestId: `${input.requestId}:selection`,
+        ipAddress: input.ipAddress,
+        now: input.now,
+      });
+    }
     await recordPolicyAcceptances({
       policies: acceptedPolicies,
       readPolicyIds: input.readPolicyIds ?? [],
@@ -2166,6 +2177,9 @@ async function loadTeamClaimRecord(claimToken: string) {
         divisionId: divisions.id,
         divisionName: divisions.name,
         captainName: people.displayName,
+        organizationId: sql<
+          string | null
+        >`coalesce(${programs.organizationId}, ${eventTypes.organizationId}, ${venues.organizationId})`,
       })
       .from(teamEntries)
       .innerJoin(
@@ -2177,6 +2191,9 @@ async function loadTeamClaimRecord(claimToken: string) {
       .leftJoin(eventBlueprints, eq(sessions.id, eventBlueprints.sessionId))
       .innerJoin(people, eq(teamEntries.payingPersonId, people.id))
       .leftJoin(orders, eq(registrations.orderId, orders.id))
+      .leftJoin(programs, eq(sessions.programId, programs.id))
+      .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
+      .leftJoin(venues, eq(sessions.venueId, venues.id))
       .where(eq(teamEntries.claimToken, claimToken))
       .limit(1)
   )[0];
@@ -2283,8 +2300,12 @@ export async function reconcileTeamEntryPayment(
       roster: teamEntries.roster,
     })
     .from(teamEntries)
+    .innerJoin(registrations, eq(teamEntries.registrationId, registrations.id))
     .where(
-      sql`${teamEntries.roster} @> ${JSON.stringify([{ orderId }])}::jsonb`,
+      or(
+        eq(registrations.orderId, orderId),
+        sql`${teamEntries.roster} @> ${JSON.stringify([{ orderId }])}::jsonb`,
+      ),
     );
   for (const entry of matchingEntries) {
     const record = await loadTeamClaimRecord(entry.claimToken);
@@ -2552,6 +2573,15 @@ export async function claimTeamEntry(input: {
         ipAddress: input.ipAddress,
       }),
     ]);
+  }
+  if (record.organizationId) {
+    await reconcileDivisionSelection({
+      actor: { ...input.actor, organizationId: record.organizationId },
+      divisionId: record.divisionId,
+      requestId: `${input.requestId}:selection`,
+      ipAddress: input.ipAddress,
+      now: input.now,
+    });
   }
   return buildTeamClaimSummary(
     input.claimToken,

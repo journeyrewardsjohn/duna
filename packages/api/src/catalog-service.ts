@@ -14,6 +14,7 @@ import {
   courts,
   eventTypes,
   getDatabase,
+  getTransactionalDatabase,
   guardianships,
   inventoryLocations,
   inventoryMovements,
@@ -26,6 +27,7 @@ import {
   membershipTiers,
   memberships,
   organizationCreditGrants,
+  organizationCreditApplications,
   organizationBrandKnowledgeSources,
   organizationMemberships,
   organizationCommunicationSettings,
@@ -55,7 +57,18 @@ import {
   type LedgerPosting,
 } from "@duna/core";
 import { demoOrganization, demoPeople } from "@duna/core/demo";
-import { and, asc, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import { stableHash } from "./canonical";
 import type {
   OperatorMutationResult,
@@ -6017,6 +6030,306 @@ async function postMoneyRefundJournal(input: {
   return journalId;
 }
 
+interface RestoredOrganizationCredits {
+  readonly credits: number;
+  readonly valueMinor: number;
+  readonly creditJournalId: string;
+  readonly moneyJournalIds: readonly string[];
+}
+
+async function restoreRedeemedOrganizationCredits(input: {
+  readonly organizationId: string;
+  readonly orderId: string;
+  readonly refundId: string;
+  readonly currency: string;
+  readonly fulfillmentId?: string;
+  readonly actorPersonId: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly reason: string;
+  readonly now: Date;
+}): Promise<RestoredOrganizationCredits> {
+  const database = getTransactionalDatabase();
+  return database.transaction(async (transaction) => {
+    await transaction.execute(sql`
+      SELECT id
+      FROM organization_credit_applications
+      WHERE organization_id = ${input.organizationId}::uuid
+        AND order_id = ${input.orderId}::uuid
+        AND restored_at IS NULL
+      FOR UPDATE
+    `);
+    const applications = await transaction
+      .select()
+      .from(organizationCreditApplications)
+      .where(
+        and(
+          eq(
+            organizationCreditApplications.organizationId,
+            input.organizationId,
+          ),
+          eq(organizationCreditApplications.orderId, input.orderId),
+          isNull(organizationCreditApplications.restoredAt),
+        ),
+      );
+    if (applications.length === 0) {
+      throw new Error("The organization credits have already been restored.");
+    }
+    for (const grantId of [
+      ...new Set(
+        applications.map(
+          (application) => application.organizationCreditGrantId,
+        ),
+      ),
+    ]) {
+      await transaction.execute(sql`
+        SELECT id
+        FROM organization_credit_grants
+        WHERE id = ${grantId}::uuid
+          AND organization_id = ${input.organizationId}::uuid
+        FOR UPDATE
+      `);
+    }
+    for (const walletId of [
+      ...new Set(
+        applications.map((application) => application.organizationWalletId),
+      ),
+    ]) {
+      await transaction.execute(sql`
+        SELECT id
+        FROM organization_wallets
+        WHERE id = ${walletId}::uuid
+          AND organization_id = ${input.organizationId}::uuid
+        FOR UPDATE
+      `);
+    }
+    const creditJournalIds = [
+      ...new Set(applications.map((application) => application.journalId)),
+    ];
+    if (creditJournalIds.length !== 1) {
+      throw new Error(
+        "This order has an ambiguous credit redemption. No wallet changes were made.",
+      );
+    }
+    const originalCreditJournalId = creditJournalIds[0]!;
+    const originalCreditEntries = await transaction
+      .select()
+      .from(ledgerEntries)
+      .where(eq(ledgerEntries.journalId, originalCreditJournalId))
+      .orderBy(asc(ledgerEntries.sequence));
+    if (originalCreditEntries.length === 0) {
+      throw new Error("The original credit redemption journal is missing.");
+    }
+    const creditPostings = reverseLedgerPostings(
+      originalCreditEntries.map((entry): LedgerPosting => ({
+        accountId: entry.accountId,
+        side: entry.side,
+        amount: entry.amount,
+        unit: entry.unit,
+        unitKind: entry.unitKind,
+        currency: entry.currency ?? undefined,
+      })),
+    );
+    assertBalancedJournal(creditPostings);
+    const creditJournalId = crypto.randomUUID();
+    await transaction.insert(ledgerJournals).values({
+      id: creditJournalId,
+      organizationId: input.organizationId,
+      idempotencyKey: `${input.requestId}:credit-restore`,
+      sourceType: "catalog-credit-restoration",
+      sourceId: input.orderId,
+      description: `Restore redeemed organization credits · ${input.reason}`,
+      status: "posted",
+      reversalOfJournalId: originalCreditJournalId,
+      actorPersonId: input.actorPersonId,
+      occurredAt: input.now,
+      postedAt: input.now,
+      metadata: { orderId: input.orderId },
+    });
+    await transaction.insert(ledgerEntries).values(
+      creditPostings.map((posting, sequence) => ({
+        id: crypto.randomUUID(),
+        organizationId: input.organizationId,
+        journalId: creditJournalId,
+        sequence,
+        ...posting,
+      })),
+    );
+
+    const moneySourceJournals = await transaction
+      .select()
+      .from(ledgerJournals)
+      .where(
+        and(
+          eq(ledgerJournals.organizationId, input.organizationId),
+          eq(ledgerJournals.sourceType, "catalog-credit-revenue"),
+          eq(ledgerJournals.sourceId, input.orderId),
+          eq(ledgerJournals.status, "posted"),
+        ),
+      );
+    const moneyJournalIds: string[] = [];
+    for (const sourceJournal of moneySourceJournals) {
+      const sourceEntries = await transaction
+        .select()
+        .from(ledgerEntries)
+        .where(eq(ledgerEntries.journalId, sourceJournal.id))
+        .orderBy(asc(ledgerEntries.sequence));
+      if (sourceEntries.length === 0) continue;
+      const postings = reverseLedgerPostings(
+        sourceEntries.map((entry): LedgerPosting => ({
+          accountId: entry.accountId,
+          side: entry.side,
+          amount: entry.amount,
+          unit: entry.unit,
+          unitKind: entry.unitKind,
+          currency: entry.currency ?? undefined,
+        })),
+      );
+      assertBalancedJournal(postings);
+      const journalId = crypto.randomUUID();
+      moneyJournalIds.push(journalId);
+      await transaction.insert(ledgerJournals).values({
+        id: journalId,
+        organizationId: input.organizationId,
+        idempotencyKey: `${input.requestId}:value-restore:${moneyJournalIds.length}`,
+        sourceType: "catalog-credit-value-restoration",
+        sourceId: input.orderId,
+        description: `Reverse recognized credit value · ${input.reason}`,
+        status: "posted",
+        reversalOfJournalId: sourceJournal.id,
+        actorPersonId: input.actorPersonId,
+        occurredAt: input.now,
+        postedAt: input.now,
+        metadata: { orderId: input.orderId },
+      });
+      await transaction.insert(ledgerEntries).values(
+        postings.map((posting, sequence) => ({
+          id: crypto.randomUUID(),
+          organizationId: input.organizationId,
+          journalId,
+          sequence,
+          ...posting,
+        })),
+      );
+    }
+
+    const credits = applications.reduce(
+      (total, application) => total + application.credits,
+      0,
+    );
+    const valueMinor = applications.reduce(
+      (total, application) => total + application.valueMinor,
+      0,
+    );
+    for (const application of applications) {
+      const grant = await transaction.query.organizationCreditGrants.findFirst({
+        where: and(
+          eq(
+            organizationCreditGrants.id,
+            application.organizationCreditGrantId,
+          ),
+          eq(organizationCreditGrants.organizationId, input.organizationId),
+        ),
+      });
+      if (!grant) throw new Error("The original credit grant is missing.");
+      const restoredCredits = grant.remainingCredits + application.credits;
+      const restoredValue = grant.remainingValueMinor + application.valueMinor;
+      if (
+        restoredCredits > grant.initialCredits ||
+        restoredValue > grant.initialValueMinor
+      ) {
+        throw new Error(
+          "Restoring this redemption would overstate the original credit grant.",
+        );
+      }
+      await transaction
+        .update(organizationCreditGrants)
+        .set({
+          remainingCredits: restoredCredits,
+          remainingValueMinor: restoredValue,
+          status: "active",
+          updatedAt: input.now,
+        })
+        .where(eq(organizationCreditGrants.id, grant.id));
+    }
+    const walletCredits = new Map<string, number>();
+    for (const application of applications) {
+      walletCredits.set(
+        application.organizationWalletId,
+        (walletCredits.get(application.organizationWalletId) ?? 0) +
+          application.credits,
+      );
+    }
+    for (const [walletId, restoredCredits] of walletCredits) {
+      await transaction
+        .update(organizationWallets)
+        .set({
+          cachedAvailableCredits: sql`${organizationWallets.cachedAvailableCredits} + ${restoredCredits}`,
+          cachedAt: input.now,
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            eq(organizationWallets.id, walletId),
+            eq(organizationWallets.organizationId, input.organizationId),
+          ),
+        );
+    }
+    await transaction
+      .update(organizationCreditApplications)
+      .set({ restorationJournalId: creditJournalId, restoredAt: input.now })
+      .where(
+        inArray(
+          organizationCreditApplications.id,
+          applications.map((application) => application.id),
+        ),
+      );
+    await transaction.insert(refundRecords).values({
+      id: input.refundId,
+      organizationId: input.organizationId,
+      orderId: input.orderId,
+      disposition: "organization-credit-restoration",
+      amountMinor: 0,
+      currency: input.currency,
+      creditsRestored: credits,
+      ledgerJournalId: creditJournalId,
+      reason: input.reason,
+      status: "succeeded",
+      initiatedByPersonId: input.actorPersonId,
+    });
+    await transaction
+      .update(orders)
+      .set({ status: "refunded", updatedAt: input.now })
+      .where(eq(orders.id, input.orderId));
+    if (input.fulfillmentId) {
+      await transaction
+        .update(catalogFulfillments)
+        .set({ status: "refunded", updatedAt: input.now })
+        .where(eq(catalogFulfillments.id, input.fulfillmentId));
+    }
+    await transaction.insert(auditLog).values({
+      organizationId: input.organizationId,
+      actorPersonId: input.actorPersonId,
+      actorType: "person",
+      action: "order.redeemed_credits_restored",
+      entityType: "refund",
+      entityId: input.refundId,
+      afterHash: stableHash({
+        orderId: input.orderId,
+        creditsRestored: credits,
+        valueMinor,
+        creditJournalId,
+        moneyJournalIds,
+      }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+    return { credits, valueMinor, creditJournalId, moneyJournalIds };
+  });
+}
+
 export async function refundOrganizationOrder(input: {
   readonly actor: ApiActor;
   readonly orderId: string;
@@ -6037,6 +6350,16 @@ export async function refundOrganizationOrder(input: {
   if (!order || order.organizationId !== organizationId) {
     throw new Error("Order was not found in this organization.");
   }
+  const redeemingApplications = await database
+    .select()
+    .from(organizationCreditApplications)
+    .where(
+      and(
+        eq(organizationCreditApplications.organizationId, organizationId),
+        eq(organizationCreditApplications.orderId, order.id),
+        isNull(organizationCreditApplications.restoredAt),
+      ),
+    );
   const fulfillment = await database.query.catalogFulfillments.findFirst({
     where: and(
       eq(catalogFulfillments.organizationId, organizationId),
@@ -6051,9 +6374,15 @@ export async function refundOrganizationOrder(input: {
         ),
       })
     : undefined;
-  if (input.amountMinor <= 0 || input.amountMinor > order.totalMinor) {
+  const restoresCredits =
+    redeemingApplications.length > 0 && !order.stripePaymentIntentId;
+  if (
+    input.amountMinor < 0 ||
+    (!restoresCredits && input.amountMinor === 0) ||
+    input.amountMinor > order.totalMinor
+  ) {
     throw new Error(
-      "Refund amount must be positive and no more than the order.",
+      "Refund amount must be no more than the order and positive for cash refunds.",
     );
   }
   const refundId = crypto.randomUUID();
@@ -6089,6 +6418,26 @@ export async function refundOrganizationOrder(input: {
       organizationId,
       orderId: order.id,
     });
+  }
+  if (restoresCredits) {
+    if (input.amountMinor !== order.totalMinor) {
+      throw new Error(
+        "Organization-credit purchases must restore the full original credit allocation.",
+      );
+    }
+    await restoreRedeemedOrganizationCredits({
+      organizationId,
+      orderId: order.id,
+      refundId,
+      currency: order.currency,
+      fulfillmentId: fulfillment?.id,
+      actorPersonId: input.actor.personId,
+      requestId: input.requestId,
+      ipAddress: input.ipAddress,
+      reason: input.reason,
+      now: input.now,
+    });
+    return { id: refundId, entity: "refund", status: "succeeded" };
   }
   const nextOrderStatus =
     refunded + input.amountMinor >= order.totalMinor

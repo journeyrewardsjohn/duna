@@ -929,6 +929,7 @@ async function loadEvents(input?: {
     registrationRows,
     pickupParticipantRows,
     registrationAttendeeRows,
+    teamRegistrationRows,
     pickupAttendeeRows,
     blueprintRows,
     ticketTypeRows,
@@ -1071,6 +1072,34 @@ async function loadEvents(input?: {
       ),
     database
       .select({
+        id: teamEntries.id,
+        teamId: teamEntries.teamId,
+        sessionId: registrations.sessionId,
+        divisionId: divisions.id,
+        divisionName: divisions.name,
+        discipline: divisions.discipline,
+        seed: teamEntries.seed,
+        selectionStatus: teamEntries.selectionStatus,
+        registrationStatus: registrations.status,
+        registeredAt: registrations.createdAt,
+        captainPersonId: teamEntries.payingPersonId,
+        roster: teamEntries.roster,
+      })
+      .from(teamEntries)
+      .innerJoin(
+        registrations,
+        eq(teamEntries.registrationId, registrations.id),
+      )
+      .innerJoin(divisions, eq(registrations.divisionId, divisions.id))
+      .where(
+        inArray(registrations.status, [
+          "confirmed",
+          "waitlisted",
+          "checked-in",
+        ]),
+      ),
+    database
+      .select({
         pickupSessionId: pickupParticipants.pickupSessionId,
         personId: pickupParticipants.personId,
       })
@@ -1136,6 +1165,34 @@ async function loadEvents(input?: {
   const attendeePeople = await loadPeople(attendeeIds);
   const attendeeById = new Map(
     attendeePeople.map((person) => [person.id, person] as const),
+  );
+  const teamPersonIds = [
+    ...new Set(
+      teamRegistrationRows.flatMap((team) => [
+        team.captainPersonId,
+        ...team.roster.flatMap((member) =>
+          member.personId ? [member.personId] : [],
+        ),
+      ]),
+    ),
+  ];
+  const visibleTeamPersonIds = teamPersonIds.length
+    ? await database
+        .select({ id: people.id })
+        .from(people)
+        .where(
+          and(
+            inArray(people.id, teamPersonIds),
+            eq(people.status, "active"),
+            eq(people.profileVisibility, "public"),
+            eq(people.isMinor, false),
+          ),
+        )
+        .then((rows) => rows.map((row) => row.id))
+    : [];
+  const publicTeamPeople = await loadPeople(visibleTeamPersonIds);
+  const publicTeamPersonById = new Map(
+    publicTeamPeople.map((person) => [person.id, person] as const),
   );
   const publicAttendee = (personId: string) => {
     const person = attendeeById.get(personId);
@@ -1418,6 +1475,78 @@ async function loadEvents(input?: {
           .filter((attendee) => attendee.sessionId === row.id)
           .map((attendee) => publicAttendee(attendee.personId))
           .filter((attendee) => attendee !== undefined),
+        registrationTeams: teamRegistrationRows
+          .filter((team) => team.sessionId === row.id)
+          .flatMap((team) => {
+            const status =
+              team.selectionStatus === "confirmed" ||
+              team.registrationStatus === "confirmed" ||
+              team.registrationStatus === "checked-in"
+                ? ("confirmed" as const)
+                : team.selectionStatus === "waitlisted" ||
+                    team.registrationStatus === "waitlisted"
+                  ? ("waitlisted" as const)
+                  : undefined;
+            if (!status) return [];
+            const playerIds = [
+              team.captainPersonId,
+              ...team.roster.flatMap((member) =>
+                member.personId ? [member.personId] : [],
+              ),
+            ];
+            const players = playerIds.flatMap((personId) => {
+              const person = publicTeamPersonById.get(personId);
+              return person
+                ? [
+                    {
+                      displayName: person.displayName,
+                      initials: person.initials,
+                      avatarUrl: person.avatarUrl,
+                      publicPath: person.publicPath,
+                      ratingDisplay: person.rating.display,
+                    },
+                  ]
+                : [];
+            });
+            const ratings = players.flatMap((player) =>
+              player.ratingDisplay === undefined ? [] : [player.ratingDisplay],
+            );
+            return [
+              {
+                id: team.id,
+                divisionId: team.divisionId,
+                divisionName: team.divisionName,
+                name:
+                  players.length > 0
+                    ? players
+                        .slice(0, 2)
+                        .map((player) => player.displayName)
+                        .join(" / ")
+                    : team.seed
+                      ? `Seed ${team.seed}`
+                      : "Registered team",
+                seed: team.seed ?? undefined,
+                status,
+                registeredAt: team.registeredAt.toISOString(),
+                averageRating:
+                  ratings.length > 0
+                    ? ratings.reduce((total, value) => total + value, 0) /
+                      ratings.length
+                    : undefined,
+                players,
+              },
+            ];
+          })
+          .sort((left, right) => {
+            if (left.status !== right.status) {
+              return left.status === "confirmed" ? -1 : 1;
+            }
+            return (
+              (left.seed ?? Number.MAX_SAFE_INTEGER) -
+                (right.seed ?? Number.MAX_SAFE_INTEGER) ||
+              left.registeredAt.localeCompare(right.registeredAt)
+            );
+          }),
         live: row.status === "live",
         tags: [titleCase(kind), titleCase(row.status)],
       },

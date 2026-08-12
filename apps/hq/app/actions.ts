@@ -1,6 +1,7 @@
 "use server";
 
 import type { VenueLayoutAsset, VenueLayoutGeometry } from "@duna/api";
+import { venueWallTimeToUtc } from "@duna/api";
 import { normalizeClubColor } from "@duna/ui";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -927,7 +928,7 @@ export async function cancelCalendarSessionAction(
 ): Promise<OperatorActionState> {
   try {
     const caller = await getServerCaller();
-    await caller.operator.cancelCalendarSession({
+    const cancelled = await caller.operator.cancelCalendarSession({
       sessionId: field(formData, "sessionId"),
       reason: field(formData, "reason"),
       confirmed: confirmed(formData),
@@ -935,9 +936,209 @@ export async function cancelCalendarSessionAction(
     });
     revalidateOperator();
     return result(
-      "success",
-      "Session cancelled, reservations released, and player updates queued.",
+      cancelled.status === "refund-attention" ? "error" : "success",
+      cancelled.status === "refund-attention"
+        ? "The event is cancelled, but one or more refunds need attention. No successful refund was repeated."
+        : "Event cancelled, cash refunds submitted, credits restored, reservations released, and player updates queued.",
     );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function updateEventSessionAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.updateEventSession({
+      sessionId: field(formData, "sessionId"),
+      title: field(formData, "title"),
+      localStartsAt: field(formData, "localStartsAt"),
+      localEndsAt: field(formData, "localEndsAt"),
+      timezone: field(formData, "timezone"),
+      capacity: numberField(formData, "capacity"),
+      localRegistrationClosesAt: optionalField(
+        formData,
+        "localRegistrationClosesAt",
+      ),
+      reason: field(formData, "reason") || "Updated event operations.",
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result("success", "Event details and registration window updated.");
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function refundEventRegistrationAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    const refunded = await caller.operator.refundEventRegistration({
+      registrationId: field(formData, "registrationId"),
+      orderId: optionalField(formData, "orderId"),
+      reason: field(formData, "reason"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      refunded.status === "failed" ? "error" : "success",
+      refunded.status === "failed"
+        ? "Stripe could not complete this refund. The registration was not removed."
+        : "Refund submitted, ledger reversal posted, credits restored when applicable, and the next eligible team promoted.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function reconcileDivisionSelectionAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    const reconciled = await caller.operator.reconcileDivisionSelection({
+      divisionId: field(formData, "divisionId"),
+      force: field(formData, "force") === "true",
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    if (reconciled.status === "awaiting-registration-close") {
+      return result(
+        "success",
+        "The current ranking remains provisional. Duna will finalize seeds automatically when registration closes.",
+      );
+    }
+    return result(
+      "success",
+      "Seeds recalculated and the confirmed field and waitlist reconciled.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function setTeamSelectionAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const selectionStatus = field(formData, "selectionStatus");
+    if (
+      selectionStatus !== "confirmed" &&
+      selectionStatus !== "waitlisted" &&
+      selectionStatus !== "withdrawn"
+    ) {
+      throw new Error("Choose confirmed, waitlisted, or withdrawn.");
+    }
+    const caller = await getServerCaller();
+    await caller.operator.setTeamSelection({
+      teamEntryId: field(formData, "teamEntryId"),
+      selectionStatus,
+      seed: optionalNumberField(formData, "seed"),
+      reason: field(formData, "reason"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      `Team moved to ${selectionStatus.replaceAll("-", " ")}.`,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function expandDivisionFieldAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    const maximumTeams = numberField(formData, "maximumTeams");
+    await caller.operator.expandDivisionField({
+      divisionId: field(formData, "divisionId"),
+      maximumTeams,
+      reason: field(formData, "reason"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      `Field expanded to ${maximumTeams} teams and the next eligible teams promoted.`,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function persistDivisionBracketAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const format = field(formData, "format");
+    const allowed = [
+      "single-elimination",
+      "double-elimination-true-reset",
+      "double-elimination-modified",
+      "double-elimination-crossover",
+      "round-robin",
+      "pool-play",
+    ] as const;
+    if (!allowed.includes(format as (typeof allowed)[number])) {
+      throw new Error("Choose a supported bracket or pool format.");
+    }
+    const caller = await getServerCaller();
+    await caller.operator.persistDivisionBracket({
+      divisionId: field(formData, "divisionId"),
+      format: format as (typeof allowed)[number],
+      poolCount: optionalNumberField(formData, "poolCount"),
+      reason: field(formData, "reason"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "A new bracket version and its matches were created without overwriting history.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function updateDivisionMatchScheduleAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const localScheduledAt = optionalField(formData, "localScheduledAt");
+    const timezone = field(formData, "timezone");
+    const caller = await getServerCaller();
+    await caller.operator.updateDivisionMatchSchedule({
+      matchId: field(formData, "matchId"),
+      courtId: optionalField(formData, "courtId"),
+      scheduledAt: localScheduledAt
+        ? venueWallTimeToUtc(localScheduledAt, timezone).toISOString()
+        : undefined,
+      reason: field(formData, "reason") || "Updated match assignment.",
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result("success", "Match time and court assignment updated.");
   } catch (error) {
     return errorState(error);
   }
