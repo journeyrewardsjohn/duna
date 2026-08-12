@@ -1,7 +1,14 @@
 # Duna operations
 
+Provider membership, verified project names, safe CLI access, and secret-store
+rules live in [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md). The complete variable
+name/scope catalog lives in
+[`ENVIRONMENT_VARIABLES.md`](ENVIRONMENT_VARIABLES.md). This file owns release
+and connected-workflow procedures; it never contains credential values.
+
 ## Connected environments
 
+- GitHub repository: `journeyrewardsjohn/duna`
 - Neon project: `beach-elite`
 - Neon branch: `duna-production`
 - Neon database: `duna`
@@ -10,8 +17,10 @@
   - `@journey-rewards-inc/duna-player`
   - `@journey-rewards-inc/duna-pro`
 - Vercel projects:
-  - `https://duna-web.vercel.app`
-  - `https://hq.duna.coach`
+  - `suttonx/duna-web`, root `apps/web`
+  - `suttonx/duna-hq`, root `apps/hq`
+- Upstash: the Redis database referenced by the server-only REST variable names;
+  it carries messaging wake hints, not message truth
 
 Secrets remain outside source control. Local values live in ignored
 `.env.local`; deployed values belong in the hosting provider’s encrypted
@@ -41,8 +50,10 @@ pnpm --filter @duna/pro export
 Installable internal builds use the `preview` profile for Android and the
 `preview-simulator` profile for iOS Simulator. Both apps are configured for EAS
 Update with app-version runtime matching and separate development, preview, and
-production channels. Physical-device iOS distribution and store submission
-remain gated on Apple organization credentials.
+production channels. SDK 55+ updates must specify `--environment`; build-profile
+`env` values are not automatically update variables. Physical-device
+distribution, signing, upload, store processing, and publication remain
+separate release gates.
 
 GitHub Actions repeats both gates on pushes and pull requests.
 
@@ -52,10 +63,21 @@ verify the project-level environment before redeploying.
 
 ## Professional tour data
 
-The Sand data workflow refreshes live FIVB tournaments every five minutes, the
-rendered AVP League season every thirty minutes, the FIVB event index every six
-hours, and Volleyball World rankings daily. Manual runs support `live`, `avp`,
-`index`, and `rankings`.
+Scheduled data ingress is split between checked-in Vercel crons and GitHub
+Actions. The executable configuration is authoritative:
+
+- `apps/hq/vercel.json`: event operations every minute; Volleyball World live
+  polling every minute; the general live feed at minute 15 every two hours; and
+  Elite stats hourly at minute 17.
+- `apps/web/vercel.json`: player-source refresh daily at 03:15 UTC.
+- `.github/workflows/sand-sync.yml`: AVP every 30 minutes, event index every six
+  hours, rankings daily at 10:10 UTC, event research at 10:45 UTC, and player
+  research at 11:20 UTC.
+
+The manual GitHub workflow supports `live`, `vw-live`, `avp`, `index`,
+`rankings`, `research`, and `players`. The HQ cron route may support additional
+review/staging modes; inspect the current route before invoking one. Scheduled
+imports do not bypass evidence, mapping, or publish/approval gates.
 
 AVP requires `FIRECRAWL_API_KEY` because the league tables are rendered in the
 browser. Structured normalization uses Vercel AI Gateway through
@@ -97,11 +119,10 @@ Provider variables, privacy boundaries, migration order, and the physical-device
 release checklist are documented in
 [`VIDEO_PLATFORM.md`](VIDEO_PLATFORM.md).
 
-R2 S3 credentials must be present in Duna Web because its API signs upload and
-playback URLs. Duna HQ already has the provided sensitive values; Vercel does
-not allow those values to be exported for copying, so add the same
-`CF_ACCESS_KEY_ID` and `CE_SECRET_ACCESS_KEY` directly to Duna Web Preview and
-Production.
+R2 S3 credentials must be present in every server project that executes upload,
+attachment, or playback signing. Sensitive Vercel values cannot be exported for
+copying, so add the canonical names directly to each required Preview and
+Production project and verify by behavior without printing them.
 
 ## Database delivery
 
@@ -239,7 +260,7 @@ still requires external approvals or account data:
 - Stripe Connect production review, Tax address, Terminal/Tap to Pay
   entitlements, Treasury/1099 approvals
 - Apple Developer and Google Play organization credentials and store review
-- Knock, Resend, Twilio 10DLC, Ably, Inngest, R2, Sentry, Axiom, and PostHog
+- Knock, Resend, Sent, Twilio 10DLC, Inngest, Upstash, R2, Sentry, Axiom, and PostHog
   production credentials
 - Mux account activation, API/signing keys, signed webhook, and a
   physical-device iOS streaming check
