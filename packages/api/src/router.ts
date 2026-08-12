@@ -5651,6 +5651,7 @@ const playerRouter = router({
         localStartsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
         durationMinutes: z.number().int().min(15).max(480),
         paymentMode: z.enum(["full", "split"]).default("full"),
+        paymentSurface: z.enum(["hosted", "native"]).default("hosted"),
         participants: z
           .array(
             z
@@ -5693,6 +5694,7 @@ const playerRouter = router({
               localStartsAt: input.localStartsAt,
               durationMinutes: input.durationMinutes,
               paymentMode: input.paymentMode,
+              paymentSurface: input.paymentSurface,
               participants: input.participants,
               policyAccepted: input.policyAccepted,
               policyFullScrollConfirmed: input.policyFullScrollConfirmed,
@@ -5710,13 +5712,27 @@ const playerRouter = router({
       }),
     ),
   courtCheckoutStatus: protectedProcedure
-    .input(z.object({ checkoutSessionId: z.string().min(1).max(192) }))
+    .input(
+      z
+        .object({
+          checkoutSessionId: z.string().min(1).max(192).optional(),
+          paymentIntentId: z.string().startsWith("pi_").max(192).optional(),
+        })
+        .refine(
+          (value) =>
+            Number(Boolean(value.checkoutSessionId)) +
+              Number(Boolean(value.paymentIntentId)) ===
+            1,
+          "Choose exactly one checkout identifier.",
+        ),
+    )
     .output(courtCheckoutStatusSchema)
     .query(async ({ input, ctx }) => {
       try {
         return await getCourtCheckoutStatus({
           actor: ctx.actor!,
           checkoutSessionId: input.checkoutSessionId,
+          paymentIntentId: input.paymentIntentId,
         });
       } catch (error) {
         return throwDomainError(error);

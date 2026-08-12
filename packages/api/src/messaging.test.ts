@@ -4,6 +4,7 @@ import { canUseMinorAi, resolveDunaAiModel } from "./duna-ai-support";
 import {
   canUseOrganizationMessaging,
   hasActiveGuardianCoverage,
+  mergeOrganizationAudiencePersonIds,
   validateConversationCreationMode,
   validateMessageAttachment,
   validateMessageAttachmentTotal,
@@ -11,6 +12,15 @@ import {
 } from "./messaging-service";
 
 describe("messaging safety", () => {
+  it("automatically includes active staff in organization-wide groups", () => {
+    expect(
+      mergeOrganizationAudiencePersonIds(
+        [{ personId: "player-1" }, { personId: "coach-1" }],
+        [{ personId: "coach-1" }, { personId: "director-1" }],
+      ),
+    ).toEqual(["player-1", "coach-1", "director-1"]);
+  });
+
   it("qualifies OpenAI models only when routing through AI Gateway", () => {
     expect(resolveDunaAiModel("gpt-5.6-luna", true)).toBe(
       "openai/gpt-5.6-luna",

@@ -430,6 +430,26 @@ export interface BookingSummary {
   readonly venueName: string;
   readonly venueId?: string;
   readonly venueTimezone?: string;
+  readonly organization?: {
+    readonly id: string;
+    readonly name: string;
+    readonly slug: string;
+  };
+  readonly location?: {
+    readonly label: string;
+    readonly address?: string;
+    readonly googlePlaceId?: string;
+    readonly latitude?: number;
+    readonly longitude?: number;
+  };
+  readonly court?: {
+    readonly id: string;
+    readonly name: string;
+  };
+  readonly details?: {
+    readonly label: string;
+    readonly path: string;
+  };
   readonly status: "confirmed" | "waitlisted" | "needs-action";
   readonly amount: Money;
   readonly participantNames: readonly string[];

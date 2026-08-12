@@ -1678,16 +1678,30 @@ async function organizationAudienceForContext(input: {
         "This organization audience does not match the selected organization.",
       );
     }
-    const rows = await database
-      .select({ personId: organizationParticipants.personId })
-      .from(organizationParticipants)
-      .where(
-        and(
-          eq(organizationParticipants.organizationId, input.organizationId),
-          eq(organizationParticipants.status, "active"),
+    const [memberRows, staffRows] = await Promise.all([
+      database
+        .select({ personId: organizationParticipants.personId })
+        .from(organizationParticipants)
+        .where(
+          and(
+            eq(organizationParticipants.organizationId, input.organizationId),
+            eq(organizationParticipants.status, "active"),
+          ),
         ),
-      );
-    return rows.map((row) => row.personId);
+      database
+        .select({ personId: organizationMemberships.personId })
+        .from(organizationMemberships)
+        .where(
+          and(
+            eq(organizationMemberships.organizationId, input.organizationId),
+            eq(organizationMemberships.active, true),
+          ),
+        ),
+    ]);
+    // Active coaches, directors, and operators are always part of their
+    // organization's service audience. This is the durable "follow" implied
+    // by joining staff; no separate social-follow action is required.
+    return mergeOrganizationAudiencePersonIds(memberRows, staffRows);
   }
   if (input.context.type === "event" || input.context.type === "lesson") {
     const rows = await database
@@ -1791,6 +1805,13 @@ async function organizationAudienceForContext(input: {
     "BAD_REQUEST",
     "That context is not available as an organization audience yet.",
   );
+}
+
+export function mergeOrganizationAudiencePersonIds(
+  memberRows: readonly { readonly personId: string }[],
+  staffRows: readonly { readonly personId: string }[],
+): readonly string[] {
+  return [...new Set([...memberRows, ...staffRows].map((row) => row.personId))];
 }
 
 async function followersOfProfessional(personId: string) {

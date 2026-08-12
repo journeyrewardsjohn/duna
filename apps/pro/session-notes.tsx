@@ -133,10 +133,12 @@ function VoiceOrb({ active }: { readonly active: boolean }) {
 
 export function SessionNotesScreen({
   sessionId,
+  initialPersonId,
   onClose,
   onSaved,
 }: {
   readonly sessionId: string;
+  readonly initialPersonId?: string;
   readonly onClose: () => void;
   readonly onSaved: () => Promise<void>;
 }) {
@@ -150,7 +152,7 @@ export function SessionNotesScreen({
   const [subject, setSubject] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("private");
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
-    new Set(),
+    new Set(initialPersonId ? [initialPersonId] : []),
   );
   const [recorded, setRecorded] = useState(false);
   const [busy, setBusy] = useState(false);

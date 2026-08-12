@@ -1,8 +1,8 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Calendar from "expo-calendar";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -11,18 +11,15 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { FellixText as Text } from "./fellix-text";
+import {
+  connectPlayerCalendar,
+  readPlayerCalendarConnection,
+  syncPlayerBookings,
+  type PlayerCalendarSyncBooking,
+} from "./player-calendar-sync";
 
-const connectionKey = "duna-player-calendar-connection-v2";
-const eventMapKey = "duna-player-calendar-events-v2";
-
-export type PlayerCalendarBooking = {
-  readonly id: string;
-  readonly title: string;
+export type PlayerCalendarBooking = PlayerCalendarSyncBooking & {
   readonly kind: string;
-  readonly startsAt: string;
-  readonly endsAt: string;
-  readonly venueName: string;
-  readonly status: "confirmed" | "waitlisted" | "needs-action";
 };
 
 type CalendarMode = "day" | "week" | "month" | "quarter";
@@ -67,23 +64,6 @@ function monthGrid(month: Date) {
   const first = new Date(month.getFullYear(), month.getMonth(), 1);
   const starts = addDays(first, -((first.getDay() + 6) % 7));
   return Array.from({ length: 42 }, (_, index) => addDays(starts, index));
-}
-
-function dunaMarker(bookingId: string) {
-  return `[Duna booking: ${bookingId}]`;
-}
-
-async function readEventMap(): Promise<Record<string, string>> {
-  const stored = await AsyncStorage.getItem(eventMapKey);
-  if (!stored) return {};
-  try {
-    const parsed = JSON.parse(stored) as unknown;
-    return parsed && typeof parsed === "object"
-      ? (parsed as Record<string, string>)
-      : {};
-  } catch {
-    return {};
-  }
 }
 
 function viewRange(mode: CalendarMode, focus: Date) {
@@ -250,12 +230,10 @@ export function PlayerCalendarModal({
     const permission = await Calendar.getCalendarPermissions();
     if (!permission.granted) return;
     const calendars = await Calendar.getCalendars(Calendar.EntityTypes.EVENT);
-    const storedCalendarId = await AsyncStorage.getItem(connectionKey);
-    const preferred = calendars.find(
-      (calendar) => calendar.id === storedCalendarId,
-    );
-    setConnected(true);
-    setCalendarTitleText(preferred?.title ?? "Device calendars");
+    const connection = await readPlayerCalendarConnection();
+    setConnected(Boolean(connection));
+    setCalendarTitleText(connection?.title);
+    if (connection) await syncPlayerBookings(bookings);
     const events = await Calendar.listEvents(
       calendars,
       addMonths(range.start, -1),
@@ -274,102 +252,22 @@ export function PlayerCalendarModal({
   }, [range.end.getTime(), range.start.getTime(), visible]);
 
   async function connect() {
-    if (Platform.OS === "web") {
-      setNotice("Open Duna on iPhone or Android to connect a calendar.");
-      return;
-    }
     setBusy(true);
     setNotice(undefined);
     try {
-      const permission = await Calendar.requestCalendarPermissions(false);
-      if (!permission.granted) {
-        setNotice(
-          "Calendar access was not granted. Nothing was read or added.",
-        );
-        return;
-      }
-      const calendars = await Calendar.getCalendars(Calendar.EntityTypes.EVENT);
-      const writable = calendars.filter(
-        (calendar) => calendar.allowsModifications,
-      );
-      const preferred =
-        writable.find((calendar) => calendar.isPrimary) ?? writable[0];
-      if (preferred) {
-        await AsyncStorage.setItem(connectionKey, preferred.id);
-        setCalendarTitleText(preferred.title);
-      } else {
-        setCalendarTitleText("Device calendars");
-      }
+      const connection = await connectPlayerCalendar();
+      setCalendarTitleText(connection.title);
       setConnected(true);
+      const synced = await syncPlayerBookings(bookings);
       await loadDeviceEvents();
       setNotice(
-        "Connected. Personal events stay on this device and appear beside Duna bookings.",
+        `${connection.title} is connected. ${synced} upcoming booking${synced === 1 ? "" : "s"} will stay updated automatically.`,
       );
     } catch (reason) {
       setNotice(
         reason instanceof Error
           ? reason.message
           : "Duna could not connect this calendar.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function syncBookings() {
-    if (!connected) return;
-    setBusy(true);
-    setNotice(undefined);
-    try {
-      const calendars = (
-        await Calendar.getCalendars(Calendar.EntityTypes.EVENT)
-      ).filter((calendar) => calendar.allowsModifications);
-      const storedCalendarId = await AsyncStorage.getItem(connectionKey);
-      const calendar =
-        calendars.find((candidate) => candidate.id === storedCalendarId) ??
-        calendars.find((candidate) => candidate.isPrimary) ??
-        calendars[0];
-      if (!calendar)
-        throw new Error("No writable device calendar is available.");
-      const eventMap = await readEventMap();
-      const upcoming = bookings.filter(
-        (booking) =>
-          booking.status === "confirmed" &&
-          Date.parse(booking.endsAt) > Date.now(),
-      );
-      for (const booking of upcoming) {
-        const details = {
-          title: booking.title,
-          startDate: new Date(booking.startsAt),
-          endDate: new Date(booking.endsAt),
-          location: booking.venueName,
-          notes: `${dunaMarker(booking.id)}\nManaged from Duna Player.`,
-          alarms: [{ relativeOffset: -60 }, { relativeOffset: -1_440 }],
-          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          url: `duna://booking/${encodeURIComponent(booking.id)}`,
-        };
-        const existingId = eventMap[booking.id];
-        if (existingId) {
-          try {
-            const event = await Calendar.ExpoCalendarEvent.get(existingId);
-            await event.update(details);
-            continue;
-          } catch {
-            delete eventMap[booking.id];
-          }
-        }
-        const event = await calendar.createEvent(details);
-        eventMap[booking.id] = event.id;
-      }
-      await AsyncStorage.setItem(eventMapKey, JSON.stringify(eventMap));
-      setNotice(
-        upcoming.length
-          ? `${upcoming.length} confirmed booking${upcoming.length === 1 ? "" : "s"} synced with one-day and one-hour reminders.`
-          : "There are no confirmed upcoming bookings to sync.",
-      );
-    } catch (reason) {
-      setNotice(
-        reason instanceof Error ? reason.message : "Calendar sync failed.",
       );
     } finally {
       setBusy(false);
@@ -407,14 +305,31 @@ export function PlayerCalendarModal({
       .map((event) => ({ kind: "device" as const, event })),
   ].sort((left, right) => itemStart(left) - itemStart(right));
 
-  const shift = (direction: -1 | 1) => {
-    const step = modeStep(mode);
-    setFocus(
-      step.months
-        ? addMonths(focus, step.months * direction)
-        : addDays(focus, step.days * direction),
-    );
-  };
+  const shift = useCallback(
+    (direction: -1 | 1) => {
+      const step = modeStep(mode);
+      setFocus((current) =>
+        step.months
+          ? addMonths(current, step.months * direction)
+          : addDays(current, step.days * direction),
+      );
+    },
+    [mode],
+  );
+  const weekPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          mode === "week" &&
+          Math.abs(gesture.dx) > 14 &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy),
+        onPanResponderRelease: (_, gesture) => {
+          if (Math.abs(gesture.dx) < 48) return;
+          shift(gesture.dx < 0 ? 1 : -1);
+        },
+      }),
+    [mode, shift],
+  );
 
   return (
     <Modal
@@ -486,30 +401,37 @@ export function PlayerCalendarModal({
             </Pressable>
           </View>
 
-          <View style={styles.connection}>
-            <View style={styles.connectionMark}>
-              <Text style={styles.connectionMarkText}>▦</Text>
+          {!connected ? (
+            <View style={styles.connection}>
+              <View style={styles.connectionMark}>
+                <Text style={styles.connectionMarkText}>▦</Text>
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.connectionTitle}>
+                  Bring in your calendar
+                </Text>
+                <Text style={styles.connectionBody}>
+                  See Apple, Google, or Outlook events beside Duna.
+                </Text>
+              </View>
+              <Pressable
+                disabled={busy}
+                onPress={() => void connect()}
+                style={styles.connectionAction}
+              >
+                <Text style={styles.connectionActionText}>
+                  {busy ? "Working…" : "Connect"}
+                </Text>
+              </Pressable>
             </View>
-            <View style={styles.flex}>
-              <Text style={styles.connectionTitle}>
-                {connected ? calendarTitleText : "Bring in your calendar"}
-              </Text>
-              <Text style={styles.connectionBody}>
-                {connected
-                  ? "Personal events appear only on this device."
-                  : "See Apple, Google, or Outlook events beside Duna."}
+          ) : (
+            <View style={styles.connectedSummary}>
+              <Text style={styles.connectedSummaryMark}>✓</Text>
+              <Text style={styles.connectedSummaryText}>
+                {calendarTitleText} · new plans sync automatically
               </Text>
             </View>
-            <Pressable
-              disabled={busy}
-              onPress={() => void (connected ? syncBookings() : connect())}
-              style={styles.connectionAction}
-            >
-              <Text style={styles.connectionActionText}>
-                {busy ? "Working…" : connected ? "Sync" : "Connect"}
-              </Text>
-            </Pressable>
-          </View>
+          )}
           {notice && <Text style={styles.notice}>{notice}</Text>}
 
           {mode === "day" && (
@@ -528,7 +450,7 @@ export function PlayerCalendarModal({
           )}
 
           {mode === "week" && (
-            <View style={styles.week}>
+            <View {...weekPanResponder.panHandlers} style={styles.week}>
               {days.map((date) => {
                 const selected = sameDay(date, focus);
                 const count =
@@ -777,6 +699,19 @@ const styles = StyleSheet.create({
   },
   connectionMarkText: { color: "#203740", fontSize: 19 },
   connectionTitle: { color: "#111719", fontSize: 15, fontWeight: "700" },
+  connectedSummary: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 7,
+    justifyContent: "center",
+    marginTop: 14,
+  },
+  connectedSummaryMark: { color: "#2f7445", fontSize: 14, fontWeight: "900" },
+  connectedSummaryText: {
+    color: "#667277",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   content: { padding: 20, paddingBottom: 56 },
   dayDots: { flexDirection: "row", gap: 2, marginTop: 2 },
   dayHero: {
