@@ -518,6 +518,112 @@ export default async function EventPage({
             </section>
           )}
 
+          {event.registrationTeams && event.registrationTeams.length > 0 && (
+            <section
+              className="event-public__section event-registration-board"
+              id="registration-list"
+            >
+              <header>
+                <div>
+                  <span className="section__eyebrow">Official field</span>
+                  <h2>Seeds + registration list.</h2>
+                  <p>
+                    Confirmed teams are shown in seed order. The waitlist moves
+                    automatically when the organizer expands the field or a team
+                    withdraws.
+                  </p>
+                </div>
+                <Trophy aria-hidden size={23} />
+              </header>
+              <div className="event-registration-board__divisions">
+                {(event.divisions ?? []).flatMap((division) => {
+                  const registered = event.registrationTeams!.filter(
+                    (team) => team.divisionId === division.id,
+                  );
+                  if (registered.length === 0) return [];
+                  const confirmed = registered.filter(
+                    (team) => team.status === "confirmed",
+                  );
+                  const waitlisted = registered.filter(
+                    (team) => team.status === "waitlisted",
+                  );
+                  return [
+                    <article key={division.id}>
+                      <header>
+                        <span>
+                          <small>Division</small>
+                          <h3>{division.name}</h3>
+                        </span>
+                        <Badge tone="positive">
+                          {confirmed.length} confirmed
+                        </Badge>
+                      </header>
+                      <div className="event-registration-board__list">
+                        {confirmed.map((team) => (
+                          <div key={team.id}>
+                            <b>{team.seed ?? "—"}</b>
+                            <span className="event-registration-board__avatars">
+                              {team.players.slice(0, 2).map((player, index) => (
+                                <i key={`${team.id}:${index}`}>
+                                  {player.avatarUrl ? (
+                                    <img alt="" src={player.avatarUrl} />
+                                  ) : (
+                                    player.initials
+                                  )}
+                                </i>
+                              ))}
+                            </span>
+                            <span>
+                              <strong>{team.name}</strong>
+                              <small>
+                                {team.averageRating !== undefined
+                                  ? `${team.averageRating.toFixed(2)} average Sand Rating`
+                                  : "Rating hidden by player privacy"}
+                              </small>
+                            </span>
+                            <Badge>Confirmed</Badge>
+                          </div>
+                        ))}
+                        {waitlisted.map((team, index) => (
+                          <div className="waitlisted" key={team.id}>
+                            <b>W{index + 1}</b>
+                            <span className="event-registration-board__avatars">
+                              {team.players
+                                .slice(0, 2)
+                                .map((player, avatarIndex) => (
+                                  <i key={`${team.id}:${avatarIndex}`}>
+                                    {player.avatarUrl ? (
+                                      <img alt="" src={player.avatarUrl} />
+                                    ) : (
+                                      player.initials
+                                    )}
+                                  </i>
+                                ))}
+                            </span>
+                            <span>
+                              <strong>{team.name}</strong>
+                              <small>
+                                {team.averageRating !== undefined
+                                  ? `${team.averageRating.toFixed(2)} average Sand Rating`
+                                  : "Rating hidden by player privacy"}
+                              </small>
+                            </span>
+                            <Badge tone="warning">Waitlist</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </article>,
+                  ];
+                })}
+              </div>
+              <p className="event-public__privacy-note">
+                A player’s name, photo, and rating appear only when that player
+                is an adult with a public profile. Minor and private profiles
+                remain hidden.
+              </p>
+            </section>
+          )}
+
           {event.recurrence && (
             <section className="event-public__section" id="event-schedule">
               <header>

@@ -2741,6 +2741,19 @@ export const sessionOperations = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+    refundStatus: varchar("refund_status", { length: 24 }),
+    refundSummary: jsonb("refund_summary").$type<{
+      readonly registrationCount: number;
+      readonly orderCount: number;
+      readonly cashRefundMinor: number;
+      readonly creditsRestored: number;
+      readonly succeededOrderIds: readonly string[];
+      readonly failedOrderIds: readonly string[];
+    }>(),
+    refundCompletedAt: timestamp("refund_completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     createdAt,
     updatedAt,
   },
@@ -2756,6 +2769,10 @@ export const sessionOperations = pgTable(
     check(
       "session_operation_cancellation_pair_valid",
       sql`(${table.cancelledAt} IS NULL AND ${table.cancellationKind} IS NULL AND ${table.cancellationReason} IS NULL) OR (${table.cancelledAt} IS NOT NULL AND ${table.cancellationKind} IS NOT NULL AND ${table.cancellationReason} IS NOT NULL)`,
+    ),
+    check(
+      "session_operation_refund_status_valid",
+      sql`${table.refundStatus} IS NULL OR ${table.refundStatus} IN ('pending', 'complete', 'attention')`,
     ),
   ],
 );
@@ -6444,6 +6461,14 @@ export const organizationCreditApplications = pgTable(
     credits: integer("credits").notNull(),
     valueMinor: bigint("value_minor", { mode: "number" }).notNull().default(0),
     currency: varchar("currency", { length: 3 }),
+    restorationJournalId: uuid("restoration_journal_id").references(
+      () => ledgerJournals.id,
+      { onDelete: "restrict" },
+    ),
+    restoredAt: timestamp("restored_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     createdAt,
   },
   (table) => [
@@ -6457,6 +6482,10 @@ export const organizationCreditApplications = pgTable(
       table.createdAt,
     ),
     index("organization_credit_application_order_idx").on(table.orderId),
+    index("organization_credit_application_restoration_idx").on(
+      table.orderId,
+      table.restoredAt,
+    ),
     check(
       "organization_credit_application_positive",
       sql`${table.credits} > 0`,
@@ -6594,6 +6623,7 @@ export const refundRecords = pgTable(
     amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
     currency: varchar("currency", { length: 3 }).notNull(),
     creditsIssued: integer("credits_issued"),
+    creditsRestored: integer("credits_restored"),
     stripeRefundId: varchar("stripe_refund_id", { length: 128 }).unique(),
     ledgerJournalId: uuid("ledger_journal_id").references(
       () => ledgerJournals.id,
@@ -6615,12 +6645,15 @@ export const refundRecords = pgTable(
     ),
     check(
       "refund_record_disposition_valid",
-      sql`${table.disposition} IN ('original-payment', 'organization-credit')`,
+      sql`${table.disposition} IN ('original-payment', 'organization-credit', 'organization-credit-restoration')`,
     ),
-    check("refund_record_amount_positive", sql`${table.amountMinor} > 0`),
+    check(
+      "refund_record_amount_valid",
+      sql`(${table.disposition} = 'organization-credit-restoration' AND ${table.amountMinor} >= 0) OR (${table.disposition} <> 'organization-credit-restoration' AND ${table.amountMinor} > 0)`,
+    ),
     check(
       "refund_record_credit_pair",
-      sql`(${table.disposition} = 'organization-credit' AND ${table.creditsIssued} > 0) OR (${table.disposition} = 'original-payment' AND ${table.creditsIssued} IS NULL)`,
+      sql`(${table.disposition} = 'organization-credit' AND ${table.creditsIssued} > 0 AND ${table.creditsRestored} IS NULL) OR (${table.disposition} = 'organization-credit-restoration' AND ${table.creditsIssued} IS NULL AND ${table.creditsRestored} > 0) OR (${table.disposition} = 'original-payment' AND ${table.creditsIssued} IS NULL AND ${table.creditsRestored} IS NULL)`,
     ),
     check(
       "refund_record_status_valid",
@@ -7120,6 +7153,9 @@ export const teamEntries = pgTable(
     registrationId: uuid("registration_id")
       .notNull()
       .references(() => registrations.id),
+    teamId: uuid("team_id").references(() => teams.id, {
+      onDelete: "set null",
+    }),
     payingPersonId: uuid("paying_person_id")
       .notNull()
       .references(() => people.id),
@@ -7155,11 +7191,36 @@ export const teamEntries = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+    seed: integer("seed"),
+    selectionStatus: varchar("selection_status", { length: 24 })
+      .notNull()
+      .default("pending"),
+    selectionReason: text("selection_reason"),
+    selectionLocked: boolean("selection_locked").notNull().default(false),
+    qualificationScore: doublePrecision("qualification_score"),
+    qualificationSnapshot: jsonb("qualification_snapshot").$type<{
+      readonly method: string;
+      readonly calculatedAt: string;
+      readonly registrationClosesAt?: string;
+      readonly fullyPaidAt?: string;
+      readonly playerRatings: readonly {
+        readonly personId: string;
+        readonly display?: number;
+        readonly current52WeekPeak?: number;
+      }[];
+    }>(),
+    selectedAt: timestamp("selected_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     createdAt,
     updatedAt,
   },
   (table) => [
     uniqueIndex("team_entry_registration_unique").on(table.registrationId),
+    uniqueIndex("team_entry_team_unique")
+      .on(table.teamId)
+      .where(sql`${table.teamId} IS NOT NULL`),
     check("team_entry_expected_size", sql`${table.expectedTeamSize} >= 2`),
     check(
       "team_entry_payment_mode",
@@ -7168,6 +7229,14 @@ export const teamEntries = pgTable(
     check(
       "team_entry_status",
       sql`${table.status} IN ('assembling', 'ready', 'confirmed', 'cancelled', 'expired')`,
+    ),
+    check(
+      "team_entry_selection_status",
+      sql`${table.selectionStatus} IN ('pending', 'confirmed', 'waitlisted', 'withdrawn')`,
+    ),
+    check(
+      "team_entry_seed_positive",
+      sql`${table.seed} IS NULL OR ${table.seed} > 0`,
     ),
   ],
 );

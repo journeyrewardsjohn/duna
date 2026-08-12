@@ -415,6 +415,32 @@ export const eventSummarySchema = z.object({
     )
     .readonly()
     .optional(),
+  registrationTeams: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        divisionId: z.string().uuid(),
+        divisionName: z.string(),
+        name: z.string(),
+        seed: z.number().int().positive().optional(),
+        status: z.enum(["confirmed", "waitlisted"]),
+        registeredAt: z.iso.datetime(),
+        averageRating: z.number().min(1).max(8).optional(),
+        players: z
+          .array(
+            z.object({
+              displayName: z.string(),
+              initials: z.string(),
+              avatarUrl: z.string().optional(),
+              publicPath: z.string().startsWith("/players/").optional(),
+              ratingDisplay: z.number().min(1).max(8).optional(),
+            }),
+          )
+          .readonly(),
+      }),
+    )
+    .readonly()
+    .optional(),
   host: z
     .object({
       id: z.string().uuid(),
@@ -3109,8 +3135,34 @@ export const operatorSessionDetailSchema = z.object({
     .array(
       z.object({
         id: z.string().uuid(),
+        registrationId: z.string().uuid(),
+        divisionId: z.string().uuid(),
         divisionName: z.string(),
+        teamId: z.string().uuid().optional(),
+        name: z.string(),
         captainName: z.string(),
+        registrationStatus: z.enum([
+          "pending",
+          "confirmed",
+          "waitlisted",
+          "cancelled",
+          "refunded",
+          "checked-in",
+        ]),
+        selectionStatus: z.enum([
+          "pending",
+          "confirmed",
+          "waitlisted",
+          "withdrawn",
+        ]),
+        selectionLocked: z.boolean(),
+        selectionReason: z.string().optional(),
+        seed: z.number().int().positive().optional(),
+        registeredAt: z.iso.datetime(),
+        fullyPaidAt: z.iso.datetime().optional(),
+        fullyPaid: z.boolean(),
+        averageRating: z.number().min(1).max(8).optional(),
+        qualificationScore: z.number().optional(),
         expectedTeamSize: z.number().int().min(2).max(6),
         playersAdded: z.number().int().min(1).max(6),
         claimedPlayers: z.number().int().min(1).max(6),
@@ -3128,16 +3180,42 @@ export const operatorSessionDetailSchema = z.object({
         roster: z
           .array(
             z.object({
+              personId: z.string().uuid().optional(),
+              orderId: z.string().uuid().optional(),
               displayName: z.string(),
+              avatarUrl: z.string().optional(),
               status: z.enum(["captain", "selected", "invited", "claimed"]),
               deliveryStatus: z.enum(["queued", "sent", "failed"]).optional(),
               paid: z.boolean(),
+              ratingDisplay: z.number().min(1).max(8).optional(),
             }),
           )
           .readonly(),
       }),
     )
     .readonly(),
+  cancellationPreview: z.object({
+    sessionId: z.string().uuid(),
+    sessionStatus: z.string(),
+    registrationCount: z.number().int().nonnegative(),
+    orderCount: z.number().int().nonnegative(),
+    cashRefundMinor: z.number().int().nonnegative(),
+    creditsToRestore: z.number().int().nonnegative(),
+    creditValueMinor: z.number().int().nonnegative(),
+    currency: currencySchema,
+    orders: z
+      .array(
+        z.object({
+          orderId: z.string().uuid(),
+          buyerName: z.string(),
+          totalMinor: z.number().int().nonnegative(),
+          cashRefundMinor: z.number().int().nonnegative(),
+          creditsToRestore: z.number().int().nonnegative(),
+          creditValueMinor: z.number().int().nonnegative(),
+        }),
+      )
+      .readonly(),
+  }),
   finance: z.object({
     grossMinor: z.number().int().nonnegative(),
     refundedMinor: z.number().int().nonnegative(),
@@ -3152,6 +3230,18 @@ export const operatorSessionDetailSchema = z.object({
     cancellationReason: z.string().optional(),
     cancelledByName: z.string().optional(),
     cancelledAt: z.iso.datetime().optional(),
+    refundStatus: z.enum(["pending", "complete", "attention"]).optional(),
+    refundSummary: z
+      .object({
+        registrationCount: z.number().int().nonnegative(),
+        orderCount: z.number().int().nonnegative(),
+        cashRefundMinor: z.number().int().nonnegative(),
+        creditsRestored: z.number().int().nonnegative(),
+        succeededOrderIds: z.array(z.string().uuid()).readonly(),
+        failedOrderIds: z.array(z.string().uuid()).readonly(),
+      })
+      .optional(),
+    refundCompletedAt: z.iso.datetime().optional(),
     weather: z
       .object({
         condition: z.string(),
@@ -3189,6 +3279,63 @@ export const operatorSessionDetailSchema = z.object({
         createdAt: z.iso.datetime(),
       }),
     )
+    .readonly(),
+});
+
+export const operatorDivisionDetailSchema = z.object({
+  session: z.object({
+    id: z.string().uuid(),
+    title: z.string(),
+    kind: z.string(),
+    startsAt: z.iso.datetime(),
+    timezone: z.string(),
+    venueId: z.string().uuid().optional(),
+  }),
+  division: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    discipline: z.string(),
+    teamSize: z.number().int().positive(),
+    capacity: z.number().int().positive(),
+    maximumTeams: z.number().int().positive().optional(),
+    seeding: z.string(),
+    tournamentFormat: z.string(),
+    poolPlay: z
+      .object({
+        enabled: z.boolean(),
+        teamsPerPool: z.number().int().min(2),
+        format: z.enum(["full", "olympic-crossover"]),
+        teamsAdvancing: z.number().int().positive(),
+      })
+      .optional(),
+    registrationClosesAt: z.iso.datetime().optional(),
+  }),
+  teams: operatorSessionDetailSchema.shape.teams,
+  bracket: z
+    .object({
+      id: z.string().uuid(),
+      version: z.number().int().positive(),
+      format: z.string(),
+      structure: z.record(z.string(), z.unknown()),
+      createdAt: z.iso.datetime(),
+    })
+    .optional(),
+  matches: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        status: z.string(),
+        label: z.string(),
+        teamAName: z.string().optional(),
+        teamBName: z.string().optional(),
+        courtId: z.string().uuid().optional(),
+        courtName: z.string().optional(),
+        scheduledAt: z.iso.datetime().optional(),
+      }),
+    )
+    .readonly(),
+  courts: z
+    .array(z.object({ id: z.string().uuid(), name: z.string() }))
     .readonly(),
 });
 
@@ -3812,6 +3959,10 @@ export const operatorMutationResultSchema = z.object({
     "member-profile",
     "health-snapshot",
     "health-share",
+    "division",
+    "team-entry",
+    "bracket",
+    "match",
   ]),
   status: z.string(),
 });
@@ -3891,6 +4042,9 @@ export type VenueLayoutCourtAssignmentPlan = z.infer<
 export type PublicVenueLayout = z.infer<typeof publicVenueLayoutSchema>;
 export type OperatorMemberProfile = z.infer<typeof operatorMemberProfileSchema>;
 export type OperatorSessionDetail = z.infer<typeof operatorSessionDetailSchema>;
+export type OperatorDivisionDetail = z.infer<
+  typeof operatorDivisionDetailSchema
+>;
 export type OperatorSessionNote = z.infer<typeof operatorSessionNoteSchema>;
 export type EventDraftEditor = z.infer<typeof eventDraftEditorSchema>;
 export type PublicCatalogItem = z.infer<typeof publicCatalogItemSchema>;

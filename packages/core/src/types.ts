@@ -144,6 +144,24 @@ export interface EventAttendeeSummary {
   readonly ratingDisplay?: number;
 }
 
+export interface EventRegistrationTeamSummary {
+  readonly id: string;
+  readonly divisionId: string;
+  readonly divisionName: string;
+  readonly name: string;
+  readonly seed?: number;
+  readonly status: "confirmed" | "waitlisted";
+  readonly registeredAt: string;
+  readonly averageRating?: number;
+  readonly players: readonly {
+    readonly displayName: string;
+    readonly initials: string;
+    readonly avatarUrl?: string;
+    readonly publicPath?: string;
+    readonly ratingDisplay?: number;
+  }[];
+}
+
 export interface EventHostSummary {
   readonly id: string;
   readonly displayName: string;
@@ -326,6 +344,7 @@ export interface EventSummary {
   readonly policies?: readonly EventPolicy[];
   readonly recurrence?: LeagueRecurrence;
   readonly attendees?: readonly EventAttendeeSummary[];
+  readonly registrationTeams?: readonly EventRegistrationTeamSummary[];
   readonly host?: EventHostSummary;
   readonly approvalRequired?: boolean;
   readonly visibility?: "public" | "unlisted";

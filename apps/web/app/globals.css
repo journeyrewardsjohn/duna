@@ -23819,6 +23819,134 @@ html {
   font-size: 0.68rem;
 }
 
+.event-registration-board__divisions {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.event-registration-board__divisions > article {
+  background: var(--color-white);
+  border: 1px solid var(--color-line);
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+.event-registration-board__divisions > article > header {
+  align-items: center;
+  background: var(--color-canvas-soft);
+  display: flex;
+  justify-content: space-between;
+  padding: 1rem;
+}
+
+.event-registration-board__divisions > article > header > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.event-registration-board__divisions > article > header small {
+  color: var(--color-bone-muted);
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.event-registration-board__divisions h3 {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  margin: 0.15rem 0 0;
+}
+
+.event-registration-board__list {
+  display: grid;
+}
+
+.event-registration-board__list > div {
+  align-items: center;
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: 38px auto minmax(0, 1fr) auto;
+  padding: 0.75rem 1rem;
+}
+
+.event-registration-board__list > div.waitlisted {
+  background: rgb(var(--warning-rgb) / 4%);
+}
+
+.event-registration-board__list > div > b {
+  align-items: center;
+  background: var(--color-depth);
+  border-radius: 11px;
+  color: var(--color-white);
+  display: flex;
+  font-family: var(--font-data);
+  height: 38px;
+  justify-content: center;
+}
+
+.event-registration-board__avatars {
+  display: flex;
+  padding-left: 0.4rem;
+}
+
+.event-registration-board__avatars i {
+  align-items: center;
+  background: var(--color-canvas);
+  border: 2px solid var(--color-white);
+  border-radius: 999px;
+  display: flex;
+  font-size: 0.58rem;
+  font-style: normal;
+  height: 40px;
+  justify-content: center;
+  margin-left: -0.4rem;
+  overflow: hidden;
+  width: 40px;
+}
+
+.event-registration-board__avatars img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.event-registration-board__list > div > span:nth-child(3) {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.event-registration-board__list strong {
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-registration-board__list small {
+  color: var(--color-bone-muted);
+  font-size: 0.625rem;
+  margin-top: 0.18rem;
+}
+
+@media (max-width: 620px) {
+  .event-registration-board__divisions {
+    grid-template-columns: 1fr;
+  }
+
+  .event-registration-board__list > div {
+    grid-template-columns: 34px auto minmax(0, 1fr);
+  }
+
+  .event-registration-board__list > div > .duna-badge {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
+}
+
 .event-public__privacy-note {
   margin: 0.65rem 0 0;
 }

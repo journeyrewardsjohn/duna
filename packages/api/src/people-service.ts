@@ -41,6 +41,10 @@ import type { ApiActor } from "./context";
 import { loadSessionArrivalBoard } from "./arrival-service";
 import { loadHealthProfile } from "./health-service";
 import {
+  loadEventCancellationPreview,
+  loadOperatorDivisionDetail,
+} from "./event-operations-service";
+import {
   loadDemoOperatorWorkspace,
   loadOperatorWorkspace,
 } from "./operator-service";
@@ -1075,12 +1079,38 @@ export async function loadOperatorSessionDetail(
   const registrationRows = workspace.eventRegistrations.filter(
     (registration) => registration.sessionId === sessionId,
   );
+  const teamEntryRows = await database
+    .select({
+      id: teamEntries.id,
+      registrationId: registrations.id,
+      divisionId: divisions.id,
+      expectedTeamSize: teamEntries.expectedTeamSize,
+      paymentMode: teamEntries.paymentMode,
+      roster: teamEntries.roster,
+      status: teamEntries.status,
+      claimExpiresAt: teamEntries.claimExpiresAt,
+      divisionName: divisions.name,
+      captainName: people.displayName,
+      registrationStatus: registrations.status,
+      orderStatus: orders.status,
+    })
+    .from(teamEntries)
+    .innerJoin(registrations, eq(teamEntries.registrationId, registrations.id))
+    .innerJoin(divisions, eq(registrations.divisionId, divisions.id))
+    .innerJoin(people, eq(teamEntries.payingPersonId, people.id))
+    .leftJoin(orders, eq(registrations.orderId, orders.id))
+    .where(eq(registrations.sessionId, sessionId));
   const orderIds = [
-    ...new Set(
-      registrationRows.flatMap((registration) =>
+    ...new Set([
+      ...registrationRows.flatMap((registration) =>
         registration.orderId ? [registration.orderId] : [],
       ),
-    ),
+      ...teamEntryRows.flatMap((team) =>
+        team.roster.flatMap((member) =>
+          member.orderId ? [member.orderId] : [],
+        ),
+      ),
+    ]),
   ];
   const [
     attendanceRows,
@@ -1089,7 +1119,6 @@ export async function loadOperatorSessionDetail(
     operation,
     notes,
     videoRows,
-    teamEntryRows,
     arrivalBoard,
   ] = await Promise.all([
     database
@@ -1150,30 +1179,22 @@ export async function loadOperatorSessionDetail(
         ),
       )
       .orderBy(desc(videos.createdAt)),
-    database
-      .select({
-        id: teamEntries.id,
-        expectedTeamSize: teamEntries.expectedTeamSize,
-        paymentMode: teamEntries.paymentMode,
-        roster: teamEntries.roster,
-        status: teamEntries.status,
-        claimExpiresAt: teamEntries.claimExpiresAt,
-        divisionName: divisions.name,
-        captainName: people.displayName,
-        registrationStatus: registrations.status,
-        orderStatus: orders.status,
-      })
-      .from(teamEntries)
-      .innerJoin(
-        registrations,
-        eq(teamEntries.registrationId, registrations.id),
-      )
-      .innerJoin(divisions, eq(registrations.divisionId, divisions.id))
-      .innerJoin(people, eq(teamEntries.payingPersonId, people.id))
-      .leftJoin(orders, eq(registrations.orderId, orders.id))
-      .where(eq(registrations.sessionId, sessionId)),
     loadSessionArrivalBoard({ organizationId, sessionId, now }),
   ]);
+  const [divisionDetails, cancellationPreview] = await Promise.all([
+    Promise.all(
+      [...new Set(teamEntryRows.map((team) => team.divisionId))].map(
+        (divisionId) =>
+          loadOperatorDivisionDetail({ organizationId, divisionId }),
+      ),
+    ),
+    loadEventCancellationPreview({ organizationId, sessionId }),
+  ]);
+  const operationalTeamById = new Map(
+    divisionDetails.flatMap((division) =>
+      division.teams.map((team) => [team.id, team] as const),
+    ),
+  );
   const personIds = [
     ...new Set([
       ...(sessionRow.coachPersonId ? [sessionRow.coachPersonId] : []),
@@ -1258,7 +1279,12 @@ export async function loadOperatorSessionDetail(
           : 0,
       };
     }),
+    cancellationPreview: {
+      ...cancellationPreview,
+      currency: currency(cancellationPreview.currency),
+    },
     teams: teamEntryRows.map((team) => {
+      const operational = operationalTeamById.get(team.id);
       const captainPaid =
         team.orderStatus === "paid" ||
         team.orderStatus === "partially-refunded" ||
@@ -1284,8 +1310,31 @@ export async function loadOperatorSessionDetail(
           : "assembling";
       return {
         id: team.id,
+        registrationId: team.registrationId,
+        divisionId: team.divisionId,
         divisionName: team.divisionName,
+        teamId: operational?.teamId,
+        name: operational?.name ?? `${team.captainName}'s team`,
         captainName: team.captainName,
+        registrationStatus:
+          team.registrationStatus === "pending" ||
+          team.registrationStatus === "confirmed" ||
+          team.registrationStatus === "waitlisted" ||
+          team.registrationStatus === "cancelled" ||
+          team.registrationStatus === "refunded" ||
+          team.registrationStatus === "checked-in"
+            ? team.registrationStatus
+            : "pending",
+        selectionStatus: operational?.selectionStatus ?? "pending",
+        selectionLocked: operational?.selectionLocked ?? false,
+        selectionReason: operational?.selectionReason,
+        seed: operational?.seed,
+        registeredAt: operational?.registeredAt ?? now.toISOString(),
+        fullyPaidAt: operational?.fullyPaidAt,
+        fullyPaid:
+          operational?.fullyPaid ?? paidPlayers >= team.expectedTeamSize,
+        averageRating: operational?.averageRating,
+        qualificationScore: operational?.qualificationScore,
         expectedTeamSize: team.expectedTeamSize,
         playersAdded,
         claimedPlayers,
@@ -1298,7 +1347,7 @@ export async function loadOperatorSessionDetail(
             claimedPlayers < team.expectedTeamSize ||
             paidPlayers < team.expectedTeamSize),
         expiresAt: team.claimExpiresAt.toISOString(),
-        roster: [
+        roster: operational?.roster ?? [
           {
             displayName: team.captainName,
             status: "captain" as const,
@@ -1334,6 +1383,14 @@ export async function loadOperatorSessionDetail(
         ? personById.get(operation.cancelledByPersonId)?.displayName
         : undefined,
       cancelledAt: operation?.cancelledAt?.toISOString(),
+      refundStatus:
+        operation?.refundStatus === "pending" ||
+        operation?.refundStatus === "complete" ||
+        operation?.refundStatus === "attention"
+          ? operation.refundStatus
+          : undefined,
+      refundSummary: operation?.refundSummary ?? undefined,
+      refundCompletedAt: operation?.refundCompletedAt?.toISOString(),
       ...weatherOperations,
     },
     notes,
@@ -1492,6 +1549,19 @@ export async function loadDemoOperatorSessionDetail(
     ],
     attendees,
     teams: [],
+    cancellationPreview: {
+      sessionId,
+      sessionStatus: session.status,
+      registrationCount: attendees.filter(
+        (attendee) => attendee.attendanceStatus !== "cancelled",
+      ).length,
+      orderCount: activeOrders,
+      cashRefundMinor: grossMinor - refundedMinor,
+      creditsToRestore: 0,
+      creditValueMinor: 0,
+      currency: session.currency,
+      orders: [],
+    },
     finance: {
       grossMinor,
       refundedMinor,

@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ArrowRight,
   CalendarClock,
+  CalendarX2,
   Check,
   CircleAlert,
   CloudSun,
@@ -18,20 +19,27 @@ import {
   MapPin,
   MessageCircle,
   Mic,
+  Pencil,
   ReceiptText,
+  RotateCcw,
   ShieldCheck,
   UserCheck,
   UserRoundX,
   UsersRound,
+  Trophy,
   Video,
 } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import {
+  cancelCalendarSessionAction,
   createSessionNoteAction,
   publishSessionNoteAction,
   recordSessionAttendanceAction,
+  refundEventRegistrationAction,
+  setTeamSelectionAction,
   type OperatorActionState,
+  updateEventSessionAction,
 } from "@/app/actions";
 import { SessionNoteRecorder } from "./session-note-recorder";
 
@@ -137,6 +145,321 @@ function arrivalEta(seconds: number, status: string): string {
   return `${Math.max(1, Math.ceil(seconds / 60))} min`;
 }
 
+function venueLocalInput(instant: string, timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(instant));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
+}
+
+function EventManagementControls({
+  detail,
+}: {
+  readonly detail: OperatorSessionDetail;
+}) {
+  const [editState, editAction, editPending] = useActionState(
+    updateEventSessionAction,
+    initialState,
+  );
+  const [cancelState, cancelAction, cancelPending] = useActionState(
+    cancelCalendarSessionAction,
+    initialState,
+  );
+  const session = detail.session;
+  const preview = detail.cancellationPreview;
+  const canChange =
+    session.status !== "cancelled" && session.status !== "completed";
+  const canRetryRefunds =
+    session.status === "cancelled" &&
+    detail.operations.refundStatus === "attention";
+  if (!canChange && !canRetryRefunds) return null;
+  return (
+    <div className="event-management-controls">
+      {canChange && (
+        <details>
+          <summary className="hq-button hq-button--secondary">
+            <Pencil aria-hidden size={16} /> Edit event
+          </summary>
+          <form action={editAction} className="event-management-panel">
+            <header>
+              <span>
+                <small>Event operations</small>
+                <strong>Edit live event details</strong>
+              </span>
+            </header>
+            <input name="sessionId" type="hidden" value={session.id} />
+            <input name="confirmed" type="hidden" value="true" />
+            <label>
+              <span>Event name</span>
+              <input defaultValue={session.title} name="title" required />
+            </label>
+            <div className="event-management-panel__grid">
+              <label>
+                <span>Starts</span>
+                <input
+                  defaultValue={venueLocalInput(
+                    session.startsAt,
+                    session.timezone,
+                  )}
+                  name="localStartsAt"
+                  required
+                  type="datetime-local"
+                />
+              </label>
+              <label>
+                <span>Ends</span>
+                <input
+                  defaultValue={venueLocalInput(
+                    session.endsAt,
+                    session.timezone,
+                  )}
+                  name="localEndsAt"
+                  required
+                  type="datetime-local"
+                />
+              </label>
+              <label>
+                <span>Registration closes</span>
+                <input
+                  defaultValue={
+                    session.registrationClosesAt
+                      ? venueLocalInput(
+                          session.registrationClosesAt,
+                          session.timezone,
+                        )
+                      : undefined
+                  }
+                  name="localRegistrationClosesAt"
+                  type="datetime-local"
+                />
+              </label>
+              <label>
+                <span>Player capacity</span>
+                <input
+                  defaultValue={session.capacity}
+                  min={1}
+                  name="capacity"
+                  required
+                  type="number"
+                />
+              </label>
+            </div>
+            <label>
+              <span>Timezone</span>
+              <input defaultValue={session.timezone} name="timezone" required />
+            </label>
+            <label>
+              <span>Reason for the change</span>
+              <input
+                defaultValue="Updated by the event organizer."
+                name="reason"
+                required
+              />
+            </label>
+            <ActionNotice state={editState} />
+            <button
+              className="hq-button hq-button--primary"
+              disabled={editPending}
+              type="submit"
+            >
+              {editPending ? "Saving…" : "Save event changes"}
+            </button>
+          </form>
+        </details>
+      )}
+      <details>
+        <summary className="hq-button hq-button--danger">
+          <CalendarX2 aria-hidden size={16} />{" "}
+          {canRetryRefunds ? "Retry refunds" : "Cancel event"}
+        </summary>
+        <form
+          action={cancelAction}
+          className="event-management-panel event-management-panel--danger"
+        >
+          <header>
+            <span>
+              <small>Cancellation preview</small>
+              <strong>
+                {canRetryRefunds
+                  ? "Only outstanding refunds will be retried"
+                  : "This action includes every eligible refund"}
+              </strong>
+            </span>
+          </header>
+          <input name="sessionId" type="hidden" value={session.id} />
+          <div className="event-cancellation-preview">
+            <span>
+              <strong>{preview.registrationCount}</strong>
+              <small>registrations affected</small>
+            </span>
+            <span>
+              <strong>
+                {formatMoney(preview.cashRefundMinor, preview.currency)}
+              </strong>
+              <small>
+                {canRetryRefunds
+                  ? "cash still awaiting Stripe"
+                  : "cash submitted to Stripe"}
+              </small>
+            </span>
+            <span>
+              <strong>{preview.creditsToRestore}</strong>
+              <small>organization credits restored</small>
+            </span>
+          </div>
+          <p>
+            Successful refunds are never repeated. Destination transfers and
+            application fees are reversed with each Stripe refund. Credit
+            redemptions return to their original wallet grants and the ledger
+            receives matching reversal journals.
+          </p>
+          <label>
+            <span>Reason players will receive</span>
+            <textarea
+              defaultValue={
+                canRetryRefunds
+                  ? "Retry outstanding refunds after event cancellation."
+                  : undefined
+              }
+              name="reason"
+              required
+              rows={3}
+            />
+          </label>
+          <label className="event-destructive-confirmation">
+            <input name="confirmed" required type="checkbox" value="true" />
+            <span>
+              {canRetryRefunds
+                ? "I confirm Duna should retry only the outstanding refunds."
+                : "I confirm this event should be cancelled and the previewed cash and credit refunds should be processed."}
+            </span>
+          </label>
+          <ActionNotice state={cancelState} />
+          <button
+            className="hq-button hq-button--danger"
+            disabled={cancelPending}
+            type="submit"
+          >
+            {cancelPending
+              ? canRetryRefunds
+                ? "Retrying refunds…"
+                : "Cancelling and refunding…"
+              : canRetryRefunds
+                ? "Retry outstanding refunds"
+                : "Cancel and refund"}
+          </button>
+        </form>
+      </details>
+    </div>
+  );
+}
+
+function RefundPaymentControl({
+  registrationId,
+  payerName,
+  preview,
+  currency,
+  compact = false,
+}: {
+  readonly registrationId: string;
+  readonly payerName: string;
+  readonly preview?: OperatorSessionDetail["cancellationPreview"]["orders"][number];
+  readonly currency: OperatorSessionDetail["finance"]["currency"];
+  readonly compact?: boolean;
+}) {
+  const [state, action, pending] = useActionState(
+    refundEventRegistrationAction,
+    initialState,
+  );
+  if (!preview) return null;
+  return (
+    <details
+      className={`event-roster-refund${compact ? " event-roster-refund--compact" : ""}`}
+    >
+      <summary title="Refund registration">
+        <RotateCcw aria-hidden size={14} /> Refund
+      </summary>
+      <form action={action}>
+        <input name="registrationId" type="hidden" value={registrationId} />
+        <input name="orderId" type="hidden" value={preview.orderId} />
+        <strong>Refund {payerName}</strong>
+        <small>
+          {preview.cashRefundMinor > 0
+            ? `${formatMoney(preview.cashRefundMinor, currency)} to the original payment`
+            : `${preview.creditsToRestore} organization credits to their wallet`}
+        </small>
+        <textarea
+          name="reason"
+          placeholder="Reason for refund"
+          required
+          rows={2}
+        />
+        <label>
+          <input name="confirmed" required type="checkbox" value="true" />
+          Confirm refund and re-evaluate this entry
+        </label>
+        {state.status !== "idle" && (
+          <small data-state={state.status}>{state.message}</small>
+        )}
+        <button disabled={pending} type="submit">
+          {pending ? "Processing…" : "Issue refund"}
+        </button>
+      </form>
+    </details>
+  );
+}
+
+function TeamSelectionControl({
+  team,
+}: {
+  readonly team: OperatorSessionDetail["teams"][number];
+}) {
+  const [state, action, pending] = useActionState(
+    setTeamSelectionAction,
+    initialState,
+  );
+  const nextStatus =
+    team.selectionStatus === "confirmed" ? "waitlisted" : "confirmed";
+  return (
+    <form action={action} className="event-team-quick-action">
+      <input name="teamEntryId" type="hidden" value={team.id} />
+      <input name="selectionStatus" type="hidden" value={nextStatus} />
+      <input name="confirmed" type="hidden" value="true" />
+      <input
+        aria-label="Seed"
+        defaultValue={team.seed}
+        min={1}
+        name="seed"
+        placeholder="Seed"
+        type="number"
+      />
+      <input
+        name="reason"
+        type="hidden"
+        value={`Organizer moved team to ${nextStatus}.`}
+      />
+      <button disabled={pending} type="submit">
+        {pending
+          ? "Moving…"
+          : nextStatus === "confirmed"
+            ? "Move up"
+            : "Move to waitlist"}
+      </button>
+      {state.status !== "idle" && (
+        <small data-state={state.status}>{state.message}</small>
+      )}
+    </form>
+  );
+}
+
 export function EventOperationsWorkspace({
   detail,
   workspace,
@@ -165,19 +488,31 @@ export function EventOperationsWorkspace({
   ).length;
   const partialTeams = detail.teams.filter((team) => team.needsAttention);
   const divisionGroups = [
-    ...new Set(detail.teams.map((team) => team.divisionName)),
+    ...new Map(
+      detail.teams.map((team) => [
+        team.divisionId,
+        { id: team.divisionId, name: team.divisionName },
+      ]),
+    ).values(),
   ]
-    .sort((left, right) => left.localeCompare(right))
-    .map((divisionName) => {
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((division) => {
       const teams = detail.teams.filter(
-        (team) => team.divisionName === divisionName,
+        (team) => team.divisionId === division.id,
       );
       return {
-        divisionName,
+        divisionId: division.id,
+        divisionName: division.name,
         teams,
         readyTeams: teams.filter((team) => !team.needsAttention).length,
         paidTeams: teams.filter(
           (team) => team.paidPlayers >= team.expectedTeamSize,
+        ).length,
+        confirmedTeams: teams.filter(
+          (team) => team.selectionStatus === "confirmed",
+        ).length,
+        waitlistedTeams: teams.filter(
+          (team) => team.selectionStatus === "waitlisted",
         ).length,
       };
     });
@@ -288,6 +623,7 @@ export function EventOperationsWorkspace({
           </span>
         </div>
         <div className="event-operations-hero__actions">
+          <EventManagementControls detail={detail} />
           {groupMessageHref ? (
             <a
               className="hq-button hq-button--secondary"
@@ -444,6 +780,17 @@ export function EventOperationsWorkspace({
               {detail.operations.cancelledByName ?? "Duna operator"} on{" "}
               {formatVenueTime(detail.operations.cancelledAt, session.timezone)}
             </small>
+            {detail.operations.refundSummary && (
+              <small>
+                {formatMoney(
+                  detail.operations.refundSummary.cashRefundMinor,
+                  detail.finance.currency,
+                )}{" "}
+                submitted · {detail.operations.refundSummary.creditsRestored}{" "}
+                credits restored · refund status{" "}
+                {detail.operations.refundStatus}
+              </small>
+            )}
           </span>
         </section>
       )}
@@ -468,23 +815,28 @@ export function EventOperationsWorkspace({
               </header>
               <div className="event-division-overview">
                 {divisionGroups.map((division) => (
-                  <article key={division.divisionName}>
-                    <span>
+                  <article key={division.divisionId}>
+                    <Link
+                      href={`/events/${session.id}/divisions/${division.divisionId}`}
+                    >
                       <small>Division</small>
-                      <strong>{division.divisionName}</strong>
-                    </span>
+                      <strong>
+                        {division.divisionName}{" "}
+                        <ArrowRight aria-hidden size={15} />
+                      </strong>
+                    </Link>
                     <dl>
                       <div>
                         <dt>Teams</dt>
                         <dd>{division.teams.length}</dd>
                       </div>
                       <div>
-                        <dt>Ready</dt>
-                        <dd>{division.readyTeams}</dd>
+                        <dt>Confirmed</dt>
+                        <dd>{division.confirmedTeams}</dd>
                       </div>
                       <div>
-                        <dt>Paid</dt>
-                        <dd>{division.paidTeams}</dd>
+                        <dt>Waitlist</dt>
+                        <dd>{division.waitlistedTeams}</dd>
                       </div>
                     </dl>
                   </article>
@@ -492,16 +844,19 @@ export function EventOperationsWorkspace({
               </div>
               <div className="event-team-operations__divisions">
                 {divisionGroups.map((division) => (
-                  <section key={division.divisionName}>
+                  <section key={division.divisionId}>
                     <header>
                       <span>
                         <small>Division</small>
                         <h3>{division.divisionName}</h3>
                       </span>
-                      <Badge>
-                        {division.teams.length} team
-                        {division.teams.length === 1 ? "" : "s"}
-                      </Badge>
+                      <Link
+                        className="event-division-open"
+                        href={`/events/${session.id}/divisions/${division.divisionId}`}
+                      >
+                        Pools, bracket + schedule{" "}
+                        <Trophy aria-hidden size={15} />
+                      </Link>
                     </header>
                     <div className="event-team-operations__list">
                       {division.teams.map((team) => (
@@ -511,66 +866,114 @@ export function EventOperationsWorkspace({
                           }
                           key={team.id}
                         >
-                          <header>
+                          <header className="event-team-card__identity">
+                            <span className="event-team-avatar-stack">
+                              {team.roster.slice(0, 3).map((member, index) => (
+                                <i key={`${team.id}:avatar:${index}`}>
+                                  {member.avatarUrl ? (
+                                    <img alt="" src={member.avatarUrl} />
+                                  ) : (
+                                    initials(member.displayName)
+                                  )}
+                                </i>
+                              ))}
+                            </span>
                             <span>
-                              <strong>{team.captainName}&apos;s team</strong>
+                              <strong>{team.name}</strong>
                               <small>
-                                {team.paymentMode === "team"
-                                  ? "captain pays"
-                                  : "players pay separately"}
+                                {team.roster
+                                  .map((member) => member.displayName)
+                                  .join(" · ")}
                               </small>
                             </span>
-                            <Badge
-                              tone={
-                                team.paidPlayers >= team.expectedTeamSize
-                                  ? "positive"
-                                  : "warning"
-                              }
-                            >
-                              {team.paidPlayers >= team.expectedTeamSize
-                                ? "Paid"
-                                : team.paidPlayers === 0
-                                  ? "Unpaid"
-                                  : `${team.paidPlayers}/${team.expectedTeamSize} paid`}
-                            </Badge>
+                            <span className="event-team-card__badges">
+                              {team.seed && <Badge>Seed {team.seed}</Badge>}
+                              <Badge
+                                tone={
+                                  team.selectionStatus === "confirmed"
+                                    ? "positive"
+                                    : team.selectionStatus === "waitlisted"
+                                      ? "warning"
+                                      : "neutral"
+                                }
+                              >
+                                {team.selectionStatus}
+                              </Badge>
+                            </span>
                           </header>
-                          <div className="event-team-operations__progress">
-                            <span>
-                              <small>Added</small>
-                              <strong>
-                                {team.playersAdded}/{team.expectedTeamSize}
-                              </strong>
-                            </span>
-                            <span>
-                              <small>Claimed</small>
-                              <strong>
-                                {team.claimedPlayers}/{team.expectedTeamSize}
-                              </strong>
-                            </span>
-                            <span>
-                              <small>Paid</small>
-                              <strong>
-                                {team.paidPlayers}/{team.expectedTeamSize}
-                              </strong>
-                            </span>
-                          </div>
-                          <div className="event-team-operations__roster">
-                            {team.roster.map((member, index) => (
-                              <span key={`${team.id}:${index}`}>
-                                <i>{initials(member.displayName)}</i>
-                                <span>
-                                  <strong>{member.displayName}</strong>
-                                  <small>
-                                    {member.status}
-                                    {member.deliveryStatus
-                                      ? ` · invite ${member.deliveryStatus}`
-                                      : ""}
-                                    {member.paid ? " · paid" : " · unpaid"}
-                                  </small>
+                          <dl className="event-team-card__facts">
+                            <div>
+                              <dt>Registered</dt>
+                              <dd>
+                                {formatVenueTime(
+                                  team.registeredAt,
+                                  session.timezone,
+                                  "en-US",
+                                  { month: "short", day: "numeric" },
+                                )}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Avg Sand Rating</dt>
+                              <dd>
+                                {team.averageRating?.toFixed(2) ?? "Not rated"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Payment</dt>
+                              <dd>
+                                {team.paidPlayers >= team.expectedTeamSize
+                                  ? "Fully paid"
+                                  : `${team.paidPlayers}/${team.expectedTeamSize} paid`}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Entry</dt>
+                              <dd>
+                                {team.paymentMode === "team"
+                                  ? "Captain paid"
+                                  : "Split payment"}
+                              </dd>
+                            </div>
+                          </dl>
+                          <div className="event-team-card__payments">
+                            {team.roster.map((member, index) => {
+                              const paymentPreview = member.orderId
+                                ? detail.cancellationPreview.orders.find(
+                                    (order) => order.orderId === member.orderId,
+                                  )
+                                : undefined;
+                              return (
+                                <span
+                                  key={`${team.id}:payment:${member.personId ?? index}`}
+                                >
+                                  <i>
+                                    <strong>{member.displayName}</strong>
+                                    <small>
+                                      {member.paid ? "Paid" : "Not paid"}
+                                    </small>
+                                  </i>
+                                  {member.orderId && (
+                                    <RefundPaymentControl
+                                      compact
+                                      currency={detail.finance.currency}
+                                      payerName={member.displayName}
+                                      preview={paymentPreview}
+                                      registrationId={team.registrationId}
+                                    />
+                                  )}
                                 </span>
-                              </span>
-                            ))}
+                              );
+                            })}
                           </div>
+                          <footer className="event-team-card__footer">
+                            <span>
+                              {team.fullyPaidAt
+                                ? `Fully paid ${formatVenueTime(team.fullyPaidAt, session.timezone, "en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+                                : "Waiting for roster/payment completion"}
+                            </span>
+                            <TeamSelectionControl team={team} />
+                          </footer>
                         </article>
                       ))}
                     </div>
@@ -621,6 +1024,14 @@ export function EventOperationsWorkspace({
                     </small>
                   </span>
                   <AttendanceControl attendee={attendee} />
+                  <RefundPaymentControl
+                    currency={detail.finance.currency}
+                    payerName={attendee.displayName}
+                    preview={detail.cancellationPreview.orders.find(
+                      (order) => order.orderId === attendee.orderId,
+                    )}
+                    registrationId={attendee.id}
+                  />
                   <Link
                     className="event-roster-list__open"
                     href={`/members/${attendee.personId}`}

@@ -3,6 +3,10 @@
   "buildCommand": "pnpm --filter @duna/db migrate && pnpm build",
   "crons": [
     {
+      "path": "/api/cron/event-operations",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/sand?mode=vw-live",
       "schedule": "* * * * *"
     },
