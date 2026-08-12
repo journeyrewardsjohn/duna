@@ -9015,7 +9015,12 @@ button {
 }
 
 .event-draft-manager {
+  padding: clamp(1rem, 1.8vw, 1.35rem);
   scroll-margin-top: 6rem;
+}
+
+.module-page > .event-draft-manager {
+  margin-bottom: clamp(1rem, 2vw, 1.5rem);
 }
 
 .event-draft-list {
@@ -24243,7 +24248,7 @@ body {
 .event-draft-job--edit {
   background: var(--color-aqua);
   border-color: var(--color-aqua);
-  color: var(--color-ink);
+  color: var(--color-on-primary);
 }
 
 .event-draft-job > span:first-child {
@@ -24277,7 +24282,7 @@ body {
 }
 
 .event-draft-job--edit small {
-  color: rgb(var(--depth-rgb) / 65%);
+  color: color-mix(in srgb, var(--color-on-primary) 72%, transparent);
 }
 
 .event-draft-review > summary {
