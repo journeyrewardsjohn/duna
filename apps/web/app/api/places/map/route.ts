@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  geocodedCoordinates,
+  mapboxStaticImageUrl,
+  publicMapboxToken,
+} from "../../../../lib/static-map";
 
 function fallbackMap(): Response {
   const svg = `
@@ -44,22 +49,63 @@ export async function GET(request: Request) {
     );
   }
 
-  const key = process.env.GOOGLE_PLACES_API_KEY;
-  if (!key) return fallbackMap();
+  const googleKey = process.env.GOOGLE_PLACES_API_KEY;
   const location = hasCoordinates ? `${latitude},${longitude}` : address;
-  const parameters = new URLSearchParams({
-    center: location,
-    zoom: "15",
-    size: "960x540",
-    scale: "2",
-    format: "png",
-    maptype: "roadmap",
-    markers: `size:mid|color:0x0d6370|${location}`,
-    key,
-  });
+  if (googleKey) {
+    const parameters = new URLSearchParams({
+      center: location,
+      zoom: "15",
+      size: "960x540",
+      scale: "2",
+      format: "png",
+      maptype: "roadmap",
+      markers: `size:mid|color:0x0d6370|${location}`,
+      key: googleKey,
+    });
+    try {
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/staticmap?${parameters.toString()}`,
+        { next: { revalidate: 86_400 } },
+      );
+      const contentType = response.headers.get("content-type") ?? "";
+      if (response.ok && contentType.startsWith("image/")) {
+        return new Response(await response.arrayBuffer(), {
+          headers: {
+            "Cache-Control": "public, max-age=3600, s-maxage=86400",
+            "Content-Type": contentType,
+          },
+        });
+      }
+    } catch {
+      // Mapbox below remains an independent raster fallback.
+    }
+  }
+
+  const mapboxToken = publicMapboxToken(process.env);
+  if (!mapboxToken) return fallbackMap();
+  let coordinates = hasCoordinates
+    ? { latitude: latitude!, longitude: longitude! }
+    : undefined;
+  if (!coordinates) {
+    try {
+      const parameters = new URLSearchParams({
+        q: address,
+        limit: "1",
+        access_token: mapboxToken,
+      });
+      const response = await fetch(
+        `https://api.mapbox.com/search/geocode/v6/forward?${parameters.toString()}`,
+        { next: { revalidate: 86_400 } },
+      );
+      if (response.ok) coordinates = geocodedCoordinates(await response.json());
+    } catch {
+      coordinates = undefined;
+    }
+  }
+  if (!coordinates) return fallbackMap();
   try {
     const response = await fetch(
-      `https://maps.googleapis.com/maps/api/staticmap?${parameters.toString()}`,
+      mapboxStaticImageUrl({ ...coordinates, token: mapboxToken }),
       { next: { revalidate: 86_400 } },
     );
     const contentType = response.headers.get("content-type") ?? "";

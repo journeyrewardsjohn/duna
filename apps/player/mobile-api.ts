@@ -4,6 +4,7 @@ import {
   type DeliveryEngine,
 } from "@duna/messaging-client";
 import { createTRPCClient, httpBatchLink, type TRPCClient } from "@trpc/client";
+import { File } from "expo-file-system";
 
 const defaultApiUrl = "https://duna.coach/api/trpc";
 const defaultWebUrl = "https://duna.coach";
@@ -96,11 +97,12 @@ export async function uploadPlayerMedia(
   const token = await getToken();
   if (!token) throw new Error("Sign in again before uploading your photo.");
   const form = new FormData();
-  form.append("file", {
-    uri: input.uri,
-    name: input.name ?? `duna-player-${Date.now()}.jpg`,
-    type: input.type ?? "image/jpeg",
-  } as unknown as Blob);
+  const file = new File(input.uri);
+  form.append(
+    "file",
+    file,
+    input.name ?? file.name ?? `duna-player-${Date.now()}.jpg`,
+  );
   form.append("width", String(input.width));
   form.append("height", String(input.height));
   const response = await fetch(

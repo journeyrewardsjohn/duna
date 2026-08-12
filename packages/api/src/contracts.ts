@@ -635,6 +635,7 @@ export const bookingSummarySchema = z.object({
     .optional(),
   team: z
     .object({
+      divisionId: z.string().uuid(),
       claimToken: z.string().uuid(),
       expectedTeamSize: z.number().int().min(2).max(6),
       paymentMode: z.enum(["self", "team"]),

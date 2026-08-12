@@ -39,6 +39,7 @@ import {
   registerForSession,
 } from "./commerce";
 import type { ApiActor } from "./context";
+import { evaluateDivisionCriteria } from "./division-eligibility";
 import { reconcileDivisionSelection } from "./event-operations-service";
 import { hasActiveDunaPlusMembership } from "./membership";
 import { resolveOrganizationCommissionPolicy } from "./organization-billing";
@@ -199,32 +200,6 @@ function personInitials(displayName: string): string {
     .toUpperCase();
 }
 
-function genderEligibility(
-  requirement?: string,
-  candidate?: string | null,
-): { readonly eligible: boolean; readonly reason?: string } {
-  const required = requirement?.trim().toLowerCase() ?? "";
-  const value = candidate?.trim().toLowerCase() ?? "";
-  const womenOnly = /women|woman|female|girls?/.test(required);
-  const menOnly =
-    !womenOnly && /(^|\W)(men|man|male|boys?)(\W|$)/.test(required);
-  if (!womenOnly && !menOnly) return { eligible: true };
-  if (!value) {
-    return { eligible: false, reason: "Gender eligibility is not verified" };
-  }
-  const matchesWomen = /women|woman|female|girls?/.test(value);
-  const matchesMen = /(^|\W)(men|man|male|boys?)(\W|$)/.test(value);
-  return womenOnly
-    ? {
-        eligible: matchesWomen,
-        reason: matchesWomen ? undefined : "This is a women's division",
-      }
-    : {
-        eligible: matchesMen,
-        reason: matchesMen ? undefined : "This is a men's division",
-      };
-}
-
 export async function searchEventTeammates(input: {
   readonly actor: ApiActor;
   readonly query?: string;
@@ -250,6 +225,12 @@ export async function searchEventTeammates(input: {
     readonly ageMaximum?: number;
     readonly gender?: string;
   };
+  const divisionSession = division?.sessionId
+    ? await database.query.sessions.findFirst({
+        where: eq(sessions.id, division.sessionId),
+      })
+    : undefined;
+  const eligibilityDate = divisionSession?.startsAt ?? input.now;
   const discipline = division?.discipline ?? "beach-2s";
   const rows = await database.execute(sql`
     WITH actor_teams AS (
@@ -332,50 +313,16 @@ export async function searchEventTeammates(input: {
     shared_teams: number;
   };
   return (rows.rows as unknown as SearchRow[]).map((row) => {
-    const ratingDisplay = row.display ?? 3;
-    const reasons: string[] = [];
-    if (
-      settings.ratingMinimum !== undefined &&
-      ratingDisplay < settings.ratingMinimum
-    ) {
-      reasons.push(`Rating below ${settings.ratingMinimum.toFixed(2)}`);
-    }
-    if (
-      settings.ratingMaximum !== undefined &&
-      ratingDisplay > settings.ratingMaximum
-    ) {
-      reasons.push(`Rating above ${settings.ratingMaximum.toFixed(2)}`);
-    }
-    const age = row.birth_date
-      ? Math.floor(
-          (input.now.getTime() -
-            new Date(`${row.birth_date}T00:00:00Z`).getTime()) /
-            (365.2425 * 24 * 60 * 60_000),
-        )
-      : undefined;
-    if (
-      settings.ageMinimum !== undefined &&
-      age !== undefined &&
-      age < settings.ageMinimum
-    ) {
-      reasons.push(`Must be ${settings.ageMinimum}+`);
-    }
-    if (
-      settings.ageMaximum !== undefined &&
-      age !== undefined &&
-      age > settings.ageMaximum
-    ) {
-      reasons.push(`Must be ${settings.ageMaximum} or younger`);
-    }
-    if (
-      (settings.ageMinimum !== undefined ||
-        settings.ageMaximum !== undefined) &&
-      age === undefined
-    ) {
-      reasons.push("Age is not verified");
-    }
-    const gender = genderEligibility(settings.gender, row.gender_category);
-    if (!gender.eligible && gender.reason) reasons.push(gender.reason);
+    const ratingDisplay = row.display ?? 1;
+    const criteria = evaluateDivisionCriteria({
+      asOf: eligibilityDate,
+      criteria: settings,
+      participant: {
+        birthDate: row.birth_date,
+        genderCategory: row.gender_category,
+        rating: ratingDisplay,
+      },
+    });
     return {
       person: {
         id: row.id,
@@ -406,8 +353,8 @@ export async function searchEventTeammates(input: {
             : "search",
       sharedTeams: row.shared_teams,
       gender: row.gender_category ?? "Not listed",
-      eligible: reasons.length === 0,
-      eligibilityReasons: reasons,
+      eligible: criteria.eligible,
+      eligibilityReasons: criteria.reasons,
     };
   });
 }
@@ -2535,6 +2482,14 @@ export async function claimTeamEntry(input: {
     );
   }
   if (record.payingPersonId !== input.actor.personId) {
+    await evaluateRegistrationForSession({
+      actor: input.actor,
+      sessionId: record.sessionId,
+      divisionId: record.divisionId,
+      subjectPersonId: input.actor.personId,
+      inviteCodes: [],
+      now: input.now,
+    });
     const person = await database.query.people.findFirst({
       where: eq(people.id, input.actor.personId),
     });

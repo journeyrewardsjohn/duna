@@ -108,6 +108,7 @@ import type {
 } from "./repository-contract";
 import { loadGuardianReviewQueue } from "./identity";
 import { loadIdentityVerification } from "./identity-verification";
+import { resolveCanonicalEventLocation } from "./event-location";
 import { getDunaPlusEntitlement, membershipPlanOffers } from "./membership";
 import { resolveOrganizationCommissionPolicy } from "./organization-billing";
 
@@ -954,6 +955,15 @@ async function loadEvents(input?: {
         priceCurrency: eventTypes.currency,
         venueName: venues.name,
         venueOrganizationId: venues.organizationId,
+        venueAddressLine1: venues.addressLine1,
+        venueAddressLine2: venues.addressLine2,
+        venueLocality: venues.locality,
+        venueAdministrativeArea: venues.administrativeArea,
+        venuePostalCode: venues.postalCode,
+        venueCountryCode: venues.countryCode,
+        venueGooglePlaceId: venues.googlePlaceId,
+        venueLatitude: venues.latitude,
+        venueLongitude: venues.longitude,
       })
       .from(sessions)
       .leftJoin(programs, eq(sessions.programId, programs.id))
@@ -1294,6 +1304,23 @@ async function loadEvents(input?: {
     const occupied = registrationCount.get(row.id) ?? 0;
     const blueprint = blueprintBySession.get(row.id);
     const blueprintLocation = blueprint?.location as EventLocation | undefined;
+    const eventLocation = resolveCanonicalEventLocation({
+      blueprint: blueprintLocation,
+      venue: {
+        name: row.venueName,
+        address: venueAddress({
+          addressLine1: row.venueAddressLine1,
+          addressLine2: row.venueAddressLine2,
+          locality: row.venueLocality,
+          administrativeArea: row.venueAdministrativeArea,
+          postalCode: row.venuePostalCode,
+          countryCode: row.venueCountryCode,
+        }),
+        googlePlaceId: row.venueGooglePlaceId,
+        latitude: row.venueLatitude,
+        longitude: row.venueLongitude,
+      },
+    });
     const eventDivisions: NonNullable<EventSummary["divisions"]> = divisionRows
       .filter((division) => division.sessionId === row.id)
       .map((division) => {
@@ -1412,7 +1439,7 @@ async function loadEvents(input?: {
           (organizationId && organizationNames.get(organizationId)) ??
           "Independent organizer",
         venueName:
-          blueprintLocation?.venueName ??
+          eventLocation?.venueName ??
           row.venueName ??
           "Location shared after registration",
         shortSummary: blueprint?.shortSummary ?? undefined,
@@ -1432,17 +1459,7 @@ async function loadEvents(input?: {
           blueprint && blueprint.media.length > 0
             ? (blueprint.media as unknown as readonly EventMedia[])
             : undefined,
-        location: blueprintLocation
-          ? {
-              ...blueprintLocation,
-              confidence:
-                blueprintLocation.googlePlaceId &&
-                blueprintLocation.latitude !== undefined &&
-                blueprintLocation.longitude !== undefined
-                  ? "confirmed"
-                  : "approximate",
-            }
-          : undefined,
+        location: eventLocation,
         features:
           blueprint && blueprint.features.length > 0
             ? (blueprint.features as unknown as readonly EventFeature[]).map(
@@ -2540,6 +2557,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
     database
       .select({
         id: registrations.id,
+        registrationDivisionId: registrations.divisionId,
         sessionId: sessions.id,
         sessionSlug: sessions.slug,
         title: sessions.title,
@@ -2929,6 +2947,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
           canCancel: row.startsAt.getTime() > now.getTime(),
           cancellationDeadline: row.startsAt.toISOString(),
           ...(row.teamClaimToken &&
+          row.registrationDivisionId &&
           row.teamExpectedSize &&
           (row.teamPaymentMode === "self" || row.teamPaymentMode === "team") &&
           (row.teamStatus === "assembling" ||
@@ -2938,6 +2957,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
             row.teamStatus === "expired")
             ? {
                 team: {
+                  divisionId: row.registrationDivisionId,
                   claimToken: row.teamClaimToken,
                   expectedTeamSize: row.teamExpectedSize,
                   paymentMode: row.teamPaymentMode,
