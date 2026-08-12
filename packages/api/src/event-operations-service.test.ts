@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   collectRegistrationOrderIds,
   planDivisionSelection,
+  registrationCanReceiveEventCancellationRefund,
   registrationRefundIsComplete,
 } from "./event-operations-service";
 
@@ -172,6 +173,15 @@ describe("planDivisionSelection", () => {
 });
 
 describe("event registration refund coverage", () => {
+  it("includes legacy cancelled registrations until their payment is refunded", () => {
+    expect(registrationCanReceiveEventCancellationRefund("cancelled")).toBe(
+      true,
+    );
+    expect(registrationCanReceiveEventCancellationRefund("refunded")).toBe(
+      false,
+    );
+  });
+
   it("includes the captain and every split-pay teammate order once", () => {
     expect(
       collectRegistrationOrderIds("captain-order", [
