@@ -80,7 +80,10 @@ import { HealthScreen } from "./health-screen";
 import { HealthHistorySyncAgent } from "./health-history-sync-agent";
 import { LiveActivitiesPrompt } from "./live-activities-prompt";
 import { PlayerCalendarSettings } from "./calendar-settings";
-import { TournamentPasses } from "./tournament-passes";
+import {
+  TournamentPasses,
+  TournamentWalletConfirmation,
+} from "./tournament-passes";
 import {
   BookingManagementModal,
   type ManagedBooking,
@@ -105,6 +108,7 @@ import {
 } from "./player-social";
 import { DiscoveryMapModal, DiscoveryMapPreview } from "./discovery-map";
 import {
+  admissionPassReady,
   checkoutRosterComplete,
   initialPurchaseKind,
 } from "./event-checkout-state";
@@ -9735,6 +9739,8 @@ function BookingModal({
     readonly title: string;
     readonly body: string;
     readonly label: string;
+    readonly admissionReady: boolean;
+    readonly admissionKind: "player-registration" | "fan-ticket";
   }>();
   const [purchaseKind, setPurchaseKind] = useState<"entry" | "ticket">("entry");
   const [divisionId, setDivisionId] = useState<string>();
@@ -10064,14 +10070,33 @@ function BookingModal({
             });
           }
         }
+        const pendingApproval = status.fulfillmentStatus === "pending-approval";
         setComplete(
           status.complete
             ? {
-                label: "Confirmed",
-                title: "You’re in.",
-                body: `${selectedEvent.title} is confirmed and now appears with your bookings.`,
+                admissionKind:
+                  purchaseKind === "ticket"
+                    ? "fan-ticket"
+                    : "player-registration",
+                admissionReady: admissionPassReady({
+                  checkoutComplete: status.complete,
+                  eventKind: selectedEvent.kind,
+                  fulfillmentStatus: status.fulfillmentStatus,
+                  purchaseKind,
+                  registrationStatus: status.registrationStatus,
+                }),
+                label: pendingApproval ? "Pending approval" : "Confirmed",
+                title: pendingApproval ? "Request received." : "You’re in.",
+                body: pendingApproval
+                  ? `${selectedEvent.title} is paid and waiting for organizer approval. Your admission pass will appear as soon as the ticket is issued.`
+                  : `${selectedEvent.title} is confirmed and now appears with your bookings.`,
               }
             : {
+                admissionKind:
+                  purchaseKind === "ticket"
+                    ? "fan-ticket"
+                    : "player-registration",
+                admissionReady: false,
                 label: "Pending",
                 title: "Payment received.",
                 body: "Duna is finishing the registration and will add it to your bookings shortly.",
@@ -10089,14 +10114,34 @@ function BookingModal({
               checkoutSessionId: result.checkoutSessionId,
             })
           : undefined;
+        const pendingApproval =
+          status?.fulfillmentStatus === "pending-approval";
         setComplete(
           status?.complete
             ? {
-                label: "Confirmed",
-                title: "You’re in.",
-                body: `${selectedEvent.title} is confirmed and now appears with your bookings.`,
+                admissionKind:
+                  purchaseKind === "ticket"
+                    ? "fan-ticket"
+                    : "player-registration",
+                admissionReady: admissionPassReady({
+                  checkoutComplete: true,
+                  eventKind: selectedEvent.kind,
+                  fulfillmentStatus: status.fulfillmentStatus,
+                  purchaseKind,
+                  registrationStatus: status.registrationStatus,
+                }),
+                label: pendingApproval ? "Pending approval" : "Confirmed",
+                title: pendingApproval ? "Request received." : "You’re in.",
+                body: pendingApproval
+                  ? `${selectedEvent.title} is paid and waiting for organizer approval. Your admission pass will appear as soon as the ticket is issued.`
+                  : `${selectedEvent.title} is confirmed and now appears with your bookings.`,
               }
             : {
+                admissionKind:
+                  purchaseKind === "ticket"
+                    ? "fan-ticket"
+                    : "player-registration",
+                admissionReady: false,
                 label: "Pending",
                 title: "Checkout is still processing.",
                 body: "Duna will confirm the booking after the payment succeeds.",
@@ -10105,20 +10150,36 @@ function BookingModal({
       } else {
         const waitlisted = result.mode === "waitlist";
         const alreadyRegistered = result.mode === "already-registered";
+        const pendingApproval = result.fulfillmentStatus === "pending-approval";
         setComplete({
+          admissionKind:
+            purchaseKind === "ticket" ? "fan-ticket" : "player-registration",
+          admissionReady: admissionPassReady({
+            checkoutComplete: !waitlisted,
+            eventKind: selectedEvent.kind,
+            fulfillmentStatus: result.fulfillmentStatus,
+            purchaseKind,
+            registrationStatus: result.registrationStatus,
+          }),
           label: waitlisted
             ? "Waitlisted"
-            : alreadyRegistered
-              ? "Already registered"
-              : "Confirmed",
+            : pendingApproval
+              ? "Pending approval"
+              : alreadyRegistered
+                ? "Already registered"
+                : "Confirmed",
           title: waitlisted
             ? "You’re on the list."
-            : alreadyRegistered
-              ? "You already have this booking."
-              : "You’re in.",
+            : pendingApproval
+              ? "Request received."
+              : alreadyRegistered
+                ? "You already have this booking."
+                : "You’re in.",
           body: waitlisted
             ? `${selectedEvent.title} will notify you if a place opens.`
-            : `${selectedEvent.title} now appears with your bookings.`,
+            : pendingApproval
+              ? `${selectedEvent.title} is waiting for organizer approval. Your admission pass will appear as soon as the ticket is issued.`
+              : `${selectedEvent.title} now appears with your bookings.`,
         });
       }
       await refresh();
@@ -10138,7 +10199,7 @@ function BookingModal({
         ) <
           15 * 60_000),
   );
-  if (existingBooking) {
+  if (existingBooking && !complete) {
     return (
       <BookingManagementModal
         booking={existingBooking as ManagedBooking}
@@ -10187,7 +10248,14 @@ function BookingModal({
                   label={complete.label}
                   onDone={close}
                   title={complete.title}
-                />
+                >
+                  {complete.admissionReady ? (
+                    <TournamentWalletConfirmation
+                      kind={complete.admissionKind}
+                      sessionId={selectedEvent.id}
+                    />
+                  ) : null}
+                </BookingConfirmationView>
               ) : (
                 <>
                   <View style={styles.hostedReviewHeader}>
@@ -10428,7 +10496,14 @@ function BookingModal({
             label={complete.label}
             onDone={close}
             title={complete.title}
-          />
+          >
+            {complete.admissionReady ? (
+              <TournamentWalletConfirmation
+                kind={complete.admissionKind}
+                sessionId={selectedEvent.id}
+              />
+            ) : null}
+          </BookingConfirmationView>
         ) : (
           <ScrollView contentContainerStyle={styles.modalContent}>
             <View style={styles.modalHeader}>

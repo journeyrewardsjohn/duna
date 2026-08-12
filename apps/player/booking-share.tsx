@@ -1,4 +1,5 @@
 import { Pressable, ScrollView, Share, StyleSheet, View } from "react-native";
+import type { ReactNode } from "react";
 import {
   bookingDateTime,
   buildBookingShareMessage,
@@ -35,6 +36,7 @@ function DetailRow({
 
 export function BookingConfirmationView({
   body,
+  children,
   details,
   label = "Confirmed",
   onDone,
@@ -43,6 +45,7 @@ export function BookingConfirmationView({
   title = "You’re in.",
 }: {
   readonly body?: string;
+  readonly children?: ReactNode;
   readonly details: ShareableBookingDetails;
   readonly label?: string;
   readonly onDone: () => void;
@@ -75,6 +78,7 @@ export function BookingConfirmationView({
           value={details.playerNames?.filter(Boolean).join(", ")}
         />
       </View>
+      {children}
       <Pressable
         accessibilityLabel={`Share ${details.title}`}
         onPress={() => void shareBooking(details)}
