@@ -1,7 +1,7 @@
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -18,6 +18,7 @@ import {
   FellixText as Text,
   FellixTextInput as TextInput,
 } from "./fellix-text";
+import type { UploadedPlayerMedia } from "./mobile-api";
 import { usePlayerRuntime } from "./runtime";
 
 const palette = {
@@ -332,7 +333,26 @@ export function ProfileEditorModal({
 
 type SelectedPhoto = ImagePicker.ImagePickerAsset & {
   readonly localId: string;
+  readonly uploadError?: string;
+  readonly uploadStatus: "queued" | "uploading" | "uploaded" | "failed";
 };
+
+function isHighResolutionArtworkPhoto(photo: {
+  readonly height: number;
+  readonly width: number;
+}) {
+  return (
+    Math.min(photo.width, photo.height) >= 1_080 &&
+    photo.width * photo.height >= 2_000_000
+  );
+}
+
+function photoUploadLabel(photo: SelectedPhoto) {
+  if (!isHighResolutionArtworkPhoto(photo)) return "REPLACE";
+  if (photo.uploadStatus === "uploaded") return "READY";
+  if (photo.uploadStatus === "failed") return "RETRY";
+  return "UPLOADING";
+}
 
 function artworkStatus(status: string | undefined) {
   if (status === "published") return "Published on your profile";
@@ -359,6 +379,10 @@ export function PlayerArtworkModal({
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
   const [latestStatus, setLatestStatus] = useState<string>();
+  const uploadedPhotos = useRef(new Map<string, UploadedPlayerMedia>());
+  const uploadPromises = useRef(
+    new Map<string, Promise<UploadedPlayerMedia>>(),
+  );
 
   useEffect(() => {
     if (!visible || !client || mode === "preview") return;
@@ -375,14 +399,103 @@ export function PlayerArtworkModal({
   }, [client, mode, visible]);
 
   const validPhotos = useMemo(
-    () =>
-      photos.filter(
-        (photo) =>
-          Math.min(photo.width, photo.height) >= 1_080 &&
-          photo.width * photo.height >= 2_000_000,
-      ),
+    () => photos.filter(isHighResolutionArtworkPhoto),
     [photos],
   );
+
+  const uploadCounts = useMemo(
+    () => ({
+      failed: photos.filter((photo) => photo.uploadStatus === "failed").length,
+      ready: photos.filter((photo) => photo.uploadStatus === "uploaded").length,
+      uploading: photos.filter(
+        (photo) =>
+          isHighResolutionArtworkPhoto(photo) &&
+          (photo.uploadStatus === "queued" ||
+            photo.uploadStatus === "uploading"),
+      ).length,
+    }),
+    [photos],
+  );
+
+  const startPhotoUpload = useCallback(
+    (photo: SelectedPhoto): Promise<UploadedPlayerMedia> => {
+      const uploaded = uploadedPhotos.current.get(photo.localId);
+      if (uploaded) return Promise.resolve(uploaded);
+
+      const pending = uploadPromises.current.get(photo.localId);
+      if (pending) return pending;
+
+      if (!uploadPlayerMedia || mode === "preview") {
+        return Promise.reject(
+          new Error("Sign in to upload your artwork photos."),
+        );
+      }
+
+      setPhotos((current) =>
+        current.map((item) =>
+          item.localId === photo.localId
+            ? { ...item, uploadError: undefined, uploadStatus: "uploading" }
+            : item,
+        ),
+      );
+
+      const promise = uploadPlayerMedia({
+        uri: photo.uri,
+        name: photo.fileName ?? `duna-action-${photo.localId}.jpg`,
+        type: photo.mimeType ?? "image/jpeg",
+        width: photo.width,
+        height: photo.height,
+      })
+        .then((nextUploaded) => {
+          uploadedPhotos.current.set(photo.localId, nextUploaded);
+          setPhotos((current) =>
+            current.map((item) =>
+              item.localId === photo.localId
+                ? {
+                    ...item,
+                    uploadError: undefined,
+                    uploadStatus: "uploaded",
+                  }
+                : item,
+            ),
+          );
+          return nextUploaded;
+        })
+        .catch((reason: unknown) => {
+          const message =
+            reason instanceof Error
+              ? reason.message
+              : "This photo could not be uploaded.";
+          setPhotos((current) =>
+            current.map((item) =>
+              item.localId === photo.localId
+                ? { ...item, uploadError: message, uploadStatus: "failed" }
+                : item,
+            ),
+          );
+          throw reason;
+        })
+        .finally(() => {
+          uploadPromises.current.delete(photo.localId);
+        });
+
+      uploadPromises.current.set(photo.localId, promise);
+      return promise;
+    },
+    [mode, uploadPlayerMedia],
+  );
+
+  useEffect(() => {
+    if (!visible || mode === "preview" || !uploadPlayerMedia) return;
+    for (const photo of photos) {
+      if (
+        photo.uploadStatus === "queued" &&
+        isHighResolutionArtworkPhoto(photo)
+      ) {
+        void startPhotoUpload(photo).catch(() => undefined);
+      }
+    }
+  }, [mode, photos, startPhotoUpload, uploadPlayerMedia, visible]);
 
   const choosePhotos = async () => {
     setError(undefined);
@@ -395,6 +508,10 @@ export function PlayerArtworkModal({
       mediaTypes: ["images"],
       allowsMultipleSelection: true,
       selectionLimit: Math.max(1, 5 - photos.length),
+      // Expo 57 defaults to `Current`, which preserves HEIC/HEIF. Asking iOS
+      // for its automatic representation restores the portable JPEG path.
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Automatic,
       quality: 1,
       orderedSelection: true,
     });
@@ -402,11 +519,10 @@ export function PlayerArtworkModal({
     const selected = result.assets.map((asset) => ({
       ...asset,
       localId: `${asset.uri}-${Crypto.randomUUID()}`,
+      uploadStatus: "queued" as const,
     }));
     const tooSmall = selected.filter(
-      (asset) =>
-        Math.min(asset.width, asset.height) < 1_080 ||
-        asset.width * asset.height < 2_000_000,
+      (asset) => !isHighResolutionArtworkPhoto(asset),
     );
     setPhotos((current) => [...current, ...selected].slice(0, 5));
     if (tooSmall.length) {
@@ -437,23 +553,14 @@ export function PlayerArtworkModal({
     }
     setBusy(true);
     try {
-      const referenceImages = [];
-      for (const [index, photo] of photos.entries()) {
-        setProgress(`Uploading ${index + 1} of ${photos.length}`);
-        const uploaded = await uploadPlayerMedia({
-          uri: photo.uri,
-          name: photo.fileName ?? `duna-action-${index + 1}.jpg`,
-          type: photo.mimeType ?? "image/jpeg",
-          width: photo.width,
-          height: photo.height,
-        });
-        referenceImages.push({
-          url: uploaded.url,
-          kind: "action" as const,
-          width: uploaded.width,
-          height: uploaded.height,
-        });
-      }
+      setProgress("Finishing photo uploads");
+      const uploads = await Promise.all(photos.map(startPhotoUpload));
+      const referenceImages = uploads.map((uploaded) => ({
+        url: uploaded.url,
+        kind: "action" as const,
+        width: uploaded.width,
+        height: uploaded.height,
+      }));
       setProgress("Creating your review package");
       const workflow = await client.player.createPlayerMediaWorkflow.mutate({
         referenceImages,
@@ -467,9 +574,11 @@ export function PlayerArtworkModal({
       ).catch(() => undefined);
       setLatestStatus(workflow.status);
       setNotice(
-        "Your action photos are securely uploaded. Duna will create the artwork, then keep it in review until you approve it.",
+        "Artwork creation started immediately. It stays in review until you approve it.",
       );
       setPhotos([]);
+      uploadedPhotos.current.clear();
+      uploadPromises.current.clear();
       setBrief("");
       setRightsConfirmed(false);
     } catch (reason) {
@@ -527,9 +636,8 @@ export function PlayerArtworkModal({
             </View>
             <View style={styles.photoGrid}>
               {photos.map((photo, index) => {
-                const highResolution =
-                  Math.min(photo.width, photo.height) >= 1_080 &&
-                  photo.width * photo.height >= 2_000_000;
+                const highResolution = isHighResolutionArtworkPhoto(photo);
+                const uploadLabel = photoUploadLabel(photo);
                 return (
                   <View key={photo.localId} style={styles.photoCard}>
                     <Image source={{ uri: photo.uri }} style={styles.photo} />
@@ -540,21 +648,43 @@ export function PlayerArtworkModal({
                       <Text
                         style={[
                           styles.photoQuality,
-                          !highResolution && styles.photoQualityBad,
+                          (!highResolution ||
+                            photo.uploadStatus === "failed") &&
+                            styles.photoQualityBad,
                         ]}
                       >
-                        {highResolution ? "HIGH RES" : "REPLACE"}
+                        {uploadLabel}
                       </Text>
+                      {highResolution &&
+                        (photo.uploadStatus === "queued" ||
+                          photo.uploadStatus === "uploading") && (
+                          <ActivityIndicator color={palette.aqua} size={10} />
+                        )}
                     </View>
+                    {photo.uploadStatus === "failed" && highResolution && (
+                      <Pressable
+                        accessibilityLabel={`Retry action photo ${index + 1}`}
+                        accessibilityRole="button"
+                        onPress={() =>
+                          void startPhotoUpload(photo).catch(() => undefined)
+                        }
+                        style={styles.retryPhoto}
+                      >
+                        <Text style={styles.retryPhotoText}>Retry upload</Text>
+                      </Pressable>
+                    )}
                     <Pressable
                       accessibilityLabel={`Remove action photo ${index + 1}`}
-                      onPress={() =>
+                      accessibilityRole="button"
+                      disabled={busy}
+                      onPress={() => {
+                        uploadedPhotos.current.delete(photo.localId);
                         setPhotos((current) =>
                           current.filter(
                             (item) => item.localId !== photo.localId,
                           ),
-                        )
-                      }
+                        );
+                      }}
                       style={styles.removePhoto}
                     >
                       <Text style={styles.removePhotoText}>×</Text>
@@ -564,6 +694,8 @@ export function PlayerArtworkModal({
               })}
               {photos.length < 5 && (
                 <Pressable
+                  accessibilityRole="button"
+                  disabled={busy}
                   onPress={() => void choosePhotos()}
                   style={styles.addPhoto}
                 >
@@ -577,6 +709,33 @@ export function PlayerArtworkModal({
                 </Pressable>
               )}
             </View>
+            {uploadCounts.uploading > 0 && (
+              <Text style={styles.progress}>
+                Uploading {uploadCounts.uploading} photo
+                {uploadCounts.uploading === 1 ? "" : "s"} now. Keep going—this
+                continues in the background.
+              </Text>
+            )}
+            {photos.length > 0 &&
+              validPhotos.length === photos.length &&
+              uploadCounts.ready === validPhotos.length &&
+              uploadCounts.failed === 0 && (
+                <Text style={styles.uploadReady}>
+                  ✓ Photos uploaded. Finish your direction and submit when
+                  ready.
+                </Text>
+              )}
+            {uploadCounts.failed > 0 && (
+              <Text style={styles.error}>
+                {uploadCounts.failed} photo
+                {uploadCounts.failed === 1 ? " needs" : "s need"} another upload
+                attempt. Tap Retry on the photo.{" "}
+                {
+                  photos.find((photo) => photo.uploadStatus === "failed")
+                    ?.uploadError
+                }
+              </Text>
+            )}
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>
                 CREATIVE DIRECTION · OPTIONAL
@@ -785,6 +944,7 @@ const styles = StyleSheet.create({
   photoMeta: {
     alignItems: "center",
     flexDirection: "row",
+    gap: 6,
     justifyContent: "space-between",
     paddingHorizontal: 10,
     paddingVertical: 9,
@@ -821,6 +981,17 @@ const styles = StyleSheet.create({
     width: 32,
   },
   removePhotoText: { color: palette.paper, fontSize: 21, lineHeight: 24 },
+  retryPhoto: {
+    alignItems: "center",
+    backgroundColor: palette.paper,
+    bottom: 0,
+    justifyContent: "center",
+    left: 0,
+    minHeight: 48,
+    position: "absolute",
+    right: 0,
+  },
+  retryPhotoText: { color: palette.coral, fontSize: 12, fontWeight: "900" },
   rights: {
     alignItems: "flex-start",
     backgroundColor: palette.paper,
@@ -864,4 +1035,10 @@ const styles = StyleSheet.create({
   },
   textarea: { minHeight: 112, textAlignVertical: "top" },
   title: { color: palette.ink, fontSize: 25, fontWeight: "800", marginTop: 2 },
+  uploadReady: {
+    color: palette.marine,
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 20,
+  },
 });
