@@ -8475,10 +8475,21 @@ button {
 .division-control-card button,
 .division-bracket-builder button,
 .division-match-schedule button {
-  background: var(--color-depth);
-  color: var(--color-white);
+  align-items: center;
+  background: var(--color-aqua);
+  border-color: var(--color-aqua);
+  color: var(--color-on-primary);
   cursor: pointer;
+  display: inline-flex;
   font-weight: 800;
+  justify-content: center;
+}
+
+.division-control-card button:disabled,
+.division-bracket-builder button:disabled,
+.division-match-schedule button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .division-registration-board,
