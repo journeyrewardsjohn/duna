@@ -883,7 +883,6 @@ async function existingCheckoutResult(input: {
   readonly registrationId?: string;
   readonly teamClaimToken?: string;
   readonly paymentSurface: "hosted" | "native";
-  readonly pricing: EventCheckoutResult["pricing"];
 }): Promise<EventCheckoutResult | undefined> {
   const order = await getDatabase().query.orders.findFirst({
     where: eq(orders.id, input.orderId),
@@ -891,6 +890,12 @@ async function existingCheckoutResult(input: {
   if (!order || !isStripeConfigured()) {
     return undefined;
   }
+  const orderPricing = {
+    subtotalMinor: order.subtotalMinor,
+    feeTotalMinor: order.feeTotalMinor,
+    totalMinor: order.totalMinor,
+    currency: currency(order.currency),
+  };
 
   if (input.paymentSurface === "native") {
     if (!order.stripePaymentIntentId) return undefined;
@@ -918,7 +923,7 @@ async function existingCheckoutResult(input: {
           await createMobilePaymentCustomerSession(customerId),
       },
       expiresAt: order.expiresAt?.toISOString(),
-      pricing: input.pricing,
+      pricing: orderPricing,
     };
   }
 
@@ -936,8 +941,33 @@ async function existingCheckoutResult(input: {
     checkoutSessionId: checkout.id,
     checkoutUrl: checkout.url,
     expiresAt: new Date(checkout.expires_at * 1_000).toISOString(),
-    pricing: input.pricing,
+    pricing: orderPricing,
   };
+}
+
+export function resolveRegistrationUnitAmount(input: {
+  readonly currentUnitAmountMinor: number;
+  readonly paidRegistration?: boolean;
+  readonly paidRegistrationUnitAmountMinor?: number;
+}): number {
+  if (
+    input.paidRegistration &&
+    input.paidRegistrationUnitAmountMinor === undefined
+  ) {
+    throw new CheckoutError(
+      "CHECKOUT_UNAVAILABLE",
+      "The paid registration price snapshot is unavailable. No new amount was charged.",
+    );
+  }
+  const amount =
+    input.paidRegistrationUnitAmountMinor ?? input.currentUnitAmountMinor;
+  if (!Number.isSafeInteger(amount) || amount < 0) {
+    throw new CheckoutError(
+      "CHECKOUT_UNAVAILABLE",
+      "The registration price snapshot is invalid.",
+    );
+  }
+  return amount;
 }
 
 interface CheckoutTeamMember {
@@ -1288,7 +1318,7 @@ export async function startEventCheckout(input: {
     event.source === "pickup"
       ? pickupSubjectPersonIds.length
       : (event.quantity ?? 1);
-  const unitAmountMinor =
+  const currentUnitAmountMinor =
     event.source === "pickup"
       ? pickupPerPersonAmount!
       : event.ticketTypeId
@@ -1296,6 +1326,19 @@ export async function startEventCheckout(input: {
         : expectedTeamSize > 1 && input.teamPaymentMode === "team"
           ? (event.teamPriceMinor ?? event.priceMinor)
           : (event.playerPriceMinor ?? event.priceMinor);
+  const paidRegistration = Boolean(
+    joiningTeam &&
+    (joiningTeam.orderStatus === "paid" ||
+      joiningTeam.orderStatus === "partially-refunded"),
+  );
+  const unitAmountMinor = resolveRegistrationUnitAmount({
+    currentUnitAmountMinor,
+    paidRegistration,
+    paidRegistrationUnitAmountMinor:
+      paidRegistration && joiningTeam
+        ? (joiningTeam.originalPlayerPriceMinor ?? undefined)
+        : undefined,
+  });
   const priced = priceConsumerOrder({
     currency: event.currency,
     isDunaPlus: hasDunaPlus,
@@ -1772,7 +1815,6 @@ export async function startEventCheckout(input: {
         registrationId: heldRegistration.id,
         teamClaimToken,
         paymentSurface: input.paymentSurface ?? "hosted",
-        pricing,
       });
       if (resumed) return resumed;
       throw new CheckoutError(
@@ -1785,7 +1827,6 @@ export async function startEventCheckout(input: {
       registrationId: hold.registration_id,
       teamClaimToken,
       paymentSurface: input.paymentSurface ?? "hosted",
-      pricing,
     });
     if (resumed) return resumed;
   }
@@ -2174,6 +2215,7 @@ async function loadTeamClaimRecord(claimToken: string) {
         registrationSettings: eventBlueprints.registrationSettings,
         registrationStatus: registrations.status,
         orderStatus: orders.status,
+        originalPlayerPriceMinor: orderItems.unitAmountMinor,
         divisionId: divisions.id,
         divisionName: divisions.name,
         captainName: people.displayName,
@@ -2191,6 +2233,13 @@ async function loadTeamClaimRecord(claimToken: string) {
       .leftJoin(eventBlueprints, eq(sessions.id, eventBlueprints.sessionId))
       .innerJoin(people, eq(teamEntries.payingPersonId, people.id))
       .leftJoin(orders, eq(registrations.orderId, orders.id))
+      .leftJoin(
+        orderItems,
+        and(
+          eq(orderItems.orderId, orders.id),
+          eq(orderItems.kind, "registration"),
+        ),
+      )
       .leftJoin(programs, eq(sessions.programId, programs.id))
       .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
       .leftJoin(venues, eq(sessions.venueId, venues.id))

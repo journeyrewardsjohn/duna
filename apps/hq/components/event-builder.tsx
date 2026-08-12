@@ -87,6 +87,11 @@ interface DivisionDraft {
     | "sand-rating-best-8"
     | "sand-rating-ttm"
     | "manual";
+  readonly activeRegistrationCount: number;
+  readonly paidRegistrationCount: number;
+  readonly removalLocked: boolean;
+  readonly teamFormatLocked: boolean;
+  readonly competitionLocked: boolean;
 }
 
 interface TicketDraft {
@@ -99,6 +104,9 @@ interface TicketDraft {
   readonly approvalRequired: boolean;
   readonly availableOnline: boolean;
   readonly availableInPerson: boolean;
+  readonly soldCount: number;
+  readonly activeTicketCount: number;
+  readonly hasHistory: boolean;
 }
 
 interface FeatureDraft {
@@ -135,6 +143,7 @@ const stepDefinitions = [
   { key: "schedule", label: "Schedule", icon: CalendarDays },
   { key: "divisions", label: "Divisions", icon: UsersRound },
   { key: "tickets", label: "Tickets", icon: Ticket },
+  { key: "pricing", label: "Pricing", icon: CircleDollarSign },
   { key: "experience", label: "Experience", icon: Sparkles },
   { key: "rules", label: "Smart rules", icon: SlidersHorizontal },
   { key: "policies", label: "Policies", icon: ShieldCheck },
@@ -143,6 +152,14 @@ const stepDefinitions = [
 
 function uid(prefix: string) {
   return `${prefix}-${globalThis.crypto.randomUUID()}`;
+}
+
+function persistedId(value: string): string | undefined {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  )
+    ? value
+    : undefined;
 }
 
 function localDateTime(daysAhead: number, hour: number) {
@@ -179,6 +196,11 @@ function initialDivision(id = uid("division")): DivisionDraft {
       teamsAdvancing: 2,
     },
     seeding: "sand-rating-best-8",
+    activeRegistrationCount: 0,
+    paidRegistrationCount: 0,
+    removalLocked: false,
+    teamFormatLocked: false,
+    competitionLocked: false,
   };
 }
 
@@ -193,6 +215,9 @@ function initialTicket(): TicketDraft {
     approvalRequired: false,
     availableOnline: true,
     availableInPerson: true,
+    soldCount: 0,
+    activeTicketCount: 0,
+    hasHistory: false,
   };
 }
 
@@ -217,11 +242,13 @@ function moneyInput(value: number) {
 
 function Toggle({
   checked,
+  disabled = false,
   label,
   detail,
   onChange,
 }: {
   readonly checked: boolean;
+  readonly disabled?: boolean;
   readonly label: string;
   readonly detail?: string;
   readonly onChange: (checked: boolean) => void;
@@ -234,6 +261,7 @@ function Toggle({
       </span>
       <input
         checked={checked}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
         type="checkbox"
       />
@@ -243,12 +271,14 @@ function Toggle({
 }
 
 function DivisionEditor({
+  canRemove,
   division,
   eventKind,
   index,
   onChange,
   onRemove,
 }: {
+  readonly canRemove: boolean;
   readonly division: DivisionDraft;
   readonly eventKind: EventKind;
   readonly index: number;
@@ -272,8 +302,18 @@ function DivisionEditor({
             {division.gender}
           </small>
         </span>
-        {index > 0 && (
-          <button aria-label="Remove division" onClick={onRemove} type="button">
+        {canRemove && (
+          <button
+            aria-label="Remove division"
+            disabled={division.removalLocked}
+            onClick={onRemove}
+            title={
+              division.removalLocked
+                ? "A division with registration or competition history cannot be removed."
+                : "Remove division"
+            }
+            type="button"
+          >
             <Trash2 aria-hidden size={16} />
           </button>
         )}
@@ -313,6 +353,7 @@ function DivisionEditor({
         <label>
           <span>Team format</span>
           <select
+            disabled={division.teamFormatLocked}
             onChange={(event) =>
               set(
                 "teamFormat",
@@ -327,6 +368,9 @@ function DivisionEditor({
             <option value="four-person">4 person</option>
             <option value="six-person">6 person</option>
           </select>
+          {division.teamFormatLocked && (
+            <small>Locked after players or teams join</small>
+          )}
         </label>
         <label>
           <span>Venue type</span>
@@ -345,6 +389,7 @@ function DivisionEditor({
         <label>
           <span>Seeding</span>
           <select
+            disabled={division.competitionLocked}
             onChange={(event) =>
               set("seeding", event.target.value as DivisionDraft["seeding"])
             }
@@ -371,42 +416,19 @@ function DivisionEditor({
         <label>
           <span>Maximum teams</span>
           <input
-            min={division.minimumTeams}
+            min={Math.max(
+              division.minimumTeams,
+              Math.ceil(
+                division.activeRegistrationCount /
+                  teamSize(division.teamFormat),
+              ),
+            )}
             onChange={(event) =>
               set("maximumTeams", Number(event.target.value))
             }
             type="number"
             value={division.maximumTeams}
           />
-        </label>
-        <label>
-          <span>Price basis</span>
-          <select
-            onChange={(event) =>
-              set(
-                "priceBasis",
-                event.target.value as DivisionDraft["priceBasis"],
-              )
-            }
-            value={division.priceBasis}
-          >
-            <option value="per-team">Per team</option>
-            <option value="per-person">Per person</option>
-          </select>
-        </label>
-        <label>
-          <span>Gross price</span>
-          <span className="event-money-input">
-            <small>$</small>
-            <input
-              inputMode="decimal"
-              min="0"
-              onChange={(event) => set("price", event.target.value)}
-              step="0.01"
-              type="number"
-              value={division.price}
-            />
-          </span>
         </label>
         <label className="event-field--span-two">
           <span>
@@ -415,6 +437,7 @@ function DivisionEditor({
               : "Tournament format"}
           </span>
           <select
+            disabled={division.competitionLocked}
             onChange={(event) =>
               set(
                 "tournamentFormat",
@@ -432,6 +455,9 @@ function DivisionEditor({
               Double elimination (cross-over)
             </option>
           </select>
+          {division.competitionLocked && (
+            <small>Locked after a bracket or match is created</small>
+          )}
         </label>
       </div>
 
@@ -502,6 +528,7 @@ function DivisionEditor({
         <Toggle
           checked={division.poolPlay.enabled}
           detail="Build pools from registrations and seed the next stage."
+          disabled={division.competitionLocked}
           label="Pool play"
           onChange={(checked) =>
             set("poolPlay", { ...division.poolPlay, enabled: checked })
@@ -512,6 +539,7 @@ function DivisionEditor({
             <label>
               <span>Teams per pool</span>
               <input
+                disabled={division.competitionLocked}
                 min="2"
                 onChange={(event) =>
                   set("poolPlay", {
@@ -526,6 +554,7 @@ function DivisionEditor({
             <label>
               <span>Pool format</span>
               <select
+                disabled={division.competitionLocked}
                 onChange={(event) =>
                   set("poolPlay", {
                     ...division.poolPlay,
@@ -542,6 +571,7 @@ function DivisionEditor({
             <label>
               <span>Teams advancing</span>
               <input
+                disabled={division.competitionLocked}
                 max={division.poolPlay.teamsPerPool}
                 min="1"
                 onChange={(event) =>
@@ -651,6 +681,9 @@ export function EventBuilder({
   const [endsAt, setEndsAt] = useState(
     initialDraft?.localEndsAt ?? localDateTime(14, 17),
   );
+  const [registrationClosesAt, setRegistrationClosesAt] = useState(
+    initialDraft?.localRegistrationClosesAt ?? "",
+  );
   const [divisions, setDivisions] = useState<readonly DivisionDraft[]>(
     initialDraft?.divisions.length
       ? initialDraft.divisions.map((division) => ({
@@ -726,8 +759,14 @@ export function EventBuilder({
     "signup" | "rating-balanced" | "manual"
   >(initialDraft?.recurrence?.teamAssignment ?? "signup");
   const mediaChoices = useMemo(() => eventMediaForKind(kind), [kind]);
+  const isPublishedEdit = Boolean(
+    initialDraft && initialDraft.status !== "draft",
+  );
+  const eventTypeLocked =
+    initialDraft?.pricingProtection.eventTypeLocked ?? false;
 
   const selectKind = (nextKind: EventKind) => {
+    if (eventTypeLocked) return;
     setKind(nextKind);
     if (mediaUrl.includes("/media/event-library/")) {
       setMediaKind("image");
@@ -854,7 +893,9 @@ export function EventBuilder({
       timezone,
       localStartsAt: startsAt,
       localEndsAt: endsAt,
+      localRegistrationClosesAt: registrationClosesAt || undefined,
       divisions: divisions.map((division) => ({
+        id: persistedId(division.id),
         name: division.name,
         description: division.description || undefined,
         minimumTeams: division.minimumTeams,
@@ -883,6 +924,7 @@ export function EventBuilder({
         seeding: division.seeding,
       })),
       tickets: tickets.map((ticket) => ({
+        id: persistedId(ticket.id),
         name: ticket.name,
         description: ticket.description || undefined,
         priceMinor: moneyMinor(ticket.price),
@@ -965,6 +1007,7 @@ export function EventBuilder({
       onlineUrl,
       policies,
       recurrenceInterval,
+      registrationClosesAt,
       recurringDays,
       selectedVenue?.courts,
       shortSummary,
@@ -991,6 +1034,7 @@ export function EventBuilder({
     (current.key === "schedule" &&
       Boolean(startsAt) &&
       Boolean(endsAt) &&
+      (!registrationClosesAt || registrationClosesAt <= startsAt) &&
       (kind !== "league" || recurringDays.length > 0)) ||
     (current.key === "divisions" &&
       divisions.length > 0 &&
@@ -998,6 +1042,11 @@ export function EventBuilder({
         (division) =>
           division.name.trim() &&
           division.maximumTeams >= division.minimumTeams,
+      )) ||
+    (current.key === "pricing" &&
+      [...divisions, ...tickets].every(
+        (item) =>
+          Number.isFinite(Number(item.price)) && Number(item.price) >= 0,
       )) ||
     current.key === "tickets" ||
     current.key === "experience" ||
@@ -1042,21 +1091,29 @@ export function EventBuilder({
             {kind === "league" ? "leagues" : "events"}
           </Link>
           <span className="hq-eyebrow">
-            Private draft · {initialDraft ? "event studio" : "guided create"}
+            {isPublishedEdit
+              ? `${initialDraft!.status.replace("-", " ")} · full event studio`
+              : `Private draft · ${initialDraft ? "event studio" : "guided create"}`}
           </span>
           <h1>
-            {initialDraft
-              ? "Make this event impossible to miss."
-              : "Create something players remember."}
+            {isPublishedEdit
+              ? "Edit every part of this event."
+              : initialDraft
+                ? "Make this event impossible to miss."
+                : "Create something players remember."}
           </h1>
           <p>
-            {initialDraft
-              ? "Refine the story, schedule, registration, and player experience. Nothing goes live until you publish."
-              : "One clear flow. Duna changes the setup when you choose the event type."}
+            {isPublishedEdit
+              ? "Update divisions, team structure, competition format, pricing, tickets, rules, and the player experience. Paid registrations keep the exact price they already accepted."
+              : initialDraft
+                ? "Refine the story, schedule, registration, and player experience. Nothing goes live until you publish."
+                : "One clear flow. Duna changes the setup when you choose the event type."}
           </p>
         </div>
         <div className="event-builder__status">
-          <Badge tone="warning">Draft</Badge>
+          <Badge tone={isPublishedEdit ? "positive" : "warning"}>
+            {initialDraft?.status.replace("-", " ") ?? "draft"}
+          </Badge>
           <span>
             <strong>Money</strong>
             <small>
@@ -1103,6 +1160,13 @@ export function EventBuilder({
           {initialDraft && (
             <input name="sessionId" type="hidden" value={initialDraft.id} />
           )}
+          {initialDraft && !isPublishedEdit && (
+            <input
+              name="reason"
+              type="hidden"
+              value="Updated private event draft."
+            />
+          )}
           <input
             name="eventDraft"
             type="hidden"
@@ -1119,6 +1183,7 @@ export function EventBuilder({
             <section className="event-type-grid">
               <button
                 className={kind === "tournament" ? "selected" : undefined}
+                disabled={eventTypeLocked}
                 onClick={() => selectKind("tournament")}
                 type="button"
               >
@@ -1138,6 +1203,7 @@ export function EventBuilder({
               </button>
               <button
                 className={kind === "league" ? "selected" : undefined}
+                disabled={eventTypeLocked}
                 onClick={() => selectKind("league")}
                 type="button"
               >
@@ -1155,6 +1221,13 @@ export function EventBuilder({
                   <ArrowRight aria-hidden size={14} />
                 </small>
               </button>
+              {eventTypeLocked && (
+                <p className="event-type-lock">
+                  Event type is locked after registration begins. Division,
+                  team, format, and pricing settings remain editable in their
+                  sections.
+                </p>
+              )}
               <article>
                 <Badge>Coming next</Badge>
                 <h3>Clinic, camp, open play + more</h3>
@@ -1497,6 +1570,23 @@ export function EventBuilder({
                 timeMode="required"
                 value={{ start: startsAt, end: endsAt }}
               />
+              <div className="event-form-grid event-form-grid--two event-registration-window">
+                <label>
+                  <span>Registration closes</span>
+                  <input
+                    max={startsAt}
+                    onChange={(event) =>
+                      setRegistrationClosesAt(event.target.value)
+                    }
+                    type="datetime-local"
+                    value={registrationClosesAt}
+                  />
+                  <small>
+                    Optional exact cutoff in the event timezone. This overrides
+                    the relative booking-close rule.
+                  </small>
+                </label>
+              </div>
               {kind === "league" && (
                 <div className="league-recurrence">
                   <div className="league-recurrence__heading">
@@ -1629,10 +1719,7 @@ export function EventBuilder({
                 </span>
                 <div>
                   <h3>Build the field.</h3>
-                  <p>
-                    Each division controls who can join, how they pay, and how
-                    play runs.
-                  </p>
+                  <p>Each division controls who can join and how play runs.</p>
                 </div>
                 <Badge>
                   {divisions.length} division
@@ -1642,6 +1729,7 @@ export function EventBuilder({
               <div className="division-list">
                 {divisions.map((division, index) => (
                   <DivisionEditor
+                    canRemove={divisions.length > 1}
                     division={division}
                     eventKind={kind}
                     index={index}
@@ -1681,6 +1769,199 @@ export function EventBuilder({
             </section>
           )}
 
+          {current.key === "pricing" && (
+            <section className="event-builder-panel event-builder-panel--flush">
+              <header>
+                <span>
+                  <CircleDollarSign aria-hidden size={20} />
+                </span>
+                <div>
+                  <h3>Price the event in one place.</h3>
+                  <p>
+                    Set every player entry and spectator ticket price without
+                    hunting through division settings.
+                  </p>
+                </div>
+                <Badge>{workspace.organization.currency}</Badge>
+              </header>
+
+              <aside
+                className={`event-price-protection ${
+                  (initialDraft?.pricingProtection.paidRegistrationCount ?? 0) >
+                  0
+                    ? "protected"
+                    : "clear"
+                }`}
+              >
+                <ShieldCheck aria-hidden size={21} />
+                <span>
+                  <strong>
+                    {(initialDraft?.pricingProtection.paidRegistrationCount ??
+                      0) > 0
+                      ? `${initialDraft!.pricingProtection.paidRegistrationCount} paid registration${initialDraft!.pricingProtection.paidRegistrationCount === 1 ? "" : "s"} keep the original price.`
+                      : "No paid registrations need grandfathering."}
+                  </strong>
+                  <small>
+                    {(initialDraft?.pricingProtection.paidRegistrationCount ??
+                      0) > 0
+                      ? "Only future registrations use a new price. Existing paid orders are never repriced, and invited teammates attached to a paid registration keep its original per-player price."
+                      : "New checkouts use the saved price. A checkout already created keeps its server-owned amount until it completes or expires."}
+                  </small>
+                </span>
+              </aside>
+
+              <div className="event-pricing-list">
+                <span className="event-pricing-list__label">
+                  Player entry pricing
+                </span>
+                {divisions.map((division) => {
+                  const original = initialDraft?.divisions.find(
+                    (candidate) => candidate.id === division.id,
+                  );
+                  const changed =
+                    original !== undefined &&
+                    (original.priceMinor !== moneyMinor(division.price) ||
+                      original.priceBasis !== division.priceBasis);
+                  return (
+                    <article key={division.id}>
+                      <header>
+                        <span>
+                          <strong>
+                            {division.name || "Untitled division"}
+                          </strong>
+                          <small>
+                            {division.activeRegistrationCount} active ·{" "}
+                            {division.paidRegistrationCount} paid
+                          </small>
+                        </span>
+                        {changed && original && (
+                          <Badge tone="warning">
+                            Was{" "}
+                            {formatMoney(
+                              original.priceMinor,
+                              workspace.organization.currency,
+                            )}
+                          </Badge>
+                        )}
+                      </header>
+                      <div className="event-form-grid event-form-grid--two">
+                        <label>
+                          <span>Charge</span>
+                          <select
+                            onChange={(event) =>
+                              setDivisions((currentDivisions) =>
+                                currentDivisions.map((candidate) =>
+                                  candidate.id === division.id
+                                    ? {
+                                        ...candidate,
+                                        priceBasis: event.target
+                                          .value as DivisionDraft["priceBasis"],
+                                      }
+                                    : candidate,
+                                ),
+                              )
+                            }
+                            value={division.priceBasis}
+                          >
+                            <option value="per-team">Per team</option>
+                            <option value="per-person">Per person</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>Gross price</span>
+                          <span className="event-money-input">
+                            <small>$</small>
+                            <input
+                              inputMode="decimal"
+                              min="0"
+                              onChange={(event) =>
+                                setDivisions((currentDivisions) =>
+                                  currentDivisions.map((candidate) =>
+                                    candidate.id === division.id
+                                      ? {
+                                          ...candidate,
+                                          price: event.target.value,
+                                        }
+                                      : candidate,
+                                  ),
+                                )
+                              }
+                              step="0.01"
+                              type="number"
+                              value={division.price}
+                            />
+                          </span>
+                        </label>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+
+              {tickets.length > 0 && (
+                <div className="event-pricing-list">
+                  <span className="event-pricing-list__label">
+                    Spectator ticket pricing
+                  </span>
+                  {tickets.map((ticketItem) => {
+                    const original = initialDraft?.tickets.find(
+                      (candidate) => candidate.id === ticketItem.id,
+                    );
+                    const changed =
+                      original !== undefined &&
+                      original.priceMinor !== moneyMinor(ticketItem.price);
+                    return (
+                      <article key={ticketItem.id}>
+                        <header>
+                          <span>
+                            <strong>{ticketItem.name}</strong>
+                            <small>{ticketItem.soldCount} sold</small>
+                          </span>
+                          {changed && original && (
+                            <Badge tone="warning">
+                              Was{" "}
+                              {formatMoney(
+                                original.priceMinor,
+                                workspace.organization.currency,
+                              )}
+                            </Badge>
+                          )}
+                        </header>
+                        <div className="event-form-grid">
+                          <label>
+                            <span>Gross ticket price</span>
+                            <span className="event-money-input">
+                              <small>$</small>
+                              <input
+                                inputMode="decimal"
+                                min="0"
+                                onChange={(event) =>
+                                  setTickets((currentTickets) =>
+                                    currentTickets.map((candidate) =>
+                                      candidate.id === ticketItem.id
+                                        ? {
+                                            ...candidate,
+                                            price: event.target.value,
+                                          }
+                                        : candidate,
+                                    ),
+                                  )
+                                }
+                                step="0.01"
+                                type="number"
+                                value={ticketItem.price}
+                              />
+                            </span>
+                          </label>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+
           {current.key === "tickets" && (
             <section className="event-builder-panel event-builder-panel--flush">
               <header>
@@ -1713,12 +1994,18 @@ export function EventBuilder({
                       <strong>{ticketItem.name}</strong>
                       <button
                         aria-label="Remove ticket"
+                        disabled={ticketItem.hasHistory}
                         onClick={() =>
                           setTickets((currentTickets) =>
                             currentTickets.filter(
                               (candidate) => candidate.id !== ticketItem.id,
                             ),
                           )
+                        }
+                        title={
+                          ticketItem.hasHistory
+                            ? "A ticket type with sales history cannot be removed."
+                            : "Remove ticket"
                         }
                         type="button"
                       >
@@ -1744,7 +2031,7 @@ export function EventBuilder({
                       <label>
                         <span>Quantity</span>
                         <input
-                          min="1"
+                          min={Math.max(1, ticketItem.activeTicketCount)}
                           onChange={(event) =>
                             setTickets((currentTickets) =>
                               currentTickets.map((candidate) =>
@@ -1761,6 +2048,12 @@ export function EventBuilder({
                           type="number"
                           value={ticketItem.quantity}
                         />
+                        {ticketItem.activeTicketCount > 0 && (
+                          <small>
+                            At least {ticketItem.activeTicketCount} while issued
+                            tickets remain active
+                          </small>
+                        )}
                       </label>
                       <label className="event-field--span-two">
                         <span>Description</span>
@@ -1780,30 +2073,6 @@ export function EventBuilder({
                           placeholder="What this ticket includes."
                           value={ticketItem.description}
                         />
-                      </label>
-                      <label>
-                        <span>Gross price</span>
-                        <span className="event-money-input">
-                          <small>$</small>
-                          <input
-                            min="0"
-                            onChange={(event) =>
-                              setTickets((currentTickets) =>
-                                currentTickets.map((candidate) =>
-                                  candidate.id === ticketItem.id
-                                    ? {
-                                        ...candidate,
-                                        price: event.target.value,
-                                      }
-                                    : candidate,
-                                ),
-                              )
-                            }
-                            step="0.01"
-                            type="number"
-                            value={ticketItem.price}
-                          />
-                        </span>
                       </label>
                     </div>
                     <div className="ticket-toggle-grid">
@@ -2368,23 +2637,43 @@ export function EventBuilder({
                     Money gate
                   </Badge>
                   <h3>
-                    {paid
-                      ? workspace.organization.stripeChargesEnabled
-                        ? "Payments are ready when you publish."
-                        : "Save the draft now. Finish payment setup before launch."
-                      : "This event can launch without payments."}
+                    {isPublishedEdit
+                      ? "Paid registrations are price-protected."
+                      : paid
+                        ? workspace.organization.stripeChargesEnabled
+                          ? "Payments are ready when you publish."
+                          : "Save the draft now. Finish payment setup before launch."
+                        : "This event can launch without payments."}
                   </h3>
                   <p>
-                    {paid
-                      ? `Public prices start at ${formatMoney(startingPrice, workspace.organization.currency)}.`
-                      : "All configured entries and tickets are free."}{" "}
-                    Duna never publishes from this step.
+                    {isPublishedEdit
+                      ? `Future registrations use prices starting at ${formatMoney(startingPrice, workspace.organization.currency)}. Existing paid orders and their attached teammate prices remain unchanged.`
+                      : paid
+                        ? `Public prices start at ${formatMoney(startingPrice, workspace.organization.currency)}.`
+                        : "All configured entries and tickets are free."}{" "}
+                    {!isPublishedEdit && "Duna never publishes from this step."}
                   </p>
                 </div>
                 {!workspace.organization.stripeChargesEnabled && paid && (
                   <Link href="/payments">Configure Money</Link>
                 )}
               </article>
+              {isPublishedEdit && (
+                <label className="event-change-reason">
+                  <span>Reason for these changes</span>
+                  <textarea
+                    defaultValue="Updated by the event organizer."
+                    maxLength={500}
+                    name="reason"
+                    required
+                    rows={3}
+                  />
+                  <small>
+                    Saved with the event audit history so staff can understand
+                    what changed.
+                  </small>
+                </label>
+              )}
               <label className="event-final-confirmation">
                 <input
                   name="confirmedPrice"
@@ -2394,9 +2683,9 @@ export function EventBuilder({
                 />
                 <span>
                   <strong>I reviewed every division and ticket price.</strong>
-                  This {initialDraft ? "updates" : "saves"} a private draft.
-                  Going live is a separate, explicit action after Money is
-                  ready.
+                  {isPublishedEdit
+                    ? " Existing paid registrations keep their original price; only future registrations use a changed price."
+                    : ` This ${initialDraft ? "updates" : "saves"} a private draft. Going live is a separate, explicit action after Money is ready.`}
                 </span>
               </label>
               {state.status !== "idle" && (
@@ -2412,20 +2701,26 @@ export function EventBuilder({
                   <span>
                     <strong>
                       {state.status === "success"
-                        ? initialDraft
-                          ? "Draft updated"
-                          : "Draft created"
+                        ? isPublishedEdit
+                          ? "Event updated"
+                          : initialDraft
+                            ? "Draft updated"
+                            : "Draft created"
                         : "Check the draft"}
                     </strong>
                     <small>{state.message}</small>
                   </span>
                   {state.status === "success" && (
                     <Link
-                      href={`${kind === "league" ? "/leagues" : "/events"}${
-                        state.entityId ? `?draft=${state.entityId}` : ""
-                      }`}
+                      href={
+                        isPublishedEdit && state.entityId
+                          ? `/events/${state.entityId}`
+                          : `${kind === "league" ? "/leagues" : "/events"}${
+                              state.entityId ? `?draft=${state.entityId}` : ""
+                            }`
+                      }
                     >
-                      Review & publish
+                      {isPublishedEdit ? "Return to event" : "Review & publish"}
                     </Link>
                   )}
                 </div>
@@ -2443,7 +2738,9 @@ export function EventBuilder({
               <ArrowLeft aria-hidden size={16} /> Back
             </button>
             <span>
-              Changes stay local until you save. The event remains private.
+              {isPublishedEdit
+                ? "Nothing changes until you save. Existing paid orders remain untouched."
+                : "Changes stay local until you save. The event remains private."}
             </span>
             {current.key === "review" ? (
               <button
@@ -2452,9 +2749,13 @@ export function EventBuilder({
                 type="submit"
               >
                 {pending
-                  ? "Saving draft…"
+                  ? isPublishedEdit
+                    ? "Saving changes…"
+                    : "Saving draft…"
                   : initialDraft
-                    ? "Save changes"
+                    ? isPublishedEdit
+                      ? "Save event changes"
+                      : "Save changes"
                     : "Save event draft"}
                 <Check aria-hidden size={16} />
               </button>

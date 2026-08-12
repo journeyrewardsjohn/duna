@@ -467,6 +467,18 @@ test("public event creation carries a clean starter into guided HQ", async ({
   await expect(page.getByLabel("Event name")).toHaveValue(
     "Hermosa Moonlight League",
   );
+  await page.getByRole("button", { name: /Divisions$/ }).click();
+  await expect(page.getByText("Price basis", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: /Pricing$/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Price the event in one place." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("spinbutton", { name: /Gross price/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("No paid registrations need grandfathering."),
+  ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
 

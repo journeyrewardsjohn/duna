@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CheckoutError,
+  resolveRegistrationUnitAmount,
   type CheckoutPolicy,
   validatePickupCoverPayment,
   validatePolicyAcceptances,
@@ -108,6 +109,43 @@ describe("native event payment contract", () => {
         paymentSheet: partialPaymentSheet,
       }),
     ).toThrow();
+  });
+});
+
+describe("event registration price protection", () => {
+  it("uses the current price when no paid registration snapshot exists", () => {
+    expect(
+      resolveRegistrationUnitAmount({ currentUnitAmountMinor: 7_500 }),
+    ).toBe(7_500);
+  });
+
+  it("grandfathers a teammate attached to a paid registration", () => {
+    expect(
+      resolveRegistrationUnitAmount({
+        currentUnitAmountMinor: 9_500,
+        paidRegistration: true,
+        paidRegistrationUnitAmountMinor: 7_500,
+      }),
+    ).toBe(7_500);
+  });
+
+  it("keeps a paid free registration free after a later price increase", () => {
+    expect(
+      resolveRegistrationUnitAmount({
+        currentUnitAmountMinor: 5_000,
+        paidRegistration: true,
+        paidRegistrationUnitAmountMinor: 0,
+      }),
+    ).toBe(0);
+  });
+
+  it("fails closed when a paid registration has no price snapshot", () => {
+    expect(() =>
+      resolveRegistrationUnitAmount({
+        currentUnitAmountMinor: 9_500,
+        paidRegistration: true,
+      }),
+    ).toThrow(/No new amount was charged/);
   });
 });
 

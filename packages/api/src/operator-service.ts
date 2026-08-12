@@ -1,5 +1,6 @@
 import {
   auditLog,
+  brackets,
   communicationUsagePeriods,
   consents,
   courtBookings,
@@ -12,6 +13,7 @@ import {
   guardianships,
   marketingCampaigns,
   marketingFlows,
+  matches,
   memberships,
   membershipTiers,
   messages,
@@ -23,6 +25,7 @@ import {
   organizationStaffInvitations,
   organizationStaffProfiles,
   organizations,
+  orders,
   people,
   programs,
   ratePlans,
@@ -31,6 +34,7 @@ import {
   scheduleOverrides,
   schedules,
   sessions,
+  teams,
   ticketTypes,
   tickets,
   venues,
@@ -79,6 +83,7 @@ type CurrencyCode = OperatorWorkspace["organization"]["currency"];
 type EventKind = OperatorWorkspace["sessions"][number]["kind"];
 
 export interface EventDraftDivisionInput {
+  readonly id?: string;
   readonly name: string;
   readonly description?: string;
   readonly minimumTeams: number;
@@ -115,6 +120,7 @@ export interface EventDraftDivisionInput {
 }
 
 export interface EventDraftTicketInput {
+  readonly id?: string;
   readonly name: string;
   readonly description?: string;
   readonly priceMinor: number;
@@ -153,6 +159,7 @@ export interface CreateEventDraftInput {
   readonly timezone: string;
   readonly localStartsAt: string;
   readonly localEndsAt: string;
+  readonly localRegistrationClosesAt?: string;
   readonly divisions: readonly EventDraftDivisionInput[];
   readonly tickets: readonly EventDraftTicketInput[];
   readonly features: readonly {
@@ -209,6 +216,7 @@ export interface CreateEventDraftInput {
 
 export interface UpdateEventDraftInput extends CreateEventDraftInput {
   readonly sessionId: string;
+  readonly reason: string;
 }
 
 export class OperatorServiceError extends Error {
@@ -353,6 +361,25 @@ function divisionDiscipline(
   if (size >= 6) return "beach-6s";
   if (size >= 3) return "beach-4s";
   return "beach-2s";
+}
+
+function eventDivisionSettings(
+  division: EventDraftDivisionInput,
+  current: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    ...current,
+    teamFormat: division.teamFormat,
+    surface: division.surface,
+    gender: division.gender,
+    ratingMinimum: division.ratingEnabled ? division.ratingMinimum : undefined,
+    ratingMaximum: division.ratingEnabled ? division.ratingMaximum : undefined,
+    ageMinimum: division.ageEnabled ? division.ageMinimum : undefined,
+    ageMaximum: division.ageEnabled ? division.ageMaximum : undefined,
+    tournamentFormat: division.tournamentFormat,
+    poolPlay: division.poolPlay,
+    seeding: division.seeding,
+  };
 }
 
 function timeZone(value: string): string {
@@ -2350,7 +2377,7 @@ export async function loadEventDraft(
   if (!row) {
     throw new OperatorServiceError(
       "RESOURCE_NOT_FOUND",
-      "Event draft was not found.",
+      "Event was not found.",
     );
   }
   const ownerOrganizationId =
@@ -2360,13 +2387,13 @@ export async function loadEventDraft(
   if (ownerOrganizationId !== organizationId) {
     throw new OperatorServiceError(
       "RESOURCE_WRONG_ORGANIZATION",
-      "Event draft belongs to another organization.",
+      "Event belongs to another organization.",
     );
   }
-  if (row.status !== "draft") {
+  if (row.status === "cancelled" || row.status === "completed") {
     throw new OperatorServiceError(
       "INVALID_CONFIGURATION",
-      "Only private drafts can be edited in the event builder.",
+      "Cancelled and completed events cannot be edited.",
     );
   }
   const kind = row.kindFromEventType ?? row.kindFromProgram;
@@ -2377,7 +2404,15 @@ export async function loadEventDraft(
     );
   }
 
-  const [divisionRows, ticketTypeRows] = await Promise.all([
+  const [
+    divisionRows,
+    ticketTypeRows,
+    registrationRows,
+    issuedTicketRows,
+    teamRows,
+    bracketRows,
+    matchRows,
+  ] = await Promise.all([
     database
       .select()
       .from(divisions)
@@ -2388,9 +2423,121 @@ export async function loadEventDraft(
       .from(ticketTypes)
       .where(eq(ticketTypes.sessionId, sessionId))
       .orderBy(asc(ticketTypes.createdAt)),
+    database
+      .select({
+        divisionId: registrations.divisionId,
+        status: registrations.status,
+        orderStatus: orders.status,
+      })
+      .from(registrations)
+      .leftJoin(orders, eq(registrations.orderId, orders.id))
+      .where(eq(registrations.sessionId, sessionId)),
+    database
+      .select({
+        ticketTypeId: tickets.ticketTypeId,
+        ticketStatus: tickets.status,
+        orderStatus: orders.status,
+      })
+      .from(tickets)
+      .innerJoin(ticketTypes, eq(tickets.ticketTypeId, ticketTypes.id))
+      .leftJoin(orders, eq(tickets.orderId, orders.id))
+      .where(eq(ticketTypes.sessionId, sessionId)),
+    database
+      .select({ divisionId: teams.divisionId })
+      .from(teams)
+      .innerJoin(divisions, eq(teams.divisionId, divisions.id))
+      .where(eq(divisions.sessionId, sessionId)),
+    database
+      .select({ divisionId: brackets.divisionId })
+      .from(brackets)
+      .innerJoin(divisions, eq(brackets.divisionId, divisions.id))
+      .where(eq(divisions.sessionId, sessionId)),
+    database
+      .select({ divisionId: matches.divisionId })
+      .from(matches)
+      .innerJoin(divisions, eq(matches.divisionId, divisions.id))
+      .where(eq(divisions.sessionId, sessionId)),
   ]);
 
+  const activeRegistrationStatuses = new Set([
+    "invited",
+    "pending",
+    "confirmed",
+    "waitlisted",
+    "checked-in",
+  ]);
+  const paidOrderStatuses = new Set(["paid", "partially-refunded"]);
+  const registrationHistoryDivisionIds = new Set(
+    registrationRows.flatMap((registration) =>
+      registration.divisionId ? [registration.divisionId] : [],
+    ),
+  );
+  const teamDivisionIds = new Set(
+    teamRows.flatMap((team) => (team.divisionId ? [team.divisionId] : [])),
+  );
+  const bracketDivisionIds = new Set(
+    bracketRows.map((bracket) => bracket.divisionId),
+  );
+  const matchDivisionIds = new Set(
+    matchRows.flatMap((match) => (match.divisionId ? [match.divisionId] : [])),
+  );
+  const activeRegistrationsByDivision = new Map<string, number>();
+  const paidRegistrationsByDivision = new Map<string, number>();
+  for (const registration of registrationRows) {
+    if (
+      registration.divisionId &&
+      activeRegistrationStatuses.has(registration.status)
+    ) {
+      activeRegistrationsByDivision.set(
+        registration.divisionId,
+        (activeRegistrationsByDivision.get(registration.divisionId) ?? 0) + 1,
+      );
+    }
+    if (
+      registration.divisionId &&
+      registration.orderStatus &&
+      paidOrderStatuses.has(registration.orderStatus)
+    ) {
+      paidRegistrationsByDivision.set(
+        registration.divisionId,
+        (paidRegistrationsByDivision.get(registration.divisionId) ?? 0) + 1,
+      );
+    }
+  }
+  const soldTicketsByType = new Map<string, number>();
+  const activeTicketsByType = new Map<string, number>();
+  const ticketTypesWithHistory = new Set<string>();
+  for (const ticket of issuedTicketRows) {
+    ticketTypesWithHistory.add(ticket.ticketTypeId);
+    if (ticket.ticketStatus !== "void" && ticket.ticketStatus !== "refunded") {
+      activeTicketsByType.set(
+        ticket.ticketTypeId,
+        (activeTicketsByType.get(ticket.ticketTypeId) ?? 0) + 1,
+      );
+    }
+    if (
+      ticket.orderStatus &&
+      paidOrderStatuses.has(ticket.orderStatus) &&
+      ticket.ticketStatus !== "void" &&
+      ticket.ticketStatus !== "refunded"
+    ) {
+      soldTicketsByType.set(
+        ticket.ticketTypeId,
+        (soldTicketsByType.get(ticket.ticketTypeId) ?? 0) + 1,
+      );
+    }
+  }
+
   const parsedLocation = eventLocationSchema.safeParse(row.location);
+  const storedCourtIds = Array.isArray(row.location?.courtIds)
+    ? row.location.courtIds.filter(
+        (value): value is string =>
+          typeof value === "string" &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            value,
+          ),
+      )
+    : [];
   const location = parsedLocation.success
     ? parsedLocation.data
     : {
@@ -2413,11 +2560,22 @@ export async function loadEventDraft(
   const parsedSmartRules = eventDraftSmartRulesSchema.safeParse(
     registrationSettings.smartRules,
   );
+  const configuredRegistrationClose =
+    typeof registrationSettings.registrationClosesAt === "string"
+      ? registrationSettings.registrationClosesAt
+      : typeof registrationSettings.registrationCloseAt === "string"
+        ? registrationSettings.registrationCloseAt
+        : undefined;
+  const registrationClosesAt =
+    configuredRegistrationClose &&
+    !Number.isNaN(Date.parse(configuredRegistrationClose))
+      ? new Date(configuredRegistrationClose)
+      : undefined;
 
   return {
     id: row.id,
     slug: row.slug,
-    status: "draft",
+    status: row.status,
     title: row.title,
     shortSummary: row.shortSummary ?? undefined,
     description: row.description ?? undefined,
@@ -2426,11 +2584,18 @@ export async function loadEventDraft(
     location: {
       ...location,
       venueId: row.venueId ?? undefined,
-      courtIds: row.courtId ? [row.courtId] : [],
+      courtIds: storedCourtIds.length
+        ? storedCourtIds
+        : row.courtId
+          ? [row.courtId]
+          : [],
     },
     timezone: row.timezone,
     localStartsAt: venueLocalDateTime(row.startsAt, row.timezone),
     localEndsAt: venueLocalDateTime(row.endsAt, row.timezone),
+    localRegistrationClosesAt: registrationClosesAt
+      ? venueLocalDateTime(registrationClosesAt, row.timezone)
+      : undefined,
     divisions: divisionRows.map((division) => {
       const settings = division.settings;
       const teamFormat = settingChoice(
@@ -2553,6 +2718,21 @@ export async function loadEventDraft(
           ] as const,
           "sand-rating-best-8",
         ),
+        activeRegistrationCount:
+          activeRegistrationsByDivision.get(division.id) ?? 0,
+        paidRegistrationCount:
+          paidRegistrationsByDivision.get(division.id) ?? 0,
+        removalLocked:
+          registrationHistoryDivisionIds.has(division.id) ||
+          teamDivisionIds.has(division.id) ||
+          bracketDivisionIds.has(division.id) ||
+          matchDivisionIds.has(division.id),
+        teamFormatLocked:
+          (activeRegistrationsByDivision.get(division.id) ?? 0) > 0 ||
+          teamDivisionIds.has(division.id),
+        competitionLocked:
+          bracketDivisionIds.has(division.id) ||
+          matchDivisionIds.has(division.id),
       };
     }),
     tickets: ticketTypeRows.map((ticket) => ({
@@ -2565,6 +2745,9 @@ export async function loadEventDraft(
       approvalRequired: ticket.approvalRequired,
       availableOnline: ticket.availableOnline,
       availableInPerson: ticket.availableInPerson,
+      soldCount: soldTicketsByType.get(ticket.id) ?? 0,
+      activeTicketCount: activeTicketsByType.get(ticket.id) ?? 0,
+      hasHistory: ticketTypesWithHistory.has(ticket.id),
     })),
     features: parsedFeatures.success ? parsedFeatures.data : [],
     policies: parsedPolicies.success ? parsedPolicies.data : [],
@@ -2581,6 +2764,29 @@ export async function loadEventDraft(
           approvalRequired: false,
         },
     recurrence: parsedRecurrence.success ? parsedRecurrence.data : undefined,
+    pricingProtection: {
+      activeRegistrationCount: registrationRows.filter((registration) =>
+        activeRegistrationStatuses.has(registration.status),
+      ).length,
+      paidRegistrationCount: registrationRows.filter(
+        (registration) =>
+          registration.orderStatus !== null &&
+          paidOrderStatuses.has(registration.orderStatus),
+      ).length,
+      paidTicketCount: [...soldTicketsByType.values()].reduce(
+        (total, count) => total + count,
+        0,
+      ),
+      pendingCheckoutCount: registrationRows.filter(
+        (registration) => registration.orderStatus === "pending",
+      ).length,
+      eventTypeLocked:
+        registrationRows.length > 0 ||
+        issuedTicketRows.length > 0 ||
+        teamRows.length > 0 ||
+        bracketRows.length > 0 ||
+        matchRows.length > 0,
+    },
   };
 }
 
@@ -4843,7 +5049,10 @@ export async function createProgramSession(input: {
   return { id: sessionId, entity: "session", status: "draft" };
 }
 
-async function prepareEventDraftWrite(input: CreateEventDraftInput) {
+async function prepareEventDraftWrite(
+  input: CreateEventDraftInput,
+  options?: { readonly allowStartedEvent?: boolean },
+) {
   requireDatabase();
   if (!input.confirmedPrice) {
     throw new OperatorServiceError(
@@ -4976,13 +5185,24 @@ async function prepareEventDraftWrite(input: CreateEventDraftInput) {
   const eventTimezone = timeZone(venue?.timezone ?? input.timezone);
   const startsAt = venueWallTimeToUtc(input.localStartsAt, eventTimezone);
   const endsAt = venueWallTimeToUtc(input.localEndsAt, eventTimezone);
+  const registrationClosesAt = input.localRegistrationClosesAt
+    ? venueWallTimeToUtc(input.localRegistrationClosesAt, eventTimezone)
+    : undefined;
   if (
     endsAt.getTime() <= startsAt.getTime() ||
-    startsAt.getTime() <= input.now.getTime()
+    (!options?.allowStartedEvent && startsAt.getTime() <= input.now.getTime())
   ) {
     throw new OperatorServiceError(
       "INVALID_SCHEDULE",
-      "The event must start in the future and end after it begins.",
+      options?.allowStartedEvent
+        ? "The event must end after it begins."
+        : "The event must start in the future and end after it begins.",
+    );
+  }
+  if (registrationClosesAt && registrationClosesAt > startsAt) {
+    throw new OperatorServiceError(
+      "INVALID_SCHEDULE",
+      "Registration must close before the event starts.",
     );
   }
   const capacity = input.divisions.reduce(
@@ -5008,6 +5228,7 @@ async function prepareEventDraftWrite(input: CreateEventDraftInput) {
     eventTimezone,
     startsAt,
     endsAt,
+    registrationClosesAt,
     capacity,
     minimumCapacity,
     startingPrice,
@@ -5025,6 +5246,7 @@ export async function createEventDraft(
     eventTimezone,
     startsAt,
     endsAt,
+    registrationClosesAt,
     capacity,
     minimumCapacity,
     startingPrice,
@@ -5041,6 +5263,7 @@ export async function createEventDraft(
     kind: input.kind,
     startsAt: startsAt.toISOString(),
     endsAt: endsAt.toISOString(),
+    registrationClosesAt: registrationClosesAt?.toISOString(),
     timezone: eventTimezone,
     venueId: venue?.id,
     courtId: input.location.courtIds[0],
@@ -5106,12 +5329,14 @@ export async function createEventDraft(
         latitude: input.location.latitude,
         longitude: input.location.longitude,
         onlineUrl: input.location.onlineUrl?.trim() || undefined,
+        courtIds: input.location.courtIds,
         courtNames: input.location.courtNames,
       },
       features: input.features,
       policies: input.policies,
       recurrence: input.recurrence,
       registrationSettings: {
+        registrationClosesAt: values.registrationClosesAt,
         teamConfirmationRequired: true,
         allowPlayerSearch: true,
         allowInviteLink: true,
@@ -5134,22 +5359,7 @@ export async function createEventDraft(
         maximumTeams: division.maximumTeams,
         teamSize: teamSize(division.teamFormat),
         priceBasis: division.priceBasis,
-        settings: {
-          teamFormat: division.teamFormat,
-          surface: division.surface,
-          gender: division.gender,
-          ratingMinimum: division.ratingEnabled
-            ? division.ratingMinimum
-            : undefined,
-          ratingMaximum: division.ratingEnabled
-            ? division.ratingMaximum
-            : undefined,
-          ageMinimum: division.ageEnabled ? division.ageMinimum : undefined,
-          ageMaximum: division.ageEnabled ? division.ageMaximum : undefined,
-          tournamentFormat: division.tournamentFormat,
-          poolPlay: division.poolPlay,
-          seeding: division.seeding,
-        },
+        settings: eventDivisionSettings(division),
         entryFeeMinor: division.priceMinor,
         currency: values.currency,
       }),
@@ -5199,24 +5409,297 @@ export async function updateEventDraft(
 ): Promise<OperatorMutationResult> {
   const organizationId = requireOrganization(input.actor);
   const before = await loadEventDraft(organizationId, input.sessionId);
+  const database = getDatabase();
+  const [target, currentBlueprint] = await Promise.all([
+    database.query.sessions.findFirst({
+      where: eq(sessions.id, input.sessionId),
+    }),
+    database.query.eventBlueprints.findFirst({
+      where: eq(eventBlueprints.sessionId, input.sessionId),
+    }),
+  ]);
+  if (!target?.programId || !target.eventTypeId) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "This event is missing the program or event type needed for editing.",
+    );
+  }
   const {
-    database,
     venue,
     eventTimezone,
     startsAt,
     endsAt,
+    registrationClosesAt,
     capacity,
     minimumCapacity,
     startingPrice,
     storedCurrency,
-  } = await prepareEventDraftWrite(input);
-  const target = await database.query.sessions.findFirst({
-    where: eq(sessions.id, input.sessionId),
+  } = await prepareEventDraftWrite(input, {
+    allowStartedEvent: target.status !== "draft",
   });
-  if (!target?.programId || !target.eventTypeId || target.status !== "draft") {
+
+  const [
+    currentDivisionRows,
+    currentTicketRows,
+    registrationRows,
+    teamRows,
+    bracketRows,
+    matchRows,
+    issuedTicketRows,
+  ] = await Promise.all([
+    database
+      .select()
+      .from(divisions)
+      .where(eq(divisions.sessionId, input.sessionId)),
+    database
+      .select()
+      .from(ticketTypes)
+      .where(eq(ticketTypes.sessionId, input.sessionId)),
+    database
+      .select({
+        id: registrations.id,
+        divisionId: registrations.divisionId,
+        status: registrations.status,
+        orderStatus: orders.status,
+      })
+      .from(registrations)
+      .leftJoin(orders, eq(registrations.orderId, orders.id))
+      .where(eq(registrations.sessionId, input.sessionId)),
+    database
+      .select({ id: teams.id, divisionId: teams.divisionId })
+      .from(teams)
+      .innerJoin(divisions, eq(teams.divisionId, divisions.id))
+      .where(eq(divisions.sessionId, input.sessionId)),
+    database
+      .select({ id: brackets.id, divisionId: brackets.divisionId })
+      .from(brackets)
+      .innerJoin(divisions, eq(brackets.divisionId, divisions.id))
+      .where(eq(divisions.sessionId, input.sessionId)),
+    database
+      .select({ id: matches.id, divisionId: matches.divisionId })
+      .from(matches)
+      .innerJoin(divisions, eq(matches.divisionId, divisions.id))
+      .where(eq(divisions.sessionId, input.sessionId)),
+    database
+      .select({
+        id: tickets.id,
+        ticketTypeId: tickets.ticketTypeId,
+        status: tickets.status,
+      })
+      .from(tickets)
+      .innerJoin(ticketTypes, eq(tickets.ticketTypeId, ticketTypes.id))
+      .where(eq(ticketTypes.sessionId, input.sessionId)),
+  ]);
+
+  const currentDivisionById = new Map(
+    currentDivisionRows.map((division) => [division.id, division] as const),
+  );
+  const currentTicketById = new Map(
+    currentTicketRows.map((ticket) => [ticket.id, ticket] as const),
+  );
+  for (const division of input.divisions) {
+    if (division.id && !currentDivisionById.has(division.id)) {
+      throw new OperatorServiceError(
+        "RESOURCE_WRONG_ORGANIZATION",
+        `${division.name}: the division does not belong to this event.`,
+      );
+    }
+  }
+  for (const ticket of input.tickets) {
+    if (ticket.id && !currentTicketById.has(ticket.id)) {
+      throw new OperatorServiceError(
+        "RESOURCE_WRONG_ORGANIZATION",
+        `${ticket.name}: the ticket type does not belong to this event.`,
+      );
+    }
+  }
+
+  const claimedDivisionIds = new Set(
+    input.divisions.flatMap((division) => (division.id ? [division.id] : [])),
+  );
+  const divisionsForWrite = input.divisions.map((division) => {
+    if (division.id) return division;
+    const matching = currentDivisionRows.find(
+      (candidate) =>
+        !claimedDivisionIds.has(candidate.id) &&
+        candidate.name.trim().toLowerCase() ===
+          division.name.trim().toLowerCase(),
+    );
+    if (!matching) return division;
+    claimedDivisionIds.add(matching.id);
+    return { ...division, id: matching.id };
+  });
+  const claimedTicketIds = new Set(
+    input.tickets.flatMap((ticket) => (ticket.id ? [ticket.id] : [])),
+  );
+  const ticketsForWrite = input.tickets.map((ticket) => {
+    if (ticket.id) return ticket;
+    const matching = currentTicketRows.find(
+      (candidate) =>
+        !claimedTicketIds.has(candidate.id) &&
+        candidate.name.trim().toLowerCase() ===
+          ticket.name.trim().toLowerCase(),
+    );
+    if (!matching) return ticket;
+    claimedTicketIds.add(matching.id);
+    return { ...ticket, id: matching.id };
+  });
+
+  const requestedDivisionIds = new Set(
+    divisionsForWrite.flatMap((division) => (division.id ? [division.id] : [])),
+  );
+  const requestedTicketIds = new Set(
+    ticketsForWrite.flatMap((ticket) => (ticket.id ? [ticket.id] : [])),
+  );
+  const removedDivisionIds = currentDivisionRows
+    .filter((division) => !requestedDivisionIds.has(division.id))
+    .map((division) => division.id);
+  const removedTicketIds = currentTicketRows
+    .filter((ticket) => !requestedTicketIds.has(ticket.id))
+    .map((ticket) => ticket.id);
+  const activeRegistrationStatuses = new Set([
+    "invited",
+    "pending",
+    "confirmed",
+    "waitlisted",
+    "checked-in",
+  ]);
+  const activeRegistrationRows = registrationRows.filter((registration) =>
+    activeRegistrationStatuses.has(registration.status),
+  );
+  const registrationCountByDivision = new Map<string, number>();
+  const activeRegistrationCountByDivision = new Map<string, number>();
+  for (const registration of registrationRows) {
+    if (!registration.divisionId) continue;
+    registrationCountByDivision.set(
+      registration.divisionId,
+      (registrationCountByDivision.get(registration.divisionId) ?? 0) + 1,
+    );
+    if (!activeRegistrationStatuses.has(registration.status)) continue;
+    activeRegistrationCountByDivision.set(
+      registration.divisionId,
+      (activeRegistrationCountByDivision.get(registration.divisionId) ?? 0) + 1,
+    );
+  }
+  const teamCountByDivision = new Map<string, number>();
+  for (const team of teamRows) {
+    if (!team.divisionId) continue;
+    teamCountByDivision.set(
+      team.divisionId,
+      (teamCountByDivision.get(team.divisionId) ?? 0) + 1,
+    );
+  }
+  const bracketDivisionIds = new Set(
+    bracketRows.map((bracket) => bracket.divisionId),
+  );
+  const matchDivisionIds = new Set(
+    matchRows.flatMap((match) => (match.divisionId ? [match.divisionId] : [])),
+  );
+
+  for (const divisionId of removedDivisionIds) {
+    const division = currentDivisionById.get(divisionId)!;
+    if (
+      (registrationCountByDivision.get(divisionId) ?? 0) > 0 ||
+      (teamCountByDivision.get(divisionId) ?? 0) > 0 ||
+      bracketDivisionIds.has(divisionId) ||
+      matchDivisionIds.has(divisionId)
+    ) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        `${division.name} cannot be removed because it already has registrations, teams, or competition activity.`,
+      );
+    }
+  }
+
+  for (const division of divisionsForWrite) {
+    if (!division.id) continue;
+    const current = currentDivisionById.get(division.id)!;
+    const activeCount = activeRegistrationCountByDivision.get(division.id) ?? 0;
+    const nextTeamSize = teamSize(division.teamFormat);
+    const nextCapacity = division.maximumTeams * nextTeamSize;
+    if (nextCapacity < activeCount) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        `${division.name}: capacity cannot be lower than the ${activeCount} active registrations.`,
+      );
+    }
+    if (
+      nextTeamSize !== current.teamSize &&
+      (activeCount > 0 || (teamCountByDivision.get(division.id) ?? 0) > 0)
+    ) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        `${division.name}: team size cannot change after players or teams have joined.`,
+      );
+    }
+    const currentSettings = current.settings;
+    const competitionStructureChanged =
+      stableHash({
+        tournamentFormat: currentSettings.tournamentFormat,
+        poolPlay: currentSettings.poolPlay,
+        seeding: currentSettings.seeding ?? current.ratingBasis,
+      }) !==
+      stableHash({
+        tournamentFormat: division.tournamentFormat,
+        poolPlay: division.poolPlay,
+        seeding: division.seeding,
+      });
+    if (
+      competitionStructureChanged &&
+      (bracketDivisionIds.has(division.id) || matchDivisionIds.has(division.id))
+    ) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        `${division.name}: format, pools, and seeding cannot change after a bracket or match has been created.`,
+      );
+    }
+  }
+
+  const activeTicketCountByType = new Map<string, number>();
+  for (const ticket of issuedTicketRows) {
+    if (ticket.status === "void" || ticket.status === "refunded") continue;
+    activeTicketCountByType.set(
+      ticket.ticketTypeId,
+      (activeTicketCountByType.get(ticket.ticketTypeId) ?? 0) + 1,
+    );
+  }
+  for (const ticketId of removedTicketIds) {
+    const ticket = currentTicketById.get(ticketId)!;
+    if (issuedTicketRows.some((issued) => issued.ticketTypeId === ticketId)) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        `${ticket.name} cannot be removed because ticket history already exists.`,
+      );
+    }
+  }
+  for (const ticket of ticketsForWrite) {
+    if (!ticket.id || ticket.quantity === undefined) continue;
+    const soldCount = activeTicketCountByType.get(ticket.id) ?? 0;
+    if (ticket.quantity < soldCount) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        `${ticket.name}: quantity cannot be lower than the ${soldCount} active tickets.`,
+      );
+    }
+  }
+
+  if (
+    input.kind !== before.kind &&
+    (registrationRows.length > 0 ||
+      teamRows.length > 0 ||
+      bracketRows.length > 0 ||
+      matchRows.length > 0 ||
+      issuedTicketRows.length > 0)
+  ) {
     throw new OperatorServiceError(
       "INVALID_CONFIGURATION",
-      "Only complete private event drafts can be edited.",
+      "Event type cannot change after registration or competition activity begins.",
+    );
+  }
+  if (capacity < activeRegistrationRows.length) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      `Event capacity cannot be lower than the ${activeRegistrationRows.length} active registrations.`,
     );
   }
 
@@ -5227,6 +5710,7 @@ export async function updateEventDraft(
     kind: input.kind,
     startsAt: startsAt.toISOString(),
     endsAt: endsAt.toISOString(),
+    registrationClosesAt: registrationClosesAt?.toISOString(),
     timezone: eventTimezone,
     venueId: venue?.id,
     courtId: input.location.courtIds[0],
@@ -5234,6 +5718,25 @@ export async function updateEventDraft(
     minimumCapacity,
     priceMinor: startingPrice,
     currency: storedCurrency,
+  };
+  const preservedRegistrationSettings: Record<string, unknown> = {
+    ...(currentBlueprint?.registrationSettings ?? {}),
+  };
+  delete preservedRegistrationSettings.registrationClosesAt;
+  delete preservedRegistrationSettings.registrationCloseAt;
+  delete preservedRegistrationSettings.closesAt;
+  const nextRegistrationSettings = {
+    ...preservedRegistrationSettings,
+    ...(values.registrationClosesAt
+      ? { registrationClosesAt: values.registrationClosesAt }
+      : {}),
+    teamConfirmationRequired: true,
+    allowPlayerSearch: true,
+    allowInviteLink: true,
+    allowEmailInvite: true,
+    allowSmsInvite: true,
+    paymentResponsibility: ["self", "entire-team"],
+    smartRules: input.smartRules,
   };
 
   await database.batch([
@@ -5276,8 +5779,9 @@ export async function updateEventDraft(
       })
       .where(eq(sessions.id, input.sessionId)),
     database
-      .update(eventBlueprints)
-      .set({
+      .insert(eventBlueprints)
+      .values({
+        sessionId: input.sessionId,
         shortSummary: values.shortSummary ?? null,
         description: values.description ?? null,
         media: input.media,
@@ -5289,98 +5793,145 @@ export async function updateEventDraft(
           latitude: input.location.latitude,
           longitude: input.location.longitude,
           onlineUrl: input.location.onlineUrl?.trim() || undefined,
+          courtIds: input.location.courtIds,
           courtNames: input.location.courtNames,
         },
         features: input.features,
         policies: input.policies,
         recurrence: input.recurrence ?? null,
-        registrationSettings: {
-          teamConfirmationRequired: true,
-          allowPlayerSearch: true,
-          allowInviteLink: true,
-          allowEmailInvite: true,
-          allowSmsInvite: true,
-          paymentResponsibility: ["self", "entire-team"],
-          smartRules: input.smartRules,
-        },
-        updatedAt: input.now,
+        registrationSettings: nextRegistrationSettings,
       })
-      .where(eq(eventBlueprints.sessionId, input.sessionId)),
-    database.delete(divisions).where(eq(divisions.sessionId, input.sessionId)),
-    database
-      .delete(ticketTypes)
-      .where(eq(ticketTypes.sessionId, input.sessionId)),
-    ...input.divisions.map((division) =>
-      database.insert(divisions).values({
-        id: crypto.randomUUID(),
-        sessionId: input.sessionId,
-        name: division.name.trim(),
-        description: division.description?.trim() || undefined,
-        discipline: divisionDiscipline(division),
-        ratingBasis: division.seeding,
-        capacity: division.maximumTeams * teamSize(division.teamFormat),
-        minimumTeams: division.minimumTeams,
-        maximumTeams: division.maximumTeams,
-        teamSize: teamSize(division.teamFormat),
-        priceBasis: division.priceBasis,
-        settings: {
-          teamFormat: division.teamFormat,
-          surface: division.surface,
-          gender: division.gender,
-          ratingMinimum: division.ratingEnabled
-            ? division.ratingMinimum
-            : undefined,
-          ratingMaximum: division.ratingEnabled
-            ? division.ratingMaximum
-            : undefined,
-          ageMinimum: division.ageEnabled ? division.ageMinimum : undefined,
-          ageMaximum: division.ageEnabled ? division.ageMaximum : undefined,
-          tournamentFormat: division.tournamentFormat,
-          poolPlay: division.poolPlay,
-          seeding: division.seeding,
+      .onConflictDoUpdate({
+        target: eventBlueprints.sessionId,
+        set: {
+          shortSummary: values.shortSummary ?? null,
+          description: values.description ?? null,
+          media: input.media,
+          location: {
+            mode: input.location.mode,
+            venueName: input.location.venueName.trim(),
+            address: input.location.address?.trim() || undefined,
+            googlePlaceId: input.location.googlePlaceId?.trim() || undefined,
+            latitude: input.location.latitude,
+            longitude: input.location.longitude,
+            onlineUrl: input.location.onlineUrl?.trim() || undefined,
+            courtIds: input.location.courtIds,
+            courtNames: input.location.courtNames,
+          },
+          features: input.features,
+          policies: input.policies,
+          recurrence: input.recurrence ?? null,
+          registrationSettings: nextRegistrationSettings,
+          updatedAt: input.now,
         },
-        entryFeeMinor: division.priceMinor,
-        currency: values.currency,
       }),
+    ...removedDivisionIds.map((divisionId) =>
+      database.delete(divisions).where(eq(divisions.id, divisionId)),
     ),
-    ...input.tickets.map((ticket) =>
-      database.insert(ticketTypes).values({
-        id: crypto.randomUUID(),
-        sessionId: input.sessionId,
-        name: ticket.name.trim(),
-        description: ticket.description?.trim() || undefined,
-        priceMinor: ticket.priceMinor,
-        currency: values.currency,
-        quantity: ticket.quantity,
-        availableOnline: ticket.availableOnline,
-        availableInPerson: ticket.availableInPerson,
-        waitlistEnabled: ticket.waitlistEnabled,
-        approvalRequired: ticket.approvalRequired,
-      }),
+    ...removedTicketIds.map((ticketId) =>
+      database.delete(ticketTypes).where(eq(ticketTypes.id, ticketId)),
+    ),
+    ...divisionsForWrite.map((division) =>
+      division.id
+        ? database
+            .update(divisions)
+            .set({
+              name: division.name.trim(),
+              description: division.description?.trim() || null,
+              discipline: divisionDiscipline(division),
+              ratingBasis: division.seeding,
+              capacity: division.maximumTeams * teamSize(division.teamFormat),
+              minimumTeams: division.minimumTeams,
+              maximumTeams: division.maximumTeams,
+              teamSize: teamSize(division.teamFormat),
+              priceBasis: division.priceBasis,
+              settings: eventDivisionSettings(
+                division,
+                currentDivisionById.get(division.id)!.settings,
+              ),
+              entryFeeMinor: division.priceMinor,
+              currency: values.currency,
+              updatedAt: input.now,
+            })
+            .where(eq(divisions.id, division.id))
+        : database.insert(divisions).values({
+            id: crypto.randomUUID(),
+            sessionId: input.sessionId,
+            name: division.name.trim(),
+            description: division.description?.trim() || undefined,
+            discipline: divisionDiscipline(division),
+            ratingBasis: division.seeding,
+            capacity: division.maximumTeams * teamSize(division.teamFormat),
+            minimumTeams: division.minimumTeams,
+            maximumTeams: division.maximumTeams,
+            teamSize: teamSize(division.teamFormat),
+            priceBasis: division.priceBasis,
+            settings: eventDivisionSettings(division),
+            entryFeeMinor: division.priceMinor,
+            currency: values.currency,
+          }),
+    ),
+    ...ticketsForWrite.map((ticket) =>
+      ticket.id
+        ? database
+            .update(ticketTypes)
+            .set({
+              name: ticket.name.trim(),
+              description: ticket.description?.trim() || null,
+              priceMinor: ticket.priceMinor,
+              currency: values.currency,
+              quantity: ticket.quantity ?? null,
+              availableOnline: ticket.availableOnline,
+              availableInPerson: ticket.availableInPerson,
+              waitlistEnabled: ticket.waitlistEnabled,
+              approvalRequired: ticket.approvalRequired,
+              updatedAt: input.now,
+            })
+            .where(eq(ticketTypes.id, ticket.id))
+        : database.insert(ticketTypes).values({
+            id: crypto.randomUUID(),
+            sessionId: input.sessionId,
+            name: ticket.name.trim(),
+            description: ticket.description?.trim() || undefined,
+            priceMinor: ticket.priceMinor,
+            currency: values.currency,
+            quantity: ticket.quantity,
+            availableOnline: ticket.availableOnline,
+            availableInPerson: ticket.availableInPerson,
+            waitlistEnabled: ticket.waitlistEnabled,
+            approvalRequired: ticket.approvalRequired,
+          }),
     ),
     database.insert(auditLog).values({
       organizationId,
       actorPersonId: input.actor.personId,
       actorType: "person",
-      action: "event.draft_updated",
+      action:
+        target.status === "draft"
+          ? "event.draft_updated"
+          : "event.settings_updated",
       entityType: "session",
       entityId: input.sessionId,
       beforeHash: stableHash(before),
       afterHash: stableHash({
         ...values,
-        divisions: input.divisions,
-        tickets: input.tickets,
+        divisions: divisionsForWrite,
+        tickets: ticketsForWrite,
         features: input.features,
         policies: input.policies,
         recurrence: input.recurrence,
       }),
-      reason: "Operator reviewed and saved changes to a private event draft.",
+      reason: input.reason,
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,
     }),
   ]);
-  return { id: input.sessionId, entity: "event", status: "draft" };
+  return {
+    id: input.sessionId,
+    entity: "event",
+    status: target.status === "draft" ? "draft" : "updated",
+  };
 }
 
 export async function publishSession(input: {
