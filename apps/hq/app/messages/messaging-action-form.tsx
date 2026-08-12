@@ -1,7 +1,12 @@
 "use client";
 
 import { CircleAlert, Send } from "lucide-react";
-import { type ReactNode, useActionState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  startTransition,
+  useActionState,
+} from "react";
 import {
   createOrganizationConversation,
   sendOrganizationMessage,
@@ -34,9 +39,14 @@ export function MessagingActionForm({
       ? createOrganizationConversation
       : sendOrganizationMessage;
   const [state, formAction, pending] = useActionState(action, initialState);
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => formAction(formData));
+  }
 
   return (
-    <form action={formAction} aria-busy={pending} className={className}>
+    <form aria-busy={pending} className={className} onSubmit={submit}>
       {children}
       {state.status === "error" && (
         <p className={styles.actionNotice} role="alert">
