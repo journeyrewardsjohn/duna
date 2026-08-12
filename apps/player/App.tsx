@@ -84,9 +84,14 @@ import {
   BookingManagementModal,
   type ManagedBooking,
 } from "./booking-management";
+import {
+  BookingConfirmationView,
+  type ShareableBookingDetails,
+} from "./booking-share";
 import dunaResultReturn from "./assets/duna-result-return-v1.png";
 import dunaResultRise from "./assets/duna-result-rise-v1.png";
 import { PlayerCalendarModal } from "./player-calendar";
+import { PlayerCalendarAutoSync } from "./player-calendar-sync";
 import { ProfileHubScreen } from "./profile-hub";
 import { PlayerArtworkModal, ProfileEditorModal } from "./profile-studio";
 import { ScoreUploadScreen } from "./score-upload";
@@ -2952,6 +2957,13 @@ function VenueBookingModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [confirmation, setConfirmation] = useState<{
+    readonly bookingId: string;
+    readonly details: ShareableBookingDetails;
+    readonly label: string;
+    readonly title: string;
+    readonly body: string;
+  }>();
   const bookingDateScrollRef = useRef<ScrollView>(null);
   const bookingDateScrollX = useRef(0);
   const dateRailPositioned = useRef(false);
@@ -3059,6 +3071,7 @@ function VenueBookingModal({
   useEffect(() => {
     if (!visible) {
       dateRailPositioned.current = false;
+      setConfirmation(undefined);
       return;
     }
     if (dateRailPositioned.current) return;
@@ -3262,6 +3275,7 @@ function VenueBookingModal({
         localStartsAt: selectedSlot.localStartsAt.slice(0, 16),
         durationMinutes,
         paymentMode,
+        paymentSurface: Platform.OS === "web" ? "hosted" : "native",
         participants,
         policyAccepted,
         policyFullScrollConfirmed: policyRead || !policy?.requireFullScroll,
@@ -3269,27 +3283,56 @@ function VenueBookingModal({
         cancelUrl: `${dunaWebUrl}/app?court_checkout=cancelled`,
         idempotencyKey: Crypto.randomUUID(),
       });
-      if (result.checkoutUrl) {
-        await WebBrowser.openBrowserAsync(result.checkoutUrl);
-      }
-      if (result.mode === "free" || result.checkoutUrl) {
+      if (result.mode === "free" || result.paymentSheet || result.checkoutUrl) {
         let confirmed = result.mode === "free";
-        if (
-          bookingIntent === "host" &&
-          result.checkoutSessionId &&
-          !confirmed
-        ) {
-          for (let attempt = 0; attempt < 8; attempt += 1) {
-            const status = await client.player.courtCheckoutStatus.query({
-              checkoutSessionId: result.checkoutSessionId,
+        let sharePaid = result.mode === "free";
+        let awaitingParticipants = false;
+        if (result.paymentSheet) {
+          let status = await client.player.courtCheckoutStatus.query({
+            paymentIntentId: result.paymentSheet.paymentIntentId,
+          });
+          if (!status.sharePaid) {
+            const paymentResult = await presentNativeEventPayment({
+              paymentSheet: result.paymentSheet,
+              customerName: dashboard?.player.displayName,
             });
-            if (status.complete) {
-              confirmed = true;
-              break;
+            if (paymentResult === "cancelled") return;
+            for (
+              let attempt = 0;
+              attempt < 8 && !status.sharePaid;
+              attempt += 1
+            ) {
+              await new Promise<void>((resolve) =>
+                setTimeout(resolve, attempt < 3 ? 450 : 900),
+              );
+              status = await client.player.courtCheckoutStatus.query({
+                paymentIntentId: result.paymentSheet!.paymentIntentId,
+              });
             }
-            await new Promise<void>((resolve) =>
-              setTimeout(resolve, attempt < 3 ? 500 : 1_000),
+          }
+          confirmed = status.complete;
+          sharePaid = status.sharePaid;
+          awaitingParticipants = status.awaitingParticipants;
+        } else if (result.checkoutUrl) {
+          if (Platform.OS !== "web") {
+            throw new Error(
+              "Duna could not prepare the in-app payment. Your court is not charged; please try again.",
             );
+          }
+          await WebBrowser.openBrowserAsync(result.checkoutUrl);
+          if (result.checkoutSessionId) {
+            for (let attempt = 0; attempt < 8; attempt += 1) {
+              const status = await client.player.courtCheckoutStatus.query({
+                checkoutSessionId: result.checkoutSessionId,
+              });
+              confirmed = status.complete;
+              sharePaid = status.sharePaid;
+              awaitingParticipants = status.awaitingParticipants;
+              if (sharePaid) break;
+              await new Promise<void>((resolve) =>
+                setTimeout(resolve, attempt < 3 ? 500 : 1_000),
+              );
+            }
           }
         }
         successHaptic();
@@ -3315,13 +3358,56 @@ function VenueBookingModal({
           onHostReady?.(seed);
           return;
         }
-        setNotice(
-          bookingIntent === "host"
-            ? "Your court payment is still confirming. Once it appears in Play, open it to host the match."
-            : paymentMode === "split"
-              ? "Your share is ready. Duna sent each invited player their secure link."
-              : "The court is reserved.",
-        );
+        if (result.bookingId && inventory) {
+          const playerNames = result.participants?.map(
+            (participant) => participant.displayName,
+          ) ?? [
+            dashboard?.player.displayName ?? "You",
+            ...participants.flatMap((participant) =>
+              participant.name ? [participant.name] : [],
+            ),
+          ];
+          setConfirmation({
+            bookingId: result.bookingId,
+            details: {
+              title: `Court rental · ${selectedSlot.courtName}`,
+              startsAt: result.startsAt,
+              endsAt: result.endsAt,
+              timezone: inventory.venue.timezone,
+              organizationName: inventory.venue.organizationName,
+              locationName: inventory.venue.name,
+              ...(inventory.venue.address
+                ? { address: inventory.venue.address }
+                : {}),
+              courtName: selectedSlot.courtName,
+              playerNames,
+              detailsUrl: `${dunaWebUrl}/venues/${inventory.venue.id}`,
+            },
+            label: awaitingParticipants
+              ? "Share paid"
+              : confirmed
+                ? "Confirmed"
+                : sharePaid
+                  ? "Payment received"
+                  : "Processing",
+            title: awaitingParticipants
+              ? "Your court is held."
+              : confirmed
+                ? "Court reserved."
+                : "Payment received.",
+            body: awaitingParticipants
+              ? "Your share is paid. Invited players have secure links for their shares; the booking confirms when everyone is paid."
+              : confirmed
+                ? "Everything you need is below and ready to share."
+                : "Duna is finishing the confirmation and will keep this booking in your Plans.",
+          });
+        } else {
+          setNotice(
+            sharePaid
+              ? "Payment received. Duna is finishing confirmation."
+              : "The court payment is still processing.",
+          );
+        }
       } else {
         setError("That court is no longer available. Pick another time.");
       }
@@ -3341,792 +3427,841 @@ function VenueBookingModal({
       visible={visible}
     >
       <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
-        <ScrollView
-          contentContainerStyle={styles.modalContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.modalHeader}>
-            <Pressable
-              onPress={
-                selectedSlot ? () => setSelectedSlot(undefined) : onClose
-              }
+        {confirmation ? (
+          <BookingConfirmationView
+            body={confirmation.body}
+            details={confirmation.details}
+            label={confirmation.label}
+            onDone={onClose}
+            title={confirmation.title}
+          />
+        ) : (
+          <>
+            <ScrollView
+              contentContainerStyle={styles.modalContent}
+              showsVerticalScrollIndicator={false}
             >
-              <Text style={styles.closeText}>{selectedSlot ? "‹" : "×"}</Text>
-            </Pressable>
-            <Text style={styles.modalHeaderTitle}>
-              {selectedSlot
-                ? bookingIntent === "host"
-                  ? "Create a match"
-                  : "Review"
-                : "Find a game"}
-            </Text>
-            <ThemeButton />
-          </View>
-          {inventory && (
-            <>
-              <Text style={styles.bookingVenueName}>
-                {inventory.venue.name}
-              </Text>
-              <Text style={styles.checkoutMeta}>
-                {inventory.venue.city} · {inventory.venue.organizationName}
-              </Text>
-            </>
-          )}
-          {!selectedSlot ? (
-            <>
-              <View style={styles.bookingDateToolbar}>
-                <View style={styles.flex}>
-                  <Text style={styles.bookingDateToolbarLabel}>
-                    WHEN DO YOU WANT TO PLAY?
+              <View style={styles.modalHeader}>
+                <Pressable
+                  onPress={
+                    selectedSlot ? () => setSelectedSlot(undefined) : onClose
+                  }
+                >
+                  <Text style={styles.closeText}>
+                    {selectedSlot ? "‹" : "×"}
                   </Text>
-                  <Text style={styles.bookingDateToolbarTitle}>
-                    {localDateAnchor(selectedDate).toLocaleDateString("en-US", {
-                      weekday: "long",
-                      month: "long",
-                      day: "numeric",
-                    })}
+                </Pressable>
+                <Text style={styles.modalHeaderTitle}>
+                  {selectedSlot
+                    ? bookingIntent === "host"
+                      ? "Create a match"
+                      : "Review"
+                    : "Find a game"}
+                </Text>
+                <ThemeButton />
+              </View>
+              {inventory && (
+                <>
+                  <Text style={styles.bookingVenueName}>
+                    {inventory.venue.name}
                   </Text>
-                </View>
-                <View style={styles.bookingDateToolbarActions}>
-                  <Pressable
-                    accessibilityLabel="Show earlier dates"
-                    onPress={() =>
-                      bookingDateScrollRef.current?.scrollTo({
-                        animated: true,
-                        x: Math.max(0, bookingDateScrollX.current - 252),
-                      })
-                    }
-                    style={styles.bookingDateNavButton}
-                  >
-                    <Text style={styles.bookingDateNavText}>‹</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityLabel="Open full calendar"
-                    onPress={() => {
-                      selectionHaptic();
-                      setCalendarOpen(true);
-                    }}
-                    style={styles.bookingDateCalendarButton}
-                  >
-                    <Text style={styles.bookingDateCalendarIcon}>▦</Text>
-                    <Text style={styles.bookingDateCalendarText}>Calendar</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityLabel="Show later dates"
-                    onPress={() => {
-                      const target = bookingDateScrollX.current + 252;
-                      if (target + width >= dates.length * 72 - width) {
+                  <Text style={styles.checkoutMeta}>
+                    {inventory.venue.city} · {inventory.venue.organizationName}
+                  </Text>
+                </>
+              )}
+              {!selectedSlot ? (
+                <>
+                  <View style={styles.bookingDateToolbar}>
+                    <View style={styles.flex}>
+                      <Text style={styles.bookingDateToolbarLabel}>
+                        WHEN DO YOU WANT TO PLAY?
+                      </Text>
+                      <Text style={styles.bookingDateToolbarTitle}>
+                        {localDateAnchor(selectedDate).toLocaleDateString(
+                          "en-US",
+                          {
+                            weekday: "long",
+                            month: "long",
+                            day: "numeric",
+                          },
+                        )}
+                      </Text>
+                    </View>
+                    <View style={styles.bookingDateToolbarActions}>
+                      <Pressable
+                        accessibilityLabel="Show earlier dates"
+                        onPress={() =>
+                          bookingDateScrollRef.current?.scrollTo({
+                            animated: true,
+                            x: Math.max(0, bookingDateScrollX.current - 252),
+                          })
+                        }
+                        style={styles.bookingDateNavButton}
+                      >
+                        <Text style={styles.bookingDateNavText}>‹</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel="Open full calendar"
+                        onPress={() => {
+                          selectionHaptic();
+                          setCalendarOpen(true);
+                        }}
+                        style={styles.bookingDateCalendarButton}
+                      >
+                        <Text style={styles.bookingDateCalendarIcon}>▦</Text>
+                        <Text style={styles.bookingDateCalendarText}>
+                          Calendar
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel="Show later dates"
+                        onPress={() => {
+                          const target = bookingDateScrollX.current + 252;
+                          if (target + width >= dates.length * 72 - width) {
+                            extendDateRange();
+                          }
+                          bookingDateScrollRef.current?.scrollTo({
+                            animated: true,
+                            x: target,
+                          });
+                        }}
+                        style={styles.bookingDateNavButton}
+                      >
+                        <Text style={styles.bookingDateNavText}>›</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                  <ScrollView
+                    contentContainerStyle={styles.bookingDateRow}
+                    horizontal
+                    onScroll={(event) => {
+                      const { contentOffset, contentSize, layoutMeasurement } =
+                        event.nativeEvent;
+                      bookingDateScrollX.current = contentOffset.x;
+                      if (
+                        contentOffset.x + layoutMeasurement.width >=
+                        contentSize.width - layoutMeasurement.width
+                      ) {
                         extendDateRange();
                       }
-                      bookingDateScrollRef.current?.scrollTo({
-                        animated: true,
-                        x: target,
-                      });
                     }}
-                    style={styles.bookingDateNavButton}
+                    ref={bookingDateScrollRef}
+                    scrollEventThrottle={16}
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.horizontalBleed}
                   >
-                    <Text style={styles.bookingDateNavText}>›</Text>
-                  </Pressable>
-                </View>
-              </View>
-              <ScrollView
-                contentContainerStyle={styles.bookingDateRow}
-                horizontal
-                onScroll={(event) => {
-                  const { contentOffset, contentSize, layoutMeasurement } =
-                    event.nativeEvent;
-                  bookingDateScrollX.current = contentOffset.x;
-                  if (
-                    contentOffset.x + layoutMeasurement.width >=
-                    contentSize.width - layoutMeasurement.width
-                  ) {
-                    extendDateRange();
-                  }
-                }}
-                ref={bookingDateScrollRef}
-                scrollEventThrottle={16}
-                showsHorizontalScrollIndicator={false}
-                style={styles.horizontalBleed}
-              >
-                {dates.map((value) => {
-                  const date = localDateAnchor(value);
-                  const active = value === selectedDate;
-                  const marker = calendarMarkers.get(value);
-                  return (
-                    <Pressable
-                      accessibilityLabel={`${date.toLocaleDateString("en-US", {
-                        weekday: "long",
-                        month: "long",
-                        day: "numeric",
-                        year: "numeric",
-                      })}${marker ? `, ${marker.count} scheduled` : ""}`}
-                      key={value}
-                      onPress={() => {
-                        selectionHaptic();
-                        setSelectedDate(value);
-                      }}
-                      style={[
-                        styles.bookingDate,
-                        active && styles.bookingDateActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.bookingDateDay,
-                          active && styles.bookingDateTextActive,
-                        ]}
-                      >
-                        {shortLocalWeekday(value)}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.bookingDateNumber,
-                          active && styles.bookingDateTextActive,
-                        ]}
-                      >
-                        {date.getDate()}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.bookingDateMonth,
-                          active && styles.bookingDateTextActive,
-                        ]}
-                      >
-                        {date.toLocaleDateString("en-US", { month: "short" })}
-                      </Text>
-                      <View style={styles.bookingDateDots}>
-                        {marker?.booking && (
-                          <View
-                            style={[
-                              styles.bookingDateDot,
-                              styles.bookingDateDotBooking,
-                            ]}
-                          />
-                        )}
-                        {marker?.event && (
-                          <View
-                            style={[
-                              styles.bookingDateDot,
-                              styles.bookingDateDotEvent,
-                            ]}
-                          />
-                        )}
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-              <View style={styles.bookingDurationRow}>
-                {durations.map((duration) => (
-                  <Pressable
-                    key={duration}
-                    onPress={() => {
-                      selectionHaptic();
-                      setDurationMinutes(duration);
-                    }}
-                    style={[
-                      styles.bookingDuration,
-                      duration === durationMinutes &&
-                        styles.bookingDurationActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.bookingDurationText,
-                        duration === durationMinutes &&
-                          styles.bookingDurationTextActive,
-                      ]}
-                    >
-                      {duration} min
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              {selectedForecastDay && (
-                <View style={styles.bookingWeather}>
-                  <Text style={styles.bookingWeatherIcon}>
-                    {weatherSymbol(selectedForecastDay.icon)}
-                  </Text>
-                  <View style={styles.flex}>
-                    <Text style={styles.rowTitle}>
-                      {selectedForecastDay.condition} ·{" "}
-                      {fahrenheit(selectedForecastDay.temperatureHighC)}
-                    </Text>
-                    <Text style={styles.rowMeta}>
-                      {selectedForecastDay.sunriseAt
-                        ? `Sunrise ${formatVenueTime(
-                            selectedForecastDay.sunriseAt,
-                            availability?.timezone ?? "UTC",
-                            "en-US",
-                            { hour: "numeric", minute: "2-digit" },
-                          )}`
-                        : "Sunrise pending"}
-                      {" · "}
-                      {selectedForecastDay.sunsetAt
-                        ? `Sunset ${formatVenueTime(
-                            selectedForecastDay.sunsetAt,
-                            availability?.timezone ?? "UTC",
-                            "en-US",
-                            { hour: "numeric", minute: "2-digit" },
-                          )}`
-                        : "Sunset pending"}
-                    </Text>
-                  </View>
-                  <Text style={styles.bookingWeatherUpdated}>
-                    Updated{" "}
-                    {availability?.forecast
-                      ? formatVenueTime(
-                          availability.forecast.updatedAt,
-                          availability.timezone,
-                          "en-US",
-                          { hour: "numeric", minute: "2-digit" },
-                        )
-                      : ""}
-                  </Text>
-                </View>
-              )}
-              {loading ? (
-                <Text style={styles.bookingEmpty}>Finding open courts…</Text>
-              ) : timeOptions.length ? (
-                <>
-                  <Text style={styles.bookingTimeSectionLabel}>
-                    OPEN COURTS + MATCHES
-                  </Text>
-                  <View style={styles.bookingTimeGrid}>
-                    {timeOptions.map((localStartsAt) => {
-                      const openMatches = (
-                        availability?.openMatches ?? []
-                      ).filter(
-                        (match) => match.localStartsAt === localStartsAt,
-                      );
-                      const slotCount = (availability?.slots ?? []).filter(
-                        (slot) => slot.localStartsAt === localStartsAt,
-                      ).length;
-                      const active = selectedLocalStart === localStartsAt;
-                      const players = openMatches
-                        .flatMap((match) => [
-                          match.host,
-                          ...match.attendees.filter(
-                            (player) => player.id !== match.host.id,
-                          ),
-                        ])
-                        .slice(0, 2);
+                    {dates.map((value) => {
+                      const date = localDateAnchor(value);
+                      const active = value === selectedDate;
+                      const marker = calendarMarkers.get(value);
                       return (
                         <Pressable
-                          accessibilityLabel={`${localSlotTime(localStartsAt)}, ${
-                            openMatches.length
-                              ? `${openMatches.length} open match${openMatches.length === 1 ? "" : "es"}`
-                              : `${slotCount} open court${slotCount === 1 ? "" : "s"}`
-                          }`}
-                          key={localStartsAt}
+                          accessibilityLabel={`${date.toLocaleDateString(
+                            "en-US",
+                            {
+                              weekday: "long",
+                              month: "long",
+                              day: "numeric",
+                              year: "numeric",
+                            },
+                          )}${marker ? `, ${marker.count} scheduled` : ""}`}
+                          key={value}
                           onPress={() => {
                             selectionHaptic();
-                            setSelectedLocalStart(localStartsAt);
+                            setSelectedDate(value);
                           }}
                           style={[
-                            styles.bookingTimeOption,
-                            openMatches.length > 0 &&
-                              styles.bookingTimeOptionMatch,
-                            active && styles.bookingTimeOptionActive,
+                            styles.bookingDate,
+                            active && styles.bookingDateActive,
                           ]}
                         >
                           <Text
                             style={[
-                              styles.bookingTimeOptionTime,
-                              active && styles.bookingTimeOptionTimeActive,
+                              styles.bookingDateDay,
+                              active && styles.bookingDateTextActive,
                             ]}
                           >
-                            {localSlotTime(localStartsAt)}
+                            {shortLocalWeekday(value)}
                           </Text>
-                          {players.length > 0 && (
-                            <View style={styles.bookingTimeRoster}>
-                              {players.map((player, index) =>
-                                player.avatarUrl ? (
-                                  <Image
-                                    key={`${player.id}-${index}`}
-                                    source={{ uri: player.avatarUrl }}
-                                    style={styles.bookingTimeAvatar}
-                                  />
-                                ) : (
-                                  <Text
-                                    key={`${player.id}-${index}`}
-                                    style={styles.bookingTimeAvatarFallback}
-                                  >
-                                    {player.initials}
-                                  </Text>
-                                ),
-                              )}
-                            </View>
-                          )}
                           <Text
                             style={[
-                              styles.bookingTimeOptionMeta,
-                              active && styles.bookingTimeOptionMetaActive,
+                              styles.bookingDateNumber,
+                              active && styles.bookingDateTextActive,
                             ]}
                           >
-                            {openMatches.length
-                              ? `${openMatches.length} open match${openMatches.length === 1 ? "" : "es"}`
-                              : `${slotCount} court${slotCount === 1 ? "" : "s"}`}
+                            {date.getDate()}
                           </Text>
+                          <Text
+                            style={[
+                              styles.bookingDateMonth,
+                              active && styles.bookingDateTextActive,
+                            ]}
+                          >
+                            {date.toLocaleDateString("en-US", {
+                              month: "short",
+                            })}
+                          </Text>
+                          <View style={styles.bookingDateDots}>
+                            {marker?.booking && (
+                              <View
+                                style={[
+                                  styles.bookingDateDot,
+                                  styles.bookingDateDotBooking,
+                                ]}
+                              />
+                            )}
+                            {marker?.event && (
+                              <View
+                                style={[
+                                  styles.bookingDateDot,
+                                  styles.bookingDateDotEvent,
+                                ]}
+                              />
+                            )}
+                          </View>
                         </Pressable>
                       );
                     })}
-                  </View>
-
-                  {selectedOpenMatches.length > 0 && (
-                    <View style={styles.bookingOpenMatchSection}>
-                      <Text style={styles.bookingTimeSectionLabel}>
-                        RESERVE A PLACE IN A MATCH
-                      </Text>
-                      {selectedOpenMatches.map((match) => {
-                        const roster = [
-                          match.host,
-                          ...match.attendees.filter(
-                            (player) => player.id !== match.host.id,
-                          ),
-                        ];
-                        const matchMinutes = Math.round(
-                          (Date.parse(match.endsAt) -
-                            Date.parse(match.startsAt)) /
-                            60_000,
-                        );
-                        return (
-                          <View key={match.id} style={styles.bookingOpenMatch}>
-                            <View style={styles.rowBetween}>
-                              <View style={styles.flex}>
-                                <Text style={styles.bookingOpenMatchEyebrow}>
-                                  {match.matchType.toUpperCase()} ·{" "}
-                                  {match.format}
-                                </Text>
-                                <Text style={styles.bookingOpenMatchTitle}>
-                                  {match.title}
-                                </Text>
-                                <Text style={styles.rowMeta}>
-                                  Hosted by {match.host.displayName}
-                                </Text>
-                              </View>
-                              <View style={styles.bookingOpenMatchPriceBlock}>
-                                <Text style={styles.bookingOpenMatchPrice}>
-                                  {match.price.amountMinor
-                                    ? formatMoney(
-                                        match.price.amountMinor,
-                                        match.price.currency,
-                                      )
-                                    : "Free"}
-                                </Text>
-                                <Text style={styles.rowMeta}>
-                                  {matchMinutes} min
-                                </Text>
-                              </View>
-                            </View>
-                            <View style={styles.bookingOpenMatchRoster}>
-                              {roster.slice(0, 4).map((player) => (
-                                <View
-                                  key={player.id}
-                                  style={styles.bookingOpenMatchPlayer}
-                                >
-                                  {player.avatarUrl ? (
-                                    <Image
-                                      source={{ uri: player.avatarUrl }}
-                                      style={styles.bookingOpenMatchAvatar}
-                                    />
-                                  ) : (
-                                    <Text
-                                      style={
-                                        styles.bookingOpenMatchAvatarFallback
-                                      }
-                                    >
-                                      {player.initials}
-                                    </Text>
-                                  )}
-                                  <Text
-                                    numberOfLines={1}
-                                    style={styles.bookingOpenMatchPlayerName}
-                                  >
-                                    {player.displayName.split(" ")[0]}
-                                  </Text>
-                                </View>
-                              ))}
-                              {Array.from(
-                                { length: Math.min(2, match.spotsRemaining) },
-                                (_, index) => (
-                                  <View
-                                    key={`${match.id}-open-${index}`}
-                                    style={styles.bookingOpenMatchPlayer}
-                                  >
-                                    <Text
-                                      style={styles.bookingOpenMatchAvailable}
-                                    >
-                                      ＋
-                                    </Text>
-                                    <Text
-                                      style={styles.bookingOpenMatchPlayerName}
-                                    >
-                                      Available
-                                    </Text>
-                                  </View>
-                                ),
-                              )}
-                            </View>
-                            <View style={styles.bookingOpenMatchFooter}>
-                              <Text style={styles.bookingOpenMatchSpots}>
-                                {match.spotsRemaining} spot
-                                {match.spotsRemaining === 1 ? "" : "s"} open
-                              </Text>
-                              <Pressable
-                                onPress={() =>
-                                  onOpenMatch?.(match.id, match.slug)
-                                }
-                                style={styles.bookingOpenMatchJoin}
-                              >
-                                <Text style={styles.payButtonText}>
-                                  Reserve a spot →
-                                </Text>
-                              </Pressable>
-                            </View>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  )}
-
-                  {selectedStartSlots.length > 0 && (
-                    <View style={styles.bookingCreateMatchSection}>
-                      <Text style={styles.bookingTimeSectionLabel}>
-                        {selectedOpenMatches.length
-                          ? "OR CREATE YOUR OWN"
-                          : "CREATE YOUR OWN MATCH"}
-                      </Text>
-                      {selectedStartSlots.map((slot) => (
-                        <View
-                          key={`${slot.courtId}-${slot.startsAt}`}
-                          style={styles.bookingCourtChoice}
-                        >
-                          <View style={styles.flex}>
-                            <Text style={styles.rowTitle}>
-                              {slot.courtName}
-                            </Text>
-                            <Text style={styles.rowMeta}>
-                              {slot.weather
-                                ? `${weatherSymbol(slot.weather.icon)} ${fahrenheit(slot.weather.temperatureC)} · `
-                                : ""}
-                              {durationMinutes} minutes
-                            </Text>
-                          </View>
-                          <Text style={styles.bookingSlotPrice}>
-                            {slot.price
-                              ? formatMoney(
-                                  slot.price.amountMinor,
-                                  slot.price.currency,
-                                )
-                              : "Free"}
-                          </Text>
-                          <View style={styles.bookingCourtActions}>
-                            <Pressable
-                              onPress={() => reviewSlot(slot, "host")}
-                              style={styles.bookingHostButton}
-                            >
-                              <Text style={styles.bookingHostButtonText}>
-                                Host match
-                              </Text>
-                            </Pressable>
-                            <Pressable
-                              onPress={() => reviewSlot(slot, "private")}
-                              style={styles.bookingPrivateButton}
-                            >
-                              <Text style={styles.bookingPrivateButtonText}>
-                                Book private
-                              </Text>
-                            </Pressable>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </>
-              ) : (
-                <View style={styles.bookingEmptyCard}>
-                  <Text style={styles.rowTitle}>
-                    No matching court is open.
-                  </Text>
-                  <Text style={styles.bodyText}>
-                    Create a priority alert and Duna will watch cancellations
-                    and newly released inventory.
-                  </Text>
-                </View>
-              )}
-              {Boolean(availability?.excludedAfterDarkCount) && (
-                <Text style={styles.bookingDaylightNote}>
-                  ☾ {availability?.excludedAfterDarkCount} start
-                  {availability?.excludedAfterDarkCount === 1 ? "" : "s"} hidden
-                  because this court is not lit after dark.
-                </Text>
-              )}
-              <Pressable
-                disabled={busy || mode === "preview"}
-                onPress={() => void createAlert()}
-                style={styles.bookingAlertButton}
-              >
-                <Text style={styles.bookingAlertIcon}>♢</Text>
-                <View style={styles.flex}>
-                  <Text style={styles.rowTitle}>Priority alert</Text>
-                  <Text style={styles.rowMeta}>
-                    One active alert is included. Premium unlocks more.
-                  </Text>
-                </View>
-                <Text style={styles.chevron}>›</Text>
-              </Pressable>
-            </>
-          ) : (
-            <>
-              <View style={styles.bookingReviewCard}>
-                <Text style={styles.bookingReviewDate}>
-                  {new Date(selectedSlot.startsAt).toLocaleDateString("en-US", {
-                    weekday: "long",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </Text>
-                <Text style={styles.bookingReviewTime}>
-                  {localSlotTime(selectedSlot.localStartsAt)} –{" "}
-                  {localSlotTime(selectedSlot.localEndsAt)}
-                </Text>
-                <Text style={styles.checkoutMeta}>
-                  {selectedSlot.courtName} · {durationMinutes} minutes
-                </Text>
-              </View>
-              {bookingIntent === "host" && (
-                <View style={styles.bookingHostIntent}>
-                  <Text style={styles.bookingHostIntentIcon}>✦</Text>
-                  <View style={styles.flex}>
-                    <Text style={styles.rowTitle}>
-                      Reserve first, then publish.
-                    </Text>
-                    <Text style={styles.rowMeta}>
-                      Duna carries this confirmed court, time, and venue into
-                      the match builder. You choose the format, level, and open
-                      spots next.
-                    </Text>
-                  </View>
-                </View>
-              )}
-              {bookingIntent === "private" && (
-                <>
-                  <View style={styles.purchaseKindRow}>
-                    {(["full", "split"] as const).map((modeOption) => (
+                  </ScrollView>
+                  <View style={styles.bookingDurationRow}>
+                    {durations.map((duration) => (
                       <Pressable
-                        key={modeOption}
-                        onPress={() => setPaymentMode(modeOption)}
+                        key={duration}
+                        onPress={() => {
+                          selectionHaptic();
+                          setDurationMinutes(duration);
+                        }}
                         style={[
-                          styles.purchaseKindButton,
-                          paymentMode === modeOption &&
-                            styles.purchaseKindButtonActive,
+                          styles.bookingDuration,
+                          duration === durationMinutes &&
+                            styles.bookingDurationActive,
                         ]}
                       >
                         <Text
                           style={[
-                            styles.purchaseKindText,
-                            paymentMode === modeOption &&
-                              styles.purchaseKindTextActive,
+                            styles.bookingDurationText,
+                            duration === durationMinutes &&
+                              styles.bookingDurationTextActive,
                           ]}
                         >
-                          {modeOption === "full"
-                            ? `Pay everything · ${formatMoney(totalMinor, "USD")}`
-                            : `Pay your part · ${formatMoney(shareMinor, "USD")}`}
+                          {duration} min
                         </Text>
                       </Pressable>
                     ))}
                   </View>
-                  <View style={styles.checkoutSection}>
-                    <View style={styles.rowBetween}>
-                      <View>
-                        <Text style={styles.rowTitle}>Add players</Text>
+                  {selectedForecastDay && (
+                    <View style={styles.bookingWeather}>
+                      <Text style={styles.bookingWeatherIcon}>
+                        {weatherSymbol(selectedForecastDay.icon)}
+                      </Text>
+                      <View style={styles.flex}>
+                        <Text style={styles.rowTitle}>
+                          {selectedForecastDay.condition} ·{" "}
+                          {fahrenheit(selectedForecastDay.temperatureHighC)}
+                        </Text>
                         <Text style={styles.rowMeta}>
-                          Frequent partners first. Invite any group size.
+                          {selectedForecastDay.sunriseAt
+                            ? `Sunrise ${formatVenueTime(
+                                selectedForecastDay.sunriseAt,
+                                availability?.timezone ?? "UTC",
+                                "en-US",
+                                { hour: "numeric", minute: "2-digit" },
+                              )}`
+                            : "Sunrise pending"}
+                          {" · "}
+                          {selectedForecastDay.sunsetAt
+                            ? `Sunset ${formatVenueTime(
+                                selectedForecastDay.sunsetAt,
+                                availability?.timezone ?? "UTC",
+                                "en-US",
+                                { hour: "numeric", minute: "2-digit" },
+                              )}`
+                            : "Sunset pending"}
                         </Text>
                       </View>
-                      <Pressable onPress={() => void importContacts()}>
-                        <Text style={styles.linkText}>Contacts</Text>
-                      </Pressable>
-                    </View>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.bookingPartnerScroll}
-                    >
-                      <View style={styles.bookingPartnerRow}>
-                        {people?.slice(0, 6).map((person) => (
-                          <Pressable
-                            key={person.id}
-                            onPress={() =>
-                              addParticipant({
-                                personId: person.id,
-                                name: person.displayName,
-                              })
-                            }
-                            style={styles.bookingPartner}
-                          >
-                            <Text style={styles.bookingPartnerAvatar}>
-                              {person.initials}
-                            </Text>
-                            <Text
-                              numberOfLines={1}
-                              style={styles.bookingPartnerName}
-                            >
-                              {person.displayName.split(" ")[0]}
-                            </Text>
-                          </Pressable>
-                        ))}
-                        {contactOptions.map((contact) => (
-                          <Pressable
-                            key={contact.email ?? contact.phoneE164}
-                            onPress={() => addParticipant(contact)}
-                            style={styles.bookingPartner}
-                          >
-                            <Text style={styles.bookingPartnerAvatar}>
-                              {(contact.name ?? "C").slice(0, 1).toUpperCase()}
-                            </Text>
-                            <Text
-                              numberOfLines={1}
-                              style={styles.bookingPartnerName}
-                            >
-                              {contact.name ?? "Contact"}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    </ScrollView>
-                    <View style={styles.bookingManualInvite}>
-                      <TextInput
-                        onChangeText={setManualName}
-                        placeholder="Name"
-                        placeholderTextColor={colors.muted}
-                        style={[styles.formInput, styles.formRowInput]}
-                        value={manualName}
-                      />
-                      <TextInput
-                        autoCapitalize="none"
-                        onChangeText={setManualTarget}
-                        placeholder="Email or mobile"
-                        placeholderTextColor={colors.muted}
-                        style={[styles.formInput, styles.formRowInput]}
-                        value={manualTarget}
-                      />
-                      <Pressable
-                        onPress={addManualParticipant}
-                        style={styles.bookingAddButton}
-                      >
-                        <Text style={styles.payButtonText}>Add</Text>
-                      </Pressable>
-                    </View>
-                    {participants.map((participant, index) => (
-                      <View
-                        key={
-                          participant.personId ??
-                          participant.email ??
-                          participant.phoneE164
-                        }
-                        style={styles.bookingParticipant}
-                      >
-                        <Text style={styles.checkText}>✓</Text>
-                        <View style={styles.flex}>
-                          <Text style={styles.rowTitle}>
-                            {participant.name ??
-                              participant.email ??
-                              participant.phoneE164}
-                          </Text>
-                          <Text style={styles.rowMeta}>
-                            {paymentMode === "split"
-                              ? `Pays ${formatMoney(shareMinor, "USD")}`
-                              : "Included in your reservation"}
-                          </Text>
-                        </View>
-                        <Pressable
-                          onPress={() =>
-                            setParticipants((current) =>
-                              current.filter(
-                                (_, itemIndex) => itemIndex !== index,
-                              ),
+                      <Text style={styles.bookingWeatherUpdated}>
+                        Updated{" "}
+                        {availability?.forecast
+                          ? formatVenueTime(
+                              availability.forecast.updatedAt,
+                              availability.timezone,
+                              "en-US",
+                              { hour: "numeric", minute: "2-digit" },
                             )
-                          }
-                        >
-                          <Text style={styles.closeText}>×</Text>
-                        </Pressable>
+                          : ""}
+                      </Text>
+                    </View>
+                  )}
+                  {loading ? (
+                    <Text style={styles.bookingEmpty}>
+                      Finding open courts…
+                    </Text>
+                  ) : timeOptions.length ? (
+                    <>
+                      <Text style={styles.bookingTimeSectionLabel}>
+                        OPEN COURTS + MATCHES
+                      </Text>
+                      <View style={styles.bookingTimeGrid}>
+                        {timeOptions.map((localStartsAt) => {
+                          const openMatches = (
+                            availability?.openMatches ?? []
+                          ).filter(
+                            (match) => match.localStartsAt === localStartsAt,
+                          );
+                          const slotCount = (availability?.slots ?? []).filter(
+                            (slot) => slot.localStartsAt === localStartsAt,
+                          ).length;
+                          const active = selectedLocalStart === localStartsAt;
+                          const players = openMatches
+                            .flatMap((match) => [
+                              match.host,
+                              ...match.attendees.filter(
+                                (player) => player.id !== match.host.id,
+                              ),
+                            ])
+                            .slice(0, 2);
+                          return (
+                            <Pressable
+                              accessibilityLabel={`${localSlotTime(localStartsAt)}, ${
+                                openMatches.length
+                                  ? `${openMatches.length} open match${openMatches.length === 1 ? "" : "es"}`
+                                  : `${slotCount} open court${slotCount === 1 ? "" : "s"}`
+                              }`}
+                              key={localStartsAt}
+                              onPress={() => {
+                                selectionHaptic();
+                                setSelectedLocalStart(localStartsAt);
+                              }}
+                              style={[
+                                styles.bookingTimeOption,
+                                openMatches.length > 0 &&
+                                  styles.bookingTimeOptionMatch,
+                                active && styles.bookingTimeOptionActive,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.bookingTimeOptionTime,
+                                  active && styles.bookingTimeOptionTimeActive,
+                                ]}
+                              >
+                                {localSlotTime(localStartsAt)}
+                              </Text>
+                              {players.length > 0 && (
+                                <View style={styles.bookingTimeRoster}>
+                                  {players.map((player, index) =>
+                                    player.avatarUrl ? (
+                                      <Image
+                                        key={`${player.id}-${index}`}
+                                        source={{ uri: player.avatarUrl }}
+                                        style={styles.bookingTimeAvatar}
+                                      />
+                                    ) : (
+                                      <Text
+                                        key={`${player.id}-${index}`}
+                                        style={styles.bookingTimeAvatarFallback}
+                                      >
+                                        {player.initials}
+                                      </Text>
+                                    ),
+                                  )}
+                                </View>
+                              )}
+                              <Text
+                                style={[
+                                  styles.bookingTimeOptionMeta,
+                                  active && styles.bookingTimeOptionMetaActive,
+                                ]}
+                              >
+                                {openMatches.length
+                                  ? `${openMatches.length} open match${openMatches.length === 1 ? "" : "es"}`
+                                  : `${slotCount} court${slotCount === 1 ? "" : "s"}`}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
                       </View>
-                    ))}
+
+                      {selectedOpenMatches.length > 0 && (
+                        <View style={styles.bookingOpenMatchSection}>
+                          <Text style={styles.bookingTimeSectionLabel}>
+                            RESERVE A PLACE IN A MATCH
+                          </Text>
+                          {selectedOpenMatches.map((match) => {
+                            const roster = [
+                              match.host,
+                              ...match.attendees.filter(
+                                (player) => player.id !== match.host.id,
+                              ),
+                            ];
+                            const matchMinutes = Math.round(
+                              (Date.parse(match.endsAt) -
+                                Date.parse(match.startsAt)) /
+                                60_000,
+                            );
+                            return (
+                              <View
+                                key={match.id}
+                                style={styles.bookingOpenMatch}
+                              >
+                                <View style={styles.rowBetween}>
+                                  <View style={styles.flex}>
+                                    <Text
+                                      style={styles.bookingOpenMatchEyebrow}
+                                    >
+                                      {match.matchType.toUpperCase()} ·{" "}
+                                      {match.format}
+                                    </Text>
+                                    <Text style={styles.bookingOpenMatchTitle}>
+                                      {match.title}
+                                    </Text>
+                                    <Text style={styles.rowMeta}>
+                                      Hosted by {match.host.displayName}
+                                    </Text>
+                                  </View>
+                                  <View
+                                    style={styles.bookingOpenMatchPriceBlock}
+                                  >
+                                    <Text style={styles.bookingOpenMatchPrice}>
+                                      {match.price.amountMinor
+                                        ? formatMoney(
+                                            match.price.amountMinor,
+                                            match.price.currency,
+                                          )
+                                        : "Free"}
+                                    </Text>
+                                    <Text style={styles.rowMeta}>
+                                      {matchMinutes} min
+                                    </Text>
+                                  </View>
+                                </View>
+                                <View style={styles.bookingOpenMatchRoster}>
+                                  {roster.slice(0, 4).map((player) => (
+                                    <View
+                                      key={player.id}
+                                      style={styles.bookingOpenMatchPlayer}
+                                    >
+                                      {player.avatarUrl ? (
+                                        <Image
+                                          source={{ uri: player.avatarUrl }}
+                                          style={styles.bookingOpenMatchAvatar}
+                                        />
+                                      ) : (
+                                        <Text
+                                          style={
+                                            styles.bookingOpenMatchAvatarFallback
+                                          }
+                                        >
+                                          {player.initials}
+                                        </Text>
+                                      )}
+                                      <Text
+                                        numberOfLines={1}
+                                        style={
+                                          styles.bookingOpenMatchPlayerName
+                                        }
+                                      >
+                                        {player.displayName.split(" ")[0]}
+                                      </Text>
+                                    </View>
+                                  ))}
+                                  {Array.from(
+                                    {
+                                      length: Math.min(2, match.spotsRemaining),
+                                    },
+                                    (_, index) => (
+                                      <View
+                                        key={`${match.id}-open-${index}`}
+                                        style={styles.bookingOpenMatchPlayer}
+                                      >
+                                        <Text
+                                          style={
+                                            styles.bookingOpenMatchAvailable
+                                          }
+                                        >
+                                          ＋
+                                        </Text>
+                                        <Text
+                                          style={
+                                            styles.bookingOpenMatchPlayerName
+                                          }
+                                        >
+                                          Available
+                                        </Text>
+                                      </View>
+                                    ),
+                                  )}
+                                </View>
+                                <View style={styles.bookingOpenMatchFooter}>
+                                  <Text style={styles.bookingOpenMatchSpots}>
+                                    {match.spotsRemaining} spot
+                                    {match.spotsRemaining === 1 ? "" : "s"} open
+                                  </Text>
+                                  <Pressable
+                                    onPress={() =>
+                                      onOpenMatch?.(match.id, match.slug)
+                                    }
+                                    style={styles.bookingOpenMatchJoin}
+                                  >
+                                    <Text style={styles.payButtonText}>
+                                      Reserve a spot →
+                                    </Text>
+                                  </Pressable>
+                                </View>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+
+                      {selectedStartSlots.length > 0 && (
+                        <View style={styles.bookingCreateMatchSection}>
+                          <Text style={styles.bookingTimeSectionLabel}>
+                            {selectedOpenMatches.length
+                              ? "OR CREATE YOUR OWN"
+                              : "CREATE YOUR OWN MATCH"}
+                          </Text>
+                          {selectedStartSlots.map((slot) => (
+                            <View
+                              key={`${slot.courtId}-${slot.startsAt}`}
+                              style={styles.bookingCourtChoice}
+                            >
+                              <View style={styles.flex}>
+                                <Text style={styles.rowTitle}>
+                                  {slot.courtName}
+                                </Text>
+                                <Text style={styles.rowMeta}>
+                                  {slot.weather
+                                    ? `${weatherSymbol(slot.weather.icon)} ${fahrenheit(slot.weather.temperatureC)} · `
+                                    : ""}
+                                  {durationMinutes} minutes
+                                </Text>
+                              </View>
+                              <Text style={styles.bookingSlotPrice}>
+                                {slot.price
+                                  ? formatMoney(
+                                      slot.price.amountMinor,
+                                      slot.price.currency,
+                                    )
+                                  : "Free"}
+                              </Text>
+                              <View style={styles.bookingCourtActions}>
+                                <Pressable
+                                  onPress={() => reviewSlot(slot, "host")}
+                                  style={styles.bookingHostButton}
+                                >
+                                  <Text style={styles.bookingHostButtonText}>
+                                    Host match
+                                  </Text>
+                                </Pressable>
+                                <Pressable
+                                  onPress={() => reviewSlot(slot, "private")}
+                                  style={styles.bookingPrivateButton}
+                                >
+                                  <Text style={styles.bookingPrivateButtonText}>
+                                    Book private
+                                  </Text>
+                                </Pressable>
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <View style={styles.bookingEmptyCard}>
+                      <Text style={styles.rowTitle}>
+                        No matching court is open.
+                      </Text>
+                      <Text style={styles.bodyText}>
+                        Create a priority alert and Duna will watch
+                        cancellations and newly released inventory.
+                      </Text>
+                    </View>
+                  )}
+                  {Boolean(availability?.excludedAfterDarkCount) && (
+                    <Text style={styles.bookingDaylightNote}>
+                      ☾ {availability?.excludedAfterDarkCount} start
+                      {availability?.excludedAfterDarkCount === 1
+                        ? ""
+                        : "s"}{" "}
+                      hidden because this court is not lit after dark.
+                    </Text>
+                  )}
+                  <Pressable
+                    disabled={busy || mode === "preview"}
+                    onPress={() => void createAlert()}
+                    style={styles.bookingAlertButton}
+                  >
+                    <Text style={styles.bookingAlertIcon}>♢</Text>
+                    <View style={styles.flex}>
+                      <Text style={styles.rowTitle}>Priority alert</Text>
+                      <Text style={styles.rowMeta}>
+                        One active alert is included. Premium unlocks more.
+                      </Text>
+                    </View>
+                    <Text style={styles.chevron}>›</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <View style={styles.bookingReviewCard}>
+                    <Text style={styles.bookingReviewDate}>
+                      {new Date(selectedSlot.startsAt).toLocaleDateString(
+                        "en-US",
+                        {
+                          weekday: "long",
+                          month: "long",
+                          day: "numeric",
+                        },
+                      )}
+                    </Text>
+                    <Text style={styles.bookingReviewTime}>
+                      {localSlotTime(selectedSlot.localStartsAt)} –{" "}
+                      {localSlotTime(selectedSlot.localEndsAt)}
+                    </Text>
+                    <Text style={styles.checkoutMeta}>
+                      {selectedSlot.courtName} · {durationMinutes} minutes
+                    </Text>
                   </View>
+                  {bookingIntent === "host" && (
+                    <View style={styles.bookingHostIntent}>
+                      <Text style={styles.bookingHostIntentIcon}>✦</Text>
+                      <View style={styles.flex}>
+                        <Text style={styles.rowTitle}>
+                          Reserve first, then publish.
+                        </Text>
+                        <Text style={styles.rowMeta}>
+                          Duna carries this confirmed court, time, and venue
+                          into the match builder. You choose the format, level,
+                          and open spots next.
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                  {bookingIntent === "private" && (
+                    <>
+                      <View style={styles.purchaseKindRow}>
+                        {(["full", "split"] as const).map((modeOption) => (
+                          <Pressable
+                            key={modeOption}
+                            onPress={() => setPaymentMode(modeOption)}
+                            style={[
+                              styles.purchaseKindButton,
+                              paymentMode === modeOption &&
+                                styles.purchaseKindButtonActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.purchaseKindText,
+                                paymentMode === modeOption &&
+                                  styles.purchaseKindTextActive,
+                              ]}
+                            >
+                              {modeOption === "full"
+                                ? `Pay everything · ${formatMoney(totalMinor, "USD")}`
+                                : `Pay your part · ${formatMoney(shareMinor, "USD")}`}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                      <View style={styles.checkoutSection}>
+                        <View style={styles.rowBetween}>
+                          <View>
+                            <Text style={styles.rowTitle}>Add players</Text>
+                            <Text style={styles.rowMeta}>
+                              Frequent partners first. Invite any group size.
+                            </Text>
+                          </View>
+                          <Pressable onPress={() => void importContacts()}>
+                            <Text style={styles.linkText}>Contacts</Text>
+                          </Pressable>
+                        </View>
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          style={styles.bookingPartnerScroll}
+                        >
+                          <View style={styles.bookingPartnerRow}>
+                            {people?.slice(0, 6).map((person) => (
+                              <Pressable
+                                key={person.id}
+                                onPress={() =>
+                                  addParticipant({
+                                    personId: person.id,
+                                    name: person.displayName,
+                                  })
+                                }
+                                style={styles.bookingPartner}
+                              >
+                                <Text style={styles.bookingPartnerAvatar}>
+                                  {person.initials}
+                                </Text>
+                                <Text
+                                  numberOfLines={1}
+                                  style={styles.bookingPartnerName}
+                                >
+                                  {person.displayName.split(" ")[0]}
+                                </Text>
+                              </Pressable>
+                            ))}
+                            {contactOptions.map((contact) => (
+                              <Pressable
+                                key={contact.email ?? contact.phoneE164}
+                                onPress={() => addParticipant(contact)}
+                                style={styles.bookingPartner}
+                              >
+                                <Text style={styles.bookingPartnerAvatar}>
+                                  {(contact.name ?? "C")
+                                    .slice(0, 1)
+                                    .toUpperCase()}
+                                </Text>
+                                <Text
+                                  numberOfLines={1}
+                                  style={styles.bookingPartnerName}
+                                >
+                                  {contact.name ?? "Contact"}
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        </ScrollView>
+                        <View style={styles.bookingManualInvite}>
+                          <TextInput
+                            onChangeText={setManualName}
+                            placeholder="Name"
+                            placeholderTextColor={colors.muted}
+                            style={[styles.formInput, styles.formRowInput]}
+                            value={manualName}
+                          />
+                          <TextInput
+                            autoCapitalize="none"
+                            onChangeText={setManualTarget}
+                            placeholder="Email or mobile"
+                            placeholderTextColor={colors.muted}
+                            style={[styles.formInput, styles.formRowInput]}
+                            value={manualTarget}
+                          />
+                          <Pressable
+                            onPress={addManualParticipant}
+                            style={styles.bookingAddButton}
+                          >
+                            <Text style={styles.payButtonText}>Add</Text>
+                          </Pressable>
+                        </View>
+                        {participants.map((participant, index) => (
+                          <View
+                            key={
+                              participant.personId ??
+                              participant.email ??
+                              participant.phoneE164
+                            }
+                            style={styles.bookingParticipant}
+                          >
+                            <Text style={styles.checkText}>✓</Text>
+                            <View style={styles.flex}>
+                              <Text style={styles.rowTitle}>
+                                {participant.name ??
+                                  participant.email ??
+                                  participant.phoneE164}
+                              </Text>
+                              <Text style={styles.rowMeta}>
+                                {paymentMode === "split"
+                                  ? `Pays ${formatMoney(shareMinor, "USD")}`
+                                  : "Included in your reservation"}
+                              </Text>
+                            </View>
+                            <Pressable
+                              onPress={() =>
+                                setParticipants((current) =>
+                                  current.filter(
+                                    (_, itemIndex) => itemIndex !== index,
+                                  ),
+                                )
+                              }
+                            >
+                              <Text style={styles.closeText}>×</Text>
+                            </Pressable>
+                          </View>
+                        ))}
+                      </View>
+                    </>
+                  )}
+                  {policy && (
+                    <View style={styles.checkoutSection}>
+                      <Text style={styles.eyebrow}>CANCELLATION POLICY</Text>
+                      {policyDocument && (
+                        <MobilePolicyReviewCard
+                          accepted={policyAccepted}
+                          detail={`Refund until ${policy.refundBeforeHours ?? 0} hours before · ${policy.lateCancellation}`}
+                          onPress={() => {
+                            selectionHaptic();
+                            setPolicyReviewOpen(true);
+                          }}
+                          policy={policyDocument}
+                        />
+                      )}
+                    </View>
+                  )}
+                  <Pressable
+                    disabled={
+                      busy ||
+                      mode === "preview" ||
+                      !policyReady ||
+                      (paymentMode === "split" && participants.length === 0) ||
+                      !inventory?.venue.paymentsReady
+                    }
+                    onPress={() => void checkout()}
+                    style={[
+                      styles.payButton,
+                      (busy ||
+                        mode === "preview" ||
+                        !policyReady ||
+                        (paymentMode === "split" &&
+                          participants.length === 0) ||
+                        !inventory?.venue.paymentsReady) &&
+                        styles.buttonDisabled,
+                    ]}
+                  >
+                    <Text style={styles.payButtonText}>
+                      {busy
+                        ? "Opening secure checkout…"
+                        : bookingIntent === "host"
+                          ? `Reserve court · ${formatMoney(totalMinor, "USD")}`
+                          : `Continue · ${formatMoney(shareMinor, "USD")}`}
+                    </Text>
+                  </Pressable>
                 </>
               )}
-              {policy && (
-                <View style={styles.checkoutSection}>
-                  <Text style={styles.eyebrow}>CANCELLATION POLICY</Text>
-                  {policyDocument && (
-                    <MobilePolicyReviewCard
-                      accepted={policyAccepted}
-                      detail={`Refund until ${policy.refundBeforeHours ?? 0} hours before · ${policy.lateCancellation}`}
-                      onPress={() => {
-                        selectionHaptic();
-                        setPolicyReviewOpen(true);
-                      }}
-                      policy={policyDocument}
-                    />
-                  )}
-                </View>
-              )}
-              <Pressable
-                disabled={
-                  busy ||
-                  mode === "preview" ||
-                  !policyReady ||
-                  (paymentMode === "split" && participants.length === 0) ||
-                  !inventory?.venue.paymentsReady
-                }
-                onPress={() => void checkout()}
-                style={[
-                  styles.payButton,
-                  (busy ||
-                    mode === "preview" ||
-                    !policyReady ||
-                    (paymentMode === "split" && participants.length === 0) ||
-                    !inventory?.venue.paymentsReady) &&
-                    styles.buttonDisabled,
-                ]}
-              >
-                <Text style={styles.payButtonText}>
-                  {busy
-                    ? "Opening secure checkout…"
-                    : bookingIntent === "host"
-                      ? `Reserve court · ${formatMoney(totalMinor, "USD")}`
-                      : `Continue · ${formatMoney(shareMinor, "USD")}`}
-                </Text>
-              </Pressable>
-            </>
-          )}
-          {notice && <Text style={styles.bookingNotice}>{notice}</Text>}
-          {error && <Text style={styles.formError}>{error}</Text>}
-        </ScrollView>
-        <BookingCalendarModal
-          markers={calendarMarkers}
-          maxDate={dateRangeEnd}
-          minDate={todayValue}
-          onClose={() => setCalendarOpen(false)}
-          onExtendRange={extendDateRange}
-          onSelect={setSelectedDate}
-          selectedDate={selectedDate}
-          visible={calendarOpen}
-        />
-        <PolicyReviewModal
-          accepted={policyAccepted}
-          onAccept={() => {
-            setPolicyRead(true);
-            setPolicyAccepted(true);
-            setPolicyReviewOpen(false);
-          }}
-          onClose={() => setPolicyReviewOpen(false)}
-          policy={policyDocument}
-          read={policyRead}
-          visible={policyReviewOpen}
-        />
+              {notice && <Text style={styles.bookingNotice}>{notice}</Text>}
+              {error && <Text style={styles.formError}>{error}</Text>}
+            </ScrollView>
+            <BookingCalendarModal
+              markers={calendarMarkers}
+              maxDate={dateRangeEnd}
+              minDate={todayValue}
+              onClose={() => setCalendarOpen(false)}
+              onExtendRange={extendDateRange}
+              onSelect={setSelectedDate}
+              selectedDate={selectedDate}
+              visible={calendarOpen}
+            />
+            <PolicyReviewModal
+              accepted={policyAccepted}
+              onAccept={() => {
+                setPolicyRead(true);
+                setPolicyAccepted(true);
+                setPolicyReviewOpen(false);
+              }}
+              onClose={() => setPolicyReviewOpen(false)}
+              policy={policyDocument}
+              read={policyRead}
+              visible={policyReviewOpen}
+            />
+          </>
+        )}
       </SafeAreaView>
     </Modal>
   );
@@ -7357,21 +7492,6 @@ function PlansScreen({
   const [calendarDate, setCalendarDate] = useState<Date>();
   const [showCalendar, setShowCalendar] = useState(false);
   const today = new Date();
-  const monday = new Date(today);
-  const mondayOffset = (today.getDay() + 6) % 7;
-  monday.setDate(today.getDate() - mondayOffset);
-  const weekDays = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(monday);
-    date.setDate(monday.getDate() + index);
-    return date;
-  });
-  const weekLabel = `${weekDays[0]!.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  })} – ${weekDays[6]!.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  })}`.toUpperCase();
   return (
     <>
       <ScrollView
@@ -7405,8 +7525,8 @@ function PlansScreen({
         <View style={styles.weekCard}>
           <View style={styles.cardTitleRow}>
             <View>
-              <Text style={styles.eyebrow}>{weekLabel}</Text>
-              <Text style={styles.cardTitle}>Your week</Text>
+              <Text style={styles.eyebrow}>ALL UPCOMING ACTIVITY</Text>
+              <Text style={styles.cardTitle}>Your plans</Text>
             </View>
             <Pressable
               accessibilityLabel="Open full calendar"
@@ -7416,55 +7536,8 @@ function PlansScreen({
               }}
               style={styles.calendarOpenAction}
             >
-              <Text style={styles.sectionAction}>Calendar →</Text>
+              <Text style={styles.sectionAction}>See calendar →</Text>
             </Pressable>
-          </View>
-          <View style={styles.weekDays}>
-            {weekDays.map((date) => {
-              const isToday = date.toDateString() === today.toDateString();
-              const hasBooking = bookings.some(
-                (booking) =>
-                  new Date(booking.startsAt).toDateString() ===
-                  date.toDateString(),
-              );
-              return (
-                <Pressable
-                  key={date.toISOString()}
-                  onPress={() => {
-                    setCalendarDate(date);
-                    setShowCalendar(true);
-                  }}
-                  style={[styles.weekDay, isToday && styles.weekDayActive]}
-                >
-                  <Text
-                    style={[
-                      styles.weekDayLabel,
-                      isToday && styles.weekDayTextActive,
-                    ]}
-                  >
-                    {date
-                      .toLocaleDateString("en-US", { weekday: "narrow" })
-                      .toUpperCase()}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.weekDayNumber,
-                      isToday && styles.weekDayTextActive,
-                    ]}
-                  >
-                    {date.getDate()}
-                  </Text>
-                  {hasBooking && (
-                    <View
-                      style={[
-                        styles.weekDot,
-                        isToday && { backgroundColor: colors.ink },
-                      ]}
-                    />
-                  )}
-                </Pressable>
-              );
-            })}
           </View>
           {bookings.map((booking, index) => (
             <Pressable
@@ -7474,18 +7547,37 @@ function PlansScreen({
               style={styles.bookingRow}
             >
               <View style={styles.bookingTime}>
+                <Text style={styles.bookingDateLabel}>
+                  {new Date(booking.startsAt)
+                    .toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      ...(booking.venueTimezone
+                        ? { timeZone: booking.venueTimezone }
+                        : {}),
+                    })
+                    .toUpperCase()}
+                </Text>
                 <Text style={styles.bookingTimeMain}>
                   {new Date(booking.startsAt)
                     .toLocaleTimeString("en-US", {
                       hour: "numeric",
                       minute: "2-digit",
                       hour12: true,
+                      ...(booking.venueTimezone
+                        ? { timeZone: booking.venueTimezone }
+                        : {}),
                     })
                     .replace(/\s[AP]M$/, "")}
                 </Text>
                 <Text style={styles.bookingTimeSuffix}>
                   {new Date(booking.startsAt)
-                    .toLocaleTimeString("en-US", { hour: "numeric" })
+                    .toLocaleTimeString("en-US", {
+                      hour: "numeric",
+                      ...(booking.venueTimezone
+                        ? { timeZone: booking.venueTimezone }
+                        : {}),
+                    })
                     .slice(-2)}
                 </Text>
               </View>
@@ -9819,6 +9911,32 @@ function BookingModal({
             eligible: true,
             eligibilityReasons: [],
           }));
+  const confirmationPlayerNames = [
+    selectedParticipant?.person.displayName,
+    ...(selectedEvent.kind === "pickup"
+      ? pickupPartner.map((partner) => partner.displayName)
+      : teamRoster.flatMap((member) =>
+          member.displayName ? [member.displayName] : [],
+        )),
+  ].filter((name): name is string => Boolean(name));
+  const completionDetails = {
+    title: selectedEvent.title,
+    startsAt: selectedEvent.startsAt,
+    endsAt: selectedEvent.endsAt,
+    timezone: selectedEvent.timezone,
+    organizationName: selectedEvent.organizationName,
+    locationName: selectedEvent.location?.venueName ?? selectedEvent.venueName,
+    ...(selectedEvent.location?.address
+      ? { address: selectedEvent.location.address }
+      : {}),
+    ...(selectedEvent.location?.courtNames?.length
+      ? { courtName: selectedEvent.location.courtNames.join(", ") }
+      : {}),
+    ...(confirmationPlayerNames.length
+      ? { playerNames: confirmationPlayerNames }
+      : {}),
+    detailsUrl: `${dunaWebUrl}/events/${encodeURIComponent(selectedEvent.slug)}`,
+  } satisfies ShareableBookingDetails;
 
   function searchTeammates(value: string) {
     setTeammateQuery(value);
@@ -9945,6 +10063,11 @@ function BookingModal({
               },
         );
       } else if (result.checkoutUrl) {
+        if (Platform.OS !== "web") {
+          throw new Error(
+            "Duna could not prepare the in-app payment. You were not charged; please try again.",
+          );
+        }
         await WebBrowser.openBrowserAsync(result.checkoutUrl);
         const status = result.checkoutSessionId
           ? await client.player.checkoutStatus.query({
@@ -10043,21 +10166,13 @@ function BookingModal({
           ) : (
             <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
               {complete ? (
-                <View style={styles.completeState}>
-                  <View style={styles.completeIcon}>
-                    <Text style={styles.completeIconText}>✓</Text>
-                  </View>
-                  <Pill
-                    tone={complete.label === "Pending" ? "warning" : "positive"}
-                  >
-                    {complete.label}
-                  </Pill>
-                  <Text style={styles.completeTitle}>{complete.title}</Text>
-                  <Text style={styles.completeBody}>{complete.body}</Text>
-                  <Pressable onPress={close} style={styles.primaryButton}>
-                    <Text style={styles.primaryButtonText}>Done</Text>
-                  </Pressable>
-                </View>
+                <BookingConfirmationView
+                  body={complete.body}
+                  details={completionDetails}
+                  label={complete.label}
+                  onDone={close}
+                  title={complete.title}
+                />
               ) : (
                 <>
                   <View style={styles.hostedReviewHeader}>
@@ -10292,19 +10407,13 @@ function BookingModal({
     >
       <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
         {complete ? (
-          <View style={styles.completeState}>
-            <View style={styles.completeIcon}>
-              <Text style={styles.completeIconText}>✓</Text>
-            </View>
-            <Pill tone={complete.label === "Pending" ? "warning" : "positive"}>
-              {complete.label}
-            </Pill>
-            <Text style={styles.completeTitle}>{complete.title}</Text>
-            <Text style={styles.completeBody}>{complete.body}</Text>
-            <Pressable onPress={close} style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>Done</Text>
-            </Pressable>
-          </View>
+          <BookingConfirmationView
+            body={complete.body}
+            details={completionDetails}
+            label={complete.label}
+            onDone={close}
+            title={complete.title}
+          />
         ) : (
           <ScrollView contentContainerStyle={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -12294,6 +12403,9 @@ function DunaApp() {
       >
         <PlayerProfileProvider palette={colors}>
           <HealthHistorySyncAgent paused={tab === "health"} runtime={runtime} />
+          {runtime.dashboard ? (
+            <PlayerCalendarAutoSync bookings={runtime.dashboard.bookings} />
+          ) : null}
           <SafeAreaView edges={["top"]} style={styles.safe}>
             <StatusBar style={theme === "dark" ? "light" : "dark"} />
             <View style={styles.app}>
@@ -17284,7 +17396,14 @@ function createStyles(palette: Palette) {
       minHeight: 69,
       paddingVertical: 9,
     },
-    bookingTime: { width: 35 },
+    bookingDateLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.5,
+      marginBottom: 3,
+    },
+    bookingTime: { width: 48 },
     bookingTimeMain: { color: colors.bone, fontSize: 10, fontWeight: "700" },
     bookingTimeSuffix: { color: colors.muted, fontSize: 10 },
     bookingAccent: { borderRadius: 2, height: 35, width: 3 },

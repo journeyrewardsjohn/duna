@@ -60,6 +60,13 @@
       "./plugins/with-ios-path-compatibility",
       "expo-notifications",
       [
+        "expo-calendar",
+        {
+          "calendarPermission": "Duna Pro reads calendars you approve on this device so coaches can see personal commitments beside organization sessions.",
+          "remindersPermission": "Duna Pro does not add reminders without a coach choosing to do so."
+        }
+      ],
+      [
         "@livekit/react-native-expo-plugin",
         {
           "android": {

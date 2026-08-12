@@ -44,6 +44,8 @@ describe("discovery structured data", () => {
         region: "CA",
         timezone: "America/Los_Angeles",
         organizationName: "Beach Elite",
+        organizationId: "0459f4ec-aeed-4a6f-83f1-e2ad23c18cec",
+        organizationSlug: "beach-elite",
         paymentsReady: true,
         capacity: 24,
         amenities: ["Showers"],

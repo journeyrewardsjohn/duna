@@ -568,6 +568,34 @@ export const bookingSummarySchema = z.object({
   venueName: z.string(),
   venueId: z.string().uuid().optional(),
   venueTimezone: z.string().optional(),
+  organization: z
+    .object({
+      id: z.string().uuid(),
+      name: z.string(),
+      slug: z.string(),
+    })
+    .optional(),
+  location: z
+    .object({
+      label: z.string(),
+      address: z.string().optional(),
+      googlePlaceId: z.string().optional(),
+      latitude: z.number().optional(),
+      longitude: z.number().optional(),
+    })
+    .optional(),
+  court: z
+    .object({
+      id: z.string().uuid(),
+      name: z.string(),
+    })
+    .optional(),
+  details: z
+    .object({
+      label: z.string(),
+      path: z.string().startsWith("/"),
+    })
+    .optional(),
   status: z.enum(["confirmed", "waitlisted", "needs-action"]),
   amount: moneySchema,
   participantNames: z.array(z.string()).readonly(),
@@ -4447,6 +4475,8 @@ export const courtBookingInventorySchema = z.object({
     region: z.string(),
     timezone: z.string(),
     organizationName: z.string(),
+    organizationId: z.string().uuid(),
+    organizationSlug: z.string(),
     paymentsReady: z.boolean(),
     capacity: z.number().int().nonnegative(),
     heroImageUrl: z.string().optional(),
@@ -4454,6 +4484,8 @@ export const courtBookingInventorySchema = z.object({
     amenities: z.array(z.string()).readonly(),
     latitude: z.number().optional(),
     longitude: z.number().optional(),
+    address: z.string().optional(),
+    googlePlaceId: z.string().optional(),
   }),
   courts: z
     .array(

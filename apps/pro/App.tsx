@@ -42,6 +42,13 @@ import {
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Line, Path } from "react-native-svg";
 import { GetPaidScreen } from "./get-paid";
+import {
+  connectProCalendar,
+  loadProPersonalEvents,
+  readProCalendarConnection,
+  type ProCalendarConnection,
+  type ProPersonalCalendarEvent,
+} from "./pro-calendar-integration";
 import { OperatorCreateScreen } from "./operator-create";
 import { SessionArrivalBoard } from "./session-arrival-board";
 import { SessionNotesScreen } from "./session-notes";
@@ -896,6 +903,7 @@ function TodayScreen({
   onCalendar,
   onCreate,
   onGetPaid,
+  onMessageGroup,
   onPeople,
   onRecordNotes,
   onScore,
@@ -903,6 +911,7 @@ function TodayScreen({
   readonly onCalendar: (entryId?: string) => void;
   readonly onCreate: () => void;
   readonly onGetPaid: () => void;
+  readonly onMessageGroup: (entry: ProCalendarEntry) => void;
   readonly onPeople: () => void;
   readonly onRecordNotes: (sessionId: string) => void;
   readonly onScore: (matchId?: string) => void;
@@ -916,29 +925,31 @@ function TodayScreen({
   const now = new Date();
   const nowMs = now.getTime();
   const todayKey = calendarDateKey(now, timezone);
-  const previewEntries = schedule.slice(0, 3).map((item, index) => {
-    const startsAt = new Date(now);
-    startsAt.setHours(9 + index * 2, 0, 0, 0);
-    const endsAt = new Date(startsAt.getTime() + 75 * 60_000);
-    return {
-      id: `preview-today-${index}`,
-      sourceType: "session" as const,
-      title: item[2],
-      startsAt: startsAt.toISOString(),
-      endsAt: endsAt.toISOString(),
-      timezone,
-      status: index === 0 ? "live" : "scheduled",
-      kind: index === 1 ? "clinic" : "open-play",
-      venueName: index === 0 ? "Manhattan Beach" : "Hermosa Beach",
-      courtName: item[3],
-      participantCount: Number(item[4].split(" / ")[0]),
-      capacity: Number(item[4].split(" / ")[1]),
-      color: index === 0 ? colors.flare : colors.aqua,
-      draggable: true,
-      attendees: [],
-      equipment: [],
-    };
-  });
+  const previewEntries = schedule
+    .slice(0, 3)
+    .map((item, index): ProCalendarEntry => {
+      const startsAt = new Date(now);
+      startsAt.setHours(9 + index * 2, 0, 0, 0);
+      const endsAt = new Date(startsAt.getTime() + 75 * 60_000);
+      return {
+        id: `preview-today-${index}`,
+        sourceType: "session",
+        title: item[2],
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+        timezone,
+        status: index === 0 ? "live" : "scheduled",
+        kind: index === 1 ? "clinic" : "open-play",
+        venueName: index === 0 ? "Manhattan Beach" : "Hermosa Beach",
+        courtName: item[3],
+        participantCount: Number(item[4].split(" / ")[0]),
+        capacity: Number(item[4].split(" / ")[1]),
+        color: index === 0 ? colors.flare : colors.aqua,
+        draggable: true,
+        attendees: [],
+        equipment: [],
+      };
+    });
   const todayEntries = (workspace?.calendar.entries ?? previewEntries)
     .filter(
       (entry) =>
@@ -990,29 +1001,15 @@ function TodayScreen({
     .toUpperCase();
   const primaryVenue = workspace?.venues.find((venue) => venue.weather);
   const todayForecast = primaryVenue?.weather?.days[0];
-
-  const openGroupMessage = async () => {
-    if (!focusEntry) return;
-    const phones = focusRegistrations.flatMap((registration) =>
-      registration.phoneE164 ? [registration.phoneE164] : [],
-    );
-    const emails = focusRegistrations.flatMap((registration) =>
-      registration.email ? [registration.email] : [],
-    );
-    const body = encodeURIComponent(
-      `Hi everyone — a quick update about ${focusEntry.title} from ${organization.name}.`,
-    );
-    if (phones.length > 0) {
-      const separator = Platform.OS === "android" ? ";" : ",";
-      await Linking.openURL(`sms:${phones.join(separator)}?body=${body}`);
-      return;
-    }
-    if (emails.length > 0) {
-      await Linking.openURL(
-        `mailto:${emails.join(",")}?subject=${encodeURIComponent(focusEntry.title)}`,
-      );
-    }
-  };
+  const businessMetrics = dashboard?.metrics.slice(0, 3) ?? [];
+  const productPerformance = workspace?.productPerformance ?? [];
+  const topProduct = productPerformance
+    .slice()
+    .sort((left, right) => right.netSalesMinor - left.netSalesMinor)[0];
+  const topProductName = topProduct
+    ? (workspace?.catalog.find((item) => item.id === topProduct.catalogItemId)
+        ?.title ?? "Top product")
+    : undefined;
 
   const nextAction = justEndedEntry
     ? {
@@ -1111,7 +1108,7 @@ function TodayScreen({
             disabled={Boolean(focusEntry) && focusRegistrations.length === 0}
             onPress={() => {
               if (focusEntry) {
-                void openGroupMessage();
+                onMessageGroup(focusEntry);
               } else {
                 onPeople();
               }
@@ -1169,6 +1166,52 @@ function TodayScreen({
           <Text style={styles.todayJobTitle}>Get Paid</Text>
           <Text style={styles.todayJobMeta}>Tap to Pay or wallet</Text>
         </Pressable>
+      </View>
+
+      <SectionTitle
+        action="Money"
+        eyebrow="BUSINESS PULSE"
+        onAction={onGetPaid}
+        title="How the club is moving"
+      />
+      <View style={styles.businessPulse}>
+        <View style={styles.businessMetricRow}>
+          {businessMetrics.map((metric) => (
+            <View key={metric.label} style={styles.businessMetric}>
+              <Text style={styles.businessMetricValue}>{metric.value}</Text>
+              <Text style={styles.businessMetricLabel}>{metric.label}</Text>
+              {metric.change && (
+                <Text style={styles.businessMetricChange}>{metric.change}</Text>
+              )}
+            </View>
+          ))}
+          {businessMetrics.length === 0 && (
+            <View style={styles.businessMetricEmpty}>
+              <Text style={styles.businessMetricEmptyTitle}>
+                Business data is connecting.
+              </Text>
+              <Text style={styles.businessMetricEmptyBody}>
+                Sales, people, and upcoming activity appear here from the live
+                organization workspace.
+              </Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.businessInsight}>
+          <Text style={styles.businessInsightIcon}>↗</Text>
+          <View style={styles.flex}>
+            <Text style={styles.businessInsightTitle}>
+              {topProduct && topProductName
+                ? `${topProductName} leads product revenue`
+                : "Performance stays tied to real activity"}
+            </Text>
+            <Text style={styles.businessInsightBody}>
+              {topProduct
+                ? `${topProduct.paidPurchases} paid purchase${topProduct.paidPurchases === 1 ? "" : "s"} · ${topProduct.uniqueCustomers} customer${topProduct.uniqueCustomers === 1 ? "" : "s"} · ${topProduct.grossMarginBps === undefined ? "margin pending" : `${(topProduct.grossMarginBps / 100).toFixed(1)}% gross margin`}`
+                : `${checkedInCount} check-ins and ${cancellationCount} cancellations are reflected from today’s live roster.`}
+            </Text>
+          </View>
+        </View>
       </View>
 
       <SectionTitle
@@ -1337,12 +1380,14 @@ function SectionTitle({
 function CalendarScreen({
   focusEntryId,
   onCreate,
+  onMessageGroup,
   onRecordNotes,
   onScan,
   onScore,
 }: {
   readonly focusEntryId?: string;
   readonly onCreate: () => void;
+  readonly onMessageGroup: (entry: ProCalendarEntry) => void;
   readonly onRecordNotes: (sessionId: string) => void;
   readonly onScan: () => void;
   readonly onScore: (matchId?: string) => void;
@@ -1379,6 +1424,14 @@ function CalendarScreen({
   const [aiScheduleDraft, setAiScheduleDraft] =
     useState<NaturalLanguageScheduleDraft>();
   const [aiScheduleConfirmed, setAiScheduleConfirmed] = useState(false);
+  const [personalCalendar, setPersonalCalendar] =
+    useState<ProCalendarConnection>();
+  const [personalEvents, setPersonalEvents] = useState<
+    readonly ProPersonalCalendarEvent[]
+  >([]);
+  const [personalCalendarBusy, setPersonalCalendarBusy] = useState(false);
+  const [personalCalendarNotice, setPersonalCalendarNotice] =
+    useState<string>();
 
   const previewEntries = useMemo<readonly ProCalendarEntry[]>(() => {
     const start = new Date();
@@ -1503,6 +1556,84 @@ function CalendarScreen({
       setBlockResourceId(blockResources[0].id);
   }, [blockResourceId, blockResources]);
 
+  useEffect(() => {
+    let active = true;
+    if (Platform.OS === "web") return () => undefined;
+    setPersonalCalendarBusy(true);
+    setPersonalCalendarNotice(undefined);
+    void (async () => {
+      try {
+        const connection = await readProCalendarConnection();
+        if (!active) return;
+        setPersonalCalendar(connection);
+        if (!connection) {
+          setPersonalEvents([]);
+          return;
+        }
+        const nextDayKey = calendarDateKey(
+          calendarDayAtNoon(selectedDate, 1),
+          timezone,
+        );
+        const events = await loadProPersonalEvents(
+          new Date(zonedLocalToIso(dayKey, 0, 0, timezone)),
+          new Date(zonedLocalToIso(nextDayKey, 0, 0, timezone)),
+        );
+        if (active) {
+          setPersonalEvents(
+            events
+              .slice()
+              .sort(
+                (left, right) =>
+                  Date.parse(String(left.startDate)) -
+                  Date.parse(String(right.startDate)),
+              ),
+          );
+        }
+      } catch (reason) {
+        if (active) setPersonalCalendarNotice(displayError(reason));
+      } finally {
+        if (active) setPersonalCalendarBusy(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [dayKey, selectedDate, timezone]);
+
+  const connectPersonalCalendar = async () => {
+    setPersonalCalendarBusy(true);
+    setPersonalCalendarNotice(undefined);
+    try {
+      const connection = await connectProCalendar();
+      const nextDayKey = calendarDateKey(
+        calendarDayAtNoon(selectedDate, 1),
+        timezone,
+      );
+      const events = await loadProPersonalEvents(
+        new Date(zonedLocalToIso(dayKey, 0, 0, timezone)),
+        new Date(zonedLocalToIso(nextDayKey, 0, 0, timezone)),
+      );
+      setPersonalCalendar(connection);
+      setPersonalEvents(
+        events
+          .slice()
+          .sort(
+            (left, right) =>
+              Date.parse(String(left.startDate)) -
+              Date.parse(String(right.startDate)),
+          ),
+      );
+      setPersonalCalendarNotice(
+        `${connection.title} is linked. Personal events stay on this device.`,
+      );
+      successHaptic();
+    } catch (reason) {
+      setPersonalCalendarNotice(displayError(reason));
+    } finally {
+      setPersonalCalendarBusy(false);
+    }
+  };
+
   const closeSheet = () => {
     setSelectedId(undefined);
     setSheetMode("session");
@@ -1606,32 +1737,6 @@ function CalendarScreen({
     if (saved) closeSheet();
   };
 
-  const selectedRegistrations = selectedEntry
-    ? (workspace?.eventRegistrations.filter(
-        (registration) => registration.sessionId === selectedEntry.id,
-      ) ?? [])
-    : [];
-  const openSelectedRosterMessage = async () => {
-    if (!selectedEntry) return;
-    const phones = selectedRegistrations.flatMap((registration) =>
-      registration.phoneE164 ? [registration.phoneE164] : [],
-    );
-    const emails = selectedRegistrations.flatMap((registration) =>
-      registration.email ? [registration.email] : [],
-    );
-    const body = encodeURIComponent(
-      `Hi everyone — a quick update about ${selectedEntry.title} from ${dashboard?.organization.name ?? "your coach"}.`,
-    );
-    if (phones.length > 0) {
-      const separator = Platform.OS === "android" ? ";" : ",";
-      await Linking.openURL(`sms:${phones.join(separator)}?body=${body}`);
-    } else if (emails.length > 0) {
-      await Linking.openURL(
-        `mailto:${emails.join(",")}?subject=${encodeURIComponent(selectedEntry.title)}`,
-      );
-    }
-  };
-
   return (
     <>
       <ScrollView
@@ -1665,6 +1770,50 @@ function CalendarScreen({
             </Pressable>
           </View>
           <Text style={styles.calendarTimezone}>{timezone}</Text>
+        </View>
+
+        <View style={styles.calendarConnectionCard}>
+          <View style={styles.calendarConnectionIcon}>
+            <Text style={styles.calendarConnectionIconText}>▦</Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.calendarConnectionEyebrow}>
+              {personalCalendar ? "PERSONAL CALENDAR LINKED" : "YOUR TIME"}
+            </Text>
+            <Text style={styles.calendarConnectionTitle}>
+              {personalCalendar
+                ? `${personalCalendar.title} is included`
+                : "See work and personal commitments together"}
+            </Text>
+            <Text style={styles.calendarConnectionBody}>
+              {personalCalendar
+                ? "Duna Pro reads this calendar on your device. Events are not copied to the organization."
+                : "Link Apple, Google, or Outlook from this device for a clearer coaching schedule."}
+            </Text>
+            {personalCalendarNotice && (
+              <Text style={styles.calendarConnectionNotice}>
+                {personalCalendarNotice}
+              </Text>
+            )}
+          </View>
+          <Pressable
+            accessibilityLabel={
+              personalCalendar
+                ? "Refresh personal calendar"
+                : "Link personal calendar"
+            }
+            disabled={personalCalendarBusy}
+            onPress={() => void connectPersonalCalendar()}
+            style={styles.calendarConnectionButton}
+          >
+            <Text style={styles.calendarConnectionButtonText}>
+              {personalCalendarBusy
+                ? "Checking"
+                : personalCalendar
+                  ? "Refresh"
+                  : "Link"}
+            </Text>
+          </Pressable>
         </View>
 
         <ScrollView
@@ -1755,9 +1904,66 @@ function CalendarScreen({
           ))}
         </View>
 
+        {personalCalendar && (
+          <>
+            <View style={styles.calendarPersonalHeading}>
+              <View>
+                <Text style={styles.eyebrow}>PERSONAL CALENDAR</Text>
+                <Text style={styles.calendarPersonalTitle}>
+                  Private commitments
+                </Text>
+              </View>
+              <Pill tone="neutral">{`${personalEvents.length} private`}</Pill>
+            </View>
+            <View style={styles.calendarPersonalAgenda}>
+              {personalEvents.map((event) => (
+                <View key={event.id} style={styles.calendarPersonalCard}>
+                  <View style={styles.calendarPersonalTime}>
+                    <Text style={styles.calendarPersonalTimeMain}>
+                      {event.allDay
+                        ? "ALL DAY"
+                        : formatCalendarTime(
+                            new Date(String(event.startDate)).toISOString(),
+                            timezone,
+                          )}
+                    </Text>
+                    {!event.allDay && (
+                      <Text style={styles.calendarPersonalTimeEnd}>
+                        {formatCalendarTime(
+                          new Date(String(event.endDate)).toISOString(),
+                          timezone,
+                        )}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={styles.calendarPersonalAccent} />
+                  <View style={styles.flex}>
+                    <Text style={styles.calendarPersonalName}>
+                      {event.title || "Busy"}
+                    </Text>
+                    <Text style={styles.calendarPersonalMeta}>
+                      {[event.location, personalCalendar.title]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </Text>
+                  </View>
+                  <Pill tone="neutral">Private</Pill>
+                </View>
+              ))}
+              {personalEvents.length === 0 && (
+                <View style={styles.calendarPersonalEmpty}>
+                  <Text style={styles.calendarPersonalEmptyText}>
+                    No personal conflicts on this day.
+                  </Text>
+                </View>
+              )}
+            </View>
+          </>
+        )}
+
         <View style={styles.calendarAgendaHeading}>
           <View>
-            <Text style={styles.eyebrow}>DAY AGENDA</Text>
+            <Text style={styles.eyebrow}>ORGANIZATION SCHEDULE</Text>
             <Text style={styles.calendarAgendaTitle}>
               {new Intl.DateTimeFormat("en-US", {
                 weekday: "long",
@@ -1766,8 +1972,14 @@ function CalendarScreen({
               }).format(selectedDate)}
             </Text>
           </View>
-          <Pill tone={visibleEntries.length > 0 ? "positive" : "neutral"}>
-            {`${visibleEntries.length} items`}
+          <Pill
+            tone={
+              visibleEntries.length + personalEvents.length > 0
+                ? "positive"
+                : "neutral"
+            }
+          >
+            {`${visibleEntries.length + personalEvents.length} total`}
           </Pill>
         </View>
 
@@ -2763,12 +2975,12 @@ function CalendarScreen({
                       </Text>
                     </Pressable>
                   )}
-                {selectedRegistrations.some(
-                  (registration) =>
-                    registration.phoneE164 || registration.email,
-                ) && (
+                {selectedEntry.attendees.length > 0 && (
                   <Pressable
-                    onPress={() => void openSelectedRosterMessage()}
+                    onPress={() => {
+                      closeSheet();
+                      onMessageGroup(selectedEntry);
+                    }}
                     style={styles.calendarSheetSecondary}
                   >
                     <Text style={styles.calendarSheetSecondaryText}>
@@ -2796,7 +3008,13 @@ function CalendarScreen({
   );
 }
 
-function PeopleScreen() {
+function PeopleScreen({
+  onMessage,
+  onRecordNotes,
+}: {
+  readonly onMessage: (personId: string) => void;
+  readonly onRecordNotes: (sessionId: string, personId: string) => void;
+}) {
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
   const [selectedPersonId, setSelectedPersonId] = useState<string>();
@@ -2844,6 +3062,19 @@ function PeopleScreen() {
   const selectedRelationship = workspace?.people.find(
     (person) => person.personId === selectedPersonId,
   );
+  const selectedNoteSession = workspace?.calendar.entries
+    .filter(
+      (entry) =>
+        entry.sourceType === "session" &&
+        entry.attendees.some(
+          (attendee) => attendee.personId === selectedPersonId,
+        ),
+    )
+    .sort(
+      (left, right) =>
+        Math.abs(Date.parse(left.startsAt) - Date.now()) -
+        Math.abs(Date.parse(right.startsAt) - Date.now()),
+    )[0];
 
   const sendInvitation = async () => {
     if (!client || mode !== "live") {
@@ -3104,38 +3335,51 @@ function PeopleScreen() {
                   ))}
                 </View>
               )}
-              {(selectedRelationship?.phoneE164 ||
-                selectedRelationship?.email) && (
-                <View style={styles.peopleProfileActions}>
-                  {selectedRelationship.phoneE164 && (
-                    <Pressable
-                      onPress={() =>
-                        void Linking.openURL(
-                          `sms:${selectedRelationship.phoneE164}`,
-                        )
-                      }
-                      style={styles.peopleProfilePrimary}
-                    >
-                      <Text style={styles.peopleProfilePrimaryText}>
-                        Message
-                      </Text>
-                    </Pressable>
-                  )}
-                  {selectedRelationship.email && (
-                    <Pressable
-                      onPress={() =>
-                        void Linking.openURL(
-                          `mailto:${selectedRelationship.email}`,
-                        )
-                      }
-                      style={styles.peopleProfileSecondary}
-                    >
-                      <Text style={styles.peopleProfileSecondaryText}>
-                        Email
-                      </Text>
-                    </Pressable>
-                  )}
-                </View>
+              <View style={styles.peopleProfileActions}>
+                <Pressable
+                  onPress={() => {
+                    setSelectedPersonId(undefined);
+                    onMessage(selectedPerson.id);
+                  }}
+                  style={styles.peopleProfilePrimary}
+                >
+                  <Text style={styles.peopleProfilePrimaryText}>
+                    Duna message
+                  </Text>
+                </Pressable>
+                <Pressable
+                  disabled={!selectedNoteSession}
+                  onPress={() => {
+                    if (!selectedNoteSession) return;
+                    setSelectedPersonId(undefined);
+                    onRecordNotes(selectedNoteSession.id, selectedPerson.id);
+                  }}
+                  style={[
+                    styles.peopleProfileSecondary,
+                    !selectedNoteSession && styles.buttonDisabled,
+                  ]}
+                >
+                  <Text style={styles.peopleProfileSecondaryText}>
+                    Add note
+                  </Text>
+                </Pressable>
+              </View>
+              {selectedRelationship?.email && (
+                <Pressable
+                  onPress={() =>
+                    void Linking.openURL(`mailto:${selectedRelationship.email}`)
+                  }
+                  style={styles.peopleProfileEmail}
+                >
+                  <Text style={styles.peopleProfileEmailText}>
+                    Email {selectedRelationship.email}
+                  </Text>
+                </Pressable>
+              )}
+              {!selectedNoteSession && (
+                <Text style={styles.peopleProfileActionHint}>
+                  Player notes become available from a shared session.
+                </Text>
               )}
             </ScrollView>
           )}
@@ -4386,7 +4630,10 @@ function ProApp() {
   >();
   const [messagesConversationId, setMessagesConversationId] =
     useState<string>();
+  const [messagesPersonId, setMessagesPersonId] = useState<string>();
+  const [messagesAudienceKey, setMessagesAudienceKey] = useState<string>();
   const [sessionNotesId, setSessionNotesId] = useState<string>();
+  const [sessionNotePersonId, setSessionNotePersonId] = useState<string>();
   const [scoreMatchId, setScoreMatchId] = useState<string>();
   const [calendarEntryId, setCalendarEntryId] = useState<string>();
   const [themePreference, setThemePreference] =
@@ -4406,6 +4653,17 @@ function ProApp() {
   const openScore = (matchId?: string) => {
     setScoreMatchId(matchId);
     setSurface("score");
+  };
+
+  const openGroupMessaging = (entry: ProCalendarEntry) => {
+    setMessagesConversationId(undefined);
+    setMessagesPersonId(undefined);
+    setMessagesAudienceKey(
+      entry.sourceType === "booking"
+        ? `rental:${entry.id}`
+        : `event:${entry.id}`,
+    );
+    setSurface("messages");
   };
 
   const changeTab = (nextTab: NavDestination) => {
@@ -4532,7 +4790,11 @@ function ProApp() {
     >
       {sessionNotesId ? (
         <SessionNotesScreen
-          onClose={() => setSessionNotesId(undefined)}
+          initialPersonId={sessionNotePersonId}
+          onClose={() => {
+            setSessionNotesId(undefined);
+            setSessionNotePersonId(undefined);
+          }}
           onSaved={refresh}
           sessionId={sessionNotesId}
         />
@@ -4551,9 +4813,13 @@ function ProApp() {
         <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
           <StatusBar style={theme === "dark" ? "light" : "dark"} />
           <ProMessagingScreen
+            initialAudienceKey={messagesAudienceKey}
             initialConversationId={messagesConversationId}
+            initialPersonId={messagesPersonId}
             onClose={() => {
               setMessagesConversationId(undefined);
+              setMessagesPersonId(undefined);
+              setMessagesAudienceKey(undefined);
               setSurface(undefined);
             }}
             palette={{
@@ -4631,8 +4897,12 @@ function ProApp() {
                   onCalendar={openCalendar}
                   onCreate={() => setSurface("create")}
                   onGetPaid={() => setSurface("get-paid")}
+                  onMessageGroup={openGroupMessaging}
                   onPeople={() => setTab("people")}
-                  onRecordNotes={setSessionNotesId}
+                  onRecordNotes={(sessionId) => {
+                    setSessionNotePersonId(undefined);
+                    setSessionNotesId(sessionId);
+                  }}
                   onScore={openScore}
                 />
               )}
@@ -4640,18 +4910,40 @@ function ProApp() {
                 <CalendarScreen
                   focusEntryId={calendarEntryId}
                   onCreate={() => setSurface("create")}
-                  onRecordNotes={setSessionNotesId}
+                  onMessageGroup={openGroupMessaging}
+                  onRecordNotes={(sessionId) => {
+                    setSessionNotePersonId(undefined);
+                    setSessionNotesId(sessionId);
+                  }}
                   onScan={() => setSurface("scan")}
                   onScore={openScore}
                 />
               )}
-              {tab === "people" && <PeopleScreen />}
+              {tab === "people" && (
+                <PeopleScreen
+                  onMessage={(personId) => {
+                    setMessagesPersonId(personId);
+                    setMessagesAudienceKey(undefined);
+                    setMessagesConversationId(undefined);
+                    setSurface("messages");
+                  }}
+                  onRecordNotes={(sessionId, personId) => {
+                    setSessionNotePersonId(personId);
+                    setSessionNotesId(sessionId);
+                  }}
+                />
+              )}
               {tab === "more" && (
                 <MoreScreen
                   onCalendar={() => openCalendar()}
                   onCreate={() => setSurface("create")}
                   onGetPaid={() => setSurface("get-paid")}
-                  onMessages={() => setSurface("messages")}
+                  onMessages={() => {
+                    setMessagesConversationId(undefined);
+                    setMessagesPersonId(undefined);
+                    setMessagesAudienceKey(undefined);
+                    setSurface("messages");
+                  }}
                   onPeople={() => setTab("people")}
                 />
               )}
@@ -5063,6 +5355,82 @@ function createStyles(palette: Palette) {
       fontSize: 10,
       marginTop: 3,
     },
+    businessPulse: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 20,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    businessMetricRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+    },
+    businessMetric: {
+      borderRightColor: rgba(colors.overlayRgb, 0.07),
+      borderRightWidth: 1,
+      flex: 1,
+      minHeight: 112,
+      minWidth: 100,
+      padding: 14,
+    },
+    businessMetricValue: {
+      color: colors.bone,
+      fontFamily: "Archivo-Block",
+      fontSize: 22,
+      fontWeight: "900",
+      letterSpacing: -0.6,
+    },
+    businessMetricLabel: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "900",
+      marginTop: 7,
+    },
+    businessMetricChange: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 3,
+    },
+    businessMetricEmpty: { padding: 18 },
+    businessMetricEmptyTitle: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    businessMetricEmptyBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 4,
+    },
+    businessInsight: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderTopColor: rgba(colors.overlayRgb, 0.07),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      minHeight: 76,
+      padding: 14,
+    },
+    businessInsightIcon: {
+      color: colors.positive,
+      fontSize: 22,
+      fontWeight: "900",
+    },
+    businessInsightTitle: {
+      color: colors.bone,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    businessInsightBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 3,
+    },
     todaySchedule: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.08),
@@ -5274,6 +5642,69 @@ function createStyles(palette: Palette) {
       maxWidth: 130,
       textAlign: "right",
     },
+    calendarConnectionCard: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.accentRgb, 0.16),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 16,
+      padding: 14,
+    },
+    calendarConnectionIcon: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.09),
+      borderRadius: 14,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    calendarConnectionIconText: {
+      color: colors.aqua,
+      fontSize: 20,
+      fontWeight: "900",
+    },
+    calendarConnectionEyebrow: {
+      color: colors.warning,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.9,
+    },
+    calendarConnectionTitle: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+    calendarConnectionBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 3,
+    },
+    calendarConnectionNotice: {
+      color: colors.aqua,
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 5,
+    },
+    calendarConnectionButton: {
+      alignItems: "center",
+      borderColor: colors.aqua,
+      borderRadius: 14,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 48,
+      minWidth: 72,
+      paddingHorizontal: 12,
+    },
+    calendarConnectionButtonText: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+    },
     calendarDayBleed: {
       marginHorizontal: -18,
       marginTop: 18,
@@ -5343,6 +5774,74 @@ function createStyles(palette: Palette) {
       fontWeight: "700",
     },
     calendarFilterTextActive: { color: colors.aqua },
+    calendarPersonalHeading: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 11,
+      marginTop: 24,
+    },
+    calendarPersonalTitle: {
+      color: colors.bone,
+      fontSize: 18,
+      fontWeight: "900",
+      letterSpacing: -0.5,
+      marginTop: 3,
+    },
+    calendarPersonalAgenda: { gap: 8 },
+    calendarPersonalCard: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.025),
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 16,
+      borderStyle: "dashed",
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 82,
+      padding: 12,
+    },
+    calendarPersonalTime: { width: 58 },
+    calendarPersonalTimeMain: {
+      color: colors.bone,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    calendarPersonalTimeEnd: {
+      color: colors.muted,
+      fontSize: 10,
+      marginTop: 3,
+    },
+    calendarPersonalAccent: {
+      alignSelf: "stretch",
+      backgroundColor: colors.sand,
+      borderRadius: 3,
+      width: 4,
+    },
+    calendarPersonalName: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
+    },
+    calendarPersonalMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 3,
+    },
+    calendarPersonalEmpty: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.positiveRgb, 0.06),
+      borderRadius: 14,
+      justifyContent: "center",
+      minHeight: 56,
+      padding: 12,
+    },
+    calendarPersonalEmptyText: {
+      color: colors.positive,
+      fontSize: 10,
+      fontWeight: "800",
+    },
     calendarAgendaHeading: {
       alignItems: "flex-end",
       flexDirection: "row",
@@ -6750,6 +7249,24 @@ function createStyles(palette: Palette) {
       marginTop: 6,
     },
     peopleProfileActions: { flexDirection: "row", gap: 8, marginTop: 12 },
+    peopleProfileActionHint: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 8,
+      textAlign: "center",
+    },
+    peopleProfileEmail: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 44,
+      paddingHorizontal: 10,
+    },
+    peopleProfileEmailText: {
+      color: colors.aqua,
+      fontSize: 11,
+      fontWeight: "800",
+    },
     peopleProfilePrimary: {
       alignItems: "center",
       backgroundColor: colors.aquaDeep,

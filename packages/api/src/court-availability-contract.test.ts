@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { courtAvailabilitySchema } from "./contracts";
+import {
+  courtAvailabilitySchema,
+  courtCheckoutResultSchema,
+} from "./contracts";
 
 function availabilityFixture() {
   const venueId = crypto.randomUUID();
@@ -82,5 +85,31 @@ describe("court availability open matches", () => {
     fixture.openMatches[0]!.spotsRemaining = 0;
 
     expect(courtAvailabilitySchema.safeParse(fixture).success).toBe(false);
+  });
+});
+
+describe("native court checkout contract", () => {
+  it("returns an in-app PaymentSheet without requiring a hosted URL", () => {
+    const result = courtCheckoutResultSchema.parse({
+      mode: "stripe",
+      bookingId: crypto.randomUUID(),
+      bookingStatus: "held",
+      paymentMode: "full",
+      paymentSheet: {
+        publishableKey: "pk_test_duna",
+        paymentIntentId: "pi_duna",
+        paymentIntentClientSecret: "pi_duna_secret_test",
+        customerId: "cus_duna",
+        customerSessionClientSecret: "cuss_duna_secret_test",
+      },
+      expiresAt: "2026-08-14T17:45:00.000Z",
+      startsAt: "2026-08-14T18:00:00.000Z",
+      endsAt: "2026-08-14T19:30:00.000Z",
+      alternatives: [],
+      participants: [],
+    });
+
+    expect(result.paymentSheet?.paymentIntentId).toBe("pi_duna");
+    expect(result.checkoutUrl).toBeUndefined();
   });
 });

@@ -53,7 +53,9 @@ export interface ProMessagingPalette {
 }
 
 interface ProMessagingScreenProps {
+  readonly initialAudienceKey?: string;
   readonly initialConversationId?: string;
+  readonly initialPersonId?: string;
   readonly onClose: () => void;
   readonly palette: ProMessagingPalette;
 }
@@ -241,7 +243,9 @@ function MessageBubble({
 }
 
 export function ProMessagingScreen({
+  initialAudienceKey,
   initialConversationId,
+  initialPersonId,
   onClose,
   palette,
 }: ProMessagingScreenProps) {
@@ -282,12 +286,14 @@ export function ProMessagingScreen({
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>();
   const [enablingNotifications, setEnablingNotifications] = useState(false);
   const threadScroll = useRef<ScrollView>(null);
+  const initialPersonApplied = useRef(false);
+  const initialAudienceApplied = useRef(false);
 
   const audiences = useMemo<readonly AudienceOption[]>(() => {
     const organizationOption: AudienceOption = {
       key: "organization",
       label: "Everyone in the organization",
-      meta: "Active members with a real Duna relationship",
+      meta: "Active players, guardians, coaches, and directors",
       conversationType: "group",
       context: {
         type: "organization",
@@ -337,6 +343,36 @@ export function ProMessagingScreen({
       );
       return [option, ...divisions];
     });
+    const publishedEventIds = new Set(
+      (runtime.events ?? []).map((event) => event.id),
+    );
+    const workspaceSessionOptions: AudienceOption[] = (
+      runtime.workspace?.sessions ?? []
+    )
+      .filter((session) => !publishedEventIds.has(session.id))
+      .map((session) => {
+        const contextType: ConversationContext["type"] =
+          session.kind === "league"
+            ? "league"
+            : session.kind === "private-lesson"
+              ? "lesson"
+              : "event";
+        return {
+          key: `event:${session.id}`,
+          label: session.title,
+          meta: `${session.kind.replaceAll("-", " ")} · ${session.analytics.registrations} registrations`,
+          conversationType: session.kind === "league" ? "league" : "event",
+          context: {
+            type: contextType,
+            id:
+              session.kind === "league" && session.programId
+                ? session.programId
+                : session.id,
+            label: session.title,
+            organizationId,
+          },
+        };
+      });
     const rentalOptions: AudienceOption[] = (
       runtime.workspace?.calendar.entries ?? []
     )
@@ -356,6 +392,7 @@ export function ProMessagingScreen({
     return [
       organizationOption,
       ...eventOptions,
+      ...workspaceSessionOptions,
       ...rentalOptions,
       {
         key: "specific",
@@ -384,6 +421,15 @@ export function ProMessagingScreen({
         detail: person.roles.join(" · "),
       });
     }
+    for (const person of runtime.workspace?.staff ?? []) {
+      if (!person.active) continue;
+      people.set(person.personId, {
+        personId: person.personId,
+        displayName: person.displayName,
+        isMinor: false,
+        detail: `${person.role.replaceAll("-", " ")} · organization staff`,
+      });
+    }
     for (const person of runtime.workspace?.messageRecipients ?? []) {
       people.set(person.id, {
         personId: person.id,
@@ -398,6 +444,31 @@ export function ProMessagingScreen({
       left.displayName.localeCompare(right.displayName),
     );
   }, [runtime.workspace]);
+
+  useEffect(() => {
+    if (!initialPersonId || initialPersonApplied.current) return;
+    const person = relatedPeople.find(
+      (candidate) => candidate.personId === initialPersonId,
+    );
+    if (!person) return;
+    initialPersonApplied.current = true;
+    setAudienceKey("specific");
+    setSelectedPeople([person.personId]);
+    setComposeTitle(`Message ${person.displayName}`);
+    setComposeOpen(true);
+  }, [initialPersonId, relatedPeople]);
+
+  useEffect(() => {
+    if (!initialAudienceKey || initialAudienceApplied.current) return;
+    const audience = audiences.find(
+      (candidate) => candidate.key === initialAudienceKey,
+    );
+    if (!audience) return;
+    initialAudienceApplied.current = true;
+    setAudienceKey(audience.key);
+    setComposeTitle(audience.label);
+    setComposeOpen(true);
+  }, [audiences, initialAudienceKey]);
 
   const loadInbox = useCallback(async () => {
     const nextInbox =

@@ -396,6 +396,66 @@ export async function createEventPaymentIntent(input: {
   return { id: intent.id, clientSecret: intent.client_secret };
 }
 
+export async function createCourtBookingPaymentIntent(input: {
+  readonly orderId: string;
+  readonly bookingId: string;
+  readonly personId: string;
+  readonly customerId: string;
+  readonly customerEmail?: string;
+  readonly description: string;
+  readonly amountMinor: number;
+  readonly currency: string;
+  readonly applicationFeeMinor: number;
+  readonly organizationCommissionMinor: number;
+  readonly organizationCommissionRateBps: number;
+  readonly connectedAccountId: string;
+  readonly idempotencyKey: string;
+}): Promise<{
+  readonly id: string;
+  readonly clientSecret: string;
+}> {
+  if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
+    throw new Error("Court payment amount must be a positive integer");
+  }
+  if (
+    !Number.isSafeInteger(input.applicationFeeMinor) ||
+    input.applicationFeeMinor < 0 ||
+    input.applicationFeeMinor > input.amountMinor
+  ) {
+    throw new Error("Court payment application fee is invalid");
+  }
+
+  const intent = await getStripeClient().paymentIntents.create(
+    {
+      amount: input.amountMinor,
+      currency: input.currency.toLowerCase(),
+      customer: input.customerId,
+      receipt_email: input.customerEmail,
+      description: input.description,
+      automatic_payment_methods: { enabled: true },
+      application_fee_amount: input.applicationFeeMinor,
+      transfer_data: { destination: input.connectedAccountId },
+      metadata: {
+        dunaOrderId: input.orderId,
+        dunaBookingId: input.bookingId,
+        dunaPersonId: input.personId,
+        dunaOrganizationCommissionMinor: String(
+          input.organizationCommissionMinor,
+        ),
+        dunaOrganizationCommissionRateBps: String(
+          input.organizationCommissionRateBps,
+        ),
+        channel: "native-payment-sheet",
+      },
+    },
+    { idempotencyKey: `${input.idempotencyKey}:native-payment` },
+  );
+  if (!intent.client_secret) {
+    throw new Error("Stripe did not return a PaymentIntent client secret");
+  }
+  return { id: intent.id, clientSecret: intent.client_secret };
+}
+
 interface CatalogNativePaymentInput {
   readonly orderId: string;
   readonly personId: string;

@@ -525,6 +525,11 @@ export function OrganizationExperienceModal({
       if (outcome === "cancelled") return false;
       await pollOrder(result.orderId);
     } else if (result.checkoutUrl) {
+      if (Platform.OS !== "web") {
+        throw new Error(
+          "Duna could not prepare the in-app payment. You were not charged; please try again.",
+        );
+      }
       await WebBrowser.openBrowserAsync(result.checkoutUrl);
       return false;
     }

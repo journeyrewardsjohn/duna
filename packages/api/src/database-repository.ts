@@ -1,6 +1,7 @@
 import {
   auditLog,
   consents,
+  courtBookingParticipants,
   courtBookings,
   courts,
   divisions,
@@ -2506,6 +2507,28 @@ function connectedBookingStatus(
   return undefined;
 }
 
+function venueAddress(parts: {
+  readonly addressLine1?: string | null;
+  readonly addressLine2?: string | null;
+  readonly locality?: string | null;
+  readonly administrativeArea?: string | null;
+  readonly postalCode?: string | null;
+  readonly countryCode?: string | null;
+}): string | undefined {
+  const cityLine = [parts.locality, parts.administrativeArea, parts.postalCode]
+    .filter(Boolean)
+    .join(", ");
+  const value = [
+    parts.addressLine1,
+    parts.addressLine2,
+    cityLine,
+    parts.countryCode,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return value || undefined;
+}
+
 async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
   const database = getDatabase();
   const person = await database.query.people.findFirst({
@@ -2525,7 +2548,23 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
         status: registrations.status,
         programKind: programs.kind,
         eventTypeKind: eventTypes.kind,
+        venueId: venues.id,
         venueName: venues.name,
+        venueTimezone: venues.timezone,
+        venueAddressLine1: venues.addressLine1,
+        venueAddressLine2: venues.addressLine2,
+        venueLocality: venues.locality,
+        venueAdministrativeArea: venues.administrativeArea,
+        venuePostalCode: venues.postalCode,
+        venueCountryCode: venues.countryCode,
+        venueGooglePlaceId: venues.googlePlaceId,
+        venueLatitude: venues.latitude,
+        venueLongitude: venues.longitude,
+        organizationId: organizations.id,
+        organizationName: organizations.name,
+        organizationSlug: organizations.slug,
+        courtId: courts.id,
+        courtName: courts.name,
         orderTotalMinor: orders.totalMinor,
         orderCurrency: orders.currency,
         orderStatus: orders.status,
@@ -2541,6 +2580,8 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
       .leftJoin(programs, eq(sessions.programId, programs.id))
       .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
       .leftJoin(venues, eq(sessions.venueId, venues.id))
+      .leftJoin(organizations, eq(programs.organizationId, organizations.id))
+      .leftJoin(courts, eq(sessions.courtId, courts.id))
       .leftJoin(orders, eq(registrations.orderId, orders.id))
       .leftJoin(teamEntries, eq(teamEntries.registrationId, registrations.id))
       .where(
@@ -2564,7 +2605,25 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
         endsAt: pickupSessions.endsAt,
         status: pickupParticipants.status,
         venueName: pickupSessions.venueLabel,
+        venueId: venues.id,
         connectedVenueName: venues.name,
+        connectedVenueTimezone: venues.timezone,
+        connectedAddressLine1: venues.addressLine1,
+        connectedAddressLine2: venues.addressLine2,
+        connectedLocality: venues.locality,
+        connectedAdministrativeArea: venues.administrativeArea,
+        connectedPostalCode: venues.postalCode,
+        connectedCountryCode: venues.countryCode,
+        connectedGooglePlaceId: venues.googlePlaceId,
+        connectedLatitude: venues.latitude,
+        connectedLongitude: venues.longitude,
+        pickupAddress: pickupSessions.address,
+        pickupGooglePlaceId: pickupSessions.googlePlaceId,
+        pickupLatitude: pickupSessions.latitude,
+        pickupLongitude: pickupSessions.longitude,
+        organizationId: organizations.id,
+        organizationName: organizations.name,
+        organizationSlug: organizations.slug,
         orderId: pickupParticipants.orderId,
         addedByPersonId: pickupParticipants.addedByPersonId,
         paidByPersonId: pickupParticipants.paidByPersonId,
@@ -2586,6 +2645,10 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
         eq(pickupParticipants.pickupSessionId, pickupSessions.id),
       )
       .leftJoin(venues, eq(pickupSessions.venueId, venues.id))
+      .leftJoin(
+        organizations,
+        eq(pickupSessions.organizationId, organizations.id),
+      )
       .leftJoin(orders, eq(pickupParticipants.orderId, orders.id))
       .where(
         and(
@@ -2602,6 +2665,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
     database
       .select({
         id: courtBookings.id,
+        courtId: courts.id,
         courtName: courts.name,
         startsAt: courtBookings.startsAt,
         endsAt: courtBookings.endsAt,
@@ -2609,6 +2673,18 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
         venueId: venues.id,
         venueName: venues.name,
         venueTimezone: venues.timezone,
+        venueAddressLine1: venues.addressLine1,
+        venueAddressLine2: venues.addressLine2,
+        venueLocality: venues.locality,
+        venueAdministrativeArea: venues.administrativeArea,
+        venuePostalCode: venues.postalCode,
+        venueCountryCode: venues.countryCode,
+        venueGooglePlaceId: venues.googlePlaceId,
+        venueLatitude: venues.latitude,
+        venueLongitude: venues.longitude,
+        organizationId: organizations.id,
+        organizationName: organizations.name,
+        organizationSlug: organizations.slug,
         orderTotalMinor: orders.totalMinor,
         orderCurrency: orders.currency,
         orderStatus: orders.status,
@@ -2616,6 +2692,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
       .from(courtBookings)
       .innerJoin(courts, eq(courtBookings.courtId, courts.id))
       .innerJoin(venues, eq(courtBookings.venueId, venues.id))
+      .innerJoin(organizations, eq(venues.organizationId, organizations.id))
       .leftJoin(orders, eq(courtBookings.orderId, orders.id))
       .where(
         and(
@@ -2631,6 +2708,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
   const pickupSessionIds = [
     ...new Set(pickupRows.map((row) => row.pickupSessionId)),
   ];
+  const courtBookingIds = courtRows.map((row) => row.id);
   const pickupAttributionIds = [
     ...new Set(
       pickupRows.flatMap((row) =>
@@ -2644,6 +2722,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
     registrationParticipantRows,
     pickupParticipantRows,
     pickupAttributionPeople,
+    courtParticipantRows,
   ] = await Promise.all([
     registrationSessionIds.length
       ? database
@@ -2685,6 +2764,29 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
           )
       : Promise.resolve([]),
     loadPeople(pickupAttributionIds),
+    courtBookingIds.length
+      ? database
+          .select({
+            bookingId: courtBookingParticipants.bookingId,
+            invitedName: courtBookingParticipants.invitedName,
+            displayName: people.displayName,
+            status: courtBookingParticipants.status,
+          })
+          .from(courtBookingParticipants)
+          .leftJoin(people, eq(courtBookingParticipants.personId, people.id))
+          .where(
+            and(
+              inArray(courtBookingParticipants.bookingId, courtBookingIds),
+              inArray(courtBookingParticipants.status, [
+                "organizer",
+                "invited",
+                "accepted",
+                "payment-pending",
+                "paid",
+              ]),
+            ),
+          )
+      : Promise.resolve([]),
   ]);
   const registrationNamesBySession = new Map<string, string[]>();
   for (const row of registrationParticipantRows) {
@@ -2726,6 +2828,15 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
       attribution.displayName,
     ]),
   );
+  const courtNamesByBooking = new Map<string, string[]>();
+  for (const row of courtParticipantRows) {
+    const name = row.displayName ?? row.invitedName;
+    if (!name) continue;
+    courtNamesByBooking.set(row.bookingId, [
+      ...(courtNamesByBooking.get(row.bookingId) ?? []),
+      name,
+    ]);
+  }
   const bookings: BookingSummary[] = [
     ...registrationRows.flatMap((row): BookingSummary[] => {
       const status = connectedBookingStatus(row.status);
@@ -2741,6 +2852,62 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
           startsAt: row.startsAt.toISOString(),
           endsAt: row.endsAt.toISOString(),
           venueName: row.venueName ?? "Venue not assigned",
+          ...(row.venueId ? { venueId: row.venueId } : {}),
+          ...(row.venueTimezone ? { venueTimezone: row.venueTimezone } : {}),
+          ...(row.organizationId && row.organizationName && row.organizationSlug
+            ? {
+                organization: {
+                  id: row.organizationId,
+                  name: row.organizationName,
+                  slug: row.organizationSlug,
+                },
+              }
+            : {}),
+          ...(row.venueName
+            ? {
+                location: {
+                  label: row.venueName,
+                  ...(venueAddress({
+                    addressLine1: row.venueAddressLine1,
+                    addressLine2: row.venueAddressLine2,
+                    locality: row.venueLocality,
+                    administrativeArea: row.venueAdministrativeArea,
+                    postalCode: row.venuePostalCode,
+                    countryCode: row.venueCountryCode,
+                  })
+                    ? {
+                        address: venueAddress({
+                          addressLine1: row.venueAddressLine1,
+                          addressLine2: row.venueAddressLine2,
+                          locality: row.venueLocality,
+                          administrativeArea: row.venueAdministrativeArea,
+                          postalCode: row.venuePostalCode,
+                          countryCode: row.venueCountryCode,
+                        }),
+                      }
+                    : {}),
+                  ...(row.venueGooglePlaceId
+                    ? { googlePlaceId: row.venueGooglePlaceId }
+                    : {}),
+                  ...(row.venueLatitude !== null
+                    ? { latitude: row.venueLatitude }
+                    : {}),
+                  ...(row.venueLongitude !== null
+                    ? { longitude: row.venueLongitude }
+                    : {}),
+                },
+              }
+            : {}),
+          ...(row.courtId && row.courtName
+            ? { court: { id: row.courtId, name: row.courtName } }
+            : {}),
+          details: {
+            label:
+              (row.programKind ?? row.eventTypeKind) === "league"
+                ? "League details"
+                : "Event details",
+            path: `/events/${row.sessionSlug}`,
+          },
           status,
           amount: {
             amountMinor: row.orderTotalMinor ?? 0,
@@ -2834,6 +3001,69 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
           endsAt: row.endsAt.toISOString(),
           venueName:
             row.connectedVenueName ?? row.venueName ?? "Community location",
+          ...(row.venueId ? { venueId: row.venueId } : {}),
+          ...(row.connectedVenueTimezone
+            ? { venueTimezone: row.connectedVenueTimezone }
+            : {}),
+          ...(row.organizationId && row.organizationName && row.organizationSlug
+            ? {
+                organization: {
+                  id: row.organizationId,
+                  name: row.organizationName,
+                  slug: row.organizationSlug,
+                },
+              }
+            : {}),
+          location: {
+            label:
+              row.connectedVenueName ?? row.venueName ?? "Community location",
+            ...(row.pickupAddress ||
+            venueAddress({
+              addressLine1: row.connectedAddressLine1,
+              addressLine2: row.connectedAddressLine2,
+              locality: row.connectedLocality,
+              administrativeArea: row.connectedAdministrativeArea,
+              postalCode: row.connectedPostalCode,
+              countryCode: row.connectedCountryCode,
+            })
+              ? {
+                  address:
+                    row.pickupAddress ??
+                    venueAddress({
+                      addressLine1: row.connectedAddressLine1,
+                      addressLine2: row.connectedAddressLine2,
+                      locality: row.connectedLocality,
+                      administrativeArea: row.connectedAdministrativeArea,
+                      postalCode: row.connectedPostalCode,
+                      countryCode: row.connectedCountryCode,
+                    }),
+                }
+              : {}),
+            ...((row.pickupGooglePlaceId ?? row.connectedGooglePlaceId)
+              ? {
+                  googlePlaceId:
+                    row.pickupGooglePlaceId ?? row.connectedGooglePlaceId!,
+                }
+              : {}),
+            ...((row.pickupLatitude ?? row.connectedLatitude) !== null
+              ? {
+                  latitude: row.pickupLatitude ?? row.connectedLatitude!,
+                }
+              : {}),
+            ...((row.pickupLongitude ?? row.connectedLongitude) !== null
+              ? {
+                  longitude: row.pickupLongitude ?? row.connectedLongitude!,
+                }
+              : {}),
+          },
+          ...(row.venueId
+            ? {
+                details: {
+                  label: "Facility details",
+                  path: `/venues/${row.venueId}`,
+                },
+              }
+            : {}),
           status,
           amount: {
             amountMinor:
@@ -2922,12 +3152,55 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
           venueId: row.venueId,
           venueName: row.venueName,
           venueTimezone: row.venueTimezone,
+          organization: {
+            id: row.organizationId,
+            name: row.organizationName,
+            slug: row.organizationSlug,
+          },
+          location: {
+            label: row.venueName,
+            ...(venueAddress({
+              addressLine1: row.venueAddressLine1,
+              addressLine2: row.venueAddressLine2,
+              locality: row.venueLocality,
+              administrativeArea: row.venueAdministrativeArea,
+              postalCode: row.venuePostalCode,
+              countryCode: row.venueCountryCode,
+            })
+              ? {
+                  address: venueAddress({
+                    addressLine1: row.venueAddressLine1,
+                    addressLine2: row.venueAddressLine2,
+                    locality: row.venueLocality,
+                    administrativeArea: row.venueAdministrativeArea,
+                    postalCode: row.venuePostalCode,
+                    countryCode: row.venueCountryCode,
+                  }),
+                }
+              : {}),
+            ...(row.venueGooglePlaceId
+              ? { googlePlaceId: row.venueGooglePlaceId }
+              : {}),
+            ...(row.venueLatitude !== null
+              ? { latitude: row.venueLatitude }
+              : {}),
+            ...(row.venueLongitude !== null
+              ? { longitude: row.venueLongitude }
+              : {}),
+          },
+          court: { id: row.courtId, name: row.courtName },
+          details: {
+            label: "Facility details",
+            path: `/venues/${row.venueId}`,
+          },
           status,
           amount: {
             amountMinor: row.orderTotalMinor ?? 0,
             currency: currency(row.orderCurrency ?? "USD"),
           },
-          participantNames: [person.displayName],
+          participantNames: courtNamesByBooking.get(row.id) ?? [
+            person.displayName,
+          ],
           paymentStatus:
             (row.orderTotalMinor ?? 0) === 0
               ? "free"

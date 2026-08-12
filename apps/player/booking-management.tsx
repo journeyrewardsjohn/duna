@@ -1,12 +1,17 @@
 import * as Crypto from "expo-crypto";
+import * as Clipboard from "expo-clipboard";
 import * as WebBrowser from "expo-web-browser";
 import {
+  googleMapsSearchUrl,
+  nativeMapUrl,
   pickupInviteActionLabel,
   pickupInviteExplanation,
   pickupInviteResult,
 } from "@duna/core";
 import { useEffect, useState } from "react";
 import {
+  Image,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -21,6 +26,7 @@ import {
 } from "./fellix-text";
 import { dunaWebUrl, type DunaApiClient } from "./mobile-api";
 import { presentNativeEventPayment } from "./native-payments";
+import { shareBooking, type ShareableBookingDetails } from "./booking-share";
 
 export type ManagedBooking = {
   readonly id: string;
@@ -32,6 +38,22 @@ export type ManagedBooking = {
   readonly startsAt: string;
   readonly endsAt: string;
   readonly venueName: string;
+  readonly venueId?: string;
+  readonly venueTimezone?: string;
+  readonly organization?: {
+    readonly id: string;
+    readonly name: string;
+    readonly slug: string;
+  };
+  readonly location?: {
+    readonly label: string;
+    readonly address?: string;
+    readonly googlePlaceId?: string;
+    readonly latitude?: number;
+    readonly longitude?: number;
+  };
+  readonly court?: { readonly id: string; readonly name: string };
+  readonly details?: { readonly label: string; readonly path: string };
   readonly status: "confirmed" | "waitlisted" | "needs-action";
   readonly amount: { readonly amountMinor: number; readonly currency: string };
   readonly participantNames?: readonly string[];
@@ -143,6 +165,7 @@ export function BookingManagementModal({
   const [message, setMessage] = useState<string>();
   const [cancelled, setCancelled] = useState(false);
   const [showAttribution, setShowAttribution] = useState(false);
+  const [copiedAddress, setCopiedAddress] = useState(false);
 
   useEffect(() => {
     setRoster(
@@ -172,6 +195,7 @@ export function BookingManagementModal({
     setMessage(undefined);
     setPickupPlayers([]);
     setShowAttribution(Boolean(booking?.addedBy));
+    setCopiedAddress(false);
   }, [booking]);
 
   if (!booking) return null;
@@ -289,6 +313,11 @@ export function BookingManagementModal({
             : "Payment succeeded. Duna is finishing confirmation now.",
         );
       } else if (result.checkoutUrl) {
+        if (Platform.OS !== "web") {
+          throw new Error(
+            "Duna could not prepare the in-app payment. No additional player was charged.",
+          );
+        }
         await WebBrowser.openBrowserAsync(result.checkoutUrl);
         setMessage(
           "Checkout opened securely. Duna confirms every paid place after payment succeeds.",
@@ -390,6 +419,67 @@ export function BookingManagementModal({
     }
   }
 
+  const location = booking.location ?? { label: booking.venueName };
+  const detailsUrl = booking.details
+    ? `${dunaWebUrl}${booking.details.path}`
+    : undefined;
+  const shareDetails = {
+    title: booking.title,
+    startsAt: booking.startsAt,
+    endsAt: booking.endsAt,
+    ...(booking.venueTimezone ? { timezone: booking.venueTimezone } : {}),
+    ...(booking.organization?.name
+      ? { organizationName: booking.organization.name }
+      : {}),
+    locationName: location.label,
+    ...(location.address ? { address: location.address } : {}),
+    ...(booking.court?.name ? { courtName: booking.court.name } : {}),
+    ...(booking.participantNames?.length
+      ? { playerNames: booking.participantNames }
+      : {}),
+    ...(detailsUrl ? { detailsUrl } : {}),
+  } satisfies ShareableBookingDetails;
+  const mapImageUrl = location.address
+    ? `${dunaWebUrl}/api/places/map?${
+        location.latitude !== undefined && location.longitude !== undefined
+          ? `latitude=${encodeURIComponent(String(location.latitude))}&longitude=${encodeURIComponent(String(location.longitude))}`
+          : `address=${encodeURIComponent(location.address)}`
+      }`
+    : undefined;
+
+  async function openMap() {
+    if (!location.address) return;
+    const platform =
+      Platform.OS === "ios"
+        ? "ios"
+        : Platform.OS === "android"
+          ? "android"
+          : "web";
+    const fallback = googleMapsSearchUrl({
+      address: location.address,
+      googlePlaceId: location.googlePlaceId,
+    });
+    const destination = nativeMapUrl({
+      address: location.address,
+      label: location.label,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      platform,
+    });
+    try {
+      if (platform === "web") await WebBrowser.openBrowserAsync(fallback);
+      else await Linking.openURL(destination);
+    } catch {
+      await WebBrowser.openBrowserAsync(fallback);
+    }
+  }
+
+  async function copyAddress() {
+    if (!location.address) return;
+    await Clipboard.setStringAsync(location.address);
+    setCopiedAddress(true);
+  }
+
   const paid = booking.paymentStatus === "paid";
   const statusLabel =
     booking.status === "needs-action"
@@ -468,9 +558,124 @@ export function BookingManagementModal({
                 day: "numeric",
                 hour: "numeric",
                 minute: "2-digit",
+                ...(booking.venueTimezone
+                  ? { timeZone: booking.venueTimezone }
+                  : {}),
               })}
             </Text>
             <Text style={styles.meta}>{booking.venueName}</Text>
+
+            <View style={styles.bookingDetailsCard}>
+              <Text style={styles.sectionEyebrow}>BOOKING DETAILS</Text>
+              <View style={styles.bookingDetailGrid}>
+                <View style={styles.bookingDetailItem}>
+                  <Text style={styles.bookingDetailLabel}>TIME</Text>
+                  <Text style={styles.bookingDetailValue}>
+                    {new Date(booking.startsAt).toLocaleTimeString("en-US", {
+                      hour: "numeric",
+                      minute: "2-digit",
+                      ...(booking.venueTimezone
+                        ? { timeZone: booking.venueTimezone }
+                        : {}),
+                    })}
+                    {" – "}
+                    {new Date(booking.endsAt).toLocaleTimeString("en-US", {
+                      hour: "numeric",
+                      minute: "2-digit",
+                      ...(booking.venueTimezone
+                        ? { timeZone: booking.venueTimezone }
+                        : {}),
+                    })}
+                  </Text>
+                </View>
+                {booking.court && (
+                  <View style={styles.bookingDetailItem}>
+                    <Text style={styles.bookingDetailLabel}>COURT</Text>
+                    <Text style={styles.bookingDetailValue}>
+                      {booking.court.name}
+                    </Text>
+                  </View>
+                )}
+                {booking.organization && (
+                  <View style={styles.bookingDetailItem}>
+                    <Text style={styles.bookingDetailLabel}>ORGANIZATION</Text>
+                    <Text style={styles.bookingDetailValue}>
+                      {booking.organization.name}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Pressable
+                accessibilityLabel={`Share ${booking.title}`}
+                onPress={() => void shareBooking(shareDetails)}
+                style={styles.shareAction}
+              >
+                <Text style={styles.shareActionIcon}>↗</Text>
+                <Text style={styles.shareActionText}>Share booking</Text>
+              </Pressable>
+            </View>
+
+            {location.address && (
+              <View style={styles.locationCard}>
+                <Pressable
+                  accessibilityLabel={`Open map for ${location.label}`}
+                  onPress={() => void openMap()}
+                  style={styles.locationMap}
+                >
+                  {mapImageUrl && (
+                    <Image
+                      accessibilityIgnoresInvertColors
+                      source={{ uri: mapImageUrl }}
+                      style={styles.locationMapImage}
+                    />
+                  )}
+                  <View style={styles.locationMapBadge}>
+                    <Text style={styles.locationMapBadgeText}>OPEN MAP ↗</Text>
+                  </View>
+                </Pressable>
+                <View style={styles.locationDetails}>
+                  <Text style={styles.sectionEyebrow}>LOCATION</Text>
+                  <Text style={styles.locationName}>{location.label}</Text>
+                  <Pressable onPress={() => void openMap()}>
+                    <Text style={styles.locationAddress}>
+                      {location.address} ↗
+                    </Text>
+                  </Pressable>
+                  <View style={styles.locationActions}>
+                    <Pressable
+                      onPress={() => void copyAddress()}
+                      style={styles.locationSecondary}
+                    >
+                      <Text style={styles.locationSecondaryText}>
+                        {copiedAddress ? "✓ Copied" : "Copy address"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void openMap()}
+                      style={styles.locationPrimary}
+                    >
+                      <Text style={styles.locationPrimaryText}>Maps ↗</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {booking.details && detailsUrl && (
+              <Pressable
+                accessibilityRole="link"
+                onPress={() => void WebBrowser.openBrowserAsync(detailsUrl)}
+                style={styles.detailsLink}
+              >
+                <View style={styles.flex}>
+                  <Text style={styles.detailsLinkEyebrow}>KEEP EXPLORING</Text>
+                  <Text style={styles.detailsLinkTitle}>
+                    {booking.details.label}
+                  </Text>
+                </View>
+                <Text style={styles.detailsLinkArrow}>↗</Text>
+              </Pressable>
+            )}
 
             {message && (
               <View style={styles.notice}>
@@ -1267,6 +1472,37 @@ const styles = StyleSheet.create({
     width: 42,
   },
   avatarText: { color: "#203740", fontSize: 13, fontWeight: "800" },
+  bookingDetailGrid: { gap: 2, marginTop: 8 },
+  bookingDetailItem: {
+    alignItems: "flex-start",
+    borderTopColor: "#ecebe7",
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    paddingVertical: 12,
+  },
+  bookingDetailLabel: {
+    color: "#78858a",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1,
+    width: 92,
+  },
+  bookingDetailsCard: {
+    backgroundColor: "#ffffff",
+    borderColor: "#e1dfda",
+    borderRadius: 20,
+    borderWidth: 1,
+    marginTop: 22,
+    padding: 17,
+  },
+  bookingDetailValue: {
+    color: "#203740",
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 20,
+  },
   cancel: {
     alignItems: "center",
     borderColor: "#bd5745",
@@ -1346,6 +1582,28 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   dangerText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
+  detailsLink: {
+    alignItems: "center",
+    backgroundColor: "#e8eeef",
+    borderRadius: 18,
+    flexDirection: "row",
+    marginTop: 18,
+    minHeight: 76,
+    padding: 16,
+  },
+  detailsLinkArrow: { color: "#203740", fontSize: 24, fontWeight: "900" },
+  detailsLinkEyebrow: {
+    color: "#718084",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  detailsLinkTitle: {
+    color: "#203740",
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 3,
+  },
   eyebrow: {
     color: "#203740",
     fontSize: 11,
@@ -1378,6 +1636,70 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
   },
   inviteButtonText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
+  locationActions: { flexDirection: "row", gap: 8, marginTop: 14 },
+  locationAddress: {
+    color: "#706a60",
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 5,
+  },
+  locationCard: {
+    backgroundColor: "#ffffff",
+    borderColor: "#e1dfda",
+    borderRadius: 20,
+    borderWidth: 1,
+    marginTop: 18,
+    overflow: "hidden",
+  },
+  locationDetails: { padding: 17 },
+  locationMap: {
+    alignItems: "center",
+    backgroundColor: "#dce5e7",
+    height: 142,
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  locationMapBadge: {
+    backgroundColor: "rgba(32,55,64,0.9)",
+    borderRadius: 11,
+    bottom: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    position: "absolute",
+    right: 12,
+  },
+  locationMapBadgeText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  locationMapImage: { height: "100%", width: "100%" },
+  locationName: {
+    color: "#111719",
+    fontSize: 22,
+    fontWeight: "900",
+    marginTop: 5,
+  },
+  locationPrimary: {
+    alignItems: "center",
+    backgroundColor: "#203740",
+    borderRadius: 13,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 48,
+  },
+  locationPrimaryText: { color: "#ffffff", fontSize: 13, fontWeight: "900" },
+  locationSecondary: {
+    alignItems: "center",
+    borderColor: "#cfd4d2",
+    borderRadius: 13,
+    borderWidth: 1,
+    flex: 1.35,
+    justifyContent: "center",
+    minHeight: 48,
+  },
+  locationSecondaryText: { color: "#203740", fontSize: 13, fontWeight: "900" },
   inviteInput: {
     backgroundColor: "#f5f4f0",
     borderRadius: 13,
@@ -1521,6 +1843,18 @@ const styles = StyleSheet.create({
   segmentText: { color: "#706a60", fontSize: 13, fontWeight: "800" },
   segmentTextActive: { color: "#ffffff" },
   safe: { backgroundColor: "#f7f5ef", flex: 1 },
+  shareAction: {
+    alignItems: "center",
+    backgroundColor: "#dce9ec",
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 8,
+    minHeight: 52,
+  },
+  shareActionIcon: { color: "#203740", fontSize: 20, fontWeight: "900" },
+  shareActionText: { color: "#203740", fontSize: 14, fontWeight: "900" },
   search: {
     alignItems: "center",
     backgroundColor: "#f5f4f0",

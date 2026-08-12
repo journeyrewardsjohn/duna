@@ -9,7 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "export": "expo export --platform all --output-dir dist",
-    "lint": "eslint App.tsx DunaProLiveActivity.tsx arrival-location-task.ts fellix-text.tsx get-paid.tsx index.js live-activities.ts messaging-notifications.ts messaging-outbox.ts messaging-screen.tsx mobile-api.ts operator-create.tsx runtime.tsx session-arrival-board.tsx session-notes.tsx ticket-scanner.tsx",
+    "lint": "eslint App.tsx DunaProLiveActivity.tsx arrival-location-task.ts fellix-text.tsx get-paid.tsx index.js live-activities.ts messaging-notifications.ts messaging-outbox.ts messaging-screen.tsx mobile-api.ts operator-create.tsx pro-calendar-integration.ts runtime.tsx session-arrival-board.tsx session-notes.tsx ticket-scanner.tsx",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
@@ -30,6 +30,7 @@
     "@trpc/client": "11.18.0",
     "expo": "~57.0.10",
     "expo-auth-session": "~57.0.6",
+    "expo-calendar": "~57.0.1",
     "expo-camera": "~57.0.3",
     "expo-build-properties": "~57.0.8",
     "expo-constants": "~57.0.9",

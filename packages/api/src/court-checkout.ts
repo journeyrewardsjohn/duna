@@ -42,7 +42,14 @@ import { assertSubjectAuthority, createCourtHold } from "./commerce";
 import type { ApiActor } from "./context";
 import { hasActiveDunaPlusMembership } from "./membership";
 import { loadOrganizationCommissionPolicy } from "./organization-billing";
-import { createCourtCheckoutSession, isStripeConfigured } from "./payments";
+import {
+  createCourtBookingPaymentIntent,
+  createCourtCheckoutSession,
+  createMobilePaymentCustomerSession,
+  getOrCreatePlayerStripeCustomer,
+  getStripePublishableKey,
+  isStripeConfigured,
+} from "./payments";
 import { sendTemplateSms } from "./sent";
 import {
   daylightStatus,
@@ -430,7 +437,14 @@ export async function loadCourtBookingInventory(
         amenities: venues.amenities,
         latitude: venues.latitude,
         longitude: venues.longitude,
+        addressLine1: venues.addressLine1,
+        addressLine2: venues.addressLine2,
+        postalCode: venues.postalCode,
+        countryCode: venues.countryCode,
+        googlePlaceId: venues.googlePlaceId,
+        organizationId: organizations.id,
         organizationName: organizations.name,
+        organizationSlug: organizations.slug,
         paymentsReady: organizations.stripeChargesEnabled,
       })
       .from(venues)
@@ -479,7 +493,9 @@ export async function loadCourtBookingInventory(
       city: venue.city ?? "City not set",
       region: venue.region ?? "Region not set",
       timezone: venue.timezone,
+      organizationId: venue.organizationId,
       organizationName: venue.organizationName,
+      organizationSlug: venue.organizationSlug,
       paymentsReady: venue.paymentsReady,
       capacity: venue.capacity,
       heroImageUrl: venue.heroImageUrl ?? undefined,
@@ -487,6 +503,18 @@ export async function loadCourtBookingInventory(
       amenities: venue.amenities,
       latitude: venue.latitude ?? undefined,
       longitude: venue.longitude ?? undefined,
+      address:
+        [
+          venue.addressLine1,
+          venue.addressLine2,
+          [venue.city, venue.region, venue.postalCode]
+            .filter(Boolean)
+            .join(", "),
+          venue.countryCode,
+        ]
+          .filter(Boolean)
+          .join(" · ") || undefined,
+      googlePlaceId: venue.googlePlaceId ?? undefined,
     },
     courts: courtRows.flatMap((court) => {
       if (court.status !== "active" || court.bookingPolicy === "none")
@@ -1115,6 +1143,7 @@ export async function startCourtCheckout(input: {
   readonly localStartsAt: string;
   readonly durationMinutes: number;
   readonly paymentMode: "full" | "split";
+  readonly paymentSurface: "hosted" | "native";
   readonly participants: readonly CourtBookingInviteInput[];
   readonly policyAccepted: boolean;
   readonly policyFullScrollConfirmed: boolean;
@@ -1610,6 +1639,92 @@ export async function startCourtCheckout(input: {
   ]);
 
   try {
+    const applicationFeeMinor = Math.min(
+      organizerShare,
+      organizerConsumerFee +
+        organizerOperatorFee +
+        organizerOrganizationCommission,
+    );
+    if (input.paymentSurface === "native") {
+      const customerId = await getOrCreatePlayerStripeCustomer({
+        personId: buyer.id,
+        existingCustomerId: buyer.stripeCustomerId ?? undefined,
+        email: buyer.email ?? undefined,
+        displayName: buyer.displayName,
+      });
+      const [paymentIntent, customerSessionClientSecret] = await Promise.all([
+        createCourtBookingPaymentIntent({
+          orderId: orderId!,
+          bookingId: hold.bookingId,
+          personId: input.actor.personId,
+          customerId,
+          customerEmail: buyer.email ?? undefined,
+          description: `${resource.venueName} · ${resource.courtName}`,
+          amountMinor: organizerShare,
+          currency: priced.currency,
+          applicationFeeMinor,
+          organizationCommissionMinor: organizerOrganizationCommission,
+          organizationCommissionRateBps: commissionPolicy.rateBps,
+          connectedAccountId: resource.stripeAccountId!,
+          idempotencyKey: input.idempotencyKey,
+        }),
+        createMobilePaymentCustomerSession(customerId),
+      ]);
+      if (buyer.stripeCustomerId !== customerId) {
+        await database
+          .update(people)
+          .set({ stripeCustomerId: customerId, updatedAt: input.now })
+          .where(eq(people.id, buyer.id));
+      }
+      await database.batch([
+        database
+          .update(orders)
+          .set({
+            stripePaymentIntentId: paymentIntent.id,
+            expiresAt: checkoutExpiresAt,
+            updatedAt: input.now,
+          })
+          .where(eq(orders.id, orderId!)),
+        database
+          .update(courtBookings)
+          .set({
+            holdExpiresAt: new Date(checkoutExpiresAt.getTime() + 5 * 60_000),
+            updatedAt: input.now,
+          })
+          .where(eq(courtBookings.id, hold.bookingId)),
+      ]);
+      await sendBookingInviteSms({
+        participantRows,
+        organizerName: buyer.displayName,
+        venueName: resource.venueName,
+        courtName: resource.courtName,
+        startsAt,
+        timeZone: resource.timezone,
+        currency: priced.currency,
+        applicationOrigin: new URL(input.successUrl).origin,
+      });
+      return {
+        mode: "stripe",
+        bookingId: hold.bookingId,
+        bookingStatus: "held",
+        paymentMode: input.paymentMode,
+        paymentSheet: {
+          publishableKey: getStripePublishableKey(),
+          paymentIntentId: paymentIntent.id,
+          paymentIntentClientSecret: paymentIntent.clientSecret,
+          customerId,
+          customerSessionClientSecret,
+        },
+        expiresAt: checkoutExpiresAt.toISOString(),
+        startsAt: hold.startsAt,
+        endsAt: hold.endsAt,
+        alternatives: [],
+        pricing,
+        policy,
+        participants: participantOutput,
+      };
+    }
+
     const checkout = await createCourtCheckoutSession({
       orderId: orderId!,
       bookingId: hold.bookingId,
@@ -1618,12 +1733,7 @@ export async function startCourtCheckout(input: {
       description: `${resource.venueName} · ${resource.courtName}`,
       amountMinor: organizerShare,
       currency: priced.currency,
-      applicationFeeMinor: Math.min(
-        organizerShare,
-        organizerConsumerFee +
-          organizerOperatorFee +
-          organizerOrganizationCommission,
-      ),
+      applicationFeeMinor,
       organizationCommissionMinor: organizerOrganizationCommission,
       organizationCommissionRateBps: commissionPolicy.rateBps,
       connectedAccountId: resource.stripeAccountId!,
@@ -2149,11 +2259,14 @@ export async function loadCourtBookingInvite(inviteToken: string) {
 
 export async function getCourtCheckoutStatus(input: {
   readonly actor: ApiActor;
-  readonly checkoutSessionId: string;
+  readonly checkoutSessionId?: string;
+  readonly paymentIntentId?: string;
 }): Promise<CourtCheckoutStatus> {
   const database = getDatabase();
   const order = await database.query.orders.findFirst({
-    where: eq(orders.stripeCheckoutSessionId, input.checkoutSessionId),
+    where: input.paymentIntentId
+      ? eq(orders.stripePaymentIntentId, input.paymentIntentId)
+      : eq(orders.stripeCheckoutSessionId, input.checkoutSessionId!),
   });
   if (!order || order.buyerPersonId !== input.actor.personId) {
     throw new CourtCheckoutError(
