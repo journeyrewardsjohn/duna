@@ -58,6 +58,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import Svg, { Circle, Line, Path, SvgUri } from "react-native-svg";
+import QRCode from "react-native-qrcode-svg";
 import {
   startDunaLiveActivity,
   type LiveActivityPushToken,
@@ -2916,6 +2917,7 @@ function VenueBookingModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [lookingPostId, setLookingPostId] = useState<string>();
   const [confirmation, setConfirmation] = useState<{
     readonly bookingId: string;
     readonly details: ShareableBookingDetails;
@@ -3026,6 +3028,46 @@ function VenueBookingModal({
   const selectedStartSlots = (availability?.slots ?? []).filter(
     (slot) => slot.localStartsAt === selectedLocalStart,
   );
+  const selectedPlayWindow = selectedOpenMatches[0] ?? selectedStartSlots[0];
+
+  useEffect(() => {
+    if (
+      !visible ||
+      !client ||
+      mode === "preview" ||
+      !venueId ||
+      !selectedPlayWindow
+    ) {
+      setLookingPostId(undefined);
+      return;
+    }
+    let cancelled = false;
+    void client.player.matchAvailability
+      .query()
+      .then((posts) => {
+        if (cancelled) return;
+        const matching = posts.find(
+          (post) =>
+            post.venueId === venueId &&
+            post.startsAt === selectedPlayWindow.startsAt &&
+            post.endsAt === selectedPlayWindow.endsAt,
+        );
+        setLookingPostId(matching?.id);
+      })
+      .catch(() => {
+        if (!cancelled) setLookingPostId(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    client,
+    mode,
+    selectedPlayWindow?.endsAt,
+    selectedPlayWindow?.startsAt,
+    venueId,
+    visible,
+  ]);
 
   useEffect(() => {
     if (!visible) {
@@ -3210,6 +3252,45 @@ function VenueBookingModal({
         result.premiumRequired
           ? "Your free priority alert is active. Premium unlocks additional simultaneous alerts."
           : "Priority alert created. We’ll notify you when a matching court opens.",
+      );
+    } catch (reason) {
+      setError(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleLookingToPlay() {
+    if (!client || !venueId || mode === "preview") return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      if (lookingPostId) {
+        await client.player.cancelMatchAvailability.mutate({
+          postId: lookingPostId,
+          idempotencyKey: Crypto.randomUUID(),
+        });
+        setLookingPostId(undefined);
+        setNotice("You are no longer shown as looking to play at this time.");
+        return;
+      }
+      if (!selectedPlayWindow) {
+        setError("Choose a time before saying you are looking to play.");
+        return;
+      }
+      const post = await client.player.createMatchAvailability.mutate({
+        venueId,
+        startsAt: selectedPlayWindow.startsAt,
+        endsAt: selectedPlayWindow.endsAt,
+        matchType: "either",
+        genderPreference: "open",
+        formatPreferences: [],
+        note: "Open to an invitation for this time.",
+        idempotencyKey: Crypto.randomUUID(),
+      });
+      setLookingPostId(post.id);
+      setNotice(
+        "You’re now visible to match creators for this time. Any invitation still requires your acceptance.",
       );
     } catch (reason) {
       setError(displayError(reason));
@@ -3947,6 +4028,33 @@ function VenueBookingModal({
                         : "s"}{" "}
                       hidden because this court is not lit after dark.
                     </Text>
+                  )}
+                  {selectedPlayWindow && (
+                    <Pressable
+                      disabled={busy || mode === "preview"}
+                      onPress={() => void toggleLookingToPlay()}
+                      style={[
+                        styles.bookingLookingButton,
+                        lookingPostId && styles.bookingLookingButtonActive,
+                      ]}
+                    >
+                      <Text style={styles.bookingLookingIcon}>
+                        {lookingPostId ? "✓" : "◎"}
+                      </Text>
+                      <View style={styles.flex}>
+                        <Text style={styles.rowTitle}>
+                          {lookingPostId
+                            ? "You’re looking to play"
+                            : "I’m looking to play"}
+                        </Text>
+                        <Text style={styles.rowMeta}>
+                          {lookingPostId
+                            ? "Tap to withdraw your availability."
+                            : "Let match creators invite you for this time. You choose whether to accept."}
+                        </Text>
+                      </View>
+                      <Text style={styles.chevron}>›</Text>
+                    </Pressable>
                   )}
                   <Pressable
                     disabled={busy || mode === "preview"}
@@ -7843,11 +7951,17 @@ function PredictionWalletSummaryCard({
 }
 
 function WalletScreen({ onClose }: { readonly onClose: () => void }) {
-  const { mode, organizationWallets, settings, wallet } = usePlayerRuntime();
+  const { client, memberCard, mode, organizationWallets, settings, wallet } =
+    usePlayerRuntime();
   const entries = wallet?.entries ?? demoWalletEntries;
   const balance =
     wallet?.availableMinor ??
     entries.reduce((sum, entry) => sum + entry.amount.amountMinor, 0);
+  const appleWalletReady =
+    Platform.OS === "ios" &&
+    mode === "live" &&
+    Boolean(client) &&
+    memberCard?.walletStatus === "available";
   return (
     <ScrollView
       contentContainerStyle={styles.screenContent}
@@ -7862,8 +7976,92 @@ function WalletScreen({ onClose }: { readonly onClose: () => void }) {
           <Text style={styles.walletCloseText}>×</Text>
         </Pressable>
       </View>
-      <AppHeader eyebrow="STRIPE-MANAGED BALANCE" />
+      <AppHeader eyebrow="MEMBERSHIP + STRIPE-MANAGED BALANCE" />
       <Text style={styles.displayTitle}>Wallet.</Text>
+      {memberCard && (
+        <View style={styles.memberCard}>
+          <View style={styles.walletTop}>
+            <DunaWordmark />
+            <Pill tone="positive">Member</Pill>
+          </View>
+          <Text style={styles.memberCardLabel}>DUNA MEMBERSHIP</Text>
+          <Text style={styles.memberCardName}>{memberCard.holderName}</Text>
+          <View style={styles.memberCardBody}>
+            <View style={styles.memberCardQr}>
+              <QRCode
+                backgroundColor="#ffffff"
+                color="#123640"
+                quietZone={5}
+                size={118}
+                value={memberCard.credentialPayload}
+              />
+            </View>
+            <View style={styles.memberCardDetails}>
+              <Text style={styles.memberCardDetailLabel}>MEMBER ID</Text>
+              <Text selectable style={styles.memberCardId}>
+                {memberCard.memberId}
+              </Text>
+              <Text style={styles.memberCardDetailLabel}>
+                UNIVERSAL CHECK-IN
+              </Text>
+              <Text style={styles.memberCardMeta}>
+                Use this QR for any event, match, or court reservation where you
+                are confirmed.
+              </Text>
+            </View>
+          </View>
+          {memberCard.upcoming[0] && (
+            <View style={styles.memberCardUpcoming}>
+              <View style={styles.flex}>
+                <Text style={styles.memberCardDetailLabel}>UP NEXT</Text>
+                <Text style={styles.memberCardUpcomingTitle}>
+                  {memberCard.upcoming[0].title}
+                </Text>
+                <Text style={styles.memberCardMeta}>
+                  {new Date(memberCard.upcoming[0].startsAt).toLocaleString(
+                    "en-US",
+                    {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    },
+                  )}{" "}
+                  · {memberCard.upcoming[0].venueName}
+                </Text>
+              </View>
+              <Text style={styles.memberCardUpcomingArrow}>›</Text>
+            </View>
+          )}
+          <Pressable
+            disabled={!appleWalletReady}
+            onPress={() => {
+              if (!client) return;
+              void client.player.memberCard
+                .query()
+                .then((fresh) =>
+                  fresh.walletPassPath
+                    ? Linking.openURL(`${dunaWebUrl}${fresh.walletPassPath}`)
+                    : undefined,
+                );
+            }}
+            style={[
+              styles.memberCardWalletButton,
+              !appleWalletReady && styles.buttonDisabled,
+            ]}
+          >
+            <Text style={styles.memberCardWalletButtonText}>
+              {Platform.OS !== "ios"
+                ? "Open Duna on iPhone to add to Apple Wallet"
+                : memberCard.walletStatus === "available"
+                  ? "Add Duna Membership to Apple Wallet"
+                  : "Apple Wallet setup is being completed"}
+            </Text>
+          </Pressable>
+          <View style={styles.walletWave} />
+        </View>
+      )}
       <View style={styles.walletCard}>
         <View style={styles.walletTop}>
           <DunaWordmark />
@@ -11304,6 +11502,10 @@ function defaultPickupStart(): string {
   return local.toISOString().slice(0, 16);
 }
 
+type LookingToPlayCandidate = Awaited<
+  ReturnType<DunaApiClient["player"]["matchAvailabilityCandidates"]["query"]>
+>[number];
+
 function PickupModal({
   visible,
   onClose,
@@ -11344,6 +11546,11 @@ function PickupModal({
     readonly PersonSummary[]
   >([]);
   const [showPlayerPicker, setShowPlayerPicker] = useState(false);
+  const [lookingCandidates, setLookingCandidates] = useState<
+    readonly LookingToPlayCandidate[]
+  >([]);
+  const [lookingCandidatesLoading, setLookingCandidatesLoading] =
+    useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const linkedCourtLocked = Boolean(initialCourtBooking && courtBookingId);
@@ -11382,6 +11589,54 @@ function PickupModal({
     setDurationMinutes(initialCourtBooking.durationMinutes);
     setError(undefined);
   }, [initialCourtBooking, visible]);
+
+  useEffect(() => {
+    if (!visible || step !== 2 || !client || mode === "preview") {
+      setLookingCandidates([]);
+      return;
+    }
+    const windowStart = new Date(startsAt);
+    if (!Number.isFinite(windowStart.getTime()) || windowStart <= new Date()) {
+      setLookingCandidates([]);
+      return;
+    }
+    let cancelled = false;
+    setLookingCandidatesLoading(true);
+    void client.player.matchAvailabilityCandidates
+      .query({
+        venueId,
+        startsAt: windowStart.toISOString(),
+        endsAt: new Date(
+          windowStart.getTime() + durationMinutes * 60_000,
+        ).toISOString(),
+        matchType,
+        genderPreference,
+        format,
+      })
+      .then((candidates) => {
+        if (!cancelled) setLookingCandidates(candidates);
+      })
+      .catch(() => {
+        if (!cancelled) setLookingCandidates([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLookingCandidatesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    client,
+    durationMinutes,
+    format,
+    genderPreference,
+    matchType,
+    mode,
+    startsAt,
+    step,
+    venueId,
+    visible,
+  ]);
 
   function chooseDay(day: Date) {
     const next = new Date(start);
@@ -11892,6 +12147,96 @@ function PickupModal({
                         ＋ Add players
                       </Text>
                     </Pressable>
+                  </View>
+                  <View style={styles.hostFlowLookingSection}>
+                    <View style={styles.hostFlowLookingHeader}>
+                      <View style={styles.flex}>
+                        <Text style={styles.hostFlowLabelInline}>
+                          LOOKING TO PLAY
+                        </Text>
+                        <Text style={styles.hostFlowLookingTitle}>
+                          Players available for this match
+                        </Text>
+                      </View>
+                      <Text style={styles.hostFlowLookingCount}>
+                        {lookingCandidatesLoading
+                          ? "…"
+                          : lookingCandidates.length}
+                      </Text>
+                    </View>
+                    <Text style={styles.hostFlowLookingBody}>
+                      These players explicitly opted in for an overlapping time
+                      and match. Adding one sends an invitation—they still have
+                      to accept or decline.
+                    </Text>
+                    {lookingCandidates.map((candidate) => {
+                      const selected = selectedPlayers.some(
+                        (player) => player.id === candidate.person.id,
+                      );
+                      const full = selectedPlayers.length >= capacity - 1;
+                      return (
+                        <View
+                          key={candidate.postId}
+                          style={styles.hostFlowLookingPlayer}
+                        >
+                          {candidate.person.avatarUrl ? (
+                            <Image
+                              source={{ uri: candidate.person.avatarUrl }}
+                              style={styles.hostFlowPlayerAvatar}
+                            />
+                          ) : (
+                            <View style={styles.hostFlowPlayerAvatarFallback}>
+                              <Text style={styles.hostFlowPlayerAvatarText}>
+                                {candidate.person.initials}
+                              </Text>
+                            </View>
+                          )}
+                          <View style={styles.flex}>
+                            <Text style={styles.hostFlowPlayerName}>
+                              {candidate.person.displayName}
+                            </Text>
+                            <Text style={styles.hostFlowPlayerMeta}>
+                              {candidate.person.rating.display.toFixed(2)} Sand
+                              {candidate.reliability.score !== undefined
+                                ? ` · ${candidate.reliability.score}% reliability`
+                                : ` · ${candidate.reliability.label.replaceAll("-", " ")}`}
+                            </Text>
+                            {candidate.note && (
+                              <Text
+                                numberOfLines={2}
+                                style={styles.hostFlowLookingNote}
+                              >
+                                {candidate.note}
+                              </Text>
+                            )}
+                          </View>
+                          <Pressable
+                            disabled={selected || full}
+                            onPress={() =>
+                              setSelectedPlayers((current) => [
+                                ...current,
+                                candidate.person,
+                              ])
+                            }
+                            style={[
+                              styles.hostFlowLookingInvite,
+                              selected && styles.hostFlowLookingInviteSelected,
+                            ]}
+                          >
+                            <Text style={styles.hostFlowLookingInviteText}>
+                              {selected ? "Added" : "Invite"}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      );
+                    })}
+                    {!lookingCandidatesLoading &&
+                      lookingCandidates.length === 0 && (
+                        <Text style={styles.hostFlowLookingEmpty}>
+                          No opted-in players match this exact place and time
+                          yet. You can still add someone you know.
+                        </Text>
+                      )}
                   </View>
                   <View style={styles.hostFlowRoster}>
                     {[host, ...selectedPlayers].map((player, index) => (
@@ -13428,6 +13773,26 @@ function createStyles(palette: Palette) {
       marginTop: 15,
       padding: 14,
     },
+    bookingLookingButton: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.07),
+      borderColor: rgba(colors.accentRgb, 0.26),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 15,
+      padding: 14,
+    },
+    bookingLookingButtonActive: {
+      backgroundColor: rgba(colors.positiveRgb, 0.1),
+      borderColor: colors.positive,
+    },
+    bookingLookingIcon: {
+      color: colors.aqua,
+      fontSize: 22,
+      fontWeight: "900",
+    },
     bookingAlertIcon: {
       color: colors.aqua,
       fontSize: 22,
@@ -13804,6 +14169,83 @@ function createStyles(palette: Palette) {
       color: colors.onAccent,
       fontSize: 12,
       fontWeight: "900",
+    },
+    hostFlowLookingSection: {
+      backgroundColor: rgba(colors.accentRgb, 0.06),
+      borderColor: rgba(colors.accentRgb, 0.18),
+      borderRadius: 20,
+      borderWidth: 1,
+      gap: 9,
+      marginTop: 16,
+      padding: 14,
+    },
+    hostFlowLookingHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+    },
+    hostFlowLabelInline: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
+    hostFlowLookingTitle: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+    hostFlowLookingCount: {
+      color: colors.aqua,
+      fontFamily: "Archivo-Block",
+      fontSize: 20,
+    },
+    hostFlowLookingBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+    },
+    hostFlowLookingPlayer: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 72,
+      padding: 10,
+    },
+    hostFlowLookingNote: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 4,
+    },
+    hostFlowLookingInvite: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 12,
+      justifyContent: "center",
+      minHeight: 42,
+      minWidth: 66,
+      paddingHorizontal: 10,
+    },
+    hostFlowLookingInviteSelected: {
+      backgroundColor: colors.positive,
+    },
+    hostFlowLookingInviteText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    hostFlowLookingEmpty: {
+      color: colors.muted,
+      fontSize: 11,
+      fontStyle: "italic",
+      lineHeight: 16,
+      paddingVertical: 8,
     },
     hostFlowRoster: { gap: 8, marginTop: 16 },
     hostFlowPlayerRow: {
@@ -17613,6 +18055,98 @@ function createStyles(palette: Palette) {
       overflow: "hidden",
       padding: 18,
       position: "relative",
+    },
+    memberCard: {
+      backgroundColor: "#123640",
+      borderColor: rgba(colors.accentRgb, 0.3),
+      borderRadius: 24,
+      borderWidth: 1,
+      marginTop: 20,
+      overflow: "hidden",
+      padding: 18,
+      position: "relative",
+    },
+    memberCardLabel: {
+      color: colors.sand,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.25,
+      marginTop: 30,
+    },
+    memberCardName: {
+      color: colors.bone,
+      fontSize: 29,
+      fontWeight: "900",
+      letterSpacing: -1.1,
+      marginTop: 4,
+    },
+    memberCardBody: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 15,
+      marginTop: 18,
+    },
+    memberCardQr: {
+      backgroundColor: "#ffffff",
+      borderRadius: 15,
+      overflow: "hidden",
+      padding: 4,
+    },
+    memberCardDetails: { flex: 1, gap: 5 },
+    memberCardDetailLabel: {
+      color: colors.sand,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1,
+      marginTop: 4,
+    },
+    memberCardId: {
+      color: colors.bone,
+      fontSize: 23,
+      fontWeight: "900",
+      letterSpacing: 2.5,
+    },
+    memberCardMeta: {
+      color: rgba(colors.boneRgb, 0.7),
+      fontSize: 10,
+      lineHeight: 15,
+    },
+    memberCardUpcoming: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.07),
+      borderRadius: 14,
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 15,
+      padding: 11,
+    },
+    memberCardUpcomingTitle: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+    memberCardUpcomingArrow: {
+      color: colors.sand,
+      fontSize: 25,
+      fontWeight: "900",
+    },
+    memberCardWalletButton: {
+      alignItems: "center",
+      backgroundColor: "#000000",
+      borderColor: rgba(colors.overlayRgb, 0.2),
+      borderRadius: 12,
+      borderWidth: 1,
+      justifyContent: "center",
+      marginTop: 14,
+      minHeight: 46,
+      paddingHorizontal: 12,
+    },
+    memberCardWalletButtonText: {
+      color: "#ffffff",
+      fontSize: 11,
+      fontWeight: "900",
+      textAlign: "center",
     },
     walletCloseRow: {
       alignItems: "flex-end",

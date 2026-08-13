@@ -2596,96 +2596,108 @@ function CalendarScreen({
                               No confirmed players yet.
                             </Text>
                           ) : (
-                            selectedEntry.attendees.map((attendee) => (
-                              <View
-                                key={attendee.registrationId}
-                                style={styles.calendarRosterRow}
-                              >
-                                <View style={styles.calendarRosterAvatar}>
-                                  <Text style={styles.calendarRosterAvatarText}>
-                                    {personInitials(attendee.displayName)}
-                                  </Text>
-                                </View>
-                                <View style={styles.flex}>
-                                  <Text style={styles.calendarRosterName}>
-                                    {attendee.displayName}
-                                  </Text>
-                                  <Text style={styles.calendarRosterMeta}>
-                                    {attendee.status}
-                                    {attendee.isMinor
-                                      ? " · guardian receives updates"
-                                      : ""}
-                                  </Text>
-                                </View>
-                                <View style={styles.calendarRosterActions}>
-                                  {attendee.status === "checked-in" ? (
-                                    <Pill tone="positive">Here</Pill>
-                                  ) : ![
-                                      "cancelled",
-                                      "refunded",
-                                      "waitlisted",
-                                    ].includes(attendee.status) ? (
+                            selectedEntry.attendees
+                              .filter(
+                                (
+                                  attendee,
+                                ): attendee is typeof attendee & {
+                                  readonly registrationId: string;
+                                } => Boolean(attendee.registrationId),
+                              )
+                              .map((attendee) => (
+                                <View
+                                  key={attendee.registrationId}
+                                  style={styles.calendarRosterRow}
+                                >
+                                  <View style={styles.calendarRosterAvatar}>
+                                    <Text
+                                      style={styles.calendarRosterAvatarText}
+                                    >
+                                      {personInitials(attendee.displayName)}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.flex}>
+                                    <Text style={styles.calendarRosterName}>
+                                      {attendee.displayName}
+                                    </Text>
+                                    <Text style={styles.calendarRosterMeta}>
+                                      {attendee.status}
+                                      {attendee.isMinor
+                                        ? " · guardian receives updates"
+                                        : ""}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.calendarRosterActions}>
+                                    {attendee.status === "checked-in" ? (
+                                      <Pill tone="positive">Here</Pill>
+                                    ) : ![
+                                        "cancelled",
+                                        "refunded",
+                                        "waitlisted",
+                                      ].includes(attendee.status) ? (
+                                      <Pressable
+                                        disabled={
+                                          busyAction ===
+                                          `check-in:${attendee.registrationId}`
+                                        }
+                                        onPress={() =>
+                                          void perform(
+                                            `check-in:${attendee.registrationId}`,
+                                            () =>
+                                              client!.operator.recordSessionAttendance.mutate(
+                                                {
+                                                  registrationId:
+                                                    attendee.registrationId,
+                                                  status: "attended",
+                                                  note: "Checked in by a coach in Duna Pro.",
+                                                  idempotencyKey:
+                                                    Crypto.randomUUID(),
+                                                },
+                                              ),
+                                          )
+                                        }
+                                        style={styles.calendarCheckInButton}
+                                      >
+                                        <Text
+                                          style={
+                                            styles.calendarCheckInButtonText
+                                          }
+                                        >
+                                          Check in
+                                        </Text>
+                                      </Pressable>
+                                    ) : null}
                                     <Pressable
                                       disabled={
-                                        busyAction ===
-                                        `check-in:${attendee.registrationId}`
+                                        busyAction === attendee.registrationId
                                       }
                                       onPress={() =>
                                         void perform(
-                                          `check-in:${attendee.registrationId}`,
+                                          attendee.registrationId,
                                           () =>
-                                            client!.operator.recordSessionAttendance.mutate(
+                                            client!.operator.removeCalendarParticipant.mutate(
                                               {
                                                 registrationId:
                                                   attendee.registrationId,
-                                                status: "attended",
-                                                note: "Checked in by a coach in Duna Pro.",
+                                                reason:
+                                                  "Removed from the session by an organization operator in Duna Pro.",
                                                 idempotencyKey:
                                                   Crypto.randomUUID(),
                                               },
                                             ),
                                         )
                                       }
-                                      style={styles.calendarCheckInButton}
+                                      style={styles.calendarRemoveButton}
                                     >
                                       <Text
-                                        style={styles.calendarCheckInButtonText}
+                                        style={styles.calendarRemoveButtonText}
                                       >
-                                        Check in
+                                        Remove
                                       </Text>
                                     </Pressable>
-                                  ) : null}
-                                  <Pressable
-                                    disabled={
-                                      busyAction === attendee.registrationId
-                                    }
-                                    onPress={() =>
-                                      void perform(
-                                        attendee.registrationId,
-                                        () =>
-                                          client!.operator.removeCalendarParticipant.mutate(
-                                            {
-                                              registrationId:
-                                                attendee.registrationId,
-                                              reason:
-                                                "Removed from the session by an organization operator in Duna Pro.",
-                                              idempotencyKey:
-                                                Crypto.randomUUID(),
-                                            },
-                                          ),
-                                      )
-                                    }
-                                    style={styles.calendarRemoveButton}
-                                  >
-                                    <Text
-                                      style={styles.calendarRemoveButtonText}
-                                    >
-                                      Remove
-                                    </Text>
-                                  </Pressable>
+                                  </View>
                                 </View>
-                              </View>
-                            ))
+                              ))
                           )}
                         </View>
                         {participantCandidates.length > 0 && (

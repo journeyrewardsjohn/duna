@@ -2,12 +2,14 @@ import {
   auditLog,
   getDatabase,
   getTransactionalDatabase,
+  matchAvailabilityPosts,
+  messages,
   people,
   pickupJoinRequests,
   pickupParticipants,
   pickupSessions,
 } from "@duna/db";
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import type { ApiActor } from "./context";
 import { CommerceError, evaluatePickupParticipant } from "./commerce";
@@ -557,6 +559,34 @@ export async function invitePickupPlayers(input: {
       traceId: input.requestId,
       ipAddress: input.ipAddress,
     });
+    if (invitedPersonIds.length > 0) {
+      await transaction.insert(messages).values(
+        invitedPersonIds.flatMap((personId) =>
+          (["in-app", "push"] as const).map((channel) => ({
+            organizationId: pickup.organizationId,
+            senderPersonId: input.actor.personId,
+            recipientPersonId: personId,
+            channel,
+            kind: "pickup-invitation",
+            subject: `Match invitation · ${pickup.title}`,
+            body: `You were invited to ${pickup.title} at ${pickup.venueLabel}. Open Duna to accept or decline the place.`,
+            status: "queued",
+            scheduledAt: input.now,
+          })),
+        ),
+      );
+      await transaction
+        .update(matchAvailabilityPosts)
+        .set({ status: "matched", updatedAt: input.now })
+        .where(
+          and(
+            inArray(matchAvailabilityPosts.personId, invitedPersonIds),
+            eq(matchAvailabilityPosts.status, "active"),
+            gt(matchAvailabilityPosts.endsAt, pickup.startsAt),
+            lt(matchAvailabilityPosts.startsAt, pickup.endsAt),
+          ),
+        );
+    }
   });
   return { invitedPersonIds, alreadyActivePersonIds };
 }

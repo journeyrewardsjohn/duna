@@ -1,4 +1,5 @@
 import {
+  activityAttendance,
   auditLog,
   calendarBusyBlocks,
   calendarChangeProposals,
@@ -10,6 +11,7 @@ import {
   catalogOptions,
   catalogPrices,
   catalogVariants,
+  courtBookingParticipants,
   courtBookings,
   courts,
   eventTypes,
@@ -39,6 +41,8 @@ import {
   orderItems,
   orders,
   people,
+  pickupParticipants,
+  pickupSessions,
   programs,
   registrations,
   refundRecords,
@@ -47,6 +51,7 @@ import {
   scheduleOverrides,
   schedules,
   sessionOperations,
+  sessionAttendance,
   sessions,
   venues,
   messages,
@@ -138,6 +143,39 @@ const EMPTY_BRAND_KNOWLEDGE: OperatorWorkspace["brandKnowledge"] = {
   contextPreview: [],
   safetyRules: BRAND_KNOWLEDGE_SAFETY_RULES,
 };
+
+function calendarAttendanceStatus(
+  value: string | null | undefined,
+): "scheduled" | "attended" | "no-show" | "cancelled" | undefined {
+  return value === "scheduled" ||
+    value === "attended" ||
+    value === "no-show" ||
+    value === "cancelled"
+    ? value
+    : undefined;
+}
+
+function calendarParticipantStatus(
+  value: string,
+): OperatorWorkspace["calendar"]["entries"][number]["attendees"][number]["status"] {
+  const supported = [
+    "organizer",
+    "invited",
+    "accepted",
+    "payment-pending",
+    "paid",
+    "pending",
+    "confirmed",
+    "waitlisted",
+    "cancelled",
+    "declined",
+    "refunded",
+    "checked-in",
+  ] as const;
+  return supported.includes(value as (typeof supported)[number])
+    ? (value as (typeof supported)[number])
+    : "invited";
+}
 
 function normalizeThemePalette(
   palette: (typeof organizationThemes.$inferSelect)["palette"],
@@ -423,6 +461,7 @@ export async function loadOperatorCommerceWorkspace(
     staffRows,
     sessionRows,
     bookingRows,
+    pickupRows,
     connectionRows,
     busyRows,
     themeRow,
@@ -556,9 +595,11 @@ export async function loadOperatorCommerceWorkspace(
       .select({
         id: courtBookings.id,
         title: people.displayName,
+        organizerPersonId: courtBookings.personId,
         startsAt: courtBookings.startsAt,
         endsAt: courtBookings.endsAt,
         status: courtBookings.status,
+        venueId: courtBookings.venueId,
         courtId: courtBookings.courtId,
         courtName: courts.name,
         venueName: venues.name,
@@ -578,6 +619,33 @@ export async function loadOperatorCommerceWorkspace(
         ),
       )
       .orderBy(asc(courtBookings.startsAt))
+      .limit(5_000),
+    database
+      .select({
+        id: pickupSessions.id,
+        title: pickupSessions.title,
+        startsAt: pickupSessions.startsAt,
+        endsAt: pickupSessions.endsAt,
+        status: pickupSessions.status,
+        venueId: pickupSessions.venueId,
+        venueName: pickupSessions.venueLabel,
+        timezone: venues.timezone,
+        capacity: pickupSessions.capacity,
+        hostPersonId: pickupSessions.hostPersonId,
+        hostName: people.displayName,
+        courtBookingId: pickupSessions.courtBookingId,
+      })
+      .from(pickupSessions)
+      .innerJoin(people, eq(pickupSessions.hostPersonId, people.id))
+      .leftJoin(venues, eq(pickupSessions.venueId, venues.id))
+      .where(
+        and(
+          eq(pickupSessions.organizationId, organizationId),
+          gt(pickupSessions.endsAt, horizonStart),
+          lt(pickupSessions.startsAt, horizonEnd),
+        ),
+      )
+      .orderBy(asc(pickupSessions.startsAt))
       .limit(5_000),
     database
       .select({
@@ -1230,9 +1298,17 @@ export async function loadOperatorCommerceWorkspace(
           avatarUrl: people.avatarUrl,
           isMinor: people.isMinor,
           status: registrations.status,
+          attendanceStatus: sessionAttendance.status,
         })
         .from(registrations)
         .innerJoin(people, eq(registrations.personId, people.id))
+        .leftJoin(
+          sessionAttendance,
+          and(
+            eq(sessionAttendance.sessionId, registrations.sessionId),
+            eq(sessionAttendance.personId, registrations.personId),
+          ),
+        )
         .where(
           and(
             inArray(registrations.sessionId, sessionIds),
@@ -1291,7 +1367,8 @@ export async function loadOperatorCommerceWorkspace(
           displayName: row.displayName,
           avatarUrl: row.avatarUrl ?? undefined,
           isMinor: row.isMinor,
-          status: row.status,
+          status: calendarParticipantStatus(row.status),
+          attendanceStatus: calendarAttendanceStatus(row.attendanceStatus),
         },
       ]);
     }
@@ -1307,6 +1384,117 @@ export async function loadOperatorCommerceWorkspace(
               ? row.itemTitle
               : `${row.itemTitle} · ${row.variantTitle}`,
           quantity: row.quantity,
+        },
+      ]);
+    }
+  }
+  const attendeesByBooking = new Map<
+    string,
+    OperatorWorkspace["calendar"]["entries"][number]["attendees"]
+  >();
+  const attendeesByPickup = new Map<
+    string,
+    OperatorWorkspace["calendar"]["entries"][number]["attendees"]
+  >();
+  if (bookingRows.length > 0) {
+    const rows = await database
+      .select({
+        participationId: courtBookingParticipants.id,
+        bookingId: courtBookingParticipants.bookingId,
+        personId: courtBookingParticipants.personId,
+        invitedName: courtBookingParticipants.invitedName,
+        displayName: people.displayName,
+        avatarUrl: people.avatarUrl,
+        isMinor: people.isMinor,
+        role: courtBookingParticipants.role,
+        status: courtBookingParticipants.status,
+        attendanceStatus: activityAttendance.status,
+      })
+      .from(courtBookingParticipants)
+      .leftJoin(people, eq(courtBookingParticipants.personId, people.id))
+      .leftJoin(
+        activityAttendance,
+        and(
+          eq(activityAttendance.activityType, "court-booking"),
+          eq(activityAttendance.activityId, courtBookingParticipants.bookingId),
+          eq(activityAttendance.personId, courtBookingParticipants.personId),
+        ),
+      )
+      .where(
+        inArray(
+          courtBookingParticipants.bookingId,
+          bookingRows.map((booking) => booking.id),
+        ),
+      )
+      .orderBy(asc(courtBookingParticipants.createdAt));
+    for (const row of rows) {
+      const attendees = attendeesByBooking.get(row.bookingId) ?? [];
+      attendeesByBooking.set(row.bookingId, [
+        ...attendees,
+        {
+          participationId: row.participationId,
+          personId: row.personId ?? undefined,
+          displayName:
+            row.displayName ?? row.invitedName ?? "Invited court player",
+          avatarUrl: row.avatarUrl ?? undefined,
+          isMinor: row.isMinor ?? false,
+          role: row.role,
+          status: calendarParticipantStatus(row.status),
+          attendanceStatus: calendarAttendanceStatus(row.attendanceStatus),
+        },
+      ]);
+    }
+  }
+  if (pickupRows.length > 0) {
+    const rows = await database
+      .select({
+        participationId: pickupParticipants.id,
+        pickupSessionId: pickupParticipants.pickupSessionId,
+        personId: pickupParticipants.personId,
+        displayName: people.displayName,
+        avatarUrl: people.avatarUrl,
+        isMinor: people.isMinor,
+        status: pickupParticipants.status,
+        attendanceStatus: activityAttendance.status,
+      })
+      .from(pickupParticipants)
+      .innerJoin(people, eq(pickupParticipants.personId, people.id))
+      .leftJoin(
+        activityAttendance,
+        and(
+          eq(activityAttendance.activityType, "pickup"),
+          eq(activityAttendance.activityId, pickupParticipants.pickupSessionId),
+          eq(activityAttendance.personId, pickupParticipants.personId),
+        ),
+      )
+      .where(
+        inArray(
+          pickupParticipants.pickupSessionId,
+          pickupRows.map((pickup) => pickup.id),
+        ),
+      )
+      .orderBy(asc(pickupParticipants.createdAt));
+    const hostByPickup = new Map(
+      pickupRows.map((pickup) => [pickup.id, pickup.hostPersonId]),
+    );
+    for (const row of rows) {
+      const attendees = attendeesByPickup.get(row.pickupSessionId) ?? [];
+      attendeesByPickup.set(row.pickupSessionId, [
+        ...attendees,
+        {
+          participationId: row.participationId,
+          personId: row.personId,
+          displayName: row.displayName,
+          avatarUrl: row.avatarUrl ?? undefined,
+          isMinor: row.isMinor,
+          role:
+            hostByPickup.get(row.pickupSessionId) === row.personId
+              ? "host"
+              : "player",
+          status: row.status,
+          attendanceStatus:
+            calendarAttendanceStatus(row.attendanceStatus) ??
+            (row.status === "checked-in" ? "attended" : undefined),
         },
       ]);
     }
@@ -1365,14 +1553,41 @@ export async function loadOperatorCommerceWorkspace(
       endsAt: booking.endsAt.toISOString(),
       timezone: booking.timezone,
       status: booking.status,
+      venueId: booking.venueId,
       venueName: booking.venueName,
       courtId: booking.courtId,
       courtName: booking.courtName,
-      participantCount: booking.participantCount,
+      participantCount: (attendeesByBooking.get(booking.id) ?? []).filter(
+        (attendee) =>
+          attendee.status === "organizer" ||
+          attendee.status === "accepted" ||
+          attendee.status === "paid",
+      ).length,
       capacity: booking.capacity,
       color: "#B98435",
       draggable: false,
-      attendees: [],
+      attendees: attendeesByBooking.get(booking.id) ?? [],
+      equipment: [],
+    })),
+    ...pickupRows.map((pickup) => ({
+      id: pickup.id,
+      sourceType: "pickup" as const,
+      title: pickup.title,
+      startsAt: pickup.startsAt.toISOString(),
+      endsAt: pickup.endsAt.toISOString(),
+      timezone: pickup.timezone ?? organization.timezone,
+      status: pickup.status,
+      kind: "pickup" as const,
+      venueId: pickup.venueId ?? undefined,
+      venueName: pickup.venueName,
+      participantCount: (attendeesByPickup.get(pickup.id) ?? []).filter(
+        (attendee) =>
+          attendee.status === "confirmed" || attendee.status === "checked-in",
+      ).length,
+      capacity: pickup.capacity,
+      color: "#247B6A",
+      draggable: false,
+      attendees: attendeesByPickup.get(pickup.id) ?? [],
       equipment: [],
     })),
     ...busyRows.map((row) => ({

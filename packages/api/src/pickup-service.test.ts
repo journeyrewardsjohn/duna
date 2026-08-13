@@ -37,6 +37,7 @@ describe("pickup management transactions", () => {
     const pickupSessionId = "33333333-3333-4333-8333-333333333333";
     const organizationId = "44444444-4444-4444-8444-444444444444";
     const startsAt = new Date("2026-08-12T18:00:00.000Z");
+    const endsAt = new Date("2026-08-12T19:30:00.000Z");
     const httpTransaction = vi.fn(() => {
       throw new Error("No transactions support in neon-http driver");
     });
@@ -51,6 +52,9 @@ describe("pickup management transactions", () => {
             organizationId,
             hostPersonId,
             startsAt,
+            endsAt,
+            title: "Sunset fours",
+            venueLabel: "The Strand",
             status: "active",
           }),
         },
@@ -63,8 +67,11 @@ describe("pickup management transactions", () => {
       transaction: httpTransaction,
     };
     const values = vi.fn().mockResolvedValue(undefined);
+    const where = vi.fn().mockResolvedValue(undefined);
+    const set = vi.fn(() => ({ where }));
     const transaction = {
       insert: vi.fn(() => ({ values })),
+      update: vi.fn(() => ({ set })),
     };
     const transactionalDatabase = {
       transaction: vi.fn(
@@ -100,7 +107,8 @@ describe("pickup management transactions", () => {
 
     expect(serviceDoubles.getTransactionalDatabase).toHaveBeenCalledOnce();
     expect(transactionalDatabase.transaction).toHaveBeenCalledOnce();
-    expect(transaction.insert).toHaveBeenCalledTimes(2);
+    expect(transaction.insert).toHaveBeenCalledTimes(3);
+    expect(transaction.update).toHaveBeenCalledOnce();
     expect(httpTransaction).not.toHaveBeenCalled();
   });
 });

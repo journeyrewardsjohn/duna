@@ -246,7 +246,16 @@ function entryKindLabel(entry: CalendarEntry): string {
   if (entry.sourceType === "operator-block") return "Blocked time";
   if (entry.sourceType === "busy-block") return "External busy block";
   if (entry.sourceType === "booking") return "Court booking";
+  if (entry.sourceType === "pickup") return "Player-hosted match";
   return (entry.kind ?? "session").replaceAll("-", " ");
+}
+
+function entryDetailHref(entry: CalendarEntry): string {
+  if (entry.sourceType === "session") return `/events/${entry.id}`;
+  if (entry.sourceType === "booking")
+    return `/events/court-bookings/${entry.id}`;
+  if (entry.sourceType === "pickup") return `/events/matches/${entry.id}`;
+  return "/calendar";
 }
 
 function initials(name: string): string {
@@ -984,7 +993,7 @@ export function ScheduleCalendar({
 
       {selectedEntry && (
         <div
-          aria-label="Session details"
+          aria-label="Schedule details"
           aria-modal="true"
           className="schedule-drawer-backdrop"
           onClick={() => setSelectedId(undefined)}
@@ -996,7 +1005,7 @@ export function ScheduleCalendar({
           >
             <header className="schedule-detail-drawer__header">
               <button
-                aria-label="Close session details"
+                aria-label="Close schedule details"
                 className="schedule-icon-button"
                 onClick={() => setSelectedId(undefined)}
                 type="button"
@@ -1087,6 +1096,96 @@ export function ScheduleCalendar({
                 )}
                 {actionFeedback.message}
               </p>
+            )}
+
+            {(selectedEntry.sourceType === "booking" ||
+              selectedEntry.sourceType === "pickup") && (
+              <section className="schedule-drawer-section">
+                <header>
+                  <span>
+                    <small>
+                      {selectedEntry.sourceType === "pickup"
+                        ? "Match players"
+                        : "Reservation players"}
+                    </small>
+                    <strong>
+                      {selectedEntry.attendees.length === 0
+                        ? "No players added yet"
+                        : `${selectedEntry.attendees.length} people connected`}
+                    </strong>
+                  </span>
+                  <Badge>
+                    {Math.max(
+                      0,
+                      selectedEntry.capacity - selectedEntry.participantCount,
+                    )}{" "}
+                    spots
+                  </Badge>
+                </header>
+                <div className="schedule-attendee-list">
+                  {selectedEntry.attendees.length === 0 ? (
+                    <p>
+                      This reservation only has its booking details. Open the
+                      full record to add or review players.
+                    </p>
+                  ) : (
+                    selectedEntry.attendees.map((attendee) => (
+                      <article
+                        key={
+                          attendee.participationId ??
+                          attendee.personId ??
+                          attendee.displayName
+                        }
+                      >
+                        <span
+                          className={`schedule-person-avatar ${
+                            attendee.avatarUrl
+                              ? "schedule-person-avatar--image"
+                              : ""
+                          }`}
+                          style={
+                            attendee.avatarUrl
+                              ? {
+                                  backgroundImage: `url("${attendee.avatarUrl}")`,
+                                }
+                              : undefined
+                          }
+                        >
+                          {!attendee.avatarUrl &&
+                            initials(attendee.displayName)}
+                        </span>
+                        <span>
+                          <strong>{attendee.displayName}</strong>
+                          <small>
+                            {[attendee.role, attendee.status]
+                              .filter(Boolean)
+                              .join(" · ")}
+                            {attendee.isMinor ? " · guardian gets updates" : ""}
+                          </small>
+                        </span>
+                        <Badge
+                          tone={
+                            attendee.attendanceStatus === "attended"
+                              ? "positive"
+                              : attendee.attendanceStatus === "no-show"
+                                ? "warning"
+                                : "neutral"
+                          }
+                        >
+                          {(attendee.attendanceStatus ?? "expected").replaceAll(
+                            "-",
+                            " ",
+                          )}
+                        </Badge>
+                      </article>
+                    ))
+                  )}
+                </div>
+                <p className="schedule-drawer-section__hint">
+                  Open the full record to check players in, record a no-show,
+                  and review linked match or court details.
+                </p>
+              </section>
             )}
 
             {selectedEntry.sourceType === "session" && (
@@ -1350,7 +1449,7 @@ export function ScheduleCalendar({
             <footer className="schedule-detail-drawer__footer">
               <Link
                 className="hq-button hq-button--primary"
-                href={selectedEntry.kind === "league" ? "/leagues" : "/events"}
+                href={entryDetailHref(selectedEntry)}
               >
                 Open full {entryKindLabel(selectedEntry)}
                 <ExternalLink size={15} />

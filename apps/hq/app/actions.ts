@@ -801,6 +801,49 @@ export async function recordSessionAttendanceAction(
   }
 }
 
+export async function recordActivityAttendanceAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const activityType = field(formData, "activityType");
+    if (activityType !== "court-booking" && activityType !== "pickup") {
+      throw new Error("Choose a valid activity type.");
+    }
+    const status = field(formData, "status");
+    if (
+      status !== "scheduled" &&
+      status !== "attended" &&
+      status !== "no-show" &&
+      status !== "cancelled"
+    ) {
+      throw new Error("Choose a valid attendance state.");
+    }
+    const activityId = field(formData, "activityId");
+    const caller = await getServerCaller();
+    await caller.operator.recordActivityAttendance({
+      activityType,
+      activityId,
+      participantId: field(formData, "participantId"),
+      status,
+      note: optionalField(formData, "note"),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    revalidatePath(
+      activityType === "pickup"
+        ? `/events/matches/${activityId}`
+        : `/events/court-bookings/${activityId}`,
+    );
+    return result(
+      "success",
+      `Attendance marked ${status.replaceAll("-", " ")}.`,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
 export async function updateMemberProfileAction(
   _previous: OperatorActionState,
   formData: FormData,

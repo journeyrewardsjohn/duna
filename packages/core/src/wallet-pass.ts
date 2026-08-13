@@ -36,6 +36,117 @@ export type TournamentWalletPassDefinition = {
   }[];
 };
 
+export type MemberWalletPassDefinition = {
+  readonly formatVersion: 1;
+  readonly passTypeIdentifier: string;
+  readonly teamIdentifier: string;
+  readonly organizationName: "Duna";
+  readonly description: "Duna Membership";
+  readonly serialNumber: string;
+  readonly logoText: "Duna Membership";
+  readonly foregroundColor: string;
+  readonly backgroundColor: string;
+  readonly labelColor: string;
+  readonly relevantDate?: string;
+  readonly storeCard: {
+    readonly primaryFields: readonly WalletField[];
+    readonly secondaryFields: readonly WalletField[];
+    readonly auxiliaryFields: readonly WalletField[];
+    readonly backFields: readonly WalletField[];
+  };
+  readonly barcodes: readonly {
+    readonly format: "PKBarcodeFormatQR";
+    readonly message: string;
+    readonly messageEncoding: "iso-8859-1";
+    readonly altText: string;
+  }[];
+};
+
+export function buildMemberWalletPassDefinition(input: {
+  readonly personId: string;
+  readonly memberId: string;
+  readonly holderName: string;
+  readonly credentialPayload: string;
+  readonly upcoming: readonly {
+    readonly title: string;
+    readonly startsAt: string;
+    readonly venueName: string;
+  }[];
+  readonly passTypeIdentifier: string;
+  readonly teamIdentifier: string;
+}): MemberWalletPassDefinition {
+  const next = input.upcoming[0];
+  return {
+    formatVersion: 1,
+    passTypeIdentifier: input.passTypeIdentifier,
+    teamIdentifier: input.teamIdentifier,
+    organizationName: "Duna",
+    description: "Duna Membership",
+    serialNumber: `member:${input.personId}`,
+    logoText: "Duna Membership",
+    foregroundColor: "rgb(247, 246, 239)",
+    backgroundColor: "rgb(12, 44, 52)",
+    labelColor: "rgb(132, 226, 201)",
+    relevantDate: next?.startsAt,
+    storeCard: {
+      primaryFields: [
+        {
+          key: "member",
+          label: "DUNA MEMBER",
+          value: input.holderName,
+        },
+      ],
+      secondaryFields: [
+        { key: "member-id", label: "MEMBER ID", value: input.memberId },
+        {
+          key: "next-title",
+          label: next ? "UP NEXT" : "STATUS",
+          value: next?.title ?? "Ready to play",
+        },
+      ],
+      auxiliaryFields: next
+        ? [
+            {
+              key: "next-time",
+              label: "WHEN",
+              value: next.startsAt,
+              dateStyle: "PKDateStyleMedium",
+              timeStyle: "PKDateStyleShort",
+            },
+            { key: "next-venue", label: "WHERE", value: next.venueName },
+          ]
+        : [],
+      backFields: [
+        {
+          key: "universal-check-in",
+          label: "UNIVERSAL CHECK-IN",
+          value:
+            "Present this membership QR at Duna check-in for any event, match, or court reservation where you are confirmed.",
+        },
+        ...input.upcoming.slice(1, 4).map((activity, index) => ({
+          key: `upcoming-${index + 2}`,
+          label: `UPCOMING ${index + 2}`,
+          value: `${activity.title} · ${activity.startsAt} · ${activity.venueName}`,
+        })),
+        {
+          key: "privacy",
+          label: "PRIVACY",
+          value:
+            "The QR contains an opaque Duna credential, not your name or Member ID. Lost cards can be reissued without changing your Member ID.",
+        },
+      ],
+    },
+    barcodes: [
+      {
+        format: "PKBarcodeFormatQR",
+        message: input.credentialPayload,
+        messageEncoding: "iso-8859-1",
+        altText: input.memberId,
+      },
+    ],
+  };
+}
+
 export function buildTournamentWalletPassDefinition(input: {
   readonly kind: AdmissionCredentialKind;
   readonly id: string;

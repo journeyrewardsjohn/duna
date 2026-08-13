@@ -1,4 +1,8 @@
-import { parseAdmissionCredential } from "@duna/core";
+import {
+  normalizeDunaMemberId,
+  parseAdmissionCredential,
+  parseDunaMemberCredential,
+} from "@duna/core";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Crypto from "expo-crypto";
@@ -16,8 +20,29 @@ import {
 import { FellixText as Text } from "./fellix-text";
 import { useProRuntime } from "./runtime";
 
-type ScannerMode = "player-registration" | "fan-ticket";
+type ScannerMode = "player-check-in" | "fan-ticket";
 type ScanState = "accepted" | "rejected" | "pending";
+
+type MemberActivityCandidate = {
+  readonly activityType: "session" | "court-booking" | "pickup";
+  readonly activityId: string;
+  readonly participationId: string;
+  readonly title: string;
+  readonly startsAt: string;
+  readonly venueName: string;
+};
+
+type MemberSelection = {
+  readonly payload: string;
+  readonly scannedAt: string;
+  readonly playerName: string;
+  readonly memberId?: string;
+  readonly candidates: readonly MemberActivityCandidate[];
+};
+
+type ValidationResult = Omit<ScanLedgerEntry, "id" | "scannedAt"> & {
+  readonly selection?: MemberSelection;
+};
 
 type ScanLedgerEntry = {
   readonly id: string;
@@ -56,6 +81,18 @@ async function persistLedger(entries: readonly ScanLedgerEntry[]) {
   await AsyncStorage.setItem(ledgerKey, JSON.stringify(entries.slice(0, 100)));
 }
 
+function toLedgerValidation(
+  validation: ValidationResult,
+): Omit<ScanLedgerEntry, "id" | "scannedAt"> {
+  return {
+    mode: validation.mode,
+    state: validation.state,
+    headline: validation.headline,
+    detail: validation.detail,
+    payload: validation.payload,
+  };
+}
+
 export function TicketScannerScreen({
   onClose,
   palette,
@@ -66,7 +103,7 @@ export function TicketScannerScreen({
   const { client, mode: runtimeMode, refresh } = useProRuntime();
   const styles = useMemo(() => createStyles(palette), [palette]);
   const [permission, requestPermission] = useCameraPermissions();
-  const [mode, setMode] = useState<ScannerMode>("player-registration");
+  const [mode, setMode] = useState<ScannerMode>("player-check-in");
   const [deviceId, setDeviceId] = useState<string>();
   const [ledger, setLedger] = useState<readonly ScanLedgerEntry[]>([]);
   const [result, setResult] = useState<ScanLedgerEntry>();
@@ -74,6 +111,7 @@ export function TicketScannerScreen({
   const [torch, setTorch] = useState(false);
   const [manualValue, setManualValue] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [memberSelection, setMemberSelection] = useState<MemberSelection>();
 
   useEffect(() => {
     void Promise.all([
@@ -87,7 +125,17 @@ export function TicketScannerScreen({
         try {
           const parsed = JSON.parse(storedLedger) as unknown;
           if (Array.isArray(parsed)) {
-            setLedger(parsed as readonly ScanLedgerEntry[]);
+            setLedger(
+              (parsed as readonly (ScanLedgerEntry & { mode: string })[]).map(
+                (entry) => ({
+                  ...entry,
+                  mode:
+                    entry.mode === "fan-ticket"
+                      ? ("fan-ticket" as const)
+                      : ("player-check-in" as const),
+                }),
+              ),
+            );
           }
         } catch {
           // Invalid local history is discarded; server scan ledgers remain intact.
@@ -101,28 +149,11 @@ export function TicketScannerScreen({
     expectedMode: ScannerMode,
     scannedAt: string,
     offline: boolean,
-  ): Promise<Omit<ScanLedgerEntry, "id" | "scannedAt">> {
+    selectedActivity?: MemberActivityCandidate,
+  ): Promise<ValidationResult> {
     const credential = parseAdmissionCredential(payload);
-    if (!credential) {
-      return {
-        mode: expectedMode,
-        state: "rejected",
-        headline: "Not a Duna admission code",
-        detail:
-          "Use the individual QR from Duna Player, Apple Wallet, or the ticket email.",
-      };
-    }
-    if (credential.kind !== expectedMode) {
-      return {
-        mode: expectedMode,
-        state: "rejected",
-        headline:
-          expectedMode === "player-registration"
-            ? "This is a fan ticket"
-            : "This is a player registration",
-        detail: "Switch validator modes before scanning this credential.",
-      };
-    }
+    const memberCredential = parseDunaMemberCredential(payload);
+    const memberId = normalizeDunaMemberId(payload);
     if (!client || runtimeMode !== "live" || !deviceId) {
       return {
         mode: expectedMode,
@@ -131,7 +162,62 @@ export function TicketScannerScreen({
         detail: "Sign in to the event organization before admitting anyone.",
       };
     }
-    if (expectedMode === "player-registration") {
+    if (expectedMode === "player-check-in") {
+      if (memberCredential || memberId) {
+        const member = await client.operator.scanDunaMember.mutate({
+          credential: payload,
+          selectedActivityType: selectedActivity?.activityType,
+          selectedActivityId: selectedActivity?.activityId,
+          deviceId,
+          scannedAt,
+          offline,
+          idempotencyKey: Crypto.randomUUID(),
+        });
+        if (member.selectionRequired) {
+          return {
+            mode: expectedMode,
+            state: "pending",
+            headline: member.playerName ?? "Choose today’s activity",
+            detail: "This member is expected at more than one activity.",
+            selection: {
+              payload,
+              scannedAt,
+              playerName: member.playerName ?? "Duna member",
+              memberId: member.memberId,
+              candidates: member.candidates,
+            },
+          };
+        }
+        return {
+          mode: expectedMode,
+          state: member.accepted ? "accepted" : "rejected",
+          headline: member.accepted
+            ? (member.playerName ?? "Member checked in")
+            : member.duplicate
+              ? "Player already checked in"
+              : (member.playerName ?? "Membership not valid here"),
+          detail: member.accepted
+            ? `${member.activity?.title ?? "Today’s activity"} · universal member check-in recorded`
+            : `${member.reason?.replaceAll("-", " ") ?? "not registered for an activity today"} · no entry granted`,
+        };
+      }
+      if (!credential) {
+        return {
+          mode: expectedMode,
+          state: "rejected",
+          headline: "Not a Duna player credential",
+          detail:
+            "Scan a Duna Membership QR, player registration QR, or enter the 6-character Member ID.",
+        };
+      }
+      if (credential.kind !== "player-registration") {
+        return {
+          mode: expectedMode,
+          state: "rejected",
+          headline: "This is a fan ticket",
+          detail: "Switch to Ticket validator for spectator admission.",
+        };
+      }
       const registration = await client.operator.scanPlayerRegistration.mutate({
         registrationId: credential.token,
         deviceId,
@@ -150,6 +236,30 @@ export function TicketScannerScreen({
         detail: registration.accepted
           ? `${registration.eventTitle} · attendance and scan ledger recorded`
           : `${registration.reason?.replaceAll("-", " ") ?? registration.registrationStatus} · scan logged`,
+      };
+    }
+    if (memberCredential || memberId) {
+      return {
+        mode: expectedMode,
+        state: "rejected",
+        headline: "This is a Duna Membership",
+        detail: "Switch to Player check-in for this credential.",
+      };
+    }
+    if (!credential) {
+      return {
+        mode: expectedMode,
+        state: "rejected",
+        headline: "Not a Duna fan ticket",
+        detail: "Use the individual QR from Apple Wallet or the ticket email.",
+      };
+    }
+    if (credential.kind !== "fan-ticket") {
+      return {
+        mode: expectedMode,
+        state: "rejected",
+        headline: "This is a player registration",
+        detail: "Switch to Player check-in for this credential.",
       };
     }
     const ticket = await client.operator.scanTicket.mutate({
@@ -173,17 +283,34 @@ export function TicketScannerScreen({
     };
   }
 
-  async function recordPayload(payload: string) {
-    if (locked || !payload.trim()) return;
+  async function recordPayload(
+    payload: string,
+    selectedActivity?: MemberActivityCandidate,
+  ) {
+    if ((locked && !selectedActivity) || !payload.trim()) return;
     const scannedAt = new Date().toISOString();
     setLocked(true);
+    setMemberSelection(undefined);
     let next: ScanLedgerEntry;
     try {
-      const validation = await validate(payload.trim(), mode, scannedAt, false);
+      const validation = await validate(
+        payload.trim(),
+        mode,
+        selectedActivity
+          ? (memberSelection?.scannedAt ?? scannedAt)
+          : scannedAt,
+        false,
+        selectedActivity,
+      );
+      if (validation.selection) {
+        setMemberSelection(validation.selection);
+        setResult(undefined);
+        return;
+      }
       next = {
         id: Crypto.randomUUID(),
         scannedAt,
-        ...validation,
+        ...toLedgerValidation(validation),
       };
       if (validation.state === "accepted") {
         if (Platform.OS !== "web")
@@ -233,9 +360,13 @@ export function TicketScannerScreen({
           entry.scannedAt,
           true,
         );
+        if (validation.selection) {
+          nextLedger.push(entry);
+          continue;
+        }
         nextLedger.push({
           ...entry,
-          ...validation,
+          ...toLedgerValidation(validation),
           payload: undefined,
         });
       } catch {
@@ -265,8 +396,8 @@ export function TicketScannerScreen({
           <Text style={styles.closeText}>×</Text>
         </Pressable>
         <View style={styles.flex}>
-          <Text style={styles.eyebrow}>DUNA PRO · ADMISSION</Text>
-          <Text style={styles.title}>Scan the right credential.</Text>
+          <Text style={styles.eyebrow}>DUNA PRO · CHECK-IN</Text>
+          <Text style={styles.title}>One scan. The right activity.</Text>
         </View>
         <Pressable
           onPress={() => setTorch((current) => !current)}
@@ -280,29 +411,33 @@ export function TicketScannerScreen({
         <View style={styles.modeRow}>
           <Pressable
             onPress={() => {
-              setMode("player-registration");
+              setMode("player-check-in");
               setResult(undefined);
+              setMemberSelection(undefined);
               setLocked(false);
             }}
             style={[
               styles.mode,
-              mode === "player-registration" && styles.modeActive,
+              mode === "player-check-in" && styles.modeActive,
             ]}
           >
             <Text
               style={[
                 styles.modeText,
-                mode === "player-registration" && styles.modeTextActive,
+                mode === "player-check-in" && styles.modeTextActive,
               ]}
             >
               Player check-in
             </Text>
-            <Text style={styles.modeMeta}>Registration QR</Text>
+            <Text style={styles.modeMeta}>
+              Membership, registration, or Member ID
+            </Text>
           </Pressable>
           <Pressable
             onPress={() => {
               setMode("fan-ticket");
               setResult(undefined);
+              setMemberSelection(undefined);
               setLocked(false);
             }}
             style={[styles.mode, mode === "fan-ticket" && styles.modeActive]}
@@ -350,8 +485,8 @@ export function TicketScannerScreen({
               <View style={styles.cameraVeil}>
                 <View style={styles.scanFrame} />
                 <Text style={styles.cameraGuide}>
-                  {mode === "player-registration"
-                    ? "Center the player’s registration QR"
+                  {mode === "player-check-in"
+                    ? "Scan Duna Membership or registration QR"
                     : "Center one individual fan ticket QR"}
                 </Text>
               </View>
@@ -392,12 +527,62 @@ export function TicketScannerScreen({
           )}
         </View>
 
+        {memberSelection && (
+          <View style={styles.selection}>
+            <Text style={styles.sectionLabel}>CHOOSE TODAY’S ACTIVITY</Text>
+            <Text style={styles.selectionTitle}>
+              Where is {memberSelection.playerName} checking in?
+            </Text>
+            {memberSelection.memberId && (
+              <Text style={styles.selectionMeta}>
+                Duna Member {memberSelection.memberId}
+              </Text>
+            )}
+            {memberSelection.candidates.map((candidate) => (
+              <Pressable
+                key={`${candidate.activityType}:${candidate.activityId}`}
+                onPress={() =>
+                  void recordPayload(memberSelection.payload, candidate)
+                }
+                style={styles.selectionOption}
+              >
+                <View style={styles.flex}>
+                  <Text style={styles.selectionOptionTitle}>
+                    {candidate.title}
+                  </Text>
+                  <Text style={styles.selectionMeta}>
+                    {new Date(candidate.startsAt).toLocaleTimeString("en-US", {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}{" "}
+                    · {candidate.venueName}
+                  </Text>
+                </View>
+                <Text style={styles.selectionArrow}>›</Text>
+              </Pressable>
+            ))}
+            <Pressable
+              onPress={() => {
+                setMemberSelection(undefined);
+                setLocked(false);
+              }}
+              style={styles.secondary}
+            >
+              <Text style={styles.secondaryText}>Cancel</Text>
+            </Pressable>
+          </View>
+        )}
+
         <View style={styles.manual}>
           <Text style={styles.sectionLabel}>CAMERA TROUBLE?</Text>
           <TextInput
-            autoCapitalize="none"
+            autoCapitalize={mode === "player-check-in" ? "characters" : "none"}
             onChangeText={setManualValue}
-            placeholder="Paste or type the Duna credential"
+            placeholder={
+              mode === "player-check-in"
+                ? "Enter 6-character Member ID or paste credential"
+                : "Paste the Duna ticket credential"
+            }
             placeholderTextColor={palette.muted}
             style={styles.input}
             value={manualValue}
@@ -431,7 +616,7 @@ export function TicketScannerScreen({
         <View style={styles.metrics}>
           <View>
             <Text style={styles.metricValue}>{totals.accepted}</Text>
-            <Text style={styles.metricLabel}>Admitted</Text>
+            <Text style={styles.metricLabel}>Accepted</Text>
           </View>
           <View>
             <Text style={styles.metricValue}>{totals.rejected}</Text>
@@ -464,7 +649,7 @@ export function TicketScannerScreen({
               <View style={styles.flex}>
                 <Text style={styles.ledgerRowTitle}>{entry.headline}</Text>
                 <Text style={styles.ledgerRowMeta}>
-                  {entry.mode === "player-registration" ? "Player" : "Ticket"} ·{" "}
+                  {entry.mode === "player-check-in" ? "Player" : "Ticket"} ·{" "}
                   {new Date(entry.scannedAt).toLocaleTimeString("en-US", {
                     hour: "numeric",
                     minute: "2-digit",
@@ -615,6 +800,45 @@ function createStyles(palette: ScannerPalette) {
       padding: 9,
     },
     nextText: { color: palette.onAccent, fontSize: 11, fontWeight: "900" },
+    selection: {
+      backgroundColor: palette.surface,
+      borderColor: palette.accent,
+      borderRadius: 17,
+      borderWidth: 1,
+      gap: 8,
+      padding: 13,
+    },
+    selectionTitle: {
+      color: palette.text,
+      fontSize: 17,
+      fontWeight: "900",
+    },
+    selectionMeta: {
+      color: palette.muted,
+      fontSize: 11,
+      lineHeight: 16,
+    },
+    selectionOption: {
+      alignItems: "center",
+      backgroundColor: palette.surfaceAlt,
+      borderColor: palette.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 58,
+      padding: 11,
+    },
+    selectionOptionTitle: {
+      color: palette.text,
+      fontSize: 13,
+      fontWeight: "900",
+    },
+    selectionArrow: {
+      color: palette.accent,
+      fontSize: 24,
+      fontWeight: "900",
+    },
     manual: {
       backgroundColor: palette.surface,
       borderColor: palette.border,
