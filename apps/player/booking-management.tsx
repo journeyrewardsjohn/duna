@@ -57,6 +57,16 @@ export type ManagedBooking = {
   readonly status: "confirmed" | "waitlisted" | "needs-action";
   readonly amount: { readonly amountMinor: number; readonly currency: string };
   readonly participantNames?: readonly string[];
+  readonly participants?: readonly {
+    readonly id: string;
+    readonly personId: string;
+    readonly displayName: string;
+    readonly avatarUrl?: string;
+    readonly role?: "host" | "player" | "organizer" | "guest";
+    readonly status: string;
+    readonly attendanceStatus?:
+      "scheduled" | "attended" | "no-show" | "cancelled";
+  }[];
   readonly paymentStatus?: "free" | "paid" | "payment-required" | "refunded";
   readonly canEdit?: boolean;
   readonly canCancel?: boolean;
@@ -83,6 +93,7 @@ export type ManagedBooking = {
       readonly currency: string;
     };
     readonly canAddPlayers: boolean;
+    readonly canReportAttendance?: boolean;
     readonly isCreator: boolean;
     readonly invitationStatus?: "invited";
   };
@@ -203,6 +214,10 @@ export function BookingManagementModal({
 
   if (!booking) return null;
 
+  const reportablePickupParticipants = (booking.participants ?? []).filter(
+    (participant) => ["confirmed", "checked-in"].includes(participant.status),
+  );
+
   async function search(value: string) {
     setQuery(value);
     if (!client) return;
@@ -248,7 +263,7 @@ export function BookingManagementModal({
     }
   }
 
-  async function cancel() {
+  async function cancel(intent: "cancel" | "decline" = "cancel") {
     const bookingId = booking?.id;
     if (!client || !bookingId) return;
     setBusy(true);
@@ -260,12 +275,49 @@ export function BookingManagementModal({
       });
       setCancelled(true);
       setConfirmCancel(false);
-      setMessage(result.message);
+      setMessage(
+        intent === "decline"
+          ? "Invitation declined. The host can now offer the place to someone else."
+          : result.message,
+      );
+      await onUpdated().catch(() => undefined);
     } catch (reason) {
       setMessage(
         reason instanceof Error
           ? reason.message
           : "Duna could not cancel this booking.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reportPickupAttendance(
+    participantId: string,
+    status: "attended" | "no-show",
+  ) {
+    const pickupSessionId = booking?.sessionId;
+    if (!client || !pickupSessionId) return;
+    setBusy(true);
+    setMessage(undefined);
+    try {
+      await client.player.reportPickupAttendance.mutate({
+        pickupSessionId,
+        participantId,
+        status,
+        idempotencyKey: Crypto.randomUUID(),
+      });
+      await onUpdated();
+      setMessage(
+        status === "attended"
+          ? "Attendance recorded."
+          : "No-show recorded. The host can correct this here if needed.",
+      );
+    } catch (reason) {
+      setMessage(
+        reason instanceof Error
+          ? reason.message
+          : "Duna could not update attendance.",
       );
     } finally {
       setBusy(false);
@@ -726,6 +778,18 @@ export function BookingManagementModal({
                         : "Confirm my place"}
                   </Text>
                 </Pressable>
+                <Pressable
+                  disabled={busy}
+                  onPress={() => void cancel("decline")}
+                  style={[
+                    styles.invitationDecline,
+                    busy && styles.actionDisabled,
+                  ]}
+                >
+                  <Text style={styles.invitationDeclineText}>
+                    Decline invitation
+                  </Text>
+                </Pressable>
               </View>
             )}
 
@@ -759,6 +823,109 @@ export function BookingManagementModal({
                     ? " · only you can edit match details"
                     : " · you can invite or cover more players"}
                 </Text>
+                {booking.pickup.canReportAttendance &&
+                  reportablePickupParticipants.length > 0 && (
+                    <View style={styles.attendancePanel}>
+                      <Text style={styles.sectionEyebrow}>
+                        MATCH ATTENDANCE
+                      </Text>
+                      <Text style={styles.attendanceTitle}>Who showed up?</Text>
+                      <Text style={styles.policy}>
+                        Report this after play. Only attended and no-show
+                        results affect reliability; cancellations do not.
+                      </Text>
+                      {reportablePickupParticipants.map((participant) => {
+                        const attended =
+                          participant.attendanceStatus === "attended";
+                        const noShow =
+                          participant.attendanceStatus === "no-show";
+                        return (
+                          <View
+                            key={participant.id}
+                            style={styles.attendanceRow}
+                          >
+                            <View style={styles.avatar}>
+                              {participant.avatarUrl ? (
+                                <Image
+                                  source={{ uri: participant.avatarUrl }}
+                                  style={styles.attendanceAvatarImage}
+                                />
+                              ) : (
+                                <Text style={styles.avatarText}>
+                                  {initials(participant.displayName)}
+                                </Text>
+                              )}
+                            </View>
+                            <View style={styles.flex}>
+                              <Text style={styles.playerName}>
+                                {participant.displayName}
+                              </Text>
+                              <Text style={styles.playerMeta}>
+                                {participant.role === "host"
+                                  ? "Host"
+                                  : attended
+                                    ? "Checked in"
+                                    : noShow
+                                      ? "No-show"
+                                      : "Awaiting report"}
+                              </Text>
+                            </View>
+                            <View style={styles.attendanceActions}>
+                              <Pressable
+                                accessibilityLabel={`Mark ${participant.displayName} as attended`}
+                                disabled={busy}
+                                onPress={() =>
+                                  void reportPickupAttendance(
+                                    participant.id,
+                                    "attended",
+                                  )
+                                }
+                                style={[
+                                  styles.attendanceAction,
+                                  attended && styles.attendanceActionHere,
+                                  busy && styles.actionDisabled,
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.attendanceActionText,
+                                    attended &&
+                                      styles.attendanceActionTextActive,
+                                  ]}
+                                >
+                                  Here
+                                </Text>
+                              </Pressable>
+                              <Pressable
+                                accessibilityLabel={`Mark ${participant.displayName} as a no-show`}
+                                disabled={busy}
+                                onPress={() =>
+                                  void reportPickupAttendance(
+                                    participant.id,
+                                    "no-show",
+                                  )
+                                }
+                                style={[
+                                  styles.attendanceAction,
+                                  noShow && styles.attendanceActionNoShow,
+                                  busy && styles.actionDisabled,
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.attendanceActionText,
+                                    noShow && styles.attendanceActionTextActive,
+                                  ]}
+                                >
+                                  No-show
+                                </Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
                 {booking.pickup.isCreator && (
                   <Pressable
                     onPress={() =>
@@ -1763,6 +1930,20 @@ const styles = StyleSheet.create({
     marginTop: 22,
     padding: 18,
   },
+  invitationDecline: {
+    alignItems: "center",
+    borderColor: "#b79d68",
+    borderRadius: 13,
+    borderWidth: 1,
+    justifyContent: "center",
+    marginTop: 10,
+    minHeight: 48,
+  },
+  invitationDeclineText: {
+    color: "#654f24",
+    fontSize: 13,
+    fontWeight: "900",
+  },
   modalRoot: { flex: 1 },
   meta: { color: "#736d62", fontSize: 16, marginTop: 5 },
   notice: {
@@ -1803,6 +1984,61 @@ const styles = StyleSheet.create({
     gap: 10,
     minHeight: 67,
   },
+  attendancePanel: {
+    backgroundColor: "#f5f4ef",
+    borderColor: "#e1dfd7",
+    borderRadius: 18,
+    borderWidth: 1,
+    marginTop: 18,
+    padding: 15,
+  },
+  attendanceTitle: {
+    color: "#111719",
+    fontSize: 20,
+    fontWeight: "900",
+    marginTop: 5,
+  },
+  attendanceRow: {
+    alignItems: "center",
+    borderTopColor: "#dfddd5",
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 72,
+  },
+  attendanceAvatarImage: {
+    borderRadius: 20,
+    height: "100%",
+    width: "100%",
+  },
+  attendanceActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  attendanceAction: {
+    alignItems: "center",
+    borderColor: "#cbc8be",
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 36,
+    paddingHorizontal: 9,
+  },
+  attendanceActionHere: {
+    backgroundColor: "#2d6a3c",
+    borderColor: "#2d6a3c",
+  },
+  attendanceActionNoShow: {
+    backgroundColor: "#a44e3f",
+    borderColor: "#a44e3f",
+  },
+  attendanceActionText: {
+    color: "#4e4a42",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  attendanceActionTextActive: { color: "#ffffff" },
   policy: { color: "#706a60", fontSize: 14, lineHeight: 21, marginTop: 8 },
   pickupEditor: {
     borderTopColor: "#e7e4dc",

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildTournamentWalletPassDefinition } from "./wallet-pass";
+import {
+  buildMemberWalletPassDefinition,
+  buildTournamentWalletPassDefinition,
+} from "./wallet-pass";
 
 const shared = {
   id: "10000000-0000-4000-8000-000000000001",
@@ -41,5 +44,30 @@ describe("tournament Apple Wallet passes", () => {
     expect(pass.logoText).toBe("Duna Tickets");
     expect(pass.eventTicket.primaryFields[0]?.label).toBe("ADMISSION TICKET");
     expect(pass.barcodes[0]?.message).toContain(":fan-ticket:");
+  });
+});
+
+describe("Duna Membership Apple Wallet pass", () => {
+  it("keeps personal details out of the QR and shows the next activity", () => {
+    const pass = buildMemberWalletPassDefinition({
+      personId: "person-1",
+      memberId: "0DUNA7",
+      holderName: "Maya Torres",
+      credentialPayload: "duna:member:v1:opaque-token",
+      upcoming: [
+        {
+          title: "Friday 2s",
+          startsAt: "2026-08-14T18:00:00.000Z",
+          venueName: "The Strand",
+        },
+      ],
+      passTypeIdentifier: "pass.com.duna.member",
+      teamIdentifier: "TEAM123",
+    });
+
+    expect(pass.barcodes[0]?.message).toBe("duna:member:v1:opaque-token");
+    expect(pass.barcodes[0]?.message).not.toContain("Maya");
+    expect(pass.storeCard.secondaryFields[1]?.value).toBe("Friday 2s");
+    expect(pass.relevantDate).toBe("2026-08-14T18:00:00.000Z");
   });
 });

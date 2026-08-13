@@ -599,6 +599,22 @@ export const bookingSummarySchema = z.object({
   status: z.enum(["confirmed", "waitlisted", "needs-action"]),
   amount: moneySchema,
   participantNames: z.array(z.string()).readonly(),
+  participants: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        personId: z.string().uuid(),
+        displayName: z.string(),
+        avatarUrl: z.string().optional(),
+        role: z.enum(["host", "player", "organizer", "guest"]).optional(),
+        status: z.string(),
+        attendanceStatus: z
+          .enum(["scheduled", "attended", "no-show", "cancelled"])
+          .optional(),
+      }),
+    )
+    .readonly()
+    .optional(),
   paymentStatus: z
     .enum(["free", "paid", "payment-required", "refunded"])
     .optional(),
@@ -629,6 +645,7 @@ export const bookingSummarySchema = z.object({
       note: z.string().optional(),
       pricePerPerson: moneySchema,
       canAddPlayers: z.boolean(),
+      canReportAttendance: z.boolean().optional(),
       isCreator: z.boolean(),
       invitationStatus: z.literal("invited").optional(),
     })
@@ -751,6 +768,24 @@ export const playerAdmissionPassSchema = z.object({
 export const playerAdmissionPassesSchema = z
   .array(playerAdmissionPassSchema)
   .readonly();
+export const playerMemberCardSchema = z.object({
+  memberId: z.string().regex(/^[0-9A-Z]{6}$/),
+  holderName: z.string(),
+  credentialPayload: z.string().startsWith("duna:member:v1:"),
+  walletStatus: z.enum(["available", "configuration-required"]),
+  walletPassPath: z.string().startsWith("/api/wallet/members/").optional(),
+  upcoming: z
+    .array(
+      z.object({
+        id: z.string(),
+        kind: z.enum(["event", "match", "court-reservation"]),
+        title: z.string(),
+        startsAt: z.iso.datetime(),
+        venueName: z.string(),
+      }),
+    )
+    .readonly(),
+});
 export const playerOrganizationAccessSchema = z.object({
   activeOrganizationId: z.string().uuid().optional(),
   organizations: z
@@ -3156,6 +3191,71 @@ export const operatorMemberProfileSchema = z.object({
     .readonly(),
 });
 
+export const attendanceReliabilitySchema = z.object({
+  score: z.number().int().min(0).max(100).optional(),
+  label: z.enum([
+    "new",
+    "building",
+    "needs-context",
+    "reliable",
+    "highly-reliable",
+  ]),
+  tracked: z.number().int().nonnegative(),
+  attended: z.number().int().nonnegative(),
+  noShows: z.number().int().nonnegative(),
+});
+
+export const operatorActivityDetailSchema = z.object({
+  activity: z.object({
+    id: z.string().uuid(),
+    type: z.enum(["court-booking", "pickup"]),
+    title: z.string(),
+    startsAt: z.iso.datetime(),
+    endsAt: z.iso.datetime(),
+    timezone: z.string(),
+    status: z.string(),
+    venueId: z.string().uuid().optional(),
+    venueName: z.string(),
+    courtId: z.string().uuid().optional(),
+    courtName: z.string().optional(),
+    capacity: z.number().int().positive(),
+    organizerPersonId: z.string().uuid(),
+    organizerName: z.string(),
+    paymentMode: z.enum(["full", "split"]).optional(),
+    totalAmountMinor: z.number().int().nonnegative(),
+    fundedAmountMinor: z.number().int().nonnegative(),
+    currency: currencySchema,
+  }),
+  participants: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        personId: z.string().uuid().optional(),
+        displayName: z.string(),
+        avatarUrl: z.string().optional(),
+        role: z.string(),
+        status: z.string(),
+        shareAmountMinor: z.number().int().nonnegative(),
+        attendanceStatus: z.enum([
+          "scheduled",
+          "attended",
+          "no-show",
+          "cancelled",
+        ]),
+        reliability: attendanceReliabilitySchema.optional(),
+      }),
+    )
+    .readonly(),
+  linkedActivity: z
+    .object({
+      id: z.string().uuid(),
+      type: z.enum(["court-booking", "pickup"]),
+      title: z.string(),
+      status: z.string(),
+    })
+    .optional(),
+});
+
 export const operatorSessionDetailSchema = z.object({
   session: operatorSessionSchema,
   arrivalBoard: sessionArrivalBoardSchema,
@@ -3567,7 +3667,13 @@ export const operatorBillingRecoverySchema = z.object({
 
 export const operatorCalendarEntrySchema = z.object({
   id: z.string(),
-  sourceType: z.enum(["session", "booking", "busy-block", "operator-block"]),
+  sourceType: z.enum([
+    "session",
+    "booking",
+    "pickup",
+    "busy-block",
+    "operator-block",
+  ]),
   title: z.string(),
   startsAt: z.iso.datetime(),
   endsAt: z.iso.datetime(),
@@ -3597,20 +3703,30 @@ export const operatorCalendarEntrySchema = z.object({
   attendees: z
     .array(
       z.object({
-        registrationId: z.string().uuid(),
-        personId: z.string().uuid(),
+        participationId: z.string().uuid().optional(),
+        registrationId: z.string().uuid().optional(),
+        personId: z.string().uuid().optional(),
         displayName: z.string(),
         avatarUrl: z.string().optional(),
         isMinor: z.boolean(),
+        role: z.string().optional(),
         status: z.enum([
+          "organizer",
           "invited",
+          "accepted",
+          "payment-pending",
+          "paid",
           "pending",
           "confirmed",
           "waitlisted",
           "cancelled",
+          "declined",
           "refunded",
           "checked-in",
         ]),
+        attendanceStatus: z
+          .enum(["scheduled", "attended", "no-show", "cancelled"])
+          .optional(),
       }),
     )
     .readonly(),
@@ -4007,6 +4123,7 @@ export const operatorMutationResultSchema = z.object({
     "refund",
     "session-note",
     "session-attendance",
+    "activity-attendance",
     "member-profile",
     "health-snapshot",
     "health-share",
@@ -4092,6 +4209,9 @@ export type VenueLayoutCourtAssignmentPlan = z.infer<
 >;
 export type PublicVenueLayout = z.infer<typeof publicVenueLayoutSchema>;
 export type OperatorMemberProfile = z.infer<typeof operatorMemberProfileSchema>;
+export type OperatorActivityDetail = z.infer<
+  typeof operatorActivityDetailSchema
+>;
 export type OperatorSessionDetail = z.infer<typeof operatorSessionDetailSchema>;
 export type OperatorDivisionDetail = z.infer<
   typeof operatorDivisionDetailSchema
@@ -4798,6 +4918,71 @@ export const playerRegistrationScanResultSchema = z.object({
   playerName: z.string(),
   eventTitle: z.string(),
 });
+
+export const memberCheckInCandidateSchema = z.object({
+  activityType: z.enum(["session", "court-booking", "pickup"]),
+  activityId: z.string().uuid(),
+  participationId: z.string().uuid(),
+  title: z.string(),
+  startsAt: z.iso.datetime(),
+  venueName: z.string(),
+});
+
+export const memberCheckInResultSchema = z.object({
+  accepted: z.boolean(),
+  duplicate: z.boolean(),
+  selectionRequired: z.boolean(),
+  reason: z
+    .enum([
+      "member-not-found",
+      "not-registered-today",
+      "activity-selection-required",
+      "already-checked-in",
+      "not-eligible",
+    ])
+    .optional(),
+  memberId: z
+    .string()
+    .regex(/^[0-9A-Z]{6}$/)
+    .optional(),
+  playerName: z.string().optional(),
+  activity: memberCheckInCandidateSchema.optional(),
+  candidates: z.array(memberCheckInCandidateSchema).readonly(),
+});
+
+export const matchAvailabilityPostSchema = z.object({
+  id: z.string().uuid(),
+  personId: z.string().uuid(),
+  venueId: z.string().uuid().optional(),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
+  matchType: z.enum(["either", "competitive", "casual"]),
+  genderPreference: z.enum(["open", "mens", "womens", "mixed"]),
+  formatPreferences: z
+    .array(z.enum(["2s", "3s", "4s", "6s", "king-queen"]))
+    .readonly(),
+  ratingMinimum: z.number().min(1).max(8).optional(),
+  ratingMaximum: z.number().min(1).max(8).optional(),
+  note: z.string().optional(),
+  status: z.enum(["active", "paused", "matched", "cancelled", "expired"]),
+});
+
+export const matchAvailabilityCandidateSchema = z.object({
+  postId: z.string().uuid(),
+  person: personSummarySchema,
+  overlapStartsAt: z.iso.datetime(),
+  overlapEndsAt: z.iso.datetime(),
+  note: z.string().optional(),
+  matchType: z.enum(["either", "competitive", "casual"]),
+  formatPreferences: z
+    .array(z.enum(["2s", "3s", "4s", "6s", "king-queen"]))
+    .readonly(),
+  reliability: attendanceReliabilitySchema,
+});
+export type MatchAvailabilityPost = z.infer<typeof matchAvailabilityPostSchema>;
+export type MatchAvailabilityCandidate = z.infer<
+  typeof matchAvailabilityCandidateSchema
+>;
 
 export const formSubmissionResultSchema = z.object({
   responseId: z.string().uuid(),

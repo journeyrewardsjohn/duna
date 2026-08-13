@@ -1,4 +1,5 @@
 import {
+  activityAttendance,
   auditLog,
   consents,
   courtBookingParticipants,
@@ -15,12 +16,14 @@ import {
   matchConfirmations,
   matchHistoryDisputes,
   matches,
+  matchAvailabilityPosts,
   memberships,
   membershipTiers,
   organizationMemberships,
   organizations,
   orders,
   people,
+  messages,
   playerPublicProfiles,
   playerSourceConnections,
   pickupParticipants,
@@ -90,10 +93,12 @@ import {
   asc,
   desc,
   eq,
+  gt,
   gte,
   ilike,
   inArray,
   isNull,
+  lt,
   ne,
   or,
 } from "drizzle-orm";
@@ -203,7 +208,7 @@ function walletDescription(reasonCode: string): string {
   return titleCase(reasonCode);
 }
 
-async function loadPeople(
+export async function loadPeople(
   personIds: readonly string[],
 ): Promise<PersonSummary[]> {
   if (personIds.length === 0) return [];
@@ -2553,6 +2558,9 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
   });
   if (!person) return [];
   const now = new Date();
+  const attendanceHistoryStartsAt = new Date(
+    now.getTime() - 72 * 60 * 60 * 1_000,
+  );
   const [registrationRows, pickupRows, courtRows] = await Promise.all([
     database
       .select({
@@ -2675,9 +2683,16 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
             "invited",
             "pending",
             "confirmed",
+            "checked-in",
             "waitlisted",
           ]),
-          gte(pickupSessions.endsAt, now),
+          or(
+            gte(pickupSessions.endsAt, now),
+            and(
+              eq(pickupSessions.hostPersonId, personId),
+              gte(pickupSessions.endsAt, attendanceHistoryStartsAt),
+            ),
+          ),
         ),
       ),
     database
@@ -2760,14 +2775,29 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
     pickupSessionIds.length
       ? database
           .select({
+            id: pickupParticipants.id,
             pickupSessionId: pickupParticipants.pickupSessionId,
+            personId: pickupParticipants.personId,
             orderId: pickupParticipants.orderId,
             displayName: people.displayName,
+            avatarUrl: people.avatarUrl,
             holdExpiresAt: pickupParticipants.holdExpiresAt,
             status: pickupParticipants.status,
+            attendanceStatus: activityAttendance.status,
           })
           .from(pickupParticipants)
           .innerJoin(people, eq(pickupParticipants.personId, people.id))
+          .leftJoin(
+            activityAttendance,
+            and(
+              eq(activityAttendance.activityType, "pickup"),
+              eq(
+                activityAttendance.activityId,
+                pickupParticipants.pickupSessionId,
+              ),
+              eq(activityAttendance.personId, pickupParticipants.personId),
+            ),
+          )
           .where(
             and(
               inArray(pickupParticipants.pickupSessionId, pickupSessionIds),
@@ -2814,9 +2844,29 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
     ]);
   }
   const pickupNamesBySession = new Map<string, string[]>();
+  const pickupRosterBySession = new Map<
+    string,
+    NonNullable<BookingSummary["participants"]>
+  >();
   const pickupCountByOrder = new Map<string, number>();
   const pickupOccupiedBySession = new Map<string, number>();
   for (const row of pickupParticipantRows) {
+    pickupRosterBySession.set(row.pickupSessionId, [
+      ...(pickupRosterBySession.get(row.pickupSessionId) ?? []),
+      {
+        id: row.id,
+        personId: row.personId,
+        displayName: row.displayName,
+        ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
+        status: row.status,
+        ...(row.attendanceStatus === "scheduled" ||
+        row.attendanceStatus === "attended" ||
+        row.attendanceStatus === "no-show" ||
+        row.attendanceStatus === "cancelled"
+          ? { attendanceStatus: row.attendanceStatus }
+          : {}),
+      },
+    ]);
     if (["confirmed", "checked-in"].includes(row.status)) {
       pickupNamesBySession.set(row.pickupSessionId, [
         ...(pickupNamesBySession.get(row.pickupSessionId) ?? []),
@@ -3094,6 +3144,15 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
           participantNames: pickupNamesBySession.get(row.pickupSessionId) ?? [
             person.displayName,
           ],
+          participants: (
+            pickupRosterBySession.get(row.pickupSessionId) ?? []
+          ).map((participant) => ({
+            ...participant,
+            role:
+              participant.personId === row.hostPersonId
+                ? ("host" as const)
+                : ("player" as const),
+          })),
           paymentStatus:
             row.status === "invited" && row.costMinor > 0
               ? "payment-required"
@@ -3127,6 +3186,10 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
               row.startsAt.getTime() > now.getTime() &&
               (isCreator || ["confirmed", "checked-in"].includes(row.status)) &&
               (spotsRemaining > 0 || waitlistEnabled),
+            canReportAttendance:
+              isCreator &&
+              now.getTime() >= row.startsAt.getTime() &&
+              now.getTime() <= row.endsAt.getTime() + 72 * 60 * 60 * 1_000,
             isCreator,
             ...(row.status === "invited"
               ? { invitationStatus: "invited" as const }
@@ -3395,6 +3458,36 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
       ipAddress: input.ipAddress,
     }),
   ]);
+  if (participantPersonIds.length > 0) {
+    await Promise.all([
+      database.insert(messages).values(
+        participantPersonIds.flatMap((personId) =>
+          (["in-app", "push"] as const).map((channel) => ({
+            organizationId,
+            senderPersonId: input.hostPersonId,
+            recipientPersonId: personId,
+            channel,
+            kind: "pickup-invitation",
+            subject: `Match invitation · ${input.title}`,
+            body: `You were invited to ${input.title} at ${matchingVenue?.name ?? input.venueName}. Open Duna to accept or decline the place.`,
+            status: "queued",
+            scheduledAt: new Date(),
+          })),
+        ),
+      ),
+      database
+        .update(matchAvailabilityPosts)
+        .set({ status: "matched", updatedAt: new Date() })
+        .where(
+          and(
+            inArray(matchAvailabilityPosts.personId, participantPersonIds),
+            eq(matchAvailabilityPosts.status, "active"),
+            gt(matchAvailabilityPosts.endsAt, startsAt),
+            lt(matchAvailabilityPosts.startsAt, endsAt),
+          ),
+        ),
+    ]);
+  }
   return {
     id: pickupId,
     slug: `pickup-${pickupId}`,

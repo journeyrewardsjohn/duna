@@ -45,6 +45,9 @@ type PlayerDashboard = Awaited<
 type PlayerWallet = Awaited<
   ReturnType<DunaApiClient["player"]["wallet"]["query"]>
 >;
+type PlayerMemberCard = Awaited<
+  ReturnType<DunaApiClient["player"]["memberCard"]["query"]>
+>;
 type PredictionWallet = Awaited<
   ReturnType<DunaApiClient["player"]["predictionWallet"]["query"]>
 >;
@@ -86,6 +89,7 @@ export interface PlayerRuntime {
   readonly publicClient?: DunaApiClient;
   readonly dashboard?: PlayerDashboard;
   readonly wallet?: PlayerWallet;
+  readonly memberCard?: PlayerMemberCard;
   readonly predictionWallet?: PredictionWallet;
   readonly predictionDiscovery?: PredictionDiscovery;
   readonly settings?: PlayerSettings;
@@ -319,6 +323,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   }, [client, signOut]);
   const [dashboard, setDashboard] = useState<PlayerDashboard>();
   const [wallet, setWallet] = useState<PlayerWallet>();
+  const [memberCard, setMemberCard] = useState<PlayerMemberCard>();
   const [predictionWallet, setPredictionWallet] = useState<PredictionWallet>();
   const [predictionDiscovery, setPredictionDiscovery] =
     useState<PredictionDiscovery>();
@@ -343,6 +348,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       const [
         nextDashboard,
         nextWallet,
+        nextMemberCard,
         nextPredictionWallet,
         nextPredictionDiscovery,
         nextSettings,
@@ -357,6 +363,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       ] = await Promise.all([
         client.player.dashboard.query(),
         client.player.wallet.query(),
+        client.player.memberCard.query().catch(() => undefined),
         client.player.predictionWallet.query(),
         client.public.predictionDiscovery
           .query({ limit: 8 })
@@ -373,6 +380,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       ]);
       setDashboard(nextDashboard);
       setWallet(nextWallet);
+      setMemberCard(nextMemberCard);
       setPredictionWallet(nextPredictionWallet);
       setPredictionDiscovery(nextPredictionDiscovery);
       setSettings(nextSettings);
@@ -477,6 +485,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         publicClient: client,
         dashboard,
         wallet,
+        memberCard,
         predictionWallet,
         predictionDiscovery,
         settings,

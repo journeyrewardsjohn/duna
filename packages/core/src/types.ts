@@ -453,6 +453,16 @@ export interface BookingSummary {
   readonly status: "confirmed" | "waitlisted" | "needs-action";
   readonly amount: Money;
   readonly participantNames: readonly string[];
+  readonly participants?: readonly {
+    readonly id: string;
+    readonly personId: string;
+    readonly displayName: string;
+    readonly avatarUrl?: string;
+    readonly role?: "host" | "player" | "organizer" | "guest";
+    readonly status: string;
+    readonly attendanceStatus?:
+      "scheduled" | "attended" | "no-show" | "cancelled";
+  }[];
   readonly paymentStatus?: "free" | "paid" | "payment-required" | "refunded";
   readonly canEdit?: boolean;
   readonly canCancel?: boolean;
@@ -476,6 +486,7 @@ export interface BookingSummary {
     readonly note?: string;
     readonly pricePerPerson: Money;
     readonly canAddPlayers: boolean;
+    readonly canReportAttendance?: boolean;
     readonly isCreator: boolean;
     readonly invitationStatus?: "invited";
   };

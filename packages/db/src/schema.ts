@@ -275,6 +275,14 @@ export const people = pgTable(
   "people",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    dunaMemberId: varchar("duna_member_id", { length: 6 })
+      .notNull()
+      .default(sql`duna_next_member_id()`),
+    membershipQrToken: varchar("membership_qr_token", { length: 64 })
+      .notNull()
+      .default(
+        sql`replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '')`,
+      ),
     workosUserId: varchar("workos_user_id", { length: 128 }).unique(),
     clerkUserId: varchar("clerk_user_id", { length: 128 }).unique(),
     stripeCustomerId: varchar("stripe_customer_id", { length: 128 }).unique(),
@@ -335,6 +343,10 @@ export const people = pgTable(
     ...{ createdAt, updatedAt },
   },
   (table) => [
+    uniqueIndex("people_duna_member_id_unique").on(table.dunaMemberId),
+    uniqueIndex("people_membership_qr_token_unique").on(
+      table.membershipQrToken,
+    ),
     index("people_display_name_idx").on(table.displayName),
     check(
       "people_minor_private_check",
@@ -2822,6 +2834,70 @@ export const sessionAttendance = pgTable(
     check(
       "session_attendance_status_valid",
       sql`${table.status} IN ('scheduled', 'attended', 'no-show', 'cancelled')`,
+    ),
+  ],
+);
+
+// Court reservations and community matches are not sessions, but attendance
+// must still be auditable and contribute to the same player reliability view.
+// The activity ID is deliberately polymorphic; every write validates activity
+// ownership and the underlying participant before inserting a row.
+export const activityAttendance = pgTable(
+  "activity_attendance",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Community matches may not belong to a club. Organization-scoped HQ
+    // reads still filter this column, while player-host reports can remain
+    // attributable without manufacturing an organization relationship.
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    activityType: varchar("activity_type", { length: 24 }).notNull(),
+    activityId: uuid("activity_id").notNull(),
+    participantId: uuid("participant_id").notNull(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    status: varchar("status", { length: 24 }).notNull().default("scheduled"),
+    source: varchar("source", { length: 24 }).notNull().default("manual"),
+    note: text("note"),
+    recordedByPersonId: uuid("recorded_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    recordedAt: timestamp("recorded_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("activity_attendance_person_unique").on(
+      table.activityType,
+      table.activityId,
+      table.personId,
+    ),
+    index("activity_attendance_participant_idx").on(
+      table.activityType,
+      table.participantId,
+    ),
+    index("activity_attendance_person_status_idx").on(
+      table.personId,
+      table.status,
+      table.recordedAt,
+    ),
+    check(
+      "activity_attendance_type_valid",
+      sql`${table.activityType} IN ('court-booking', 'pickup')`,
+    ),
+    check(
+      "activity_attendance_status_valid",
+      sql`${table.status} IN ('scheduled', 'attended', 'no-show', 'cancelled')`,
+    ),
+    check(
+      "activity_attendance_source_valid",
+      sql`${table.source} IN ('manual', 'member-qr', 'player-report', 'system')`,
     ),
   ],
 );
@@ -7914,6 +7990,78 @@ export const pickupParticipants = pgTable(
     check(
       "pickup_participant_pending_hold_required",
       sql`${table.status} <> 'pending' OR (${table.orderId} IS NOT NULL AND ${table.holdExpiresAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+// Explicit, time-bounded opt-in used to help match hosts fill open places.
+// It is never inferred from browsing, location, or prior bookings.
+export const matchAvailabilityPosts = pgTable(
+  "match_availability_posts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    venueId: uuid("venue_id").references(() => venues.id, {
+      onDelete: "cascade",
+    }),
+    startsAt: timestamp("starts_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    endsAt: timestamp("ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    matchType: varchar("match_type", { length: 16 })
+      .notNull()
+      .default("either"),
+    genderPreference: varchar("gender_preference", { length: 16 })
+      .notNull()
+      .default("open"),
+    formatPreferences: text("format_preferences")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    ratingMinimum: doublePrecision("rating_minimum"),
+    ratingMaximum: doublePrecision("rating_maximum"),
+    note: text("note"),
+    status: varchar("status", { length: 16 }).notNull().default("active"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("match_availability_venue_time_idx").on(
+      table.venueId,
+      table.status,
+      table.startsAt,
+      table.endsAt,
+    ),
+    index("match_availability_person_idx").on(
+      table.personId,
+      table.status,
+      table.endsAt,
+    ),
+    check(
+      "match_availability_time_valid",
+      sql`${table.endsAt} > ${table.startsAt}`,
+    ),
+    check(
+      "match_availability_type_valid",
+      sql`${table.matchType} IN ('either', 'competitive', 'casual')`,
+    ),
+    check(
+      "match_availability_gender_valid",
+      sql`${table.genderPreference} IN ('open', 'mens', 'womens', 'mixed')`,
+    ),
+    check(
+      "match_availability_status_valid",
+      sql`${table.status} IN ('active', 'paused', 'matched', 'cancelled')`,
+    ),
+    check(
+      "match_availability_rating_valid",
+      sql`(${table.ratingMinimum} IS NULL AND ${table.ratingMaximum} IS NULL) OR (${table.ratingMinimum} IS NOT NULL AND ${table.ratingMaximum} IS NOT NULL AND ${table.ratingMinimum} BETWEEN 1 AND 8 AND ${table.ratingMaximum} BETWEEN 1 AND 8 AND ${table.ratingMaximum} >= ${table.ratingMinimum})`,
     ),
   ],
 );
