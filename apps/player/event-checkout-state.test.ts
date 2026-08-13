@@ -3,6 +3,7 @@ import {
   admissionPassReady,
   checkoutRosterComplete,
   initialPurchaseKind,
+  presentThenPollCheckout,
 } from "./event-checkout-state";
 
 describe("event checkout state", () => {
@@ -81,5 +82,47 @@ describe("event checkout state", () => {
         registrationStatus: "confirmed",
       }),
     ).toBe(false);
+  });
+
+  it("opens the native payment sheet before reading checkout status", async () => {
+    const calls: string[] = [];
+    let statusReads = 0;
+    const result = await presentThenPollCheckout({
+      present: async () => {
+        calls.push("present");
+        return "completed";
+      },
+      readStatus: async () => {
+        calls.push("status");
+        statusReads += 1;
+        return { complete: statusReads > 1 };
+      },
+      isComplete: (status) => status.complete,
+      maxPolls: 3,
+      delayMs: () => 0,
+      sleep: async () => {
+        calls.push("wait");
+      },
+    });
+
+    expect(result).toEqual({ cancelled: false, status: { complete: true } });
+    expect(calls).toEqual(["present", "status", "wait", "status"]);
+  });
+
+  it("does not read checkout status when payment is cancelled", async () => {
+    let statusRead = false;
+    const result = await presentThenPollCheckout({
+      present: async () => "cancelled",
+      readStatus: async () => {
+        statusRead = true;
+        return { complete: false };
+      },
+      isComplete: (status) => status.complete,
+      maxPolls: 3,
+      delayMs: () => 0,
+    });
+
+    expect(result).toEqual({ cancelled: true });
+    expect(statusRead).toBe(false);
   });
 });

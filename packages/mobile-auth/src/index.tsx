@@ -18,6 +18,7 @@ const ACCESS_TOKEN_KEY = "duna.workos.access-token";
 const EXPIRES_AT_KEY = "duna.workos.expires-at";
 const REFRESH_TOKEN_KEY = "duna.workos.refresh-token";
 const ORGANIZATION_KEY = "duna.workos.organization-id";
+const MOBILE_AUTH_REQUEST_TIMEOUT_MS = 12_000;
 const discovery: AuthSession.DiscoveryDocument = {
   authorizationEndpoint: "https://api.workos.com/user_management/authorize",
 };
@@ -46,6 +47,18 @@ interface WorkOSMobileAuth {
   readonly selectOrganization: (organizationId: string) => Promise<void>;
   readonly signIn: () => Promise<void>;
   readonly signOut: () => Promise<void>;
+}
+
+class MobileAuthResponseError extends Error {
+  readonly code?: string;
+  readonly status: number;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "MobileAuthResponseError";
+    this.code = code;
+    this.status = status;
+  }
 }
 
 const WorkOSMobileAuthContext = createContext<WorkOSMobileAuth | undefined>(
@@ -93,7 +106,7 @@ export async function getStoredWorkOSMobileToken(
     return accessToken;
   }
   if (!refreshToken) return null;
-  backgroundRefresh ??= fetch(
+  backgroundRefresh ??= mobileAuthFetch(
     `${cleanBaseUrl(authBaseUrl)}/api/auth/mobile/refresh`,
     {
       body: JSON.stringify({
@@ -120,12 +133,53 @@ function cleanBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
+async function mobileAuthFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    MOBILE_AUTH_REQUEST_TIMEOUT_MS,
+  );
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (reason) {
+    if (reason instanceof Error && reason.name === "AbortError") {
+      throw new Error(
+        "Duna could not reach secure sign-in in time. Please try again.",
+        { cause: reason },
+      );
+    }
+    throw reason;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function responseJson<T>(response: Response): Promise<T> {
-  const body = (await response.json()) as T & { error?: string };
+  const body = (await response.json()) as T & {
+    code?: string;
+    error?: string;
+  };
   if (!response.ok) {
-    throw new Error(body.error || "Duna could not complete sign-in.");
+    throw new MobileAuthResponseError(
+      body.error || "Duna could not complete sign-in.",
+      response.status,
+      body.code,
+    );
   }
   return body;
+}
+
+function isTerminalSessionError(reason: unknown): boolean {
+  if (!(reason instanceof MobileAuthResponseError)) return false;
+  return (
+    reason.code === "invalid_grant" ||
+    reason.code === "session_revoked" ||
+    reason.status === 401 ||
+    (reason.status === 400 && reason.message === "Invalid refresh request.")
+  );
 }
 
 export function WorkOSMobileAuthProvider({
@@ -175,7 +229,7 @@ export function WorkOSMobileAuthProvider({
 
   const loadOrganizations = useCallback(
     async (accessToken: string) => {
-      const organizationResponse = await fetch(
+      const organizationResponse = await mobileAuthFetch(
         `${baseUrl}/api/auth/mobile/organizations`,
         { headers: { authorization: `Bearer ${accessToken}` } },
       );
@@ -193,7 +247,7 @@ export function WorkOSMobileAuthProvider({
       if (!requireOrganization || next.organizationId) return next;
       const firstOrganization = (await loadOrganizations(next.accessToken))[0];
       if (!firstOrganization) return next;
-      const refreshResponse = await fetch(
+      const refreshResponse = await mobileAuthFetch(
         `${baseUrl}/api/auth/mobile/refresh`,
         {
           body: JSON.stringify({
@@ -211,14 +265,17 @@ export function WorkOSMobileAuthProvider({
 
   const refreshSession = useCallback(
     async (current: MobileSession): Promise<MobileSession> => {
-      refreshRef.current ??= fetch(`${baseUrl}/api/auth/mobile/refresh`, {
-        body: JSON.stringify({
-          organizationId: current.organizationId,
-          refreshToken: current.refreshToken,
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      })
+      refreshRef.current ??= mobileAuthFetch(
+        `${baseUrl}/api/auth/mobile/refresh`,
+        {
+          body: JSON.stringify({
+            organizationId: current.organizationId,
+            refreshToken: current.refreshToken,
+          }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        },
+      )
         .then((refreshResponse) => responseJson<MobileSession>(refreshResponse))
         .then(commitSession)
         .then(() => sessionRef.current!)
@@ -240,21 +297,29 @@ export function WorkOSMobileAuthProvider({
     ]).then(async ([accessToken, expiresAt, refreshToken, organizationId]) => {
       if (!active) return;
       if (accessToken && refreshToken) {
+        const cached: MobileSession = {
+          accessToken,
+          expiresAt: Number(expiresAt) || 0,
+          refreshToken,
+          organizationId: organizationId ?? undefined,
+        };
         try {
-          const cached: MobileSession = {
-            accessToken,
-            expiresAt: Number(expiresAt) || 0,
-            refreshToken,
-            organizationId: organizationId ?? undefined,
-          };
           const fresh =
             cached.expiresAt <= Date.now() + 60_000
               ? await refreshSession(cached)
               : cached;
           const restored = await addDefaultOrganization(fresh);
           if (active) await commitSession(restored);
-        } catch {
-          await clearSession();
+        } catch (reason) {
+          if (isTerminalSessionError(reason)) {
+            await clearSession();
+          } else if (active) {
+            sessionRef.current = cached;
+            setSession(cached);
+            setError(
+              "Duna could not refresh your secure session. Check your connection and try again.",
+            );
+          }
         }
       }
       if (active) setIsLoaded(true);
@@ -296,7 +361,7 @@ export function WorkOSMobileAuthProvider({
       return;
     }
     setError(undefined);
-    void fetch(`${baseUrl}/api/auth/mobile/exchange`, {
+    void mobileAuthFetch(`${baseUrl}/api/auth/mobile/exchange`, {
       body: JSON.stringify({ code, codeVerifier }),
       headers: { "content-type": "application/json" },
       method: "POST",
@@ -325,11 +390,17 @@ export function WorkOSMobileAuthProvider({
     if (current.expiresAt > Date.now() + 60_000) return current.accessToken;
     try {
       return (await refreshSession(current)).accessToken;
-    } catch {
-      await clearSession();
-      sessionRef.current = undefined;
-      setSession(undefined);
-      return null;
+    } catch (reason) {
+      if (isTerminalSessionError(reason)) {
+        await clearSession();
+        sessionRef.current = undefined;
+        setSession(undefined);
+        return null;
+      }
+      setError(
+        "Duna could not refresh your secure session. Check your connection and try again.",
+      );
+      throw reason;
     }
   }, [refreshSession]);
   const signIn = useCallback(async () => {
@@ -355,7 +426,7 @@ export function WorkOSMobileAuthProvider({
       setError(undefined);
       setIsSwitchingOrganization(true);
       try {
-        const refreshResponse = await fetch(
+        const refreshResponse = await mobileAuthFetch(
           `${baseUrl}/api/auth/mobile/refresh`,
           {
             body: JSON.stringify({

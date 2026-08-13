@@ -112,6 +112,7 @@ import {
   admissionPassReady,
   checkoutRosterComplete,
   initialPurchaseKind,
+  presentThenPollCheckout,
 } from "./event-checkout-state";
 import { DiscoverySearchFlow } from "./discovery-search-flow";
 import {
@@ -2143,18 +2144,7 @@ function HomeScreen({
               </View>
             </Pressable>
             {!["pickup", "court-rental"].includes(nextBooking.kind) && (
-              <LiveActivitiesPrompt
-                booking={nextBooking}
-                client={client}
-                compactPalette={{
-                  accent: colors.aqua,
-                  accentSurface: rgba(colors.accentRgb, 0.12),
-                  border: rgba(colors.overlayRgb, 0.1),
-                  muted: colors.muted,
-                  surface: colors.navyLift,
-                  text: colors.bone,
-                }}
-              />
+              <LiveActivitiesPrompt booking={nextBooking} client={client} />
             )}
           </>
         ) : (
@@ -2650,6 +2640,8 @@ type MobileCalendarMarker = {
 };
 
 function BookingCalendarModal({
+  availability,
+  availabilityLoading,
   markers,
   maxDate,
   minDate,
@@ -2659,6 +2651,8 @@ function BookingCalendarModal({
   selectedDate,
   visible,
 }: {
+  readonly availability?: CourtAvailability;
+  readonly availabilityLoading: boolean;
   readonly markers: ReadonlyMap<string, MobileCalendarMarker>;
   readonly maxDate: string;
   readonly minDate: string;
@@ -2674,9 +2668,33 @@ function BookingCalendarModal({
   );
   const today = localDateValue(new Date());
   const months = [visibleMonth, addLocalMonths(visibleMonth, 1)] as const;
+  const selectedAvailability =
+    availability?.date === selectedDate ? availability : undefined;
+  const openCourtCount = new Set(
+    selectedAvailability?.slots.map((slot) => slot.courtId) ?? [],
+  ).size;
+  const openStartCount = new Set(
+    selectedAvailability?.slots.map((slot) => slot.localStartsAt) ?? [],
+  ).size;
+  const openMatchCount = selectedAvailability?.openMatches.length ?? 0;
+  const openOptionCount = openStartCount + openMatchCount;
+  const firstOpenAt = [
+    ...(selectedAvailability?.slots.map((slot) => slot.localStartsAt) ?? []),
+    ...(selectedAvailability?.openMatches.map((match) => match.localStartsAt) ??
+      []),
+  ].sort()[0];
+  const selectedDateLabel = localDateAnchor(selectedDate).toLocaleDateString(
+    "en-US",
+    { weekday: "long", month: "long", day: "numeric" },
+  );
 
   useEffect(() => {
-    if (visible) setVisibleMonth(startOfLocalMonth(selectedDate));
+    if (!visible) return;
+    setVisibleMonth((current) =>
+      selectedDate >= current && selectedDate < addLocalMonths(current, 2)
+        ? current
+        : startOfLocalMonth(selectedDate),
+    );
   }, [selectedDate, visible]);
 
   return (
@@ -2692,13 +2710,19 @@ function BookingCalendarModal({
       >
         <View style={styles.bookingCalendarHeader}>
           <View style={styles.flex}>
-            <Text style={styles.bookingCalendarEyebrow}>TWO-MONTH VIEW</Text>
+            <Text style={styles.bookingCalendarEyebrow}>
+              COURT AVAILABILITY
+            </Text>
             <Text style={styles.bookingCalendarTitle}>
               When do you want to play?
+            </Text>
+            <Text style={styles.bookingCalendarInstruction}>
+              Tap a day to preview live court openings.
             </Text>
           </View>
           <Pressable
             accessibilityLabel="Close full calendar"
+            hitSlop={3}
             onPress={onClose}
             style={styles.bookingCalendarClose}
           >
@@ -2709,6 +2733,7 @@ function BookingCalendarModal({
           <Pressable
             accessibilityLabel="Previous month"
             disabled={visibleMonth <= startOfLocalMonth(minDate)}
+            hitSlop={4}
             onPress={() =>
               setVisibleMonth((current) => addLocalMonths(current, -1))
             }
@@ -2721,6 +2746,7 @@ function BookingCalendarModal({
           </Text>
           <Pressable
             accessibilityLabel="Next month"
+            hitSlop={4}
             onPress={() => {
               const nextMonth = addLocalMonths(visibleMonth, 1);
               const endOfSecondMonth = addLocalDateDays(
@@ -2739,6 +2765,61 @@ function BookingCalendarModal({
           contentContainerStyle={styles.bookingCalendarScroll}
           showsVerticalScrollIndicator={false}
         >
+          <View style={styles.bookingCalendarAvailability}>
+            <Text style={styles.bookingCalendarAvailabilityEyebrow}>
+              {selectedDateLabel.toUpperCase()}
+            </Text>
+            <Text
+              accessibilityLiveRegion="polite"
+              style={styles.bookingCalendarAvailabilityTitle}
+            >
+              {availabilityLoading
+                ? "Checking live availability…"
+                : openCourtCount > 0
+                  ? `${openCourtCount} ${openCourtCount === 1 ? "court" : "courts"} with open times`
+                  : openMatchCount > 0
+                    ? `${openMatchCount} open ${openMatchCount === 1 ? "match" : "matches"}`
+                    : "No open court times yet"}
+            </Text>
+            {!availabilityLoading && openOptionCount > 0 ? (
+              <View style={styles.bookingCalendarAvailabilityFacts}>
+                {openStartCount > 0 ? (
+                  <Text style={styles.bookingCalendarAvailabilityFact}>
+                    {openStartCount} {openStartCount === 1 ? "start" : "starts"}
+                  </Text>
+                ) : null}
+                {openMatchCount > 0 ? (
+                  <Text style={styles.bookingCalendarAvailabilityFact}>
+                    {openMatchCount} open{" "}
+                    {openMatchCount === 1 ? "match" : "matches"}
+                  </Text>
+                ) : null}
+                {firstOpenAt ? (
+                  <Text style={styles.bookingCalendarAvailabilityFact}>
+                    From {localSlotTime(firstOpenAt)}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              disabled={availabilityLoading || openOptionCount === 0}
+              onPress={onClose}
+              style={[
+                styles.bookingCalendarAvailabilityButton,
+                (availabilityLoading || openOptionCount === 0) &&
+                  styles.bookingCalendarAvailabilityButtonDisabled,
+              ]}
+            >
+              <Text style={styles.bookingCalendarAvailabilityButtonText}>
+                {availabilityLoading
+                  ? "Checking…"
+                  : openOptionCount > 0
+                    ? `See ${openOptionCount} open ${openOptionCount === 1 ? "option" : "options"}`
+                    : "No times available"}
+              </Text>
+            </Pressable>
+          </View>
           <View
             style={[
               styles.bookingCalendarMonths,
@@ -2746,7 +2827,13 @@ function BookingCalendarModal({
             ]}
           >
             {months.map((month) => (
-              <View key={month} style={styles.bookingCalendarMonth}>
+              <View
+                key={month}
+                style={[
+                  styles.bookingCalendarMonth,
+                  width >= 720 && styles.bookingCalendarMonthWide,
+                ]}
+              >
                 <Text style={styles.bookingCalendarMonthTitle}>
                   {localMonthLabel(month)}
                 </Text>
@@ -2773,58 +2860,59 @@ function BookingCalendarModal({
                     const disabled = date < minDate || date > maxDate;
                     const selected = date === selectedDate;
                     return (
-                      <Pressable
-                        accessibilityLabel={`${localDateAnchor(
-                          date,
-                        ).toLocaleDateString("en-US", {
-                          weekday: "long",
-                          month: "long",
-                          day: "numeric",
-                          year: "numeric",
-                        })}${marker ? `, ${marker.count} scheduled` : ""}`}
-                        disabled={disabled}
-                        key={date}
-                        onPress={() => {
-                          selectionHaptic();
-                          onSelect(date);
-                          onClose();
-                        }}
-                        style={[
-                          styles.bookingCalendarDay,
-                          date === today && styles.bookingCalendarDayToday,
-                          selected && styles.bookingCalendarDaySelected,
-                          disabled && styles.bookingCalendarDayDisabled,
-                        ]}
-                      >
-                        <Text
+                      <View key={date} style={styles.bookingCalendarCell}>
+                        <Pressable
+                          accessibilityLabel={`${localDateAnchor(
+                            date,
+                          ).toLocaleDateString("en-US", {
+                            weekday: "long",
+                            month: "long",
+                            day: "numeric",
+                            year: "numeric",
+                          })}${marker ? `, ${marker.count} scheduled` : ""}`}
+                          disabled={disabled}
+                          hitSlop={6}
+                          onPress={() => {
+                            selectionHaptic();
+                            onSelect(date);
+                          }}
                           style={[
-                            styles.bookingCalendarDayText,
-                            selected && styles.bookingCalendarDayTextSelected,
+                            styles.bookingCalendarDay,
+                            date === today && styles.bookingCalendarDayToday,
+                            selected && styles.bookingCalendarDaySelected,
+                            disabled && styles.bookingCalendarDayDisabled,
                           ]}
                         >
-                          {localDateAnchor(date).getDate()}
-                        </Text>
-                        {marker && (
-                          <View style={styles.bookingCalendarMarkers}>
-                            {marker.booking && (
-                              <View
-                                style={[
-                                  styles.bookingCalendarMarker,
-                                  styles.bookingCalendarMarkerBooking,
-                                ]}
-                              />
-                            )}
-                            {marker.event && (
-                              <View
-                                style={[
-                                  styles.bookingCalendarMarker,
-                                  styles.bookingCalendarMarkerEvent,
-                                ]}
-                              />
-                            )}
-                          </View>
-                        )}
-                      </Pressable>
+                          <Text
+                            style={[
+                              styles.bookingCalendarDayText,
+                              selected && styles.bookingCalendarDayTextSelected,
+                            ]}
+                          >
+                            {localDateAnchor(date).getDate()}
+                          </Text>
+                          {marker && (
+                            <View style={styles.bookingCalendarMarkers}>
+                              {marker.booking && (
+                                <View
+                                  style={[
+                                    styles.bookingCalendarMarker,
+                                    styles.bookingCalendarMarkerBooking,
+                                  ]}
+                                />
+                              )}
+                              {marker.event && (
+                                <View
+                                  style={[
+                                    styles.bookingCalendarMarker,
+                                    styles.bookingCalendarMarkerEvent,
+                                  ]}
+                                />
+                              )}
+                            </View>
+                          )}
+                        </Pressable>
+                      </View>
                     );
                   })}
                 </View>
@@ -2887,7 +2975,9 @@ function VenueBookingModal({
   readonly onOpenMatch?: (matchId: string, matchSlug: string) => void;
 }) {
   const { width } = useWindowDimensions();
-  const { client, dashboard, mode, people, refresh } = usePlayerRuntime();
+  const { client, dashboard, mode, people, publicClient, refresh } =
+    usePlayerRuntime();
+  const courtClient = publicClient ?? client;
   const [todayValue] = useState(() => localDateValue(new Date()));
   const [inventory, setInventory] = useState<CourtInventory>();
   const [availability, setAvailability] = useState<CourtAvailability>();
@@ -2914,6 +3004,7 @@ function VenueBookingModal({
   const [policyRead, setPolicyRead] = useState(false);
   const [policyReviewOpen, setPolicyReviewOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
@@ -3090,11 +3181,11 @@ function VenueBookingModal({
   }, [dateRangeEnd, selectedDate, todayValue, visible, width]);
 
   useEffect(() => {
-    if (!visible || !venueId || !client) return;
+    if (!visible || !venueId || !courtClient) return;
     let cancelled = false;
     setLoading(true);
     setError(undefined);
-    void client.public.courtBookingInventory
+    void courtClient.public.courtBookingInventory
       .query({ venueId })
       .then((nextInventory) => {
         if (cancelled) return;
@@ -3117,18 +3208,20 @@ function VenueBookingModal({
     return () => {
       cancelled = true;
     };
-  }, [client, venueId, visible]);
+  }, [courtClient, venueId, visible]);
 
   useEffect(() => {
-    if (!visible || !venueId || !client || !inventory) return;
+    if (!visible || !venueId || !courtClient || !inventory) return;
     let cancelled = false;
     setLoading(true);
+    setAvailabilityLoading(true);
+    setAvailability(undefined);
     setSelectedSlot(undefined);
     setSelectedLocalStart(undefined);
     setPolicyAccepted(false);
     setPolicyRead(false);
     setPolicyReviewOpen(false);
-    void client.public.courtAvailability
+    void courtClient.public.courtAvailability
       .query({
         venueId,
         date: selectedDate,
@@ -3147,12 +3240,15 @@ function VenueBookingModal({
         if (!cancelled) setError(displayError(reason));
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setAvailabilityLoading(false);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [client, durationMinutes, inventory, selectedDate, venueId, visible]);
+  }, [courtClient, durationMinutes, inventory, selectedDate, venueId, visible]);
 
   function reviewSlot(
     slot: CourtAvailability["slots"][number],
@@ -3328,28 +3424,22 @@ function VenueBookingModal({
         let sharePaid = result.mode === "free";
         let awaitingParticipants = false;
         if (result.paymentSheet) {
-          let status = await client.player.courtCheckoutStatus.query({
-            paymentIntentId: result.paymentSheet.paymentIntentId,
-          });
-          if (!status.sharePaid) {
-            const paymentResult = await presentNativeEventPayment({
-              paymentSheet: result.paymentSheet,
-              customerName: dashboard?.player.displayName,
-            });
-            if (paymentResult === "cancelled") return;
-            for (
-              let attempt = 0;
-              attempt < 8 && !status.sharePaid;
-              attempt += 1
-            ) {
-              await new Promise<void>((resolve) =>
-                setTimeout(resolve, attempt < 3 ? 450 : 900),
-              );
-              status = await client.player.courtCheckoutStatus.query({
+          const payment = await presentThenPollCheckout({
+            present: () =>
+              presentNativeEventPayment({
+                paymentSheet: result.paymentSheet!,
+                customerName: dashboard?.player.displayName,
+              }),
+            readStatus: () =>
+              client.player.courtCheckoutStatus.query({
                 paymentIntentId: result.paymentSheet!.paymentIntentId,
-              });
-            }
-          }
+              }),
+            isComplete: (status) => status.sharePaid,
+            maxPolls: 8,
+            delayMs: (attempt) => (attempt < 3 ? 450 : 900),
+          });
+          if (payment.cancelled) return;
+          const { status } = payment;
           confirmed = status.complete;
           sharePaid = status.sharePaid;
           awaitingParticipants = status.awaitingParticipants;
@@ -4306,12 +4396,18 @@ function VenueBookingModal({
               {error && <Text style={styles.formError}>{error}</Text>}
             </ScrollView>
             <BookingCalendarModal
+              availability={availability}
+              availabilityLoading={availabilityLoading}
               markers={calendarMarkers}
               maxDate={dateRangeEnd}
               minDate={todayValue}
               onClose={() => setCalendarOpen(false)}
               onExtendRange={extendDateRange}
-              onSelect={setSelectedDate}
+              onSelect={(date) => {
+                if (date === selectedDate) return;
+                setAvailabilityLoading(true);
+                setSelectedDate(date);
+              }}
               selectedDate={selectedDate}
               visible={calendarOpen}
             />
@@ -10250,24 +10346,20 @@ function BookingModal({
       });
       if (result.paymentSheet) {
         const paymentIntentId = result.paymentSheet.paymentIntentId;
-        let status = await client.player.checkoutStatus.query({
-          paymentIntentId,
+        const payment = await presentThenPollCheckout({
+          present: () =>
+            presentNativeEventPayment({
+              paymentSheet: result.paymentSheet!,
+              customerName: player.displayName,
+            }),
+          readStatus: () =>
+            client.player.checkoutStatus.query({ paymentIntentId }),
+          isComplete: (status) => status.complete,
+          maxPolls: 5,
+          delayMs: (attempt) => 450 + attempt * 250,
         });
-        if (!status.complete) {
-          const paymentResult = await presentNativeEventPayment({
-            paymentSheet: result.paymentSheet,
-            customerName: player.displayName,
-          });
-          if (paymentResult === "cancelled") return;
-          for (let attempt = 0; attempt < 5 && !status.complete; attempt += 1) {
-            await new Promise((resolve) =>
-              setTimeout(resolve, 450 + attempt * 250),
-            );
-            status = await client.player.checkoutStatus.query({
-              paymentIntentId,
-            });
-          }
-        }
+        if (payment.cancelled) return;
+        const { status } = payment;
         const pendingApproval = status.fulfillmentStatus === "pending-approval";
         setComplete(
           status.complete
@@ -13295,14 +13387,20 @@ function createStyles(palette: Palette) {
       lineHeight: 31,
       marginTop: 7,
     },
+    bookingCalendarInstruction: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 5,
+    },
     bookingCalendarClose: {
       alignItems: "center",
       borderColor: colors.sand,
       borderRadius: 22,
       borderWidth: 1.5,
-      height: 42,
+      height: 48,
       justifyContent: "center",
-      width: 42,
+      width: 48,
     },
     bookingCalendarCloseText: {
       color: colors.bone,
@@ -13321,11 +13419,11 @@ function createStyles(palette: Palette) {
       alignItems: "center",
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.1),
-      borderRadius: 20,
+      borderRadius: 24,
       borderWidth: 1,
-      height: 40,
+      height: 48,
       justifyContent: "center",
-      width: 40,
+      width: 48,
     },
     bookingCalendarNavText: {
       color: colors.bone,
@@ -13350,13 +13448,17 @@ function createStyles(palette: Palette) {
       flexDirection: "row",
     },
     bookingCalendarMonth: {
+      alignSelf: "stretch",
       backgroundColor: colors.navy,
       borderColor: rgba(colors.overlayRgb, 0.1),
       borderRadius: 20,
       borderWidth: 1,
-      flex: 1,
+      flexGrow: 0,
+      flexShrink: 0,
       padding: 10,
+      width: "100%",
     },
+    bookingCalendarMonthWide: { flex: 1 },
     bookingCalendarMonthTitle: {
       color: colors.bone,
       fontSize: 16,
@@ -13378,19 +13480,25 @@ function createStyles(palette: Palette) {
       flexWrap: "wrap",
     },
     bookingCalendarBlank: {
-      aspectRatio: 0.95,
+      height: 40,
+      width: "14.285714%",
+    },
+    bookingCalendarCell: {
+      alignItems: "center",
+      height: 40,
+      justifyContent: "center",
       width: "14.285714%",
     },
     bookingCalendarDay: {
-      alignItems: "flex-start",
-      aspectRatio: 0.95,
-      backgroundColor: colors.depth,
+      alignItems: "center",
+      backgroundColor: "transparent",
       borderColor: "transparent",
-      borderRadius: 10,
+      borderRadius: 999,
       borderWidth: 1,
-      justifyContent: "space-between",
-      padding: 6,
-      width: "14.285714%",
+      justifyContent: "center",
+      padding: 3,
+      height: 36,
+      width: 36,
     },
     bookingCalendarDayToday: {
       borderColor: colors.aqua,
@@ -13402,13 +13510,16 @@ function createStyles(palette: Palette) {
     bookingCalendarDayDisabled: { opacity: 0.28 },
     bookingCalendarDayText: {
       color: colors.bone,
-      fontSize: 10,
+      fontFamily: "Archivo-Table",
+      fontSize: 13,
       fontWeight: "900",
     },
     bookingCalendarDayTextSelected: { color: "#ffffff" },
     bookingCalendarMarkers: {
+      bottom: 4,
       flexDirection: "row",
       gap: 3,
+      position: "absolute",
     },
     bookingCalendarMarker: {
       borderRadius: 3,
@@ -13417,6 +13528,57 @@ function createStyles(palette: Palette) {
     },
     bookingCalendarMarkerBooking: { backgroundColor: "#4b8fc9" },
     bookingCalendarMarkerEvent: { backgroundColor: colors.flare },
+    bookingCalendarAvailability: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 18,
+      borderWidth: 1,
+      marginTop: 14,
+      padding: 16,
+    },
+    bookingCalendarAvailabilityButton: {
+      alignItems: "center",
+      backgroundColor: colors.aquaDeep,
+      borderRadius: 14,
+      justifyContent: "center",
+      marginTop: 14,
+      minHeight: 56,
+      paddingHorizontal: 16,
+    },
+    bookingCalendarAvailabilityButtonDisabled: { opacity: 0.42 },
+    bookingCalendarAvailabilityButtonText: {
+      color: "#ffffff",
+      fontSize: 13,
+      fontWeight: "900",
+    },
+    bookingCalendarAvailabilityEyebrow: {
+      color: colors.sand,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    bookingCalendarAvailabilityFact: {
+      backgroundColor: colors.navy,
+      borderRadius: 999,
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+      overflow: "hidden",
+      paddingHorizontal: 9,
+      paddingVertical: 6,
+    },
+    bookingCalendarAvailabilityFacts: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+      marginTop: 10,
+    },
+    bookingCalendarAvailabilityTitle: {
+      color: colors.bone,
+      fontSize: 18,
+      fontWeight: "900",
+      marginTop: 5,
+    },
     bookingCalendarLegend: {
       alignItems: "center",
       flexDirection: "row",
