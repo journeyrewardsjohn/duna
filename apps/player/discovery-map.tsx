@@ -26,7 +26,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FellixText as Text } from "./fellix-text";
 import { resolveDiscoveryMediaUrl } from "./discovery-media";
 import { dunaWebUrl } from "./mobile-api";
@@ -510,7 +510,7 @@ function resultFacts(item: DiscoveryMapItem) {
     })
     .slice(0, 2)
     .forEach((tag) => facts.push(tag));
-  return facts.slice(0, 5);
+  return Array.from(new Set(facts)).slice(0, 5);
 }
 
 function ActiveResultVideo({
@@ -757,6 +757,7 @@ export function DiscoveryMapModal({
   const styles = useMemo(() => createStyles(token), [token]);
   const mapToken = useMapboxToken(visible);
   const reducedMotion = useReducedMotion();
+  const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const cameraRef = useRef<React.ElementRef<typeof Mapbox.Camera>>(null);
   const firstIdle = useRef(true);
@@ -1053,7 +1054,13 @@ export function DiscoveryMapModal({
         ) : (
           <MapFallback styles={styles} />
         )}
-        <SafeAreaView pointerEvents="box-none" style={styles.mapChrome}>
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.mapChrome,
+            { paddingTop: Math.max(insets.top, spacing[3]) },
+          ]}
+        >
           <View style={styles.mapHeader}>
             <Pressable
               accessibilityLabel="Close map"
@@ -1129,7 +1136,7 @@ export function DiscoveryMapModal({
               <Text style={styles.searchAreaText}>⌕ Search here</Text>
             </Pressable>
           ) : null}
-        </SafeAreaView>
+        </View>
         <Animated.View
           {...panResponder.panHandlers}
           style={[

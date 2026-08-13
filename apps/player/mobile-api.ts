@@ -9,6 +9,7 @@ import { File } from "expo-file-system";
 const defaultApiUrl = "https://duna.coach/api/trpc";
 const defaultWebUrl = "https://duna.coach";
 const MOBILE_API_TIMEOUT_MS = 20_000;
+const MOBILE_AUTH_TOKEN_TIMEOUT_MS = 8_000;
 
 function normalizeApiUrl(value: string | undefined): string {
   const candidate = value?.trim() || defaultApiUrl;
@@ -26,6 +27,31 @@ export const dunaWebUrl = (
 
 export type DunaApiClient = TRPCClient<AppRouter>;
 export type TokenGetter = () => Promise<string | null>;
+
+export async function getMobileAuthToken(
+  getToken: TokenGetter,
+  timeoutMs = MOBILE_AUTH_TOKEN_TIMEOUT_MS,
+): Promise<string | null> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      getToken(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () =>
+            reject(
+              new Error(
+                "Your secure session took too long to refresh. Please try again.",
+              ),
+            ),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
 
 export interface UploadedPlayerMedia {
   readonly url: string;
@@ -60,7 +86,7 @@ export function createDunaApiClient(getToken: TokenGetter): DunaApiClient {
         url: dunaApiUrl,
         fetch: fetchWithTimeout,
         headers: async () => {
-          const token = await getToken();
+          const token = await getMobileAuthToken(getToken);
           return token ? { authorization: `Bearer ${token}` } : {};
         },
       }),
@@ -76,7 +102,7 @@ export function createPlayerMessagingDeliveryEngine(
     baseUrl: `${dunaApiBaseUrl}/api/messaging`,
     fetchClient: async (input, init) => {
       const headers = new Headers(init?.headers);
-      const token = await getToken();
+      const token = await getMobileAuthToken(getToken);
       if (token) headers.set("authorization", `Bearer ${token}`);
       return fetchWithTimeout(input, { ...init, headers });
     },
@@ -94,7 +120,7 @@ export async function uploadPlayerMedia(
     readonly height: number;
   },
 ): Promise<UploadedPlayerMedia> {
-  const token = await getToken();
+  const token = await getMobileAuthToken(getToken);
   if (!token) throw new Error("Sign in again before uploading your photo.");
   const form = new FormData();
   const file = new File(input.uri);

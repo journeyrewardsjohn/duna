@@ -32,3 +32,33 @@ export function admissionPassReady(input: {
     : input.registrationStatus === "confirmed" ||
         input.registrationStatus === "checked-in";
 }
+
+export async function presentThenPollCheckout<T>(input: {
+  readonly present: () => Promise<"cancelled" | "completed">;
+  readonly readStatus: () => Promise<T>;
+  readonly isComplete: (status: T) => boolean;
+  readonly maxPolls: number;
+  readonly delayMs: (attempt: number) => number;
+  readonly sleep?: (delayMs: number) => Promise<void>;
+}): Promise<
+  | { readonly cancelled: true }
+  | { readonly cancelled: false; readonly status: T }
+> {
+  const paymentResult = await input.present();
+  if (paymentResult === "cancelled") return { cancelled: true };
+
+  const sleep =
+    input.sleep ??
+    ((delayMs: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, delayMs)));
+  let status = await input.readStatus();
+  for (
+    let attempt = 0;
+    attempt < input.maxPolls && !input.isComplete(status);
+    attempt += 1
+  ) {
+    await sleep(input.delayMs(attempt));
+    status = await input.readStatus();
+  }
+  return { cancelled: false, status };
+}

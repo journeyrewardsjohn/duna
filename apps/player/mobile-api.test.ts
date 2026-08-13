@@ -11,7 +11,23 @@ vi.mock("expo-file-system", () => ({
   },
 }));
 
-import { uploadPlayerMedia } from "./mobile-api";
+import { getMobileAuthToken, uploadPlayerMedia } from "./mobile-api";
+
+describe("mobile authentication", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns a refreshed access token", async () => {
+    await expect(getMobileAuthToken(async () => "token", 10)).resolves.toBe(
+      "token",
+    );
+  });
+
+  it("fails clearly instead of leaving a request busy forever", async () => {
+    await expect(
+      getMobileAuthToken(() => new Promise(() => undefined), 1),
+    ).rejects.toThrow("secure session took too long");
+  });
+});
 
 describe("native player media upload", () => {
   afterEach(() => vi.restoreAllMocks());

@@ -8,9 +8,9 @@ export function liveActivityHomeMode(input: {
   readonly checking: boolean;
   readonly isIOS: boolean;
   readonly optedIn: boolean;
-}): "compact" | "hidden" | "prompt" {
+}): "hidden" | "prompt" {
   if (!input.isIOS || input.checking) return "hidden";
-  return input.optedIn ? "compact" : "prompt";
+  return input.optedIn ? "hidden" : "prompt";
 }
 
 export async function hasLiveActivityOptIn() {

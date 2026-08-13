@@ -48,7 +48,7 @@ struct ContentView: View {
         }
       }
     }
-    .ignoresSafeArea(edges: .bottom)
+    .ignoresSafeArea()
     .sheet(isPresented: $showCamera) {
       CameraPreviewView()
         .environmentObject(scoring)
@@ -60,7 +60,17 @@ struct ContentView: View {
   }
 
   private func topBar(compact: Bool) -> some View {
-    ZStack {
+    HStack(spacing: 3) {
+      roundButton(
+        symbol: "video.fill",
+        label: "Check Duna Vision camera",
+        compact: compact
+      ) {
+        showCamera = true
+      }
+
+      Spacer(minLength: 2)
+
       TimelineView(.periodic(from: .now, by: 1)) { context in
         HStack(spacing: 4) {
           Image(
@@ -76,25 +86,20 @@ struct ContentView: View {
             .monospacedDigit()
         }
       }
+      .fixedSize(horizontal: true, vertical: false)
+      .layoutPriority(1)
 
-      HStack {
-        roundButton(
-          symbol: "video.fill",
-          label: "Check Duna Vision camera",
-          compact: compact
-        ) {
-          showCamera = true
-        }
-        Spacer()
-        roundButton(
-          symbol: "gearshape.fill",
-          label: "Match and set controls",
-          compact: compact
-        ) {
-          showControls = true
-        }
+      Spacer(minLength: 2)
+
+      roundButton(
+        symbol: "gearshape.fill",
+        label: "Match and set controls",
+        compact: compact
+      ) {
+        showControls = true
       }
     }
+    .padding(.trailing, compact ? 38 : 48)
     .frame(height: compact ? 27 : 31)
   }
 

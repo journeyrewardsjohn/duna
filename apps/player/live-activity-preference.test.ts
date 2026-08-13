@@ -54,13 +54,13 @@ describe("live activity preference", () => {
     );
   });
 
-  it("keeps first-time education and post-opt-in controls mutually exclusive", () => {
+  it("shows education once and stays quiet after opt-in", () => {
     expect(
       liveActivityHomeMode({ checking: false, isIOS: true, optedIn: false }),
     ).toBe("prompt");
     expect(
       liveActivityHomeMode({ checking: false, isIOS: true, optedIn: true }),
-    ).toBe("compact");
+    ).toBe("hidden");
     expect(
       liveActivityHomeMode({ checking: true, isIOS: true, optedIn: true }),
     ).toBe("hidden");
