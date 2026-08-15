@@ -7579,6 +7579,22 @@ a.professional-match-card:hover {
     linear-gradient(155deg, #7e6b2f, #47674c 72%);
 }
 
+.ticket-selector__card--vip {
+  background:
+    radial-gradient(circle at 84% 12%, rgb(255 240 194 / 38%), transparent 26%),
+    linear-gradient(155deg, #152c42, #28576d 52%, #c9903c 138%);
+  border-color: rgb(252 217 144 / 52%);
+}
+
+.ticket-selector__card--vip > header > span:first-child {
+  color: #ffe0a1;
+}
+
+.ticket-selector__card--vip > a {
+  background: #fff4d8;
+  color: #193449;
+}
+
 .ticket-selector__card > header {
   align-items: center;
   display: flex;
@@ -23951,6 +23967,362 @@ html {
   margin: 0.65rem 0 0;
 }
 
+/* Public registration review: choose first, identify yourself only when ready. */
+.public-registration {
+  background:
+    radial-gradient(circle at 84% 0%, rgb(55 171 166 / 12%), transparent 29%),
+    radial-gradient(circle at 12% 16%, rgb(222 174 102 / 12%), transparent 24%),
+    var(--color-canvas);
+  color: var(--color-bone);
+  min-height: calc(100vh - 70px);
+  padding: clamp(6.8rem, 11vw, 9.5rem) max(1rem, 4vw) clamp(3rem, 7vw, 6rem);
+}
+
+.public-registration__hero,
+.public-registration__body {
+  margin: 0 auto;
+  max-width: 1120px;
+}
+
+.public-registration__hero {
+  align-items: end;
+  display: grid;
+  gap: clamp(1.5rem, 5vw, 4rem);
+  grid-template-columns: minmax(0, 1.2fr) minmax(290px, 0.8fr);
+  margin-bottom: clamp(1.6rem, 4vw, 3.4rem);
+}
+
+.public-registration__hero h1 {
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 6vw, 5.8rem);
+  letter-spacing: -0.045em;
+  line-height: 0.86;
+  margin: 0.75rem 0 1rem;
+  max-width: 690px;
+}
+
+.public-registration__hero p {
+  color: var(--color-bone-muted);
+  font-size: 0.9rem;
+  line-height: 1.65;
+  margin: 0;
+  max-width: 610px;
+}
+
+.public-registration__event-facts {
+  background: rgb(255 255 255 / 72%);
+  border: 1px solid var(--color-line);
+  border-radius: 22px;
+  box-shadow: 0 16px 44px rgb(17 39 61 / 7%);
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.85rem;
+}
+
+.public-registration__event-facts > span {
+  align-items: center;
+  background: var(--color-surface);
+  border-radius: 15px;
+  display: grid;
+  gap: 0.05rem 0.55rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 0.75rem;
+}
+
+.public-registration__event-facts svg {
+  color: var(--color-aqua);
+  grid-row: 1 / 3;
+}
+
+.public-registration__event-facts small,
+.public-registration__item small {
+  color: var(--color-bone-muted);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.public-registration__event-facts strong {
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.public-registration__body {
+  align-items: start;
+  display: grid;
+  gap: clamp(1rem, 3vw, 1.8rem);
+  grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
+}
+
+.public-registration__cart,
+.public-registration__identity {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 26px;
+  box-shadow: 0 18px 50px rgb(17 39 61 / 8%);
+}
+
+.public-registration__cart {
+  padding: clamp(1rem, 3vw, 1.5rem);
+}
+
+.public-registration__cart > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.9rem;
+}
+
+.public-registration__cart > header > span,
+.public-registration__cart > header > a {
+  align-items: center;
+  display: flex;
+  font-size: 0.7rem;
+  font-weight: 800;
+  gap: 0.4rem;
+}
+
+.public-registration__cart > header > span svg,
+.public-registration__cart > header > a {
+  color: var(--color-aqua);
+}
+
+.public-registration__item,
+.public-registration__empty {
+  align-items: center;
+  background:
+    radial-gradient(circle at 88% 0%, rgb(55 171 166 / 13%), transparent 30%),
+    var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 20px;
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: clamp(1rem, 3vw, 1.35rem);
+}
+
+.public-registration__item.is-vip {
+  background:
+    radial-gradient(circle at 90% 5%, rgb(255 223 150 / 32%), transparent 29%),
+    linear-gradient(145deg, #143147, #1f5a6a);
+  border-color: rgb(225 188 113 / 45%);
+  color: #fff;
+}
+
+.public-registration__item.is-vip small,
+.public-registration__item.is-vip p {
+  color: rgb(255 255 255 / 72%);
+}
+
+.public-registration__item.is-vip h2,
+.public-registration__item.is-vip > strong {
+  color: #fff;
+}
+
+.public-registration__item-icon,
+.public-registration__identity-icon {
+  align-items: center;
+  background: var(--color-aqua-haze);
+  border-radius: 14px;
+  color: var(--color-aqua);
+  display: flex;
+  height: 48px;
+  justify-content: center;
+  width: 48px;
+}
+
+.public-registration__item.is-vip .public-registration__item-icon {
+  background: rgb(255 239 204 / 18%);
+  color: #ffe0a1;
+}
+
+.public-registration__item h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 3vw, 2rem);
+  letter-spacing: -0.035em;
+  margin: 0.2rem 0 0.35rem;
+}
+
+.public-registration__item p,
+.public-registration__empty p {
+  color: var(--color-bone-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.public-registration__item > strong {
+  font-family: var(--font-display);
+  font-size: clamp(1.2rem, 2.8vw, 1.75rem);
+  white-space: nowrap;
+}
+
+.public-registration__empty {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.public-registration__empty > svg {
+  color: var(--color-aqua);
+}
+
+.public-registration__empty strong {
+  display: block;
+  font-size: 0.82rem;
+  margin-bottom: 0.25rem;
+}
+
+.public-registration__empty a {
+  color: var(--color-aqua);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.public-registration__checkout-note {
+  align-items: flex-start;
+  border-top: 1px solid var(--color-line);
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.public-registration__checkout-note > svg {
+  color: var(--color-positive);
+  flex: 0 0 auto;
+  margin-top: 0.08rem;
+}
+
+.public-registration__checkout-note span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.public-registration__checkout-note strong {
+  font-size: 0.69rem;
+}
+
+.public-registration__checkout-note small {
+  color: var(--color-bone-muted);
+  font-size: 0.64rem;
+  line-height: 1.45;
+}
+
+.public-registration__identity {
+  background:
+    radial-gradient(circle at 92% 0%, rgb(222 174 102 / 22%), transparent 35%),
+    linear-gradient(145deg, #102d43, #174b5c);
+  color: #fff;
+  padding: clamp(1.25rem, 3vw, 1.8rem);
+}
+
+.public-registration__identity-icon {
+  background: rgb(255 255 255 / 11%);
+  color: #fff;
+  margin-bottom: 1.4rem;
+}
+
+.public-registration__identity .section__eyebrow {
+  color: #e4c080;
+}
+
+.public-registration__identity h2 {
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4vw, 3rem);
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+  margin: 0.65rem 0 0.8rem;
+}
+
+.public-registration__identity > p {
+  color: rgb(255 255 255 / 74%);
+  font-size: 0.74rem;
+  line-height: 1.6;
+  margin: 0 0 1.3rem;
+}
+
+.public-registration__create,
+.public-registration__sign-in {
+  align-items: center;
+  border-radius: 999px;
+  display: flex;
+  font-size: 0.7rem;
+  font-weight: 850;
+  justify-content: center;
+  min-height: 48px;
+}
+
+.public-registration__create {
+  background: #fff;
+  color: #173147;
+  gap: 0.5rem;
+}
+
+.public-registration__sign-in {
+  border: 1px solid rgb(255 255 255 / 28%);
+  color: #fff;
+  margin-top: 0.55rem;
+}
+
+.public-registration__create[aria-disabled="true"],
+.public-registration__sign-in[aria-disabled="true"] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.public-registration__secure {
+  align-items: center;
+  color: rgb(255 255 255 / 62%);
+  display: flex;
+  font-size: 0.6rem;
+  gap: 0.35rem;
+  justify-content: center;
+  margin-top: 0.9rem;
+}
+
+@media (max-width: 760px) {
+  .public-registration__hero,
+  .public-registration__body {
+    grid-template-columns: 1fr;
+  }
+
+  .public-registration__hero {
+    gap: 1.2rem;
+  }
+
+  .public-registration__event-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 500px) {
+  .public-registration {
+    padding-inline: 1rem;
+  }
+
+  .public-registration__event-facts,
+  .public-registration__item,
+  .public-registration__empty {
+    grid-template-columns: 1fr;
+  }
+
+  .public-registration__event-facts > span {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .public-registration__item > strong {
+    margin-left: 3.6rem;
+  }
+
+  .public-registration__empty a {
+    margin-left: 3.2rem;
+  }
+}
+
 .event-ticket-grid {
   display: grid;
   gap: 0.6rem;
@@ -28182,7 +28554,7 @@ html {
 .event-public__weather {
   margin: 0 auto;
   max-width: 1520px;
-  padding: 0 clamp(1rem, 4vw, 4rem);
+  padding: clamp(0.9rem, 1.8vw, 1.4rem) clamp(1rem, 4vw, 4rem) 0;
 }
 
 .event-public__prediction {

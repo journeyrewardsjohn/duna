@@ -336,7 +336,7 @@ export default async function EventPage({
             </div>
             <small>
               <Numeric>{capacityUsed}</Numeric> of{" "}
-              <Numeric>{event.capacity}</Numeric> joined
+              <Numeric>{event.capacity}</Numeric> in the field
             </small>
           </article>
         </div>
@@ -674,8 +674,8 @@ export default async function EventPage({
                 <span className="section__eyebrow">Who&apos;s playing</span>
                 <h2>
                   {capacityUsed === 0
-                    ? "No one has joined yet."
-                    : `${capacityUsed} ${capacityUsed === 1 ? "player" : "players"} confirmed.`}
+                    ? "The field is just opening."
+                    : `${capacityUsed} ${capacityUsed === 1 ? "player" : "players"} in the field.`}
                 </h2>
               </div>
               <UsersRound aria-hidden size={23} />
@@ -712,13 +712,13 @@ export default async function EventPage({
                   <span>
                     <strong>
                       {capacityUsed === 0
-                        ? "Be the first player in."
-                        : `${capacityUsed} confirmed ${capacityUsed === 1 ? "player" : "players"}.`}
+                        ? "Player names will appear here."
+                        : `${capacityUsed} ${capacityUsed === 1 ? "player is" : "players are"} in the field.`}
                     </strong>
                     <small>
                       {capacityUsed === 0
-                        ? "Confirmed players who share a public profile will appear here."
-                        : "Their profile visibility keeps the player cards private."}
+                        ? "Players with a public profile appear when their registration is confirmed."
+                        : "Player cards respect each person’s privacy settings."}
                     </small>
                   </span>
                 </article>
@@ -950,7 +950,7 @@ export default async function EventPage({
             <Link
               href={
                 event.divisions?.length === 1
-                  ? `/app/checkout/${event.slug}?division=${event.divisions[0]!.id}`
+                  ? `/checkout/${event.slug}?division=${event.divisions[0]!.id}`
                   : "#divisions"
               }
             >
