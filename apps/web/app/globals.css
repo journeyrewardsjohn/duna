@@ -24037,7 +24037,7 @@ html {
 .public-registration__event-facts small,
 .public-registration__item small {
   color: var(--color-bone-muted);
-  font-size: 0.6rem;
+  font-size: 0.625rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -24278,7 +24278,7 @@ html {
   align-items: center;
   color: rgb(255 255 255 / 62%);
   display: flex;
-  font-size: 0.6rem;
+  font-size: 0.625rem;
   gap: 0.35rem;
   justify-content: center;
   margin-top: 0.9rem;
