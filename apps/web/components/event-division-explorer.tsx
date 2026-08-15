@@ -363,8 +363,8 @@ export function EventDivisionExplorer({
                   <Numeric>{price(division.playerPrice)}</Numeric>
                 </span>
               </div>
-              <Link href={`/app/checkout/${eventSlug}?division=${division.id}`}>
-                Select division <ArrowRight aria-hidden size={16} />
+              <Link href={`/checkout/${eventSlug}?division=${division.id}`}>
+                Review registration <ArrowRight aria-hidden size={16} />
               </Link>
             </footer>
           </article>

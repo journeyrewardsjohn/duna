@@ -1055,7 +1055,15 @@ async function loadEvents(input?: {
       })
       .from(registrations)
       .where(
-        inArray(registrations.status, ["pending", "confirmed", "checked-in"]),
+        // An organizer's invite reserves a place in an invite-only field just
+        // as a completed registration does. Counting it here prevents public
+        // availability from advertising already allocated places as open.
+        inArray(registrations.status, [
+          "invited",
+          "pending",
+          "confirmed",
+          "checked-in",
+        ]),
       ),
     database
       .select({

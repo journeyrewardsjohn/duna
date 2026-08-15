@@ -498,10 +498,29 @@ test("tournament pages and checkout expose divisions, tickets, teams, and waiver
   await expect(
     page.getByRole("heading", { name: "AA", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("Host approval required")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: /players confirmed\./ }),
+    page.getByRole("link", { name: "Reserve VIP access" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /players in the field\./ }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await page.goto(
+    "/checkout/sunset-open-qualifier?division=20000000-0000-4000-8000-000000000001",
+  );
+  await expect(
+    page.getByRole("heading", { name: "Review your place on the sand." }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("No account wall before this point."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Create free account/ }),
+  ).toHaveAttribute(
+    "href",
+    /\/sign-up\?returnTo=%2Fapp%2Fcheckout%2Fsunset-open-qualifier/,
+  );
   await expectNoHorizontalOverflow(page);
 
   await page.goto(

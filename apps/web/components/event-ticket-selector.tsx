@@ -2,7 +2,7 @@
 
 import { formatMoney, type EventTicketSummary } from "@duna/core";
 import { Numeric } from "@duna/ui";
-import { ArrowRight, Check, Minus, Plus, Ticket } from "lucide-react";
+import { ArrowRight, Check, Crown, Minus, Plus, Ticket } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -13,6 +13,12 @@ function ticketBenefits(description?: string) {
     .map((item) => item.trim().replace(/\.$/, ""))
     .filter(Boolean);
   return parts.length > 1 ? parts.slice(0, 4) : [description];
+}
+
+function isVipTicket(ticket: EventTicketSummary) {
+  return /\b(vip|premium|hospitality|reserved)\b/i.test(
+    `${ticket.name} ${ticket.description ?? ""}`,
+  );
 }
 
 export function EventTicketSelector({
@@ -31,15 +37,22 @@ export function EventTicketSelector({
           const quantity = quantities[ticketItem.id] ?? 1;
           const max = Math.max(1, Math.min(10, ticketItem.remaining ?? 10));
           const soldOut = ticketItem.remaining === 0;
+          const vip = isVipTicket(ticketItem);
           return (
             <article
-              className={`ticket-selector__card ticket-selector__card--${(index % 3) + 1}`}
+              className={`ticket-selector__card ticket-selector__card--${(index % 3) + 1}${vip ? " ticket-selector__card--vip" : ""}`}
               key={ticketItem.id}
             >
               <header>
                 <span>
-                  <Ticket aria-hidden size={19} /> Ticket{" "}
-                  {String(index + 1).padStart(2, "0")}
+                  {vip ? (
+                    <Crown aria-hidden size={19} />
+                  ) : (
+                    <Ticket aria-hidden size={19} />
+                  )}
+                  {vip
+                    ? "VIP access"
+                    : `Ticket ${String(index + 1).padStart(2, "0")}`}
                 </span>
                 <Numeric>
                   {ticketItem.price.amountMinor === 0
@@ -63,9 +76,11 @@ export function EventTicketSelector({
               <small>
                 {soldOut && ticketItem.waitlistEnabled
                   ? "Sold out · waitlist open"
-                  : ticketItem.approvalRequired
-                    ? "Host approval required"
-                    : `${ticketItem.remaining ?? "Unlimited"} available`}
+                  : vip && ticketItem.remaining !== undefined
+                    ? `${ticketItem.remaining} VIP ${ticketItem.remaining === 1 ? "place" : "places"} remaining`
+                    : ticketItem.approvalRequired
+                      ? "Host approval required"
+                      : `${ticketItem.remaining ?? "Unlimited"} available`}
               </small>
               <div className="ticket-selector__quantity">
                 <span>
@@ -103,11 +118,13 @@ export function EventTicketSelector({
               </div>
               <Link
                 aria-disabled={soldOut && !ticketItem.waitlistEnabled}
-                href={`/app/checkout/${eventSlug}?ticket=${ticketItem.id}&quantity=${quantity}`}
+                href={`/checkout/${eventSlug}?ticket=${ticketItem.id}&quantity=${quantity}`}
               >
                 {soldOut && ticketItem.waitlistEnabled
                   ? "Join waitlist"
-                  : "Select tickets"}
+                  : vip
+                    ? "Reserve VIP access"
+                    : "Review tickets"}
                 <ArrowRight aria-hidden size={16} />
               </Link>
             </article>
@@ -115,7 +132,8 @@ export function EventTicketSelector({
         })}
       </div>
       <p className="ticket-selector__hint">
-        Swipe or scroll to compare ticket types
+        Review your tickets before creating or signing in to your free Duna
+        account.
       </p>
     </div>
   );
