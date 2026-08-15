@@ -29187,7 +29187,17 @@ a {
 
 .site-header__brand {
   color: var(--text-1);
+  align-items: center;
+  display: inline-flex;
   justify-self: start;
+  min-height: 2rem;
+}
+
+/* The supplied horizontal logo has a little more transparent canvas above
+ * its visible mark. Offset that canvas only in the floating site nav so the
+ * visible logo, rather than the PNG bounds, is optically centred. */
+.site-header__brand .duna-mark__logo {
+  transform: translateY(0.18rem);
 }
 
 .site-header__nav {
@@ -29242,6 +29252,53 @@ a {
   height: 44px;
   justify-content: center;
   width: 44px;
+}
+
+.site-loading {
+  align-items: center;
+  background: #f8f7f3;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: fixed;
+  z-index: 100;
+}
+
+.site-loading img {
+  animation: site-loading-breathe 900ms ease-in-out infinite alternate;
+  height: 2rem;
+  object-fit: contain;
+  width: 2rem;
+}
+
+.site-loading__label {
+  border: 0;
+  clip: rect(0 0 0 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@keyframes site-loading-breathe {
+  from {
+    opacity: 0.58;
+    transform: scale(0.94);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-loading img {
+    animation: none;
+  }
 }
 
 .hero {

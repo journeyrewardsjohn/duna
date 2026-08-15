@@ -12,7 +12,12 @@ export function SiteHeader() {
   return (
     <header className="site-header">
       <div className="site-header__inner">
-        <Link aria-label="Duna home" className="site-header__brand" href="/">
+        <Link
+          aria-label="Duna home"
+          className="site-header__brand"
+          href="/"
+          prefetch
+        >
           <DunaMark />
         </Link>
         <nav aria-label="Main navigation" className="site-header__nav">

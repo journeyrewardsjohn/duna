@@ -10,6 +10,7 @@ function OpenDunaLink({ href }: { readonly href: string }) {
       aria-label="Open Duna Player"
       className="site-header__enter"
       href={href}
+      prefetch
     >
       <span>
         <small>Player app</small>
