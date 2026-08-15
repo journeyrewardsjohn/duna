@@ -10,6 +10,23 @@ const artworkBase64 = {
 } as const;
 
 export function tournamentPassArtwork(): Record<string, Buffer> {
+  const publicRoots = [
+    join(process.cwd(), "public", "wallet"),
+    join(process.cwd(), "apps", "web", "public", "wallet"),
+  ];
+  const publicRoot = publicRoots.find((candidate) =>
+    existsSync(join(candidate, "logo.png")),
+  );
+  if (publicRoot) {
+    return {
+      "icon.png": readFileSync(join(publicRoot, "icon.png")),
+      "icon@2x.png": readFileSync(join(publicRoot, "icon@2x.png")),
+      "icon@3x.png": readFileSync(join(publicRoot, "icon@3x.png")),
+      "logo.png": readFileSync(join(publicRoot, "logo.png")),
+      "logo@2x.png": readFileSync(join(publicRoot, "logo@2x.png")),
+      "logo@3x.png": readFileSync(join(publicRoot, "logo@3x.png")),
+    };
+  }
   return {
     "icon.png": Buffer.from(artworkBase64.icon, "base64"),
     "icon@2x.png": Buffer.from(artworkBase64.icon2x, "base64"),
@@ -18,3 +35,5 @@ export function tournamentPassArtwork(): Record<string, Buffer> {
     "logo@2x.png": Buffer.from(artworkBase64.logo2x, "base64"),
   };
 }
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";

@@ -2917,8 +2917,8 @@ body[data-zone="operator"] :is(h1, h2, h3) {
   box-shadow: 10px 0 32px rgb(27 27 25 / 3%);
 }
 
-.hq-sidebar :where(.duna-mark__word, .duna-mark__symbol) {
-  color: var(--text-1);
+.hq-sidebar .duna-mark__logo {
+  max-width: 148px;
 }
 
 .organization-switcher,

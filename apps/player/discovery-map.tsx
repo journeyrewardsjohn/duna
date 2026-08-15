@@ -679,24 +679,10 @@ function NativeResultCard({
           {item.subtitle}
         </Text>
         {travel ? (
-          <View style={styles.travelRow}>
-            <View style={styles.travelMetric}>
-              <Text style={styles.travelLabel}>DRIVING DISTANCE</Text>
-              <Text style={styles.travelValue}>
-                {formatDrivingDistance(
-                  travel.distanceMeters,
-                  measurementSystem,
-                )}
-              </Text>
-            </View>
-            <View style={styles.travelDivider} />
-            <View style={styles.travelMetric}>
-              <Text style={styles.travelLabel}>EST. DRIVE NOW</Text>
-              <Text style={styles.travelValue}>
-                {formatDrivingDuration(travel.durationSeconds)}
-              </Text>
-            </View>
-          </View>
+          <Text style={styles.travelSummary}>
+            {formatDrivingDistance(travel.distanceMeters, measurementSystem)}{" "}
+            away · {formatDrivingDuration(travel.durationSeconds)} drive now
+          </Text>
         ) : null}
         {facts.length > 0 ? (
           <View style={styles.factRow}>
@@ -1165,13 +1151,6 @@ export function DiscoveryMapModal({
                       : "Swipe up for cards · down for map"}
                 </Text>
               </View>
-              <Text style={styles.sheetArrow}>
-                {sheetPosition === "map"
-                  ? "↑"
-                  : sheetPosition === "list"
-                    ? "↓"
-                    : "↕"}
-              </Text>
             </View>
           </Pressable>
           <ScrollView
@@ -1433,11 +1412,16 @@ function createStyles(token: ResolvedDunaTokens) {
       letterSpacing: -0.7,
     },
     sheetSubtitle: { color: token.text3, fontSize: 11, marginTop: spacing[1] },
-    sheetArrow: { color: token.text2, fontSize: 22, marginLeft: spacing[3] },
     sheetResults: {
       gap: spacing[4],
       padding: spacing[4],
       paddingTop: spacing[2],
+    },
+    travelSummary: {
+      color: token.text3,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: spacing[2],
     },
     sheetEndSpace: { height: 160 },
     resultCard: {
@@ -1589,35 +1573,6 @@ function createStyles(token: ResolvedDunaTokens) {
       color: token.text2,
       fontSize: 12,
       lineHeight: 18,
-      marginTop: spacing[1],
-    },
-    travelRow: {
-      backgroundColor: token.surface2,
-      borderColor: token.hairline,
-      borderRadius: radii.medium,
-      borderWidth: 1,
-      flexDirection: "row",
-      marginTop: spacing[3],
-      paddingHorizontal: spacing[3],
-      paddingVertical: spacing[3],
-    },
-    travelMetric: { flex: 1 },
-    travelDivider: {
-      backgroundColor: token.hairlineStrong,
-      marginHorizontal: spacing[3],
-      width: 1,
-    },
-    travelLabel: {
-      color: token.text3,
-      fontSize: 10,
-      fontWeight: "900",
-      letterSpacing: 0.7,
-    },
-    travelValue: {
-      color: token.text1,
-      fontFamily: "Archivo-Table",
-      fontSize: 14,
-      fontWeight: "900",
       marginTop: spacing[1],
     },
     factRow: {

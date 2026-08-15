@@ -70,6 +70,7 @@ import {
   usePlayerRuntime,
   type PlayerRuntime,
 } from "./runtime";
+import { PlayerLaunchExperience } from "./launch-experience";
 import {
   clearPendingWatchScoreDraft,
   getPendingWatchScoreDraft,
@@ -141,6 +142,12 @@ import {
   FellixTextInput as TextInput,
   useFellixFonts,
 } from "./fellix-text";
+
+// Metro requires static module references so the full Duna mark ships natively.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const dunaPlayerWordmarkBlue = require("./assets/duna-horizontal-blue.png");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const dunaPlayerWordmarkWhite = require("./assets/duna-horizontal-white.png");
 
 type MobileCoach = NonNullable<PlayerRuntime["coaches"]>[number];
 type PlayerCoachingNote = NonNullable<PlayerRuntime["coachingNotes"]>[number];
@@ -629,32 +636,26 @@ function PreviewBanner() {
   );
 }
 
-function DunaWordmark({ pro = false }: { readonly pro?: boolean }) {
+function DunaWordmark({
+  pro = false,
+  tone = "default",
+}: {
+  readonly pro?: boolean;
+  readonly tone?: "default" | "light";
+}) {
+  const { theme } = useContext(ThemeContext);
   return (
     <View style={styles.wordmark}>
-      <View style={styles.mark}>
-        <Svg height="30" viewBox="0 0 64 48" width="40">
-          <Line
-            opacity={0.38}
-            stroke={pro ? colors.warning : colors.bone}
-            strokeLinecap="round"
-            strokeWidth="1.5"
-            x1="5"
-            x2="59"
-            y1="34"
-            y2="34"
-          />
-          <Path
-            d="M6 36.5C17.5 36.5 22.4 31.7 29.2 26.3C36.3 20.7 45 18.4 58 11.5"
-            fill="none"
-            stroke={pro ? colors.warning : colors.bone}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="4.5"
-          />
-        </Svg>
-      </View>
-      <Text style={styles.wordmarkText}>DUNA</Text>
+      <Image
+        accessibilityLabel="Duna"
+        resizeMode="contain"
+        source={
+          tone === "light" || theme === "dark"
+            ? dunaPlayerWordmarkWhite
+            : dunaPlayerWordmarkBlue
+        }
+        style={styles.wordmarkImage}
+      />
       {pro && <Text style={styles.proPill}>PRO</Text>}
     </View>
   );
@@ -8076,8 +8077,11 @@ function WalletScreen({ onClose }: { readonly onClose: () => void }) {
       <Text style={styles.displayTitle}>Wallet.</Text>
       {memberCard && (
         <View style={styles.memberCard}>
+          <View pointerEvents="none" style={styles.memberCardGlowOne} />
+          <View pointerEvents="none" style={styles.memberCardGlowTwo} />
+          <View pointerEvents="none" style={styles.memberCardTexture} />
           <View style={styles.walletTop}>
-            <DunaWordmark />
+            <DunaWordmark tone="light" />
             <Pill tone="positive">Member</Pill>
           </View>
           <Text style={styles.memberCardLabel}>DUNA MEMBERSHIP</Text>
@@ -13158,15 +13162,23 @@ function DunaApp() {
 
 export default function App() {
   const [fontsLoaded, fontError] = useFellixFonts();
+  const [showLaunchExperience, setShowLaunchExperience] = useState(true);
 
   if (fontError) throw fontError;
   if (!fontsLoaded) return null;
 
   return (
     <SafeAreaProvider>
-      <PlayerRuntimeProvider>
-        <DunaApp />
-      </PlayerRuntimeProvider>
+      <View style={{ flex: 1 }}>
+        <PlayerRuntimeProvider>
+          <DunaApp />
+        </PlayerRuntimeProvider>
+        {showLaunchExperience && (
+          <PlayerLaunchExperience
+            onComplete={() => setShowLaunchExperience(false)}
+          />
+        )}
+      </View>
     </SafeAreaProvider>
   );
 }
@@ -14683,19 +14695,7 @@ function createStyles(palette: Palette) {
       lineHeight: 20,
     },
     wordmark: { alignItems: "center", flexDirection: "row", gap: 8 },
-    mark: {
-      alignItems: "center",
-      height: 30,
-      justifyContent: "center",
-      width: 40,
-    },
-    wordmarkText: {
-      color: colors.bone,
-      fontFamily: "Archivo-Wordmark",
-      fontSize: 17,
-      fontWeight: "900",
-      letterSpacing: 3,
-    },
+    wordmarkImage: { height: 35, width: 104 },
     proPill: {
       backgroundColor: rgba(colors.warningRgb, 0.12),
       borderRadius: 6,
@@ -18219,8 +18219,8 @@ function createStyles(palette: Palette) {
       position: "relative",
     },
     memberCard: {
-      backgroundColor: "#123640",
-      borderColor: rgba(colors.accentRgb, 0.3),
+      backgroundColor: "#123b45",
+      borderColor: "rgba(196, 225, 225, 0.38)",
       borderRadius: 24,
       borderWidth: 1,
       marginTop: 20,
@@ -18229,14 +18229,14 @@ function createStyles(palette: Palette) {
       position: "relative",
     },
     memberCardLabel: {
-      color: colors.sand,
+      color: "#f4c47f",
       fontSize: 10,
       fontWeight: "900",
       letterSpacing: 1.25,
       marginTop: 30,
     },
     memberCardName: {
-      color: colors.bone,
+      color: "#fffdf6",
       fontSize: 29,
       fontWeight: "900",
       letterSpacing: -1.1,
@@ -18256,40 +18256,42 @@ function createStyles(palette: Palette) {
     },
     memberCardDetails: { flex: 1, gap: 5 },
     memberCardDetailLabel: {
-      color: colors.sand,
+      color: "#f4c47f",
       fontSize: 10,
       fontWeight: "900",
       letterSpacing: 1,
       marginTop: 4,
     },
     memberCardId: {
-      color: colors.bone,
+      color: "#fffdf6",
       fontSize: 23,
       fontWeight: "900",
       letterSpacing: 2.5,
     },
     memberCardMeta: {
-      color: rgba(colors.boneRgb, 0.7),
+      color: "rgba(255, 253, 246, 0.8)",
       fontSize: 10,
       lineHeight: 15,
     },
     memberCardUpcoming: {
       alignItems: "center",
-      backgroundColor: rgba(colors.overlayRgb, 0.07),
+      backgroundColor: "rgba(255, 253, 246, 0.12)",
+      borderColor: "rgba(255, 253, 246, 0.14)",
       borderRadius: 14,
+      borderWidth: 1,
       flexDirection: "row",
       gap: 10,
       marginTop: 15,
       padding: 11,
     },
     memberCardUpcomingTitle: {
-      color: colors.bone,
+      color: "#fffdf6",
       fontSize: 13,
       fontWeight: "900",
       marginTop: 3,
     },
     memberCardUpcomingArrow: {
-      color: colors.sand,
+      color: "#f4c47f",
       fontSize: 25,
       fontWeight: "900",
     },
@@ -18309,6 +18311,37 @@ function createStyles(palette: Palette) {
       fontSize: 11,
       fontWeight: "900",
       textAlign: "center",
+    },
+    memberCardGlowOne: {
+      backgroundColor: "rgba(73, 178, 185, 0.5)",
+      borderRadius: 190,
+      height: 380,
+      position: "absolute",
+      right: -230,
+      top: -240,
+      transform: [{ rotate: "-24deg" }],
+      width: 380,
+    },
+    memberCardGlowTwo: {
+      backgroundColor: "rgba(241, 181, 109, 0.26)",
+      borderRadius: 180,
+      bottom: -275,
+      height: 360,
+      left: -175,
+      position: "absolute",
+      transform: [{ rotate: "20deg" }],
+      width: 360,
+    },
+    memberCardTexture: {
+      borderColor: "rgba(255, 253, 246, 0.17)",
+      borderRadius: 170,
+      borderWidth: 1,
+      height: 330,
+      position: "absolute",
+      right: -85,
+      top: 84,
+      transform: [{ rotate: "-34deg" }],
+      width: 330,
     },
     walletCloseRow: {
       alignItems: "flex-end",

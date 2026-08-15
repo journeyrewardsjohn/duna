@@ -9,6 +9,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -20,11 +21,131 @@ import { usePlayerRuntime } from "./runtime";
 type HubDestination =
   "profile" | "wallet" | "predictions" | "health" | "performance";
 
+const notificationOptions = [
+  {
+    scope: "marketing-email" as const,
+    title: "Email updates",
+    body: "Nearby play, programs, and product news.",
+    disclosure:
+      "Duna may send optional email updates about nearby play, programs, product news, and offers. You can turn these emails off at any time.",
+  },
+  {
+    scope: "marketing-sms" as const,
+    title: "Text updates",
+    body: "Optional discovery and offers by SMS.",
+    disclosure:
+      "Duna may send optional text messages about nearby play, programs, product news, and offers. Message and data rates may apply. Reply STOP to opt out.",
+  },
+  {
+    scope: "marketing-push" as const,
+    title: "Push updates",
+    body: "Optional device updates beyond account activity.",
+    disclosure:
+      "Duna may send optional device notifications about nearby play, programs, product news, and offers. You can disable these notifications at any time.",
+  },
+] as const;
+
 function money(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
   }).format(value / 100);
+}
+
+function NotificationPreferencesModal({
+  onClose,
+  visible,
+}: {
+  readonly onClose: () => void;
+  readonly visible: boolean;
+}) {
+  const { client, mode, refresh, settings } = usePlayerRuntime();
+  const [saving, setSaving] =
+    useState<(typeof notificationOptions)[number]["scope"]>();
+  const [notice, setNotice] = useState<string>();
+  const [error, setError] = useState<string>();
+  const granted = (scope: (typeof notificationOptions)[number]["scope"]) =>
+    settings?.consents.find((consent) => consent.scope === scope)?.granted ??
+    false;
+  const setPreference = async (
+    option: (typeof notificationOptions)[number],
+    next: boolean,
+  ) => {
+    if (!client || mode === "preview") return;
+    setSaving(option.scope);
+    setError(undefined);
+    setNotice(undefined);
+    try {
+      await client.player.recordConsent.mutate({
+        scope: option.scope,
+        granted: next,
+        disclosureText: option.disclosure,
+        idempotencyKey: Crypto.randomUUID(),
+      });
+      await refresh();
+      setNotice(
+        `${next ? "Enabled" : "Disabled"} ${option.title.toLowerCase()}.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Duna could not save that notification preference.",
+      );
+    } finally {
+      setSaving(undefined);
+    }
+  };
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="pageSheet"
+      visible={visible}
+    >
+      <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
+        <View style={styles.modalHeader}>
+          <View style={styles.flex}>
+            <Text style={styles.eyebrow}>COMMUNICATION</Text>
+            <Text style={styles.modalTitle}>Notifications.</Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Close notification preferences"
+            onPress={onClose}
+            style={styles.close}
+          >
+            <Text style={styles.closeText}>×</Text>
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.subscriptionContent}>
+          <Text style={styles.subscriptionIntro}>
+            Booking, payment, safety, wallet, and guardian notices stay on so
+            Duna can operate your account. Choose the optional updates below.
+          </Text>
+          {notice && <Text style={styles.subscriptionNotice}>{notice}</Text>}
+          {error && <Text style={styles.subscriptionError}>{error}</Text>}
+          {notificationOptions.map((option) => {
+            const enabled = granted(option.scope);
+            return (
+              <View key={option.scope} style={styles.notificationRow}>
+                <View style={styles.flex}>
+                  <Text style={styles.notificationTitle}>{option.title}</Text>
+                  <Text style={styles.notificationBody}>{option.body}</Text>
+                </View>
+                <Switch
+                  accessibilityLabel={`${enabled ? "Disable" : "Enable"} ${option.title}`}
+                  disabled={Boolean(saving) || mode === "preview"}
+                  onValueChange={(next) => void setPreference(option, next)}
+                  trackColor={{ false: "#d9ddda", true: "#5c8a93" }}
+                  value={enabled}
+                />
+              </View>
+            );
+          })}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
 }
 
 function ProfileDetailsModal({
@@ -513,6 +634,7 @@ export function ProfileHubScreen({
   const player = dashboard?.player ?? demoPlayer;
   const [profileOpen, setProfileOpen] = useState(false);
   const [subscriptionsOpen, setSubscriptionsOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const actions: readonly {
     readonly key: HubDestination;
     readonly icon: string;
@@ -718,8 +840,15 @@ export function ProfileHubScreen({
             </View>
             <Text style={styles.settingArrow}>›</Text>
           </Pressable>
+          <Pressable
+            disabled={mode === "preview"}
+            onPress={() => setNotificationsOpen(true)}
+            style={styles.setting}
+          >
+            <Text style={styles.settingText}>Notifications</Text>
+            <Text style={styles.settingArrow}>›</Text>
+          </Pressable>
           {[
-            ["Notifications", "#notifications"],
             ["Privacy + safety", "#privacy"],
             ["Language + units", "#profile"],
             ["Account + security", "#account"],
@@ -760,6 +889,10 @@ export function ProfileHubScreen({
       <SubscriptionManagementModal
         onClose={() => setSubscriptionsOpen(false)}
         visible={subscriptionsOpen}
+      />
+      <NotificationPreferencesModal
+        onClose={() => setNotificationsOpen(false)}
+        visible={notificationsOpen}
       />
     </>
   );
@@ -1006,6 +1139,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
+  notificationBody: {
+    color: "#706a60",
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3,
+  },
+  notificationRow: {
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderColor: "#dfdfdc",
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 14,
+    padding: 16,
+  },
+  notificationTitle: { color: "#111719", fontSize: 16, fontWeight: "800" },
   organization: {
     alignItems: "center",
     borderBottomColor: "#ebe9e4",

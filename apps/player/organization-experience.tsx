@@ -20,12 +20,11 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Circle, Line, Path } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 import { useMapboxToken } from "./discovery-map";
 import { DunaNumericText, FellixText as Text } from "./fellix-text";
 import type { DunaApiClient } from "./mobile-api";
@@ -170,52 +169,19 @@ function BackIcon({
   );
 }
 
-function ShareIcon({
+function CloseIcon({
   color = environmentalColors.ink,
 }: {
   readonly color?: string;
 }) {
   return (
     <Svg height={22} viewBox="0 0 24 24" width={22}>
-      <Circle
-        cx="18"
-        cy="5"
+      <Path
+        d="m6 6 12 12M18 6 6 18"
         fill="none"
-        r="2.5"
         stroke={color}
-        strokeWidth={2}
-      />
-      <Circle
-        cx="6"
-        cy="12"
-        fill="none"
-        r="2.5"
-        stroke={color}
-        strokeWidth={2}
-      />
-      <Circle
-        cx="18"
-        cy="19"
-        fill="none"
-        r="2.5"
-        stroke={color}
-        strokeWidth={2}
-      />
-      <Line
-        stroke={color}
-        strokeWidth={2}
-        x1="8.2"
-        x2="15.8"
-        y1="10.8"
-        y2="6.2"
-      />
-      <Line
-        stroke={color}
-        strokeWidth={2}
-        x1="8.2"
-        x2="15.8"
-        y1="13.2"
-        y2="17.8"
+        strokeLinecap="round"
+        strokeWidth={2.4}
       />
     </Svg>
   );
@@ -595,10 +561,6 @@ export function OrganizationExperienceModal({
     else onClose();
   };
 
-  const sharePath = selectedItem
-    ? `${dunaWebUrl}/clubs/${slug}/products/${selectedItem.slug}`
-    : `${dunaWebUrl}/clubs/${slug}`;
-
   const selectedVariant =
     selectedItem?.variants.find(
       (variant) => variant.id === selectedVariantId,
@@ -634,7 +596,7 @@ export function OrganizationExperienceModal({
     <Modal
       animationType="slide"
       onRequestClose={closeOrBack}
-      presentationStyle="fullScreen"
+      presentationStyle="pageSheet"
       statusBarTranslucent={false}
       visible={Boolean(slug)}
     >
@@ -662,17 +624,15 @@ export function OrganizationExperienceModal({
             </Text>
           </View>
           <Pressable
-            accessibilityLabel="Share"
+            accessibilityLabel="Close club"
             hitSlop={10}
-            onPress={() =>
-              void Share.share({ message: sharePath, url: sharePath })
-            }
+            onPress={onClose}
             style={({ pressed }) => [
               styles.iconButton,
               pressed && styles.pressed,
             ]}
           >
-            <ShareIcon color={themeTokens.text1} />
+            <CloseIcon color={themeTokens.text1} />
           </Pressable>
         </View>
 
@@ -843,14 +803,21 @@ export function OrganizationExperienceModal({
                     {addMembership ? <CheckIcon color={onPrimary} /> : null}
                   </View>
                   <View style={styles.flex}>
-                    <Text style={styles.membershipAddTitle}>
-                      Add {membershipOffers[0]?.title ?? "club membership"}
-                    </Text>
+                    <View style={styles.membershipAddHeading}>
+                      <Text style={styles.membershipAddTitle}>
+                        Add {membershipOffers[0]?.title ?? "club membership"}
+                      </Text>
+                      {membershipOffers[0] ? (
+                        <Text style={styles.membershipAddPrice}>
+                          {catalogPrice(membershipOffers[0])}
+                        </Text>
+                      ) : null}
+                    </View>
                     <Text style={styles.membershipAddBody}>
-                      Required for this purchase ·{" "}
+                      Required for this purchase
                       {membershipOffers[0]
-                        ? catalogPrice(membershipOffers[0])
-                        : "not configured"}
+                        ? " · billed before this order"
+                        : " · not configured"}
                     </Text>
                   </View>
                 </Pressable>
@@ -1614,18 +1581,30 @@ function createStyles(token: ResolvedDunaTokens) {
     },
     mapText: { fontSize: 15, fontWeight: "700" },
     membershipAdd: {
-      alignItems: "center",
+      alignItems: "flex-start",
       borderRadius: 18,
       flexDirection: "row",
-      gap: 12,
+      gap: 14,
       marginTop: 18,
-      padding: 15,
+      paddingHorizontal: 18,
+      paddingVertical: 17,
+    },
+    membershipAddHeading: {
+      alignItems: "baseline",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
     },
     membershipAddBody: {
       color: token.text2,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: 5,
+    },
+    membershipAddPrice: {
+      color: token.text1,
       fontSize: 14,
-      lineHeight: 19,
-      marginTop: 3,
+      fontWeight: "900",
     },
     membershipAddTitle: {
       color: token.text1,

@@ -46,6 +46,7 @@ import {
   createCourtBookingPaymentIntent,
   createCourtCheckoutSession,
   createMobilePaymentCustomerSession,
+  getStripeClient,
   getOrCreatePlayerStripeCustomer,
   getStripePublishableKey,
   isStripeConfigured,
@@ -1817,6 +1818,98 @@ export async function startCourtCheckout(input: {
     ]);
     throw error;
   }
+}
+
+export async function resumeCourtBookingCheckout(input: {
+  readonly actor: ApiActor;
+  readonly bookingId: string;
+  readonly now: Date;
+}): Promise<CourtCheckoutResult> {
+  if (!process.env.DATABASE_URL || !isStripeConfigured()) {
+    throw new CourtCheckoutError(
+      "PAYMENTS_NOT_READY",
+      "Secure court payment is not configured.",
+    );
+  }
+  const database = getDatabase();
+  const booking = await database.query.courtBookings.findFirst({
+    where: eq(courtBookings.id, input.bookingId),
+  });
+  if (!booking) {
+    throw new CourtCheckoutError(
+      "COURT_NOT_FOUND",
+      "Court booking was not found.",
+    );
+  }
+  await assertSubjectAuthority({
+    actor: input.actor,
+    subjectPersonId: booking.personId,
+  });
+  if (
+    booking.status !== "held" ||
+    !booking.holdExpiresAt ||
+    booking.holdExpiresAt <= input.now
+  ) {
+    throw new CourtCheckoutError(
+      "CHECKOUT_UNAVAILABLE",
+      "This court hold has expired. Choose the time again to start a fresh reservation.",
+    );
+  }
+  const participant = await database.query.courtBookingParticipants.findFirst({
+    where: and(
+      eq(courtBookingParticipants.bookingId, booking.id),
+      eq(courtBookingParticipants.personId, input.actor.personId),
+    ),
+  });
+  const orderId = booking.orderId ?? participant?.orderId;
+  const order = orderId
+    ? await database.query.orders.findFirst({ where: eq(orders.id, orderId) })
+    : undefined;
+  if (!order || order.status !== "pending" || !order.stripePaymentIntentId) {
+    throw new CourtCheckoutError(
+      "CHECKOUT_UNAVAILABLE",
+      "A secure payment sheet is not available for this reservation anymore.",
+    );
+  }
+  const intent = await getStripeClient().paymentIntents.retrieve(
+    order.stripePaymentIntentId,
+  );
+  const customerId =
+    typeof intent.customer === "string" ? intent.customer : intent.customer?.id;
+  if (intent.status === "canceled" || !intent.client_secret || !customerId) {
+    throw new CourtCheckoutError(
+      "CHECKOUT_UNAVAILABLE",
+      "A secure payment sheet is not available for this reservation anymore.",
+    );
+  }
+  const paymentMode = booking.paymentMode === "split" ? "split" : "full";
+  return {
+    mode: "stripe",
+    bookingId: booking.id,
+    bookingStatus: "held",
+    paymentMode,
+    paymentSheet: {
+      publishableKey: getStripePublishableKey(),
+      paymentIntentId: intent.id,
+      paymentIntentClientSecret: intent.client_secret,
+      customerId,
+      customerSessionClientSecret:
+        await createMobilePaymentCustomerSession(customerId),
+    },
+    expiresAt: booking.holdExpiresAt.toISOString(),
+    startsAt: booking.startsAt.toISOString(),
+    endsAt: booking.endsAt.toISOString(),
+    alternatives: [],
+    pricing: {
+      subtotalMinor: order.subtotalMinor,
+      feeTotalMinor: order.feeTotalMinor,
+      totalMinor: booking.totalAmountMinor,
+      payNowMinor: order.totalMinor,
+      currency: currencyCode(order.currency) ?? "USD",
+      rateUnitMinutes: 15,
+    },
+    policy: normalizeCourtCancellationPolicy(booking.policySnapshot),
+  };
 }
 
 export async function startParticipantShareCheckout(input: {

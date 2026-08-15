@@ -26298,14 +26298,8 @@ html {
   top: clamp(1.5rem, 4vw, 3.5rem);
 }
 
-.auth-entry__brand .duna-mark__symbol {
+.auth-entry__brand .duna-mark__logo {
   height: 34px;
-  width: 34px;
-}
-
-.auth-entry__brand .duna-mark__word {
-  font-size: 1rem;
-  letter-spacing: 0.3em;
 }
 
 .auth-entry__story {
@@ -32197,13 +32191,17 @@ a {
     width: 82px;
   }
 
-  .player-sidebar__brand .duna-mark__word,
+  .player-sidebar__brand .duna-mark__logo,
   .player-sidebar nav span,
   .player-sidebar__record,
   .player-sidebar__plus,
   .player-sidebar__profile > span:nth-child(2),
   .player-sidebar__profile > .duna-numeric {
     display: none;
+  }
+
+  .player-sidebar__brand .duna-mark__icon--compact {
+    display: block;
   }
 
   .player-sidebar nav a {

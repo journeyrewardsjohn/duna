@@ -73,8 +73,8 @@ button {
   padding: 0 0.65rem;
 }
 
-.hq-sidebar__brand .duna-mark__word {
-  font-size: 1rem;
+.hq-sidebar__brand .duna-mark__logo {
+  height: 2rem;
 }
 
 .organization-switcher,
@@ -4424,7 +4424,7 @@ button {
     padding: 0;
   }
 
-  .hq-sidebar__brand .duna-mark__word,
+  .hq-sidebar__brand .duna-mark__logo,
   .hq-sidebar__brand > .duna-badge,
   .organization-switcher > span:nth-child(2),
   .organization-switcher > svg,
@@ -4435,6 +4435,10 @@ button {
   .hq-sidebar__meta small,
   .hq-sidebar__meta a {
     display: none;
+  }
+
+  .hq-sidebar__brand .duna-mark__icon--compact {
+    display: block;
   }
 
   .organization-switcher,
@@ -11505,12 +11509,8 @@ body {
   min-height: 58px;
 }
 
-.hq-sidebar__brand .duna-mark__word {
-  font-family: var(--font-data);
-  font-variation-settings:
-    "wdth" 90,
-    "wght" 800;
-  letter-spacing: 0.17em;
+.hq-sidebar__brand .duna-mark__logo {
+  height: 2rem;
 }
 
 .hq-sidebar nav {
@@ -16344,8 +16344,12 @@ body {
   width: 55px;
 }
 
-.hq-shell:not(.admin-shell) .hq-sidebar__brand .duna-mark__word {
+.hq-shell:not(.admin-shell) .hq-sidebar__brand .duna-mark__logo {
   display: none;
+}
+
+.hq-shell:not(.admin-shell) .hq-sidebar__brand .duna-mark__icon--compact {
+  display: block;
 }
 
 .hq-shell:not(.admin-shell) .hq-sidebar__brand > small {
