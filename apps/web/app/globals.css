@@ -23995,7 +23995,7 @@ html {
 .public-registration__hero h1 {
   font-family: var(--font-display);
   font-size: clamp(3rem, 6vw, 5.8rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   line-height: 0.86;
   margin: 0.75rem 0 1rem;
   max-width: 690px;
@@ -24142,7 +24142,7 @@ html {
 .public-registration__item h2 {
   font-family: var(--font-display);
   font-size: clamp(1.35rem, 3vw, 2rem);
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
   margin: 0.2rem 0 0.35rem;
 }
 
@@ -24233,7 +24233,7 @@ html {
   color: #fff;
   font-family: var(--font-display);
   font-size: clamp(2rem, 4vw, 3rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   line-height: 0.9;
   margin: 0.65rem 0 0.8rem;
 }
