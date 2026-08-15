@@ -1,5 +1,8 @@
-import { DunaLoader } from "@duna/ui";
-
 export default function Loading() {
-  return <DunaLoader label="Finding your next game" variant="player" />;
+  return (
+    <div aria-live="polite" className="site-loading" role="status">
+      <img alt="" aria-hidden src="/brand/duna-icon.png" />
+      <span className="site-loading__label">Loading Duna</span>
+    </div>
+  );
 }
