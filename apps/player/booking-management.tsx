@@ -118,6 +118,13 @@ type SearchResult = Awaited<
   ReturnType<DunaApiClient["player"]["teammateSearch"]["query"]>
 >[number];
 
+type CheckoutPlayer = {
+  readonly person: {
+    readonly id: string;
+    readonly displayName: string;
+  };
+};
+
 function money(booking: ManagedBooking) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -325,7 +332,7 @@ export function BookingManagementModal({
   }
 
   async function finishPickupCheckout(
-    selectedPlayers: readonly SearchResult[] = [],
+    selectedPlayers: readonly CheckoutPlayer[] = [],
   ) {
     const pickupSessionId = booking?.sessionId;
     if (!client || !pickupSessionId) return;
@@ -398,6 +405,58 @@ export function BookingManagementModal({
         reason instanceof Error
           ? reason.message
           : "Duna could not confirm these places.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function finishCourtCheckout() {
+    if (!client || booking?.source !== "court") return;
+    if (Platform.OS === "web") {
+      setMessage(
+        "Open this reservation in the Duna app to finish payment securely.",
+      );
+      return;
+    }
+    setBusy(true);
+    setMessage(undefined);
+    try {
+      const result = await client.player.resumeCourtBookingCheckout.mutate({
+        bookingId: booking.id,
+        idempotencyKey: Crypto.randomUUID(),
+      });
+      if (!result.paymentSheet) {
+        throw new Error(
+          "Duna could not prepare the secure court payment sheet.",
+        );
+      }
+      const paymentResult = await presentNativeEventPayment({
+        paymentSheet: result.paymentSheet,
+      });
+      if (paymentResult === "cancelled") return;
+      let status = await client.player.courtCheckoutStatus.query({
+        paymentIntentId: result.paymentSheet.paymentIntentId,
+      });
+      for (let attempt = 0; attempt < 5 && !status.complete; attempt += 1) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, 450 + attempt * 250),
+        );
+        status = await client.player.courtCheckoutStatus.query({
+          paymentIntentId: result.paymentSheet.paymentIntentId,
+        });
+      }
+      setMessage(
+        status.complete
+          ? "Court reservation confirmed."
+          : "Payment succeeded. Duna is finishing confirmation now.",
+      );
+      await onUpdated();
+    } catch (reason) {
+      setMessage(
+        reason instanceof Error
+          ? reason.message
+          : "Duna could not finish the court payment.",
       );
     } finally {
       setBusy(false);
@@ -752,6 +811,73 @@ export function BookingManagementModal({
                 <Text style={styles.noticeText}>{message}</Text>
               </View>
             )}
+
+            {!cancelled &&
+              booking.paymentStatus === "payment-required" &&
+              (booking.sessionId || booking.source === "court") && (
+                <View style={styles.paymentActionCard}>
+                  <Text style={styles.sectionEyebrow}>PAYMENT NEEDED</Text>
+                  <Text style={styles.paymentActionTitle}>
+                    Finish this booking here.
+                  </Text>
+                  <Text style={styles.policy}>
+                    {booking.source === "court"
+                      ? "Finish your reserved court in the same secure payment sheet used at checkout."
+                      : "Choose your place or cover every unpaid place. Duna opens the same secure payment sheet used at checkout."}
+                  </Text>
+                  <View style={styles.paymentActions}>
+                    <Pressable
+                      disabled={busy}
+                      onPress={() =>
+                        void (booking.source === "court"
+                          ? finishCourtCheckout()
+                          : finishPickupCheckout())
+                      }
+                      style={[styles.primary, busy && styles.actionDisabled]}
+                    >
+                      <Text style={styles.primaryText}>
+                        {busy
+                          ? "Preparing payment…"
+                          : booking.source === "court"
+                            ? "Pay for court"
+                            : "Pay for me"}
+                      </Text>
+                    </Pressable>
+                    {booking.source !== "court" &&
+                      booking.team?.roster.some(
+                        (member) => !member.paid && member.personId,
+                      ) && (
+                        <Pressable
+                          disabled={busy}
+                          onPress={() =>
+                            void finishPickupCheckout(
+                              booking.team!.roster.flatMap((member) =>
+                                !member.paid && member.personId
+                                  ? [
+                                      {
+                                        person: {
+                                          id: member.personId,
+                                          displayName: member.displayName,
+                                        },
+                                      },
+                                    ]
+                                  : [],
+                              ),
+                            )
+                          }
+                          style={[
+                            styles.secondary,
+                            busy && styles.actionDisabled,
+                          ]}
+                        >
+                          <Text style={styles.secondaryText}>
+                            Pay for everyone
+                          </Text>
+                        </Pressable>
+                      )}
+                  </View>
+                </View>
+              )}
 
             {!cancelled && booking.pickup?.invitationStatus === "invited" && (
               <View style={styles.invitationCard}>
@@ -1958,6 +2084,26 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 11,
     paddingVertical: 7,
+  },
+  paymentActionCard: {
+    backgroundColor: "#eef3f4",
+    borderColor: "#c9dce0",
+    borderRadius: 20,
+    borderWidth: 1,
+    marginTop: 18,
+    padding: 18,
+  },
+  paymentActionTitle: {
+    color: "#173640",
+    fontSize: 21,
+    fontWeight: "900",
+    marginTop: 4,
+  },
+  paymentActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 9,
+    marginTop: 15,
   },
   paymentText: { color: "#2d6a3c", fontSize: 11, fontWeight: "900" },
   playerMeta: {

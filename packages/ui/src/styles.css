@@ -8,6 +8,7 @@
 
 .duna-loader {
   align-content: center;
+  isolation: isolate;
   background:
     radial-gradient(
       circle at 62% 42%,
@@ -21,22 +22,37 @@
   justify-items: center;
   min-height: 100svh;
   padding: 2rem;
+  position: relative;
 }
 
-.duna-loader__mark .duna-mark__symbol {
+.duna-loader--player {
+  background: #fbcabb;
+}
+.duna-loader--pro {
+  background: #d1e2f0;
+}
+
+.duna-loader__video {
+  height: 100%;
+  inset: 0;
+  object-fit: contain;
+  position: absolute;
+  width: 100%;
+  z-index: 0;
+}
+
+.duna-loader__content {
+  align-items: center;
+  display: grid;
+  gap: 1rem;
+  justify-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.duna-loader__mark .duna-mark__icon {
   height: 4.5rem;
-  width: 6rem;
-}
-
-.duna-loader__mark .duna-mark__ridge {
-  animation: duna-loader-draw 1.4s
-    var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) infinite alternate;
-  stroke-dasharray: 72;
-  stroke-dashoffset: 72;
-}
-
-.duna-loader__mark .duna-mark__horizon {
-  animation: duna-loader-horizon 1.4s ease-in-out infinite alternate;
+  width: 4.5rem;
 }
 
 .duna-loader__label {
@@ -47,31 +63,8 @@
   text-transform: uppercase;
 }
 
-@keyframes duna-loader-draw {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-@keyframes duna-loader-horizon {
-  from {
-    opacity: 0.2;
-  }
-
-  to {
-    opacity: 0.7;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .duna-loader__mark .duna-mark__ridge,
-  .duna-loader__mark .duna-mark__horizon {
-    animation: none;
-  }
-
-  .duna-loader__mark .duna-mark__ridge {
-    stroke-dashoffset: 0;
-  }
+.duna-loader--player .duna-loader__label {
+  color: rgb(5 22 38 / 72%);
 }
 
 :root,
@@ -354,34 +347,37 @@
 
 .duna-mark {
   align-items: center;
-  color: inherit;
   display: inline-flex;
-  gap: 0.62rem;
+  line-height: 0;
 }
 
-.duna-mark__symbol {
+.duna-mark__icon {
+  display: block;
   height: 2rem;
-  overflow: visible;
-  width: 2.66rem;
+  object-fit: contain;
+  width: 2rem;
+}
+.duna-mark__icon--compact {
+  display: none;
+}
+.duna-mark__logo {
+  display: block;
+  height: 2rem;
+  object-fit: contain;
+  width: auto;
+}
+.duna-mark__logo--white {
+  display: none;
 }
 
-.duna-mark__horizon {
-  opacity: 0.36;
+:root[data-theme="dark"] .duna-mark__logo--blue,
+[data-zone="live"] .duna-mark__logo--blue {
+  display: none;
 }
 
-.duna-mark__ridge {
-  vector-effect: non-scaling-stroke;
-}
-
-.duna-mark__word {
-  font-family: var(--font-data);
-  font-size: 1.08rem;
-  font-variation-settings:
-    "wdth" 90,
-    "wght" 800;
-  font-weight: 800;
-  letter-spacing: 0.17em;
-  line-height: 1;
+:root[data-theme="dark"] .duna-mark__logo--white,
+[data-zone="live"] .duna-mark__logo--white {
+  display: block;
 }
 
 .duna-button {

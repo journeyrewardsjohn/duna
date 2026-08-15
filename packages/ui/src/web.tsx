@@ -10,41 +10,73 @@ export function DunaMark({
 }) {
   return (
     <span className={["duna-mark", className].filter(Boolean).join(" ")}>
-      <svg aria-hidden="true" className="duna-mark__symbol" viewBox="0 0 64 48">
-        <path
-          className="duna-mark__horizon"
-          d="M5 34H59"
-          fill="none"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeWidth="1.5"
+      {compact ? (
+        <img
+          alt="Duna"
+          className="duna-mark__icon"
+          src="/brand/duna-icon.png"
         />
-        <path
-          className="duna-mark__ridge"
-          d="M6 36.5C17.5 36.5 22.4 31.7 29.2 26.3C36.3 20.7 45 18.4 58 11.5"
-          fill="none"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="4.5"
-        />
-      </svg>
-      {!compact && <span className="duna-mark__word">DUNA</span>}
+      ) : (
+        <>
+          <img
+            alt=""
+            aria-hidden
+            className="duna-mark__icon duna-mark__icon--compact"
+            src="/brand/duna-icon.png"
+          />
+          <img
+            alt="Duna"
+            className="duna-mark__logo duna-mark__logo--blue"
+            src="/brand/duna-horizontal-blue.png"
+          />
+          <img
+            alt="Duna"
+            className="duna-mark__logo duna-mark__logo--white"
+            src="/brand/duna-horizontal-white.png"
+          />
+        </>
+      )}
     </span>
   );
 }
 
 export function DunaLoader({
   label = "Opening Duna",
+  variant = "plain",
 }: {
   readonly label?: string;
+  readonly variant?: "plain" | "player" | "pro";
 }) {
+  const video =
+    variant === "player"
+      ? "/media/launch/duna-loading.mp4"
+      : variant === "pro"
+        ? "/media/launch/duna-pro-loading.mp4"
+        : undefined;
   return (
-    <div aria-live="polite" className="duna-loader" role="status">
-      <span aria-hidden="true" className="duna-loader__mark">
-        <DunaMark compact />
-      </span>
-      <span className="duna-loader__label">{label}</span>
+    <div
+      aria-live="polite"
+      className={`duna-loader duna-loader--${variant}`}
+      role="status"
+    >
+      {video && (
+        <video
+          aria-hidden="true"
+          autoPlay
+          className="duna-loader__video"
+          loop
+          muted
+          playsInline
+          preload="auto"
+          src={video}
+        />
+      )}
+      <div className="duna-loader__content">
+        <span aria-hidden="true" className="duna-loader__mark">
+          <DunaMark compact />
+        </span>
+        <span className="duna-loader__label">{label}</span>
+      </div>
     </div>
   );
 }

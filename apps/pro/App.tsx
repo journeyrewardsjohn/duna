@@ -28,6 +28,7 @@ import {
   AccessibilityInfo,
   Animated,
   Easing,
+  Image,
   Linking,
   Modal,
   Platform,
@@ -40,7 +41,6 @@ import {
   type ViewStyle,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Line, Path } from "react-native-svg";
 import { GetPaidScreen } from "./get-paid";
 import {
   connectProCalendar,
@@ -62,11 +62,18 @@ import {
   type OperatorMatches,
   type ProRuntime,
 } from "./runtime";
+import { ProLaunchExperience } from "./launch-experience";
 import {
   FellixText as Text,
   FellixTextInput as TextInput,
   useFellixFonts,
 } from "./fellix-text";
+
+// Metro requires static module references so the full Duna mark ships natively.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const dunaProWordmarkBlue = require("./assets/duna-horizontal-blue.png");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const dunaProWordmarkWhite = require("./assets/duna-horizontal-white.png");
 
 const lightColors = {
   canvas: "#f6f5f1",
@@ -371,31 +378,15 @@ function PreviewBanner() {
 }
 
 function Mark() {
+  const { theme } = useContext(ThemeContext);
   return (
     <View style={styles.wordmark}>
-      <View style={styles.mark}>
-        <Svg height="30" viewBox="0 0 64 48" width="40">
-          <Line
-            opacity={0.38}
-            stroke={colors.warning}
-            strokeLinecap="round"
-            strokeWidth="1.5"
-            x1="5"
-            x2="59"
-            y1="34"
-            y2="34"
-          />
-          <Path
-            d="M6 36.5C17.5 36.5 22.4 31.7 29.2 26.3C36.3 20.7 45 18.4 58 11.5"
-            fill="none"
-            stroke={colors.warning}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="4.5"
-          />
-        </Svg>
-      </View>
-      <Text style={styles.wordmarkText}>DUNA</Text>
+      <Image
+        accessibilityLabel="Duna Pro"
+        resizeMode="contain"
+        source={theme === "dark" ? dunaProWordmarkWhite : dunaProWordmarkBlue}
+        style={styles.wordmarkImage}
+      />
       <Text style={styles.proPill}>PRO</Text>
     </View>
   );
@@ -4970,15 +4961,23 @@ function ProApp() {
 
 export default function App() {
   const [fontsLoaded, fontError] = useFellixFonts();
+  const [showLaunchExperience, setShowLaunchExperience] = useState(true);
 
   if (fontError) throw fontError;
   if (!fontsLoaded) return null;
 
   return (
     <SafeAreaProvider>
-      <ProRuntimeProvider>
-        <ProApp />
-      </ProRuntimeProvider>
+      <View style={{ flex: 1 }}>
+        <ProRuntimeProvider>
+          <ProApp />
+        </ProRuntimeProvider>
+        {showLaunchExperience && (
+          <ProLaunchExperience
+            onComplete={() => setShowLaunchExperience(false)}
+          />
+        )}
+      </View>
     </SafeAreaProvider>
   );
 }
@@ -6579,19 +6578,7 @@ function createStyles(palette: Palette) {
       fontWeight: "900",
     },
     wordmark: { alignItems: "center", flexDirection: "row", gap: 7 },
-    mark: {
-      alignItems: "center",
-      height: 30,
-      justifyContent: "center",
-      width: 40,
-    },
-    wordmarkText: {
-      color: colors.bone,
-      fontFamily: "Archivo-Wordmark",
-      fontSize: 17,
-      fontWeight: "900",
-      letterSpacing: 3,
-    },
+    wordmarkImage: { height: 35, width: 104 },
     proPill: {
       backgroundColor: rgba(colors.warningRgb, 0.12),
       borderRadius: 6,

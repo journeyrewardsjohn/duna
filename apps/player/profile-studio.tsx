@@ -18,7 +18,7 @@ import {
   FellixText as Text,
   FellixTextInput as TextInput,
 } from "./fellix-text";
-import type { UploadedPlayerMedia } from "./mobile-api";
+import type { DunaApiClient, UploadedPlayerMedia } from "./mobile-api";
 import { usePlayerRuntime } from "./runtime";
 
 const palette = {
@@ -32,6 +32,12 @@ const palette = {
   coral: "#c55b49",
   wash: "#e9eeeb",
 } as const;
+
+type PlayerArtworkWorkflow = NonNullable<
+  Awaited<
+    ReturnType<DunaApiClient["player"]["playerMediaStudio"]["query"]>
+  >["workflow"]
+>;
 
 function SheetHeader({
   eyebrow,
@@ -378,7 +384,8 @@ export function PlayerArtworkModal({
   const [progress, setProgress] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
-  const [latestStatus, setLatestStatus] = useState<string>();
+  const [workflow, setWorkflow] = useState<PlayerArtworkWorkflow>();
+  const [approvalBusy, setApprovalBusy] = useState(false);
   const uploadedPhotos = useRef(new Map<string, UploadedPlayerMedia>());
   const uploadPromises = useRef(
     new Map<string, Promise<UploadedPlayerMedia>>(),
@@ -390,7 +397,7 @@ export function PlayerArtworkModal({
     void client.player.playerMediaStudio
       .query()
       .then((studio) => {
-        if (active) setLatestStatus(studio.workflow?.status);
+        if (active) setWorkflow(studio.workflow);
       })
       .catch(() => undefined);
     return () => {
@@ -572,7 +579,9 @@ export function PlayerArtworkModal({
       await Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       ).catch(() => undefined);
-      setLatestStatus(workflow.status);
+      setWorkflow((current) =>
+        current ? { ...current, status: workflow.status } : undefined,
+      );
       setNotice(
         "Artwork creation started immediately. It stays in review until you approve it.",
       );
@@ -590,6 +599,34 @@ export function PlayerArtworkModal({
     } finally {
       setBusy(false);
       setProgress(undefined);
+    }
+  };
+
+  const approveArtwork = async () => {
+    if (!client || !workflow) return;
+    setError(undefined);
+    setNotice(undefined);
+    setApprovalBusy(true);
+    try {
+      await client.player.approveOwnPlayerMediaWorkflow.mutate({
+        workflowId: workflow.id,
+        idempotencyKey: Crypto.randomUUID(),
+      });
+      await refresh();
+      const studio = await client.player.playerMediaStudio.query();
+      setWorkflow(studio.workflow);
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      ).catch(() => undefined);
+      setNotice("Your approved artwork is now live on your Duna profile.");
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Your artwork package could not be approved.",
+      );
+    } finally {
+      setApprovalBusy(false);
     }
   };
 
@@ -630,10 +667,54 @@ export function PlayerArtworkModal({
               <View style={styles.flex}>
                 <Text style={styles.fieldLabel}>LATEST PACKAGE</Text>
                 <Text style={styles.statusText}>
-                  {artworkStatus(latestStatus)}
+                  {artworkStatus(workflow?.status)}
                 </Text>
               </View>
             </View>
+            {workflow?.status === "review" &&
+              workflow.outputImages.length > 0 && (
+                <View style={styles.reviewPackage}>
+                  <Text style={styles.fieldLabel}>READY FOR YOUR APPROVAL</Text>
+                  <Text style={styles.reviewTitle}>
+                    Your artwork package is ready.
+                  </Text>
+                  <Text style={styles.reviewBody}>
+                    Review the generated look below. Approving publishes it to
+                    your profile; you can create another package whenever you
+                    want a different direction.
+                  </Text>
+                  <ScrollView
+                    contentContainerStyle={styles.reviewImages}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                  >
+                    {workflow.outputImages.map((output, index) => (
+                      <Image
+                        key={output.url}
+                        accessibilityLabel={`Artwork option ${index + 1}`}
+                        source={{ uri: output.url }}
+                        style={styles.reviewImage}
+                      />
+                    ))}
+                  </ScrollView>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={approvalBusy}
+                    onPress={() => void approveArtwork()}
+                    style={[
+                      styles.approveArtwork,
+                      approvalBusy && styles.disabled,
+                    ]}
+                  >
+                    {approvalBusy && (
+                      <ActivityIndicator color={palette.paper} size="small" />
+                    )}
+                    <Text style={styles.approveArtworkText}>
+                      {approvalBusy ? "Publishing artwork…" : "Approve artwork"}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
             <View style={styles.photoGrid}>
               {photos.map((photo, index) => {
                 const highResolution = isHighResolutionArtworkPhoto(photo);
@@ -812,6 +893,17 @@ const styles = StyleSheet.create({
   addPhotoIcon: { color: palette.marine, fontSize: 30 },
   addPhotoMeta: { color: palette.muted, fontSize: 11, marginTop: 4 },
   addPhotoText: { color: palette.marine, fontSize: 15, fontWeight: "800" },
+  approveArtwork: {
+    alignItems: "center",
+    backgroundColor: palette.marine,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    minHeight: 52,
+    paddingHorizontal: 16,
+  },
+  approveArtworkText: { color: palette.paper, fontSize: 15, fontWeight: "900" },
   artworkHero: {
     backgroundColor: palette.marine,
     borderRadius: 24,
@@ -969,6 +1061,32 @@ const styles = StyleSheet.create({
   },
   primaryText: { color: palette.paper, fontSize: 16, fontWeight: "900" },
   progress: { color: palette.marine, fontSize: 14, fontWeight: "800" },
+  reviewBody: {
+    color: palette.muted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 5,
+  },
+  reviewImage: {
+    backgroundColor: palette.wash,
+    borderRadius: 14,
+    height: 176,
+    width: 132,
+  },
+  reviewImages: { gap: 10, paddingVertical: 14 },
+  reviewPackage: {
+    backgroundColor: "#e7f1f2",
+    borderColor: "#b7dadd",
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 16,
+  },
+  reviewTitle: {
+    color: palette.marine,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 4,
+  },
   removePhoto: {
     alignItems: "center",
     backgroundColor: "rgba(17,23,25,0.78)",

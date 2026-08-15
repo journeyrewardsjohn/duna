@@ -203,6 +203,7 @@ import {
   loadCourtAvailability,
   loadCourtBookingInvite,
   loadCourtBookingInventory,
+  resumeCourtBookingCheckout,
   startCourtCheckout,
   startParticipantShareCheckout,
   venueWallTimeToUtc,
@@ -451,6 +452,7 @@ import {
   researchRankedPlayers,
   resolvePublicPlayerRoute,
   reviewPlayerMediaWorkflow,
+  approveOwnPlayerMediaWorkflow,
   savePlayerPublicProfile,
   setPlayerFollow,
   updatePlayerIdentity,
@@ -4594,6 +4596,35 @@ const playerRouter = router({
         },
       }),
     ),
+  approveOwnPlayerMediaWorkflow: protectedProcedure
+    .use(requireScope("profile:write"))
+    .input(
+      z.object({
+        workflowId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.approveOwnPlayerMediaWorkflow",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await approveOwnPlayerMediaWorkflow({
+              actor: ctx.actor!,
+              workflowId: input.workflowId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   inferPlayingExperience: protectedProcedure
     .input(
       z.object({
@@ -5980,6 +6011,40 @@ const playerRouter = router({
               idempotencyKey: input.idempotencyKey,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  resumeCourtBookingCheckout: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "court-booking-payment-resume",
+        capacity: 8,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        bookingId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(courtCheckoutResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.resumeCourtBookingCheckout",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await resumeCourtBookingCheckout({
+              actor: ctx.actor!,
+              bookingId: input.bookingId,
               now: ctx.now,
             });
           } catch (error) {

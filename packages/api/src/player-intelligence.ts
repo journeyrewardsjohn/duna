@@ -58,7 +58,9 @@ export class PlayerIntelligenceError extends Error {
       | "FOLLOW_SELF"
       | "MEDIA_RIGHTS_REQUIRED"
       | "MEDIA_REFERENCES_INVALID"
-      | "WORKFLOW_NOT_FOUND",
+      | "WORKFLOW_NOT_FOUND"
+      | "WORKFLOW_NOT_READY"
+      | "WORKFLOW_OUTPUTS_MISSING",
     message: string,
   ) {
     super(message);
@@ -1637,6 +1639,52 @@ export async function reviewPlayerMediaWorkflow(input: {
     await database.batch([workflowUpdate, audit]);
   }
   return { workflowId: workflow.id, status };
+}
+
+export async function approveOwnPlayerMediaWorkflow(input: {
+  readonly actor: ApiActor;
+  readonly workflowId: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}) {
+  requireDatabase();
+  const workflow = await getDatabase().query.playerMediaWorkflows.findFirst({
+    where: eq(playerMediaWorkflows.id, input.workflowId),
+  });
+  if (!workflow) {
+    throw new PlayerIntelligenceError(
+      "WORKFLOW_NOT_FOUND",
+      "The artwork package was not found.",
+    );
+  }
+  await assertProfileSubjectAuthority({
+    actor: input.actor,
+    subjectPersonId: workflow.personId,
+  });
+  if (workflow.status !== "review") {
+    throw new PlayerIntelligenceError(
+      "WORKFLOW_NOT_READY",
+      "This artwork package is not ready for your approval yet.",
+    );
+  }
+  if (workflow.outputImages.length === 0) {
+    throw new PlayerIntelligenceError(
+      "WORKFLOW_OUTPUTS_MISSING",
+      "Duna has not attached a reviewable artwork output yet.",
+    );
+  }
+  return reviewPlayerMediaWorkflow({
+    actor: input.actor,
+    workflowId: workflow.id,
+    decision: "published",
+    outputs: workflow.outputImages,
+    reason:
+      "Player approved their reviewed Duna artwork package for publication.",
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+    now: input.now,
+  });
 }
 
 async function queueFollowMessage(input: {
