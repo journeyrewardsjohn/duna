@@ -15,6 +15,7 @@ import {
   professionalMatchPredictionClosed,
   professionalMatchStatus,
   selectFivbRefreshCandidates,
+  shouldRefreshPublicFivbLiveMatch,
   shouldBackfillEliteVolleyballWorldEvent,
   shouldAutoLinkProfessionalSource,
   shouldCreateUnclaimedSourceProfile,
@@ -26,6 +27,35 @@ import {
 } from "./volleyball-world-live";
 
 describe("FIVB event detail refresh", () => {
+  it("does not turn completed or archived public matches into live requests", () => {
+    const policy = {
+      now: new Date("2026-08-16T12:00:00.000Z"),
+      completedEventGraceHours: 48,
+    };
+    expect(
+      shouldRefreshPublicFivbLiveMatch(
+        { status: "completed", eventStatus: "live" },
+        policy,
+      ),
+    ).toBe(false);
+    expect(
+      shouldRefreshPublicFivbLiveMatch(
+        {
+          status: "scheduled",
+          eventStatus: "completed",
+          eventEndsOn: "2026-08-09",
+        },
+        policy,
+      ),
+    ).toBe(false);
+    expect(
+      shouldRefreshPublicFivbLiveMatch(
+        { status: "live", eventStatus: "live", eventEndsOn: "2026-08-16" },
+        policy,
+      ),
+    ).toBe(true);
+  });
+
   it("hides a stale fixture duplicate when an official live row is available", () => {
     const participants = [
       { side: "A", name: "Anders Mol" },

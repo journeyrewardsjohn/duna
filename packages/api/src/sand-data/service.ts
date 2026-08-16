@@ -443,6 +443,38 @@ export interface FivbRefreshPolicy {
   readonly completedEventGraceHours: number;
 }
 
+export interface PublicFivbLiveRefreshCandidate {
+  readonly status: VolleyballWorldStoredMatch["status"];
+  readonly eventStatus?: string | null;
+  readonly eventEndsOn?: string | null;
+}
+
+/**
+ * The public match endpoint serves a stored score for completed matches.  It
+ * must not turn an ordinary historical page view into another official live
+ * score request.  An incompletely reconciled match also stops polling once
+ * its completed event has passed the SuperAdmin-configured grace window.
+ */
+export function shouldRefreshPublicFivbLiveMatch(
+  candidate: PublicFivbLiveRefreshCandidate,
+  policy: Pick<FivbRefreshPolicy, "now" | "completedEventGraceHours"> = {
+    now: new Date(),
+    completedEventGraceHours: 48,
+  },
+): boolean {
+  if (candidate.status === "completed") return false;
+  const completedCutoff = new Date(
+    policy.now.getTime() - policy.completedEventGraceHours * 60 * 60 * 1_000,
+  )
+    .toISOString()
+    .slice(0, 10);
+  return !(
+    candidate.eventStatus === "completed" &&
+    candidate.eventEndsOn &&
+    candidate.eventEndsOn < completedCutoff
+  );
+}
+
 function detailSyncedAt(candidate: FivbRefreshCandidate): string {
   const value = unknownRecord(candidate.rawPayload).detailSyncedAt;
   return typeof value === "string" ? value : "";
@@ -9902,6 +9934,7 @@ export async function loadPublicProfessionalMatchLive(matchId: string) {
   if (!row) return undefined;
   const stored = parseStoredVolleyballWorldMatch(row.rawPayload);
   if (!stored) return undefined;
+  if (stored.status === "completed") return stored;
   const event = await database.query.professionalEvents.findFirst({
     where: and(
       eq(professionalEvents.sourceId, row.sourceId),
@@ -9914,6 +9947,22 @@ export async function loadPublicProfessionalMatchLive(matchId: string) {
   const binding = event
     ? parseVolleyballWorldBinding(event.rawPayload)
     : undefined;
+  const fivbControl = await loadScraperControl("fivb-12ndr");
+  if (
+    !shouldRefreshPublicFivbLiveMatch(
+      {
+        status: stored.status,
+        eventStatus: event?.status,
+        eventEndsOn: event?.endsOn,
+      },
+      {
+        now: new Date(),
+        completedEventGraceHours: fivbControl.completedEventGraceHours ?? 48,
+      },
+    )
+  ) {
+    return stored;
+  }
   const control = await loadScraperControl("volleyball-world");
   if (!control.enabled || !control.liveTransportEnabled) return stored;
   const current = await fetchVolleyballWorldLiveMatch(stored.matchNo).catch(
