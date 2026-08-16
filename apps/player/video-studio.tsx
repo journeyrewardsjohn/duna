@@ -2875,81 +2875,79 @@ function CaptureExperience({
           onSave={() => void saveCalibration()}
         />
       )}
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setShowRemote(false)}
-        transparent
-        visible={showRemote}
-      >
-        <Pressable
-          onPress={() => setShowRemote(false)}
-          style={styles.remoteBackdrop}
-        >
+      {showRemote && (
+        <View accessibilityViewIsModal style={StyleSheet.absoluteFill}>
           <Pressable
-            onPress={(event) => event.stopPropagation()}
-            style={styles.remoteCard}
+            onPress={() => setShowRemote(false)}
+            style={styles.remoteBackdrop}
           >
-            <View style={styles.remoteCardHeader}>
-              <View style={styles.flex}>
-                <Text style={styles.remoteEyebrow}>DUNA VISION REMOTE</Text>
-                <Text style={styles.remoteTitle}>
-                  Scan to control this camera
+            <Pressable
+              onPress={(event) => event.stopPropagation()}
+              style={styles.remoteCard}
+            >
+              <View style={styles.remoteCardHeader}>
+                <View style={styles.flex}>
+                  <Text style={styles.remoteEyebrow}>DUNA VISION REMOTE</Text>
+                  <Text style={styles.remoteTitle}>
+                    Scan to control this camera
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => setShowRemote(false)}
+                  style={styles.remoteClose}
+                >
+                  <Text style={styles.remoteCloseText}>×</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.remoteBody}>
+                A trusted second device can align court corners, set heights,
+                confirm teams, watch the low-resolution preview, and start or
+                end this {mode === "live" ? "live stream" : "recording"}. The
+                link expires automatically.
+              </Text>
+              {visionAccess ? (
+                <View style={styles.qrFrame}>
+                  <QRCode
+                    backgroundColor="#ffffff"
+                    color={palette.navy}
+                    size={214}
+                    value={visionAccess.remoteUrl}
+                  />
+                </View>
+              ) : (
+                <ActivityIndicator color={palette.aqua} size="large" />
+              )}
+              <View style={styles.remoteConnectionRow}>
+                <View
+                  style={[
+                    styles.remoteStatusDot,
+                    visionSession?.remoteConnected &&
+                      styles.remoteStatusDotLive,
+                  ]}
+                />
+                <Text style={styles.remoteConnectionText}>
+                  {visionSession?.remoteConnected
+                    ? "Remote is connected"
+                    : "Waiting for a remote device"}
                 </Text>
               </View>
-              <Pressable
-                onPress={() => setShowRemote(false)}
-                style={styles.remoteClose}
-              >
-                <Text style={styles.remoteCloseText}>×</Text>
-              </Pressable>
-            </View>
-            <Text style={styles.remoteBody}>
-              A trusted second device can align court corners, set heights,
-              confirm teams, watch the low-resolution preview, and start or end
-              this {mode === "live" ? "live stream" : "recording"}. The link
-              expires automatically.
-            </Text>
-            {visionAccess ? (
-              <View style={styles.qrFrame}>
-                <QRCode
-                  backgroundColor="#ffffff"
-                  color={palette.navy}
-                  size={214}
-                  value={visionAccess.remoteUrl}
-                />
-              </View>
-            ) : (
-              <ActivityIndicator color={palette.aqua} size="large" />
-            )}
-            <View style={styles.remoteConnectionRow}>
-              <View
-                style={[
-                  styles.remoteStatusDot,
-                  visionSession?.remoteConnected && styles.remoteStatusDotLive,
-                ]}
-              />
-              <Text style={styles.remoteConnectionText}>
-                {visionSession?.remoteConnected
-                  ? "Remote is connected"
-                  : "Waiting for a remote device"}
-              </Text>
-            </View>
-            {!!visionAccess && (
-              <Pressable
-                onPress={() =>
-                  void Share.share({
-                    message: `Control ${form.title} in Duna Vision: ${visionAccess.remoteUrl}`,
-                    url: visionAccess.remoteUrl,
-                  })
-                }
-                style={styles.remoteShareButton}
-              >
-                <Text style={styles.remoteShareText}>Share secure link</Text>
-              </Pressable>
-            )}
+              {!!visionAccess && (
+                <Pressable
+                  onPress={() =>
+                    void Share.share({
+                      message: `Control ${form.title} in Duna Vision: ${visionAccess.remoteUrl}`,
+                      url: visionAccess.remoteUrl,
+                    })
+                  }
+                  style={styles.remoteShareButton}
+                >
+                  <Text style={styles.remoteShareText}>Share secure link</Text>
+                </Pressable>
+              )}
+            </Pressable>
           </Pressable>
-        </Pressable>
-      </Modal>
+        </View>
+      )}
     </View>
   );
 }
@@ -4143,6 +4141,23 @@ export function VideoStudioScreen({
     studio?.usage.uploads.limitSeconds ?? plan.monthlyUploadSeconds;
   const livePercent = Math.min(1, liveUsed / Math.max(1, liveLimit));
   const uploadPercent = Math.min(1, uploadUsed / Math.max(1, uploadLimit));
+  const videoSurfaceVisible = Boolean(detailsMode || captureMode);
+  const closeVideoSurface = () => {
+    if (captureMode) {
+      VideoCapture?.releasePreview();
+      setCaptureMode(undefined);
+      return;
+    }
+    if (identifyingImportedPlayers) {
+      setIdentifyingImportedPlayers(false);
+      return;
+    }
+    if (editingImportedCourt) {
+      setEditingImportedCourt(false);
+      return;
+    }
+    setDetailsMode(undefined);
+  };
 
   if (!active) return null;
 
@@ -4433,52 +4448,9 @@ export function VideoStudioScreen({
       </ScrollView>
 
       <Modal
-        animationType="slide"
-        onRequestClose={() => setDetailsMode(undefined)}
-        visible={Boolean(detailsMode)}
-      >
-        {detailsMode && (
-          <VideoDetailsForm
-            client={client}
-            form={form}
-            importedVision={importedVision}
-            importedVisionLoading={samplingImportedFrames}
-            mode={detailsMode}
-            onCreateMatch={onCreateMatch}
-            onCancel={() => setDetailsMode(undefined)}
-            onChange={setForm}
-            onContinue={() => {
-              rememberCaptureDefaults(form);
-              if (detailsMode === "live") {
-                setDetailsMode(undefined);
-                setCaptureMode("live");
-              } else if (detailsMode === "record") {
-                setDetailsMode(undefined);
-                setCaptureMode("record");
-              } else {
-                void upload();
-              }
-            }}
-            onEditImportedCourt={() => {
-              if (!importedVision) return;
-              setImportedCourtDraft(
-                importedVision.geometry ?? geometryFromGuidance(undefined),
-              );
-              setEditingImportedCourt(true);
-            }}
-            onIdentifyImportedPlayers={() =>
-              setIdentifyingImportedPlayers(true)
-            }
-            onImportedVisionChange={setImportedVision}
-            preparedVideo={preparedVideo}
-          />
-        )}
-      </Modal>
-
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setCaptureMode(undefined)}
-        visible={Boolean(captureMode)}
+        animationType={captureMode ? "fade" : "slide"}
+        onRequestClose={closeVideoSurface}
+        visible={videoSurfaceVisible}
       >
         {captureMode && client && (
           <CaptureExperience
@@ -4506,6 +4478,93 @@ export function VideoStudioScreen({
             }}
           />
         )}
+        {!captureMode && identifyingImportedPlayers && detailsMode && (
+          <PlayerPickerModal
+            embedded
+            maxSelected={8}
+            onChange={(players) =>
+              setImportedVision((current) =>
+                current ? { ...current, players } : current,
+              )
+            }
+            onClose={() => setIdentifyingImportedPlayers(false)}
+            palette={importedPlayerPalette}
+            selected={importedVision?.players ?? []}
+            title="Who appears in this video?"
+            visible
+          />
+        )}
+        {!captureMode &&
+          editingImportedCourt &&
+          importedVision &&
+          importedCourtDraft && (
+            <View style={styles.importedCalibrationScene}>
+              {frameForId(importedVision, importedVision.courtFrameId) && (
+                <Image
+                  source={{
+                    uri:
+                      "data:image/jpeg;base64," +
+                      frameForId(importedVision, importedVision.courtFrameId)!
+                        .jpegBase64,
+                  }}
+                  style={styles.importedCalibrationImage}
+                />
+              )}
+              <CourtCalibrationEditor
+                automaticGeometry={geometryFromGuidance(undefined)}
+                geometry={importedCourtDraft}
+                onCancel={() => setEditingImportedCourt(false)}
+                onChange={setImportedCourtDraft}
+                onSave={() => {
+                  setImportedVision((current) =>
+                    current
+                      ? { ...current, geometry: importedCourtDraft }
+                      : current,
+                  );
+                  setEditingImportedCourt(false);
+                }}
+              />
+            </View>
+          )}
+        {!captureMode &&
+          !identifyingImportedPlayers &&
+          !editingImportedCourt &&
+          detailsMode && (
+            <VideoDetailsForm
+              client={client}
+              form={form}
+              importedVision={importedVision}
+              importedVisionLoading={samplingImportedFrames}
+              mode={detailsMode}
+              onCreateMatch={onCreateMatch}
+              onCancel={() => setDetailsMode(undefined)}
+              onChange={setForm}
+              onContinue={() => {
+                rememberCaptureDefaults(form);
+                if (detailsMode === "live") {
+                  setDetailsMode(undefined);
+                  setCaptureMode("live");
+                } else if (detailsMode === "record") {
+                  setDetailsMode(undefined);
+                  setCaptureMode("record");
+                } else {
+                  void upload();
+                }
+              }}
+              onEditImportedCourt={() => {
+                if (!importedVision) return;
+                setImportedCourtDraft(
+                  importedVision.geometry ?? geometryFromGuidance(undefined),
+                );
+                setEditingImportedCourt(true);
+              }}
+              onIdentifyImportedPlayers={() =>
+                setIdentifyingImportedPlayers(true)
+              }
+              onImportedVisionChange={setImportedVision}
+              preparedVideo={preparedVideo}
+            />
+          )}
       </Modal>
 
       {selectedVideo && client && (
@@ -4516,53 +4575,6 @@ export function VideoStudioScreen({
           video={selectedVideo}
         />
       )}
-
-      <PlayerPickerModal
-        maxSelected={8}
-        onChange={(players) =>
-          setImportedVision((current) =>
-            current ? { ...current, players } : current,
-          )
-        }
-        onClose={() => setIdentifyingImportedPlayers(false)}
-        palette={importedPlayerPalette}
-        selected={importedVision?.players ?? []}
-        title="Who appears in this video?"
-        visible={identifyingImportedPlayers}
-      />
-
-      <Modal
-        animationType="slide"
-        onRequestClose={() => setEditingImportedCourt(false)}
-        visible={editingImportedCourt}
-      >
-        {importedVision && importedCourtDraft && (
-          <View style={styles.importedCalibrationScene}>
-            {frameForId(importedVision, importedVision.courtFrameId) && (
-              <Image
-                source={{
-                  uri: `data:image/jpeg;base64,${frameForId(importedVision, importedVision.courtFrameId)!.jpegBase64}`,
-                }}
-                style={styles.importedCalibrationImage}
-              />
-            )}
-            <CourtCalibrationEditor
-              automaticGeometry={geometryFromGuidance(undefined)}
-              geometry={importedCourtDraft}
-              onCancel={() => setEditingImportedCourt(false)}
-              onChange={setImportedCourtDraft}
-              onSave={() => {
-                setImportedVision((current) =>
-                  current
-                    ? { ...current, geometry: importedCourtDraft }
-                    : current,
-                );
-                setEditingImportedCourt(false);
-              }}
-            />
-          </View>
-        )}
-      </Modal>
     </>
   );
 }
